@@ -14,6 +14,7 @@ import {
   presentPermission,
   questionsOf,
   redact,
+  type SourceFacts,
 } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
@@ -121,20 +122,78 @@ export const createAskPresenter = (
     return run ? db.getWorkflow(run.workflowId)?.name : undefined;
   };
 
-  const named = (group: AdminGroup, key: string): string | undefined => {
+  /** A setting as the fleet keeps it, under the names the write's input uses: what its before → after is read against. */
+  const current = (
+    group: AdminGroup,
+    key: string
+  ): Record<string, unknown> | undefined => {
     switch (group) {
-      case "mcp_servers":
-        return db.getMcpServer(key)?.name;
-      case "delegate_types":
-        return delegateTypes.get(key)?.name;
-      case "hooks":
-        return db.getFleetHook(key)?.name;
-      case "rules":
-        return db.getRule(key)?.name;
+      case "mcp_servers": {
+        const row = db.getMcpServer(key);
+        return (
+          row && {
+            config: row.config,
+            enabled: row.enabled,
+            projectId: row.projectId,
+          }
+        );
+      }
+      case "delegate_types": {
+        const type = delegateTypes.get(key);
+        return type && { ...type };
+      }
+      case "hooks": {
+        const hook = db.getFleetHook(key);
+        return hook && { ...hook };
+      }
+      case "rules": {
+        const rule = db.getRule(key);
+        return rule && { ...rule };
+      }
+      case "skills": {
+        const skill = db.listSkills().find((one) => one.name === key);
+        return (
+          skill && {
+            source: skill.source,
+            enabled: skill.enabled,
+            projectId: skill.projectId ?? null,
+          }
+        );
+      }
+      case "plugins": {
+        const plugin = db.listPlugins().find((one) => one.id === key);
+        return (
+          plugin && {
+            enabled: plugin.enabled,
+            projectId: plugin.projectId ?? null,
+          }
+        );
+      }
+      case "connections": {
+        // Never its key: the sealed secret stays out of every card.
+        const row = db.connections.byName(key);
+        return (
+          row && {
+            service: row.service,
+            account: row.account,
+            transport: row.transport,
+            url: row.url,
+            command: row.command,
+            args: row.args,
+            auth: row.auth,
+            header: row.header,
+            projects: db.connections.projectsOf(row.id),
+          }
+        );
+      }
+      case "previews":
+        return { ...db.previews.settings() };
       default:
         return undefined;
     }
   };
+
+  const projectName = (id: string): string | undefined => db.project(id)?.name;
 
   const memory = (path: string | null): string | undefined =>
     path === null
@@ -145,13 +204,15 @@ export const createAskPresenter = (
   return (envelope: Envelope): void => {
     const payload = envelope.payload as PermissionRequestFrame & {
       proposer?: unknown;
+      sourceFacts?: SourceFacts;
       workflowRunId?: unknown;
     };
     payload.presentation = presentPermission(payload.toolName, payload.input, {
       ...askerOf(envelope.instanceId ?? payload.instanceId, payload),
       memory,
-      named,
-      projectName: (id) => db.project(id)?.name,
+      current,
+      projectName,
+      ...(payload.sourceFacts ? { source: payload.sourceFacts } : {}),
     });
   };
 };

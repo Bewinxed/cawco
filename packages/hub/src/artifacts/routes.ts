@@ -95,6 +95,18 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
+    // Each artifact with whose move it is (artifact_list).
+    .get(
+      "/api/instances/:id/artifacts/status",
+      { query: t.Object({ waiting: t.Optional(t.BooleanString()) }) },
+      ({ params, query }) => {
+        try {
+          return artifacts.status(params.id, query.waiting === true);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     .post(
       "/api/instances/:id/artifacts",
       {

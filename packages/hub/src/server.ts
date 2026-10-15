@@ -563,6 +563,7 @@ import { sessionLimitRoutes } from "./session-limits";
 import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
+import { sourceFacts } from "./source-facts";
 import {
   type StagesTemplate,
   TEMPLATES,
@@ -2551,6 +2552,8 @@ export const createServer = (
     settle: (requestId) => {
       pending.resolve(requestId);
     },
+    sourceFacts: (name, input) =>
+      sourceFacts(name, input, () => db.fleetConfig().marketplaces),
     // An ask approved after a restart: the hub runs the write itself.
     run: async (name, input, instanceId) => {
       // A relay's opening asks as an admin write does (relay.ts).

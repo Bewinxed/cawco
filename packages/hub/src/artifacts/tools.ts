@@ -18,6 +18,7 @@ export const WORKSPACE_ID = /^[0-9a-f][0-9a-f-]{7,35}$/;
 export const PATCH_LIMIT = 200;
 
 export const ARTIFACT_TOOLS = [
+  "artifact_list",
   "artifact_create",
   "artifact_update",
   "artifact_read",
@@ -153,6 +154,14 @@ export const artifactRead = {
     since: z.number().int().min(0).optional(),
     png: z.boolean().optional(),
   },
+};
+
+export const artifactList = {
+  name: "artifact_list",
+  description:
+    "Your artifacts (a lead: its project's too), newest first: shown, opened, open pins, unread changes, " +
+    "picks, and `waitingOn` person or session. `waiting: true` keeps those waiting on someone.",
+  input: { waiting: z.boolean().optional() },
 };
 
 export const artifactShow = {

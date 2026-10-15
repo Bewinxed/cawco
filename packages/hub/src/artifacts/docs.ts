@@ -92,6 +92,8 @@ export interface ArtifactDocs {
     origin: ChangeOrigin,
     change: (doc: Doc) => void
   ) => void;
+  /** How many views (a page's overlay, a pane, a canvas's host) are joined to the artifact now. */
+  viewers: (id: string) => number;
 }
 
 /** The joined client an update came from; none for the hub's own. */
@@ -264,6 +266,7 @@ export const createArtifactDocs = (deps: { db: ArtifactsDb }): ArtifactDocs => {
     screens: (id) =>
       [...(loaded.get(id)?.clients ?? [])].filter((client) => client.screen)
         .length,
+    viewers: (id) => loaded.get(id)?.clients.size ?? 0,
     snapshot: (id) =>
       Buffer.from(encodeStateAsUpdate(load(id).doc)).toString("base64"),
     transact: (id, origin, change) => {

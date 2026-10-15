@@ -4082,6 +4082,58 @@
         }
       }
     },
+    "/api/instances/{id}/artifacts/status": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "waiting",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdArtifactsStatus",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdArtifactsStatus 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdArtifactsStatus200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiInstancesByIdArtifactsStatus 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/artifacts/{artifact}": {
       "get": {
         "parameters": [
@@ -21099,6 +21151,12 @@
           "$ref": "#/components/schemas/ArtifactSummary"
         }
       },
+      "getApiInstancesByIdArtifactsStatus200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ArtifactStatus"
+        }
+      },
       "postApiInstancesByIdArtifactsCommentsByPinReply200": {
         "type": "object",
         "properties": {
@@ -29183,6 +29241,87 @@
           "name",
           "opened",
           "route"
+        ]
+      },
+      "ArtifactStatus": {
+        "description": "One artifact as `artifact_list` answers it.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "opened": {
+            "description": "Whether the person has had its latest revision on screen.",
+            "type": "boolean"
+          },
+          "picks": {
+            "description": "A decision page's choices: how many it asks, how many are picked, how many picks are not sent yet.",
+            "type": "object",
+            "properties": {
+              "asked": {
+                "type": "number"
+              },
+              "made": {
+                "type": "number"
+              },
+              "unsent": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "asked",
+              "made",
+              "unsent"
+            ]
+          },
+          "picksAwaiting": {
+            "description": "Picks the person sent that the session has not read.",
+            "type": "number"
+          },
+          "pins": {
+            "description": "Pins the person left open.",
+            "type": "number"
+          },
+          "session": {
+            "description": "The session that made it, when it is not the caller's own (a lead reading its project's).",
+            "type": "string"
+          },
+          "shown": {
+            "description": "Whether its session's panel shows it now.",
+            "type": "boolean"
+          },
+          "unread": {
+            "description": "The person's changes (picks, notes, drawn elements) since the session last read it.",
+            "type": "number"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "waitingOn": {
+            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks or a canvas's changes unread).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactStatusWaitingOn"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "opened",
+          "picksAwaiting",
+          "pins",
+          "shown",
+          "unread",
+          "updatedAt",
+          "waitingOn"
         ]
       },
       "ArtifactRead": {
@@ -45541,6 +45680,13 @@
           "unauthenticated",
           "unknown",
           "unreadable-credentials"
+        ]
+      },
+      "ArtifactStatusWaitingOn": {
+        "type": "string",
+        "enum": [
+          "person",
+          "session"
         ]
       },
       "BinaryUpdateLandingOutcome": {

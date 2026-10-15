@@ -486,6 +486,16 @@ function fleetRoots(): { scratch: string; short: string } {
  */
 const OWNER_FILE = ".scratch-fleet.lock";
 
+/** The proxy settings a workspace reaches public hosts by, passed to the fleet when set. */
+const PROXY_ENV = [
+  "HTTPS_PROXY",
+  "https_proxy",
+  "HTTP_PROXY",
+  "http_proxy",
+  "NO_PROXY",
+  "no_proxy",
+];
+
 /** Every two-hex name, in an order of its own each draw. */
 function shuffledHex(): string[] {
   const names = Array.from({ length: 256 }, (_, n) =>
@@ -1125,6 +1135,15 @@ async function standUp(
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     DISABLE_AUTOUPDATER: "1",
     OPENCODE_DISABLE_MODELS_FETCH: "1",
+    // Inside a workspace, public hosts are reached only through its proxy:
+    // the hub reading a skill's source (source-facts.ts) goes the same way.
+    // Loopback stays direct (`no_proxy`), so the mock model is unchanged.
+    ...Object.fromEntries(
+      PROXY_ENV.flatMap((name) => {
+        const value = process.env[name];
+        return value ? [[name, value]] : [];
+      })
+    ),
   };
   const procs: Partial<Record<Role, ReturnType<typeof Bun.spawn>>> = {};
   /** Each role's latest launch's stderr file. */

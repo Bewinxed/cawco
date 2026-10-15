@@ -82,11 +82,17 @@ import type { Tasks } from "./tasks";
  * writes a project's fonts and images into `design/` itself
  * (project-folder.ts `folderContent`). About 11 tokens for the lead, its
  * description cut to a line (lead 15,664 measured).
+ * 2026-10-16: `artifact_list` (the owner asked four times in a day which
+ * previews were waiting on him; no tool answered it), about 110 tokens for
+ * the worker, the delegate and the lead, deferred, not always loaded; and a
+ * required `reason` on every `admin_*_write` (the owner approved writes he
+ * could not explain), about 300 more for the worker (worker 24,575,
+ * delegate 6,573, lead 15,799 measured). Raised deliberately.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 24_170,
-  delegate: 6500,
-  lead: 15_670,
+  worker: 24_590,
+  delegate: 6590,
+  lead: 15_810,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

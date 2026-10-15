@@ -77,7 +77,7 @@
     rows: FleetMemoryVersion[]
   ): FleetMemoryVersion | Exclude<Before, { kind: "loading" | "version" }> {
     if (writes) {
-      if (parsed.kind !== "doc" || !parsed.updatedAt) {
+      if (parsed.kind !== "saved" || !parsed.updatedAt) {
         return { kind: "missing", why: "the save did not say when it landed" };
       }
       const saved = Date.parse(parsed.updatedAt);
@@ -116,7 +116,7 @@
       return;
     }
     // A live write has no saved row yet; the diff waits for it.
-    if (writes && parsed.kind !== "doc") {
+    if (writes && parsed.kind !== "saved") {
       before = { kind: "loading" };
       return;
     }
@@ -167,7 +167,7 @@
 
   /** `saved · d957eef · 03:56` — the parts the result actually carried. */
   const footer = $derived.by(() => {
-    if (parsed.kind !== "doc") {
+    if (parsed.kind !== "doc" && parsed.kind !== "saved") {
       return;
     }
     const parts = [

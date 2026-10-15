@@ -214,6 +214,33 @@ export interface ArtifactRead {
   wrote?: string[];
 }
 
+/** A decision page's choice, as the kit marks it (`data-cawco-choice="<id>"`). */
+const CHOICE_ATTRIBUTE = /\bdata-cawco-choice="([^"]+)"/g;
+
+/** One artifact as `artifact_list` answers it. */
+export interface ArtifactStatus {
+  id: string;
+  kind: ArtifactKind;
+  name: string;
+  /** Whether the person has had its latest revision on screen. */
+  opened: boolean;
+  /** A decision page's choices: how many it asks, how many are picked, how many picks are not sent yet. */
+  picks?: { asked: number; made: number; unsent: number };
+  /** Picks the person sent that the session has not read. */
+  picksAwaiting: number;
+  /** Pins the person left open. */
+  pins: number;
+  /** The session that made it, when it is not the caller's own (a lead reading its project's). */
+  session?: string;
+  /** Whether its session's panel shows it now. */
+  shown: boolean;
+  /** The person's changes (picks, notes, drawn elements) since the session last read it. */
+  unread: number;
+  updatedAt: string;
+  /** Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks or a canvas's changes unread). */
+  waitingOn: ("person" | "session")[];
+}
+
 export interface Created {
   /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`). */
   host?: string;
@@ -697,7 +724,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
   };
 
+  /**
+   * A page's next revision, for new HTML. A view joined to it morphs to the
+   * new HTML in place, so the person has that revision on screen without a
+   * new show.
+   */
+  const nextRevision = (row: ArtifactRow) => ({
+    revision: row.revision + 1,
+    updatedAt: new Date(),
+    ...(docs.viewers(row.id) > 0 ? { openedRevision: row.revision + 1 } : {}),
+  });
+
+  /** A page or preview as the session reads it, which counts as its read. */
   const read = (row: ArtifactRow, since?: number): ArtifactRead => {
+    db.update(row.id, { readSeq: row.seq });
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
     const meta = metaOf(doc);
@@ -1259,7 +1299,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const entries = canvasEntries(docs, row.id);
     const present = new Set(entries.map((entry) => entry.el.id));
     const meta = docs.doc(row.id).getMap("meta");
-    db.update(row.id, { deliveredSeq: row.seq });
+    db.update(row.id, { deliveredSeq: row.seq, readSeq: row.seq });
     return {
       id: row.id,
       kind: row.kind,
@@ -1337,6 +1377,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       seq: 0,
       changes: {},
       deliveredSeq: 0,
+      readSeq: 0,
+      openedRevision: null,
       createdAt: now,
       updatedAt: now,
       shownAt: null,
@@ -1387,6 +1429,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         seq: 0,
         changes: {},
         deliveredSeq: 0,
+        readSeq: 0,
+        openedRevision: null,
         createdAt: now,
         updatedAt: now,
         shownAt: null,
@@ -1469,9 +1513,98 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
+  /** A decision page's choice ids, as its HTML declares them; empty for any other page. */
+  const choicesAsked = (row: ArtifactRow): string[] => {
+    if (row.kind !== "page") {
+      return [];
+    }
+    let html: string;
+    try {
+      html = readFileSync(join(deps.root, row.id, "index.html"), "utf8");
+    } catch {
+      return [];
+    }
+    return [
+      ...new Set([...html.matchAll(CHOICE_ATTRIBUTE)].map((match) => match[1])),
+    ];
+  };
+
+  /** One artifact as `artifact_list` answers it, read for `caller`. */
+  const statusOf = (caller: InstanceRow, row: ArtifactRow): ArtifactStatus => {
+    const doc = docs.doc(row.id);
+    const state = stateOf(doc);
+    const { sentAt } = metaOf(doc);
+    const byPerson = Object.entries(row.changes).filter(
+      ([, change]) => change.by === "person"
+    );
+    const unread = byPerson.filter(([, change]) => change.seq > row.readSeq);
+    const picksAwaiting = unread.filter(
+      ([key, change]) => key in state && change.seq <= row.deliveredSeq
+    ).length;
+    const pins = Object.values(
+      doc.getMap("pins").toJSON() as Record<string, Pin>
+    ).filter((pin) => !pin.resolvedAt).length;
+    const asked = choicesAsked(row);
+    const picks =
+      asked.length > 0
+        ? {
+            asked: asked.length,
+            made: asked.filter((choice) => choice in state).length,
+            unsent: Object.values(state).filter(
+              (entry) => !sentAt || entry.at > sentAt
+            ).length,
+          }
+        : undefined;
+    const shown = deps.showing(row.instanceId) === row.id;
+    const opened = row.openedRevision === row.revision;
+    const draft = doc.getMap("meta").get("draft") === true;
+    const waitingOn: ArtifactStatus["waitingOn"] = [];
+    if (
+      !draft &&
+      ((shown && !opened) ||
+        (picks && (picks.made < picks.asked || picks.unsent > 0)))
+    ) {
+      waitingOn.push("person");
+    }
+    if (
+      !draft &&
+      (picksAwaiting > 0 || (row.kind === "canvas" && unread.length > 0))
+    ) {
+      waitingOn.push("session");
+    }
+    return {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      ...(row.instanceId === caller.id ? {} : { session: row.instanceId }),
+      shown,
+      opened,
+      updatedAt: row.updatedAt.toISOString(),
+      pins,
+      unread: unread.length,
+      picksAwaiting,
+      ...(picks ? { picks } : {}),
+      waitingOn,
+    };
+  };
+
   return {
     list: (instanceId: string): ArtifactSummary[] =>
       db.ofInstance(sessionOf(instanceId).id).map(summaryOf),
+
+    /**
+     * `artifact_list`: the session's artifacts (a project's lead also gets
+     * every session's of its project), newest first, each with whose move it
+     * is; `waiting` keeps those where it is somebody's.
+     */
+    status: (instanceId: string, waitingOnly = false): ArtifactStatus[] => {
+      const instance = sessionOf(instanceId);
+      const rows = answerable(instance).sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      );
+      const all = rows.map((row) => statusOf(instance, row));
+      return waitingOnly ? all.filter((one) => one.waitingOn.length > 0) : all;
+    },
 
     /**
      * An artifact by id with the session that made it, and whether that
@@ -1545,6 +1678,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             seq: 0,
             changes: {},
             deliveredSeq: 0,
+            readSeq: 0,
+            openedRevision: null,
             createdAt: now,
             updatedAt: now,
             shownAt: null,
@@ -1605,10 +1740,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           name: row.name,
           html: change.html,
         });
-        row = db.update(row.id, {
-          revision: row.revision + 1,
-          updatedAt: new Date(),
-        }) as ArtifactRow;
+        row = db.update(row.id, nextRevision(row)) as ArtifactRow;
         writePage(row.id, html);
         // Every page open on it hears the new revision in the doc and morphs
         // in place (the overlay); nothing reloads.
@@ -1805,6 +1937,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      */
     shown: (instanceId: string, id: string, ack: ShownAck): { heard: true } => {
       const row = own(sessionOf(instanceId), id);
+      if (ack.ok) {
+        db.update(row.id, { openedRevision: row.revision });
+      }
       const key = shownKey(row.id, ack.revision);
       const waiter = waiting.get(key);
       if (waiter) {

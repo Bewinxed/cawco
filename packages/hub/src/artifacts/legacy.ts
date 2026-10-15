@@ -108,6 +108,8 @@ const importCanvas = (deps: ImportDeps, canvas: LegacyCanvas): void => {
     seq: 0,
     changes: {},
     deliveredSeq: 0,
+    readSeq: 0,
+    openedRevision: null,
     createdAt: at,
     updatedAt: at,
     shownAt: null,
@@ -149,5 +151,5 @@ const importCanvas = (deps: ImportDeps, canvas: LegacyCanvas): void => {
     ),
     Object.fromEntries(Object.keys(entries).map((key) => [key, "person"]))
   );
-  deps.db.update(row.id, { deliveredSeq: seq });
+  deps.db.update(row.id, { deliveredSeq: seq, readSeq: seq });
 };

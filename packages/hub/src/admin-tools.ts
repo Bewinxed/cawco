@@ -124,6 +124,27 @@ const marketplaceAction = async (
   return link.marketplace;
 };
 
+/** Every write's reason, which the person reads first on the approval (admin-asks.ts `askRefusal`). */
+const reason = z
+  .string()
+  .max(300)
+  .optional()
+  .describe("Required: one sentence on why, for which task.");
+
+/** What a memory write answers: the hash to write against next, when it landed, and the size kept; never the text back. */
+const keptMemory = (
+  saved: unknown,
+  content: string
+): { bytes: number; hash: string; lines: number; updatedAt: string } => {
+  const row = saved as { hash: string; updatedAt: string };
+  return {
+    hash: row.hash,
+    updatedAt: row.updatedAt,
+    lines: content === "" ? 0 : content.split("\n").length,
+    bytes: Buffer.byteLength(content),
+  };
+};
+
 const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
 
 /** Whether a tool is an admin write: the hub asks the person before each call runs (admin-asks.ts). */
@@ -187,9 +208,14 @@ function admin<T extends z.ZodRawShape>(
   const write = tool(
     `admin_${group}_write`,
     `Change ${about} \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The call waits while the person approves it, then runs once with these arguments; a refusal comes back with their reason. Read with admin_${group}_read first.`,
-    { action: z.enum(writes), ...input },
-    (args) =>
-      handler(args as { action: string } & Partial<z.infer<z.ZodObject<T>>>)
+    { action: z.enum(writes), reason, ...input },
+    // The reason is the person's to read on the approval, not a setting.
+    (args) => {
+      const { reason: _reason, ...setting } = args as Record<string, unknown>;
+      return handler(
+        setting as { action: string } & Partial<z.infer<z.ZodObject<T>>>
+      );
+    }
   );
   return [read, write];
 }
@@ -917,10 +943,13 @@ export function adminTools() {
             throw new Error("content is required to set fleet memory");
           }
           return ok(
-            await api("PUT", "/api/fleet/memory", {
-              content,
-              ...(expectedHash ? { expectedHash } : {}),
-            })
+            keptMemory(
+              await api("PUT", "/api/fleet/memory", {
+                content,
+                ...(expectedHash ? { expectedHash } : {}),
+              }),
+              content
+            )
           );
         }
         if (action === "set_doc") {
@@ -929,14 +958,18 @@ export function adminTools() {
               "path and content are required to set a memory document"
             );
           }
-          return ok(
-            await api("PUT", "/api/fleet/memory/docs", {
-              path,
-              content,
-              ...(scope ? { scope } : {}),
-              ...(expectedHash ? { expectedHash } : {}),
-            })
-          );
+          return ok({
+            path,
+            ...keptMemory(
+              await api("PUT", "/api/fleet/memory/docs", {
+                path,
+                content,
+                ...(scope ? { scope } : {}),
+                ...(expectedHash ? { expectedHash } : {}),
+              }),
+              content
+            ),
+          });
         }
         // remove_doc
         if (!path) {

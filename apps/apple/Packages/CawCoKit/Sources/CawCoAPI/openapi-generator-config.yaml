@@ -14,6 +14,7 @@ typeOverrides:
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
     ArtifactKind: OpenEnums.ArtifactKind
+    ArtifactStatusWaitingOn: OpenEnums.ArtifactStatusWaitingOn
     AuthState: OpenEnums.AuthState
     BinaryUpdateLandingOutcome: OpenEnums.BinaryUpdateLandingOutcome
     BinaryUpdatePhase: OpenEnums.BinaryUpdatePhase

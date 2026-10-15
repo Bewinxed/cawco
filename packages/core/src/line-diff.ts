@@ -19,7 +19,10 @@ const LINE = /[^\n]*\n|[^\n]+$/g;
 export const linesOf = (source: string): string[] => source.match(LINE) ?? [];
 
 /** Where two line lists stop agreeing: the common head's length and the common tail's. */
-function commonEnds(a: string[], b: string[]): { head: number; tail: number } {
+export function commonEnds(
+  a: string[],
+  b: string[]
+): { head: number; tail: number } {
   let head = 0;
   while (head < a.length && head < b.length && a[head] === b[head]) {
     head += 1;

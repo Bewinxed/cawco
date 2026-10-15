@@ -2609,6 +2609,10 @@ export const artifacts = sqliteTable(
       .default({}),
     /** The last seq the session was told of: the person's changes after it are owed to it. */
     deliveredSeq: integer("delivered_seq").notNull().default(0),
+    /** The seq the session last read it at (`artifact_read`): the person's changes after it are unread (`artifact_list`). */
+    readSeq: integer("read_seq").notNull().default(0),
+    /** The revision a person last had on screen: a view's word that it showed it, or a page's new HTML morphing in an open view. Null until then. */
+    openedRevision: integer("opened_revision"),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
     shownAt: timestamp("shown_at"),

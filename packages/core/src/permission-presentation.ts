@@ -12,7 +12,7 @@
  * exist (so a put says whether it adds or replaces).
  */
 import { type MemoryScope, scopeWords } from "./fleet";
-import { editScript, linesOf } from "./line-diff";
+import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
@@ -68,19 +68,53 @@ export const askerLine = (presentation: PermissionPresentation): string =>
 
 /** The settings groups an admin write names things in. */
 export type AdminGroup =
-  "delegate_types" | "hooks" | "mcp_servers" | "plugins" | "rules" | "skills";
+  | "connections"
+  | "delegate_types"
+  | "hooks"
+  | "mcp_servers"
+  | "plugins"
+  | "previews"
+  | "rules"
+  | "skills";
+
+/**
+ * Where an install fetches from, as the hub read it when the call was
+ * proposed (hub source-facts.ts): a skill's source, a marketplace's.
+ */
+export interface SourceFacts {
+  /** The source as read: `github.com/owner/repo`, `npm package`. */
+  at: string;
+  /** When it first came out: the repository's creation, the package's first publish (ISO). */
+  since?: string;
+  /** The repository's GitHub stars. */
+  stars?: number;
+  /** Why there are no facts: a source that carries none, or the registry's answer. */
+  unknown?: string;
+  /** The package's npm downloads in the last week. */
+  weeklyDownloads?: number;
+}
 
 export interface PresentationContext {
   /** The asking session's name. */
   asker: string;
+  /**
+   * A setting as the fleet keeps it now, by the key the write names it with
+   * (a preview setting's key is ""): its fields as the write's own input
+   * names them, secrets included (they are hidden as shown); undefined when
+   * it does not exist. What a write's before → after is read against.
+   */
+  current: (
+    group: AdminGroup,
+    key: string
+  ) => Record<string, unknown> | undefined;
   /** The fleet's current text: the CLAUDE.md for `null`, else the memory document at that path. Undefined when there is none. */
   memory: (path: string | null) => string | undefined;
-  /** The current name of a setting the fleet keeps, by the key the write names it with; undefined when it does not exist. */
-  named: (group: AdminGroup, key: string) => string | undefined;
   /** The asking session's project, by name; undefined when it is in none. */
   project?: string;
   /** A project's name by its id; undefined when the hub keeps no such project. */
-  projectName?: (id: string) => string | undefined;
+  projectName: (id: string) => string | undefined;
+  /** An install's or a link's source, read when it was proposed; undefined for any other call. */
+  source?: SourceFacts;
 }
 
 // ── line changes ─────────────────────────────────────────────────────────
@@ -171,6 +205,40 @@ const changeOf = (
       removed: stat.removed,
     },
     stat,
+  };
+};
+
+/** Unchanged lines kept around a document's changed lines, so a hunk reads in place. */
+const HUNK_CONTEXT = 3;
+
+/**
+ * A document's change as only its changed lines and a few around them: the
+ * span from the first changed line to the last, on each side, counted over
+ * the whole document. A memory write's card carries this, never the file.
+ */
+const hunkOf = (
+  path: string,
+  before: string,
+  after: string
+): { change: PermissionChange; detail: string } => {
+  const { change, stat } = changeOf(path, before, after);
+  const a = linesOf(before);
+  const b = linesOf(after);
+  const { head, tail } = commonEnds(a, b);
+  const from = Math.max(0, head - HUNK_CONTEXT);
+  const keep = Math.max(0, tail - HUNK_CONTEXT);
+  const words = statWords(stat);
+  return {
+    change: {
+      ...change,
+      // Each line keeps its own line ending (line-diff.ts `linesOf`).
+      before: a.slice(from, a.length - keep).join(""),
+      after: b.slice(from, b.length - keep).join(""),
+    },
+    detail:
+      stat.added + stat.removed === 0
+        ? words
+        : `${words} (+${stat.added} −${stat.removed}), shown from line ${from + 1} of ${b.length}`,
   };
 };
 
@@ -298,7 +366,11 @@ const only = (summary: string, fields: PermissionField[] = []): Presented => ({
   fields,
 });
 
-/** `admin_memory_write`: the fleet's CLAUDE.md and its linked documents, with the change each makes. */
+/**
+ * `admin_memory_write`: the fleet's CLAUDE.md and its linked documents, with
+ * the change each makes as its changed lines alone ({@link hunkOf}), never
+ * the whole file.
+ */
 function memoryWrite(
   input: Record<string, unknown>,
   context: PresentationContext
@@ -308,25 +380,25 @@ function memoryWrite(
   switch (input.action) {
     case "set": {
       const now = context.memory(null);
-      const { change: made, stat } = changeOf("CLAUDE.md", now ?? "", content);
+      const { change: made, detail } = hunkOf("CLAUDE.md", now ?? "", content);
       return {
         summary:
           now === undefined
             ? "Create the fleet's CLAUDE.md"
             : "Change the fleet's CLAUDE.md",
-        detail: statWords(stat),
+        detail,
         changes: [made],
-        fields: [],
+        fields: [{ key: "loads in", value: "every session" }],
       };
     }
     case "set_doc": {
       const name = path ?? "(no path)";
       const now = path ? context.memory(path) : undefined;
-      const { change: made, stat } = changeOf(name, now ?? "", content);
+      const { change: made, detail } = hunkOf(name, now ?? "", content);
       const scope = input.scope as MemoryScope | undefined;
       return {
         summary: now === undefined ? `Create ${name}` : `Change ${name}`,
-        detail: statWords(stat),
+        detail,
         changes: [made],
         // Named only when the write sets it; left out, the scope stays.
         fields:
@@ -336,7 +408,7 @@ function memoryWrite(
                   key: "loaded into",
                   value: scopeWords(
                     scope,
-                    (id) => context.projectName?.(id) ?? `project ${id}`
+                    (id) => context.projectName(id) ?? `project ${id}`
                   ),
                 },
               ]
@@ -351,10 +423,10 @@ function memoryWrite(
           { key: "note", value: "The fleet keeps no document at this path." },
         ]);
       }
-      const { change: made, stat } = changeOf(name, now, "");
+      const { change: made, detail } = hunkOf(name, now, "");
       return {
         summary: `Remove ${name}`,
-        detail: statWords(stat),
+        detail,
         changes: [made],
         fields: [],
       };
@@ -383,21 +455,257 @@ function mcpTarget(config: Record<string, unknown>): string | undefined {
   return cut([command, ...args].join(" "), COMMAND_CAP);
 }
 
-function skillsWrite(input: Record<string, unknown>): Presented {
+const DAY_MS = 86_400_000;
+const COUNT = new Intl.NumberFormat("en");
+const DAY = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** How long ago `iso` was, in its largest whole unit: "today", "3 days ago", "5 months ago", "2 years ago". */
+const agoWords = (iso: string): string => {
+  const days = Math.floor((Date.now() - Date.parse(iso)) / DAY_MS);
+  if (days < 1) {
+    return "today";
+  }
+  if (days < 60) {
+    return `${plural(days, "day")} ago`;
+  }
+  const months = Math.floor(days / 30.44);
+  return months < 24
+    ? `${plural(months, "month")} ago`
+    : `${plural(Math.floor(days / 365.25), "year")} ago`;
+};
+
+/**
+ * An install's source as the card shows it: how old, how many use it, and
+ * where, unless the summary already names it (`named`).
+ */
+function sourceFields(
+  source: SourceFacts | undefined,
+  named = false
+): PermissionField[] {
+  if (!source) {
+    return [];
+  }
+  const npm = source.weeklyDownloads !== undefined;
+  const fields: PermissionField[] = named
+    ? []
+    : [{ key: "from", value: source.at }];
+  if (source.unknown) {
+    fields.push({ key: "age", value: `Unknown: ${source.unknown}` });
+  }
+  if (source.since) {
+    fields.push({
+      key: "age",
+      value: `${npm ? "First published" : "Created"} ${DAY.format(new Date(source.since))}, ${agoWords(source.since)}`,
+    });
+  }
+  if (source.stars !== undefined) {
+    fields.push({ key: "stars", value: COUNT.format(source.stars) });
+  }
+  if (source.weeklyDownloads !== undefined) {
+    fields.push({
+      key: "downloads",
+      value: `${COUNT.format(source.weeklyDownloads)} last week`,
+    });
+  }
+  return fields;
+}
+
+// ── before → after ───────────────────────────────────────────────────────
+
+/** Where a setting applies, in the person's words: one project's checkouts and workspaces, or every machine. */
+const bindingWords = (projectId: unknown, context: PresentationContext) =>
+  typeof projectId === "string" && projectId
+    ? `${context.projectName(projectId) ?? projectId} project only`
+    : "every machine";
+
+/** Which sessions load a setting: one project's, or every session. */
+const loadsIn = (projectId: unknown, context: PresentationContext) =>
+  typeof projectId === "string" && projectId
+    ? `sessions in ${context.projectName(projectId) ?? projectId}`
+    : "every session";
+
+/** "Loads in": where it loads after the write, and where it loaded before when that moves. */
+const loadsInField = (
+  before: unknown,
+  after: unknown,
+  context: PresentationContext
+): PermissionField => {
+  const now = loadsIn(after, context);
+  const was = loadsIn(before, context);
+  return {
+    key: "loads in",
+    value: now === was ? now : `${now} (was: ${was})`,
+  };
+};
+
+/** A setting's field as a person reads it: a project binding as its scope, a flag as on or off, a list joined, secrets hidden. */
+const settingWords = (
+  key: string,
+  value: unknown,
+  context: PresentationContext
+): string => {
+  if (key === "projectId") {
+    return bindingWords(value, context);
+  }
+  if (key === "enabled") {
+    return value === false ? "off" : "on";
+  }
+  if (value === undefined || value === null || value === "") {
+    return "(none)";
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return "(none)";
+    }
+    return value
+      .map((one) => {
+        if (key === "projects" && typeof one === "string") {
+          return context.projectName(one) ?? one;
+        }
+        return typeof one === "string" ? one : JSON.stringify(one);
+      })
+      .join(", ");
+  }
+  return shown(key, value);
+};
+
+/** The name a field reads under: a project binding is its scope. */
+const fieldName = (key: string) => (key === "projectId" ? "scope" : key);
+
+const same = (a: unknown, b: unknown) =>
+  JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/**
+ * What a write changes, against what the fleet keeps now: each field of
+ * `after` that differs, as "before → after" with names resolved; with
+ * nothing kept yet, each field it sets. A field `after` leaves undefined
+ * keeps its value and is not shown; one it sets null is cleared.
+ */
+function changedFields(
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown>,
+  context: PresentationContext
+): PermissionField[] {
+  return Object.entries(after).flatMap(([key, value]) => {
+    if (value === undefined) {
+      return [];
+    }
+    if (!before) {
+      return value === null || value === "" || same(value, [])
+        ? []
+        : [{ key: fieldName(key), value: settingWords(key, value, context) }];
+    }
+    const was = before[key];
+    if (same(was, value)) {
+      return [];
+    }
+    const from = settingWords(key, was, context);
+    const to = settingWords(key, value, context);
+    return [
+      {
+        key: fieldName(key),
+        // Hidden values (an env's, a header's) moved under the same keys.
+        value: from === to ? `${to}, its values change` : `${from} → ${to}`,
+      },
+    ];
+  });
+}
+
+/** Every key either side names, each with the new side's value (null where it drops one): a whole replacement's `after`. */
+const replacing = (
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown>
+): Record<string, unknown> =>
+  Object.fromEntries(
+    [...new Set([...Object.keys(before ?? {}), ...Object.keys(after)])].map(
+      (key) => [key, after[key] ?? null]
+    )
+  );
+
+/** The line under a change's summary: which settings move, or that none does. */
+const changeDetail = (fields: PermissionField[]): string =>
+  fields.length === 0
+    ? "Nothing changes: the fleet already keeps it this way."
+    : `Changes ${fields.map((field) => field.key).join(", ")}; nothing else.`;
+
+/** The setting kept now, as a record, or undefined. */
+const record = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+
+/** The input's own fields, minus what names the call. */
+const given = (input: Record<string, unknown>, skip: readonly string[]) =>
+  Object.fromEntries(
+    Object.entries(input).filter(
+      ([key]) => !(skip.includes(key) || key === "action" || key === "reason")
+    )
+  );
+
+function skillsWrite(
+  input: Record<string, unknown>,
+  context: PresentationContext
+): Presented {
   const name = text(input.name) ?? "(unnamed)";
-  const fields = fieldsOf(input, ["action", "name", "source"]);
+  const before = context.current("skills", name);
+  const projectId =
+    input.projectId === undefined ? before?.projectId : input.projectId;
   switch (input.action) {
-    case "install":
-      return only(
-        `Install skill ${name} from ${text(input.source) ?? "(no source)"}`,
-        fields
+    case "install": {
+      const source = text(input.source) ?? "(no source)";
+      // The summary names the source.
+      const facts = sourceFields(context.source, true);
+      if (!before) {
+        return only(`Install skill ${name} from ${source}`, [
+          { key: "scope", value: bindingWords(projectId, context) },
+          loadsInField(projectId, projectId, context),
+          ...facts,
+        ]);
+      }
+      const changed = changedFields(
+        before,
+        { source: input.source, enabled: true, projectId: projectId ?? null },
+        context
       );
+      return {
+        summary: `Reinstall skill ${name} from ${source}`,
+        detail: changeDetail(changed),
+        changes: [],
+        fields: [
+          ...changed,
+          loadsInField(before.projectId, projectId, context),
+          ...facts,
+        ],
+      };
+    }
     case "enable":
-      return only(`Enable skill ${name}`, fields);
-    case "disable":
-      return only(`Disable skill ${name}`, fields);
+    case "disable": {
+      const changed = changedFields(
+        before,
+        { enabled: input.action === "enable" },
+        context
+      );
+      return {
+        summary: `${input.action === "enable" ? "Enable" : "Disable"} skill ${name}`,
+        detail: before
+          ? changeDetail(changed)
+          : "The fleet keeps no skill of this name.",
+        changes: [],
+        fields: [...changed, loadsInField(projectId, projectId, context)],
+      };
+    }
     case "remove":
-      return only(`Remove skill ${name}`, fields);
+      return only(`Remove skill ${name}`, [
+        {
+          key: "loads in",
+          value: `no session (was: ${loadsIn(before?.projectId, context)})`,
+        },
+      ]);
     default:
       return only(`Change skill ${name}`, fieldsOf(input));
   }
@@ -408,26 +716,50 @@ function mcpServersWrite(
   context: PresentationContext
 ): Presented {
   const name = text(input.name) ?? "(unnamed)";
+  const before = context.current("mcp_servers", name);
   if (input.action === "remove") {
-    return only(`Remove MCP server ${name}`);
+    return only(`Remove MCP server ${name}`, [
+      {
+        key: "loads in",
+        value: `no session (was: ${loadsIn(before?.projectId, context)})`,
+      },
+    ]);
   }
-  const config =
-    input.config && typeof input.config === "object"
-      ? (input.config as Record<string, unknown>)
-      : {};
-  const target = mcpTarget(config);
-  const verb = context.named("mcp_servers", name) ? "Replace" : "Add";
-  // The summary carries where it answers; the command line is repeated whole
-  // only when the summary had to cut it.
-  const whole = target !== undefined && !target.endsWith("…");
-  const fields = [
-    ...fieldsOf(config, whole ? ["url", "command", "args"] : ["url"]),
-    ...fieldsOf(input, ["action", "name", "config"]),
+  const config = record(input.config) ?? {};
+  // As the hub stores a put: `enabled` left out is on, `projectId` left out
+  // keeps the binding it has.
+  const enabled = input.enabled ?? true;
+  const projectId =
+    input.projectId === undefined
+      ? (before?.projectId ?? null)
+      : input.projectId;
+  if (!before) {
+    const target = mcpTarget(config);
+    // The summary carries where it answers; the command line is repeated
+    // whole only when the summary had to cut it.
+    const whole = target !== undefined && !target.endsWith("…");
+    return only(`Add MCP server ${name}${target ? ` (${target})` : ""}`, [
+      ...fieldsOf(config, whole ? ["url", "command", "args"] : ["url"]),
+      { key: "scope", value: bindingWords(projectId, context) },
+      ...(enabled === false ? [{ key: "enabled", value: "off" }] : []),
+      loadsInField(projectId, projectId, context),
+    ]);
+  }
+  const keptConfig = record(before.config);
+  const changed = [
+    ...changedFields(keptConfig, replacing(keptConfig, config), context),
+    ...changedFields(
+      { enabled: before.enabled, projectId: before.projectId ?? null },
+      { enabled, projectId },
+      context
+    ),
   ];
-  return only(
-    `${verb} MCP server ${name}${target ? ` (${target})` : ""}`,
-    fields
-  );
+  return {
+    summary: `Change MCP server ${name}`,
+    detail: changeDetail(changed),
+    changes: [],
+    fields: [...changed, loadsInField(before.projectId, projectId, context)],
+  };
 }
 
 function hooksWrite(
@@ -435,21 +767,27 @@ function hooksWrite(
   context: PresentationContext
 ): Presented {
   const id = text(input.id);
-  const name =
-    text(input.name) ??
-    (id ? context.named("hooks", id) : undefined) ??
-    id ??
-    "(unnamed)";
+  const before = id ? context.current("hooks", id) : undefined;
+  const name = text(input.name) ?? text(before?.name) ?? id ?? "(unnamed)";
   const event = text(input.event);
-  const fields = fieldsOf(input, ["action", "id", "name"]);
   switch (input.action) {
     case "create":
       return only(
         `Add hook ${name}${event ? ` on ${event}` : ""}`,
         fieldsOf(input, ["action", "id", "name", "event"])
       );
-    case "update":
-      return only(`Change hook ${name}`, fields);
+    case "update": {
+      // The hub lays the given fields over the stored hook.
+      const changed = changedFields(before, given(input, ["id"]), context);
+      return {
+        summary: `Change hook ${name}`,
+        detail: before
+          ? changeDetail(changed)
+          : "The fleet keeps no hook of this id.",
+        changes: [],
+        fields: changed,
+      };
+    }
     case "remove":
       return only(`Remove hook ${name}`);
     default:
@@ -462,11 +800,8 @@ function rulesWrite(
   context: PresentationContext
 ): Presented {
   const id = text(input.id);
-  const name =
-    text(input.name) ??
-    (id ? context.named("rules", id) : undefined) ??
-    id ??
-    "(unnamed)";
+  const before = id ? context.current("rules", id) : undefined;
+  const name = text(input.name) ?? text(before?.name) ?? id ?? "(unnamed)";
   const pattern = text(input.pattern);
   switch (input.action) {
     case "create":
@@ -474,8 +809,18 @@ function rulesWrite(
         `Add rule ${name}${pattern ? ` (watches “${cut(pattern, 60)}”)` : ""}`,
         fieldsOf(input, ["action", "name"])
       );
-    case "update":
-      return only(`Change rule ${name}`, fieldsOf(input, ["action", "id"]));
+    case "update": {
+      // The tool lays the given fields over the stored rule.
+      const changed = changedFields(before, given(input, ["id"]), context);
+      return {
+        summary: `Change rule ${name}`,
+        detail: before
+          ? changeDetail(changed)
+          : "The fleet keeps no rule of this id.",
+        changes: [],
+        fields: changed,
+      };
+    }
     case "remove":
       return only(`Remove rule ${name}`);
     default:
@@ -483,22 +828,51 @@ function rulesWrite(
   }
 }
 
-function pluginsWrite(input: Record<string, unknown>): Presented {
+function pluginsWrite(
+  input: Record<string, unknown>,
+  context: PresentationContext
+): Presented {
   const id = text(input.id) ?? "(no id)";
   const name = text(input.name) ?? "(unnamed)";
+  const before = text(input.id) ? context.current("plugins", id) : undefined;
   switch (input.action) {
     case "link":
-      return only(
-        `Link marketplace ${name} from ${text(input.source) ?? "(no source)"}`
-      );
+      return only(`Link marketplace ${text(input.source) ?? "(no source)"}`, [
+        {
+          key: "loads in",
+          value: "nothing yet: a plugin from it loads once installed",
+        },
+        ...sourceFields(context.source),
+      ]);
     case "unlink":
       return only(`Unlink marketplace ${name}`);
     case "install":
-      return only(`Install plugin ${id}`);
+      return only(before ? `Reinstall plugin ${id}` : `Install plugin ${id}`, [
+        ...(before?.enabled === false
+          ? [{ key: "enabled", value: "off → on" }]
+          : []),
+        { key: "loads in", value: loadsIn(before?.projectId, context) },
+        ...sourceFields(context.source),
+      ]);
     case "enable":
-      return only(`Enable plugin ${id}`);
-    case "disable":
-      return only(`Disable plugin ${id}`);
+    case "disable": {
+      const changed = changedFields(
+        before,
+        { enabled: input.action === "enable" },
+        context
+      );
+      return {
+        summary: `${input.action === "enable" ? "Enable" : "Disable"} plugin ${id}`,
+        detail: before
+          ? changeDetail(changed)
+          : "The fleet keeps no plugin of this id.",
+        changes: [],
+        fields: [
+          ...changed,
+          { key: "loads in", value: loadsIn(before?.projectId, context) },
+        ],
+      };
+    }
     case "refresh":
       return only(`Refresh plugin ${id} from its marketplace`);
     case "remove":
@@ -516,17 +890,133 @@ function delegateTypesWrite(
   if (input.action === "delete") {
     return only(`Remove delegate type ${name}`);
   }
-  const route = [text(input.harness), text(input.model), text(input.effort)]
-    .filter(Boolean)
-    .join(" · ");
-  const verb = context.named("delegate_types", name) ? "Change" : "Add";
-  return only(
-    `${verb} delegate type ${name}${route ? ` (${route})` : ""}`,
-    fieldsOf(input, ["action", "name", "harness", "model", "effort"])
+  const before = context.current("delegate_types", name);
+  if (!before) {
+    const route = [text(input.harness), text(input.model), text(input.effort)]
+      .filter(Boolean)
+      .join(" · ");
+    return only(
+      `Add delegate type ${name}${route ? ` (${route})` : ""}`,
+      fieldsOf(input, ["action", "name", "harness", "model", "effort"])
+    );
+  }
+  // A put replaces the type: a field it leaves out is cleared.
+  const after = Object.fromEntries(
+    DELEGATE_TYPE_FIELDS.map((key) => [key, input[key] ?? null])
   );
+  const kept = Object.fromEntries(
+    DELEGATE_TYPE_FIELDS.map((key) => [key, before[key] ?? null])
+  );
+  const changed = changedFields(kept, after, context);
+  return {
+    summary: `Change delegate type ${name}`,
+    detail: changeDetail(changed),
+    changes: [],
+    fields: changed,
+  };
 }
 
+/** What a delegate type's put sets (hub admin-tools.ts). */
+const DELEGATE_TYPE_FIELDS = [
+  "description",
+  "harness",
+  "model",
+  "effort",
+  "skills",
+  "denyTools",
+  "canDelegate",
+  "cawcoTodos",
+  "connections",
+] as const;
+
+/** `admin_connections_write`: a service the hub signs in to, never its key. */
+function connectionsWrite(
+  input: Record<string, unknown>,
+  context: PresentationContext
+): Presented {
+  const name = text(input.name) ?? "(unnamed)";
+  const before = context.current("connections", name);
+  switch (input.action) {
+    case "create":
+      return only(
+        `Add connection ${name}${text(input.service) ? ` (${text(input.service)}${text(input.account) ? ` as ${text(input.account)}` : ""})` : ""}`,
+        changedFields(
+          undefined,
+          given(input, ["name", "service", "account"]),
+          context
+        )
+      );
+    case "update": {
+      const changed = changedFields(
+        before,
+        given(input, ["name", "origin"]),
+        context
+      );
+      return {
+        summary: `Change connection ${name}`,
+        detail: before
+          ? changeDetail(changed)
+          : "The hub keeps no connection of this name.",
+        changes: [],
+        fields: changed,
+      };
+    }
+    case "sign_in":
+      return only(`Sign connection ${name} in`);
+    case "remove":
+      return only(`Remove connection ${name}`, [
+        {
+          key: "used by",
+          value: `no session (was: ${settingWords("projects", before?.projects, context)})`,
+        },
+      ]);
+    default:
+      return only(`Change connection ${name}`, fieldsOf(input));
+  }
+}
+
+/** `admin_previews_write`: how every preview on the fleet is reached. */
+function previewsWrite(
+  input: Record<string, unknown>,
+  context: PresentationContext
+): Presented {
+  const changed = changedFields(
+    context.current("previews", ""),
+    { mode: input.mode, pattern: input.pattern ?? null },
+    context
+  );
+  return {
+    summary: "Change how previews are reached",
+    detail: changeDetail(changed),
+    changes: [],
+    fields: [...changed, { key: "affects", value: "every session's previews" }],
+  };
+}
+
+/**
+ * An admin write as its card reads it: the session's `reason` first, as
+ * "why", then what changes and what it affects, as each group says them.
+ */
 function adminWrite(
+  group: string,
+  input: Record<string, unknown>,
+  context: PresentationContext
+): Presented | undefined {
+  const presented = adminGroupWrite(group, input, context);
+  if (!presented) {
+    return;
+  }
+  const why = text(input.reason);
+  return {
+    ...presented,
+    fields: [
+      ...(why ? [{ key: "why", value: why }] : []),
+      ...presented.fields.filter((field) => field.key !== "reason"),
+    ],
+  };
+}
+
+function adminGroupWrite(
   group: string,
   input: Record<string, unknown>,
   context: PresentationContext
@@ -535,7 +1025,7 @@ function adminWrite(
     case "memory":
       return memoryWrite(input, context);
     case "skills":
-      return skillsWrite(input);
+      return skillsWrite(input, context);
     case "mcp_servers":
       return mcpServersWrite(input, context);
     case "hooks":
@@ -543,9 +1033,13 @@ function adminWrite(
     case "rules":
       return rulesWrite(input, context);
     case "plugins":
-      return pluginsWrite(input);
+      return pluginsWrite(input, context);
     case "delegate_types":
       return delegateTypesWrite(input, context);
+    case "connections":
+      return connectionsWrite(input, context);
+    case "previews":
+      return previewsWrite(input, context);
     default:
       return undefined;
   }

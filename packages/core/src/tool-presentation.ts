@@ -1103,6 +1103,8 @@ export type MemoryResult =
       kind: "docs";
       docs: { content: string; path: string; updatedAt?: string }[];
     }
+  /** A write's answer: what it saved, by hash and time, never the text back. */
+  | { kind: "saved"; hash: string; updatedAt?: string }
   | { kind: "none" };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -1111,8 +1113,17 @@ const optional = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
 
 function memoryDoc(value: unknown): MemoryResult {
-  if (!(isRecord(value) && typeof value.content === "string")) {
+  if (!isRecord(value)) {
     return { kind: "none" };
+  }
+  if (typeof value.content !== "string") {
+    return typeof value.hash === "string"
+      ? {
+          kind: "saved",
+          hash: value.hash,
+          updatedAt: optional(value.updatedAt),
+        }
+      : { kind: "none" };
   }
   return {
     kind: "doc",
@@ -1123,7 +1134,7 @@ function memoryDoc(value: unknown): MemoryResult {
   };
 }
 
-/** `get` answers `{memory}`, `list_docs` `{docs}`, and `set`/`set_doc` the saved record itself. */
+/** `get` answers `{memory}`, `list_docs` `{docs}`, and `set`/`set_doc` what they saved (`{hash, updatedAt, lines, bytes}`). */
 export function memoryResult(raw: unknown): MemoryResult {
   let value: unknown = raw;
   if (typeof raw === "string") {

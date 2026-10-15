@@ -552,6 +552,8 @@ nonisolated struct ToolDescriptor {
 nonisolated enum MemoryResult {
     case doc(String)
     case docs([(path: String, content: String)])
+    /// A write's answer: what it saved, by hash, never the text back.
+    case saved
     case none
 
     init(_ raw: String?) {
@@ -565,6 +567,6 @@ nonisolated enum MemoryResult {
             return
         }
         let doc = (value["memory"] as? [String: Any]) ?? value
-        if let content = doc["content"] as? String { self = .doc(content) } else { self = .none }
+        if let content = doc["content"] as? String { self = .doc(content) } else if doc["hash"] is String { self = .saved } else { self = .none }
     }
 }

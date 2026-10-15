@@ -634,8 +634,8 @@ final class MemoryBody: UIView {
             loading.layer.cornerRadius = Radius.radiusSm
             loading.heightAnchor.constraint(equalToConstant: 80).isActive = true
             stack.addArrangedSubview(loading)
-            if !footer.isEmpty, case .doc = parsed { stack.addArrangedSubview(line(footer, mono: true)) }
-            guard removes || { if case .doc = parsed { return true } else { return false } }() else { return }
+            if !footer.isEmpty, case .saved = parsed { stack.addArrangedSubview(line(footer, mono: true)) }
+            guard removes || { if case .saved = parsed { return true } else { return false } }() else { return }
             let written = input["content"] as? String ?? ""
             Task { [weak self] in
                 guard let self else { return }

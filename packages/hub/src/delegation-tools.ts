@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   artifactCreate,
   artifactDelete,
+  artifactList,
   artifactPromote,
   artifactRead,
   artifactShow,
@@ -1043,6 +1044,24 @@ export function handoffTools(deps: HandoffDeps) {
         Promise.resolve({
           content: [{ type: "text" as const, text: actions.showImage(path) }],
         })
+    ),
+    tool(
+      artifactList.name,
+      artifactList.description,
+      artifactList.input,
+      async ({ waiting }) =>
+        json(
+          await actions.artifactCall(
+            "GET",
+            `/status${waiting ? "?waiting=true" : ""}`
+          )
+        ),
+      {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      }
     ),
     tool(
       artifactCreate.name,
