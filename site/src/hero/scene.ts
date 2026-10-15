@@ -86,18 +86,21 @@ export function frameClip(
       onFrame(frame);
     },
     play(timeline, at) {
-      const head = { frame: 0 };
-      const render = () => clip.show(Math.min(clip.count - 1, Math.floor(head.frame)));
-      timeline.fromTo(
-        head,
-        { frame: 0 },
-        {
-          frame: clip.count,
-          duration: clip.count / FPS,
-          ease: 'none',
-          onUpdate: render,
-          onReverseComplete: render,
+      // The index is a getter/setter, so every render of the timeline sets the frame, including
+      // a seek with its events suppressed (an onUpdate would miss those).
+      let head = 0;
+      const playhead = {
+        frame(value?: number): number {
+          if (value === undefined) return head;
+          head = value;
+          clip.show(Math.min(clip.count - 1, Math.max(0, Math.floor(value))));
+          return head;
         },
+      };
+      timeline.fromTo(
+        playhead,
+        { frame: 0 },
+        { frame: clip.count, duration: clip.count / FPS, ease: 'none' },
         at,
       );
     },
@@ -119,7 +122,7 @@ export function sceneOne(stage: HTMLElement): gsap.core.Timeline {
   const lids = all(laptop, '.lid[data-frame]');
   const reach = lids.map((lid) => (lid.getAttribute('data-pool') ?? '0 0').split(' ').map(Number));
   const frames = lids.map((lid) => all(laptop, `[data-frame="${lid.getAttribute('data-frame')}"]`));
-  const drifts = all(stage, '[data-card]');
+  const drifts = all(stage, '[data-drift]');
 
   const lid = frameClip(frames, (frame) => {
     const [scale = 0, strength = 0] = reach[frame] ?? [];
@@ -160,7 +163,7 @@ export function sceneOne(stage: HTMLElement): gsap.core.Timeline {
   // 4. The magnetic catch settles the laptop by 1px.
   timeline
     .fromTo(laptop, { y: 0 }, { y: 1, duration: 0.06, ease: 'power2.in' }, 'lid-shut')
-    .to(laptop, { y: 0, duration: 0.2, ease: UI_IN.ease });
+    .to(laptop, { y: 0, duration: 0.2, ease: UI_IN.ease }, '>');
 
   // 5. Desk-box's sessions arrive as cards and drift along the floor's y axis from then on.
   drifts.forEach((drift, index) => {

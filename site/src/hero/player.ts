@@ -130,13 +130,18 @@ export function initHero(stage: HTMLElement, rail: HTMLElement): Hero {
     setMotion(on) {
       motion = on;
       toggle.hidden = !on;
+      handOff?.kill();
+      handOff = null;
       if (!on || paused) {
-        // Still: the summary frame, the whole story at once.
-        hold();
-        timeline.progress(1);
+        // Still: the summary frame, the whole story at once. Its events are suppressed, so
+        // standing on the end arms no hand-off; Play then starts the scene over at once.
+        timeline.pause();
+        timeline.progress(1, true);
+        fill.style.transform = 'scaleX(1)';
         return;
       }
-      timeline.progress(0);
+      timeline.progress(0, true);
+      fill.style.transform = 'scaleX(0)';
       carryOn();
     },
   };

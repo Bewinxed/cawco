@@ -735,14 +735,24 @@ h1 {
   pointer-events: none;
 }
 
-/* A card never passes the window's right edge: its place, or as far right as its width allows. */
+/*
+ * A card never passes the window's right edge: its place, or as far right as its width allows.
+ * Its height (`--rise`, from the card's state below) rides on this same translate: scene.ts
+ * transforms the card itself for its arrival, and gsap folds a transformed element's own
+ * `translate` into its transform, so a rise set on the card would be lost.
+ */
 .drift {
   --edge: calc(100cqw + var(--gutter) - 8px);
+  --rise: 0px;
   position: absolute;
   left: min(var(--cx), calc(var(--edge) - var(--w)));
   top: var(--cy);
   translate: calc(var(--t, 0) * var(--v) * -0.866 * var(--kpx))
-    calc(var(--t, 0) * var(--v) * 0.5 * var(--kpx));
+    calc(var(--t, 0) * var(--v) * 0.5 * var(--kpx) - var(--rise));
+}
+
+.drift:has(> [data-height='2']) {
+  --rise: 10px;
 }
 
 /* The cards stand off desk-box's front corner, the farthest back slowest (10, 14, 18 px/s at k 0.9). */
@@ -792,9 +802,9 @@ h1 {
   --lift: 10px 8px 14px var(--card-shadow);
 }
 
+/* Held 10px higher (`.drift`'s `--rise`), its shadow further off and fainter. */
 .session-card[data-height='2'] {
   --lift: 18px 14px 22px var(--card-shadow-faint);
-  translate: 0 -10px;
 }
 
 .session-card .card-title {
@@ -859,10 +869,15 @@ h1 {
   border-radius: var(--radius-control);
   background: transparent;
   cursor: pointer;
+  transition: transform 160ms var(--ease-out);
 }
 
 .beat[aria-disabled='true'] {
   cursor: default;
+}
+
+.beat:not([aria-disabled='true']):active {
+  transform: scale(0.97);
 }
 
 .beat-line {
@@ -2974,6 +2989,7 @@ mark {
   .tab,
   .autoplay,
   .demo-pause,
+  .beat,
   .copy-icons > *,
   .tab-slider {
     transition: none;
@@ -2998,7 +3014,8 @@ mark {
   .copy:active,
   .tab:active,
   .autoplay:active,
-  .demo-pause:active {
+  .demo-pause:active,
+  .beat:not([aria-disabled='true']):active {
     transform: none;
   }
 }
