@@ -32,7 +32,8 @@
  */
 import { existsSync } from "node:fs";
 import { mkdir, open, readdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -42,12 +43,14 @@ const FINISH = "mcp__cawco__finish_item";
 const BIG_BYTES = 70e6;
 /** Paths the boundary stands in for under `.claude/` (boundary-host.ts `PROTECTED`). */
 const STAND_INS = [
-  ".claude/settings.json",
-  ".claude/settings.local.json",
-  ".claude/hooks",
-  ".claude/commands",
-  ".claude/agents",
-];
+  "settings.json",
+  "settings.local.json",
+  "hooks",
+  "commands",
+  "agents",
+].map((name) => projectClaudeDir("", name));
+/** The person's own skill, by its path in the clone. */
+const SKILL = projectClaudeDir("", "skills", "mine", "SKILL.md");
 
 const commitCommand = (tag: string) =>
   [
@@ -184,8 +187,8 @@ const pastLimit = async ({ check, fleet }: Ctx, w: Workspace) => {
 /** (b) Small: the person's skill and notes carried, the stand-ins not. */
 const smallCarry = async ({ check, fleet, home }: Ctx, w: Workspace) => {
   const skill = "---\nname: mine\ndescription: the person's own\n---\nMine.\n";
-  await mkdir(join(w.path, ".claude", "skills", "mine"), { recursive: true });
-  await writeFile(join(w.path, ".claude", "skills", "mine", "SKILL.md"), skill);
+  await mkdir(dirname(join(w.path, SKILL)), { recursive: true });
+  await writeFile(join(w.path, SKILL), skill);
   await mkdir(join(w.path, ".probe"), { recursive: true });
   await writeFile(join(w.path, ".probe", "notes.md"), "notes\n");
   const standIns = standInsIn(w.path);
@@ -203,8 +206,7 @@ const smallCarry = async ({ check, fleet, home }: Ctx, w: Workspace) => {
   check(
     "(b) the carry's ignored/ holds the person's skill and notes as written",
     carry !== "" &&
-      (await read(join(ignored, ".claude", "skills", "mine", "SKILL.md"))) ===
-        skill &&
+      (await read(join(ignored, SKILL))) === skill &&
       (await read(join(ignored, ".probe", "notes.md"))) === "notes\n",
     await tree(carry)
   );
