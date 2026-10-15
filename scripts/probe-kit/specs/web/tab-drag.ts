@@ -297,14 +297,12 @@ function geometry(s: Shape, fold: readonly [boolean, boolean]): string[] {
   const { width: w, height: h, flare: f, radius: r } = s;
   const n = (v: number) => String(Math.round(v * 100) / 100);
   const [vx, vy, vw, vh] = s.viewBox.split(" ").map(Number);
-  if (
-    !(
-      vx === 0 &&
-      vy === 0 &&
-      near(vw ?? 0, w + 2 * f, 0.5) &&
-      near(vh ?? 0, h, 0.5)
-    )
-  ) {
+  if (!(
+    vx === 0 &&
+    vy === 0 &&
+    near(vw ?? 0, w + 2 * f, 0.5) &&
+    near(vh ?? 0, h, 0.5)
+  )) {
     out.push(`view box ${s.viewBox}, not 0 0 ${w + 2 * f} ${h}`);
   }
   const q = 0.5523 * f;

@@ -1351,7 +1351,7 @@
      is drawn as chosen. -->
 <Tabs
   boxes={servedBoxes}
-  class="session-tabs {hosted ? "hosted" : ""}"
+  class="session-tabs {hosted ? 'hosted' : ''}"
   data-strip={leaf.id}
   onValueChange={(id) => workspace.activate(id, leaf.id)}
   {travel}

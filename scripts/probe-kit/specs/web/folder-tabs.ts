@@ -345,14 +345,12 @@ function shapeFaults(t: Tab): string[] {
   if (!(vx === 0 && vy === 0 && near(vw ?? 0, w + 2 * f) && near(vh ?? 0, h))) {
     out.push(`view box ${t.viewBox}, not 0 0 ${w + 2 * f} ${h}`);
   }
-  if (
-    !(
-      t.svg &&
-      near(t.svg.width, vw ?? 0) &&
-      near(t.svg.height, vh ?? 0) &&
-      near(t.svg.left, t.left - f)
-    )
-  ) {
+  if (!(
+    t.svg &&
+    near(t.svg.width, vw ?? 0) &&
+    near(t.svg.height, vh ?? 0) &&
+    near(t.svg.left, t.left - f)
+  )) {
     out.push(
       `drawn ${t.svg ? `${t.svg.width.toFixed(1)}×${t.svg.height.toFixed(1)} at ${(t.svg.left - t.left).toFixed(1)}` : "nothing"}, not its view box one flare out`
     );
@@ -1105,12 +1103,10 @@ async function readSwitch(
     return { rise: mover.rise, bows };
   });
   const [early, late] = pulled as [(typeof pulled)[0], (typeof pulled)[0]];
-  if (
-    !(
-      late.rise > early.rise &&
-      late.bows.every((b, k) => b > (early.bows[k] ?? 0))
-    )
-  ) {
+  if (!(
+    late.rise > early.rise &&
+    late.bows.every((b, k) => b > (early.bows[k] ?? 0))
+  )) {
     out.pull.push(
       `not building: rise ${early.rise.toFixed(2)}→${late.rise.toFixed(2)}, bows ${early.bows.map((b) => b.toFixed(2))}→${late.bows.map((b) => b.toFixed(2))}`
     );

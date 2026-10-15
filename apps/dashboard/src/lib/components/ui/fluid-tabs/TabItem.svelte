@@ -480,9 +480,8 @@
      chosen at now; none where the host draws none. */
   .fold .rim {
     opacity: calc(
-      var(--rim-rest, 0) +
-      (var(--rim-full, 0) - var(--rim-rest, 0)) *
-      var(--pick)
+      var(--rim-rest, 0) + (var(--rim-full, 0) - var(--rim-rest, 0)) *
+        var(--pick)
     );
     filter: drop-shadow(
       0 0 6px color-mix(in oklab, var(--rim-ink, transparent) 50%, transparent)

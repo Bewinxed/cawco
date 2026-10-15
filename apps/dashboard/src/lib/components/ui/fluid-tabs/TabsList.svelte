@@ -501,13 +501,11 @@
     toward: number,
     fraction: number
   ) {
-    if (
-      !(
-        forward?.held &&
-        forward.leaving === items[chosen] &&
-        forward.mover === items[toward]
-      )
-    ) {
+    if (!(
+      forward?.held &&
+      forward.leaving === items[chosen] &&
+      forward.mover === items[toward]
+    )) {
       startForward(track, items, chosen, toward, true);
     }
     const clock = forward?.clock;
