@@ -4,6 +4,15 @@ import { RESTING_TAB_ICON } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
 import { publicOrigin } from "../public-origin.js";
 
 /**
+ * The UI's own face (Nunito, its Latin subset, @fontsource-variable/nunito),
+ * by its source file: preloaded, so the first paint is laid out in it and not
+ * in the fallback its `font-display: swap` shows until it arrives. Laid out in
+ * the fallback, every tab stood at another width than the one its shape was
+ * measured at (fluid-tabs/fold-memory.ts). No other face is preloaded.
+ */
+const UI_FACE = "nunito-latin-wght-normal.woff2";
+
+/**
  * Every request the dashboard's server answers:
  *
  * - **The gate** (core `browser-gate.ts`): a page of another origin, a
@@ -20,6 +29,7 @@ import { publicOrigin } from "../public-origin.js";
  * - app.html's icon link gets the resting tab icon's hashed URL, on every page
  *   the server sends: one rendered here and the shell of a route with SSR off
  *   alike.
+ * - Scripts and styles are preloaded, as by default, and the UI's face.
  */
 export const handle: Handle = async ({ event, resolve }) => {
   const refused = crossSiteRefusal(
@@ -37,6 +47,10 @@ export const handle: Handle = async ({ event, resolve }) => {
     );
   }
   const resolved = await resolve(event, {
+    preload: (input) =>
+      input.type === "js" ||
+      input.type === "css" ||
+      (input.type === "font" && input.filename.endsWith(`/${UI_FACE}`)),
     transformPageChunk: ({ html }) =>
       html.replace("%cawco.tab-icon%", RESTING_TAB_ICON),
   });

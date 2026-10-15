@@ -32,6 +32,15 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* A tab's hang's open and close clock (motion/hang `GROW`): a number the
+   run carries between 0 and 1, which nothing draws; each frame's shape is
+   read off the run's time. */
+@property --hang-grow {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
 /* A hanging card's neck (.kit-hang), registered so a glide to another
    anchor tweens the cut in its top edge as lengths. */
 @property --neck-start {
@@ -1252,16 +1261,19 @@
       pointer-events: none;
     }
     /* The cut: across the neck, the edge's top row is the card's own
-       surface again, drawn over it. A flare's stroke meets the top edge
-       along it, its last few pixels in the edge's own row (`--neck-tail-*`,
-       √(2·flare + 1) each side with a flare, written by every card through
-       HangCard through hang's `setNeck`): the edge fades out across them as the stroke's
-       coverage does, rather than stopping short of them. Under that row is
-       the card's surface, so covering the edge with it by a ramp draws
-       what masking the edge out by the same ramp drew, with no mask: a
-       mask drew the whole card's edge through a buffer of its own on every
-       paint, which was most of what was left of the frame Caw's panel
-       started its slide in. */
+       surface again, drawn over it. A flare's stroke (a band between radii
+       f and f + 1) meets the top edge along it, its last √(2f + 1) px in
+       the edge's own row: the cut starts on that band's outer circle
+       (`--neck-cut`, a shape written by every card through HangCard
+       through hang's `setNeck`), so the edge shows under it exactly where
+       the stroke crosses the row, antialiased as the anchor's own curve
+       is, and the curve runs on into the card's edge as one stroke. A
+       linear fade across the run drew the edge out too soon (0.27 where
+       the band still covers 0.49), a soft smear where the curve met the
+       card (owner: "has a blur or alias"). A clip, not a mask: a mask drew
+       the whole card's edge through a buffer of its own on every paint,
+       which was most of what was left of the frame Caw's panel started its
+       slide in. */
     /* The cut stops short of a flush side's edge: there the anchor's
        flank runs straight on down into the card's side, and its first
        pixel is that side's edge, not the cut. */
@@ -1282,14 +1294,49 @@
       z-index: 2;
       inline-size: calc(var(--gap-to) - var(--gap-from));
       block-size: 1px;
-      background: linear-gradient(
-        to right,
-        transparent,
-        var(--hang-neck) var(--neck-tail-start, 0px)
-          calc(100% - var(--neck-tail-end, 0px)),
-        transparent
-      );
+      background: var(--hang-neck);
+      clip-path: var(--neck-cut, none);
       pointer-events: none;
+    }
+  }
+  /* A card or menu hanging from a folder tab (HangCard `tab`: the session
+     card, the tab's menu) is one silhouette with its tab (motion/hang-shape):
+     its edge, its tab's edge and the joint between them are one outline, one
+     stroke over both (`.hang-outline`), and its surface is cut to that
+     outline (`clip-path`, written every frame it moves). So it draws no
+     edge, cut or shadow of its own: no border (`::after`), no cut across the
+     neck (`::before`), no box-shadow (the outline layer casts the shape's).
+     It never slides: shut, it is cut to nothing, and it grows out of its
+     tab's foot. */
+  .kit-pop.kit-hang.tab-hang {
+    box-shadow: none;
+    clip-path: path("M 0 0 Z");
+    translate: none;
+    will-change: auto;
+
+    &::before,
+    &::after {
+      display: none;
+    }
+  }
+  /* The one outline a tab and its hang are drawn in (hang-outline.ts): over
+     the page, just over the card, never in the way of a press. */
+  .hang-outline {
+    position: fixed;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    overflow: visible;
+    pointer-events: none;
+
+    & stop.edge {
+      stop-color: var(--border-control);
+    }
+    & feFlood.far {
+      flood-color: var(--shadow-tint-3);
+    }
+    & feFlood.near {
+      flood-color: var(--shadow-tint);
     }
   }
   /* A card hanging from the top bar's glass (HangCard `glass`: Caw's panel,
@@ -1350,14 +1397,14 @@
     /* Shut: up past its own height by the reach of its shadow under it
        (`--hang-reach`, the hung shadow's), so none of it is left under the
        cut. */
-    .kit-pop.kit-hang:not([data-shown]) {
+    .kit-pop.kit-hang:not(.tab-hang, [data-shown]) {
       translate: 0 calc(-100% - var(--hang-reach, 0px));
     }
     /* Its own layer for as long as it is mounted: WebKit gave the card one
        for its slide alone and took it away when the slide ended, and that
        repainted the whole card, its shadow and its rows, in the frame it
        landed in (75–80 ms in Playwright WebKit at 3x). */
-    .kit-pop.kit-hang {
+    .kit-pop.kit-hang:not(.tab-hang) {
       will-change: translate;
     }
     @starting-style {

@@ -50,6 +50,7 @@
    */
   import { flushSync, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
   import {
     TabItem,
     Tabs,
@@ -713,6 +714,8 @@
       <!-- The session tabs' folder tabs, hosted: no shelf, the chosen
            sheet the only mark, the section's seam under the row. -->
       <Tabs
+        boxes={(page.data as { foldBoxes?: Record<string, FoldMeasure> })
+          .foldBoxes}
         class="work-tabs"
         onValueChange={(id: string) => choose(id as WorkTab)}
         value={workTab.current}
@@ -985,9 +988,10 @@
   /* The count, washed in its tab's status ink (the usage tints' strength),
      on the chosen tab only; the other's is a plain numeral, muted unless
      it says something failed. The wash and the ink come and go with the
-     choice, as the tab's own sheet and title do (ui/fluid-tabs, `--pick`):
-     the wash as its background, the ink as the numeral again in it over
-     the muted one, faded in. */
+     choice, as the tab's own sheet and title do, on its clock
+     (ui/fluid-tabs, `--pick`, typed and carried by the choice itself): the
+     wash as its background, the ink as the numeral again in it over the
+     muted one, faded in. */
   .count {
     --ink: var(--status-live-ink);
     --wash: var(--count-wash-live);
@@ -1013,17 +1017,10 @@
     & > span {
       grid-area: 1 / 1;
     }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: background-color var(--choose-dur) var(--choose-ease);
-    }
   }
   .loud {
     color: var(--ink);
     opacity: var(--pick);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--choose-dur) var(--choose-ease);
-    }
   }
   .count[data-tab="finished"] {
     --ink: var(--status-done-ink);

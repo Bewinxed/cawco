@@ -1,7 +1,8 @@
 /**
  * The values the server renders the first paint from: the rail's width, the
- * last narrow-or-wide, the config page's card heights, and the workspace's
- * layout and its sessions' places. The page keeps each in its own
+ * last narrow-or-wide, the config page's card heights, the workspace's
+ * layout and its sessions' places, and the folder tabs' measured shapes
+ * (fluid-tabs/fold-memory.ts). The page keeps each in its own
  * localStorage, which is its source; the server's copy is a cookie only the
  * server writes and reads (`/prefs`, HttpOnly), so no page script reads or
  * writes one. A previewed app shares this host in port mode, and cookies are
@@ -14,11 +15,18 @@ export const PREFS = [
   "cawco-config-cards",
   "cawco-workspace",
   "cawco-workspace-ctx",
+  "cawco-tab-boxes",
 ] as const;
 export type Pref = (typeof PREFS)[number];
 
 /** A year: these are preferences, kept until changed. */
 export const PREF_MAX_AGE = 31_536_000;
+
+/**
+ * The most a pref's value may come to, URI-encoded: a browser keeps no
+ * cookie past 4096 bytes, name and value together.
+ */
+export const PREF_VALUE_LIMIT = 3800;
 
 /**
  * The cookie a pref is kept under: `__Host-`-prefixed where the scheme lets

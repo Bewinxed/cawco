@@ -48,9 +48,12 @@
     motionOk,
     pinned as pinnedOut,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { growTo } from "#lib/cawco/motion/hang.js";
+  import { placeHang } from "#lib/cawco/motion/hang-shape.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
+  import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
   import {
     restRank,
     TabItem,
@@ -110,6 +113,10 @@
 
   const servedNames = $derived(
     (page.data as { names?: Record<string, HubRead<string>> }).names ?? {}
+  );
+  /** Each tab's shape as last measured, from the layout's cookie (fluid-tabs/fold-memory.ts). */
+  const servedBoxes = $derived(
+    (page.data as { foldBoxes?: Record<string, FoldMeasure> }).foldBoxes ?? {}
   );
 
   interface Tab {
@@ -236,34 +243,6 @@
 
   /** Where the chosen tab stands, -1 with the board showing. */
   const chosenAt = $derived(tabs.findIndex((tab) => tab.id === leaf.active));
-  /**
-   * A swipe carrying the choice (`travel`): the tab it is heading to and how
-   * far, 0 to 1. At rest the choice is all on the chosen tab (`f` 0).
-   */
-  const scrub = $derived.by(() => {
-    const to = travel ? tabs.findIndex((tab) => tab.id === travel.toward) : -1;
-    if (!travel || chosenAt < 0 || to < 0 || to === chosenAt) {
-      return { to: chosenAt, f: 0 };
-    }
-    return { to, f: Math.min(1, Math.max(0, travel.fraction)) };
-  });
-  /**
-   * How chosen a tab is drawn, 0 to 1, between the choice on the chosen tab
-   * and on the one a swipe is heading to, by how far the swipe has gone, so
-   * every tab moves with the finger and the landing changes nothing: its
-   * lean and its rim's strength and foot (the kit draws its sheet, card and
-   * title from the same). Where two tabs meet, which side shows and where
-   * is the track's (TabsList, `--cut-start`/`--cut-end`). Every receded tab
-   * is one step back, whatever its distance from the choice: two tabs whose
-   * order changes on a switch then look alike as they trade places, so the
-   * trade shows nothing. Nothing here sizes a tab: choosing one never moves
-   * the others.
-   */
-  const pickOf = (i: number) => {
-    const { to, f } = scrub;
-    const from = Number(i === chosenAt);
-    return from + (Number(i === to) - from) * f;
-  };
   /** Each status's rim ink, on the rail's scale. */
   const TONE_INK: Record<StatusTone, string> = {
     working: "var(--status-live-glyph)",
@@ -339,7 +318,8 @@
     if (!(detailsOpen && detailId !== id)) {
       detailId = id;
       detailAnchor = anchor;
-      cardFlush = flushAt(anchor) ? "start" : null;
+      cardPlace = placeOf(anchor, cardWidth());
+      cardFlush = cardPlace.flush;
       detailsOpen = true;
       return;
     }
@@ -359,66 +339,85 @@
             : -1;
         detailId = id;
         detailAnchor = anchor;
-        cardFlush = flushAt(anchor) ? "start" : null;
+        cardPlace = placeOf(anchor, cardWidth());
+        cardFlush = cardPlace.flush;
       });
     });
   }
 
-  /* ── The card hangs from its tab ──────────────────────────────────
-     The card's anchor is the tab's whole box (`.tab`), however it was
-     opened: hover, a click on the tab or its chevron, the keyboard, the
-     menu. Its top edge is the tab's foot (no side offset), and its
-     leading edge stands one flare, one card corner and 4px before the
-     tab, so its outline runs corner → short run → the chosen sheet's
-     concave flare → up the tab's flank: one folder. Its top border is
-     cut across the tab's flared span (`--neck-start`, `--neck-end`,
-     `--neck-flare-start`, `--neck-flare-end`, in the card's own
-     coordinates), and a stroke runs up
-     the tab's flanks instead (`.neck`). A phone's card stands at the
-     screen's 12px margin; collision does the rest.
+  /* ── The card and the menu hang from their tab ───────────────────
+     Both hang from the tab's whole box (`.tab`), however they were opened,
+     as one silhouette with it (HangCard `tab`, motion/hang-shape): the
+     tab's outline runs down its flank, round its foot's flare and on as
+     their edge all the way round, one stroke, and they grow out of the
+     tab's foot and fold back into it (owner: "this is just a cheap
+     workaround, and in both of these the rim doesn't smoothly connect
+     between these"; "why aren't these the blended/merged menu that morphs
+     out of the tab?").
 
-     Where that leading edge would cross its pane's own leading edge (the
-     sidebar's border, a split's seam: the strip's box, measured), the card
-     stands flush with the tab instead (owner: "when the popover overlays
-     the sidebar it should sit flush with the left border of the tab
-     instead of overlapping the sidebar"): its left edge on the tab's,
-     square, so the outline runs straight down the tab's flank into the
-     card's side, with no flare and no corner on that side; the other side
-     keeps its flare. */
-  /** Round the card's corner, and the 4px run before the flare begins. */
-  const CARD_CORNER = 12;
-  const CARD_RUN = 4;
-  /** The card's margin to the viewport. */
-  const CARD_MARGIN = 12;
+     Where they stand is the shape's own rule (`placeHang`, the same for
+     both, owner: "the curve of the foot doesn't match the curve of the
+     tab, and it needs to be wider to fit and connect well"): their top
+     edge runs out of each foot's tip, level, to a corner (`radius-lg`) a
+     short run (`HANG_RUN`) past it, so the foot's curve goes on into their
+     edge and they are always wider than the tab's foot-to-foot span. Where
+     that would cross the pane's leading edge (the sidebar's border, a
+     split's seam: the strip's box, measured) or the screen's margin, they
+     stand flush with the tab's flank on that side instead (owner: "when
+     the popover overlays the sidebar it should sit flush with the left
+     border of the tab instead of overlapping the sidebar"), its foot
+     square, the flank running straight on into their side; past the
+     screen's trailing margin they shift toward the start, or stand flush
+     with the trailing flank. The card is 416px wide, the screen less its
+     margins at most (a phone's runs margin to margin); the menu is as wide
+     as its rows, at least as wide as the shape needs. */
+  /** Their corner (`radius-lg`) and the level run from a foot's tip to it. */
+  const HANG_CORNER = 12;
+  const HANG_RUN = 4;
+  /** Their margin to the screen's edges. */
+  const HANG_MARGIN = 12;
   const flareOf = (anchor: HTMLElement) =>
-    Number.parseFloat(getComputedStyle(anchor).getPropertyValue("--flare")) ||
-    0;
-  /** Whether the card's usual leading edge would cross its pane's. */
-  function flushAt(anchor: HTMLElement) {
-    const pane = anchor.closest(".session-tabs");
-    if (!pane) {
-      return false;
+    Number.parseFloat(
+      getComputedStyle(
+        anchor.querySelector(".ff-tab") ?? anchor
+      ).getPropertyValue("--flare")
+    ) || 0;
+  /**
+   * Where a hang `width` wide stands under `anchor`: its offset from the
+   * tab's leading edge (the primitive's `alignOffset`), its width, and the
+   * side it stands flush on, if any.
+   */
+  function placeOf(anchor: HTMLElement, width: number) {
+    const box = anchor.getBoundingClientRect();
+    const pane = anchor.closest(".session-tabs")?.getBoundingClientRect();
+    const place = placeHang({
+      bounds: {
+        left: Math.max(pane?.left ?? 0, touch.current ? HANG_MARGIN : 0),
+        right: innerWidth - HANG_MARGIN,
+      },
+      corner: HANG_CORNER,
+      flare: flareOf(anchor),
+      run: HANG_RUN,
+      tab: { left: box.left, right: box.right },
+      width,
+    });
+    let flush: "start" | "end" | null = null;
+    if (place.flush.start) {
+      flush = "start";
+    } else if (place.flush.end) {
+      flush = "end";
     }
-    const offset = touch.current
-      ? -CARD_MARGIN
-      : -(flareOf(anchor) + CARD_CORNER + CARD_RUN);
-    return (
-      anchor.getBoundingClientRect().left + offset <
-      pane.getBoundingClientRect().left
-    );
+    return { offset: place.left - box.left, width: place.width, flush };
   }
-  /** The card's leading edge's offset from its tab's, before collision. */
-  function alignFor(anchor: HTMLElement | null) {
-    if (!anchor || flushAt(anchor)) {
-      return 0;
-    }
-    return touch.current
-      ? -CARD_MARGIN
-      : -(flareOf(anchor) + CARD_CORNER + CARD_RUN);
-  }
+  /** The card's width: 416px, within the screen less its margins. */
+  const cardWidth = () => Math.min(416, innerWidth - 2 * HANG_MARGIN);
+  /** Where the card stands under its tab, as it was last placed. */
+  let cardPlace = $state<ReturnType<typeof placeOf> | null>(null);
+  /** The card stands drawn out of its tab (HangCard `joined`). */
+  let cardJoined = $state(false);
   /**
    * The side the card stands flush with its tab on, as HangCard measures it
-   * where the card stands (and as `flushAt` says before it is placed): the
+   * where the card stands (and as `placeOf` says before it is placed): the
    * tab's sheet is square at its foot on that side.
    */
   let cardFlush = $state<"start" | "end" | null>(null);
@@ -829,35 +828,9 @@
     });
   });
 
-  /**
-   * A tab moved by an animation of its own (a slide, its arrival, a flight
-   * landing it) is a stack of its own while that runs, and would be drawn
-   * under every other tab's card. It stands at its rank in the track's
-   * stack (TabsList `--z`, above its own card, sheet and title's layers)
-   * until the last of them ends; its rim stays on it, under a nearer tab.
-   */
+  /** A run the strip or a flight started itself, not a style's transition. */
   const owned = (run: Animation) =>
     !(run instanceof CSSTransition || run instanceof CSSAnimation);
-  function holdRank(el: HTMLElement) {
-    const runs = el.getAnimations().filter(owned);
-    if (runs.length === 0) {
-      return;
-    }
-    el.style.zIndex = "calc(var(--z, 1) * 4 + 2)";
-    const release = () => {
-      if (
-        !el
-          .getAnimations()
-          .some((run) => owned(run) && run.playState === "running")
-      ) {
-        el.style.removeProperty("z-index");
-      }
-    };
-    for (const run of runs) {
-      run.addEventListener("finish", release, { once: true });
-      run.addEventListener("cancel", release, { once: true });
-    }
-  }
 
   /** Every tab that stood somewhere else before the change slides from there to where it lies. */
   function slide(from: Map<string, number>, removed: boolean, added: boolean) {
@@ -896,7 +869,6 @@
           [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
           { id: SLIDE, duration, easing }
         );
-        holdRank(el);
       }
     }
   }
@@ -942,7 +914,6 @@
               { duration: dur("--dur-morph"), easing: ease("--ease-out") }
             );
           }
-          holdRank(node);
         });
         return forget(id, node, frame);
       });
@@ -993,10 +964,10 @@
       return { duration: 0 };
     }
     const narrow = motionOk.current;
-    // A stack of its own while it fades: at its rank, as a sliding tab is.
+    // Taken out of the flow, it keeps its place in the stack as it fades.
     return lifting(
       node,
-      pinnedOut(node, () => ({ "z-index": "calc(var(--z, 1) * 4 + 2)" })),
+      pinnedOut(node, () => ({ "z-index": "var(--z, 1)" })),
       {
         duration: dur("--dur-exit"),
         easing: easeOut,
@@ -1025,33 +996,25 @@
   const PULL_WINDOW = 80;
   /** How far a release is carried along its speed, ms (as the Caw drawer's). */
   const PULL_PROJECT = 99;
-  /** Past fully out, a third of the finger's travel shows, and no more than a fifth. */
-  const PULL_RESIST = 0.35;
-  const PULL_RESIST_MAX = 0.2;
-
-  /** Room past the menu's sides and foot for its whole overlay shadow, px. */
-  const SHADOW_ROOM = 120;
 
   /** The menu openings this strip made itself, already at the tab's foot. */
   const anchored = new WeakSet<Event>();
 
-  /* ── Under a finger the menu hangs from its tab ───────────────────
-     As the session card does, and by the same mechanism (motion/hang,
-     `.kit-hang`): its top edge is the tab's foot, its leading edge stands
-     at the phone's 12px margin before the tab (the card's own place,
-     `alignFor`), its top edge is cut across the tab's flared span, the
-     chosen tab draws its flanks' stroke down into it (`.neck`), and it
-     wears the tab's own surface, so tab and menu read as one sheet
-     (owner: "it should have the same continuous styling like the tab").
-     Pulled down, the finger draws it out of the foot 1:1 (`drawPull`),
-     which is its open; held, or from the options action, it comes down out
-     of the foot on its own (`hang`). A mouse's menu opens at the pointer,
-     a plain kit menu. */
+  /* ── The menu hangs from its tab ──────────────────────────────────
+     As the session card does, by the same shape (HangCard `tab`,
+     `placeOf`): one silhouette with its tab, on the tab's own surface, so
+     tab and menu are one sheet (owner: "it should have the same continuous
+     styling like the tab"). However it is opened, the chevron, a right
+     click, a long press, it hangs from the tab's foot under the row, never
+     over the row at the pointer. Pulled down, the finger draws it out of
+     the foot 1:1 (`drawPull`, the shape `at` of the way out), which is its
+     open; held, or from the chevron or a click, it grows out of the foot
+     on its own (`hang`). */
   /** The tab whose menu hangs from it, while it stands open. */
   let menuHung = $state<string | null>(null);
   /** The side the hanging menu stands flush with its tab on (HangCard). */
   let menuFlush = $state<"start" | "end" | null>(null);
-  /** The least width that holds the tab's span and its flare: the margin, the tab, its flare, a corner. */
+  /** The least width the shape needs past the tab's span (`placeOf`). */
   let menuMin = $state(0);
   /** A finger is drawing the menu out: the pull is its open. */
   let menuHeld = false;
@@ -1075,19 +1038,13 @@
   function openMenu(tabNode: HTMLElement) {
     const hit = tabNode.querySelector("[data-session-tab]") ?? tabNode;
     const box = tabNode.getBoundingClientRect();
-    if (touch.current) {
-      menuFlush = flushAt(tabNode) ? "start" : null;
-      menuMin =
-        -alignFor(tabNode) +
-        box.width +
-        flareOf(tabNode) +
-        CARD_CORNER +
-        CARD_RUN;
-    }
+    const place = placeOf(tabNode, 0);
+    menuFlush = place.flush;
+    menuMin = place.width;
     const event = new MouseEvent("contextmenu", {
       bubbles: true,
       cancelable: true,
-      clientX: box.left + (touch.current ? alignFor(tabNode) : 0),
+      clientX: box.left + place.offset,
       clientY: box.bottom,
     });
     anchored.add(event);
@@ -1095,13 +1052,12 @@
   }
 
   /**
-   * Under a finger the menu has one place, whatever opened it: hanging from
-   * the tab's foot under the row, where a pull brings it, never over the
-   * row at the finger. A long press's menu is moved there; a mouse's right
-   * click opens where it was clicked.
+   * The menu has one place, whatever opened it: hanging from the tab's foot
+   * under the row, where a pull brings it, never over the row at the
+   * pointer. A long press's and a right click's menu are moved there.
    */
   function anchorMenu(event: MouseEvent) {
-    if (!touch.current || anchored.has(event)) {
+    if (anchored.has(event)) {
       return;
     }
     event.preventDefault();
@@ -1115,34 +1071,15 @@
       '[data-slot="context-menu-content"][data-state="open"]'
     );
 
-  /** Draws the menu `at` of the way out of the tab's foot: 0 tucked under it, 1 out. */
-  function drawPull(el: HTMLElement, at: number) {
-    const h = el.offsetHeight;
-    const over = Math.max(0, at - 1);
-    const hidden = (1 - Math.min(Math.max(at, 0), 1)) * h;
-    const stretch = Math.min(over * h * PULL_RESIST, h * PULL_RESIST_MAX);
-    el.style.transition = "none";
-    el.style.opacity = "1";
-    el.style.scale = "1";
-    el.style.translate = `0 ${stretch - hidden}px`;
-    // Cut at the tab's foot only. Its overlay shadow (0 18px 48px) reaches
-    // past the other edges by more than its blur: cut any closer, the cut
-    // shows as a square patch round the card's rounded corners.
-    el.style.clipPath = `inset(${hidden}px ${-SHADOW_ROOM}px ${-SHADOW_ROOM}px)`;
-  }
+  /**
+   * Draws a tab's hang `at` of the way out of the tab's foot, the one shape
+   * (motion/hang `growTo`): 0 the tab alone, 1 out. Past fully out it
+   * stands out: the shape is the hang's own size at most.
+   */
+  const drawPull = (el: HTMLElement, at: number) => growTo(el, at);
 
-  /** Hands the menu back to its own rules, at rest. */
-  function releasePull(el: HTMLElement) {
-    for (const prop of [
-      "transition",
-      "opacity",
-      "scale",
-      "translate",
-      "clip-path",
-    ]) {
-      el.style.removeProperty(prop);
-    }
-  }
+  /** The hang stands fully out where the finger left it. */
+  const releasePull = (el: HTMLElement) => growTo(el, 1);
 
   let pullFrame = 0;
   onMount(() => () => cancelAnimationFrame(pullFrame));
@@ -1402,6 +1339,7 @@
 <!-- `''` when the board is showing: a value no segment carries, so nothing
      is drawn as chosen. -->
 <Tabs
+  boxes={servedBoxes}
   class="session-tabs {hosted ? 'hosted' : ''}"
   data-strip={leaf.id}
   onValueChange={(id) => workspace.activate(id, leaf.id)}
@@ -1417,7 +1355,7 @@
   >
     {#each tabs as tab, i (tab.key)}
       {@const chosen = leaf.active === tab.id}
-      {@const cardHere = detailsOpen && detailId === tab.id}
+      {@const cardHere = cardJoined && detailId === tab.id}
       {@const menuHere = menuHung === tab.id}
       <!-- The caret marks where a drop would land, drawn on the side the
            pointer is nearest. Graphite, like every structural mark here:
@@ -1465,18 +1403,11 @@
           warm.leave(leaf.id, tab.id);
           leaveDetails();
         }}
-        style:--full-next={RIM[tabs[i + 1]?.tone ?? tab.tone].full}
-        style:--full-prev={RIM[tabs[i - 1]?.tone ?? tab.tone].full}
         style:--lone-end={Number(i === tabs.length - 1)}
         style:--lone-start={Number(i === 0)}
-        style:--pick={pickOf(i)}
-        style:--rest-next={RIM[tabs[i + 1]?.tone ?? tab.tone].rest}
-        style:--rest-prev={RIM[tabs[i - 1]?.tone ?? tab.tone].rest}
         style:--rim-full={RIM[tab.tone].full}
         style:--rim-rest={RIM[tab.tone].rest}
         style:--tone={TONE_INK[tab.tone]}
-        style:--tone-next={TONE_INK[tabs[i + 1]?.tone ?? tab.tone]}
-        style:--tone-prev={TONE_INK[tabs[i - 1]?.tone ?? tab.tone]}
         style:--z-rest={restAt(i)}
         class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 &&
           i === tabs.length - 1}
@@ -1576,6 +1507,8 @@
               aria-keyshortcuts="Delete Shift+F10"
               aria-label={`${tab.label}, ${tab.statusLabel}${chosen ? " — open session details" : ""}`}
               data-session-tab={tab.id}
+              flush={hungFlush(cardHere, menuHere)}
+              hung={cardHere || menuHere}
               href={tab.href}
               label={tab.label}
               onauxclick={(event) => middleClose(tab.id, event)}
@@ -1676,67 +1609,41 @@
               {/snippet}
             </TabItem>
           </ContextMenu.Trigger>
-          <!-- Under a finger it hangs from the tab's foot as one shape with
-               it (a HangCard, above), from the card's own 12px margin
-               before the tab, shifted left only when it would pass the
-               screen's edge less 12px (as TabOptionsSheet on iOS); a
-               mouse's opens beside the pointer. -->
-          {#if touch.current}
-            <HangCard
-              align="start"
-              anchor={menuFor === tab.id ? anchorOf(tab.id) : null}
-              as={ContextMenu.Content}
-              class="tab-menu"
-              collisionPadding={12}
-              flared={chosen}
-              folded={takeMenuFolded}
-              held={() => menuHeld}
-              onneck={(neck) => {
-                menuFlush = neck.flush;
-              }}
-              side="bottom"
-              sideOffset={0}
-              style="--hang-min: {menuMin}px"
-              bind:joined={
-                () => menuHung === tab.id,
-                (shown) => {
-                  if (shown) {
-                    menuHung = tab.id;
-                  } else if (menuHung === tab.id) {
-                    menuHung = null;
-                  }
+          <!-- It hangs from the tab as one shape with it (HangCard `tab`,
+               motion/hang-shape), however it was opened (the chevron, a
+               right click, a long press, a pull), at every width: grown
+               out of the tab's foot and folded back into it (owner: "why
+               aren't these the blended/merged menu that morphs out of the
+               tab?"). -->
+          <HangCard
+            align="start"
+            anchor={menuFor === tab.id ? anchorOf(tab.id) : null}
+            as={ContextMenu.Content}
+            class="tab-menu"
+            collisionPadding={12}
+            folded={takeMenuFolded}
+            held={() => menuHeld}
+            onneck={(neck) => {
+              menuFlush = neck.flush;
+            }}
+            side="bottom"
+            sideOffset={0}
+            style="--hang-min: {menuMin}px"
+            tab
+            bind:joined={
+              () => menuHung === tab.id,
+              (shown) => {
+                if (shown) {
+                  menuHung = tab.id;
+                } else if (menuHung === tab.id) {
+                  menuHung = null;
                 }
               }
-            >
-              {@render options()}
-            </HangCard>
-          {:else}
-            <ContextMenu.Content
-              align="start"
-              collisionPadding={12}
-              side="right"
-              sideOffset={0}
-            >
-              {@render options()}
-            </ContextMenu.Content>
-          {/if}
+            }
+          >
+            {@render options()}
+          </HangCard>
         </ContextMenu.Root>
-        <!-- The status rim, drawn on the tab's own outline, on every width,
-             in pieces: the top, and each side twice, its shoulder and run
-             standing on a plain foot and on the chosen sheet's flared one,
-             each faded out at its end. -->
-        <span aria-hidden="true" class="rim">
-          <span class="rim-top"></span>
-          {#each ["start", "end"] as side (side)}
-            <span class="rim-side" data-side={side}>
-              <span class="rim-plain"></span>
-              <span class="rim-flared"></span>
-            </span>
-          {/each}
-        </span>
-        <!-- The stroke up the tab's flanks while its card hangs from it:
-             the rim owns the top, the neck the foot. -->
-        <span aria-hidden="true" class="neck"></span>
       </div>
     {/each}
   </TabsList>
@@ -1799,7 +1706,7 @@
   <Popover.Portal>
     <HangCard
       align="start"
-      alignOffset={alignFor(detailAnchor)}
+      alignOffset={cardPlace ? cardPlace.offset : 0}
       anchor={detailAnchor}
       aria-label="Session details"
       as={Popover.Content}
@@ -1807,8 +1714,9 @@
       collisionPadding={12}
       customAnchor={detailAnchor}
       data-safe-bottom
-      flared={leaf.active === detailId}
       folded={takeFolded}
+      style={cardPlace ? `--hang-width: ${cardPlace.width}px` : undefined}
+      tab
       onCloseAutoFocus={(event) => {
         event.preventDefault();
         if (restoreFocus) {
@@ -1844,6 +1752,7 @@
       side="bottom"
       sideOffset={0}
       trapFocus={pinned}
+      bind:joined={cardJoined}
       bind:ref={cardEl}
     >
       <div
@@ -1868,16 +1777,14 @@
 
 <style>
   /* css-scope .session-details-popover: SessionDetails finds the card it stands in by it */
-  /* The card is a HangCard on its tab: its edge, the cut across the tab's
-     flared span, its shadow cut at its top edge, and its open and close
-     are the component's. Its content runs edge to edge. */
+  /* The card is a HangCard on its tab (`tab`): one silhouette with it, its
+     outline, its cast and its open and close the component's. Its content
+     runs edge to edge; its head is its tab's surface. Its width is where
+     it is placed (`placeOf`): 416px, the screen less its margins at most. */
   :global(.kit-pop.session-details-popover) {
-    /* Its head is its tab's surface, and the tab runs on into it through
-       the cut. */
-    --hang-neck: var(--surface-recess);
     display: flex;
     z-index: 60;
-    width: min(416px, calc(100vw - 24px));
+    width: var(--hang-width, min(416px, calc(100vw - 24px)));
     max-height: min(760px, var(--bits-popover-content-available-height, 85dvh));
     overflow: hidden;
     overscroll-behavior: contain;
@@ -1904,6 +1811,22 @@
     width: 100%;
     max-height: inherit;
   }
+  /* A tab's rim's ink at the strength it wears it now: the one outline's
+     ink across the tab while a hang stands drawn out of it (HangCard). */
+  .tab :global(.ff-tab) {
+    --hang-rim: color-mix(
+      in oklab,
+      var(--rim-ink)
+        calc(
+          (
+              var(--rim-rest) + (var(--rim-full) - var(--rim-rest)) *
+                var(--pick)
+            ) *
+            100%
+        ),
+      var(--border-control)
+    );
+  }
   /* A pinned card follows its tab as the strip scrolls, frame by frame: its
      wrapper moves on its own layer, so each step is the compositor's, not a
      repaint of the card. */
@@ -1912,8 +1835,8 @@
   ) {
     will-change: transform;
   }
-  /* The glide to another tab: the wrapper's move, the card's height and the
-     cut in its top edge, together. */
+  /* The glide to another tab: the wrapper's move and the card's height
+     together; the outline follows them frame by frame (HangCard). */
   @media (prefers-reduced-motion: no-preference) {
     :global(
       [data-bits-floating-content-wrapper]:has(
@@ -1924,11 +1847,6 @@
     }
     :global(.session-details-popover[data-morph]) .details-morph {
       transition: height var(--dur-pop) var(--ease-drawer);
-    }
-    :global(.kit-pop.session-details-popover[data-morph]) {
-      transition:
-        --neck-start var(--dur-pop) var(--ease-drawer),
-        --neck-end var(--dur-pop) var(--ease-drawer);
     }
   }
   /* The trailing controls sit 4px after the title and 4px apart, on every
@@ -1964,12 +1882,11 @@
     color: var(--ink-muted);
     cursor: pointer;
 
-    /* It comes and goes with the choice, and drops with its tab's lean. */
+    /* It comes and goes with the choice. */
     @media (prefers-reduced-motion: no-preference) {
       transition:
         opacity var(--choose-dur) var(--choose-ease),
-        scale var(--choose-dur) var(--choose-ease),
-        translate var(--choose-dur) var(--choose-ease);
+        scale var(--choose-dur) var(--choose-ease);
     }
     :global([data-ride]) & {
       transition: none;
@@ -2075,11 +1992,9 @@
        token (HeadFade), so the two are one fill at the shelf's line. */
     --sheet: var(--tab-sheet);
     --tab-hover: light-dark(var(--surface-recess), var(--surface-hover));
-    /* The status rim's stroke (`.rim`, `tab-rim-width`, a plain px number
-       for the rim's arithmetic): a gliding seam stops with it on the
-       neighbour's own (the kit's `--seam-tuck`). */
+    /* The status rim's stroke (`tab-rim-width`, a plain px number), drawn
+       on each tab's own path (TabItem). */
     --rim-w: var(--tab-rim-width);
-    --seam-stroke: calc(var(--rim-w) * 1px);
 
     @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
       --rim-w: 1;
@@ -2160,7 +2075,13 @@
       }
     }
 
-    /* Where a drop would land: a 2px rule in the gap, on the near side. */
+    /* Where a drop would land: a 2px rule in the gap, on the near side.
+       The tab that draws it stands over the strip while it does, so no
+       neighbour's shape covers the rule. */
+    &.drop-before,
+    &.drop-after {
+      z-index: calc(var(--stack-top) + 1);
+    }
     &.drop-before::before,
     &.drop-after::after {
       content: "";
@@ -2169,7 +2090,7 @@
       inline-size: 2px;
       border-radius: var(--radius-pill);
       background: var(--ink-strong);
-      z-index: calc(var(--stack-top) + 1);
+      z-index: 4;
     }
     &.drop-before::before {
       inset-inline-start: -2px;
@@ -2180,24 +2101,15 @@
   }
   /* ── A tab carried along its strip (tab-drag.svelte.ts) ────────────
      The tab itself is what moves. Lifted, it stands over every tab in the
-     strip (its whole stack above the track's, under the drop caret and
-     the focus ring), upright as a pointer's lift takes a receded tab all
-     the way, in front of both neighbours: both its feet drawn and both its
-     edges cast. It follows the pointer with no easing (`data-following`);
-     its neighbours slide into the slots it leaves on the strip's own slide
-     (PaneTabs `slide`), and it takes the same on its way back. With less
-     motion they stand in their slots at once. */
+     strip, in front of both neighbours (the track ranks it so: both its
+     feet drawn, TabsList), and casts both its edges. It follows the
+     pointer with no easing (`data-following`); its neighbours slide into
+     the slots it leaves on the strip's own slide (PaneTabs `slide`), and it
+     takes the same on its way back. With less motion they stand in their
+     slots at once. */
   .tab[data-lifted] {
-    --under-start: 0 !important;
-    --under-end: 0 !important;
-    --lone-start: 0 !important;
-    --lone-end: 0 !important;
-    --lean-lift-now: 1;
-    z-index: var(--stack-top) !important;
-
-    & :global(.ff-tab) {
-      --lean-lift-now: 1 !important;
-    }
+    --lone-start: 0;
+    --lone-end: 0;
   }
   @media (prefers-reduced-motion: no-preference) {
     :global(.ff-tabs-list[data-reordering]) > .tab:not([data-following]) {
@@ -2215,51 +2127,50 @@
      behind (`shadow-tab-start`, `shadow-tab-end`, in `tab-shade`), so each
      reads as its own folder, rimmed or not (owner: "tabs should cast
      shadows on each other because now the tab that is inactive between
-     two tabs that are active has no silhouette"). Only sideways, and only
-     from a side that stands in front of a neighbour: a side under its
-     neighbour's card (TabsList `--under-start`/`--under-end`) casts none,
-     nor does the strip's first tab's leading side or its last tab's
-     trailing side (`--lone-start`/`--lone-end`), and nothing is cast above
-     a tab's top or below the shelf's line. By day it is warm ink; at night
-     the tabs are the darkest surfaces, where no shadow shows, so it is the
-     ink lit (`tab-shade`), and the chosen tab casts none: its sheet is the
-     lightest of them, lit ink beside it only blurred its edge (1.09:1 to
-     1.02:1 against the tab behind), and its rim draws it
-     (`tab-shade-chosen`); its cast changes with the choice, on the
-     switch's duration and curve. (Following the sheet frame by frame,
-     `--sheet-now`, cost WebKit's swipe a quarter more per frame.) A side
-     changes hands at a seam's handover on a switch, where the two tabs
-     stand alike.
+     two tabs that are active has no silhouette"). Only sideways: not from
+     the strip's first tab's leading side or its last tab's trailing side
+     (`--lone-start`/`--lone-end`), and nothing above a tab's top or below
+     the shelf's line. A side under its neighbour casts onto nothing that
+     shows: the neighbour, a stack above it, covers the cast with the side.
+     By day it is warm ink; at night the tabs are the darkest surfaces,
+     where no shadow shows, so it is the ink lit (`tab-shade`), and the
+     chosen tab casts none: its sheet is the lightest of them, lit ink
+     beside it only blurred its edge (1.09:1 to 1.02:1 against the tab
+     behind), and its rim draws it (`tab-shade-chosen`); its cast changes
+     with the choice, on the switch's duration and curve.
 
-     The card is cut to its outline by a clip-path, which would cut a
-     shadow of its own away, so the edge is cast by boxes of their own
-     under the card: the card's outline less its 1px slope, square sides
+     The edge is cast by boxes of their own under the tab's shape (TabItem
+     `.fold`), in its stack: the tab's box less its 1px slope, square sides
      and rounded shoulders at the tab radius, filled opaque, one casting
-     each side's `box-shadow`. A `drop-shadow()` filter on a shape cut to
-     the outline drew it too, but WebKit drew it again offscreen every frame
-     of a switch, and the switch's frames grew half as long again; these
-     are painted, never filtered, on a layer of their own. They stand at
-     the tab's rank, the card's own layer, before the card in the tree, so
-     the card covers them whole and every tab behind lies under the cast,
-     every tab in front over it. They never lean: their top stands where a
-     leaning card's top falls (`--lean`), under the card at every lean, so
-     a switch moves nothing of them but a gliding seam's cut. */
+     each side's `box-shadow`. A `drop-shadow()` filter on the shape drew
+     it too, but WebKit drew it again offscreen every frame of a switch,
+     and the switch's frames grew half as long again; these are painted,
+     never filtered.
+
+     The boxes' sides are the tab's straight flanks, so their cast would
+     run on down past where the foot curves away from the flank, into the
+     foot's concave corner, and stop flat on the shelf's line: a soft band
+     beside the curve, cut square by the card that hangs from it (owner:
+     "the curve beteween the left of the tab's foot and the hover menu has
+     a blur or alias"). The cast fades out over the flare above the foot
+     instead, gone where the foot begins, so the corner shows only what
+     lies under it and the foot's curve is the one edge there. */
   .shade {
-    --shade-top: calc(var(--item) * (1 - cos(var(--lean))));
     position: absolute;
     inset: 0;
-    z-index: calc(var(--z, var(--z-rest, 1)) * 4);
+    z-index: 0;
     pointer-events: none;
-    clip-path: inset(var(--shade-top) -12px 0);
-    will-change: transform;
+    clip-path: inset(0 -12px 0);
+    mask-image: linear-gradient(
+      to bottom,
+      #000 calc(100% - 2 * var(--flare)),
+      transparent calc(100% - var(--flare))
+    );
 
     & > span {
       position: absolute;
-      inset-block: var(--shade-top) 0;
-      inset-inline: calc(
-          var(--seam-tuck) * var(--cut-start, 0) + var(--slope-start)
-        )
-        calc(var(--seam-tuck) * var(--cut-end, 0) + var(--slope-end));
+      inset-block: 0;
+      inset-inline: var(--slope-start) var(--slope-end);
       border-radius: var(--radius) var(--radius) 0 0;
       background: var(--surface-recess-deep);
 
@@ -2271,11 +2182,11 @@
     }
     & > .s {
       box-shadow: var(--shadow-tab-start);
-      opacity: calc((1 - var(--under-start, 0)) * (1 - var(--lone-start, 0)));
+      opacity: calc(1 - var(--lone-start, 0));
     }
     & > .e {
       box-shadow: var(--shadow-tab-end);
-      opacity: calc((1 - var(--under-end, 0)) * (1 - var(--lone-end, 0)));
+      opacity: calc(1 - var(--lone-end, 0));
     }
     :global([data-chosen]) > & > .s {
       box-shadow: var(--shadow-tab-start-chosen);
@@ -2289,10 +2200,10 @@
      Each tab's rim wears its session's status (`data-tone`, the rail's
      scale) on the tab's whole outline at one weight, 1.5px: across the
      top, round both shoulders, down both sloped sides, and at the foot out
-     round the sheet's flare to the shelf's line, on every tab chosen or not
-     (owner: "A curved foot on inactive tabs: their sides curve out at the
-     base like the chosen tab's"), with a soft glow following the outline
-     at half its strength. The desk keeps its status glyph
+     round the flare to the shelf's line on every side in front of its
+     neighbour (owner: "A curved foot on inactive tabs: their sides curve
+     out at the base like the chosen tab's"), with a soft glow following
+     the outline at half its strength. The desk keeps its status glyph
      before the title as well (owner: "desktop and mobile should all have
      rims, desktop has icons mobile not").
 
@@ -2302,467 +2213,30 @@
      (owner: the other tabs have no rim "unless they are active, then they
      should have a more subtle rim", "or any other status").
 
-     It is drawn in pieces (`.rim-top`; a `.rim-side` for each side holding
-     its shoulder and run twice, once on its flared foot and once on a
-     plain one for a gliding seam's handover), opaque in the tone (`--tone`, `TONE_INK`), and the rim
-     as a whole carries the tone's strength as its opacity (`--rim-mix`:
-     how chosen the tab is, `--pick`, sets it), so the strength travels on
-     the compositor and cross-fades on the switch's clock. It leans with
-     its tab (TabItem `--lean-now`). Each foot narrows to a point where it
-     meets the shelf, and the last `tab-rim-taper` px of the stroke fade
-     out to nothing, so a rim never stops on a hard cut (owner: "the rim
-     should taper-progress-fade at the very edges").
-
-     Each tab's rim stands at the tab's own rank in the track's stack,
-     over its card, sheet and title and under every tab nearer the choice
-     (TabsList `--z`; `--z-rest` until the track has ranked them), as one
-     folder over another: where two tabs overlap, the front tab's card
-     covers the side, top and shoulder of the one behind, whose outline
-     runs on under it and meets the front's at its edge. On a switch the
-     edge where the two meet glides between their two edges on the
-     switch's clock (TabsList, `--cut-start`/`--cut-end`): the tab in front
-     at that frame draws it there, its card standing in with it, and the
-     one behind stands at its own edge. The front changes at equal depth,
-     where the two stand in on the same pixels in the same ink (a gliding
-     side's ink leans toward its neighbour's, `--tone-prev`/`--tone-next`,
-     by how far it has come) at the same strength (that side alone leans
-     toward the weaker rim's), so the handover shows nothing. A tab in
-     front with no rim draws no stroke there, and the one behind draws
-     none either: its side stands under the front card. Increase Contrast
-     and Reduce Transparency draw a solid 1px outline and no glow, on
-     every tab that wears a rim. */
+     It is the tab's own path stroked (TabItem `.fold`): one outline with
+     its sheet, in the tone (`--rim-ink`, `TONE_INK`), at the tone's
+     strength by how chosen the tab is (`--rim-rest` to `--rim-full` by the kit's
+     `--pick`, on the choice's clock), each foot narrowing to a point on
+     the shelf and its last `tab-rim-taper` px fading out to nothing, so a
+     rim never stops on a hard cut (owner: "the rim should
+     taper-progress-fade at the very edges"). Each tab is a stack at its
+     rank (TabsList), so where two tabs overlap the front one covers the
+     other's side, rim and all, as one folder over another. Increase
+     Contrast and Reduce Transparency draw a solid 1px outline and no
+     glow, on every tab that wears a rim. */
   .tab {
-    /* The strengths a rim takes (`RIM`, written on each tab for itself,
-       `--rim-rest` unchosen and `--rim-full` chosen, and for each of its
-       neighbours, `--rest-prev` …), solid under Increase Contrast. */
+    /* The strengths a rim takes (`RIM`, written on each tab, `--rim-rest`
+       unchosen and `--rim-full` chosen), solid under Increase Contrast. */
     --rim-subtle: var(--tab-rim-mix-subtle);
     --rim-chosen: var(--tab-rim-mix-chosen);
     --rim-idle: var(--tab-rim-mix-idle);
-    /* How much of its chosen sheet shows now: the sheet's own opacity on
-       every frame, read off the sheet's fade by the track (TabsList
-       `--depth`, 0 chosen to 1 receded; how chosen it is drawn until the
-       track has measured it). The rim's strength follows it, on the
-       sheet's own clock. */
-    --sheet-now: calc(1 - var(--depth, calc(1 - var(--pick))));
-    /* Its strength now, and its neighbours': from how chosen each stands
-       on the switch's clock (`--sheet-now`, `--depth-prev`,
-       `--depth-next`). */
-    --rim-mix: calc(
-      var(--rim-rest) + (var(--rim-full) - var(--rim-rest)) * var(--sheet-now)
-    );
-    --rim-mix-prev: calc(
-      var(--rest-prev) + (var(--full-prev) - var(--rest-prev)) *
-        (1 - var(--depth-prev, 1))
-    );
-    --rim-mix-next: calc(
-      var(--rest-next) + (var(--full-next) - var(--rest-next)) *
-        (1 - var(--depth-next, 1))
-    );
+    --rim-ink: var(--tone);
 
     @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
       --rim-subtle: 1;
       --rim-chosen: 1;
       --rim-idle: 1;
     }
-    /* The tab's lean, as the kit's card has it (TabItem `--lean-now`), for
-       the rim drawn on that card. */
-    --lean-now: calc(
-      var(--lean) * (1 - var(--pick)) * (1 - var(--lean-lift-now, 0))
-    );
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .tab:not([data-chosen]):hover {
-      --lean-lift-now: var(--lean-lift);
-    }
-  }
-  /* `--t` and `--tn` are the stroke, `--fn` the flare (`--flare`:
-     `--radius-sm` on the desk, `--radius-lg` on the phone's row) and
-     `--tl` the taper (`tab-rim-taper`) as plain numbers, for the fade's
-     arithmetic: the flared foot's stroke runs a quarter turn round a
-     centre one flare above the shelf at the tab's outer edge, `--R` from
-     it (the stroke's middle), `--A` long. */
-  .rim {
-    /* Room round the outline for the glow. */
-    --spill: 6px;
-    --F: var(--flare);
-    /* The stroke, the track's (`--seam-stroke`, so a seam's glide stops
-       with it on the neighbour's own; `--rim-w`, 1 under Increase
-       Contrast). The shoulders, the seams and the taper's narrowing all
-       take it from here. */
-    --t: var(--seam-stroke);
-    --tn: var(--rim-w);
-    --fn: 8;
-    --tl: var(--tab-rim-taper);
-    --taper: calc(var(--tl) * 1px);
-    /* The taper's shape (`tab-rim-taper-ease`, p): at x of the taper's
-       length from the tip its ink is 1 - (1 - x)^p, an ease-out, steep off
-       the tip and nearly whole by 40% of the length. The masks draw it as
-       stops at these fractions of the length (`--e…`, its ink there),
-       straight between them. */
-    --te: var(--tab-rim-taper-ease);
-    --e04: calc(1 - pow(0.96, var(--te)));
-    --e08: calc(1 - pow(0.92, var(--te)));
-    --e13: calc(1 - pow(0.87, var(--te)));
-    --e19: calc(1 - pow(0.81, var(--te)));
-    --e26: calc(1 - pow(0.74, var(--te)));
-    --e35: calc(1 - pow(0.65, var(--te)));
-    --e50: calc(1 - pow(0.5, var(--te)));
-    --e70: calc(1 - pow(0.3, var(--te)));
-    --R: calc(var(--fn) + var(--tn) / 2);
-    --A: calc(var(--R) * pi / 2);
-    /* How far along the taper the flared foot's quarter turn reaches (1
-       when the fade ends on the foot), and the ink there, where it meets
-       the run. */
-    --a0: min(1, calc(var(--A) / max(var(--tl), 0.001)));
-    --ea0: calc(1 - pow(1 - var(--a0), var(--te)));
-    /* How far from the tip the stroke narrows, on the taper's curve: to
-       where its ink is 90% whole, (1 - 0.1^(1/p)) of its length. */
-    --tn90: calc((1 - pow(0.1, 1 / var(--te))) * var(--tl));
-    /* Where on the flare (an angle up from its tip, about the quarter
-       turn's centre) the stroke starts to narrow: that length round it,
-       never so near the tip that its inner edge would cross the shelf, and
-       at most 45deg of the turn: further up, the curve below swells wider
-       than the stroke before it meets it (35% wider at the quarter on the
-       phone's flare at 90deg; at 60deg on the desk a bump of ink and a dip
-       past it, 0.095 of the foot's whole as folder-tabs' composite reads
-       it on a faint leaning foot, 0.048 at 45deg). Its inner edge runs round at the stroke's width
-       (radius `--ro`) down to there, at `--px` out and `--py` above the
-       shelf, then on a curve that leaves along that circle and lands flat
-       on the shelf at the tip (its control on the shelf at `--cx`): the
-       widest the stroke can stand between its flare and the shelf. */
-    --ro: calc(var(--fn) + var(--tn));
-    --th: clamp(
-      acos(calc(var(--fn) / var(--ro))),
-      calc(var(--tn90) / var(--R) * 1rad),
-      45deg
-    );
-    --px: calc(var(--ro) * sin(var(--th)) * 1px);
-    --py: calc((var(--fn) - var(--ro) * cos(var(--th))) * 1px);
-    --cx: calc(
-      (
-          var(--ro) * sin(var(--th)) -
-            (var(--fn) - var(--ro) * cos(var(--th))) * cos(var(--th)) /
-            sin(var(--th))
-        ) *
-        1px
-    );
-    display: block;
-    position: absolute;
-    inset-block: calc(-1 * var(--spill)) 0;
-    inset-inline: calc(-1 * var(--F));
-    /* Over its own card, sheet and title, under every tab nearer the
-       choice (TabItem's layers: card ×4, sheet +1, title +2). */
-    z-index: calc(var(--z, var(--z-rest, 1)) * 4 + 3);
-    pointer-events: none;
-    /* Its pieces stay inside it: a side standing in for a gliding seam
-       never reaches past the track's end and gives it scroll room it does
-       not have. Nothing drawn is cut: every piece lies inside the
-       outline's box. */
-    overflow: clip;
-    /* Its strength now, the tab's own on every frame: a switch moves it
-       one way, from where it rests to where it will, and never through a
-       neighbour's. Only a gliding seam's side leans (`.rim-side`). */
-    opacity: var(--rim-mix);
-    filter: drop-shadow(
-      0 0 6px color-mix(in oklab, var(--tone) 50%, transparent)
-    );
-    /* The glow stops at the shelf's line. */
-    clip-path: inset(-24px -24px 0);
-    /* It leans with its card, about the same bottom centre. */
-    transform-origin: 50% 100%;
-    transform: rotateX(var(--lean-now));
-
-    @media (max-width: 899px) {
-      --fn: 12;
-    }
-    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-      filter: none;
-    }
-    /* Its strength follows the switch's clock frame by frame (`--depth`);
-       a status changing at rest cross-fades it at the panel's pace. */
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--choose-dur) var(--choose-ease),
-        opacity var(--dur-panel) var(--ease-out),
-        filter var(--dur-panel) var(--ease-out);
-
-      :global([data-switching]) & {
-        transition-property: transform, filter;
-      }
-    }
-
-    & > span {
-      position: absolute;
-      inset: var(--spill) 0 0;
-    }
-  }
-  /* The straight top, between the two shoulders (overlapping each by half
-     a pixel, opaque on opaque, so no seam shows), its ends standing in
-     with a side that stands in for a gliding seam. */
-  .rim-top {
-    background: var(--tone);
-    clip-path: inset(
-      0
-        calc(
-          var(--F) + var(--slope-end) + var(--radius) - 0.5px +
-            var(--seam-tuck) * var(--cut-end, 0)
-        )
-        calc(100% - var(--t))
-        calc(
-          var(--F) + var(--slope-start) + var(--radius) - 0.5px +
-            var(--seam-tuck) * var(--cut-start, 0)
-        )
-    );
-  }
-  /* A side, drawn as the leading one; the trailing one is its mirror. It
-     stands at its tab's own edge, but for a seam gliding on a switch,
-     where it stands in by its cut (TabsList), its ink leaning toward the
-     neighbour's as far as it has come.
-
-     Its strength leans too, and only its own: where its seam glides (that
-     seam's glide, TabsList `--glide-start`/`--glide-end`, the same on both
-     its tabs: 0 at either edge, 1 half way), it leans toward the weaker of
-     its tab's rim and the neighbour's as the seam nears half way, and back
-     as it leaves, so at the handover the two sides stand on the same pixels
-     in the same ink at the same strength and the edge passes from one to
-     the other with nothing moving (a lean read off the cut instead dropped
-     to 0 as the side went behind, and brightened it in a frame). Against a
-     neighbour with no rim the gliding side fades out. The rim's top, its
-     far side and its feet keep the tab's own strength (`.rim`), so a jump
-     past a rimless tab never blinks the rims either side of it out. The
-     glow (`.rim`'s filter, drawn off what the pieces show) leans with it. */
-  .rim-side {
-    --s: var(--slope-start);
-    /* 1 where the side stands under its neighbour's card (TabsList). */
-    --u: var(--under-start, 0);
-    --glide: var(--glide-start, 0);
-    --beside: var(--rim-mix-prev);
-    translate: calc(var(--seam-tuck) * var(--cut-start, 0)) 0;
-    opacity: calc(
-      1 - var(--glide) + var(--glide) *
-        min(1, calc(var(--beside) / max(var(--rim-mix), 0.001)))
-    );
-    /* Its two drawings add up here and nowhere else (`.rim-flared`). */
-    isolation: isolate;
-
-    & > span {
-      position: absolute;
-      inset: 0;
-      background: color-mix(
-        in oklab,
-        var(--tone-prev) calc(var(--cut-start, 0) * 100%),
-        var(--tone)
-      );
-    }
-    &[data-side="end"] {
-      --s: var(--slope-end);
-      --u: var(--under-end, 0);
-      --glide: var(--glide-end, 0);
-      --beside: var(--rim-mix-next);
-      translate: calc(-1 * var(--seam-tuck) * var(--cut-end, 0)) 0;
-      transform: scaleX(-1);
-
-      & > span {
-        background: color-mix(
-          in oklab,
-          var(--tone-next) calc(var(--cut-end, 0) * 100%),
-          var(--tone)
-        );
-      }
-    }
-  }
-  /* The side on its flared foot and on a plain one, each one shape from
-     shoulder to tip (so no seam where the run meets its foot) with its own
-     fade, measured along its own stroke from its tip. Every tab stands on
-     its flared foot, chosen or not, as its card and sheet do (owner: "A
-     curved foot on inactive tabs: their sides curve out at the base like
-     the chosen tab's"), so a choice changes no foot: body and feet are one
-     shape through the switch. Only a gliding seam's sides straighten, by
-     how far it has glided (`--glide`, 0 at either edge, 1 half way): at
-     the handover, where its front changes, both its sides stand plain on
-     the same pixels, so the curve passing from one side of the seam to the
-     other shows nothing, and each flares again as the seam settles. Their
-     strengths always sum to one and they add as light (`plus-lighter`), so
-     where the two run on the same pixels (the run, and its fading stretch
-     above a foot) the stroke holds its strength through the switch.
-
-     A foot never shows from under a neighbour: the rank does that, not a
-     timing. A side under its neighbour's card draws no foot (`--u`,
-     flipped with the rank at the seam's handover, at equal depth, where
-     the two sides stand on the same pixels): its tip folds up to the run's
-     foot, as the sheet's own foot there lies under the front card. The
-     card covers it at rest, and on a switch the card's foot row, a
-     compositor layer's edge, is half clear and showed it as a stub on the
-     shelf. Its shoulder and run stay, so the corner where the two tops
-     meet is one line.
-
-     The plain side: down the outline to the shelf, narrowing to a point
-     there up to where the taper's ink is 90% whole (`--tn90`), or the
-     foot's top where that is lower, on an ease-out from the tip as its ink
-     does: its inner edge leaves the tip square across the stroke (its
-     control at the tip's height), so the stroke widens fast off the point
-     and slows into its full width. */
-  .rim-plain {
-    opacity: var(--glide);
-    clip-path: shape(
-      from calc(var(--F) + var(--s) + var(--radius)) 0,
-      arc to calc(var(--F) + var(--s)) var(--radius) of var(--radius) ccw,
-      line to var(--F) calc(100% - var(--F)),
-      line to var(--F) calc(100% - var(--F) * var(--u)),
-      curve to calc(var(--F) + var(--t))
-        calc(100% - max(min(var(--tn90) * 1px, var(--F)), var(--F) * var(--u)))
-        with calc(var(--F) + var(--t)) calc(100% - var(--F) * var(--u)),
-      line to calc(var(--F) + var(--t)) calc(100% - var(--F)),
-      line to calc(var(--F) + var(--s) + var(--t)) var(--radius),
-      arc to calc(var(--F) + var(--s) + var(--radius)) var(--t) of
-        calc(var(--radius) - var(--t)) cw,
-      close
-    );
-    /* Up from the tip: straight, so the stroke's length is its height.
-       The taper's curve (`--e…`), stopped short of the shoulder: a stop
-       past it lands on it, where the stroke is whole. */
-    --cap: calc(100% - var(--radius));
-    mask-image: linear-gradient(
-      to top,
-      transparent,
-      rgb(0 0 0 / var(--e04)) min(0.04 * var(--taper), var(--cap)),
-      rgb(0 0 0 / var(--e08)) min(0.08 * var(--taper), var(--cap)),
-      rgb(0 0 0 / var(--e13)) min(0.13 * var(--taper), var(--cap)),
-      rgb(0 0 0 / var(--e19)) min(0.19 * var(--taper), var(--cap)),
-      rgb(0 0 0 / var(--e26)) min(0.26 * var(--taper), var(--cap)),
-      rgb(0 0 0 / var(--e35)) min(0.35 * var(--taper), var(--cap)),
-      rgb(0 0 0 / var(--e50)) min(0.5 * var(--taper), var(--cap)),
-      rgb(0 0 0 / var(--e70)) min(0.7 * var(--taper), var(--cap)),
-      #000 min(var(--taper), var(--cap))
-    );
-  }
-  /* The flared side: down the outline, then out round the sheet's flare
-     to the shelf's line, narrowing from where the taper's ink is 90%
-     whole (`--th`) to a point where it meets it. */
-  .rim-flared {
-    opacity: calc(1 - var(--glide));
-    mix-blend-mode: plus-lighter;
-    clip-path: shape(
-      from calc(var(--F) + var(--s) + var(--radius)) 0,
-      arc to calc(var(--F) + var(--s)) var(--radius) of var(--radius) ccw,
-      line to var(--F) calc(100% - var(--F)),
-      arc to calc(var(--F) * var(--u)) calc(100% - var(--F) * var(--u)) of
-        var(--F) cw,
-      curve to calc(var(--px) + (var(--F) + var(--t) - var(--px)) * var(--u))
-        calc(100% - var(--py) - (var(--F) - var(--py)) * var(--u)) with
-        calc(var(--cx) + (var(--F) + var(--t) - var(--cx)) * var(--u))
-        calc(100% - var(--F) * var(--u)),
-      arc to calc(var(--F) + var(--t)) calc(100% - var(--F)) of
-        calc(var(--ro) * 1px) ccw,
-      line to calc(var(--F) + var(--s) + var(--t)) var(--radius),
-      arc to calc(var(--F) + var(--s) + var(--radius)) var(--t) of
-        calc(var(--radius) - var(--t)) cw,
-      close
-    );
-    /* The taper's curve (`--e…`) along the stroke: round the flare's
-       quarter turn from its tip (a conic about the turn's centre, from the
-       run at 0deg to the tip at 90deg, a stop at x of the taper's length
-       standing x·tl/R rad up from the tip), then on up the run from where
-       the turn left it (`--ea0`). A stop past the turn's end lands on the
-       run's foot and one short of it on the turn's, each in the ink there,
-       so the two meet in one ink; on the run the fade stops short of the
-       shoulder, where the stroke is whole.
-
-       The two cover the whole side and part at the run's foot as hard stops
-       on one line (the conic clear above it, the linear clear below), so
-       every pixel takes its ink from one of them. As two tiles meeting
-       there, a leaning tab drew the line between device rows, each tile's
-       edge covered the row in part, and the stroke dipped across it: 9 to
-       13% of its ink at 390 mid-switch (folder-tabs-proof, "composite"). */
-    --cap: calc(100% - var(--F) - var(--radius));
-    mask-image:
-      conic-gradient(
-        from 90deg at 0 calc(100% - var(--F)),
-        rgb(0 0 0 / var(--ea0)) 0deg,
-        rgb(0 0 0 / var(--ea0))
-          max(0deg, calc(90deg - var(--tl) / var(--R) * 1rad)),
-        rgb(0 0 0 / calc(1 - pow(1 - min(0.7, var(--a0)), var(--te))))
-          max(0deg, calc(90deg - 0.7 * var(--tl) / var(--R) * 1rad)),
-        rgb(0 0 0 / calc(1 - pow(1 - min(0.5, var(--a0)), var(--te))))
-          max(0deg, calc(90deg - 0.5 * var(--tl) / var(--R) * 1rad)),
-        rgb(0 0 0 / calc(1 - pow(1 - min(0.35, var(--a0)), var(--te))))
-          max(0deg, calc(90deg - 0.35 * var(--tl) / var(--R) * 1rad)),
-        rgb(0 0 0 / calc(1 - pow(1 - min(0.26, var(--a0)), var(--te))))
-          max(0deg, calc(90deg - 0.26 * var(--tl) / var(--R) * 1rad)),
-        rgb(0 0 0 / calc(1 - pow(1 - min(0.19, var(--a0)), var(--te))))
-          max(0deg, calc(90deg - 0.19 * var(--tl) / var(--R) * 1rad)),
-        rgb(0 0 0 / calc(1 - pow(1 - min(0.13, var(--a0)), var(--te))))
-          max(0deg, calc(90deg - 0.13 * var(--tl) / var(--R) * 1rad)),
-        rgb(0 0 0 / calc(1 - pow(1 - min(0.08, var(--a0)), var(--te))))
-          max(0deg, calc(90deg - 0.08 * var(--tl) / var(--R) * 1rad)),
-        rgb(0 0 0 / calc(1 - pow(1 - min(0.04, var(--a0)), var(--te))))
-          max(0deg, calc(90deg - 0.04 * var(--tl) / var(--R) * 1rad)),
-        transparent 90deg
-      ),
-      linear-gradient(
-        to top,
-        transparent var(--F),
-        rgb(0 0 0 / var(--ea0)) var(--F),
-        rgb(0 0 0 / calc(1 - pow(1 - max(0.04, var(--a0)), var(--te))))
-          calc(
-            var(--F) +
-              clamp(0px, 0.04 * var(--taper) - var(--A) * 1px, var(--cap))
-          ),
-        rgb(0 0 0 / calc(1 - pow(1 - max(0.08, var(--a0)), var(--te))))
-          calc(
-            var(--F) +
-              clamp(0px, 0.08 * var(--taper) - var(--A) * 1px, var(--cap))
-          ),
-        rgb(0 0 0 / calc(1 - pow(1 - max(0.13, var(--a0)), var(--te))))
-          calc(
-            var(--F) +
-              clamp(0px, 0.13 * var(--taper) - var(--A) * 1px, var(--cap))
-          ),
-        rgb(0 0 0 / calc(1 - pow(1 - max(0.19, var(--a0)), var(--te))))
-          calc(
-            var(--F) +
-              clamp(0px, 0.19 * var(--taper) - var(--A) * 1px, var(--cap))
-          ),
-        rgb(0 0 0 / calc(1 - pow(1 - max(0.26, var(--a0)), var(--te))))
-          calc(
-            var(--F) +
-              clamp(0px, 0.26 * var(--taper) - var(--A) * 1px, var(--cap))
-          ),
-        rgb(0 0 0 / calc(1 - pow(1 - max(0.35, var(--a0)), var(--te))))
-          calc(
-            var(--F) +
-              clamp(0px, 0.35 * var(--taper) - var(--A) * 1px, var(--cap))
-          ),
-        rgb(0 0 0 / calc(1 - pow(1 - max(0.5, var(--a0)), var(--te))))
-          calc(
-            var(--F) +
-              clamp(0px, 0.5 * var(--taper) - var(--A) * 1px, var(--cap))
-          ),
-        rgb(0 0 0 / calc(1 - pow(1 - max(0.7, var(--a0)), var(--te))))
-          calc(
-            var(--F) +
-              clamp(0px, 0.7 * var(--taper) - var(--A) * 1px, var(--cap))
-          ),
-        #000
-          calc(var(--F) + clamp(0px, var(--taper) - var(--A) * 1px, var(--cap)))
-      );
-    mask-repeat: no-repeat;
-  }
-  /* The feet ease nothing of their own: a seam's glide moves them, frame
-     by frame (`--glide`). */
-  @media (prefers-reduced-motion: no-preference) {
-    /* A pointer's lift runs at the control tier (TabItem). */
-    @media (hover: hover) and (pointer: fine) {
-      .tab:not([data-chosen]):hover .rim {
-        transition-duration: var(--dur-control);
-        transition-timing-function: var(--ease-out);
-      }
-    }
-  }
-  /* Under a swipe the rim is where its fraction puts it, frame by frame:
-     no transition lags the finger. */
-  :global([data-ride]) .rim {
-    transition: none;
   }
 
   /* ── The phone's row ──────────────────────────────────────────────
@@ -2791,108 +2265,28 @@
   }
 
   /* ── The tab its card or its menu hangs from ─────────────────────
-     While its card or a finger's menu hangs from it (`data-hung`) a tab
-     keeps the card head's surface (the chosen sheet already is it; a
-     hovered tab's card would light to the hover step instead), and the
-     chosen tab draws a 1px stroke in the card's edge from the flare's
-     outer end, up the concave flare and up each flank, fading out by 60%
-     of the tab's height where the rim's taper takes over. It is drawn like
-     the rim's stroke, as a shape on a box one flare wider than the tab each
-     side, and reaches 1px under the tab so it meets the card's own top
-     edge. */
+     While its card or its menu stands drawn out of it (`data-hung`) a tab
+     and its hang are one silhouette (HangCard `tab`, motion/hang-shape):
+     one outline over both, drawn by the hang's outline layer, so the tab
+     draws no rim of its own then (TabItem `hung`) and its sheet stops
+     where the outline's stroke is centred. Its sheet is the hang's head
+     surface, whether it is chosen or not, so the tab and the hang under
+     it are one fill across the shelf; and it stands over every other tab
+     (TabsList), both feet flared but where its hang stands flush with its
+     flank (TabItem `flush`, the flank running straight on into the hang's
+     side). Its rim's ink and strength (`--hang-rim`) is the outline's
+     across the tab, running into the hang's edge down its flanks. */
   .tab[data-hung] {
+    --sheet: var(--surface-recess);
     --tab-fill: var(--surface-recess);
     --tab-hover: var(--surface-recess);
   }
   /* The menu hanging from its tab is on the tab's own surface, as the
-     card's head is, so the two read as one sheet; and it is wide enough to
-     hold the tab's span and its flare under its top edge (`menuMin`). */
+     card's head is, so the two read as one sheet; and it is as wide as the
+     shape needs past the tab's span (`menuMin`, `placeOf`). */
   :global(.kit-pop.kit-hang.tab-menu) {
     min-inline-size: max(12rem, var(--hang-min, 0px));
     --hang-surface: var(--surface-recess);
-  }
-  /* Flush with the pane's edge (`flushAt`): the sheet's foot and the
-     card's are square on the leading side while its card hangs there, so
-     the tab's flank runs straight down into the card's side. */
-  .tab[data-flush="start"] :global(.ff-tab)::before {
-    --foot-s: var(--flare);
-  }
-  .tab[data-flush="start"] :global(.ff-tab.selected)::after {
-    clip-path: shape(
-      from calc(var(--cut-s) + var(--flare)) 100%,
-      line to calc(var(--cut-s) + var(--flare) + var(--slope-start))
-        var(--radius),
-      arc to
-        calc(var(--cut-s) + var(--flare) + var(--slope-start) + var(--radius)) 0
-        of var(--radius) cw,
-      line to
-        calc(
-          100% - var(--cut-e) - var(--flare) - var(--slope-end) - var(--radius)
-        )
-        0,
-      arc to calc(100% - var(--cut-e) - var(--flare) - var(--slope-end))
-        var(--radius) of var(--radius) cw,
-      line to calc(100% - var(--cut-e) - var(--flare)) calc(100% - var(--flare)),
-      arc to calc(100% - var(--cut-e)) 100% of var(--flare) ccw,
-      close
-    );
-  }
-  .neck {
-    display: none;
-  }
-  .tab[data-hung][data-chosen] .neck {
-    --f: var(--flare);
-    --h: calc(100% - 1px);
-    display: block;
-    position: absolute;
-    inset-block: 0 -1px;
-    inset-inline: calc(-1 * var(--flare));
-    /* At its tab's rank: over its title, under its rim. */
-    z-index: calc(var(--z, var(--z-rest, 1)) * 4 + 2);
-    pointer-events: none;
-    background: var(--border-control);
-    clip-path: shape(
-      from 0 100%,
-      arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
-        calc(var(--f) + 1px) ccw,
-      line to calc(var(--f) + 1px) 0,
-      line to var(--f) 0,
-      line to var(--f) calc(var(--h) - var(--f)),
-      arc to 0 var(--h) of var(--f) cw,
-      close,
-      move to 100% 100%,
-      arc to calc(100% - var(--f) - 1px) calc(var(--h) - var(--f)) of
-        calc(var(--f) + 1px) cw,
-      line to calc(100% - var(--f) - 1px) 0,
-      line to calc(100% - var(--f)) 0,
-      line to calc(100% - var(--f)) calc(var(--h) - var(--f)),
-      arc to 100% var(--h) of var(--f) ccw,
-      close
-    );
-    mask-image: linear-gradient(
-      to top,
-      #000 calc(var(--f) + 2px),
-      transparent 60%
-    );
-  }
-  /* Flush: the leading stroke runs straight down the flank to the card's
-     own side; the trailing one keeps its flare. */
-  .tab[data-hung][data-chosen][data-flush="start"] .neck {
-    clip-path: shape(
-      from var(--f) 100%,
-      line to var(--f) 0,
-      line to calc(var(--f) + 1px) 0,
-      line to calc(var(--f) + 1px) 100%,
-      close,
-      move to 100% 100%,
-      arc to calc(100% - var(--f) - 1px) calc(var(--h) - var(--f)) of
-        calc(var(--f) + 1px) cw,
-      line to calc(100% - var(--f) - 1px) 0,
-      line to calc(100% - var(--f)) 0,
-      line to calc(100% - var(--f)) calc(var(--h) - var(--f)),
-      arc to 100% var(--h) of var(--f) ccw,
-      close
-    );
   }
 
   /* A tab's close, and the "+" after the tabs in its look. */
@@ -2926,8 +2320,7 @@
       transition:
         background-color var(--dur-control) var(--ease-out),
         color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out),
-        translate var(--choose-dur) var(--choose-ease);
+        transform var(--dur-control) var(--ease-out);
 
       &:active {
         transform: scale(var(--press-scale));
