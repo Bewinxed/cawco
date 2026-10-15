@@ -188,29 +188,74 @@ const hubBase = async (git: Git, repo: string): Promise<string> => {
   return branch;
 };
 
-/** Each repository's {@link hubBase} in flight: the last of its queue. */
-const basing = new Map<string, Promise<unknown>>();
+/** Each source repository's {@link inSource} work in flight: the last of its queue. */
+const sourcing = new Map<string, Promise<unknown>>();
 
 /**
- * {@link hubBase}, one at a time per repository. Workspaces cut at once from
- * a project the hub has no default branch for yet (a routine's runs, a
- * group of delegates) would each push its branch as the hub's first, and
- * every push after the first is refused ("reference already exists"); queued,
- * the later ones find the branch the first pushed.
+ * `work` on source repository `repo`, one at a time per repository. A
+ * workspace's create writes the source's own `.git/config` (its `origin`,
+ * the hub's credential helper, a pushed branch's tracking) and pushes its
+ * branch as the hub's first; workspaces cut at once from one repository (a
+ * group of delegates, a routine's runs) each did so side by side, and git
+ * refused all but one: "could not lock config file .git/config: File exists"
+ * (scratch fleet, 20 delegates at once, 2026-10-15), or "reference already
+ * exists" for the push. Queued, each later one finds what the first wrote.
  */
-const hubBaseOnce = (git: Git, repo: string): Promise<string> => {
-  const mine = (basing.get(repo) ?? Promise.resolve())
+const inSource = <T>(repo: string, work: () => Promise<T>): Promise<T> => {
+  const mine = (sourcing.get(repo) ?? Promise.resolve())
     .catch(() => undefined)
-    .then(() => hubBase(git, repo));
-  basing.set(repo, mine);
+    .then(work);
+  sourcing.set(repo, mine);
   const forget = () => {
-    if (basing.get(repo) === mine) {
-      basing.delete(repo);
+    if (sourcing.get(repo) === mine) {
+      sourcing.delete(repo);
     }
   };
   mine.then(forget, forget);
   return mine;
 };
+
+/**
+ * Readies source repository `repoRoot` for a workspace cut from it, inside
+ * {@link inSource}: its `origin` (the hub's remote of `projectId` when it has
+ * none), the hub's credential helper in its config when that is the hub and
+ * `source` (another workspace's clone, whose config is that workspace's) is
+ * none, and the branch the workspace starts from ({@link hubBase}).
+ */
+const readySource = (
+  repoRoot: string,
+  projectId: unknown,
+  fromClone: boolean,
+  deadline: number
+): Promise<{ hub: boolean; known: string | undefined }> =>
+  inSource(repoRoot, async () => {
+    const plain = gitUntil(deadline);
+    // A workspace starts from origin's default branch and lands there.
+    let origin = await plain(repoRoot, "remote", "get-url", "origin").catch(
+      () => undefined
+    );
+    if (!origin) {
+      if (typeof projectId !== "string" || !projectId) {
+        throw new Error(
+          `${repoRoot} has no origin remote and belongs to no project, so it has no hub remote to cut a workspace from. Delegate from a session in a project, or add a remote with \`git remote add origin <url>\`, and delegate again.`
+        );
+      }
+      origin = hubRepo(projectId);
+      await plain(repoRoot, "remote", "add", "origin", origin);
+      console.info(
+        `[workspace] ${repoRoot} had no origin: the hub's remote of project ${projectId} is its origin now`
+      );
+    }
+    // A clone of a workspace's clone reaches the hub as that workspace does.
+    const hub = isHubRemote(origin);
+    if (hub && !fromClone) {
+      useHubCredentialHelper(repoRoot);
+    }
+    const known = hub
+      ? await hubBase(gitUntil(deadline, hubGitEnv()), repoRoot)
+      : undefined;
+    return { hub, known };
+  });
 
 /**
  * {@link CONTROL_WORKSPACE_CREATE}: a shared clone on `ws/<id8>` from the
@@ -254,29 +299,13 @@ export const createWorkspace = async (
   if (problem) {
     throw new Error(`${repoRoot} cannot have a workspace: ${problem}`);
   }
-  // A workspace starts from origin's default branch and lands there.
-  let origin = await plain(repoRoot, "remote", "get-url", "origin").catch(
-    () => undefined
+  const { hub, known } = await readySource(
+    repoRoot,
+    projectId,
+    Boolean(source),
+    deadline
   );
-  if (!origin) {
-    if (typeof projectId !== "string" || !projectId) {
-      throw new Error(
-        `${repoRoot} has no origin remote and belongs to no project, so it has no hub remote to cut a workspace from. Delegate from a session in a project, or add a remote with \`git remote add origin <url>\`, and delegate again.`
-      );
-    }
-    origin = hubRepo(projectId);
-    await plain(repoRoot, "remote", "add", "origin", origin);
-    console.info(
-      `[workspace] ${repoRoot} had no origin: the hub's remote of project ${projectId} is its origin now`
-    );
-  }
-  // A clone of a workspace's clone reaches the hub as that workspace does.
-  const hub = isHubRemote(origin);
-  if (hub && !source) {
-    useHubCredentialHelper(repoRoot);
-  }
   const authed = hub ? gitUntil(deadline, hubGitEnv()) : plain;
-  const known = hub ? await hubBaseOnce(authed, repoRoot) : undefined;
   const id = String(workspaceId);
   const id8 = id.slice(0, 8);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);

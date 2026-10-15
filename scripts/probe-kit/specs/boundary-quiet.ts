@@ -7,7 +7,10 @@
  *
  * Twenty delegates (I0–I19) each run one command and finish; a twenty-first
  * (P) starts a server in its workspace, shows it as a preview, and finishes.
- * The hub puts each finished delegate to sleep.
+ * All 21 are delegated at once from one repository with no `origin`, as a
+ * person fans delegates out: each workspace's create readies that one source
+ * (agent workspace.ts `inSource`). The hub puts each finished delegate to
+ * sleep.
  *
  * 1. Agent restart before the quiet time: no idle workspace's boundary is
  *    started again or handed over, five of them given an older form first
@@ -46,8 +49,6 @@ import type { Kit, Spec } from "../kit";
 const IDLE = 20;
 /** The idle workspaces given an older form before the first restart. */
 const RE_FORMED = 5;
-/** How many delegates run at once. Ours: a scratch machine's share of Claude Code processes. */
-const AT_ONCE = 7;
 const FINISH = "mcp__cawco__finish_item";
 const CREATE = "mcp__cawco__artifact_create";
 const TAG = /PROBE-QUIET-(?:AGAIN-|SERVE-)?(I\d+|P):/g;
@@ -337,15 +338,8 @@ const standUp = async (kit: Kit) => {
     return { ...started, tag };
   };
   const tags = [...Array.from({ length: IDLE }, (_, at) => `I${at}`), "P"];
-  const batches = Array.from(
-    { length: Math.ceil(tags.length / AT_ONCE) },
-    (_, at) => tags.slice(at * AT_ONCE, (at + 1) * AT_ONCE)
-  );
-  const all: Delegated[] = [];
-  for (const batch of batches) {
-    // biome-ignore lint/performance/noAwaitInLoops: a batch of delegates at a time
-    all.push(...(await Promise.all(batch.map(delegate))));
-  }
+  // All at once, from one repository, as a person fans delegates out.
+  const all = await Promise.all(tags.map(delegate));
   const items = () =>
     fleet.query<{ id: string; state: string }>(
       `SELECT id, state FROM work_items WHERE id IN (${all.map(() => "?").join(",")})`,
