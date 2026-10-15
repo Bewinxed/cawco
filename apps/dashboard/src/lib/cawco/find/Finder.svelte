@@ -252,7 +252,7 @@
         finder.by !== null)
   );
   const machineCount = $derived(
-    finder.coverage?.machines.length || finder.knownMachines
+    finder.coverage?.machines.length ?? finder.askable
   );
   const answered = $derived(
     (finder.coverage?.machines ?? []).filter((m) => m.answered).length
@@ -429,7 +429,7 @@
       return `No sessions for “${finder.text.trim()}”`;
     }
     if (finder.searching) {
-      return `${nameRows.length} found by name. Searching ${machineCount ? machines(machineCount) : "machines"}.`;
+      return `${nameRows.length} found by name. Searching ${machines(finder.askable)}.`;
     }
     if (finder.typed) {
       const gone = finder.missing.length
@@ -519,9 +519,7 @@
     {/if}
     {#if finder.searching}
       <span class="searching" aria-hidden="true"
-        >{machineCount
-          ? `Searching ${machines(machineCount)}…`
-          : "Searching machines…"}<Spinner class="spin" /></span
+        >Searching {machines(finder.askable)}…<Spinner class="spin" /></span
       >
     {:else if finder.coverage?.asked && finder.missing.length === 0}
       <span class="covered"

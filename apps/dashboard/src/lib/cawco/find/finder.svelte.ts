@@ -184,6 +184,12 @@ export interface Opening {
 
 const keyOf = (r: FindResult) => `${r.kind}:${r.id}`;
 
+/** The engine's word for a machine it would not ask: it is offline. */
+const OFFLINE = "it is offline";
+/** Machines a full find asks: those a names answer lists, less the offline. */
+const askable = (coverage: FindCoverage) =>
+  coverage.machines.filter((m) => m.reason !== OFFLINE).length;
+
 export class FinderState {
   text = $state("");
   who = $state<Who>("anyone");
@@ -197,8 +203,12 @@ export class FinderState {
   peeked = $state<string | null>(null);
   unfolded = new SvelteSet<string>();
   now = $state(Date.now());
-  /** Machines last heard of, for "Searching 3 machines…" before this answer names them. */
-  knownMachines = $state(0);
+  /**
+   * How many machines a full find asks, from the names answer (which lists
+   * every machine it would ask, an offline one named so): "Searching 3
+   * machines…" from the first keystroke.
+   */
+  askable = $state(0);
   /** Typing has not settled yet: the machines are about to be asked. */
   settling = $state(false);
   /** A names ask in flight while the last answer stays drawn. */
@@ -553,10 +563,7 @@ export class FinderState {
     this.#pendingNames = null;
     this.names = this.#land(read, key);
     if (read.ok) {
-      this.knownMachines = Math.max(
-        this.knownMachines,
-        read.value.coverage.machines.length
-      );
+      this.askable = askable(read.value.coverage);
     }
   }
 
@@ -583,10 +590,6 @@ export class FinderState {
     }
     this.#pendingEvery = null;
     this.everywhere = this.#land(read, key);
-    if (read.ok) {
-      this.knownMachines =
-        read.value.coverage.machines.length || this.knownMachines;
-    }
   }
 
   #land<T>(read: Read<T>, key: string): Answer<T> {
