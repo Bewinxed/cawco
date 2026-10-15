@@ -884,7 +884,9 @@ export const createCaw = ({
    * harness to read it, and `threadId`, when it names one, is `working`
    * from now until the turn that reads it ends. A turn your words are in
    * stays yours when an event joins it ({@link joined}). Without a thread
-   * it says `what` it answers, on his panel.
+   * it says `what` it answers, on his panel, and the turn answers no thread
+   * from then on: it never carries on the thread of the turn it joined (a
+   * routine run's, say), which would take its asks and notes.
    */
   const follow = (
     leadId: string,
@@ -894,7 +896,7 @@ export const createCaw = ({
     to: { threadId: string } | { what: string }
   ) => {
     const before = turns.get(leadId);
-    const threadId = "threadId" in to ? to.threadId : before?.threadId;
+    const threadId = "threadId" in to ? to.threadId : undefined;
     if ("threadId" in to) {
       answered.set(leadId, to.threadId);
     }
@@ -2588,8 +2590,10 @@ export const createCaw = ({
      * of the thread its end is noted in ({@link attemptThread}), which reads
      * `working` until the turn that reads it ends; any other session's
      * report or question is the wake of the thread it works for, recorded on
-     * it at its spawn (`spawnThread`); anything else says `what` it answers
-     * on his panel, never on a thread it would only be guessed from.
+     * it at its spawn (`spawnThread`), else of the project's newest
+     * conversation (never a routine's own thread); with none, it says `what`
+     * it answers on his panel. It never takes the thread of the turn it
+     * joins ({@link follow}): a routine run's thread holds that run alone.
      */
     heard(
       leadId: string,
@@ -2611,7 +2615,8 @@ export const createCaw = ({
       const recorded = from.threadId ? db.thread(from.threadId) : undefined;
       const threadId =
         attempt ??
-        (recorded?.projectId === project.id ? recorded.id : undefined);
+        (recorded?.projectId === project.id ? recorded.id : undefined) ??
+        db.newestConversation(project.id)?.id;
       follow(leadId, project.id, by, sent, threadId ? { threadId } : { what });
     },
 
@@ -2639,11 +2644,11 @@ export const createCaw = ({
       if (!project) {
         return;
       }
-      noteIn(
-        project.id,
-        turns.get(instanceId)?.threadId ?? answered.get(instanceId),
-        note
-      );
+      // A turn under way answers its own thread, or none (the project's
+      // newest conversation); only a call after its turn's record ended
+      // goes where that turn answered.
+      const turn = turns.get(instanceId);
+      noteIn(project.id, turn ? turn.threadId : answered.get(instanceId), note);
     },
 
     /** A question tagged to a thread was parked or settled: its status moved. */

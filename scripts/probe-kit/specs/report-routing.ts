@@ -30,6 +30,13 @@
  * d. Then a line that writes: asked, in thread "main" (the project's
  *    conversation), never the routine's.
  * e. The routine's thread took nothing: its messages are the ones it had.
+ * f. In main your words have Caw start a helper that waits; its row's
+ *    recorded thread is cleared (a session spawned before threads were
+ *    recorded). A lead routine runs: Caw's turn is the run's, in its thread,
+ *    and slow. The helper is released and reports into that turn: Caw's
+ *    turn now answers main (the newest conversation), never the run's
+ *    thread (caw.ts `heard`, `follow`); his ask from the report is in main;
+ *    the run's thread holds only its run's notes.
  *
  *   bun scripts/probe-kit/run.ts report-routing
  */
@@ -55,6 +62,18 @@ const READS =
 const READS_WHY = "Inspect the two untracked paths";
 const WRITES = "touch probe-written.txt 2>/dev/null";
 const WRITES_WHY = "Write a probe file";
+const RESULT = "mcp__cawco__routine_result";
+const WAIT = "mcp__cawco__wait_item";
+const RUN_ID = /routine_result with run "([^"]+)"/;
+/** Case f: your words start Caw's helper, whose brief carries CHILD_F. */
+const START_F = "PROBE-F: start the helper";
+const CHILD_F = "PROBE-F-CHILD";
+const HELD_F = "PROBE-F-WAIT until released";
+const RELEASE_F = "PROBE-F-RELEASE";
+const F_REPORTED = "PROBE-F-REPORTED the helper is done";
+/** The lead routine's prompt: its run's turn is slow, so the report lands in it. */
+const ROUTINE_F = "PROBE-ROUTINE-F look over the board";
+const WRITES_F = "touch probe-f.txt 2>/dev/null";
 const STAGES =
   "---\nready      todo\nworking    active\nreview     you\ndone       done\ndropped    dropped\nmoves\n  * → *    you, session\nviews\n  board      by stage\n---\n";
 
@@ -74,12 +93,21 @@ const found = (request: Seen, name: string, input: object): Reply => {
     : text(`${name} is not offered`);
 };
 
-/** What has been played: the orchestrator's delegate, then Caw's two lines. */
-const played: Record<"delegated" | "read" | "wrote", boolean> = {
+/** What has been played: the orchestrator's delegate, Caw's lines, case f's steps. */
+const played: Record<
+  "delegated" | "read" | "wrote" | "delegatedF" | "waitedF" | "wroteF" | "slow",
+  boolean
+> = {
   delegated: false,
   read: false,
   wrote: false,
+  delegatedF: false,
+  waitedF: false,
+  wroteF: false,
+  slow: false,
 };
+/** The routine runs Caw has answered, by id. */
+const answeredRuns = new Set<string>();
 /** Every Caw request's words: whatever reached his session. */
 const cawSaw: string[] = [];
 const finished = new Set<string>();
@@ -95,7 +123,62 @@ const caw = (request: Seen): Reply => {
     played.wrote = true;
     return useTool("Bash", { command: WRITES, description: WRITES_WHY });
   }
+  return cawF(request);
+};
+
+/**
+ * Case f: your words start the helper; the routine's run is a slow turn that
+ * answers NO_REPLY at its end; the helper's report starts the write.
+ */
+const cawF = (request: Seen): Reply => {
+  const run = request.last.match(RUN_ID)?.[1];
+  if (run && request.last.includes(ROUTINE_F)) {
+    if (answeredRuns.has(run) || !request.toolNames.includes(RESULT)) {
+      return answeredRuns.has(run)
+        ? text("ok")
+        : found(request, RESULT, { run, result: "NO_REPLY" });
+    }
+    answeredRuns.add(run);
+    played.slow = true;
+    return {
+      everyMs: 2000,
+      words: Array.from({ length: 15 }, () => "looking "),
+      tool: { name: RESULT, input: { run, result: "NO_REPLY" } },
+    };
+  }
+  if (!played.delegatedF && request.all.includes(START_F)) {
+    const reply = found(request, DELEGATE, {
+      title: "The helper",
+      prompt: `${CHILD_F}: wait until you are released, then finish your item.`,
+      cwd: repo,
+      checks: [{ name: "Nothing to check", command: "true" }],
+      lands: "none",
+    });
+    if (reply.tool?.name === DELEGATE) {
+      played.delegatedF = true;
+    }
+    return reply;
+  }
+  if (!played.wroteF && request.all.includes(F_REPORTED)) {
+    played.wroteF = true;
+    return useTool("Bash", { command: WRITES_F, description: WRITES_WHY });
+  }
   return text("ok");
+};
+
+/** Caw's helper: declares a wait, and finishes once it is released. */
+const helper = (request: Seen): Reply => {
+  if (request.all.includes(RELEASE_F)) {
+    return child(request, F_REPORTED);
+  }
+  if (played.waitedF) {
+    return text("ok");
+  }
+  const reply = found(request, WAIT, { minutes: 60, reason: HELD_F });
+  if (reply.tool?.name === WAIT) {
+    played.waitedF = true;
+  }
+  return reply;
 };
 
 /** A delegate: finds finish_item, calls it once with `headline`, then says ok. */
@@ -139,6 +222,9 @@ const respond = (request: Seen): Reply => {
   }
   if (request.all.includes(CHILD)) {
     return child(request, ORCH_REPORTED);
+  }
+  if (request.all.includes(CHILD_F)) {
+    return helper(request);
   }
   return orchestrator(request);
 };
@@ -438,6 +524,118 @@ const run = async (kit: Kit) => {
     routineMessages() === routineBefore,
     JSON.stringify({ before: routineBefore, now: notes })
   );
+
+  // ── f. a report with no recorded thread, landing in a routine run's turn
+  await fleet.api(`/api/projects/${project.id}/threads/${main}/messages`, {
+    body: START_F,
+  });
+  const helperItem = (await until(
+    "f: Caw's helper, waiting",
+    () =>
+      fleet.query<{ instance_id: string; wait_reason: string | null }>(
+        "SELECT instance_id, wait_reason FROM work_items WHERE parent_instance_id = ? AND title = 'The helper'",
+        leadId
+      )[0],
+    (row) => row?.wait_reason === HELD_F,
+    300_000
+  )) as { instance_id: string };
+  // As a session spawned before its thread was recorded: none on its row.
+  fleet.write(
+    "UPDATE instances SET thread_id = NULL WHERE id = ?",
+    helperItem.instance_id
+  );
+  const leadRoutine = await fleet.api<{ id: string }>("/api/routines", {
+    projectId: project.id,
+    timeZone: "UTC",
+    target: "lead",
+    name: "Probe board",
+    cron: "0 0 1 1 *",
+    prompt: ROUTINE_F,
+  });
+  const runThread = (await until(
+    "f: Caw's turn is the routine run's, in its thread",
+    () => {
+      const [owned] = fleet.query<{ thread_id: string | null }>(
+        "SELECT thread_id FROM routines WHERE id = ?",
+        leadRoutine.id
+      );
+      const [turn] = fleet.query<{ thread_id: string | null }>(
+        "SELECT thread_id FROM lead_turns WHERE instance_id = ?",
+        leadId
+      );
+      return played.slow &&
+        owned?.thread_id &&
+        turn?.thread_id === owned.thread_id
+        ? owned.thread_id
+        : undefined;
+    },
+    Boolean,
+    180_000
+  )) as string;
+  await fleet.send(helperItem.instance_id, RELEASE_F);
+  await until(
+    "f: the helper's report sent to Caw",
+    () => sendsTo(leadId, helperItem.instance_id)[0],
+    Boolean,
+    180_000
+  );
+  const [afterReport] = fleet.query<{ thread_id: string | null }>(
+    "SELECT thread_id FROM lead_turns WHERE instance_id = ?",
+    leadId
+  );
+  const [runRow] = fleet.query<{ state: string }>(
+    "SELECT state FROM routine_runs WHERE routine_id = ? ORDER BY started_at LIMIT 1",
+    leadRoutine.id
+  );
+  kit.check(
+    "f: a report with no recorded thread, joining a routine run's turn, takes the project's conversation (main), never the run's thread",
+    afterReport?.thread_id === main,
+    JSON.stringify({
+      turnThread: afterReport?.thread_id,
+      main,
+      runThread,
+      runWhileReported: runRow?.state,
+    })
+  );
+  const cardF = await until(
+    "f: the card for the helper's write",
+    pending,
+    (asks) => asks.some((one) => one.payload.presentation.command === WRITES_F),
+    300_000
+  ).then(
+    (asks) =>
+      asks.find((one) => one.payload.presentation.command === WRITES_F) as Ask
+  );
+  const runMessages = fleet.query<{
+    author: string;
+    note_title: string | null;
+  }>(
+    "SELECT author, note_title FROM thread_messages WHERE thread_id = ? ORDER BY created_at",
+    runThread
+  );
+  kit.check(
+    "f: Caw's ask from that report is in main, and the run's thread holds only its run's notes",
+    cardF.payload.threadId === main &&
+      runMessages.every(
+        (one) =>
+          one.author === "event" &&
+          (one.note_title ?? "").startsWith("Routine · ")
+      ),
+    JSON.stringify({ thread: cardF.payload.threadId, main, runMessages })
+  );
+  await fleet.post({
+    type: "command",
+    commandId: crypto.randomUUID(),
+    kind: "permission.answer",
+    machineId: MACHINE,
+    sessionId: cardF.instanceId,
+    payload: {
+      instanceId: cardF.instanceId,
+      requestId: cardF.requestId,
+      method: "resolvePermission",
+      args: [cardF.requestId, { behavior: "deny", message: "No." }],
+    },
+  });
 };
 
 export default { name: "report-routing", run } satisfies Spec;
