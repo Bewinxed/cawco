@@ -72,8 +72,8 @@ import { claudeHomeEnv, resolveBin, toolEnv, toolPath } from "./tools";
 import {
   CARRIED,
   carriedList,
+  fleetFilesIn,
   heldHash,
-  linkedTree,
   placeTree,
   removeTree,
   treeStoreOf,
@@ -1963,15 +1963,10 @@ export const placedAsMade = async (cwd: string): Promise<string[]> => {
     }
     const dir = join(placedSkillsDir(folder), record.name);
     if ((await heldHash(dir)) === record.hash) {
-      // The skill's link, and in the tree it links to (tree-swap.ts) the
-      // files the fleet carried and their list. Anything else in that tree
-      // (a note someone added there) is theirs, not CawCo's.
-      const tree = await linkedTree(dir);
-      const carried = tree ? ((await carriedList(tree)) ?? []) : [];
-      made.push(
-        dir,
-        ...(tree ? [CARRIED, ...carried].map((path) => join(tree, path)) : [])
-      );
+      // The skill's link, and what of the fleet's is in the tree it links
+      // to (tree-swap.ts `fleetFilesIn`). Anything else in that tree (a note
+      // someone added there) is theirs, not CawCo's.
+      made.push(dir, ...(await fleetFilesIn(dir)));
     }
   }
   for (const record of Object.values(placedMemory)) {

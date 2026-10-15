@@ -295,3 +295,61 @@ export const linkedTree = async (path: string): Promise<string | undefined> =>
   (await lstat(path).catch(() => undefined))?.isSymbolicLink()
     ? resolve(dirname(path), await readlink(path))
     : undefined;
+
+/** Python's own name for the bytecode of `<stem>.py`: `<stem>.<tag>.pyc`, or `.opt-N.pyc` (PEP 3147, PEP 488). */
+const BYTECODE = /^([^.]+)\.[^.]+(?:\.opt-\d+)?\.pyc$/;
+
+/**
+ * The bytecode Python made in `tree` of the files the fleet carried in it:
+ * each `<dir>/__pycache__/<stem>.<tag>.pyc` (or `.opt-N.pyc`) whose
+ * `<dir>/<stem>.py` is in `carried`, by its path in the tree. Made by
+ * running the fleet's own code, so as much CawCo's as the source it was
+ * built from. A `.pyc` of no carried source, and any other file, is not.
+ */
+export const carriedBytecode = async (
+  tree: string,
+  carried: readonly string[]
+): Promise<string[]> => {
+  const stems = new Map<string, Set<string>>();
+  for (const path of carried) {
+    if (path.endsWith(".py")) {
+      const at = path.lastIndexOf("/");
+      const cache = at < 0 ? "__pycache__" : `${path.slice(0, at)}/__pycache__`;
+      stems.set(
+        cache,
+        (stems.get(cache) ?? new Set()).add(path.slice(at + 1, -".py".length))
+      );
+    }
+  }
+  const made: string[] = [];
+  for (const [cache, sources] of stems) {
+    // biome-ignore lint/performance/noAwaitInLoops: one cache folder at a time, a tree holds a few
+    const entries = await readdir(join(tree, cache), {
+      withFileTypes: true,
+    }).catch(() => []);
+    for (const entry of entries) {
+      const stem = BYTECODE.exec(entry.name)?.[1];
+      if (entry.isFile() && stem !== undefined && sources.has(stem)) {
+        made.push(`${cache}/${entry.name}`);
+      }
+    }
+  }
+  return made;
+};
+
+/**
+ * Everything of the fleet's in the tree the link at `path` points to, by
+ * full path: the files it carried, their list, and the bytecode Python made
+ * of the carried sources ({@link carriedBytecode}). Nothing for a path that
+ * is no link.
+ */
+export const fleetFilesIn = async (path: string): Promise<string[]> => {
+  const tree = await linkedTree(path);
+  if (!tree) {
+    return [];
+  }
+  const carried = (await carriedList(tree)) ?? [];
+  return [CARRIED, ...carried, ...(await carriedBytecode(tree, carried))].map(
+    (each) => join(tree, each)
+  );
+};
