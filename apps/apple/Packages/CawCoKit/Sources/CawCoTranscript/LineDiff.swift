@@ -5,7 +5,8 @@
 /// A line keeps its terminator. A trailing newline therefore ends the last
 /// line rather than opening an empty one ("a\nb\n" is two lines, as "a\nb"
 /// is), and a last line without one differs from the same line with one.
-enum LineDiff {
+/// Pure data work, so it is nonisolated: ToolDescriptor reads it off the main actor.
+nonisolated enum LineDiff {
     enum Step {
         case context(old: Int, new: Int)
         case deletion(old: Int)
