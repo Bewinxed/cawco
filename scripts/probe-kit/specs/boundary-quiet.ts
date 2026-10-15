@@ -6,17 +6,19 @@
  * run it where a workspace boundary can start (not inside another one).
  *
  * Twenty delegates (I0–I19) each run one command and finish; a twenty-first
- * (P) starts a server in its workspace, shows it as a preview, and finishes.
- * All 21 are delegated at once from one repository with no `origin`, as a
- * person fans delegates out: each workspace's create readies that one source
- * (agent workspace.ts `inSource`). The hub puts each finished delegate to
- * sleep.
+ * (P) starts a server in its workspace, shows it as a preview, and finishes;
+ * a twenty-second (W) starts a `setsid` server in its workspace and declares
+ * a {@link WAIT_MINUTES}-minute wait (`wait_item`), its item live, its
+ * session quiet. All 22 are delegated at once from one repository with no
+ * `origin`, as a person fans delegates out: each workspace's create readies
+ * that one source (agent workspace.ts `inSource`). The hub puts each finished
+ * delegate to sleep.
  *
  * 1. Agent restart before the quiet time: no idle workspace's boundary is
  *    started again or handed over, five of them given an older form first
  *    (an account added to their policy, as a session on another account
  *    would): each keeps the boundary process it had, and the start-up line
- *    leaves them as they are.
+ *    leaves them as they are. W's is given an older form too.
  * 2. After `QUIET_CLOSE_MS` (and a sweep's minute), every idle workspace's
  *    boundary and judge are closed, each said in the agent's log, its clone,
  *    state dir and scratch dir standing. P's stays up and its preview still
@@ -28,6 +30,15 @@
  * 5. A message to I1's: it wakes, starts a server in its workspace and shows
  *    it; the preview serves the page.
  * 6. Agent restart after the closes: no closed workspace's boundary starts.
+ * 7. W, its item live through the quiet time: its boundary is the one it had
+ *    before the restart, never closed. The wait's end wakes it, and its first
+ *    command reaches its server; the form its boundary lost is not taken
+ *    there (the agent says it keeps it as it is while its work listens), so
+ *    the server stays in the network its commands run in. A message after
+ *    the quiet time: its command reaches the server again, and a preview of
+ *    its port serves the page.
+ * 8. The preview closed and W's item finished: its boundary, its server still
+ *    listening in it, closes within {@link W_CLOSE_MS} of the item's end.
  *
  *   bun scripts/probe-kit/run.ts boundary-quiet
  */
@@ -51,11 +62,20 @@ const IDLE = 20;
 const RE_FORMED = 5;
 const FINISH = "mcp__cawco__finish_item";
 const CREATE = "mcp__cawco__artifact_create";
-const TAG = /PROBE-QUIET-(?:AGAIN-|SERVE-)?(I\d+|P):/g;
+const WAIT = "mcp__cawco__wait_item";
+const TAG = /PROBE-QUIET-(?:AGAIN-|SERVE-|CHECK-|FINISH-)?(I\d+|P|W):/g;
 const PID_NS = /pid:\[\d+\]/;
 const WHITESPACE = /\s+/g;
-/** P's server port and I1's, each in its own boundary's network. */
-const PORT: Record<string, number> = { P: 47_611, I1: 47_612 };
+/** P's server port, I1's and W's, each in its own boundary's network. */
+const PORT: Record<string, number> = { P: 47_611, I1: 47_612, W: 47_613 };
+/** W's wait: past the quiet time and a sweep. */
+const WAIT_MINUTES = 15;
+const W_REASON = "the dev server in its workspace";
+/** How the hub wakes a delegate whose wait ended (hub work-items.ts). */
+const WAIT_OVER = `Your wait is over: ${W_REASON}.`;
+/** How soon W's boundary closes once its item ends: the quiet time, a sweep's minute and slack. */
+const W_CLOSE_MS = 13 * 60_000;
+const KEPT_LINE = `is kept as it is while its work listens on ${PORT.W}`;
 /** A sweep's minute and the slack of a close, past the quiet time. */
 const CLOSE_SLACK_MS = 3 * 60_000;
 const ACCOUNT_ADDED = "acct-probe-older-form";
@@ -81,9 +101,20 @@ const serveCommand = (tag: string): string => {
   ].join(" && ");
 };
 
+/** A command that reaches `tag`'s server on its port and then says `marker`, spelled apart; nothing when it does not answer. */
+const reachCommand = (tag: string, marker: string): string =>
+  `bun -e ${quoted(`const r = await fetch("http://127.0.0.1:${PORT[tag]}/"); if (!r.ok) process.exit(1);`)} && echo "${marker.slice(0, 4)}""${marker.slice(4)}"`;
+
 const steps = new Map<
   string,
-  { finished?: boolean; searched?: boolean; shown?: boolean }
+  {
+    checked?: boolean;
+    finished?: boolean;
+    searched?: boolean;
+    shown?: boolean;
+    waited?: boolean;
+    woke?: boolean;
+  }
 >();
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -92,6 +123,68 @@ const tool = (name: string, input: object): Reply => ({
   words: [],
   tool: { name, input },
 });
+
+/** A deferred tool is found first, then called. */
+const offered = (request: Seen, name: string, input: object): Reply => {
+  if (request.toolNames.includes(name)) {
+    return tool(name, input);
+  }
+  return request.toolNames.includes("ToolSearch")
+    ? tool("ToolSearch", { query: `select:${name}`, max_results: 1 })
+    : text(`${name} is not offered`);
+};
+
+/**
+ * W: starts its server and waits; woken by the wait's end, reaches its
+ * server; asked to check, reaches it again and shows it; asked to finish,
+ * finishes.
+ */
+const waiter = (request: Seen): Reply => {
+  const step = steps.get("W") ?? {};
+  steps.set("W", step);
+  const has = (marker: string) => request.all.includes(marker);
+  if (!has("SERVER-UP-W:")) {
+    return tool("Bash", {
+      command: serveCommand("W"),
+      description: "Start the server",
+    });
+  }
+  if (!step.waited) {
+    const reply = offered(request, WAIT, {
+      minutes: WAIT_MINUTES,
+      reason: W_REASON,
+    });
+    step.waited = reply.tool?.name === WAIT;
+    return reply;
+  }
+  if (!step.woke && has(WAIT_OVER)) {
+    step.woke = true;
+    return tool("Bash", {
+      command: reachCommand("W", "WOKE-UP-W:"),
+      description: "Reach the server",
+    });
+  }
+  if (has("PROBE-QUIET-CHECK-W:") && !step.checked) {
+    step.checked = true;
+    return tool("Bash", {
+      command: reachCommand("W", "STILL-UP-W:"),
+      description: "Reach the server again",
+    });
+  }
+  if (step.checked && !step.shown) {
+    step.shown = true;
+    return tool(CREATE, { kind: "preview", name: "quiet-w", port: PORT.W });
+  }
+  if (has("PROBE-QUIET-FINISH-W:") && !step.finished) {
+    const reply = offered(request, FINISH, {
+      headline: "W kept its server up through its wait.",
+      summary: "W kept its server up through its wait.",
+    });
+    step.finished = reply.tool?.name === FINISH;
+    return reply;
+  }
+  return text("ok");
+};
 
 /** A delegate's own work: its one command, or P's server and preview, then finish_item. */
 const firstWork = (request: Seen, tag: string): Reply => {
@@ -146,6 +239,9 @@ const respond = (request: Seen): Reply => {
   const tag = [...request.all.matchAll(TAG)].at(-1)?.[1];
   if (!tag) {
     return text("ok");
+  }
+  if (tag === "W") {
+    return waiter(request);
   }
   if (request.all.includes(`PROBE-QUIET-AGAIN-${tag}:`)) {
     return request.all.includes(`AGAIN-DONE-${tag}:`)
@@ -329,7 +425,12 @@ const standUp = async (kit: Kit) => {
     const started = await fleet.api<Omit<Delegated, "tag">>("/api/work-items", {
       parentInstanceId: parent,
       title: `Quiet ${tag}`,
-      prompt: `PROBE-QUIET-${tag}: ${tag === "P" ? "start the server, show it, then finish" : "run one command, then finish"}.`,
+      prompt: `PROBE-QUIET-${tag}: ${
+        {
+          P: "start the server, show it, then finish",
+          W: "start the server, then wait",
+        }[tag] ?? "run one command, then finish"
+      }.`,
       harness: "claude",
       model: "claude-haiku-4-5",
       cwd: src,
@@ -337,26 +438,42 @@ const standUp = async (kit: Kit) => {
     });
     return { ...started, tag };
   };
-  const tags = [...Array.from({ length: IDLE }, (_, at) => `I${at}`), "P"];
+  const tags = [...Array.from({ length: IDLE }, (_, at) => `I${at}`), "P", "W"];
   // All at once, from one repository, as a person fans delegates out.
-  const all = await Promise.all(tags.map(delegate));
+  const everyone = await Promise.all(tags.map(delegate));
+  const w = everyone.find((one) => one.tag === "W") as Delegated;
+  const all = everyone.filter((one) => one !== w);
   const items = () =>
-    fleet.query<{ id: string; state: string }>(
-      `SELECT id, state FROM work_items WHERE id IN (${all.map(() => "?").join(",")})`,
-      ...all.map((one) => one.workItemId)
+    fleet.query<{ id: string; state: string; wait_until: number | null }>(
+      `SELECT id, state, wait_until FROM work_items WHERE id IN (${everyone.map(() => "?").join(",")})`,
+      ...everyone.map((one) => one.workItemId)
     );
   const ended = await until(
-    "every work item ended",
+    "every work item ended but W's, which waits",
     items,
     (rows) =>
-      rows.every((row) => ["done", "failed", "cancelled"].includes(row.state)),
+      rows.every((row) =>
+        row.id === w.workItemId
+          ? row.state === "running" && row.wait_until !== null
+          : ["done", "failed", "cancelled"].includes(row.state)
+      ),
     900_000
   ).catch(items);
-  const notDone = ended.filter((row) => row.state !== "done");
+  const notDone = ended.filter(
+    (row) => row.id !== w.workItemId && row.state !== "done"
+  );
   kit.check(
-    `the ${tags.length} work items are done`,
-    ended.length === tags.length && notDone.length === 0,
+    `the ${all.length} work items are done`,
+    ended.length === everyone.length && notDone.length === 0,
     notDone.map((row) => `${row.id} ${row.state}`).join("; ") || "all done"
+  );
+  const waiting = ended.find((row) => row.id === w.workItemId);
+  kit.check(
+    `W started its server and its item waits ${WAIT_MINUTES} min, still live`,
+    waiting?.state === "running" &&
+      waiting.wait_until !== null &&
+      Boolean(steps.get("W")?.waited),
+    `${waiting?.state ?? "missing"}, wait until ${waiting?.wait_until ?? "none"}`
   );
   const statuses = () =>
     all.map((one) => ({
@@ -381,7 +498,16 @@ const standUp = async (kit: Kit) => {
     "P's preview serves its page before anything closes",
     (await serving(fleet, p.instanceId, "P")).ok
   );
-  return { fleet, home, idle, p };
+  return { fleet, home, idle, p, w };
+};
+
+/** Gives workspace `id` an older form: an account added to its policy, as a session on another account would. */
+const reForm = async (home: string, id: string): Promise<void> => {
+  const file = join(home, ".cawco", "workspaces", id, "accounts.json");
+  const listed = JSON.parse(
+    await readFile(file, "utf8").catch(() => "[]")
+  ) as string[];
+  await writeFile(file, `${JSON.stringify([...listed, ACCOUNT_ADDED])}\n`);
 };
 
 /** 1: a restart before the quiet time starts no idle boundary and hands none over, five of an older form. */
@@ -389,7 +515,8 @@ const firstRestart = async (
   kit: Kit,
   fleet: Fleet,
   home: string,
-  idle: readonly Delegated[]
+  idle: readonly Delegated[],
+  w: Delegated
 ): Promise<void> => {
   const boundariesNow = async () =>
     new Map(
@@ -405,19 +532,7 @@ const firstRestart = async (
     );
   const had = await boundariesNow();
   await Promise.all(
-    idle.slice(-RE_FORMED).map(async (one) => {
-      const file = join(
-        home,
-        ".cawco",
-        "workspaces",
-        one.workspaceId,
-        "accounts.json"
-      );
-      const listed = JSON.parse(
-        await readFile(file, "utf8").catch(() => "[]")
-      ) as string[];
-      await writeFile(file, `${JSON.stringify([...listed, ACCOUNT_ADDED])}\n`);
-    })
+    [...idle.slice(-RE_FORMED), w].map((one) => reForm(home, one.workspaceId))
   );
   const line = await restart(fleet);
   const after = await boundariesNow();
@@ -501,6 +616,120 @@ const quietCloses = async (
   );
 };
 
+/**
+ * 7: W's live item holds its boundary through the quiet time, the boundary it
+ * had before the restart, and its server answers its own commands and its
+ * preview, its older form kept while the server listens.
+ */
+const waiterHolds = async (
+  kit: Kit,
+  fleet: Fleet,
+  w: Delegated,
+  had: readonly string[]
+): Promise<void> => {
+  const now = await boundariesOf(fleet, w.workspaceId);
+  const unsaid = !(await fleet.logs("agent")).includes(
+    `${w.workspaceId}${CLOSED_LINE}`
+  );
+  kit.check(
+    "7: past the quiet time, W's live item, its session quiet, holds the boundary it had before the restart: never closed or replaced",
+    had.length === 1 && JSON.stringify(now) === JSON.stringify(had) && unsaid,
+    `before: ${had.join(",") || "none"}; now: ${now.join(",") || "none"}; close said: ${!unsaid}`
+  );
+  const woke = await until(
+    "W woken by its wait's end",
+    () => fleet.seen.find((one) => one.all.includes("WOKE-UP-W:")),
+    Boolean,
+    (WAIT_MINUTES + 5) * 60_000
+  ).catch(() => undefined);
+  const afterWake = await boundariesOf(fleet, w.workspaceId);
+  kit.check(
+    "7: the wait's end wakes W, and its first command reaches its server, in the boundary it had",
+    Boolean(woke) && JSON.stringify(afterWake) === JSON.stringify(had),
+    `reached: ${Boolean(woke)}; boundary ${afterWake.join(",") || "none"}`
+  );
+  await fleet.send(
+    w.instanceId,
+    "PROBE-QUIET-CHECK-W: is the server still up? Show it."
+  );
+  const shown = await until(
+    "W reached its server again and showed it",
+    () =>
+      steps.get("W")?.shown &&
+      fleet.seen.some((one) => one.all.includes("STILL-UP-W:")),
+    Boolean,
+    240_000
+  ).catch(() => false);
+  const serves = await serving(fleet, w.instanceId, "W");
+  kit.check(
+    "7: after the quiet time W's command reaches its server again, and a preview of its port serves the page",
+    Boolean(shown) && serves.ok,
+    `reached: ${Boolean(shown)}; ${serves.last}`
+  );
+  const kept = (await fleet.logs("agent"))
+    .split("\n")
+    .find((line) => line.includes(w.workspaceId) && line.includes(KEPT_LINE));
+  const last = await boundariesOf(fleet, w.workspaceId);
+  kit.check(
+    "7: W's boundary, of an older form since the restart, is kept as it is while its server listens: said in the agent's log, never handed over",
+    Boolean(kept) && JSON.stringify(last) === JSON.stringify(had),
+    `${kept ?? "no kept line"}; boundary ${last.join(",") || "none"}`
+  );
+};
+
+/** 8: W's preview closed and its item finished; answers when the item ended. */
+const waiterFinishes = async (
+  kit: Kit,
+  fleet: Fleet,
+  w: Delegated
+): Promise<number> => {
+  const closed = await fetch(
+    `${fleet.base}/api/instances/${w.instanceId}/preview`,
+    { method: "DELETE" }
+  );
+  await fleet.send(w.instanceId, "PROBE-QUIET-FINISH-W: finish your item.");
+  const item = () =>
+    fleet.query<{ state: string }>(
+      "SELECT state FROM work_items WHERE id = ?",
+      w.workItemId
+    )[0];
+  const ended = await until(
+    "W's item done",
+    item,
+    (row) => row?.state === "done",
+    300_000
+  ).catch(item);
+  kit.check(
+    "8: W's preview is closed and its item is done",
+    closed.ok && ended?.state === "done",
+    `preview close ${closed.status}; item ${ended?.state ?? "missing"}`
+  );
+  return Date.now();
+};
+
+/** 8: once W's item ended, its boundary closes within {@link W_CLOSE_MS}, its server still listening in it. */
+const waiterCloses = async (
+  kit: Kit,
+  fleet: Fleet,
+  w: Delegated,
+  endedAt: number
+): Promise<void> => {
+  const open = await until(
+    "W's boundary closed",
+    () => boundariesOf(fleet, w.workspaceId),
+    (left) => left.length === 0,
+    Math.max(endedAt + W_CLOSE_MS - Date.now(), 0)
+  ).catch(() => boundariesOf(fleet, w.workspaceId));
+  const said = (await fleet.logs("agent")).includes(
+    `${w.workspaceId}${CLOSED_LINE}`
+  );
+  kit.check(
+    `8: within ${W_CLOSE_MS / 60_000} min of W's item ending, its boundary closes, said in the agent's log`,
+    open.length === 0 && said,
+    `open: ${open.join(",") || "none"}; said: ${said}; ${Math.round((Date.now() - endedAt) / 1000)} s after the end`
+  );
+};
+
 /** 4 and 5: a continued session's first command, and a preview it opens, start its closed boundary again. */
 const reopens = async (
   kit: Kit,
@@ -560,26 +789,32 @@ const run = async (kit: Kit) => {
     );
     return;
   }
-  const { fleet, home, idle, p } = await standUp(kit);
+  const { fleet, home, idle, p, w } = await standUp(kit);
   const before = await footprint(fleet);
-  await firstRestart(kit, fleet, home, idle);
+  const waiterHad = await boundariesOf(fleet, w.workspaceId);
+  await firstRestart(kit, fleet, home, idle, w);
   await quietCloses(kit, fleet, home, idle, p);
 
-  // 3. The footprint, before and after.
+  // 3. The footprint, before and after: P's boundary and W's stay.
   const after = await footprint(fleet);
   kit.check(
     "3: closing the idle boundaries takes their processes and inotify instances",
     after.processes < before.processes &&
       after.inotify < before.inotify &&
-      after.boundaries === 1,
+      after.boundaries === 2,
     `before: ${before.words}; after: ${after.words}`
   );
   kit.note(
-    `3: footprint with ${IDLE} idle workspaces and P: before ${before.words}; after the closes ${after.words}`
+    `3: footprint with ${IDLE} idle workspaces, P and W: before ${before.words}; after the closes ${after.words}`
   );
+
+  await waiterHolds(kit, fleet, w, waiterHad);
+  const waiterEnded = await waiterFinishes(kit, fleet, w);
 
   const [i0, i1, ...rest] = idle as [Delegated, Delegated, ...Delegated[]];
   await reopens(kit, fleet, i0, i1);
+  // Before the next restart, which gives every boundary its quiet time again.
+  await waiterCloses(kit, fleet, w, waiterEnded);
 
   // 6. A restart after the closes opens none of them.
   const line = await restart(fleet);

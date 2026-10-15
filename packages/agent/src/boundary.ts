@@ -45,7 +45,10 @@
  * there, core keepers.ts), is handed over ({@link handOver}): a boundary of
  * this build's form starts beside it on the current keeper, every new command
  * runs in the new one, and the older one runs on, untouched, until nothing
- * runs in it, then closes ({@link closeIdle}). Every boundary and judge
+ * runs in it, then closes ({@link closeIdle}). One whose work listens on a
+ * port is not handed over until that ends ({@link servedPorts}): the new
+ * one's network is another, where its own next command would find nothing
+ * listening. Every boundary and judge
  * process is found and stopped on whichever keeper holds it. A boundary runs
  * only while something holds it ({@link liveWhy}); one nothing has held for
  * {@link QUIET_CLOSE_MS} closes with its judge, its clone and state left as
@@ -1626,34 +1629,67 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   // One of an older form, or one a retiring keeper holds, is handed over to
   // one of this build's form on the current keeper.
   if (held.form !== (await formOf(ref)) || holder.epoch !== client.epoch) {
-    if (owed) {
-      // The keeper the endpoint names now retires as soon as this build's
-      // takes the endpoint: the boundary runs on as it is, armed, and is
-      // handed over once, at the first look after this build's keeper is
-      // the machine's ({@link handOverStale}).
-      if (!stale.has(ref.id)) {
-        console.info(
-          `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is handed over once this build's session keeper is the machine's`
-        );
-      }
-      replaceSoon(ref);
-      return armHook(ref.id, held);
-    }
-    if (process.platform === "linux" && (await hasLeftDirs(ref.path))) {
-      // A boundary started beside it would bind the same mount point and
-      // keep it; this one is replaced whole once nothing runs in it.
-      forgetStale(ref.id);
-      restartWhenIdle(ref);
-      return armHook(ref.id, held);
-    }
-    const fresh = await handOver(client, ref, held);
-    forgetStale(ref.id);
-    return fresh;
+    return replaceOlder(client, ref, held, owed);
   }
   forgetStale(ref.id);
   // Written again each time: one an earlier agent started may have no hook
   // yet, or one that reaches cawco another way.
   return armHook(ref.id, held);
+};
+
+/**
+ * {@link ensure} for workspace `ref`'s running boundary `held`, of an older
+ * form or on a retiring keeper: handed over to one of this build's form on
+ * the current keeper, or, until it can be, armed as it is.
+ */
+const replaceOlder = async (
+  client: SessiondClient,
+  ref: WorkspaceRef,
+  held: Held,
+  owed: boolean
+): Promise<Boundary> => {
+  if (owed) {
+    // The keeper the endpoint names now retires as soon as this build's
+    // takes the endpoint: the boundary runs on as it is, armed, and is
+    // handed over once, at the first look after this build's keeper is
+    // the machine's ({@link handOverStale}).
+    if (!stale.has(ref.id)) {
+      console.info(
+        `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is handed over once this build's session keeper is the machine's`
+      );
+    }
+    replaceSoon(ref);
+    return armHook(ref.id, held);
+  }
+  if (process.platform === "linux" && (await hasLeftDirs(ref.path))) {
+    // A boundary started beside it would bind the same mount point and
+    // keep it; this one is replaced whole once nothing runs in it.
+    forgetStale(ref.id);
+    restartWhenIdle(ref);
+    return armHook(ref.id, held);
+  }
+  // Every command after a handover runs in the new sandbox's network, where
+  // nothing listens: a dev server the work left running in this one would
+  // answer its previews but never its own next curl (5be5bfbb, 2026-10-15:
+  // its server on 5222 "gone" at each turn after a handover). So a boundary
+  // whose work serves on a port is kept as it is, armed, and handed over at
+  // the first ensure after its last listener ends; one nothing holds closes
+  // once quiet ({@link sweepQuiet}), and its next start is of this form.
+  const serving = (await servedPorts(ref.id, held)).join(", ");
+  if (serving) {
+    forgetStale(ref.id);
+    if (keptServing.get(ref.id) !== serving) {
+      keptServing.set(ref.id, serving);
+      console.info(
+        `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work listens on ${serving}, and handed over at the first start after that ends`
+      );
+    }
+    return armHook(ref.id, held);
+  }
+  keptServing.delete(ref.id);
+  const fresh = await handOver(client, ref, held);
+  forgetStale(ref.id);
+  return fresh;
 };
 
 /**
@@ -2403,15 +2439,9 @@ const inFlight = (seen: Seen[], id: string, old: Retiring): boolean => {
  * delegate's dev server, restarted after an update on the port it had), so
  * the older one is done. Undefined when its work listens on no port (a job, a
  * build: it closes once that ends), or on one no newer generation listens on
- * (it stays, reached there, {@link workspaceNetworks}).
- *
- * Its work's ports are the listening sockets of its sandbox's network
- * ({@link listeners}) that a process of its work has open: one that descends
- * from its sandbox's init and was not there when its runner was ready
- * ({@link inTree}), by the socket inodes in its `/proc/<pid>/fd`. srt's own
- * relays inside (its proxies' ports) are its runner's plumbing, never its
- * work's. A newer generation listens on a port when its network's tables
- * list it listening, whoever holds it.
+ * (it stays, reached there, {@link workspaceNetworks}). Its work's ports are
+ * {@link workPorts}; a newer generation listens on a port when its network's
+ * tables list it listening, whoever holds it.
  */
 const supersededPorts = async (
   seen: Seen[],
@@ -2424,20 +2454,7 @@ const supersededPorts = async (
   if (!mine || old.identity) {
     return;
   }
-  const idle = new Set(mine.place.idle);
-  const work = inTree(seen, mine.place.inner).filter(
-    (one) => !idle.has(one.pid)
-  );
-  const open = new Set(
-    (await Promise.all(work.map((one) => socketsOf(one.pid)))).flat()
-  );
-  const ports = [
-    ...new Set(
-      (await listeners(mine.place.inner))
-        .filter((one) => open.has(one.inode))
-        .map((one) => one.port)
-    ),
-  ].sort((a, b) => a - b);
+  const ports = await workPorts(seen, mine.place);
   if (ports.length === 0) {
     return;
   }
@@ -2454,6 +2471,48 @@ const supersededPorts = async (
   );
   return ports.every((port) => newer.has(port)) ? ports : undefined;
 };
+
+/**
+ * Linux: the ports the work of the sandbox at `place` listens on, sorted: the
+ * listening sockets of its network ({@link listeners}) that a process of its
+ * work has open, one that descends from its init and was not there when its
+ * runner was ready ({@link inTree}), by the socket inodes in its
+ * `/proc/<pid>/fd`. srt's own relays inside are its runner's, never its work's.
+ */
+const workPorts = async (seen: Seen[], place: Place): Promise<number[]> => {
+  const idle = new Set(place.idle);
+  const work = inTree(seen, place.inner).filter((one) => !idle.has(one.pid));
+  const open = new Set(
+    (await Promise.all(work.map((one) => socketsOf(one.pid)))).flat()
+  );
+  return [
+    ...new Set(
+      (await listeners(place.inner))
+        .filter((one) => open.has(one.inode))
+        .map((one) => one.port)
+    ),
+  ].sort((a, b) => a - b);
+};
+
+/**
+ * The ports the work of workspace `id`'s running boundary `held` listens on
+ * ({@link workPorts}); none on macOS, whose boundary has no network of its
+ * own, and none for an anchor from before srt.
+ */
+const servedPorts = async (id: string, held: Held): Promise<number[]> => {
+  if (process.platform !== "linux" || held.identity) {
+    return [];
+  }
+  const place = await readPlace(id, held.gen);
+  return place ? workPorts(await snapshot(), place) : [];
+};
+
+/**
+ * The workspaces whose boundary of an older form, or on a retiring keeper,
+ * is kept as it is because its work serves on a port ({@link ensure}), each
+ * with those ports as last said: a handover is said once per change.
+ */
+const keptServing = new Map<string, string>();
 
 /** The socket inodes process `pid` has open, as its `/proc/<pid>/fd` links name them (`socket:[INODE]`); none once it is gone. */
 const socketsOf = async (pid: number): Promise<string[]> => {
@@ -3125,6 +3184,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     forgetStale(id);
     forgetRetiring(id);
     forgetStubbed(id);
+    keptServing.delete(id);
     const boundaries = [held, ...(await readRetiring(id))];
     for (const boundary of boundaries) {
       // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, as an archive closes them
