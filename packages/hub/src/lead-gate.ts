@@ -780,6 +780,15 @@ const FIND_ACTS =
 const FOLLOWS = /^(?:-f|-F|--follow(?:=.*)?|--retry)$/;
 /** `sort`'s options that write a file or run a program. */
 const SORT_ACTS = /^(?:-o|--output(?:=.*)?|--compress-program(?:=.*)?)$/;
+/** `file`'s options that write a compiled magic file. */
+const FILE_ACTS = /^(?:-C|--compile)$/;
+/** `tree`'s options that write its listing into a file. */
+const TREE_ACTS = /^(?:-o|--output(?:=.*)?)$/;
+/** `date`'s options that set the clock. */
+const DATE_ACTS = /^(?:-s|--set(?:=.*)?)$/;
+
+/** A program that only reads whatever it is given. */
+const onlyReads = (): boolean => true;
 
 /** The words of a command that are not options. */
 const operands = (args: string[]): string[] =>
@@ -790,22 +799,56 @@ const operands = (args: string[]): string[] =>
  * of its arguments would make it write, run something or keep running.
  */
 const READERS: Readonly<Record<string, (args: string[]) => boolean>> = {
-  ls: () => true,
-  cat: () => true,
-  grep: () => true,
-  wc: () => true,
-  head: () => true,
+  ls: onlyReads,
+  cat: onlyReads,
+  grep: onlyReads,
+  wc: onlyReads,
+  head: onlyReads,
   find: (args) => !args.some((arg) => FIND_ACTS.test(arg)),
-  echo: () => true,
-  printf: () => true,
-  tr: () => true,
-  cut: () => true,
-  pwd: () => true,
-  true: () => true,
+  echo: onlyReads,
+  printf: onlyReads,
+  tr: onlyReads,
+  cut: onlyReads,
+  pwd: onlyReads,
+  true: onlyReads,
+  false: onlyReads,
+  test: onlyReads,
+  "[": onlyReads,
   tail: (args) => !args.some((arg) => FOLLOWS.test(arg)),
   sort: (args) => !args.some((arg) => SORT_ACTS.test(arg)),
   // A second operand is the file uniq writes its output to.
   uniq: (args) => operands(args).length <= 1,
+  file: (args) => !args.some((arg) => FILE_ACTS.test(arg)),
+  stat: onlyReads,
+  du: onlyReads,
+  df: onlyReads,
+  tree: (args) => !args.some((arg) => TREE_ACTS.test(arg)),
+  realpath: onlyReads,
+  readlink: onlyReads,
+  basename: onlyReads,
+  dirname: onlyReads,
+  which: onlyReads,
+  diff: onlyReads,
+  cmp: onlyReads,
+  comm: onlyReads,
+  tac: onlyReads,
+  nl: onlyReads,
+  rev: onlyReads,
+  paste: onlyReads,
+  fold: onlyReads,
+  column: onlyReads,
+  od: onlyReads,
+  hexdump: onlyReads,
+  md5sum: onlyReads,
+  sha1sum: onlyReads,
+  sha256sum: onlyReads,
+  sha512sum: onlyReads,
+  cksum: onlyReads,
+  jq: onlyReads,
+  date: (args) => !args.some((arg) => DATE_ACTS.test(arg)),
+  whoami: onlyReads,
+  id: onlyReads,
+  uname: onlyReads,
 };
 
 /** Whether every command of a line passes `allowed`, nothing in it writes by its syntax, and it can all be read. */

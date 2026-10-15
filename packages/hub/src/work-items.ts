@@ -26,9 +26,9 @@
  * end. A **budget** (dollars, turns, minutes; the call's, else the task's,
  * else the project's) is checked in one place ({@link overBudget}); at its
  * limit the item fails, its parent is told, and its session is ended. The
- * project's **lead** is a co-parent: it may answer, steer and stop the
- * project's items, hears their reports beside the parent, and alone once the
- * parent has ended. And the **plan ↔ to-do link**: a task attempt's plan, as
+ * project's **lead** may answer, steer and stop the project's items; their
+ * reports and asks reach only the session that started each, the lead only
+ * for the work he started ({@link reportees}). And the **plan ↔ to-do link**: a task attempt's plan, as
  * its plan panel reads it on any harness (CawCo's own steps where "CawCo's
  * to-dos" is on, else the harness's list), is read on its turn's end, a
  * completed `[td-n]` step ticks that to-do, `finish_item` asks once about the
@@ -71,7 +71,6 @@ import {
   CONTROL_WORKSPACE_MIGRATE,
   DEPS_INSTALLING,
   depsScript,
-  ENDED_STATUSES,
   handoffMarker,
   holdingWords,
   holdsNothing,
@@ -1595,13 +1594,13 @@ export const createWorkItems = ({
     !!(row.workItemId || row.workflowStepId);
 
   /**
-   * Who hears a delegated session's reports: its parent, and its project's
-   * lead as well when that is another session; only the lead once the parent
-   * has ended (stopped or discarded, or gone), as it adopts the orphan.
-   * Without a lead, the parent alone, as before. While a project's Caw is
-   * off, an item whose work is not yours reaches no Caw at all, even one
-   * that started it: off, only your words wake him (caw.ts). Your work
-   * reaches him on or off.
+   * Who hears a delegated session's reports and asks: the session that
+   * started its work, by the id its row records, and no one else. A
+   * project's lead hears only the work he started himself, never another
+   * session's work in his project because it is in his project. While a
+   * project's Caw is off, an item he started whose work is not yours
+   * reaches him not at all: off, only your words wake him (caw.ts). Your
+   * work reaches him on or off.
    */
   const reportees = (row: InstanceRow): InstanceRow[] => {
     if (!reportsBack(row)) {
@@ -1612,16 +1611,7 @@ export const createWorkItems = ({
       : [];
     const item = itemOf(row);
     const sleeping = item ? cawOff(item) : null;
-    const lead = item && !sleeping ? leadFor(item) : undefined;
-    if (!lead) {
-      return parent && parent.id !== sleeping ? [parent] : [];
-    }
-    // An ended parent (stopping or stopped): its items are orphans its
-    // project's lead adopts.
-    if (!parent || ENDED_STATUSES.has(parent.status)) {
-      return [lead];
-    }
-    return parent.id === lead.id ? [parent] : [parent, lead];
+    return parent && parent.id !== sleeping ? [parent] : [];
   };
 
   // --- file ownership ---------------------------------------------------------

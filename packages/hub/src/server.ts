@@ -3963,8 +3963,8 @@ export const createServer = (
   };
 
   /**
-   * The session a parked ask was routed to: its parent, or its project's
-   * lead (work-items.ts `reportees`), as the ask's record names it
+   * The session a parked ask was routed to: its parent (work-items.ts
+   * `reportees`), as the ask's record names it
    * ({@link deliverDelegateAsk}). Undefined for an ask not routed.
    */
   const routedRecipient = (parked: Envelope): string | undefined => {
@@ -4086,10 +4086,10 @@ export const createServer = (
   /**
    * A delegate's report to its parent, as a queued peer message: what its
    * turn said (or why it never started), under the marker the parent's
-   * transcript renders as a report. A work item of a project with a lead
-   * reports to the lead too, and to the lead alone once its parent has ended
-   * (work-items.ts `reportees`). `headline` is the delegate's
-   * one-or-two-sentence outcome from `finish_item`, carried on the marker.
+   * transcript renders as a report. The parent, the session that started its
+   * work, is the only one that hears it (work-items.ts `reportees`).
+   * `headline` is the delegate's one-or-two-sentence outcome from
+   * `finish_item`, carried on the marker.
    */
   const reportToParent = (
     delegate: InstanceRow,
@@ -23930,8 +23930,9 @@ export const createServer = (
                     kind: "peer",
                     fromSession: sender.id,
                   });
-                // Its parent, else its project's lead, which adopts a work
-                // item whose parent has ended (work-items.ts `reportees`).
+                // The session that started its work, and no other
+                // (work-items.ts `reportees`); one that cannot take it
+                // leaves the ask the person's.
                 const parent =
                   sender && parentId && parentId !== message.instanceId
                     ? workItems.reportees(sender).find(takes)
