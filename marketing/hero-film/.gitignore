@@ -1,0 +1,6 @@
+# Footage and renders are made, not kept: capture/ films the footage, and the
+# render script cuts the candidates from it (README.md).
+assets/footage/
+out/
+renders/
+.hyperframes/

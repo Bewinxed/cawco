@@ -1,0 +1,55 @@
+{
+  "title": "cawco.dev hero film",
+  "decisions": [
+    {
+      "id": "hero-film",
+      "question": "Which hero film?",
+      "context": "The real dashboard, filmed frame by frame on a made-up fleet: a session asks to read a query plan, is approved, hands a delegate to dev-vm, and the delegate reports back. 12 s, loops on its first frame, no sound. Each film differs from the first in one thing.",
+      "options": [
+        {
+          "id": "still",
+          "label": "Whole window, still camera",
+          "detail": "The whole dashboard, nothing moves but the product.",
+          "facts": "MP4 2.31 MB · WebM 3.15 MB · 12 s · 60 fps",
+          "light": {
+            "mp4": "../out/still/hero.mp4",
+            "webm": "../out/still/hero.webm",
+            "poster": "../out/still/poster.png"
+          },
+          "night": {
+            "mp4": "../out/still-night/hero.mp4",
+            "webm": "../out/still-night/hero.webm",
+            "poster": "../out/still-night/poster.png"
+          }
+        },
+        {
+          "id": "push",
+          "label": "Whole window, slow lean in",
+          "detail": "The camera leans in 6% as the session asks, and back out as the delegate reports.",
+          "facts": "MP4 3.47 MB · WebM 2.30 MB · 12 s · 60 fps",
+          "light": {
+            "mp4": "../out/push/hero.mp4",
+            "webm": "../out/push/hero.webm",
+            "poster": "../out/push/poster.png"
+          }
+        },
+        {
+          "id": "close",
+          "label": "Close on the session",
+          "detail": "Framed on the session and its composer, without the rail.",
+          "facts": "MP4 2.22 MB · WebM 2.96 MB · 12 s · 60 fps",
+          "light": {
+            "mp4": "../out/close/hero.mp4",
+            "webm": "../out/close/hero.webm",
+            "poster": "../out/close/poster.png"
+          }
+        },
+        {
+          "id": "none",
+          "label": "No film: keep the hero as it is",
+          "detail": "Today's page, with no product picture near the top."
+        }
+      ]
+    }
+  ]
+}

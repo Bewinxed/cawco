@@ -1,0 +1,176 @@
+<!doctype html>
+<html
+  data-composition-variables='[
+    {"id":"cut","type":"enum","label":"Cut","default":"still","options":[
+      {"value":"still","label":"Whole window, still camera"},
+      {"value":"push","label":"Whole window, slow push in and out"},
+      {"value":"close","label":"Close on the session"}
+    ]},
+    {"id":"footage","type":"string","label":"Footage","default":"assets/footage/board-light.mp4"}
+  ]'
+  lang="en"
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="width=2400, height=1500" name="viewport" />
+    <!-- GSAP 3.14.2, vendored unchanged: a render never waits on a CDN. -->
+    <!-- biome-ignore lint/performance/noSyncScripts: the timeline below is built from it as the page parses, as HyperFrames requires -->
+    <script src="vendor/gsap.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 2400px;
+        height: 1500px;
+        overflow: hidden;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      /* The camera: everything filmed moves as one, from its top-left corner. */
+      #camera {
+        position: absolute;
+        inset: 0;
+      }
+      .take {
+        position: absolute;
+        inset: 0;
+      }
+      .take video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      The real Caw&Co dashboard, filmed frame by frame on a made-up fleet
+      (capture/: hub.ts, fleet.ts, capture.ts). The footage is 13s: one
+      second of the board at rest, then the twelve the film loops.
+
+      The take plays from its second 1. Over the last 0.8s the same footage
+      from its second 0.2 dissolves in over it, so the film's last frame runs
+      straight into its first: at 12s the dissolve shows footage second 1.0,
+      which is frame 0. Twelve seconds is six of the board's 2s breaths, so
+      what breathes is in step across the seam.
+    -->
+    <div
+      data-composition-id="hero"
+      data-duration="12"
+      data-fps="60"
+      data-height="1500"
+      data-start="0"
+      data-width="2400"
+      id="root"
+    >
+      <div id="camera">
+        <div class="take" id="take-wrap">
+          <video
+            class="clip"
+            data-duration="12"
+            data-media-start="1"
+            data-start="0"
+            data-track-index="0"
+            data-var-src="footage"
+            id="take"
+            muted
+            playsinline
+            src="assets/footage/board-light.mp4"
+          ></video>
+        </div>
+        <div class="take" id="seam-wrap">
+          <video
+            class="clip"
+            data-duration="0.8"
+            data-media-start="0.2"
+            data-start="11.2"
+            data-track-index="1"
+            data-var-src="footage"
+            id="seam"
+            muted
+            playsinline
+            src="assets/footage/board-light.mp4"
+          ></video>
+        </div>
+      </div>
+    </div>
+    <script>
+      "use strict";
+      /**
+       * The dashboard's own curves (design/tokens: ease-in-out for what is
+       * already on screen moving), as cubic-béziers GSAP can ease by.
+       */
+      const bezier = (x1, y1, x2, y2) => {
+        const at = (a, b, t) =>
+          ((1 - 3 * b + 3 * a) * t + (3 * b - 6 * a)) * t * t + 3 * a * t;
+        return (progress) => {
+          let lo = 0;
+          let hi = 1;
+          let t = progress;
+          for (let i = 0; i < 40; i += 1) {
+            t = (lo + hi) / 2;
+            if (at(x1, x2, t) < progress) {
+              lo = t;
+            } else {
+              hi = t;
+            }
+          }
+          return at(y1, y2, t);
+        };
+      };
+      const inOut = bezier(0.77, 0, 0.175, 1);
+
+      const { gsap } = window;
+      const { cut } = window.__hyperframes.getVariables();
+      const tl = gsap.timeline({ paused: true });
+
+      tl.fromTo(
+        "#seam-wrap",
+        { opacity: 0 },
+        { opacity: 1, duration: 0.8, ease: inOut },
+        11.2
+      );
+
+      if (cut === "push") {
+        // Lean in on the session as it asks and is answered; lean back out
+        // as the delegate reports, to the whole board the loop starts on.
+        // From (333, 667) a 1.06 lean takes 20px off the left and 40 off
+        // the top, so the rail's marks and the tabs stay in frame; what
+        // leaves it is the transcript's right margin.
+        tl.fromTo(
+          "#camera",
+          { scale: 1, transformOrigin: "333px 667px" },
+          { scale: 1.06, duration: 4, ease: inOut },
+          1
+        ).to("#camera", { scale: 1, duration: 2.2, ease: inOut }, 9);
+      } else if (cut === "close") {
+        // The session alone: the dashboard's 972 × 607.5 px from (228, 142.5),
+        // its pane and composer, filling the frame.
+        const scale = 1200 / 972;
+        tl.set(
+          "#camera",
+          {
+            transformOrigin: "0px 0px",
+            scale,
+            x: -456 * scale,
+            y: -285 * scale,
+          },
+          0
+        );
+      }
+
+      window.__timelines.hero = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
