@@ -12,13 +12,33 @@
 </script>
 
 <div class="decision-node" data-picked={node.picked || undefined}>
-  <Handle id="in-left" isConnectable={false} position={Position.Left} type="target" />
-  <Handle id="in-top" isConnectable={false} position={Position.Top} type="target" />
+  <Handle
+    id="in-left"
+    isConnectable={false}
+    position={Position.Left}
+    type="target"
+  />
+  <Handle
+    id="in-top"
+    isConnectable={false}
+    position={Position.Top}
+    type="target"
+  />
   <span class="name">{node.name}</span>
   <span aria-hidden="true" class="ring"></span>
   <span class="sr-only">{node.picked ? "Picked" : "Not picked"}</span>
-  <Handle id="out-right" isConnectable={false} position={Position.Right} type="source" />
-  <Handle id="out-bottom" isConnectable={false} position={Position.Bottom} type="source" />
+  <Handle
+    id="out-right"
+    isConnectable={false}
+    position={Position.Right}
+    type="source"
+  />
+  <Handle
+    id="out-bottom"
+    isConnectable={false}
+    position={Position.Bottom}
+    type="source"
+  />
 </div>
 
 <style>

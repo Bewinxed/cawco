@@ -413,14 +413,14 @@
   }
 
   /** The time the tiles' ages read, moved each minute while the tab shows. */
-  let now = $state(Date.now());
+  let decisionsNow = $state(Date.now());
   $effect(() => {
     if (current !== "decisions") {
       return;
     }
-    now = Date.now();
+    decisionsNow = Date.now();
     const ticking = setInterval(() => {
-      now = Date.now();
+      decisionsNow = Date.now();
     }, 60_000);
     return () => clearInterval(ticking);
   });
@@ -1034,7 +1034,7 @@
       hrefOf={(to) => hrefOf(null, "decisions", to)}
       {lead}
       mode={decisionMode}
-      {now}
+      now={decisionsNow}
       onfirstwords={firstWords}
       onopentask={openOne}
       page={decisionPage}
@@ -1423,18 +1423,18 @@
      pane and scroll (or pan) inside. A decision page runs to the pane's foot,
      under its docked composer. */
   .pane:is(
-      [data-view="board"],
-      [data-view="canvas"],
-      [data-view="decisions-page"],
-      [data-view="decisions-graph"]
-    ) {
+    [data-view="board"],
+    [data-view="canvas"],
+    [data-view="decisions-page"],
+    [data-view="decisions-graph"]
+  ) {
     overflow: hidden;
   }
   .pane:not(
-      [data-view="board"],
-      [data-view="canvas"],
-      [data-view="decisions-page"]
-    ) {
+    [data-view="board"],
+    [data-view="canvas"],
+    [data-view="decisions-page"]
+  ) {
     padding-block-end: var(--space-6);
   }
   .swap {

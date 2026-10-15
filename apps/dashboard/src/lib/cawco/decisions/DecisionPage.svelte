@@ -53,7 +53,9 @@
     /** The card it opens scrolled to. */
     card?: string | null;
     now: number;
-    taskOf: (id: string) => { kind: StageKind | null; title: string } | undefined;
+    taskOf: (
+      id: string
+    ) => { kind: StageKind | null; title: string } | undefined;
     hrefOf: (taskId: string) => string;
     onopentask: (taskId: string) => void;
     onback: () => void;
@@ -85,7 +87,8 @@
 
   // Read on arrival, and again whenever the hub says its pages or tasks moved.
   $effect(() => {
-    const _moves = cawco.decisionsChangedOf(projectId) + cawco.tasksChangedOf(projectId);
+    const _moves =
+      cawco.decisionsChangedOf(projectId) + cawco.tasksChangedOf(projectId);
     const _page = name;
     untrack(() => load());
   });
@@ -136,9 +139,17 @@
       return null;
     }
     if (shown.state === "picking") {
-      return { label: "I'm done picking", pendingLabel: "Sending…", act: "send" as const };
+      return {
+        label: "I'm done picking",
+        pendingLabel: "Sending…",
+        act: "send" as const,
+      };
     }
-    return { label: "Make tasks", pendingLabel: "Making tasks…", act: "tasks" as const };
+    return {
+      label: "Make tasks",
+      pendingLabel: "Making tasks…",
+      act: "tasks" as const,
+    };
   });
 
   async function act(which: "send" | "tasks") {
@@ -210,7 +221,8 @@
           <span
             class="title"
             data-share="dpage:{name}:title"
-            {@attach land(() => `dpage:${name}:title`)}>{shown?.title ?? name}</span
+            {@attach land(() => `dpage:${name}:title`)}
+            >{shown?.title ?? name}</span
           >
           {#if shown}
             <span
@@ -227,7 +239,12 @@
           {/if}
         </div>
         {#if pill}
-          <StatePill tone={pill.tone} title={pill.title} who={pill.who} word={pill.word} />
+          <StatePill
+            tone={pill.tone}
+            title={pill.title}
+            who={pill.who}
+            word={pill.word}
+          />
         {/if}
       </div>
     </div>
@@ -240,7 +257,7 @@
           <RecordCard card={each} {hrefOf} {onopentask} {taskOf} />
         {/each}
       </div>
-    {:else if read && read.artifactId && read.writer}
+    {:else if read?.artifactId && read.writer}
       <PageFrame
         artifactId={read.artifactId}
         {card}
@@ -251,12 +268,14 @@
       />
     {:else if read}
       <p class="problem">
-        This page's session is gone from the hub, so it can't be shown here. Its
-        session can publish it again.
+        This page's session is gone from the hub, so the page can't be shown
+        here.
       </p>
     {:else}
       <div aria-hidden="true" class="opening">
-        <span class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"></span>
+        <span
+          class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+        ></span>
       </div>
     {/if}
   </div>
@@ -384,11 +403,11 @@
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
   }
-  /* The record on the page's own grid: two across on a desk, one under. */
+  /* The record on the page's own grid: two across on a desk, one under; the
+     cards stretch to their row, their content at its top. */
   .records {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    align-items: start;
     gap: var(--space-3);
   }
   @media (min-width: 1024px) {
@@ -429,7 +448,8 @@
     border-radius: var(--radius-lg);
     background: var(--material-panel);
     box-shadow: var(--shadow-tile);
-    backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+    backdrop-filter: blur(var(--material-blur))
+      saturate(var(--material-saturate));
   }
   @media (prefers-reduced-transparency: reduce) {
     .cin {

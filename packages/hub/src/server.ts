@@ -545,6 +545,7 @@ import {
 import { createProjectEdits, ProjectEditRefusal } from "./project-edit";
 import {
   changeFolderFiles,
+  YOU as FOLDER_YOU,
   FolderRefusal,
   folderFileNames,
   listFolder,
@@ -553,7 +554,6 @@ import {
   readFolderFile,
   trashProjectFolder,
   writeFolderFile,
-  YOU as FOLDER_YOU,
 } from "./project-folder";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
@@ -16962,18 +16962,27 @@ export const createServer = (
       };
     },
     projectExists: (projectId) => db.project(projectId) !== undefined,
+    // The artifact's refusal ("Nothing new to send…"), as the tab's route says it.
     send: async (instanceId, artifactId, text) => {
-      try {
-        await artifacts.send(instanceId, artifactId, text ? { text } : {});
-      } catch (error) {
-        if (error instanceof ArtifactRefusal) {
-          throw new DecisionRefusal(
-            error.status === 409 || error.status === 404 ? error.status : 503,
-            error.message,
-            { cause: error }
-          );
-        }
-        throw error;
+      const refusal = await artifacts
+        .send(instanceId, artifactId, text ? { text } : {})
+        .then(
+          () => null,
+          (error: unknown) => {
+            if (error instanceof ArtifactRefusal) {
+              return error;
+            }
+            throw error;
+          }
+        );
+      if (refusal) {
+        throw new DecisionRefusal(
+          refusal.status === 409 || refusal.status === 404
+            ? refusal.status
+            : 503,
+          refusal.message,
+          { cause: refusal }
+        );
       }
     },
     stampSent: (artifactId, text) =>

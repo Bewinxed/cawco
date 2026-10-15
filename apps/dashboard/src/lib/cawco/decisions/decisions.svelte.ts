@@ -26,7 +26,9 @@ export class ProjectDecisions {
 
   /** Pages still waiting for picks: the tab's trail. */
   get waiting(): number {
-    return this.list?.pages.filter((page) => page.state === "picking").length ?? 0;
+    return (
+      this.list?.pages.filter((page) => page.state === "picking").length ?? 0
+    );
   }
 
   async read(): Promise<void> {

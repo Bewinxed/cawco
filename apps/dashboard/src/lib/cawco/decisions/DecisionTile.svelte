@@ -31,7 +31,9 @@
   } = $props();
 
   const row = $derived(
-    page.writer ? cawco.instanceIndex.byId.get(page.writer.instanceId) : undefined
+    page.writer
+      ? cawco.instanceIndex.byId.get(page.writer.instanceId)
+      : undefined
   );
   const working = $derived(
     !!page.writer && cawco.activityOf(page.writer.instanceId) === "working"
@@ -46,7 +48,12 @@
   data-page={page.name}
   {href}
   onclick={(event) => {
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
+    if (
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.button !== 0
+    ) {
       return;
     }
     event.preventDefault();
@@ -60,7 +67,12 @@
       {@attach land(() => `dpage:${page.name}:title`)}>{page.title}</span
     >
     {#if pill}
-      <StatePill tone={pill.tone} title={pill.title} who={pill.who} word={pill.word} />
+      <StatePill
+        tone={pill.tone}
+        title={pill.title}
+        who={pill.who}
+        word={pill.word}
+      />
     {/if}
   </span>
   <span class="line">
@@ -69,7 +81,10 @@
       data-share="dpage:{page.name}:progress"
       {@attach land(() => `dpage:${page.name}:progress`)}
     >
-      <TaskRing done={decided ? 1 : page.picked} total={decided ? 1 : page.cards} />
+      <TaskRing
+        done={decided ? 1 : page.picked}
+        total={decided ? 1 : page.cards}
+      />
       <span class="num">{progressWords(page)}</span>
     </span>
     {#if notes}

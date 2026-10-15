@@ -272,13 +272,13 @@
     const href = `/project/${encodeURIComponent(projectId)}?view=decisions&page=${encodeURIComponent(named.page)}#${encodeURIComponent(named.card)}`;
     let live = true;
     readDecision(projectId, named.page)
-      .then((read) => {
+      .then((found) => {
         if (live) {
           decided = {
             href,
-            page: read.title,
+            page: found.title,
             question:
-              read.record?.cards.find((card) => card.id === named.card)
+              found.record?.cards.find((card) => card.id === named.card)
                 ?.question ?? null,
           };
         }
@@ -447,8 +447,9 @@
           {#if decided}
             <p class="decided">
               Decided on <a href={decided.href}
-                >{decided.page}{#if decided.question}
-                  › {decided.question}{/if}</a
+                >{decided.question
+                  ? `${decided.page} › ${decided.question}`
+                  : decided.page}</a
               >
             </p>
           {/if}

@@ -214,7 +214,9 @@ export const logOf = (
     if (card.tasks.length > 0) {
       lines.push(
         "",
-        ...card.tasks.map((id) => `- ${id}${titles[id] ? ` ${titles[id]}` : ""}`)
+        ...card.tasks.map(
+          (id) => `- ${id}${titles[id] ? ` ${titles[id]}` : ""}`
+        )
       );
     }
     const others = card.options.filter(
