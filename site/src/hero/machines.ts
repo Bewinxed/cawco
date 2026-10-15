@@ -169,7 +169,7 @@ export function deskBox(): string {
   return [
     `<svg class="machine m-desk" viewBox="${viewBox}" style="${style}" aria-hidden="true" focusable="false">`,
     `<defs>${sharedDefs()}</defs>`,
-    `<path class="sh" d="${pathOf(shadow, true)}"/>`,
+    `<g class="shade"><path d="${pathOf(shadow, true)}"/></g>`,
     `<path class="ct" d="${pathOf(contact, true)}"/>`,
     feetSvg,
     solidSvg(body, `<path class="F" d="${seam(plan, feet + 9)}"/>`),
@@ -256,9 +256,11 @@ export function laptop(): string {
   bounds.add(...lift(plan, 0).map(project));
 
   const lidRing = roundedRing(-w / 2, 0, w, d, r, 5);
+  // The base's own shadows stand through the whole clip: its cast shadow, and the contact, a
+  // dark rim 4mm round the foot. Only the lid's shadow is a frame of the clip.
   const baseShadow = floorShadow([...lift(plan, 0), ...lift(plan, base)]);
   const contact = hull(
-    lift(roundedRing(-w / 2 - 2.5, -d / 2 - 2.5, w + 5, d + 5, r + 2.5, 5), 0).map(project),
+    lift(roundedRing(-w / 2 - 4, -d / 2 - 4, w + 8, d + 8, r + 4, 5), 0).map(project),
   );
 
   const shadows: string[] = [];
@@ -269,9 +271,7 @@ export function laptop(): string {
     const lidShadow = floorShadow(corners);
     bounds.add(...corners.map(project), ...lidShadow);
     const on = frame === 0 ? ' class="sh on"' : ' class="sh"';
-    shadows.push(
-      `<path${on} data-frame="${frame}" d="${pathOf(baseShadow, true)}${pathOf(lidShadow, true)}"/>`,
-    );
+    shadows.push(`<path${on} data-frame="${frame}" d="${pathOf(lidShadow, true)}"/>`);
 
     // Which face of the lid is seen: the screen side above 45°, the shell below.
     const [x0, y0, z0] = at(0, 0, 0);
@@ -287,7 +287,7 @@ export function laptop(): string {
           const matrix = planeMatrix(at(-w / 2, d, 0), [1, 0, 0], [0, -Math.cos(a), -Math.sin(a)]);
           const level = lit(theta);
           const dim = level < 1 ? ` opacity="${hundredth(level)}"` : '';
-          return `<g transform="${matrix}"><rect class="scr" style="--on:${Math.round(level * 100)}%" x="7" y="7" width="290" height="191" rx="2.5"/><use href="#m-screen" x="7" y="7"${dim}/><rect class="F gk" x="1.6" y="1.6" width="300.8" height="211.8" rx="9.6"/><use href="#m-led" class="cam fine" transform="translate(152 3.6) scale(.9)"/></g>`;
+          return `<g class="face" transform="${matrix}"><rect class="scr" style="--on:${Math.round(level * 100)}%" x="7" y="7" width="290" height="191" rx="2.5"/><use href="#m-screen" x="7" y="7"${dim}/><rect class="F gk" x="1.6" y="1.6" width="300.8" height="211.8" rx="9.6"/><use href="#m-led" class="cam fine" transform="translate(152 3.6) scale(.9)"/></g>`;
         })()
       : '';
     // The screen's light on the deck and the floor: how far it reaches, and how strong it is.
@@ -309,8 +309,9 @@ export function laptop(): string {
   const ports = `<g class="fine" transform="${sidePlane(w / 2, base)}"><rect class="rc F" x="40" y="2.2" width="8.6" height="3" rx="1.5"/><rect class="rc F" x="52" y="2.2" width="8.6" height="3" rx="1.5"/><circle class="rc F" cx="-78" cy="3.7" r="1.7"/></g>`;
   const deck = `<g transform="${topPlane(base)}"><rect class="rc F" x="-137" y="-97.5" width="274" height="108.5" rx="4"/>${keyboard()}<rect class="F" x="-64" y="21" width="128" height="79" rx="5"/></g>`;
 
-  // The screen's light (night only), scaled toward the hinge by scene.ts as the lid closes.
-  const floorPool = `<g class="pool" transform="${topPlane(0)}"><clipPath id="m-floor-pool"><rect x="-260" y="${d / 2 - 6}" width="520" height="300"/></clipPath><g clip-path="url(#m-floor-pool)"><ellipse data-pool-shape cx="0" cy="${d / 2}" rx="230" ry="170" fill="url(#m-pool)"/></g></g>`;
+  // The screen's light (night only), scaled toward the hinge by scene.ts as the lid closes. On
+  // the floor it falls straight ahead of the laptop, no wider than the laptop itself.
+  const floorPool = `<g class="pool" transform="${topPlane(0)}"><clipPath id="m-floor-pool"><rect x="${-w / 2}" y="${d / 2 - 6}" width="${w}" height="160"/></clipPath><g clip-path="url(#m-floor-pool)"><ellipse data-pool-shape cx="0" cy="${d / 2}" rx="${w / 2}" ry="150" fill="url(#m-pool)"/></g></g>`;
   const deckPool = `<g class="pool" transform="${topPlane(base)}"><clipPath id="m-deck-pool"><rect x="${-w / 2}" y="${-d / 2}" width="${w}" height="${d}" rx="${r}"/></clipPath><g clip-path="url(#m-deck-pool)"><ellipse data-pool-shape cx="0" cy="${HINGE.y}" rx="260" ry="330" fill="url(#m-pool)"/></g></g>`;
 
   // What the screen shows: the app's transcript, and the line it types. It is drawn through a
@@ -336,7 +337,7 @@ export function laptop(): string {
   return [
     `<svg class="machine m-lap" viewBox="${viewBox}" style="${style}" aria-hidden="true" focusable="false">`,
     `<defs>${screen}</defs>`,
-    ...shadows,
+    `<g class="shade"><path class="sh-base" d="${pathOf(baseShadow, true)}"/>${shadows.join('')}</g>`,
     `<path class="ct" d="${pathOf(contact, true)}"/>`,
     floorPool,
     solidSvg(baseSolid, `<path class="F" d="${seam(plan, 1.6)}"/>`),

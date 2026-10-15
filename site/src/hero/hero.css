@@ -56,6 +56,12 @@
   initial-value: transparent;
 }
 
+@property --m-off {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
 @property --lamp {
   syntax: '<color>';
   inherits: true;
@@ -82,23 +88,44 @@
 
 /*
  * The stage: scene 1 on isometric paper. Every machine is drawn at k px per millimetre, one scale
- * for the page (`--kpx`: 0.8 from 1200 up, 0.62 at 768, 0.42 at 390, straight between), and is
- * placed by its floor origin. The laptop's origin sits on a node of the lattice and desk-box
- * stands a whole lattice vector from it, so both register with the paper.
+ * for the page (`--kpx`: 0.8 from 1200 up, 0.62 at 768, 0.32 at 390, 0.28 at 360, straight
+ * between), and is placed by its floor origin. The laptop's origin sits on a node of the lattice
+ * and desk-box stands a whole lattice vector from it, so both register with the paper.
  *
  * Wide (1000 and up), left to right: the laptop, desk-box a lattice step clear of its lid, and
  * desk-box's sessions as a column of cards beside it. Narrow: desk-box and its cards above the
  * laptop. At 1440 × 900 everything but the laptop's base is above the fold.
  */
 .hero-stage {
-  --kpx: clamp(0.42px, 0.42px + (100vw - 390px) * 0.000529, 0.62px);
-  /* The size the cards are read at: the feature scenes' (`.scene`) reading size. */
-  --reading: clamp(10.5px, 10.5px + (100vw - 390px) * 0.0037, 13.5px);
+  --kpx: clamp(
+    0.28px,
+    min(0.28px + (100vw - 360px) * 0.00133, 0.32px + (100vw - 390px) * 0.000794),
+    0.62px
+  );
+  /* The size the cards are read at: 9.75px on a 390 phone, 13.5px from 1200 up. */
+  --reading: clamp(
+    9.3px,
+    min(9.3px + (100vw - 360px) * 0.015, 9.75px + (100vw - 390px) * 0.00463),
+    13.5px
+  );
+  /*
+   * A card's height, and how far right of the column the needs-you card reaches: its width
+   * (`--card-w` ems), its floor shadow (the skew, the blur and the 38mm offset) and its drift.
+   */
+  --card-w: 24;
+  --card-h: calc(2.6 * var(--reading) + 2px);
+  --card-run: calc((var(--card-w) + 1.6) * var(--reading) + 63.2 * var(--kpx));
   --dusk: 0;
 
-  /* Wide: the laptop's lid 6px under the stage's top, the group centred on the stage. */
+  /*
+   * Wide: the laptop's lid 6px under the stage's top, the group centred on the stage, or as far
+   * left as the needs-you card needs to end inside the window.
+   */
   --lap-y: calc(6px + 385 * var(--kpx));
-  --lap-x: calc(50cqw - 219 * var(--kpx) - 6px - 10.75 * var(--reading));
+  --lap-x: min(
+    calc(50cqw - 219 * var(--kpx) - 6px - 10.75 * var(--reading)),
+    calc(100cqw + var(--gutter) - 26px - var(--card-run) - 597 * var(--kpx))
+  );
   --box-want-x: calc(var(--lap-x) + 465 * var(--kpx));
   --box-want-y: calc(var(--lap-y) - 78 * var(--kpx));
   /*
@@ -112,8 +139,8 @@
   );
   --box-x: calc(var(--lap-x) + var(--box-dx));
   --box-y: calc(var(--lap-y) + var(--box-dy));
-  /* The cards' column: beside desk-box's right side, from just under its top. */
-  --col-x: calc(var(--box-x) + 132 * var(--kpx) + 12px);
+  /* The cards' column: 14px right of desk-box's right side, from just under its top. */
+  --col-x: calc(var(--box-x) + 132 * var(--kpx) + 14px);
   --col-y: calc(var(--box-y) - 305.5 * var(--kpx) + 22px);
 
   /*
@@ -143,7 +170,7 @@
     color-mix(in oklab, var(--crow-ink) 45%, var(--paper)),
     color-mix(in oklab, var(--brand-paper) calc(35% - 10% * var(--dusk)), var(--paper))
   );
-  /* A screen that is off: ink 2%. */
+  /* A screen that is off: ink 2%, in the page's scheme even where the screen is lit light. */
   --m-off: light-dark(
     color-mix(in oklab, var(--crow-ink) 2%, var(--paper)),
     color-mix(in oklab, var(--brand-paper) 2%, var(--paper))
@@ -151,35 +178,30 @@
   /* Desk-box's status lamp is a state: the product's online colour (color.presence-online). */
   --lamp: light-dark(oklch(62.7% 0.17 149), oklch(74% 0.17 149));
   --glow: color-mix(in oklab, var(--lamp) 50%, transparent);
-  /* What the laptop's screen shows, in the app's tokens: its rows, a mark, its ink. */
-  --scr-row: var(--app-line);
-  --scr-mark: var(--mark-2);
-  --scr-ink: var(--app-ink);
-  /* The machines' shadows on the floor: cast by the key light, and the contact under each foot. */
-  --m-shadow: light-dark(
-    color-mix(in oklab, var(--crow-ink) 14%, transparent),
-    oklch(0% 0 0 / 0.5)
+  /*
+   * Everything's shadow on the floor is one shade, as one light casts them all: ink by day and
+   * black at night at `--shade-a` (14% by day, 90% at night). A machine's cast shadows are laid
+   * down at once at that strength; a card's is the same shade made solid on the paper (`--floor`)
+   * and laid with darken, so where shadows overlap the floor is no darker than either. The
+   * contact is a dark rim round each machine's foot.
+   */
+  --shade-a: 0.14;
+  --floor: color-mix(
+    in srgb,
+    light-dark(var(--crow-ink), oklch(0% 0 0)) calc(var(--shade-a) * 100%),
+    var(--paper)
   );
   --m-contact: light-dark(
     color-mix(in oklab, var(--crow-ink) 24%, transparent),
-    oklch(0% 0 0 / 0.62)
+    oklch(0% 0 0 / 0.85)
   );
   /* The lit screen's light on the deck and the floor, and its bloom (night only). */
   --pool: color-mix(in oklab, var(--brand-paper) 18%, transparent);
   /*
-   * The cards' shadows on the floor, fainter the higher a card is held: ink by day, black at
-   * night (45% for a working card), and the card's paper 7% top highlight at night.
+   * The light cards' edge is an ink line (35%); at night a card keeps the app's line for its
+   * edge and the paper's 7% as its top highlight.
    */
-  --floor-0: light-dark(color-mix(in oklab, var(--crow-ink) 26%, transparent), oklch(0% 0 0 / 0.6));
-  --floor-1: light-dark(
-    color-mix(in oklab, var(--crow-ink) 18%, transparent),
-    oklch(0% 0 0 / 0.45)
-  );
-  --floor-2: light-dark(
-    color-mix(in oklab, var(--crow-ink) 13%, transparent),
-    oklch(0% 0 0 / 0.36)
-  );
-  --card-edge: light-dark(color-mix(in oklab, var(--crow-ink) 18%, var(--paper)), var(--app-line));
+  --card-edge: light-dark(color-mix(in oklab, var(--crow-ink) 35%, var(--paper)), var(--app-line));
   --card-rim: light-dark(transparent, color-mix(in oklab, var(--brand-paper) 7%, transparent));
 
   grid-area: stage;
@@ -283,14 +305,23 @@
   fill: var(--lamp);
 }
 
-.machine .sh {
-  fill: var(--m-shadow);
-  filter: blur(4px);
+/*
+ * A machine's cast shadows: filled whole, then laid on the floor at once, softer the taller the
+ * machine (desk-box 5k, the laptop 3.5k, k being px per mm).
+ */
+.machine .shade {
+  fill: light-dark(var(--crow-ink), oklch(0% 0 0));
+  opacity: var(--shade-a);
+  filter: blur(calc(5 * var(--kpx)));
+}
+
+.m-lap .shade {
+  filter: blur(calc(3.5 * var(--kpx)));
 }
 
 .machine .ct {
   fill: var(--m-contact);
-  filter: blur(2px);
+  filter: blur(calc(2 * var(--kpx)));
 }
 
 /* The lid's frame clip: one pose (and its shadow) at a time; scene.ts moves `.on`. */
@@ -298,7 +329,17 @@
   display: none;
 }
 
-/* The screen: on in the app's raised surface, off in ink 2%, mixed by how lit the pose is. */
+/*
+ * The screen shows the app in its light scheme at every hour: lit, it is the brightest thing on
+ * the laptop. Its surface goes out to the page's own off-screen tone as the lid closes.
+ */
+.machine .face {
+  --scr-row: var(--app-line);
+  --scr-mark: var(--mark-2);
+  --scr-ink: var(--app-ink);
+  color-scheme: light;
+}
+
 .machine .scr {
   fill: color-mix(in oklab, var(--app-raised) var(--on), var(--m-off));
 }
@@ -306,6 +347,10 @@
 /* The lit screen's pool on the deck and the floor, and its bloom: night only. */
 .machine .pool {
   display: none;
+}
+
+:root[data-theme='dark'] .hero-stage {
+  --shade-a: 0.9;
 }
 
 :root[data-theme='dark'] .machine .pool {
@@ -319,6 +364,10 @@
 }
 
 @media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .hero-stage {
+    --shade-a: 0.9;
+  }
+
   :root:not([data-theme='light']) .machine .pool {
     display: inline;
   }
@@ -332,14 +381,15 @@
 
 /*
  * Desk-box's sessions: flat UI cards, a column beside it stacked in depth, the farthest back on
- * top. Each hovers at its state's height over its spot on the floor, and its shadow lies on the
- * paper under it, cast by the machines' key light: offset down and to the right by the height
- * (0.4543, 0.3637 px per mm at k 1, 51.3° of shear), as long as the card is tall times the
- * light's slope. Height is state: working (h1) 36mm, needs you (h2) 76mm, done (h0) on the floor.
+ * top. Each stands upright at its state's height over its spot on the floor, and its shadow lies
+ * on the paper under it, cast by the machines' key light: a parallelogram whose sides run along
+ * the light (51.3° of shear, as the machines' shadows), offset down and to the right by the
+ * height (0.4543, 0.3637 px per mm at k 1), as long as the card is tall times the light's slope.
+ * Height is state: working (h1) 18mm, needs you (h2) 38mm, done (h0) on the floor.
  */
 .hero-cards {
   position: absolute;
-  left: min(var(--col-x), calc(100cqw + var(--gutter) - 8px - 24em - 82.6 * var(--kpx)));
+  left: var(--col-x);
   top: var(--col-y);
   display: flex;
   flex-direction: column;
@@ -354,29 +404,29 @@
 /*
  * A card and its floor shadow drift together along the floor's y axis, back and up (30° up and
  * to the right), at their own speed in floor units per second times k, as scene.ts runs `--t`.
- * Below each card the column leaves its shadow's floor clear: the card's height, the shadow's
- * offset and length, and room for the card behind to drift past.
+ * The drift is a relative offset, not a transform, so the card's shadow is laid on the stage's
+ * own floor (darken) rather than inside a layer of its own. Below each card the column leaves
+ * its shadow's floor clear: the card's height, the shadow's offset and length, and room for the
+ * card behind to drift past.
  */
 .drift {
   --hb: 0;
-  --soft: 2px;
-  --floor: var(--floor-0);
+  --soft: 0.06em;
   position: relative;
+  top: calc(var(--t, 0) * var(--v) * -0.5 * var(--kpx));
+  left: calc(var(--t, 0) * var(--v) * 0.866 * var(--kpx));
   margin-bottom: calc(var(--hb) * 1.3965 * var(--kpx) + 0.9em + 15px);
-  translate: calc(var(--t, 0) * var(--v) * 0.866 * var(--kpx))
-    calc(var(--t, 0) * var(--v) * -0.5 * var(--kpx));
 }
 
+/* The higher a card is held, the farther and softer its shadow: one light, one shade. */
 .drift:has(> [data-height='1']) {
-  --hb: 36;
-  --soft: 5px;
-  --floor: var(--floor-1);
+  --hb: 18;
+  --soft: 0.1em;
 }
 
 .drift:has(> [data-height='2']) {
-  --hb: 76;
-  --soft: 10px;
-  --floor: var(--floor-2);
+  --hb: 38;
+  --soft: 0.2em;
 }
 
 /*
@@ -402,10 +452,11 @@
   top: calc(100% + var(--hb) * 1.3965 * var(--kpx));
   width: 100%;
   height: 35.2%;
-  border-radius: 0.7em;
+  border-radius: 0.15em;
   background: var(--floor);
   filter: blur(var(--soft));
   opacity: 0;
+  mix-blend-mode: darken;
   transform: skewX(51.3deg);
   transform-origin: 0 0;
 }
@@ -576,19 +627,32 @@
 }
 
 /*
- * Narrow: desk-box stands at the left, its cards' column beside it, and the laptop below both,
- * its lid clear of the column's last shadow. The column's height is its three cards (2.55em and
- * their border each), their shadows (0.9em) and gaps (15px), and the h2 and two h1 heights.
+ * Narrow: desk-box and its cards' column as one group at the top, centred, or 12px in from the
+ * stage's left edge where the column needs the room (it may reach into the right gutter, to 2px
+ * from the window). The laptop stands under them on the lattice, its shut lid 12px below the
+ * column's last shadow; open, the lid rises into the column's place before any card arrives.
+ * Desk-box is placed first here and the laptop a whole lattice vector from it (rows rounded
+ * down, so the clearance holds). The column's height is its three cards, their shadows (0.9em)
+ * and gaps (15px), and the h2 and two h1 heights (38 + 18 + 18mm at 1.3965 px per mm and k).
  */
 @media (max-width: 999px) {
   .hero-stage {
-    --lap-x: calc(50cqw - 32 * var(--kpx));
-    --col-height: calc(10.35 * var(--reading) + 206.7 * var(--kpx) + 51px);
-    --lap-y: calc(22px + var(--col-height) + 12px + 385 * var(--kpx));
-    --box-want-x: calc(132 * var(--kpx) + 6px);
-    --box-want-y: calc(8px + 305.5 * var(--kpx));
-    --col-x: calc(var(--box-x) + 132 * var(--kpx) + 10px);
+    --group: calc(263.8 * var(--kpx) + 14px + var(--card-run));
+    --inset: max(
+      min(12px, 100cqw + var(--gutter) - 2px - var(--group)),
+      (100cqw - var(--group)) / 2
+    );
+    --box-x: calc(var(--inset) + 131.9 * var(--kpx));
+    --box-y: calc(8px + 305.5 * var(--kpx));
+    --col-x: calc(var(--box-x) + 131.9 * var(--kpx) + 14px);
     --col-y: calc(var(--box-y) - 305.5 * var(--kpx) + 14px);
+    --col-height: calc(3 * var(--card-h) + 103.3 * var(--kpx) + 2.7 * var(--reading) + 30px);
+    --lap-want-y: calc(var(--col-y) + var(--col-height) + 12px + 145.7 * var(--kpx));
+    --lap-dy: round(up, calc(var(--lap-want-y) - var(--box-y)), 20.8px);
+    --lap-odd: calc(mod(var(--lap-dy), 41.6px) * 0.576923);
+    --lap-dx: calc(round(calc(50cqw - var(--box-x) - var(--lap-odd)), 24px) + var(--lap-odd));
+    --lap-x: calc(var(--box-x) + var(--lap-dx));
+    --lap-y: calc(var(--box-y) + var(--lap-dy));
 
     height: calc(var(--lap-y) + 134 * var(--kpx) + 20px);
   }
@@ -597,7 +661,15 @@
 /* A phone: the stage comes before the subhead and the install (styles.css orders the hero). */
 @media (max-width: 599px) {
   .hero-stage {
+    --card-w: 23;
+    --card-h: calc(2.4 * var(--reading) + 2px);
     margin-top: 18px;
+  }
+
+  /* The cards sit a little tighter, so desk-box and the column share a phone's width. */
+  .session-card {
+    gap: 0.45em;
+    padding: 0.5em 0.65em;
   }
 
   /* Parts under 0.75px at this scale step out. */

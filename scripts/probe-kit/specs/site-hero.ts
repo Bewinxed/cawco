@@ -10,16 +10,21 @@
  *    1px settle; the typing cadence and the caret's 530ms blink, read from the timeline itself.
  * 3. The drift: 10 / 14 / 18 px/s along the floor's y axis, and the same place at the same time
  *    across two loads.
- * 4. At night the lit screen brightens the floor in front of the laptop. Desk-box's lamp is the
- *    product's online colour (color.presence-online) in both schemes.
+ * 4. The drawn pixels, where only drawing decides (one capture of the stage, read in the page):
+ *    each card's floor shadow is dark against the ground (20 levels of luma at night, 25 by
+ *    day) and its drawn ends lean along the key light; the closed laptop's shadow is as dark
+ *    beside its base; at night the lit screen is the brightest surface on the laptop, and its
+ *    light falls on the deck and the floor straight in front, not beside. Desk-box's lamp is
+ *    the product's online colour (color.presence-online) in both schemes.
  * 5. Reduced motion stands on the summary frame; the pause holds the timeline and is kept for
  *    the visit; hovering the stage holds the hand-off.
  * 6. At 1440 × 900 the eyebrow, headline, subhead, install, the laptop's screen, desk-box and all
  *    three cards are above the fold, and the open lid stands a lattice step (24px) clear of
  *    desk-box. The headline's glyphs never touch: c and l in "close" keep 2px, at 1440 and 390.
  * 7. At every width from 360 to 1920: the paper's node on the laptop's floor origin, desk-box a
- *    lattice vector from it, the cards inside the window and the stage, clear of each other, of
- *    each other's shadows and of the machines.
+ *    lattice vector from it, the open lid 12px clear of it, the cards 12px right of it, inside
+ *    the window and the stage with their shadows, clear of each other, of each other's shadows
+ *    and of the machines.
  * 8. Mobile Safari's edge strips: the page ground in both themes and through the switch, at
  *    least 12px, no pointer events; none under a mouse.
  *
@@ -59,6 +64,15 @@ const ONLINE = (() => {
 /** The machines' key light (site/src/hero/iso.ts): a shadow's shear, across per down. */
 const LIGHT_SHEAR = 0.4543 / 0.3637;
 
+/** How far below the ground's luma a shadow's darkest band must fall: at night, by day. */
+const BELOW = { dark: 20, light: 25 } as const;
+
+/**
+ * How far below the paper a light card's 1px edge must draw: an ink line (ink 35% lands near
+ * 80 below), not the pale ink 18% rule (near 44 below) the review read as no edge.
+ */
+const EDGE_BELOW = 60;
+
 /** What the spec reads of the stage's gsap timeline (site/src/hero/scene.ts). */
 interface Timeline {
   duration: () => number;
@@ -75,8 +89,17 @@ interface Timeline {
   time: () => number;
 }
 
+/** A capture of the stage, decoded in the page (`grab`), read in page coordinates. */
+interface Ink {
+  /** The page ground's luma (`--paper`), 0–255. */
+  ground: number;
+  /** The median luma of the square `half` css px either side of page point (x, y). */
+  patch: (x: number, y: number, half: number) => number;
+}
+
 declare global {
   interface Window {
+    __ink?: Ink;
     /** The composition registry: the stage's timeline under its `data-composition-id`. */
     __timelines?: Record<string, Timeline>;
   }
@@ -239,26 +262,21 @@ const stateNow = () => ({
       const hb = Number(getComputedStyle(holder).getPropertyValue("--hb"));
       const style = getComputedStyle(shadow);
       const shear = new DOMMatrix(style.transform).c;
+      // Fractional px from the computed style: offsetLeft and offsetTop round to whole px.
+      const left = Number.parseFloat(style.left);
+      const top = Number.parseFloat(style.top);
+      const tall = Number.parseFloat(getComputedStyle(holder).height);
       return {
         height: c.dataset.height,
         hb,
         lift: 1.0328 * hb * k,
-        dx: shadow.offsetLeft,
+        dx: left,
         // How far the shadow lies below the card's foot on the floor, and below the card.
-        floorDy: shadow.offsetTop - c.offsetHeight - 1.0328 * hb * k,
-        gap: shadow.offsetTop - c.offsetHeight,
-        length: shadow.offsetTop - c.offsetHeight + shadow.offsetHeight,
+        floorDy: top - tall - 1.0328 * hb * k,
+        gap: top - tall,
+        length: top - tall + Number.parseFloat(style.height),
         shear,
         soft: Number.parseFloat(style.filter.replace(/[^\d.]/g, "")),
-        alpha: (() => {
-          const probe = document.createElement("canvas").getContext("2d");
-          if (!probe) {
-            return 0;
-          }
-          probe.fillStyle = style.backgroundColor;
-          probe.fillRect(0, 0, 1, 1);
-          return probe.getImageData(0, 0, 1, 1).data[3] ?? 0;
-        })(),
         opacity: Number(getComputedStyle(c).opacity),
         shadowOpacity: Number(style.opacity),
         transform: getComputedStyle(c).transform,
@@ -327,20 +345,19 @@ async function labels(kit: Kit, page: Page): Promise<void> {
       .join("; ")
   );
   kit.check(
-    "the needs-you card (h2) is held highest: its shadow farther off, longer, softer and fainter than a working card's (h1)",
+    "the needs-you card (h2) is held highest: its shadow farther off, longer and softer than a working card's (h1)",
     h1 !== undefined &&
       h2 !== undefined &&
       h2.lift > h1.lift &&
       h2.dx > h1.dx &&
       h2.gap > h1.gap &&
       h2.length > h1.length &&
-      h2.soft > h1.soft &&
-      h2.alpha < h1.alpha,
+      h2.soft > h1.soft,
     [h1, h2]
       .map(
         (c) =>
           c &&
-          `h${c.height}: lift ${c.lift.toFixed(1)}px, shadow ${c.gap.toFixed(1)}px below the card, reaching ${c.length.toFixed(1)}px, blur ${c.soft}px, alpha ${c.alpha}`
+          `h${c.height}: lift ${c.lift.toFixed(1)}px, shadow ${c.gap.toFixed(1)}px below the card, reaching ${c.length.toFixed(1)}px, blur ${c.soft}px`
       )
       .join("; ")
   );
@@ -498,62 +515,422 @@ async function night(kit: Kit, base: string): Promise<void> {
       out === 0,
     `pool ${lit} → ${mid} → ${out}`
   );
-  // What drawing alone decides: the light itself. One lattice tile of floor in front of the
-  // laptop, against one at the same depth off to its side, while the screen is lit.
-  await seek(page, "typed", frameOn);
-  const spots = await page.evaluate(() => {
-    const laptop = document.querySelector(".m-lap") as SVGSVGElement;
-    const m = laptop.getScreenCTM() as DOMMatrix;
-    // Floor points in the drawing's own units: (x - y) * 0.8944, (x + y) * 0.5164.
-    const at = (x: number, y: number) =>
-      new DOMPoint((x - y) * 0.8944, (x + y) * 0.5164).matrixTransform(m);
-    const front = at(0, 175);
-    const side = at(-330, 175);
-    return [front, side].map((p) => ({
-      x: p.x - 12 + scrollX,
-      y: p.y - 20.8 + scrollY,
-    }));
+}
+
+/**
+ * Captures the stage as it is drawn now and decodes it in the page as `window.__ink`, so the
+ * readers below sample its pixels at page coordinates worked out from the engine.
+ */
+async function grab(page: Page): Promise<void> {
+  const area = await page.evaluate(() => {
+    const b = (
+      document.querySelector(".hero-stage") as Element
+    ).getBoundingClientRect();
+    const top = Math.max(0, Math.floor(b.top + scrollY - 40));
+    return {
+      x: 0,
+      y: top,
+      width: innerWidth,
+      height: Math.ceil(b.height + 80),
+    };
   });
-  const lumas: number[] = [];
-  for (const spot of spots) {
-    // biome-ignore lint/performance/noAwaitInLoops: one patch after the other on one page
-    lumas.push(await meanLuma(page, { ...spot, width: 24, height: 41.6 }));
-  }
-  const [inFront = 0, aside = 0] = lumas;
-  kit.check(
-    "at night the lit screen visibly brightens the floor in front of the laptop",
-    inFront - aside >= 6,
-    `mean luma ${inFront.toFixed(1)} in front against ${aside.toFixed(1)} aside`
+  const png = (await page.screenshot({ clip: area, fullPage: true })).toString(
+    "base64"
+  );
+  await page.evaluate(
+    async ([data, clip]) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${data}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      ctx.drawImage(image, 0, 0);
+      const pixels = ctx.getImageData(0, 0, image.width, image.height).data;
+      const scale = image.width / clip.width;
+      const luma = (r: number, g: number, b: number) =>
+        0.2126 * r + 0.7152 * g + 0.0722 * b;
+      // The ground: the page's paper, as sRGB bytes through a canvas.
+      const probe = document.createElement("div");
+      probe.style.background = "var(--paper)";
+      document.body.append(probe);
+      const swatch = document.createElement("canvas").getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      swatch.fillStyle = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      swatch.fillRect(0, 0, 1, 1);
+      const [red = 0, green = 0, blue = 0] = swatch.getImageData(
+        0,
+        0,
+        1,
+        1
+      ).data;
+      window.__ink = {
+        ground: luma(red, green, blue),
+        patch: (x, y, half) => {
+          const values: number[] = [];
+          const x0 = Math.round((x - half - clip.x) * scale);
+          const x1 = Math.round((x + half - clip.x) * scale);
+          const y0 = Math.round((y - half - clip.y) * scale);
+          const y1 = Math.round((y + half - clip.y) * scale);
+          for (
+            let py = Math.max(0, y0);
+            py <= Math.min(image.height - 1, y1);
+            py += 1
+          ) {
+            for (
+              let px = Math.max(0, x0);
+              px <= Math.min(image.width - 1, x1);
+              px += 1
+            ) {
+              const at = (py * image.width + px) * 4;
+              values.push(
+                luma(pixels[at] ?? 0, pixels[at + 1] ?? 0, pixels[at + 2] ?? 0)
+              );
+            }
+          }
+          values.sort((p, q) => p - q);
+          return values[Math.floor(values.length / 2)] ?? Number.NaN;
+        },
+      };
+    },
+    [png, area] as const
   );
 }
 
-/** The mean luma (0–255) of a patch of the page, from a capture read back in the page. */
-async function meanLuma(
-  page: Page,
-  clip: { height: number; width: number; x: number; y: number }
-): Promise<number> {
-  const png = (await page.screenshot({ clip, fullPage: true })).toString(
-    "base64"
-  );
-  return page.evaluate(async (data) => {
-    const image = new Image();
-    image.src = `data:image/png;base64,${data}`;
-    await image.decode();
-    const canvas = document.createElement("canvas");
-    canvas.width = image.width;
-    canvas.height = image.height;
-    const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
-    ctx.drawImage(image, 0, 0);
-    const pixels = ctx.getImageData(0, 0, image.width, image.height).data;
-    let sum = 0;
-    for (let i = 0; i < pixels.length; i += 4) {
-      sum +=
-        0.2126 * (pixels[i] ?? 0) +
-        0.7152 * (pixels[i + 1] ?? 0) +
-        0.0722 * (pixels[i + 2] ?? 0);
+/**
+ * Each card's floor shadow as drawn: its darkest band (the median of small patches along its
+ * middle, the darkest of them), and the lean of its two ends, fitted to where each row of the
+ * middle half crosses halfway from the ground to that row's core (a run of 3px below it, so a
+ * lattice dot is never an edge). An end that lies in another shadow (desk-box's) has no edge to
+ * read, one shade being one shade: only rows whose floor outside the end is the ground count.
+ */
+const cardInk = () => {
+  const ink = window.__ink as Ink;
+  const step = 0.5;
+  // Where row y, scanned inward from `from` (side 1: to the right), falls to `level` and stays.
+  const crossing = (
+    y: number,
+    from: number,
+    side: 1 | -1,
+    level: number,
+    span: number
+  ) => {
+    let previous = ink.patch(from, y, 0);
+    for (let i = 1; i <= span / step; i += 1) {
+      const x = from + side * i * step;
+      const here = ink.patch(x, y, 0);
+      if (
+        here <= level &&
+        previous > level &&
+        [1, 2, 3].every((d) => ink.patch(x + side * d, y, 0) <= level)
+      ) {
+        const back = x - side * step;
+        return back + (x - back) * ((previous - level) / (previous - here));
+      }
+      previous = here;
     }
-    return sum / (pixels.length / 4);
-  }, png);
+    return null;
+  };
+  // The least-squares lean, across per down, of (y, x) points.
+  const fit = (points: [number, number][]) => {
+    const n = points.length;
+    const my = points.reduce((s, [y]) => s + y, 0) / n;
+    const mx = points.reduce((s, [, x]) => s + x, 0) / n;
+    const sxy = points.reduce((s, [y, x]) => s + (y - my) * (x - mx), 0);
+    const syy = points.reduce((s, [y]) => s + (y - my) ** 2, 0);
+    return { rows: n, lean: syy > 0 ? sxy / syy : Number.NaN };
+  };
+  return [...document.querySelectorAll<HTMLElement>("[data-drift]")].map(
+    (holder) => {
+      const card = holder.querySelector(".session-card") as HTMLElement;
+      const shadow = holder.querySelector(".card-shadow") as HTMLElement;
+      const box = holder.getBoundingClientRect();
+      const style = getComputedStyle(shadow);
+      const left = box.left + scrollX + Number.parseFloat(style.left);
+      const top = box.top + scrollY + Number.parseFloat(style.top);
+      const w = Number.parseFloat(style.width);
+      const h = Number.parseFloat(style.height);
+      // Where to look, from the drawing's own shear; the lean itself is measured.
+      const lean = new DOMMatrix(style.transform).c;
+      const half = Math.max(1, Math.min(3, h * 0.2));
+      let darkest = Number.POSITIVE_INFINITY;
+      for (let at = 0.15; at <= 0.85; at += 0.05) {
+        darkest = Math.min(
+          darkest,
+          ink.patch(left + lean * (h / 2) + at * w, top + h / 2, half)
+        );
+      }
+      const end = (side: 1 | -1) => {
+        const points: [number, number][] = [];
+        for (let y = top + 0.3 * h; y <= top + 0.7 * h; y += step) {
+          const edge = left + (side === 1 ? 0 : w) + lean * (y - top);
+          const from = edge - side * 2 * h;
+          if (Math.abs(ink.patch(from, y, 0.5) - ink.ground) > 4) {
+            continue;
+          }
+          const level =
+            (ink.ground + ink.patch(edge + side * 0.5 * w, y, 0)) / 2;
+          const x = crossing(y, from, side, level, 4 * h);
+          if (x !== null) {
+            points.push([y, x]);
+          }
+        }
+        return fit(points);
+      };
+      const ends = [end(1), end(-1)];
+      // The card's 1px edge: the darkest device pixel across its left side, row by row down
+      // its middle, and the median of those rows.
+      const face = card.getBoundingClientRect();
+      const rows: number[] = [];
+      for (
+        let y = face.top + 0.3 * face.height;
+        y <= face.top + 0.7 * face.height;
+        y += 1
+      ) {
+        let least = Number.POSITIVE_INFINITY;
+        for (let d = -1; d <= 2; d += 0.25) {
+          least = Math.min(
+            least,
+            ink.patch(face.left + scrollX + d, y + scrollY, 0)
+          );
+        }
+        rows.push(least);
+      }
+      rows.sort((p, q) => p - q);
+      return {
+        height: card.dataset.height,
+        ground: ink.ground,
+        edge: rows[Math.floor(rows.length / 2)] ?? Number.NaN,
+        darkest,
+        // The ends on open floor, read over 4 rows or more; [left, right] as read.
+        leans: ends.filter((e) => e.rows >= 4).map((e) => e.lean),
+        rows: ends.map((e) => e.rows),
+      };
+    }
+  );
+};
+
+/**
+ * The closed laptop's shadow beside its base: bands of floor parallel to the base's right side,
+ * 1.25 to 5px out (past the outline's ink), each the median of 16 patches along it.
+ */
+const laptopBand = () => {
+  const ink = window.__ink as Ink;
+  const svg = document.querySelector(".m-lap") as SVGSVGElement;
+  const m = svg.getScreenCTM() as DOMMatrix;
+  const k = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+  const bands: number[] = [];
+  for (let px = 1.25; px <= 5; px += 0.5) {
+    // A floor point d mm out from the right side lies 0.8935·d·k px from its foot on screen.
+    const out = 152 + px / (0.8935 * k);
+    const values: number[] = [];
+    for (let y = -60; y <= 60; y += 8) {
+      const p = new DOMPoint(
+        0.8944 * (out - y),
+        0.5164 * (out + y)
+      ).matrixTransform(m);
+      values.push(ink.patch(p.x + scrollX, p.y + scrollY, 0.5));
+    }
+    values.sort((p, q) => p - q);
+    bands.push(values[Math.floor(values.length / 2)] ?? Number.NaN);
+  }
+  return { ground: ink.ground, darkest: Math.min(...bands), bands };
+};
+
+/** The laptop's surfaces at night, open: the screen, the deck, the base's two sides, the bezel. */
+const laptopSurfaces = () => {
+  const ink = window.__ink as Ink;
+  const svg = document.querySelector(".m-lap") as SVGSVGElement;
+  const m = svg.getScreenCTM() as DOMMatrix;
+  const k = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+  const at = (x: number, y: number, z: number) => {
+    const p = new DOMPoint(
+      0.8944 * (x - y),
+      0.5164 * (x + y) - 1.0328 * z
+    ).matrixTransform(m);
+    return [p.x + scrollX, p.y + scrollY] as const;
+  };
+  const face = document.querySelector(".m-lap .lid.on .face") as SVGGElement;
+  const fm = face.getScreenCTM() as DOMMatrix;
+  const onFace = (u: number, v: number) => {
+    const p = new DOMPoint(u, v).matrixTransform(fm);
+    return [p.x + scrollX, p.y + scrollY] as const;
+  };
+  // The base's sides are 7.4mm tall: a patch a fifth of that either side of their middle.
+  const side = Math.max(0.5, 1.5 * k);
+  return {
+    screen: ink.patch(...onFace(152, 150), Math.max(1, 6 * k)),
+    deck: ink.patch(...at(-100, 60, 7.4), Math.max(1, 4 * k)),
+    front: ink.patch(...at(-60, 107.5, 3.7), side),
+    right: ink.patch(...at(152, 0, 3.7), side),
+    bezel: ink.patch(...onFace(4.3, 100), 0.5),
+  };
+};
+
+/** Where the screen's light lands: the deck, the floor straight ahead, the floor either side. */
+const poolSpots = () => {
+  const ink = window.__ink as Ink;
+  const svg = document.querySelector(".m-lap") as SVGSVGElement;
+  const m = svg.getScreenCTM() as DOMMatrix;
+  const k = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+  const read = (x: number, y: number, z: number) => {
+    const p = new DOMPoint(
+      0.8944 * (x - y),
+      0.5164 * (x + y) - 1.0328 * z
+    ).matrixTransform(m);
+    return ink.patch(p.x + scrollX, p.y + scrollY, Math.max(1.5, 5 * k));
+  };
+  return {
+    deck: read(-100, 60, 7.4),
+    ahead: read(0, 147.5, 0),
+    left: read(-202, 147.5, 0),
+    right: read(202, 147.5, 0),
+  };
+};
+
+const showPools = (on: boolean) => {
+  for (const pool of document.querySelectorAll<SVGElement>(".machine .pool")) {
+    pool.style.display = on ? "" : "none";
+  }
+};
+
+async function cardShadows(kit: Kit, base: string): Promise<void> {
+  for (const view of ["desk", "phone"] as View[]) {
+    for (const theme of ["light", "dark"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one width and scheme at a time
+      const page = await kit.page(view, { theme, init: [keepPaused] });
+      await load(page, base);
+      await seek(page, "cards-in", frameOn);
+      await grab(page);
+      const cards = await page.evaluate(cardInk);
+      const width = view === "desk" ? 1440 : 390;
+      kit.check(
+        `${width} ${theme}: every card's floor shadow is ${BELOW[theme]}+ levels below the ground at its darkest band, and its drawn ends lean along the key light (${LIGHT_SHEAR.toFixed(3)}, within 10%)`,
+        cards.every(
+          (c) =>
+            c.ground - c.darkest >= BELOW[theme] &&
+            c.leans.length > 0 &&
+            c.leans.every((lean) => Math.abs(lean / LIGHT_SHEAR - 1) <= 0.1)
+        ),
+        `ground ${cards[0]?.ground.toFixed(1)}; ${cards
+          .map(
+            (c) =>
+              `h${c.height}: darkest ${c.darkest.toFixed(1)} (${(c.ground - c.darkest).toFixed(1)} below), lean ${c.leans.map((lean) => lean.toFixed(3)).join(" / ")} (rows on open floor, left / right: ${c.rows.join(" / ")})`
+          )
+          .join("; ")}`
+      );
+      if (theme === "light") {
+        kit.check(
+          `${width} light: every card's 1px edge is drawn as an ink line, ${EDGE_BELOW}+ levels below the paper`,
+          cards.every((c) => c.ground - c.edge >= EDGE_BELOW),
+          `ground ${cards[0]?.ground.toFixed(1)}; edges ${cards
+            .map(
+              (c) =>
+                `h${c.height} ${c.edge.toFixed(1)} (${(c.ground - c.edge).toFixed(1)} below)`
+            )
+            .join(", ")}`
+        );
+      }
+    }
+  }
+}
+
+const baseShade = () => {
+  const shade = document.querySelector(".m-lap .shade > .sh-base");
+  return {
+    drawn: shade !== null && getComputedStyle(shade).display !== "none",
+    framed: shade?.hasAttribute("data-frame") ?? true,
+    lid: Number(
+      document.querySelector(".m-lap .lid.on")?.getAttribute("data-frame")
+    ),
+  };
+};
+
+async function closedLaptop(kit: Kit, base: string): Promise<void> {
+  const engine = await kit.page("desk", { init: [keepPaused] });
+  await load(engine, base);
+  const close = await engine.evaluate(
+    (id) => window.__timelines?.[id]?.labels.close ?? 0,
+    ID
+  );
+  const through: { drawn: boolean; framed: boolean; lid: number }[] = [];
+  for (const at of ["ajar", close + 8 / 24 + 0.001, "lid-shut", "summary"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one seek of one timeline after another
+    through.push(await seek(engine, at, baseShade));
+  }
+  kit.check(
+    "the base's cast shadow is not a frame of the lid clip: drawn before, through and after it",
+    through.every((s) => s.drawn && !s.framed),
+    through.map((s) => `lid ${s.lid}: ${s.drawn ? "drawn" : "gone"}`).join(", ")
+  );
+  for (const view of ["desk", "phone"] as View[]) {
+    for (const theme of ["light", "dark"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one width and scheme at a time
+      const page = await kit.page(view, { theme, init: [keepPaused] });
+      await load(page, base);
+      const bands: { darkest: number; ground: number }[] = [];
+      for (const label of ["lid-shut", "summary"]) {
+        // biome-ignore lint/performance/noAwaitInLoops: one label, then its capture
+        await seek(page, label, frameOn);
+        await grab(page);
+        bands.push(await page.evaluate(laptopBand));
+      }
+      const width = view === "desk" ? 1440 : 390;
+      kit.check(
+        `${width} ${theme}: the closed laptop casts a shadow beside its base, ${BELOW[theme]}+ levels below the ground (lid-shut, summary)`,
+        bands.every((b) => b.ground - b.darkest >= BELOW[theme]),
+        `ground ${bands[0]?.ground.toFixed(1)}; darkest ${bands
+          .map(
+            (b) =>
+              `${b.darkest.toFixed(1)} (${(b.ground - b.darkest).toFixed(1)} below)`
+          )
+          .join(", ")}`
+      );
+    }
+  }
+}
+
+async function nightScreen(kit: Kit, base: string): Promise<void> {
+  for (const view of ["desk", "phone"] as View[]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one width at a time
+    const page = await kit.page(view, { theme: "dark", init: [keepPaused] });
+    await load(page, base);
+    await seek(page, "typed", frameOn);
+    await grab(page);
+    const s = await page.evaluate(laptopSurfaces);
+    const lit = await page.evaluate(poolSpots);
+    await page.evaluate(showPools, false);
+    await grab(page);
+    const unlit = await page.evaluate(poolSpots);
+    await page.evaluate(showPools, true);
+    const width = view === "desk" ? 1440 : 390;
+    const rest = Math.max(s.deck, s.front, s.right, s.bezel);
+    kit.check(
+      `${width} at night, typed: the lit screen is the brightest surface on the laptop`,
+      s.screen - rest >= 20,
+      `screen ${s.screen.toFixed(1)}; deck ${s.deck.toFixed(1)}, front ${s.front.toFixed(1)}, right side ${s.right.toFixed(1)}, bezel ${s.bezel.toFixed(1)}`
+    );
+    const gain = {
+      deck: lit.deck - unlit.deck,
+      ahead: lit.ahead - unlit.ahead,
+      left: lit.left - unlit.left,
+      right: lit.right - unlit.right,
+    };
+    kit.check(
+      `${width} at night, typed: the screen's light falls on the deck and the floor straight ahead, not beside`,
+      gain.deck >= 6 &&
+        gain.ahead >= 6 &&
+        Math.abs(gain.left) <= 1.5 &&
+        Math.abs(gain.right) <= 1.5 &&
+        lit.ahead - Math.max(lit.left, lit.right) >= 6,
+      `luma with the light (and without): deck ${lit.deck.toFixed(1)} (${unlit.deck.toFixed(1)}), ahead ${lit.ahead.toFixed(1)} (${unlit.ahead.toFixed(1)}), beside ${lit.left.toFixed(1)} / ${lit.right.toFixed(1)} (${unlit.left.toFixed(1)} / ${unlit.right.toFixed(1)})`
+    );
+  }
 }
 
 async function lampColour(kit: Kit, base: string): Promise<void> {
@@ -1086,9 +1463,9 @@ const registration = () => {
 };
 
 /**
- * The cards' boxes and shadows, how many of each card's edge points fall on the laptop, and
- * whether one covers desk-box's lamp. A card may pass in front of desk-box's side, which it
- * rises off; never in front of the laptop, nor of the lamp.
+ * The cards' boxes and shadows (with the shadow's blur), how far right of desk-box each card
+ * starts, how many of each card's edge points fall on the laptop, and whether one covers
+ * desk-box's lamp. A card never passes in front of desk-box, the laptop or the lamp.
  */
 const cardsNow = () => {
   const bodies = [".m-lap > path.t", ".m-lap .lid.on > path"].map(
@@ -1105,11 +1482,18 @@ const cardsNow = () => {
   const lamp = (
     document.querySelector(".m-desk use.lamp") as Element
   ).getBoundingClientRect();
+  const desk = (
+    document.querySelector(".m-desk > path.t") as Element
+  ).getBoundingClientRect();
   return [...document.querySelectorAll(".session-card")].map((card) => {
     const r = card.getBoundingClientRect();
-    const s = (
-      (card.parentElement as Element).querySelector(".card-shadow") as Element
-    ).getBoundingClientRect();
+    const shadow = (card.parentElement as Element).querySelector(
+      ".card-shadow"
+    ) as Element;
+    const s = shadow.getBoundingClientRect();
+    const blur = Number.parseFloat(
+      getComputedStyle(shadow).filter.replace(/[^\d.]/g, "")
+    );
     const edge = Array.from(
       { length: 11 },
       (_, at) => r.left + (r.width * at) / 10
@@ -1117,6 +1501,8 @@ const cardsNow = () => {
     return {
       box: { left: r.left, right: r.right, top: r.top, bottom: r.bottom },
       shadow: { left: s.left, right: s.right, top: s.top, bottom: s.bottom },
+      reach: s.right + 2 * blur,
+      clear: r.left - desk.right,
       covers: edge.filter((x) => onMachine(x, r.top) || onMachine(x, r.bottom))
         .length,
       lamp:
@@ -1126,6 +1512,18 @@ const cardsNow = () => {
         lamp.top + lamp.height / 2 < r.bottom,
     };
   });
+};
+
+/** How the narrow stage sits: desk-box's inset from the stage, and the floor left between
+ * desk-box's shadow and the shut laptop. */
+const narrowNow = () => {
+  const box = (s: string) =>
+    (document.querySelector(s) as Element).getBoundingClientRect();
+  const stage = box(".hero-stage");
+  return {
+    inset: box(".m-desk > path.t").left - stage.left,
+    gap: box(".m-lap .lid.on > path").top - box(".m-desk .shade").bottom,
+  };
 };
 
 const meet = (a: Box, b: Box) =>
@@ -1138,10 +1536,12 @@ const cardFaults = (
   cards: ReturnType<typeof cardsNow>,
   floor: { stage: number; width: number }
 ): string[] =>
-  cards.flatMap(({ box, covers, lamp, shadow }, i) =>
+  cards.flatMap(({ box, clear, covers, lamp, reach, shadow }, i) =>
     (
       [
         [box.left < 0 || box.right > floor.width, " leaves the window"],
+        [reach > floor.width, "'s shadow runs out of the window"],
+        [clear < 12, ` starts ${clear.toFixed(1)}px right of desk-box`],
         [box.bottom > floor.stage + 0.5, " leaves the stage"],
         [covers > 0, " covers the laptop"],
         [lamp, " covers desk-box's lamp"],
@@ -1172,11 +1572,18 @@ async function layout(kit: Kit, base: string): Promise<void> {
     const dx = bx - lx;
     const dy = by - ly;
     const bad: string[] = [];
+    let clear = Number.POSITIVE_INFINITY;
     for (const label of ["cards-in", "summary"]) {
       // biome-ignore lint/performance/noAwaitInLoops: one label of one timeline after another
       const cards = await seek(page, label, cardsNow);
       bad.push(...cardFaults(label, cards, floor));
+      clear = Math.min(clear, ...cards.map((c) => c.clear));
     }
+    const lid = await seek(page, "typed", lidToBox);
+    if (lid < 12) {
+      bad.push(`typed: the open lid ${lid.toFixed(1)}px from desk-box`);
+    }
+    const stand = await seek(page, "cards-in", narrowNow);
     const node = Math.hypot(nx - lx, ny - ly);
     // A lattice vector: whole rows of 20.8px, and across whole 24px steps, offset 12px on odd rows.
     const row = Math.round(dy / 20.8);
@@ -1185,9 +1592,9 @@ async function layout(kit: Kit, base: string): Promise<void> {
       Math.abs(dy / 20.8 - row) < 0.01 &&
       Math.abs(across - Math.round(across)) < 0.01;
     kit.check(
-      `${width}px: the paper's node on the laptop's origin, desk-box a lattice step away, the cards clear`,
+      `${width}px: the paper's node on the laptop's origin, desk-box a lattice step away, the open lid 12px+ clear of it, the cards 12px+ right of it and clear, their shadows in the window`,
       node < 0.05 && onLattice && floor.scroll === width && bad.length === 0,
-      `node ${node.toFixed(3)}px, box (${dx.toFixed(1)}, ${dy.toFixed(1)})${bad.length > 0 ? `, ${bad.join("; ")}` : ""}`
+      `node ${node.toFixed(3)}px, box (${dx.toFixed(1)}, ${dy.toFixed(1)}), lid ${lid.toFixed(1)}px clear, cards ${clear.toFixed(1)}px right of desk-box${width < 600 ? `, desk-box ${stand.inset.toFixed(1)}px in, ${stand.gap.toFixed(1)}px of floor from its shadow to the shut laptop` : ""}${bad.length > 0 ? `, ${bad.join("; ")}` : ""}`
     );
   }
 }
@@ -1282,6 +1689,9 @@ export default {
       await cadence(kit, page);
       await drift(kit, page, server.base);
       await night(kit, server.base);
+      await nightScreen(kit, server.base);
+      await cardShadows(kit, server.base);
+      await closedLaptop(kit, server.base);
       await lampColour(kit, server.base);
       await playing(kit, server.base);
       await desktopFold(kit, server.base);
