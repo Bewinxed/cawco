@@ -202,7 +202,9 @@ export class FinderState {
   /** Typing has not settled yet: the machines are about to be asked. */
   settling = $state(false);
   /** A names ask in flight while the last answer stays drawn. */
-  #pendingNames = $state<{ for: string; since: number } | null>(null);
+  #pendingNames = $state<{ for: string; since: number; late: boolean } | null>(
+    null
+  );
   namesPending = $derived(this.#pendingNames);
   /** A machines ask in flight while the last answer stays drawn. */
   #pendingEvery = $state<{ for: string; since: number } | null>(null);
@@ -275,17 +277,21 @@ export class FinderState {
 
   /**
    * Rows drawn in the hub section, the best first: the answer to the words
-   * in the field, else the last answer while the next is on its way (a
-   * names answer takes milliseconds; emptying the list between keystrokes
-   * would blink it). A failed ask leaves none.
+   * in the field, else the last answer while the next is on its way. A names
+   * answer takes milliseconds, and a row in both answers stays the same row
+   * and slides; emptying the list between them would destroy and redraw it.
+   * The doorway's recent sessions never stand under typed words for longer
+   * than the wait grace, nor typed matches at the doorway: past it, an
+   * answer of the other sort is let go. A failed ask leaves none.
    */
   shownNameRows = $derived.by(() => {
     const { names } = this;
-    // The doorway's recent sessions never stand under typed words, nor typed
-    // matches at the doorway: only an answer of the same sort is held.
-    const held =
+    const sameSort =
       names.state === "ok" && (names.for === "") === (this.asked === "");
-    const answer = held ? names.value : null;
+    const inFlight =
+      this.namesPending !== null && !this.namesPending.late;
+    const answer =
+      names.state === "ok" && (sameSort || inFlight) ? names.value : null;
     if (!answer) {
       return [] as Spoken[];
     }
@@ -530,8 +536,14 @@ export class FinderState {
     const n = this.#namesAsk;
     const key = words;
     if (this.names.state === "ok") {
-      // The last answer stays drawn (shownNameRows) while this one is asked.
-      this.#pendingNames = { for: key, since: Date.now() };
+      // The last answer stays drawn (shownNameRows) while this one is asked,
+      // for as long as the wait grace.
+      this.#pendingNames = { for: key, since: Date.now(), late: false };
+      setTimeout(() => {
+        if (n === this.#namesAsk && this.#pendingNames) {
+          this.#pendingNames = { ...this.#pendingNames, late: true };
+        }
+      }, GRACE_MS);
     } else {
       this.names = { state: "asking", for: key, since: Date.now() };
     }

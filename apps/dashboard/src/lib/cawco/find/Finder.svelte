@@ -14,6 +14,12 @@
    * Phone, the same parts upside down: the field above the keyboard and the
    * best match nearest it, "Where … was said" furthest up.
    *
+   * Everything in the list is one keyed sequence (`items`), heads and chips
+   * and rows and peeks alike, so a session that is there before a keystroke
+   * and after it is the same element: it slides to its new place, rows that
+   * leave close, rows that arrive are uncovered (motion/rows `reflow`, The
+   * Nothing Jumps Rule). Nothing is destroyed and drawn again.
+   *
    * The field keeps the focus (a WAI-ARIA combobox over a listbox): ↑↓ move
    * the active row, ↵ opens it, → peeks it in place, ← folds, Escape closes.
    */
@@ -28,7 +34,6 @@
   import SearchIcon from "~icons/solar/magnifer-bold-duotone";
   import Server from "~icons/solar/server-bold-duotone";
   import { crossIn, crossOut } from "../motion/curves.svelte";
-  import { unfold } from "../motion/fold.svelte";
   import { reflow } from "../motion/rows.svelte";
   import Segmented from "../spawn/Segmented.svelte";
   import FindPeek from "./FindPeek.svelte";
@@ -38,6 +43,7 @@
   import {
     type FinderState,
     GRACE_MS,
+    type GoTo,
     type MachineAct,
     type Opening,
     type Spoken,
@@ -67,15 +73,16 @@
 
   const uid = $props.id();
   const listId = `${uid}-list`;
-  /** A stop's element id: keys hold ':' and '#', fine in an id, escaped for a selector. */
+  /** A stop's element id. */
   const idOf = (key: string) => `${uid}-${key}`;
-
   const stopKey = (r: FindResult) => `${r.kind}:${r.id}`;
 
   // ---- Waits that outlast the grace (DESIGN.md, The Real Wait Rule) ----
   let namesLate = $state(false);
   let everyLate = $state(false);
-  const namesWaiting = $derived(finder.names.state === "asking");
+  const namesWaiting = $derived(
+    finder.names.state === "asking" || finder.namesPending !== null
+  );
   const everyWaiting = $derived(finder.searching);
   $effect(() => {
     if (!namesWaiting) {
@@ -100,6 +107,11 @@
 
   // ---- Keys ----
   const step = (n: number) => finder.move(phone ? -n : n);
+  /** The caret is in the words, not at their end: ← and → move it. */
+  const inWords = (event: KeyboardEvent) => {
+    const input = event.currentTarget as HTMLInputElement;
+    return input.selectionStart !== input.value.length;
+  };
 
   function onkeydown(event: KeyboardEvent) {
     if (event.isComposing) {
@@ -114,36 +126,17 @@
         event.preventDefault();
         step(-1);
         break;
-      case "ArrowRight": {
-        const input = event.currentTarget as HTMLInputElement;
-        // The caret moving in the words comes first.
-        if (input.selectionStart !== input.value.length) {
-          return;
+      case "ArrowRight":
+        if (!inWords(event)) {
+          event.preventDefault();
+          finder.peek();
         }
-        event.preventDefault();
-        finder.peek();
         break;
-      }
-      case "ArrowLeft": {
-        const input = event.currentTarget as HTMLInputElement;
-        if (
-          finder.peeked === null &&
-          finder.unfolded.size === 0 &&
-          finder.view === "find"
-        ) {
-          return;
-        }
-        if (
-          input.selectionStart !== input.value.length &&
-          finder.view === "find"
-        ) {
-          return;
-        }
-        if (finder.fold()) {
+      case "ArrowLeft":
+        if (!inWords(event) && finder.fold()) {
           event.preventDefault();
         }
         break;
-      }
       case "Enter":
         event.preventDefault();
         commit(finder.active);
@@ -235,21 +228,14 @@
 
   // ---- What the list holds ----
   const activeKey = $derived(finder.active?.key ?? null);
-  const goTo = $derived(finder.goTo);
   const nameRows = $derived(finder.shownNameRows);
   const saidRows = $derived(finder.saidRows);
+  const waitingCount = $derived(finder.waitingItems.length);
   const today = $derived.by(() => {
     const start = new Date(finder.now);
     start.setHours(0, 0, 0, 0);
     return start.getTime();
   });
-  const doorwayToday = $derived(
-    nameRows.filter((r) => (r.lastActivity ?? 0) >= today)
-  );
-  const doorwayEarlier = $derived(
-    nameRows.filter((r) => (r.lastActivity ?? 0) < today)
-  );
-  const waitingCount = $derived(finder.waitingItems.length);
 
   /**
    * Whether "Where … was said" stands: while the machines are asked, when
@@ -271,6 +257,130 @@
   const answered = $derived(
     (finder.coverage?.machines ?? []).filter((m) => m.answered).length
   );
+  const missingNames = $derived(finder.missing.map((m) => m.name).join(", "));
+  const machines = (n: number) => (n === 1 ? "1 machine" : `${n} machines`);
+
+  type Fold = Extract<GoTo, { type: "fold" }>;
+  type Item =
+    | { t: "waiting"; key: string }
+    | { t: "head"; key: string; label: string }
+    | { t: "chips"; key: string }
+    | { t: "coverage"; key: string }
+    | { t: "rule"; key: string }
+    | { t: "row"; key: string; result: Spoken; section: "names" | "said" }
+    | { t: "peek"; key: string; result: Spoken; row: string }
+    | { t: "goto"; key: string; result: FindResult }
+    | { t: "acts"; key: string; result: FindResult }
+    | { t: "fold"; key: string; entry: Fold }
+    | { t: "skeleton"; key: string; tall: boolean }
+    | { t: "nothing"; key: string };
+  /** A section: what stands at its head, then its units (a row and what hangs from it). */
+  interface Section {
+    key: string;
+    lead: Item[];
+    units: Item[][];
+  }
+
+  const rowUnit = (result: Spoken, section: "names" | "said"): Item[] => {
+    const key = stopKey(result);
+    const unit: Item[] = [{ t: "row", key, result, section }];
+    if (finder.peeked === key) {
+      unit.push({ t: "peek", key: `${key}#peek`, result, row: key });
+    }
+    return unit;
+  };
+  const gotoUnit = (result: FindResult): Item[] => {
+    const key = stopKey(result);
+    const unit: Item[] = [{ t: "goto", key, result }];
+    if (result.kind === "machine" && finder.peeked === key) {
+      unit.push({ t: "acts", key: `${key}#acts`, result });
+    }
+    return unit;
+  };
+  const skeletons = (section: string, n: number, tall = false): Item[][] =>
+    Array.from({ length: n }, (_, i) => [
+      { t: "skeleton", key: `skeleton:${section}:${i}`, tall },
+    ]);
+
+  function doorway(): Section[] {
+    const recent = (label: string, rows: Spoken[]): Section => ({
+      key: label,
+      lead: rows.length > 0 ? [{ t: "head", key: `head:${label}`, label }] : [],
+      units: rows.map((r) => rowUnit(r, "names")),
+    });
+    return [
+      {
+        key: "waiting",
+        lead: [],
+        units: waitingCount > 0 ? [[{ t: "waiting", key: "waiting" }]] : [],
+      },
+      recent(
+        "Today",
+        nameRows.filter((r) => (r.lastActivity ?? 0) >= today)
+      ),
+      recent(
+        "Earlier",
+        nameRows.filter((r) => (r.lastActivity ?? 0) < today)
+      ),
+      {
+        key: "loading",
+        lead: [],
+        units: namesLate && nameRows.length === 0 ? skeletons("names", 3) : [],
+      },
+    ];
+  }
+
+  function typed(): Section[] {
+    const goTo: Section = {
+      key: "goto",
+      lead: [],
+      units: finder.goTo.map((entry) => {
+        if (entry.type === "one") {
+          return gotoUnit(entry.result);
+        }
+        const key = `fold:${entry.kind}`;
+        const fold: Item = { t: "fold", key, entry };
+        return finder.unfolded.has(key)
+          ? [fold, ...entry.results.flatMap(gotoUnit)]
+          : [fold];
+      }),
+    };
+    let nameUnits = nameRows.map((r) => rowUnit(r, "names"));
+    if (nameUnits.length === 0 && namesLate) {
+      nameUnits = skeletons("names", 2);
+    }
+    const said: Section = { key: "said", lead: [], units: [] };
+    if (saidShown) {
+      said.lead.push(
+        { t: "head", key: "head:said", label: `Where “${finder.saidFor}” was said` },
+        { t: "chips", key: "chips" }
+      );
+      if (finder.missing.length > 0) {
+        said.lead.push({ t: "coverage", key: "coverage" });
+      }
+      said.units = saidRows.map((r) => rowUnit(r, "said"));
+      if (said.units.length === 0 && everyLate) {
+        said.units = skeletons("said", 2, true);
+      }
+    }
+    return [goTo, { key: "names", lead: [], units: nameUnits }, said];
+  }
+
+  /** The list, in drawn order: a hairline between sections that hold something. */
+  const items = $derived.by((): Item[] => {
+    if (finder.typed && finder.nothing) {
+      return [{ t: "nothing", key: "nothing" }];
+    }
+    const sections = (finder.typed ? typed() : doorway()).filter(
+      (s) => s.lead.length + s.units.length > 0
+    );
+    const ordered = phone ? [...sections].reverse() : sections;
+    return ordered.flatMap((s, i) => [
+      ...(i > 0 ? [{ t: "rule", key: `rule:${s.key}` } as Item] : []),
+      ...s.lead,
+      ...(phone ? [...s.units].reverse() : s.units).flat(),
+    ]);
+  });
 
   /** What the footer says ↵ does on the active row. */
   const enterHint = $derived.by(() => {
@@ -286,6 +396,10 @@
     }
     return "open";
   });
+  const peekable = $derived(
+    finder.active?.type === "row" ||
+      (finder.active?.type === "goto" && finder.active.result.kind === "machine")
+  );
 
   /** The peek's said line: asked, missing, or what came back. */
   function momentsState(result: Spoken) {
@@ -293,8 +407,7 @@
       return { state: "ok" as const };
     }
     const { machine } = result;
-    const gone = finder.missing.find((m) => m.machineId === machine.id);
-    if (gone) {
+    if (finder.missing.some((m) => m.machineId === machine.id)) {
       return { state: "missing" as const, machine: machine.name };
     }
     if (finder.searching) {
@@ -303,7 +416,6 @@
     return { state: "ok" as const };
   }
 
-  const hueOfMissing = $derived(finder.missing.map((m) => m.name).join(", "));
   const announce = $derived.by(() => {
     if (finder.hubDown) {
       return "Can't reach the hub.";
@@ -312,13 +424,11 @@
       return `No sessions for “${finder.text.trim()}”`;
     }
     if (finder.searching) {
-      return `${nameRows.length} found by name. Searching ${machineCount || ""} machines.`;
+      return `${nameRows.length} found by name. Searching ${machineCount ? machines(machineCount) : "machines"}.`;
     }
     if (finder.typed) {
-      const gone = finder.missing.length
-        ? ` ${hueOfMissing} didn't answer.`
-        : "";
-      return `${nameRows.length + saidRows.length + goTo.length} found.${gone}`;
+      const gone = finder.missing.length ? ` ${missingNames} didn't answer.` : "";
+      return `${nameRows.length + saidRows.length + finder.goTo.length} found.${gone}`;
     }
     return "";
   });
@@ -358,165 +468,12 @@
   </div>
 {/snippet}
 
-{#snippet rowFor(result: Spoken, section: "names" | "said")}
-  {@const key = stopKey(result)}
-  {@const row = rowOf(
-    result,
-    finder.now,
-    section === "said" ? "moment" : "name"
-  )}
-  <FindRow
-    id={idOf(key)}
-    active={activeKey === key}
-    now={finder.now}
-    onhover={() => hover(key)}
-    onpeek={() => finder.togglePeek(key)}
-    onpick={() => pick(key)}
-    peekable={phone}
-    peeked={finder.peeked === key}
-    {phone}
-    {row}
-  />
-  {#if finder.peeked === key}
-    <div class="peek-slot" data-flip transition:unfold>
-      <FindPeek
-        id={`${idOf(key)}-peek`}
-        {activeKey}
-        {idOf}
-        keyOf={(i) => `${key}#m${i}`}
-        moments={finder.peekMoments(result)}
-        momentsState={momentsState(result)}
-        now={finder.now}
-        onopen={(moment) => openMoment(result, moment)}
-        onretry={() => finder.retry()}
-        {phone}
-        {result}
-      />
-    </div>
-  {/if}
-{/snippet}
-
-{#snippet goToRow(result: FindResult)}
-  {@const key = stopKey(result)}
-  <FindRow
-    id={idOf(key)}
-    active={activeKey === key}
-    now={finder.now}
-    onhover={() => hover(key)}
-    onpeek={() => finder.togglePeek(key)}
-    onpick={() => pick(key)}
-    peekable={phone && result.kind === "machine"}
-    peeked={finder.peeked === key}
-    {phone}
-    row={rowOf(result, finder.now)}
-  />
-  {#if result.kind === "machine" && finder.peeked === key}
-    <!-- biome-ignore lint/a11y/useSemanticElements: an option group inside a listbox (WAI-ARIA listbox); a fieldset groups form controls, not options -->
-    <div
-      class="acts"
-      data-flip
-      transition:unfold
-      role="group"
-      aria-label={`${result.title}, what to do`}
-    >
-      {#each [["start", "Start a session here"], ["see", "See what runs here"]] as const as [act, label] (act)}
-        {@const k = `${key}#${act}`}
-        <button
-          id={idOf(k)}
-          class="act"
-          aria-selected={activeKey === k}
-          data-active={activeKey === k ? "" : undefined}
-          data-find-row
-          onclick={() => onmachine(result, act)}
-          onpointermove={() => hover(k)}
-          role="option"
-          tabindex="-1"
-          type="button"
-        >
-          <Server aria-hidden="true" />{label}
-        </button>
-      {/each}
-    </div>
-  {/if}
-{/snippet}
-
-{#snippet goToSection()}
-  {#if goTo.length > 0}
-    <!-- biome-ignore lint/a11y/useSemanticElements: an option group inside a listbox (WAI-ARIA listbox); a fieldset groups form controls, not options -->
-    <div class="group goto" role="group" aria-label="Go to" data-flip>
-      {#each goTo as entry (entry.type === "one" ? stopKey(entry.result) : `fold:${entry.kind}`)}
-        {#if entry.type === "one"}
-          {@render goToRow(entry.result)}
-        {:else}
-          {@const key = `fold:${entry.kind}`}
-          {@const first = entry.results[0] as FindResult}
-          {@const Glyph = kindGlyph(first)}
-          {@const open = finder.unfolded.has(key)}
-          <button
-            id={idOf(key)}
-            class={["fold-row", { phone }]}
-            aria-label={`${entry.results.length} ${kindNoun(first, entry.results.length)} match “${finder.asked}”, ${open ? "shown" : "folded"}`}
-            aria-selected={activeKey === key}
-            data-active={activeKey === key ? "" : undefined}
-            data-find-row
-            data-flip
-            onclick={() => pick(key)}
-            onpointermove={() => hover(key)}
-            role="option"
-            tabindex="-1"
-            type="button"
-          >
-            <Glyph class="fold-glyph" aria-hidden="true" />
-            <span class="fold-label"
-              ><span class="num">{entry.results.length}</span>
-              {kindNoun(first, entry.results.length)} match “{finder.asked}”</span
-            >
-            <ChevronRight
-              class={open ? "fold-chev open" : "fold-chev"}
-              aria-hidden="true"
-            />
-          </button>
-          {#if open}
-            <div class="fold-body" data-flip transition:unfold>
-              {#each entry.results as result (stopKey(result))}
-                {@render goToRow(result)}
-              {/each}
-            </div>
-          {/if}
-        {/if}
-      {/each}
-    </div>
-  {/if}
-{/snippet}
-
-{#snippet namesSection()}
-  {#if nameRows.length > 0}
-    <!-- biome-ignore lint/a11y/useSemanticElements: an option group inside a listbox (WAI-ARIA listbox); a fieldset groups form controls, not options -->
-    <div
-      class="group"
-      role="group"
-      aria-label="Sessions that match by name"
-      data-flip
-    >
-      {#each phone ? [...nameRows].reverse() : nameRows as result (stopKey(result))}
-        {@render rowFor(result, "names")}
-      {/each}
-    </div>
-  {:else if namesLate}
-    <div class="group" aria-hidden="true">
-      <Skeleton class="skeleton-row" />
-      <Skeleton class="skeleton-row" />
-    </div>
-  {/if}
-{/snippet}
-
 {#snippet whoChips()}
-  <div class={["chips", { phone }]} role="toolbar" aria-label="Who said it">
+  <div class={["chips", { phone }]} data-flip role="toolbar" aria-label="Who said it">
     {#each WHO as who (who.value)}
-      {@const on = (finder.by ?? "anyone") === who.value}
       <button
         class="chip"
-        aria-pressed={on}
+        aria-pressed={(finder.by ?? "anyone") === who.value}
         onclick={() => {
           if (finder.parsed.me && who.value !== "me") {
             finder.removeWords(["me"]);
@@ -538,12 +495,12 @@
       >
     {/each}
     {#if finder.parsed.time}
+      {@const time = finder.parsed.time}
       <span class="chip word" data-flip="pop"
-        >{finder.parsed.time}<button
+        >{time}<button
           class="chip-x"
-          aria-label={`Stop narrowing to ${finder.parsed.time}`}
-          onclick={() =>
-            finder.removeWords((finder.parsed.time as string).split(" "))}
+          aria-label={`Stop narrowing to ${time}`}
+          onclick={() => finder.removeWords(time.split(" "))}
           type="button"><IconClose /></button
         ></span
       >
@@ -551,94 +508,123 @@
     {#if finder.searching}
       <span class="searching" aria-hidden="true"
         >{machineCount
-          ? `Searching ${machineCount} machines…`
+          ? `Searching ${machines(machineCount)}…`
           : "Searching machines…"}<Spinner class="spin" /></span
       >
     {:else if finder.coverage?.asked && finder.missing.length === 0}
-      <span class="covered num">All {machineCount} machines answered</span>
+      <span class="covered"
+        >{machineCount === 1
+          ? "The machine answered"
+          : `All ${machineCount} machines answered`}</span
+      >
     {/if}
   </div>
 {/snippet}
 
-{#snippet saidSection()}
-  {#if saidShown}
+{#snippet item_(item: Item)}
+  {#if item.t === "row"}
+    <FindRow
+      id={idOf(item.key)}
+      active={activeKey === item.key}
+      now={finder.now}
+      onhover={() => hover(item.key)}
+      onpeek={() => finder.togglePeek(item.key)}
+      onpick={() => pick(item.key)}
+      peekable={phone}
+      peeked={finder.peeked === item.key}
+      {phone}
+      row={rowOf(
+        item.result,
+        finder.now,
+        item.section === "said" ? "moment" : "name"
+      )}
+    />
+  {:else if item.t === "peek"}
+    <div class="peek-slot" data-flip>
+      <FindPeek
+        id={`${idOf(item.row)}-peek`}
+        {activeKey}
+        {idOf}
+        keyOf={(i) => `${item.row}#m${i}`}
+        moments={finder.peekMoments(item.result)}
+        momentsState={momentsState(item.result)}
+        now={finder.now}
+        onopen={(moment) => openMoment(item.result, moment)}
+        onretry={() => finder.retry()}
+        {phone}
+        result={item.result}
+      />
+    </div>
+  {:else if item.t === "goto"}
+    <FindRow
+      id={idOf(item.key)}
+      active={activeKey === item.key}
+      now={finder.now}
+      onhover={() => hover(item.key)}
+      onpeek={() => finder.togglePeek(item.key)}
+      onpick={() => pick(item.key)}
+      peekable={phone && item.result.kind === "machine"}
+      peeked={finder.peeked === item.key}
+      {phone}
+      row={rowOf(item.result, finder.now)}
+    />
+  {:else if item.t === "acts"}
+    {@const row = stopKey(item.result)}
     <!-- biome-ignore lint/a11y/useSemanticElements: an option group inside a listbox (WAI-ARIA listbox); a fieldset groups form controls, not options -->
     <div
-      class="group said"
-      role="group"
-      aria-label={`Where “${finder.saidFor}” was said`}
+      class="acts"
+      aria-label={`${item.result.title}, what to do`}
       data-flip
+      role="group"
     >
-      <div class="head">Where “{finder.saidFor}” was said</div>
-      {@render whoChips()}
-      {#if finder.missing.length > 0}
-        <div class="coverage" data-flip>
-          <span class="num">{answered} of {machineCount}</span> machines<span
-            class="dot">·</span
-          >{hueOfMissing} didn't<span class="dot">·</span><button
-            class="link"
-            onclick={() => finder.retry()}
-            type="button">Retry</button
-          >
-        </div>
-      {/if}
-      {#if saidRows.length > 0}
-        {#each phone ? [...saidRows].reverse() : saidRows as result (stopKey(result))}
-          {@render rowFor(result, "said")}
-        {/each}
-      {:else if everyLate}
-        <Skeleton class="skeleton-row reason" />
-        <Skeleton class="skeleton-row reason" />
-      {/if}
+      {#each [["start", "Start a session here"], ["see", "See what runs here"]] as const as [act, label] (act)}
+        {@const k = `${row}#${act}`}
+        <button
+          id={idOf(k)}
+          class="act"
+          aria-selected={activeKey === k}
+          data-active={activeKey === k ? "" : undefined}
+          data-find-row
+          onclick={() => onmachine(item.result, act)}
+          onpointermove={() => hover(k)}
+          role="option"
+          tabindex="-1"
+          type="button"
+        >
+          <Server aria-hidden="true" />{label}
+        </button>
+      {/each}
     </div>
-  {/if}
-{/snippet}
-
-{#snippet nothingHere()}
-  <div class="nothing" data-flip>
-    <p class="nothing-line">No sessions for “{finder.text.trim()}”</p>
-    <button class="link" onclick={clear} type="button"
-      >Open today's sessions</button
+  {:else if item.t === "fold"}
+    {@const first = item.entry.results[0] as FindResult}
+    {@const Glyph = kindGlyph(first)}
+    {@const open = finder.unfolded.has(item.key)}
+    {@const count = item.entry.results.length}
+    <button
+      id={idOf(item.key)}
+      class={["fold-row", { phone }]}
+      aria-label={`${count} ${kindNoun(first, count)} match “${finder.asked}”, ${open ? "shown" : "folded"}`}
+      aria-selected={activeKey === item.key}
+      data-active={activeKey === item.key ? "" : undefined}
+      data-find-row
+      data-flip
+      onclick={() => pick(item.key)}
+      onpointermove={() => hover(item.key)}
+      role="option"
+      tabindex="-1"
+      type="button"
     >
-  </div>
-{/snippet}
-
-{#snippet doorway()}
-  {#if !phone}
-    {@render waitingRow_()}
-  {/if}
-  {#snippet group(label: string, rows: Spoken[])}
-    {#if rows.length > 0}
-      <!-- biome-ignore lint/a11y/useSemanticElements: an option group inside a listbox (WAI-ARIA listbox); a fieldset groups form controls, not options -->
-      <div class="group" role="group" aria-label={label} data-flip>
-        <div class="head">{label}</div>
-        {#each phone ? [...rows].reverse() : rows as result (stopKey(result))}
-          {@render rowFor(result, "names")}
-        {/each}
-      </div>
-    {/if}
-  {/snippet}
-  {#if phone}
-    {@render group("Earlier", doorwayEarlier)}
-    {@render group("Today", doorwayToday)}
-  {:else}
-    {@render group("Today", doorwayToday)}
-    {@render group("Earlier", doorwayEarlier)}
-  {/if}
-  {#if namesLate && nameRows.length === 0}
-    <div class="group" aria-hidden="true">
-      <Skeleton class="skeleton-row" />
-      <Skeleton class="skeleton-row" />
-      <Skeleton class="skeleton-row" />
-    </div>
-  {/if}
-  {#if phone}
-    {@render waitingRow_()}
-  {/if}
-{/snippet}
-
-{#snippet waitingRow_()}
-  {#if waitingCount > 0}
+      <Glyph class="fold-glyph" aria-hidden="true" />
+      <span class="fold-label"
+        ><span class="num">{count}</span>
+        {kindNoun(first, count)} match “{finder.asked}”</span
+      >
+      <ChevronRight
+        class={open ? "fold-chev open" : "fold-chev"}
+        aria-hidden="true"
+      />
+    </button>
+  {:else if item.t === "waiting"}
     <button
       id={idOf("waiting")}
       class={["waiting-row", { phone }]}
@@ -660,6 +646,33 @@
       >
       <ChevronRight class="fold-chev" aria-hidden="true" />
     </button>
+  {:else if item.t === "head"}
+    <div class="head" data-flip role="presentation">{item.label}</div>
+  {:else if item.t === "chips"}
+    {@render whoChips()}
+  {:else if item.t === "coverage"}
+    <div class="coverage" data-flip>
+      <span class="num">{answered} of {machines(machineCount)}</span><span
+        class="dot">·</span
+      >{missingNames} didn't<span class="dot">·</span><button
+        class="link"
+        onclick={() => finder.retry()}
+        type="button">Retry</button
+      >
+    </div>
+  {:else if item.t === "rule"}
+    <hr class="rule" data-flip />
+  {:else if item.t === "skeleton"}
+    <div class="skeleton-slot" aria-hidden="true" data-flip>
+      <Skeleton class={item.tall ? "skeleton-row tall" : "skeleton-row"} />
+    </div>
+  {:else if item.t === "nothing"}
+    <div class="nothing" data-flip>
+      <p class="nothing-line">No sessions for “{finder.text.trim()}”</p>
+      <button class="link" onclick={clear} type="button"
+        >Open today's sessions</button
+      >
+    </div>
   {/if}
 {/snippet}
 
@@ -673,27 +686,9 @@
     {@attach reflow()}
     {@attach highlight({ rows: "[data-find-row]", hovered: "data-active" })}
   >
-    {#if !finder.typed}
-      {@render doorway()}
-    {:else if finder.nothing}
-      {@render nothingHere()}
-    {:else if phone}
-      {@render saidSection()}
-      {#if saidShown && (nameRows.length > 0 || goTo.length > 0)}<hr
-          class="rule"
-          data-flip
-        />{/if}
-      {@render namesSection()}
-      {@render goToSection()}
-    {:else}
-      {@render goToSection()}
-      {#if goTo.length > 0 && nameRows.length > 0}<hr
-          class="rule"
-          data-flip
-        />{/if}
-      {@render namesSection()}
-      {@render saidSection()}
-    {/if}
+    {#each items as item (item.key)}
+      {@render item_(item)}
+    {/each}
   </div>
 {/snippet}
 
@@ -732,15 +727,19 @@
     {@attach highlight({ rows: "[data-find-row]", hovered: "data-active" })}
   >
     {#if finder.waiting.state === "ok" && waitingCount === 0}
-      <div class="nothing">
+      <div class="nothing" data-flip>
         <p class="nothing-line">Nothing waits for you</p>
         <button class="link" onclick={() => finder.showFind()} type="button"
           >Open today's sessions</button
         >
       </div>
     {:else if finder.waiting.state === "asking" || finder.waiting.state === "idle"}
-      <Skeleton class="skeleton-row" />
-      <Skeleton class="skeleton-row" />
+      <div class="skeleton-slot" aria-hidden="true" data-flip>
+        <Skeleton class="skeleton-row" />
+      </div>
+      <div class="skeleton-slot" aria-hidden="true" data-flip>
+        <Skeleton class="skeleton-row" />
+      </div>
     {:else}
       {#each finder.waitingItems as item (`${item.kind}:${item.id}`)}
         {@const key = `wait:${item.kind}:${item.id}`}
@@ -758,26 +757,22 @@
   </div>
 {/snippet}
 
-{#snippet fault()}
-  <div class="fault" role="alert">
-    {#if finder.hubDown}
-      Can't reach the hub. Nothing can be found until it's back.
-    {:else}
-      {finder.refused}.
-    {/if}
-    <button class="link" onclick={() => finder.retry()} type="button"
-      >Retry</button
-    >
-  </div>
-{/snippet}
-
 <div class={["finder", { phone }]}>
   {#if !phone}
     {@render field_()}
   {/if}
   <div class="body">
     {#if finder.hubDown || finder.refused}
-      {@render fault()}
+      <div class="fault" role="alert">
+        {#if finder.hubDown}
+          Can't reach the hub. Nothing can be found until it's back.
+        {:else}
+          {finder.refused}.
+        {/if}
+        <button class="link" onclick={() => finder.retry()} type="button"
+          >Retry</button
+        >
+      </div>
     {:else}
       {#key finder.view}
         <div class="view" in:crossIn out:crossOut>
@@ -798,13 +793,13 @@
         <span><kbd>↵</kbd> open</span><span><kbd>←</kbd> back</span><span
           ><kbd>esc</kbd></span
         >
-      {:else if finder.stops.length > 0}
-        <span><kbd>↵</kbd> {enterHint}</span>
-        {#if finder.active?.type === "row" || (finder.active?.type === "goto" && finder.active.result.kind === "machine")}
-          <span><kbd>→</kbd> peek</span>
-        {/if}
-        <span><kbd>esc</kbd></span>
       {:else}
+        {#if finder.stops.length > 0}
+          <span><kbd>↵</kbd> {enterHint}</span>
+          {#if peekable}
+            <span><kbd>→</kbd> peek</span>
+          {/if}
+        {/if}
         <span><kbd>esc</kbd></span>
       {/if}
     </div>
@@ -921,34 +916,20 @@
   .list.phone {
     justify-content: flex-end;
   }
-  .group {
-    display: flex;
-    flex-direction: column;
-  }
   .rule {
     flex: none;
     margin: var(--space-1) calc(-1 * var(--space-1));
     border: 0;
     border-block-start: 1px solid var(--border-hairline);
   }
-  .said {
-    border-block-start: 1px solid var(--border-hairline);
-    margin-inline: calc(-1 * var(--space-1));
-    padding-inline: var(--space-1);
-    margin-block-start: var(--space-1);
-  }
-  .said:first-child {
-    border-block-start: 0;
-    margin-block-start: 0;
-  }
 
   /* A group's head: uppercase label (DESIGN.md, the slash and @ menu). */
   .head {
-    display: flex;
-    align-items: center;
+    flex: none;
     block-size: 28px;
     padding-inline: var(--space-3);
     font: var(--type-caps);
+    line-height: 28px;
     text-transform: uppercase;
     letter-spacing: var(--track-caps);
     color: var(--ink-muted);
@@ -961,6 +942,7 @@
   .chips {
     display: flex;
     align-items: center;
+    flex: none;
     flex-wrap: wrap;
     gap: var(--space-1);
     min-block-size: 36px;
@@ -1033,6 +1015,7 @@
     color: var(--ink-muted);
   }
   .covered {
+    gap: 0.25em;
     color: var(--ink-subtle);
   }
   .searching :global(.spin) {
@@ -1043,6 +1026,7 @@
   .coverage {
     display: flex;
     align-items: center;
+    flex: none;
     block-size: 28px;
     padding-inline: var(--space-3);
     font: var(--type-meta);
@@ -1117,7 +1101,7 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  :global(.fold-chev) {
+  .list :global(.fold-chev) {
     color: var(--ink-muted);
   }
   @media (prefers-reduced-motion: no-preference) {
@@ -1128,16 +1112,14 @@
   .fold-row :global(.fold-chev.open) {
     rotate: 90deg;
   }
-  .fold-body {
-    display: flex;
-    flex-direction: column;
-  }
-  .peek-slot {
+  .peek-slot,
+  .skeleton-slot {
     flex: none;
   }
 
   .acts {
     display: flex;
+    flex: none;
     flex-direction: column;
     margin-inline-start: calc(var(--space-3) + var(--icon-md) + var(--space-2));
     padding-inline-start: var(--space-3);
@@ -1165,17 +1147,20 @@
     }
   }
 
-  .finder :global(.skeleton-row) {
-    flex: none;
-    block-size: 36px;
-    margin: 8px var(--space-3);
+  /* A skeleton at the size of the row it stands for: 52px, or 70px with its reason. */
+  .skeleton-slot {
+    padding: 8px var(--space-3);
   }
-  .finder :global(.skeleton-row.reason) {
+  .finder :global(.skeleton-row) {
+    block-size: 36px;
+  }
+  .finder :global(.skeleton-row.tall) {
     block-size: 54px;
   }
 
   .nothing {
     display: flex;
+    flex: none;
     flex-direction: column;
     align-items: flex-start;
     gap: 2px;
@@ -1230,6 +1215,7 @@
     inline-size: 44px;
     block-size: 44px;
   }
+
   .hints {
     display: flex;
     align-items: center;
