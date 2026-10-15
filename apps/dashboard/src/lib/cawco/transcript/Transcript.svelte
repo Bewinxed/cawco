@@ -75,7 +75,7 @@
     type FoldMemo,
     queuedFrom,
     type Row,
-    wellRuns,
+    wellRunsFrom,
   } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
@@ -181,16 +181,64 @@
    * pane takes the same turns at the scheduler's slow tier, so that by the
    * time it is switched to there is usually nothing left to fold.
    */
+  /** No settled rows: a build whose rows are all read afresh. */
+  const NO_ROWS: Row[] = [];
+  /**
+   * `read` of a build's settled rows (`Built`'s `settled`), once for each
+   * array the fold hands over: a new array is a settled row moved, gone or
+   * changed (rows.ts `stillDrawn`: the store's revision moves with every
+   * change to a message), so what was read of the last one still holds.
+   */
+  function perSettled<T>(read: (settled: Row[]) => T): (settled: Row[]) => T {
+    const seen = new WeakMap<Row[], T>();
+    return (settled) => {
+      if (!seen.has(settled)) {
+        seen.set(settled, read(settled));
+      }
+      return seen.get(settled) as T;
+    };
+  }
+  /** Which keys a list of rows holds. */
+  interface Keys {
+    has: (key: string) => boolean;
+  }
+  const settledKeys = perSettled(
+    (settled) => new Set(settled.map((row) => row.key))
+  );
+  /** The keys of `among`, which begins with `settled`: those read once, the rest now. */
+  function keysIn(among: Row[], settled: Row[]): Keys {
+    const known = settledKeys(settled);
+    const rest = new Set<string>();
+    for (let i = settled.length; i < among.length; i += 1) {
+      rest.add(among[i].key);
+    }
+    return { has: (key) => known.has(key) || rest.has(key) };
+  }
+  /** Where among settled rows the ones that can leave stand (`canLeave`): a failed send, a compaction running. */
+  const leavableIn = perSettled((settled) =>
+    settled.flatMap((row, index) => (canLeave(row) ? [index] : []))
+  );
   let frozen: Row[] = [];
-  /** A build: the rows, whether they grew at the front, and how the last live row ended. */
+  /** The rows `frozen` begins with as the fold keeps them (see `Built`). */
+  let frozenSettled: Row[] = NO_ROWS;
+  /**
+   * A build: the rows, whether they grew at the front, and how the last live
+   * row ended — and the array the rows begin with, `settled`: the fold's
+   * settled rows (rows.ts `FoldMemo.drawn`), the same array from one build to
+   * the next for as long as none of them moves. Whatever is read off every
+   * row is read off those once for each such array (`perSettled`), and off
+   * the rows after them each build: a streamed word moves the tail alone.
+   */
   interface Built {
     ended: Fold["ended"];
     rows: Row[];
+    settled: Row[];
     shifted: boolean;
   }
   /** The rows already on screen, handed back unchanged: nothing moved, nothing ended. */
   const STILL_BUILD = (): Built => ({
     rows: frozen,
+    settled: frozenSettled,
     shifted: false,
     ended: null,
   });
@@ -198,7 +246,7 @@
    * The second step of a change virtua has to take in two (see `build`):
    * the rows it ends on, and the bump that hands them over.
    */
-  let pending: Row[] | null = null;
+  let pending: { rows: Row[]; settled: Row[] } | null = null;
   let secondStep = $state(0);
   /** What `frozen` was folded from — the incremental fold's memory. */
   let memo: FoldMemo | null = null;
@@ -435,7 +483,12 @@
     const next = pending;
     pending = null;
     if (next && current) {
-      return { rows: next, shifted: frontOnly(frozen, next), ended: null };
+      return {
+        rows: next.rows,
+        settled: next.settled,
+        shifted: frontOnly(frozen, next.rows),
+        ended: null,
+      };
     }
     if (primed && current) {
       return STILL_BUILD();
@@ -491,8 +544,9 @@
     const folded = buildRowsFrom(session, memo);
     const { rows: next } = folded;
     ({ memo } = folded);
+    const settled = folded.memo.drawn.rows;
     ledger(folded);
-    noteMoves(frozen, next, folded.ended);
+    noteMoves(frozen, next, folded.ended, settled);
     // FRONT-CHANGE DETECTION for virtua's `shift` mode: an older history chunk
     // arriving puts new rows ABOVE everything on screen — without `shift`,
     // virtua keeps the scroll OFFSET and the content lurches toward the top
@@ -525,19 +579,28 @@
     if (landedNow && !shifted) {
       const was = tailStart(frozen);
       const now = tailStart(next);
-      if (frontOnly(frozen.slice(0, was), next.slice(0, now))) {
-        pending = next;
+      // The same settled rows, or as many, is no change in front: asked
+      // before copying either.
+      if (
+        settled !== frozenSettled &&
+        was !== now &&
+        frontOnly(frozen.slice(0, was), next.slice(0, now))
+      ) {
+        pending = { rows: next, settled };
         queueMicrotask(() => {
           secondStep += 1;
         });
         return {
           rows: [...frozen.slice(0, was), ...next.slice(now)],
+          // The last build's settled rows, still in front: a tail never
+          // holds a settled row (rows.ts `tailRows`).
+          settled: frozenSettled.length <= was ? frozenSettled : NO_ROWS,
           shifted: false,
           ended: folded.ended,
         };
       }
     }
-    return { rows: next, shifted, ended: folded.ended };
+    return { rows: next, settled, shifted, ended: folded.ended };
   }
 
   /**
@@ -620,11 +683,17 @@
    * rows at the end, or changes rows in place, moves nothing and measures
    * nothing.
    */
-  function noteMoves(prior: Row[], next: Row[], ended: Fold["ended"]): void {
+  function noteMoves(
+    prior: Row[],
+    next: Row[],
+    ended: Fold["ended"],
+    settled: Row[]
+  ): void {
     if (!untrack(() => landed && watched && motionOk.current)) {
       return;
     }
-    let from = 0;
+    // Both begin with the same settled rows: those are in their places.
+    let from = settled === frozenSettled ? settled.length : 0;
     while (
       from < prior.length &&
       from < next.length &&
@@ -914,8 +983,9 @@
   // $derived). An $effect runs after the derived is read but before the DOM
   // renders, so the bookkeeping stays in sync with what the Virtualizer sees.
   $effect(() => {
-    const { rows: next } = built;
+    const { rows: next, settled } = built;
     frozen = next;
+    frozenSettled = settled;
     primed = true;
     // The append has landed: the rows on screen are the session's again, and
     // the indicator under them has nothing left to wait for.
@@ -997,7 +1067,7 @@
   let leaving: Standing[] = [];
   let leftTick = $state(0);
   /** The keys the list drew last: a row not among them is new. */
-  let drawnKeys = new Set<string>();
+  let drawnKeys: Keys = new Set<string>();
   /**
    * The row that takes a leaving row's place: whether it takes the place in
    * on top of its own (`absorbs`), and whether it is a different row from
@@ -1044,13 +1114,17 @@
   const presentation = $derived.by(() => {
     // biome-ignore lint/complexity/noVoid: a row finishing its fold re-draws the list without it.
     void leftTick;
-    const { rows: next, ended } = built;
-    return untrack(() => withLeaving(next, ended));
+    const { rows: next, ended, settled } = built;
+    return untrack(() => withLeaving(next, settled, ended));
   });
 
-  /** The rows as drawn: `next`, with the rows folding shut where they stood. */
-  function withLeaving(next: Row[], ended: Fold["ended"]) {
-    const present = new Set(next.map((row) => row.key));
+  /**
+   * The rows as drawn: `next`, with the rows folding shut where they stood,
+   * and the settled rows they still begin with — none, when a row folding
+   * shut stands among those.
+   */
+  function withLeaving(next: Row[], settled: Row[], ended: Fold["ended"]) {
+    const present = keysIn(next, settled);
     const folding = new Set(leaving.map(({ row }) => row.key));
     const handed = new Map<string, Handoff>();
     // Only a row on screen folds or hands its place on: one outside virtua's
@@ -1069,7 +1143,11 @@
       }
     }
     leaving = leaving.filter(({ row }) => !present.has(row.key));
-    const drawn = [...next];
+    // The rows themselves, when nothing folds: a streamed word copies none.
+    const drawn = leaving.length > 0 ? [...next] : next;
+    // Where the first row put back in stands: one among the settled rows
+    // means the list no longer begins with them.
+    let first = drawn.length;
     // Each goes back in where it stood. One that stood under another row on
     // its way out goes in once that one is in; one whose place is not in the
     // list any more — the rows around it read again from history — was not
@@ -1084,16 +1162,19 @@
           return true;
         }
         drawn.splice(at, 0, row);
+        first = Math.min(first, at);
         placed = true;
         return false;
       });
     }
     const lost = new Set(unplaced.map(({ row }) => row.key));
     leaving = leaving.filter(({ row }) => !lost.has(row.key));
-    standing = standingIn(drawn, present);
-    drawnKeys = new Set(drawn.map((row) => row.key));
+    const begins = first >= settled.length ? settled : NO_ROWS;
+    standing = standingIn(drawn, begins, present);
+    drawnKeys = keysIn(drawn, begins);
     return {
       rows: drawn,
+      settled: begins,
       leaving: new Set(leaving.map(({ row }) => row.key)),
       handed,
     };
@@ -1196,7 +1277,8 @@
     }
     const { row } = stood;
     if (row.kind === "livetool") {
-      const holder = next.find(
+      // From the end: the call has just landed, in the newest runs.
+      const holder = next.findLast(
         (r) =>
           r.kind === "tools" &&
           r.messages.some(
@@ -1244,10 +1326,12 @@
    */
   function standingIn(
     drawn: Row[],
-    present: Set<string>
+    settled: Row[],
+    present: Keys
   ): Map<string, Standing> {
     const stood = new Map<string, Standing>();
-    drawn.forEach((row, index) => {
+    const stand = (index: number) => {
+      const row = drawn[index];
       if (!(present.has(row.key) && canLeave(row))) {
         return;
       }
@@ -1259,7 +1343,14 @@
         }
       }
       stood.set(row.key, { above, row });
-    });
+    };
+    // Among the settled rows, the few that can leave were found once.
+    for (const index of leavableIn(settled)) {
+      stand(index);
+    }
+    for (let index = settled.length; index < drawn.length; index += 1) {
+      stand(index);
+    }
     return stood;
   }
 
@@ -1278,7 +1369,8 @@
     }
     for (const key of above) {
       const as = key === ended?.key && ended.into ? ended.into : key;
-      const index = drawn.findIndex((row) => row.key === as);
+      // From the end: the rows a row stood under are the tail's, nearly always.
+      const index = drawn.findLastIndex((row) => row.key === as);
       if (index >= 0) {
         return index + 1;
       }
@@ -1290,11 +1382,23 @@
    * The reader's rows whose well runs on into the next. A row folding away is
    * already out of its run: the rows either side close or join over its fold.
    */
-  const runsOn = $derived.by(() => {
+  const runsOn = $derived.by((): Keys => {
     const drawn = renderedRows;
-    const { leaving: gone } = presentation;
-    return untrack(() => wellRuns(drawn, (key) => gone.has(key)));
+    const { leaving: gone, settled } = presentation;
+    return untrack(() => {
+      // No row folding away stands among the settled rows (`withLeaving`).
+      const before = settledRuns(settled);
+      const after = wellRunsFrom(
+        drawn.slice(settled.length),
+        (key) => gone.has(key),
+        before.above
+      ).runs;
+      return { has: (key) => before.runs.has(key) || after.has(key) };
+    });
   });
+  const settledRuns = perSettled((settled) =>
+    wellRunsFrom(settled, () => false, null)
+  );
 
   /**
    * THE TAIL STAYS MOUNTED.
@@ -1319,15 +1423,22 @@
    */
   const keepMounted = $derived.by(() => {
     const count = renderedRows.length;
-    return [
-      ...Array.from(
-        { length: Math.min(TAIL_MOUNTED, count) },
-        (_, i) => count - 1 - i
-      ),
-      ...renderedRows.flatMap((row, index) =>
-        presentation.leaving.has(row.key) ? [index] : []
-      ),
-    ];
+    const { leaving: folding, settled } = presentation;
+    const kept = Array.from(
+      { length: Math.min(TAIL_MOUNTED, count) },
+      (_, i) => count - 1 - i
+    );
+    // A row folding shut stands after the settled rows (`withLeaving`).
+    for (
+      let index = settled.length;
+      folding.size > 0 && index < count;
+      index += 1
+    ) {
+      if (folding.has(renderedRows[index].key)) {
+        kept.push(index);
+      }
+    }
+    return kept;
   });
 
   function left(key: string): void {
@@ -2271,12 +2382,12 @@
   }
 
   /** Fire `onlanded` once, the first time the transcript has content. */
-  let settled = false;
+  let landingTold = false;
   function settle(): void {
-    if (settled) {
+    if (landingTold) {
       return;
     }
-    settled = true;
+    landingTold = true;
     onlanded?.();
   }
 
@@ -2398,14 +2509,21 @@
    * — read off the rows drawn, so a row folding shut keeps its gap, and the
    * rows around it theirs, until it is gone.
    */
-  const continued = $derived.by(() => {
+  const continued = $derived.by((): Keys => {
     const rowList = renderedRows;
-    return untrack(() => continuesAbove(rowList));
+    const { settled } = presentation;
+    return untrack(() => {
+      const before = settledContinued(settled);
+      const after = continuesAbove(rowList, settled.length);
+      return { has: (key) => before.has(key) || after.has(key) };
+    });
   });
+  const settledContinued = perSettled((settled) => continuesAbove(settled, 1));
 
-  function continuesAbove(rowList: Row[]): Set<string> {
+  /** The keys of `rowList`'s rows from `from` on that continue the line above them. */
+  function continuesAbove(rowList: Row[], from: number): Set<string> {
     const keys = new Set<string>();
-    for (let i = 1; i < rowList.length; i += 1) {
+    for (let i = Math.max(1, from); i < rowList.length; i += 1) {
       if (!railLed(rowList[i])) {
         continue;
       }
@@ -2436,10 +2554,11 @@
     }
     let slot = 0;
     // The calls whose glance the last build drew: each is that glance, landed.
+    // A glance is a tail row (`tailStart`): only the tail is read.
     const glanced = new Set(
-      frozen.flatMap((row) =>
-        row.kind === "livetool" ? [row.glance.toolId] : []
-      )
+      frozen
+        .slice(tailStart(frozen))
+        .flatMap((row) => (row.kind === "livetool" ? [row.glance.toolId] : []))
     );
     for (const { id, row } of fresh) {
       if (!(live || LIVE_KINDS.has(row.kind))) {

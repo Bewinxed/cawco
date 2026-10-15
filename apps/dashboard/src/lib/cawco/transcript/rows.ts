@@ -222,8 +222,21 @@ export function wellRuns(
   rows: Row[],
   gone: (key: string) => boolean = () => false
 ): Set<string> {
+  return wellRunsFrom(rows, gone, null).runs;
+}
+
+/**
+ * `wellRuns` over `rows` read on from where an earlier stretch ended: `above`
+ * is the reader's row that stretch ended on, if it did, and `runs` may hold
+ * its key. And where this stretch ends, for the next one.
+ */
+export function wellRunsFrom(
+  rows: Row[],
+  gone: (key: string) => boolean,
+  from: string | null
+): { above: string | null; runs: Set<string> } {
   const runs = new Set<string>();
-  let above: string | null = null;
+  let above = from;
   for (const row of rows) {
     const v = voiceOf(row);
     if (v === "none" || gone(row.key)) {
@@ -235,7 +248,7 @@ export function wellRuns(
     }
     above = you ? row.key : null;
   }
-  return runs;
+  return { above, runs };
 }
 
 /** Where the voices stand after `rows`, from the top of the transcript. */
