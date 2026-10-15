@@ -121,7 +121,7 @@ function pageMarkup(): Plugin {
         const tags: HtmlTagDescriptor[] = [
           {
             tag: 'style',
-            attrs: { 'data-caw-steps': '' },
+            attrs: { 'data-clip-steps': '' },
             children: [...clips.values()].map((made) => made.css).join(''),
             injectTo: 'head',
           },
