@@ -30,7 +30,9 @@
  *     A runs meanwhile.
  * p4. An acceptance check with `machine: probe-b` waits, its item's status
  *     naming the pause and its end.
- * p5. The hub restarted mid-pause keeps the pause.
+ * p5. The hub restarted mid-pause, with a minute of it left, keeps the
+ *     pause, and the waiting check, resumed, still says why it waits.
+ * p1–p4 are read while the pause lasts; p6 once it has ended.
  * p6. At the end everything proceeds: the interrupted delegate carries on
  *     and reads the handoff, the queued delegate starts on B, the check runs
  *     and the item lands; B is no longer paused.
@@ -389,6 +391,13 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
   const c = await probe.delegate("Checker", `${FINISH_C}: finish once told.`, {
     checks: [{ name: "On B", command: "echo ran-on-b", machine: B }],
   });
+  // C at work on A before B is paused: its turn under way, spinning.
+  await until(
+    "C at work on A",
+    () => heard.get("C")?.length,
+    (count) => count >= 2,
+    180_000
+  );
 
   // p1
   const pausedAt = Date.now();
@@ -444,18 +453,22 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     q.queued !== null && q.workItemId === null && q.text.includes(words),
     JSON.stringify(q)
   );
+  // Every check of the pause reads it while it lasts: p3 and p4 by the time
+  // the restart (p5) needs, with a minute of the pause still to come.
+  const restartBy = until_ - 60_000;
+  const before = (at: number) => Math.max(1000, at - Date.now());
   const cWorked = () =>
     (heard.get("C") ?? []).filter((seen) => seen.at > pausedAt).length;
   await until(
     "C at work on A during the pause",
     cWorked,
-    (count) => count >= 2,
-    120_000
+    (count) => count >= 1,
+    before(restartBy)
   ).catch(() => undefined);
   const cRan = check(
     "p3: a delegate on A runs meanwhile",
-    cWorked() >= 2,
-    `C's requests since the pause: ${cWorked()}; all of C's: ${story("C", pausedAt)}`
+    cWorked() >= 1,
+    `C's requests since the pause: ${cWorked()}; all of C's:\n  ${story("C", pausedAt)}`
   );
 
   // p4
@@ -463,23 +476,32 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     fleet.api<{ id: string; checkQueue: { words: string } | null }[]>(
       `/api/work-items?parent=${probe.parent}`
     );
-  const waiting = await until(
-    "C's check waiting on B",
-    async () =>
-      (await tray()).find((item) => item.id === c.workItemId)?.checkQueue
-        ?.words,
-    (status) => status.includes("paused"),
-    120_000
-  ).catch(() => undefined);
+  const checkWait = () =>
+    until(
+      "C's check waiting on B",
+      async () =>
+        (await tray()).find((item) => item.id === c.workItemId)?.checkQueue
+          ?.words,
+      (status) => status.includes("paused"),
+      before(restartBy)
+    ).catch(() => undefined);
+  const cItem = () =>
+    JSON.stringify(
+      fleet.query(
+        "SELECT state, checking_since, error FROM work_items WHERE id = ?",
+        c.workItemId as string
+      )[0]
+    );
+  const waiting = await checkWait();
   const cWaited = check(
     "p4: a check with machine: probe-b waits, its item's status naming the pause and its end",
     waiting?.includes(words) === true,
-    `${waiting ?? "no wait said"}; C's item: ${JSON.stringify(fleet.query("SELECT state, checking_since, error FROM work_items WHERE id = ?", c.workItemId as string)[0])}`
+    `${waiting ?? "no wait said"}; C's item: ${cItem()}; all of C's:\n  ${story("C", pausedAt)}`
   );
   const bQuiet = check(
     "p1–p4: nothing reached the delegate on B while paused",
-    probe.since("B", pausedAt).length === 0,
-    story("B", pausedAt)
+    Date.now() < until_ && probe.since("B", pausedAt).length === 0,
+    `${Math.round((until_ - Date.now()) / 1000)}s of the pause left; B's requests since it began:\n  ${story("B", pausedAt)}`
   );
   if (!(cRan && cWaited && bQuiet)) {
     // The hub's own account of the pause and of what it sent B and C.
@@ -505,6 +527,21 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     "p5: the hub restarted mid-pause keeps the pause",
     kept === until_ && Date.now() < until_,
     `pausedUntil ${kept}, ${Math.round((until_ - Date.now()) / 1000)}s left`
+  );
+  // The check its finish_item started waits again under the new hub (its
+  // checks resumed as A registers), still saying why.
+  const resumed = await until(
+    "C's check waiting again after the restart",
+    async () =>
+      (await tray()).find((item) => item.id === c.workItemId)?.checkQueue
+        ?.words,
+    (status) => status.includes("paused"),
+    before(until_ - 5000)
+  ).catch(() => undefined);
+  check(
+    "p5: after the restart the check still waits, saying so",
+    resumed?.includes(words) === true,
+    `${resumed ?? "no wait said"}; C's item: ${cItem()}`
   );
 
   // p6
