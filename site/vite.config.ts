@@ -180,10 +180,55 @@ const returnPath: Plugin = {
   },
 };
 
+/**
+ * The native app's price and free week are the app's own: the price is the Pro product in
+ * apps/apple/StoreKit/CawCo.storekit, and the free week is the paywall's terms line in
+ * PaywallCopy.swift. The pricing card and llms.txt both say them, so the build stops if
+ * either has drifted from the app.
+ */
+const appPrice: Plugin = {
+  name: 'cawco-app-price',
+  buildStart() {
+    const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+    const store = JSON.parse(read('../apps/apple/StoreKit/CawCo.storekit')) as {
+      products: { productID: string; type: string; displayPrice: string }[];
+    };
+    const pro = store.products.find((p) => p.productID === 'dev.cawco.app.pro');
+    if (pro?.type !== 'NonConsumable') {
+      throw new Error(
+        `CawCo.storekit has no one-time dev.cawco.app.pro (found ${pro?.type ?? 'nothing'}).`,
+      );
+    }
+    const paywall = read(
+      '../apps/apple/Packages/CawCoKit/Sources/CawCoScreens/Paywall/PaywallCopy.swift',
+    );
+    const days = paywall.match(/"(\d+) days free, then \\\(price/)?.[1];
+    if (!days) throw new Error('PaywallCopy.swift no longer says how many days are free.');
+    const price = `$${pro.displayPrice}`;
+
+    const page = read('./index.html');
+    const card = page.match(/<h3>The native app<\/h3>([\s\S]*?)<\/article>/)?.[1] ?? '';
+    const llms = read('./public/llms.txt');
+    const claims: [where: string, text: string, says: string][] = [
+      ['The pricing card in index.html', card, `<p class="price">${price} <span>once</span></p>`],
+      ['The pricing card in index.html', card, `${days} days free`],
+      ['public/llms.txt', llms, `${price} once`],
+      ['public/llms.txt', llms, `${days} days free`],
+    ];
+    for (const [where, text, says] of claims) {
+      if (!text.replace(/\s+/g, ' ').includes(says)) {
+        throw new Error(
+          `${where} doesn't say "${says}", as the app's StoreKit product and paywall do.`,
+        );
+      }
+    }
+  },
+};
+
 export default defineConfig({
   // Relative URLs, so the same build works at cawco.dev's root and under a preview path.
   base: './',
-  plugins: [pageMarkup(), paperGround, returnPath],
+  plugins: [pageMarkup(), paperGround, returnPath, appPrice],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

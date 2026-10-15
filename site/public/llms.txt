@@ -28,7 +28,7 @@ To add another machine, use Add machine in the dashboard instead of running this
 
 The hub, the daemon and the board are free. You run them on your own machines.
 
-A native app for iPhone, iPad and Mac will cost $9.99, paid once, with no trial. It is not released yet.
+The native app for iPhone, iPad and Mac is the same board. It is 7 days free, then $29.99 once, with no subscription, and one purchase covers every iPhone, iPad and Mac on your Apple Account. It is not released yet.
 
 ## Links
 
