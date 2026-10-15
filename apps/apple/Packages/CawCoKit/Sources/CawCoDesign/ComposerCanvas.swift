@@ -126,6 +126,16 @@ enum CanvasDebug {
         if arguments.contains("-send-probe-busy") { return "open" }
         return nil
     }()
+    /// `-canvas-probe-enter`: the next entry's ticket is spoiled, so the hub refuses it as forged.
+    @MainActor static var spoilNextTicket = false
+
+    /// The address a canvas page's load goes to: its ticket spoiled when the probe asked.
+    @MainActor static func loading(_ url: URL) -> URL {
+        guard spoilNextTicket, url.path() == "/__cawco/enter",
+              let spoiled = URL(string: url.absoluteString.replacingOccurrences(of: "ticket=", with: "ticket=spoiled")) else { return url }
+        spoilNextTicket = false
+        return spoiled
+    }
 }
 #endif
 
@@ -193,6 +203,10 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     }
     /// Its last load failed: the next attach loads it again.
     private(set) var broken = false
+    #if DEBUG
+    /// How many times its page has said it joined (`cawco:ready`), for the canvas probe.
+    private(set) var readies = 0
+    #endif
     /// This load's answer was refused by status: WebKit's own word for the cancel is not the reason.
     private var answerRefused = false
     /// Where the canvas stands, told to the page (`cawco:place`): the rail's Dock reads Undock while docked.
@@ -308,9 +322,12 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
             }
             guard !Task.isCancelled else { return }
             #if DEBUG
-            CanvasDebug.log.notice("canvas page loads \(url.absoluteString, privacy: .public)")
-            #endif
+            let load = CanvasDebug.loading(url)
+            CanvasDebug.log.notice("canvas page loads \(load.absoluteString, privacy: .public)")
+            web.load(URLRequest(url: load))
+            #else
             web.load(URLRequest(url: url))
+            #endif
         }
     }
 
@@ -483,6 +500,9 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
             // before the page's module ran, and nothing heard it but the overlay.
             if first { tellPlace() }
         case "cawco:ready":
+            #if DEBUG
+            readies += 1
+            #endif
             connected = true
             // In: a later lapse of its pass may enter again.
             reentered = false

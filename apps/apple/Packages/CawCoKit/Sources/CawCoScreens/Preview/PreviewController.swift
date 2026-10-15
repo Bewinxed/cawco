@@ -529,7 +529,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             do {
                 let url = try await hub.previewLoad(place, in: instanceId, byHost: byHost)
                 guard !Task.isCancelled else { return }
+                #if DEBUG
+                web.load(URLRequest(url: PreviewProbe.loading(url)))
+                #else
                 web.load(URLRequest(url: url))
+                #endif
             } catch {
                 guard !Task.isCancelled else { return }
                 failed("The hub didn't give this preview a pass: \(error.localizedDescription)", of: nil)
@@ -544,6 +548,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func webView(_: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
                  decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void) {
         let status = (navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0
+        #if DEBUG
+        if navigationResponse.isForMainFrame {
+            PreviewProbe.say("preview answered \(status) for \(navigationResponse.response.url?.absoluteString ?? "?")")
+        }
+        #endif
         guard byHost, navigationResponse.isForMainFrame, status == 401, !reentered,
               let at = navigationResponse.response.url ?? start else { return decisionHandler(.allow) }
         reentered = true
@@ -563,6 +572,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         comment(false)
         #if DEBUG
         PreviewProbe.say("preview document")
+        PreviewProbe.documents += 1
         #endif
     }
 
@@ -697,6 +707,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         connected = true
         // In: a later lapse of its pass may enter again.
         reentered = false
+        #if DEBUG
+        PreviewProbe.say("preview ready")
+        if byHost { PreviewProbe.lapse(web) }
+        #endif
         commentButton.isEnabled = true
         paintSend()
         // The page's mode as the person left it, and the open card's pin tracked again.
@@ -749,6 +763,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     private func failed(_ message: String, of: String?) {
+        #if DEBUG
+        PreviewProbe.say("preview failed: \(message)")
+        #endif
         failureOf = of
         failure.label.text = message
         failure.isHidden = false
@@ -1654,3 +1671,54 @@ private final class WeakHandler: NSObject, WKScriptMessageHandler {
         target?.userContentController(controller, didReceive: message)
     }
 }
+
+#if DEBUG
+/// `-preview-lapse` (scripts/probe-kit/specs/ios-preview-enter.ts): host
+/// mode's pass taken away twice. Once the page is first ready its web view's
+/// cookies go and it reloads, so the origin turns it away (401) and the
+/// preview enters again; once ready again the same, with the next ticket
+/// spoiled, so the entry turns it away too: a second 401 in a row, which
+/// stands. Each step is a `preview lapse` line.
+extension PreviewProbe {
+    static let lapseAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-lapse")
+    /// Documents the web view has committed this launch.
+    static var documents = 0
+    /// The document the last lapse was taken on: the overlay can say it is ready more than once a document.
+    private static var lapsedOn = 0
+    /// How many lapses this launch has taken.
+    private static var readies = 0
+    /// The next entry's ticket is spoiled, so the hub refuses it as forged.
+    private static var spoilNext = false
+
+    /// The address a load goes to, said as `preview loads`: the ticket spoiled when the lapse asked.
+    static func loading(_ url: URL) -> URL {
+        var url = url
+        if spoilNext, url.path() == "/__cawco/enter",
+           let spoiled = URL(string: url.absoluteString.replacingOccurrences(of: "ticket=", with: "ticket=spoiled")) {
+            spoilNext = false
+            url = spoiled
+        }
+        say("preview loads \(url.absoluteString)")
+        return url
+    }
+
+    /// The page is ready: on the first and second time, its pass goes and it reloads.
+    static func lapse(_ web: WKWebView) {
+        guard lapseAtLaunch, documents != lapsedOn else { return }
+        lapsedOn = documents
+        readies += 1
+        guard readies <= 2 else { return }
+        let lapse = readies
+        let spoil = lapse == 2
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            let store = web.configuration.websiteDataStore.httpCookieStore
+            let cookies = await store.allCookies()
+            for cookie in cookies { await store.deleteCookie(cookie) }
+            say("preview lapse \(lapse) deleted \(cookies.map(\.name).joined(separator: ",")) spoil=\(spoil)")
+            spoilNext = spoil
+            web.reload()
+        }
+    }
+}
+#endif

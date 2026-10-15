@@ -142,42 +142,53 @@ export const spendTicket = (
 };
 
 /**
- * The pass cookie's name and attributes for an origin. On https it is
- * `__Host-` and `Secure; SameSite=None`, so a frame of the dashboard carries
- * it. Plain http on `localhost` or a `.localhost` name, which browsers treat
- * as a secure context, takes `Secure; SameSite=None` too, without the prefix
- * (Chrome refuses `__Host-` there). Any other plain http name can hold no
- * cross-site cookie at all (`SameSite=None` needs `Secure`), so its pass is
- * `SameSite=Lax`: it stands in the app's web views and a tab of its own, and
- * in a frame only when the dashboard is the same site.
+ * The pass cookie's name, and its attributes for the entry `request` makes.
+ * On https it is `__Host-` and `Secure; SameSite=None`, so a frame of the
+ * dashboard carries it. Plain http on `localhost` or a `.localhost` name,
+ * which Chrome treats as a secure context, takes `Secure; SameSite=None` too,
+ * without the prefix (Chrome refuses `__Host-` there), when it is entered in
+ * a frame. WebKit stores no `Secure` cookie over plain http, `.localhost`
+ * included (WebKit bug 232088), so a document of its own there (the app's
+ * web views, a tab; `Sec-Fetch-Dest: document`) takes `SameSite=Lax`, which
+ * its own page, socket and loads carry. Any other plain http name can hold
+ * no cross-site cookie at all (`SameSite=None` needs `Secure`), so its pass
+ * is `SameSite=Lax`: it stands in the app's web views and a tab of its own,
+ * and in a frame only when the dashboard is the same site.
  */
 export interface PassCookie {
-  attributes: string;
+  attributes: (request: Request) => string;
   name: string;
 }
+
+const CROSS_SITE = "Path=/; Secure; HttpOnly; SameSite=None";
+const SAME_SITE = "Path=/; HttpOnly; SameSite=Lax";
 
 export const passCookie = (
   scheme: "http" | "https",
   hostname: string
 ): PassCookie => {
   if (scheme === "https") {
-    return {
-      name: "__Host-cawco-preview",
-      attributes: "Path=/; Secure; HttpOnly; SameSite=None",
-    };
+    return { name: "__Host-cawco-preview", attributes: () => CROSS_SITE };
   }
   return hostname === "localhost" || hostname.endsWith(".localhost")
     ? {
         name: "cawco-preview",
-        attributes: "Path=/; Secure; HttpOnly; SameSite=None",
+        attributes: (request) =>
+          request.headers.get("sec-fetch-dest") === "document"
+            ? SAME_SITE
+            : CROSS_SITE,
       }
-    : { name: "cawco-preview", attributes: "Path=/; HttpOnly; SameSite=Lax" };
+    : { name: "cawco-preview", attributes: () => SAME_SITE };
 };
 
-/** The `Set-Cookie` value that lets the browser into session `instanceId`'s origin. */
-const setPass = (cookie: PassCookie, instanceId: string): string => {
+/** The `Set-Cookie` value that lets the browser that sent `request` into session `instanceId`'s origin. */
+const setPass = (
+  cookie: PassCookie,
+  request: Request,
+  instanceId: string
+): string => {
   const body: PassBody = { s: instanceId, e: Date.now() + PASS_MS };
-  return `${cookie.name}=${signed("pass", body)}; Max-Age=${PASS_MS / 1000}; ${cookie.attributes}`;
+  return `${cookie.name}=${signed("pass", body)}; Max-Age=${PASS_MS / 1000}; ${cookie.attributes(request)}`;
 };
 
 /**
@@ -261,7 +272,7 @@ export const enter = (
       status: 302,
       headers: {
         location: placeOf(url),
-        "set-cookie": setPass(cookie, instanceId),
+        "set-cookie": setPass(cookie, request, instanceId),
         "cache-control": "no-store",
       },
     }),

@@ -2,6 +2,7 @@
 import CawCoCore
 import OSLog
 import UIKit
+import WebKit
 
 /// A simulator pass's canvas probe (scripts/probe-ios-composer-canvas.ts),
 /// every line in the Probe log as `canvas …`. Three passes, one launch each:
@@ -42,10 +43,11 @@ import UIKit
 ///   listing it.
 @MainActor
 enum CanvasProbe {
-    private enum Pass { case pen, draw, wheel, still, sync }
+    private enum Pass { case pen, draw, wheel, still, sync, enter }
     private static var pass: Pass? = {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-canvas-probe") { return .pen }
+        if arguments.contains("-canvas-probe-enter") { return .enter }
         if arguments.contains("-canvas-probe-draw") { return .draw }
         if arguments.contains("-canvas-probe-wheel") { return .wheel }
         if arguments.contains("-canvas-probe-still") { return .still }
@@ -101,8 +103,80 @@ enum CanvasProbe {
         case .wheel: await wheelPass(composer, window)
         case .still: await stillPass(composer)
         case .sync: await syncPass(composer)
+        case .enter: await enterPass(composer)
         }
         say("done")
+    }
+
+    // MARK: Host mode's entry
+
+    /// `-canvas-probe-enter` (scripts/probe-kit/specs/ios-preview-enter.ts):
+    /// Draw opens the canvas and its page joins its doc; the spec reads how
+    /// it loaded from the Canvas log (`loads`, `answered`). In host mode,
+    /// then: its pass taken away (cookies gone, a reload), the page enters
+    /// again once and joins; the export's page (`exportCanvas`, its
+    /// `origin`) is the same page and a web view of its own enters it and
+    /// joins; and taken away once more with the next ticket spoiled, the
+    /// second refusal in a row breaks the load, with no third load.
+    private static func enterPass(_ composer: ComposerView) async {
+        guard let binding = composer.binding, let host = binding.canvasHost else { return }
+        composer.openCanvas()
+        let joined = await until(30) { composer.canvasRoom?.web?.connected == true }
+        guard joined, let web = composer.canvasRoom?.web, let canvas = binding.canvas else {
+            return check("enter: Draw opens a canvas whose page joins its doc", false, "note \(composer.probeCanvasNote ?? "none")")
+        }
+        check("enter: Draw opens a canvas whose page joins its doc", true, "origin \(web.page.origin.absoluteString) byHost \(web.page.byHost)")
+        guard web.page.byHost else { return }
+
+        let joins = await takePass(web, spoil: false)
+        let back = await until(20) { web.readies > joins && web.connected }
+        check("lapse: the page enters again and joins", back && !web.broken, "joined again \(back), broken \(web.broken)")
+
+        do {
+            let export = try await host.hub.exportCanvas(canvas.id, name: canvas.name)
+            let session = binding.sessionId
+            let fresh = CanvasWeb(page: export.page, instanceId: session) { place in
+                try await host.hub.previewLoad(place, in: session, byHost: export.page.byHost)
+            }
+            fresh.web.frame = CGRect(x: 0, y: 0, width: 320, height: 400)
+            composer.window?.insertSubview(fresh.web, at: 0)
+            fresh.load()
+            let ready: Bool
+            do {
+                try await fresh.ready()
+                ready = true
+            } catch {
+                ready = false
+            }
+            check("export: its page is the canvas's, and a web view of its own enters it and joins",
+                  export.page == web.page && ready,
+                  "export origin \(export.page.origin.absoluteString) byHost \(export.page.byHost), the same page \(export.page == web.page), joined \(ready)")
+            fresh.close()
+            fresh.web.removeFromSuperview()
+        } catch {
+            check("export: its page is the canvas's, and a web view of its own enters it and joins", false, "export: \(error.localizedDescription)")
+        }
+
+        await takePass(web, spoil: true)
+        let broke = await until(15) { web.broken }
+        await wait(5)
+        check("twice: a second refusal in a row breaks the load and stands", broke && !web.connected, "broken \(broke), joined \(web.connected)")
+    }
+
+    /// The canvas page's pass goes (its web view's cookies), the next ticket
+    /// spoiled when `spoil`, and the page reloads; answers how many times it
+    /// had joined just before.
+    @discardableResult
+    private static func takePass(_ web: CanvasWeb, spoil: Bool) async -> Int {
+        await wait(2)
+        let store = web.web.configuration.websiteDataStore.httpCookieStore
+        let cookies = await store.allCookies()
+        for cookie in cookies { await store.deleteCookie(cookie) }
+        say("lapse deleted \(cookies.map(\.name).joined(separator: ",")) spoil=\(spoil)")
+        CanvasDebug.spoilNextTicket = spoil
+        let joins = web.readies
+        web.web.reload()
+        return joins
     }
 
     /// Where the script's finger goes down: the pill's middle, in the window's points.
