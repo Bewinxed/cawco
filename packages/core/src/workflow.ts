@@ -161,6 +161,12 @@ export interface WorkflowRun {
   state: Record<string, unknown>;
   status: WorkflowRunStatus;
   supervisorInstanceId: string | null;
+  /**
+   * What a command of the run (`w.exec`) waits for now, as said: "waiting:
+   * Omars-MacBook-Pro is paused until 00:57", or a shared slot it is queued
+   * for. Null when it waits for nothing.
+   */
+  waiting: string | null;
   workflowId: string;
   workspace: string;
 }

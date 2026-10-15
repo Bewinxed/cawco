@@ -22134,6 +22134,13 @@
           "launchedBy": {
             "type": "string"
           },
+          "waiting": {
+            "description": "What a command of the run (`w.exec`) waits for now, as said: \"waiting:\nOmars-MacBook-Pro is paused until 00:57\", or a shared slot it is queued\nfor. Null when it waits for nothing.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "edges": {
             "type": "object"
           },
@@ -22168,6 +22175,7 @@
           "status",
           "steps",
           "supervisorInstanceId",
+          "waiting",
           "workflowId",
           "workspace"
         ]
@@ -22316,6 +22324,13 @@
           {
             "type": "object",
             "properties": {
+              "waiting": {
+                "description": "What a command of the run (`w.exec`) waits for now, as said: \"waiting:\nOmars-MacBook-Pro is paused until 00:57\", or a shared slot it is queued\nfor. Null when it waits for nothing.",
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "edges": {
                 "type": "object"
               },
@@ -22333,7 +22348,8 @@
             "required": [
               "edges",
               "loops",
-              "planned"
+              "planned",
+              "waiting"
             ]
           }
         ]
@@ -45105,6 +45121,13 @@
               "string"
             ]
           },
+          "waiting": {
+            "description": "What a command of the run (`w.exec`) waits for now, as said: \"waiting:\nOmars-MacBook-Pro is paused until 00:57\", or a shared slot it is queued\nfor. Null when it waits for nothing.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "workflowId": {
             "type": "string"
           },
@@ -45131,6 +45154,7 @@
           "state",
           "status",
           "supervisorInstanceId",
+          "waiting",
           "workflowId",
           "workspace"
         ]

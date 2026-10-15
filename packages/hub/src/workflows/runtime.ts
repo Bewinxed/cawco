@@ -66,11 +66,17 @@ export interface WorkflowRuntimeDeps {
     step?: WorkflowStep;
   }) => void;
   cleanup: (machineId: string, instanceId: string) => void;
+  /**
+   * Runs a `w.exec` on the run's machine. On a paused machine it waits for
+   * the pause's end (one a pause stops runs again after it); `onWait` hears
+   * each wait, null once it waits no more.
+   */
   command: (
     machineId: string,
     cwd: string,
     cmd: string,
-    timeoutMs?: number
+    timeoutMs: number | undefined,
+    onWait: (words: string | null) => void
   ) => Promise<CommandResult>;
   custodyPending: (machineId: string, instanceId: string) => boolean;
   db: DbShape;
@@ -103,7 +109,7 @@ export interface WorkflowRuntimeDeps {
 }
 
 export type PublicRun = WorkflowRunRow &
-  Pick<WorkflowRun, "edges" | "loops" | "planned">;
+  Pick<WorkflowRun, "edges" | "loops" | "planned" | "waiting">;
 
 /** What the call that opened a step named it, read off the spec it recorded. */
 function stepTitleOf(row: WorkflowStepRow): string | null {
@@ -258,7 +264,8 @@ const loggedArgs = (
  */
 export function publicRun(
   run: WorkflowRunRow,
-  log: WorkflowLogRow[]
+  log: WorkflowLogRow[],
+  waiting: string | null
 ): PublicRun {
   const edges: Record<string, Record<string, "fired" | "skipped">> = {};
   const loops: Record<string, Record<string, number>> = {};
@@ -293,7 +300,7 @@ export function publicRun(
       run.graph.edges.map((edge) => [edge.id, "skipped" as const])
     );
   }
-  return { ...run, edges, loops, planned: plannedOf(run.graph) };
+  return { ...run, edges, loops, planned: plannedOf(run.graph), waiting };
 }
 
 /**
@@ -394,6 +401,11 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
   const { db } = deps;
   const ajv = new Ajv({ allErrors: true, strict: false });
   const locks = new Map<string, Promise<unknown>>();
+  /** What a run's command waits for now, by run ({@link WorkflowRun.waiting}). */
+  const waits = new Map<string, string>();
+  /** A run as it is shown: its row, its graph's reading, and what it waits for. */
+  const shown = (run: WorkflowRunRow): PublicRun =>
+    publicRun(run, db.listWorkflowLog(run.id), waits.get(run.id) ?? null);
 
   const runOf = (id: string): WorkflowRunRow => {
     const run = db.getWorkflowRun(id);
@@ -453,7 +465,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
   ) =>
     deps.broadcast({
       runId: run.id,
-      run: publicRun(run, db.listWorkflowLog(run.id)),
+      run: shown(run),
       step: step && publicStep(step),
       attempt,
       checkpoint,
@@ -1170,25 +1182,41 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     kind: WorkflowEffectKind,
     args: Record<string, unknown>
   ): Promise<unknown> => {
+    /** A command's wait, on the run as every surface shows it. */
+    const waited = (words: string | null): void => {
+      if (words) {
+        waits.set(run.id, words);
+      } else if (!waits.delete(run.id)) {
+        return;
+      }
+      announce(db.getWorkflowRun(run.id) ?? run);
+    };
     switch (kind) {
       case "exec": {
-        const { exitCode, stdout, stderr } = await deps.command(
-          run.machineId,
-          run.workspace,
-          String(args.cmd),
-          args.timeoutMinutes === undefined
-            ? undefined
-            : Number(args.timeoutMinutes) * 60_000
-        );
+        const { exitCode, stdout, stderr } = await deps
+          .command(
+            run.machineId,
+            run.workspace,
+            String(args.cmd),
+            args.timeoutMinutes === undefined
+              ? undefined
+              : Number(args.timeoutMinutes) * 60_000,
+            waited
+          )
+          .finally(() => waited(null));
         return { code: exitCode, stdout, stderr };
       }
       case "exists": {
         const path = String(args.path).replaceAll("'", "'\\''");
-        const { exitCode } = await deps.command(
-          run.machineId,
-          run.workspace,
-          `test -e '${path}'`
-        );
+        const { exitCode } = await deps
+          .command(
+            run.machineId,
+            run.workspace,
+            `test -e '${path}'`,
+            undefined,
+            waited
+          )
+          .finally(() => waited(null));
         return exitCode === 0;
       }
       case "jev":
@@ -1562,7 +1590,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       const rows = db.listWorkflowSteps(id);
       const ask = askOf(run);
       return {
-        ...publicRun(run, db.listWorkflowLog(id)),
+        ...shown(run),
         steps: rows.map(publicStep),
         attempts: rows.flatMap((step) => db.listWorkflowAttempts(step.id)),
         ...(ask ? { ask } : {}),
@@ -1654,7 +1682,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         }
         finish(run, "cancelled");
         interrupt(id);
-        return publicRun(run, db.listWorkflowLog(id));
+        return shown(run);
       });
     },
     answer(

@@ -111,6 +111,7 @@
     startedAt: new Date(now - 600_000).toISOString(),
     state: {},
     supervisorInstanceId: null,
+    waiting: null,
     workflowId: WORKFLOW,
     workspace: "/bench",
   });

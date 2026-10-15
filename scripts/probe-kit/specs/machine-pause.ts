@@ -42,6 +42,11 @@
  *     run is the same one, and its delegate is told nothing; B's row says it
  *     stopped 1 running check. After the pause the check runs again and the
  *     item lands.
+ * p8. A workflow's `w.exec` already running on B as a third pause begins:
+ *     its process goes within 10 s, the run stays running and says its
+ *     command waits for the pause, the answer says it stopped 1 running
+ *     workflow command; after the pause the command runs again and the run
+ *     ends done.
  *
  *   bun scripts/probe-kit/run.ts machine-pause
  */
@@ -63,8 +68,12 @@ const SLEEP = /PROBE-SLEEP-([A-Z])/;
 const HELLO = "PROBE-HELLO-Q";
 const FINISH_C = "PROBE-FINISH-C";
 const FINISH_D = "PROBE-FINISH-D";
-/** p7's check on B: its first run marks its scratch dir and sleeps; the run after the pause finds the mark and ends. */
-const LONG_CHECK = `if [ -e "$TMPDIR/p7-ran" ]; then echo ran-p7; else touch "$TMPDIR/p7-ran"; sleep 600; fi`;
+/**
+ * p7's check on B, run in its check workspace's clone: its first run marks
+ * the clone and sleeps; the run after the pause finds the mark and ends.
+ */
+const LONG_CHECK =
+  "if [ -e .p7-ran ]; then echo ran-p7; else touch .p7-ran; sleep 600; fi";
 const P7_PAUSE_MS = 60_000;
 const CMD = /PROBE-CMD (\d+) (interrupt|handoff) (\S+)(?: (.*))?/g;
 
@@ -353,6 +362,7 @@ const run = async (kit: Kit) => {
     itemOf,
     lasts,
     parent,
+    repo,
     since,
     sleeping,
     turnOpen,
@@ -369,6 +379,8 @@ interface Probe {
     | undefined;
   lasts: (seen: Seen[]) => string;
   parent: string;
+  /** The project's checkout, at the same path on both machines. */
+  repo: string;
   since: (tag: string, at: number) => Seen[];
   sleeping: (tag: string, instanceId: string) => Promise<void>;
   turnOpen: (id: string) => boolean;
@@ -630,6 +642,113 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
   check("p6: B is no longer paused", after === null, String(after));
 
   await runningCheck(kit, fleet, probe, tray);
+  await runningExec(kit, fleet, probe.repo);
+};
+
+/** p8's workflow: one `w.exec` in B's checkout, marked like p7's check; its output is the run's result. */
+const LONG_EXEC_PROGRAM = `import { z } from "zod";
+
+export const inputs = z.object({});
+
+export default async function (w: Workflow<typeof inputs>) {
+  const out = await w.exec(
+    "if [ -e .p8-ran ]; then echo ran-p8; else touch .p8-ran; sleep 600; fi",
+    { timeoutMinutes: 15 }
+  );
+  return out.stdout.trim();
+}
+`;
+
+interface RunView {
+  result: unknown;
+  status: string;
+  waiting: string | null;
+}
+
+/** p8: a workflow's `w.exec` already running on B as a pause begins. */
+const runningExec = async (kit: Kit, fleet: KitFleet, repo: string) => {
+  const { check } = kit;
+  const before = await longSleeps();
+  const workflow = await fleet.api<{ id: string }>("/api/workflows", {
+    name: "Pause probe exec",
+    program: LONG_EXEC_PROGRAM,
+  });
+  const { runId } = await fleet.api<{ runId: string }>(
+    `/api/workflows/${workflow.id}/runs`,
+    { workspace: { path: repo, machineId: B } }
+  );
+  const runView = () => fleet.api<RunView>(`/api/workflow-runs/${runId}`);
+  const ours = await until(
+    "the run's w.exec sleeping on B",
+    async () => [...(await longSleeps())].filter((pid) => !before.has(pid)),
+    (pids) => pids.length > 0,
+    120_000
+  ).catch(async () => {
+    throw new Error(
+      `p8: the run's w.exec never started: ${JSON.stringify(await runView())}`
+    );
+  });
+  const pausedAt = Date.now();
+  const until_ = pausedAt + P7_PAUSE_MS;
+  const answer = await fetch(`${fleet.base}/api/machines/${B}/pause`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ until: new Date(until_).toISOString() }),
+  });
+  const view = (await answer.json().catch(() => ({}))) as {
+    pauseStopped?: string | null;
+  };
+  const gone = await until(
+    "the w.exec's sleep gone",
+    async () => {
+      const now = await longSleeps();
+      return ours.every((pid) => !now.has(pid));
+    },
+    Boolean,
+    10_000
+  ).catch(() => false);
+  check(
+    "p8: within 10 s of the pause the running w.exec's process is gone from B's process table",
+    gone === true,
+    `pids ${ours.join(" ")}`
+  );
+  const words = `paused until ${clock(until_)}`;
+  const waiting = await until(
+    "the run waiting on the pause",
+    runView,
+    (seen) => seen.waiting?.includes("paused") === true,
+    10_000
+  ).catch(runView);
+  check(
+    "p8: the run is still running, and says its command waits: … paused until",
+    waiting.status === "running" &&
+      waiting.waiting?.startsWith("waiting:") === true &&
+      waiting.waiting.includes(words),
+    JSON.stringify({ status: waiting.status, waiting: waiting.waiting })
+  );
+  check(
+    "p8: the pause's answer says it stopped 1 running workflow command",
+    view.pauseStopped === "stopped 1 running workflow command",
+    `${answer.status} ${JSON.stringify(view)}`
+  );
+  const ended = await until(
+    "the run's end",
+    runView,
+    (seen) => seen.status !== "running" && seen.status !== "waiting",
+    P7_PAUSE_MS + 180_000
+  ).catch(runView);
+  check(
+    "p8: after the pause the w.exec runs again and the run ends done, waiting on nothing",
+    ended.status === "done" &&
+      ended.result === "ran-p8" &&
+      ended.waiting === null &&
+      Date.now() > until_,
+    JSON.stringify({
+      status: ended.status,
+      result: ended.result,
+      waiting: ended.waiting,
+    })
+  );
 };
 
 /** Every `sleep 600` in this host's process table (every machine of the fleet runs here). */

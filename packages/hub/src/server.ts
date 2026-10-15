@@ -16240,8 +16240,9 @@ export const createServer = (
         observe();
       }),
     // A workflow's command on a paused machine waits for the pause's end.
-    command: (machineId, cwd, cmd, timeoutMs) =>
+    command: (machineId, cwd, cmd, timeoutMs, onWait) =>
       runOnMachine(machineId, cwd, cmd, timeoutMs, undefined, {
+        onWait,
         what: "workflow command",
       }),
     park: parkForPerson,

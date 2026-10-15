@@ -250,6 +250,13 @@
     <header class="head">
       <div class="facts">
         <p class="started">Started {startedAt}</p>
+        <!-- A command of the run held by its machine's pause, or queued for
+             a shared slot: said where the run's facts are, until it goes. -->
+        {#if going && run.waiting}
+          <p class="waiting" role="status">
+            {run.waiting.charAt(0).toUpperCase()}{run.waiting.slice(1)}
+          </p>
+        {/if}
         {#if inputs.length}
           <dl class="inputs">
             {#each inputs as [key, value] (key)}
@@ -480,6 +487,10 @@
   .started {
     margin: 0;
     color: var(--ink-muted);
+  }
+  .waiting {
+    margin: 0;
+    color: var(--ink-strong);
   }
   .inputs {
     display: grid;
