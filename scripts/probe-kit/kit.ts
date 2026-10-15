@@ -140,8 +140,20 @@ function installRuns(): void {
   };
 }
 
-/** The dashboard built once per run: `vite build`, as the probes' `vite preview` serves it. */
+/**
+ * The dashboard built once per run: `vite build`, as the probes' `vite
+ * preview` serves it. A heavy run while it builds: it holds one of the
+ * machine's slots (heavy-run.ts) until the build ends.
+ */
 export async function build(): Promise<void> {
+  const slot = await heavySlot();
+  try {
+    await viteBuild();
+  } finally {
+    slot.release();
+  }
+}
+const viteBuild = async (): Promise<void> => {
   const child = Bun.spawn(["bunx", "vite", "build"], {
     cwd: DASHBOARD,
     // This process's own, git's repository variables gone (scratch-fleet.ts
@@ -158,18 +170,32 @@ export async function build(): Promise<void> {
   if (code !== 0) {
     throw new Error(`vite build exited ${code}: ${(err || out).slice(-2000)}`);
   }
-}
+};
 
 /**
  * The dashboard served against `hub`: the dev server (`vite dev`, where the
  * `/motion/` benches live: a built dashboard 404s them), or the built one
  * (`vite preview`, what the runtime specs time: a dev build's own checks
- * would be in every long task). Its address and process.
+ * would be in every long task). Its address and process. A heavy run while
+ * it boots: it holds one of the machine's slots until it answers, and none
+ * while it serves.
  */
 async function serve(
   how: "dev" | "preview",
   hub: string,
   env: Record<string, string> = {}
+) {
+  const slot = await heavySlot();
+  try {
+    return await boot(how, hub, env);
+  } finally {
+    slot.release();
+  }
+}
+async function boot(
+  how: "dev" | "preview",
+  hub: string,
+  env: Record<string, string>
 ) {
   const port = await freePort();
   const child = Bun.spawn(
@@ -293,11 +319,10 @@ export class Run {
       bench: () => this.bench(),
       built: () => this.builtBench(),
       fleet: async (respond) => {
-        // A fleet spec is a heavy run, its build and fleet both: it holds one
-        // of the machine's slots (heavy-run.ts) until the spec ends, after
-        // its fleets have stopped (ends run last-added first).
-        const slot = await heavySlot();
-        ends.push(async () => slot.release());
+        // Heavy while it builds and boots, and only then: the dashboard's
+        // build holds one of the machine's slots while it runs (`build`),
+        // the fleet while it sets up and boots (scratch-fleet.ts), and each
+        // dashboard server until it answers (`serve`).
         // Built before the fleet starts, never between its start and the
         // dashboard's: the build runs once per run, so a fleet left waiting
         // on it ran its sessions on for the build's length when its spec

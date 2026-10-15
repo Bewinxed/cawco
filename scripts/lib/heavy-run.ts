@@ -308,6 +308,52 @@ export async function heavySlot(): Promise<HeavySlot> {
   };
 }
 
+/**
+ * A run that is heavy only in phases: a scratch fleet builds and boots, then
+ * serves for as long as its person keeps it (a preview waits hours on the
+ * owner, and must never hold a slot a nightly's release proof waits on). It
+ * holds this process's slot while any of its phases is open, and lets it go
+ * when the last one closes; a phase opened later (a service restarted) takes
+ * a slot again, waiting for one as any run does.
+ */
+export interface HeavyPhases {
+  /** Closes one open phase; the slot goes once none is open. */
+  close: () => void;
+  /** Opens a phase; resolves once the slot is held. */
+  open: () => Promise<void>;
+}
+export function heavyPhases(): HeavyPhases {
+  let open = 0;
+  let slot: Promise<HeavySlot> | undefined;
+  return {
+    open: async () => {
+      open += 1;
+      slot ??= heavySlot().catch((error: unknown) => {
+        slot = undefined;
+        throw error;
+      });
+      await slot;
+    },
+    close: () => {
+      if (open === 0) {
+        return;
+      }
+      open -= 1;
+      if (open > 0 || !slot) {
+        return;
+      }
+      // One process holds one slot, counted by its holds (`heavySlot`): a
+      // phase opened before this release lands holds it on.
+      const holding = slot;
+      slot = undefined;
+      holding.then(
+        (hold) => hold.release(),
+        () => undefined
+      );
+    },
+  };
+}
+
 if (import.meta.main) {
   const [verb, pid, ...command] = process.argv.slice(2);
   if (verb === "count") {
