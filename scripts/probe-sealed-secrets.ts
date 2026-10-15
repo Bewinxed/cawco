@@ -35,8 +35,12 @@ import { randomBytes } from "node:crypto";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ensureDeps } from "./lib/deps";
+import { refuseInWorkspace } from "./lib/workspace-refusal";
 import type { Reply } from "./scratch-fleet";
 
+// Not in a CawCo workspace (lib/workspace-refusal.ts): stage 5 types the
+// key at the CLI's hidden prompt through a pty.
+refuseInWorkspace("probe-sealed-secrets.ts", ["pty"]);
 // The dependencies first (lib/deps.ts): what needs them loads after.
 await ensureDeps();
 const { makeSecretBox } = await import("../packages/hub/src/secret-box");

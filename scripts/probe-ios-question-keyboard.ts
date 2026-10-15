@@ -51,6 +51,7 @@ import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
+import { axeRefused, refuseInWorkspace } from "./lib/workspace-refusal";
 
 const argv = process.argv.slice(2);
 const keep = argv.includes("--keep");
@@ -62,20 +63,12 @@ if (beforeFlag >= 0 && !beforeRef) {
   );
   process.exit(2);
 }
-// A CawCo workspace's boundary denies what this probe drives the simulator
-// and the scratch fleet with: axe reaches the simulator through
-// testmanagerd's launchd socket ("Failed to connect to unix domain socket at
-// path /private/var/tmp/com.apple.launchd.…/com.apple.testmanagerd.remote-automation.uds:
-// 1 Operation not permitted"), and the scratch agent cuts the tray row's
-// delegate a TMPDIR link under /private/tmp/cawco-<uid> ("EPERM: operation
-// not permitted, symlink …"). Run there, it would wait out a slot and a
-// build and then read no card.
-if (process.env.CAWCO_WORKSPACE) {
-  console.error(
-    "probe-ios-question-keyboard.ts drives the simulator with axe (testmanagerd's launchd socket) and has the scratch agent link a delegate's TMPDIR under /private/tmp, both of which a CawCo workspace's boundary denies. Run it from the orchestrator's shell on the Mac, or a person's."
-  );
-  process.exit(2);
-}
+// Not in a CawCo workspace (lib/workspace-refusal.ts): the tray row's
+// delegate, and axe on the newest runtime's iPhone (scenario's slot).
+refuseInWorkspace(
+  "probe-ios-question-keyboard.ts",
+  axeRefused() ? ["axe", "delegate"] : ["delegate"]
+);
 // The dependencies first (lib/deps.ts): the fleet loads after them.
 await ensureDeps();
 const { scratchFleet, until } = await import("./scratch-fleet");

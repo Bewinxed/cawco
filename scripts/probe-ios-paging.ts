@@ -57,8 +57,14 @@ import type { Subprocess } from "bun";
 import { macSideApp, macSideStale } from "./lib/apple-app";
 import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
+import { axeRefused, refuseInWorkspace } from "./lib/workspace-refusal";
 import type { Reply, Seen } from "./scratch-fleet";
 
+// Not in a CawCo workspace (lib/workspace-refusal.ts) when axe would drive
+// the newest runtime's iPhone, which its slot takes.
+if (axeRefused()) {
+  refuseInWorkspace("probe-ios-paging.ts", ["axe"]);
+}
 // The dependencies first (lib/deps.ts): the fleet loads after them.
 await ensureDeps();
 const { scratchFleet, until } = await import("./scratch-fleet");
