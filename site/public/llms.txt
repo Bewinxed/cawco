@@ -15,7 +15,7 @@ To add another machine, use Add machine in the dashboard instead of running this
 ## What it does
 
 - One board: every session on every machine is a row under its project, and its delegates fold open under it. A workflow chains steps, checks and questions, and its run shows each step the same way.
-- Phone approvals: when an agent stops at a permission prompt, the prompt arrives in Telegram with Allow, Always allow and Deny.
+- Phone approvals: the Caw&Co app for iPhone and iPad (coming to the App Store) notifies you when an agent stops at a permission prompt; a file edit can be approved from the lock screen, and a shell command opens in the app to be read first.
 - Rules: a rule watches what every session says and sends your reply when a phrase or a regular expression matches. With Jev connected it can match by meaning. You can narrow a rule to one machine, project, agent or model.
 - Delegates: a session can hand work to another session on any machine in the fleet, on any agent. A delegate has its own session and its own clone, and it is done when its parent's checks pass.
 - Fleet sync: add a skill, an MCP server or a plugin marketplace once on the hub and every machine gets it. Memory and hooks sync too.

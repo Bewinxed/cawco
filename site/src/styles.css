@@ -855,8 +855,7 @@ h1 {
 .win,
 .node,
 .rule-card,
-.hitl,
-.tg {
+.hitl {
   border: 1px solid var(--app-line);
   border-radius: 0.9em;
   background: var(--app-raised);
@@ -1395,54 +1394,6 @@ h1 {
 .aside-note b {
   display: block;
   color: var(--app-ink);
-}
-
-.tg {
-  display: grid;
-  gap: 0.55em;
-  min-width: 0;
-  padding: 0.7em;
-}
-
-.tg-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.2em 0.4em;
-}
-
-.tg-head .icon {
-  color: #229ed9;
-  font-size: 1.25em;
-}
-
-.tg-msg {
-  display: grid;
-  gap: 0.15em;
-  padding: 0.5em 0.65em;
-  border-radius: 0.8em 0.8em 0.8em 0.25em;
-  background: var(--app-recess);
-  overflow-wrap: anywhere;
-}
-
-/* One row of three where there is room, as Telegram shows them; fewer across where there is not. */
-.tg-buttons {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(5.6em, 1fr));
-  gap: 0.3em;
-}
-
-.tg-btn {
-  display: grid;
-  place-items: center;
-  min-width: 0;
-  padding: 0.45em 0.2em;
-  border: 1px solid var(--app-line);
-  border-radius: 0.5em;
-  background: var(--app-recess);
-  font-size: 0.82em;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
 /* Scene: rules */
@@ -2191,10 +2142,6 @@ mark {
 
   .choice .app-btn {
     padding: 0 0.5em;
-  }
-
-  .tg {
-    padding: 0.55em;
   }
 
   .scene-rules {

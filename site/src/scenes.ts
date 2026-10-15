@@ -114,11 +114,10 @@ function board(root: HTMLElement): Timeline {
   return timeline;
 }
 
-/** A session stops at a prompt. It shows in the app and in Telegram, and one tap sends it on. */
+/** A session stops at a prompt. It shows in the app, and one tap sends it on. */
 function phone(root: HTMLElement): Timeline {
   const handset = one(root, '[data-handset]');
   const ask = one(root, '[data-ask]');
-  const telegram = one(root, '[data-tg]');
   const allow = one(root, '[data-allow]');
   const tap = one(root, '[data-tap]');
 
@@ -132,14 +131,13 @@ function phone(root: HTMLElement): Timeline {
   root.classList.add('is-pending');
   showFirst(ask);
   // The app's own arrival for a prompt: one settle of 8px, then still.
-  gsap.set([ask, telegram], { opacity: 0, y: 8 });
+  gsap.set(ask, { opacity: 0, y: 8 });
   gsap.set(tap, { x: tapAt.x, y: tapAt.y, opacity: 0, scale: 0.4 });
 
   const timeline = gsap.timeline({ defaults: { ease: OUT } });
   timeline
     .to(ask, { opacity: 1, y: 0, duration: 0.24 }, 0.6)
-    .to(telegram, { opacity: 1, y: 0, duration: 0.24 }, '<0.25')
-    .to(tap, { opacity: 1, scale: 1, duration: 0.2 }, '+=1')
+    .to(tap, { opacity: 1, scale: 1, duration: 0.2 }, '+=1.25')
     .to(allow, { scale: 0.96, duration: 0.1 }, '<0.06')
     .to(allow, { scale: 1, duration: 0.2 })
     .to(tap, { opacity: 0, scale: 1.6, duration: 0.3 }, '<')
