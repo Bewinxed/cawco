@@ -140,6 +140,27 @@ export const sawTool = (id: string, found: string): void => {
 };
 
 /**
+ * `npm prefix -g` as each npm binary answered it. Asked once per npm: every
+ * harness read checks its binary is there ({@link toolBinary}), and a spawn of
+ * npm on each would be the cost of a machine without that tool on its PATH.
+ */
+const npmPrefixes = new Map<string, string>();
+
+const npmPrefix = async (npm: string): Promise<string | undefined> => {
+  const known = npmPrefixes.get(npm);
+  if (known !== undefined) {
+    return known;
+  }
+  const said = await Bun.$`${npm} prefix -g`.quiet().nothrow().env(toolEnv());
+  const prefix = said.text().trim();
+  if (said.exitCode !== 0 || !prefix) {
+    return undefined;
+  }
+  npmPrefixes.set(npm, prefix);
+  return prefix;
+};
+
+/**
  * Where `npm install -g` puts binaries, asked of npm rather than guessed: nvm,
  * volta and a hand-set prefix all put them somewhere this daemon's PATH may
  * never have heard of.
@@ -149,12 +170,11 @@ const npmGlobalBin = async (bin: string): Promise<string | undefined> => {
   if (!npm) {
     return undefined;
   }
-  const prefix = await Bun.$`${npm} prefix -g`.quiet().nothrow().env(toolEnv());
-  if (prefix.exitCode !== 0) {
+  const root = await npmPrefix(npm);
+  if (!root) {
     return undefined;
   }
 
-  const root = prefix.text().trim();
   const candidates =
     platform() === "win32"
       ? [join(root, `${bin}.cmd`), join(root, `${bin}.exe`)]
@@ -170,18 +190,16 @@ const npmGlobalBin = async (bin: string): Promise<string | undefined> => {
 
 /**
  * A catalog tool's binary, found now: its bin on {@link toolPath}, then the
- * first of its well-known paths that is there. What a harness adapter runs,
- * so it runs the copy the tool probe reports on.
+ * first of its well-known paths that is there, then npm's global bin. The one
+ * lookup the tool probe and every harness adapter make, so an adapter runs
+ * the copy the tool row reports on and never says "not found" beside it.
  */
-export const toolBinary = (spec: ToolSpec): string | undefined =>
+export const toolBinary = async (spec: ToolSpec): Promise<string | undefined> =>
   resolveBin(spec.bin) ??
   spec.wellKnownPaths
     ?.map((path) => expandHome(path))
-    .find((path) => existsSync(path));
-
-/** {@link toolBinary}, then npm's global bin. */
-const locate = async (spec: ToolSpec): Promise<string | undefined> =>
-  toolBinary(spec) ?? (await npmGlobalBin(spec.bin));
+    .find((path) => existsSync(path)) ??
+  (await npmGlobalBin(spec.bin));
 
 /** `npm root -g`, resolved: where npm's global packages are, asked of npm. */
 const npmGlobalRoot = async (): Promise<string | undefined> => {
@@ -252,7 +270,7 @@ const bears = async (
 
 /** Where this machine's copy of a tool is, and the catalog method that put it there. */
 const findCopy = async (spec: ToolSpec): Promise<Found | undefined> => {
-  const path = await locate(spec);
+  const path = await toolBinary(spec);
   if (!path) {
     return undefined;
   }

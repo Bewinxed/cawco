@@ -1801,9 +1801,14 @@ export interface WorkspaceHolding {
   stashes: number;
   /**
    * Set when the clone's folder is there and its `.git` is no repository
-   * git can read: its entries that are not CawCo's deny stand-ins (agent
-   * stand-ins.ts `straysIn`). None is a husk, a deleted clone a sandbox
-   * refilled with stand-ins, which holds nothing; any keeps the folder.
+   * git can read: how many entries down its tree are not CawCo's (agent
+   * stand-ins.ts `straysIn`, which names each by its path relative to the
+   * folder). CawCo's are a deny path's stand-in exactly as made, a mount
+   * point a sandbox left on a deny path, a `.git/config` holding only
+   * git-lfs's `[lfs] repositoryformatversion = 0` marker, a project skill
+   * exactly as CawCo placed it (agent fleet.ts `placedSkillsAsMade`), and a
+   * dir (`.git`, `.claude`) holding only those. None is a husk, a deleted
+   * clone a sandbox refilled, which holds nothing; any keeps the folder.
    */
   strays?: number;
 }

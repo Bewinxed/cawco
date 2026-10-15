@@ -33,10 +33,10 @@ export const OPENCODE_BIN = OPENCODE_TOOL.bin;
 
 /**
  * This machine's OpenCode, found where the tool probe finds it (tools.ts
- * `toolBinary`): `opencode2` on the PATH, or a well-known path (Homebrew's
- * 2.0 is only `opencode`, under its formula's own link).
+ * `toolBinary`): `opencode2` on the PATH, a well-known path (Homebrew's
+ * 2.0 is only `opencode`, under its formula's own link), or npm's global bin.
  */
-export const opencodeBinary = (): string | undefined =>
+export const opencodeBinary = (): Promise<string | undefined> =>
   toolBinary(OPENCODE_TOOL);
 
 /** Where one server listens and the password it was launched with. */

@@ -38540,7 +38540,7 @@
             "type": "number"
           },
           "strays": {
-            "description": "Set when the clone's folder is there and its `.git` is no repository\ngit can read: its entries that are not CawCo's deny stand-ins (agent\nstand-ins.ts `straysIn`). None is a husk, a deleted clone a sandbox\nrefilled with stand-ins, which holds nothing; any keeps the folder.",
+            "description": "Set when the clone's folder is there and its `.git` is no repository\ngit can read: how many entries down its tree are not CawCo's (agent\nstand-ins.ts `straysIn`, which names each by its path relative to the\nfolder). CawCo's are a deny path's stand-in exactly as made, a mount\npoint a sandbox left on a deny path, a `.git/config` holding only\ngit-lfs's `[lfs] repositoryformatversion = 0` marker, a project skill\nexactly as CawCo placed it (agent fleet.ts `placedSkillsAsMade`), and a\ndir (`.git`, `.claude`) holding only those. None is a husk, a deleted\nclone a sandbox refilled, which holds nothing; any keeps the folder.",
             "type": "number"
           }
         },

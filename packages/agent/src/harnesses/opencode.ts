@@ -232,14 +232,14 @@ const CONFIG_FLAG = "CAWCO_CONFIG";
  * other flags fails its launch check and is replaced at rest, its sessions
  * moving over as each comes to rest.
  */
-const serverLaunch = (
+const serverLaunch = async (
   config: Record<string, unknown>,
   pluginDir: string,
   diskHash: string | null,
   env: Record<string, string> = {}
-): ServerLaunch => ({
+): Promise<ServerLaunch> => ({
   spec: {
-    command: opencodeBinary() ?? OPENCODE_BIN,
+    command: (await opencodeBinary()) ?? OPENCODE_BIN,
     args: ["serve", "--hostname=127.0.0.1", "--port=0"],
     env: {
       OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
@@ -1607,7 +1607,7 @@ export class OpencodeHarness implements Harness {
       this.#versionProbe = (async () => {
         // What each probe finds is the tool probe's news too (tools.ts
         // `sawTool`): a hand upgrade this sees reaches the hub's tool row now.
-        const binary = opencodeBinary();
+        const binary = await opencodeBinary();
         if (!binary) {
           sawTool("opencode", "missing");
           throw new Error(
@@ -2420,7 +2420,7 @@ export class OpencodeHarness implements Harness {
         this.#configState = "pending";
         return;
       }
-      const launch = serverLaunch(
+      const launch = await serverLaunch(
         await this.#launchConfig(),
         await this.#plugin(),
         targetHash
@@ -2533,7 +2533,7 @@ export class OpencodeHarness implements Harness {
   }
 
   async detect(): Promise<HarnessReport> {
-    const installed = opencodeBinary() !== undefined;
+    const installed = (await opencodeBinary()) !== undefined;
     const version = installed
       ? await this.#installedVersion().catch(() => undefined)
       : undefined;
@@ -2969,7 +2969,7 @@ export class OpencodeHarness implements Harness {
         // Only OPENCODE_VERSION starts: its server API and plugin are what this speaks.
         await this.#installedVersion();
         await this.#cutoverV1();
-        const launch = serverLaunch(
+        const launch = await serverLaunch(
           await this.#launchConfig(),
           await this.#plugin(),
           await this.#hashConfig()
@@ -3008,7 +3008,7 @@ export class OpencodeHarness implements Harness {
                 identity,
                 initialVersion,
                 undefined,
-                serverLaunch(
+                await serverLaunch(
                   await this.#launchConfig(),
                   await this.#plugin(),
                   initialHash
@@ -3304,7 +3304,7 @@ export class OpencodeHarness implements Harness {
 
   /** Every provider OpenCode can sign in to (its integrations), by id and name. */
   async providerList(): Promise<{ id: string; name: string }[]> {
-    if (opencodeBinary() === undefined) {
+    if ((await opencodeBinary()) === undefined) {
       return [];
     }
     const listed = await (await this.#ensure()).integration.list();
@@ -4620,7 +4620,7 @@ export class OpencodeHarness implements Harness {
    * what converts a 1.x database before anything reads it as 2.0's.
    */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
-    if (opencodeBinary() === undefined) {
+    if ((await opencodeBinary()) === undefined) {
       return [];
     }
     await this.#ensure();
@@ -4634,7 +4634,7 @@ export class OpencodeHarness implements Harness {
     sessionKey: string,
     _dir?: string
   ): Promise<NeutralSessionInfo | undefined> {
-    if (opencodeBinary() === undefined) {
+    if ((await opencodeBinary()) === undefined) {
       return;
     }
     // A read-only lookup: a key that cannot be an OpenCode session answers
@@ -4660,7 +4660,7 @@ export class OpencodeHarness implements Harness {
     sessionKey: string,
     _dir?: string
   ): Promise<SessionMessage[]> {
-    if (opencodeBinary() === undefined) {
+    if ((await opencodeBinary()) === undefined) {
       return [];
     }
     assertOpencodeKey(sessionKey, "getSessionMessages");
@@ -4726,7 +4726,7 @@ export class OpencodeHarness implements Harness {
     title: string,
     _dir?: string
   ): Promise<void> {
-    if (opencodeBinary() === undefined) {
+    if ((await opencodeBinary()) === undefined) {
       return;
     }
     assertOpencodeKey(sessionKey, "renameSession");
@@ -4748,7 +4748,7 @@ export class OpencodeHarness implements Harness {
   }
 
   async deleteSession(sessionKey: string, _dir?: string): Promise<void> {
-    if (opencodeBinary() === undefined) {
+    if ((await opencodeBinary()) === undefined) {
       return;
     }
     assertOpencodeKey(sessionKey, "deleteSession");
