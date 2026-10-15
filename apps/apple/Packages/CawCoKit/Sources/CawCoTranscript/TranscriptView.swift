@@ -92,6 +92,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var generation = 0
     private var liveWasOn = false
     private var lastAnswer = ""
+    /// An ended stream's words stand until the preparation holding its message lands (`configure`, `adopt`).
+    private var holding = false
+    #if DEBUG
+    /// A reply's message took the live row's key this build: its commit says the landing (probe-kit `ios-scroll-up`).
+    private var landing = false
+    #endif
     private var reasoningEnded = false
     private var keys: [String: String] = [:]
     private var ahead: Set<String>?
@@ -750,7 +756,18 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
              transcript.loading, transcript.fault, transcript.missing)
         let tail = transcript.tail
         let next = tail?.streaming ?? ""
-        if next != received {
+        // The hub ends a reply's stream in the same breath as it appends the
+        // reply's message; the list's rows come from a preparation of that,
+        // a moment later. Until it lands, the streamed words stand: let go
+        // of first, the reply vanished under the working face, then came
+        // back as new rows, where it is to land on the streamed rows' own
+        // (the live row's key, `rekey`) and be drawn anew in place.
+        if next.isEmpty, !received.isEmpty, transcript.blockRevision != prepared?.revision {
+            holding = true
+        } else if next != received {
+            holding = false
+        }
+        if next != received, !holding {
             let now = CACurrentMediaTime()
             if !next.hasPrefix(received) || next.isEmpty {
                 splitter = MarkdownSplitter(); liveSources = []; cursor = 0; shown = 0; rate = 0
@@ -813,6 +830,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private func adopt(_ next: Prepared) {
         prepared = next
         blocks = next.blocks
+        // The ended stream's message is in the rows now: its words leave the tail.
+        if holding, next.revision >= transcript?.blockRevision ?? 0 {
+            holding = false
+            splitter = MarkdownSplitter(); liveSources = []; cursor = 0; shown = 0; rate = 0
+            arrivals = []
+            received = ""
+            characters = []
+        }
         branches = next.branches
         queued = next.queued
         rowCount = next.rowCount
@@ -983,6 +1008,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             let key = "live:\(generation)"
             keys[landed.id] = key
             rekey(landed.id, as: key)
+            #if DEBUG
+            landing = true
+            #endif
             request()
         }
         // Reasoning the reader watched lands as its own row and folds shut there.
@@ -1437,6 +1465,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         env.watched = landed && onScreen
         #if DEBUG
         let began = CACurrentMediaTime()
+        // A reply's message landing on its streamed rows (`rekey`), said with what its commit took.
+        var landedInPlace = false
+        defer {
+            if landing {
+                landing = false
+                Self.dockLog.notice("probe landing \(landedInPlace ? "in place" : "as new rows", privacy: .public) \((CACurrentMediaTime() - began) * 1000, format: .fixed(precision: 1)) ms")
+            }
+        }
         #endif
         // The settled rows are the ones the list already holds, as they were
         // built (a frame of a streamed reply, a generation that changed none of
@@ -1586,6 +1622,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         let sameRows = before.count == section.settled.count + section.tail.count && parted == before.count
         if sameRows {
+            #if DEBUG
+            landedInPlace = true
+            #endif
             if section.settled.count != before.settled.count {
                 rows = RowIndex(settled: section.settled, tail: section.tail, anchor: before.originId, skip: Self.olderId)
             }

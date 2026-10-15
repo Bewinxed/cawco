@@ -36,7 +36,9 @@
  *    time over the wall time the tail was busy. Under 50% (mostly idle).
  *    And every commit of its rows takes under 8 ms (the app says one of
  *    4 ms or more, `probe commit`, with what it took; the whole ones, an
- *    answer landing among them, are noted).
+ *    answer landing among them, are noted). The reply's message lands on
+ *    the rows that streamed it, drawn anew in place, in under 8 ms (the
+ *    app says `probe landing in place` or `as new rows`).
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-scroll-up
@@ -83,6 +85,8 @@ const MARK = /(seed|stream)-mark-[0-9a-f]{6}/g;
 const PACE = /probe pace (.*)$/;
 const REST = /probe rest \w+: top=(\d) older=(\d) rows=(\d+)/;
 const COMMIT = /probe commit ([\d.]+) ms/;
+/** The reply's message landing on its streamed rows (TranscriptView `probe landing`). */
+const LANDING = /probe landing (in place|as new rows) ([\d.]+) ms/;
 /** The app's glyph comparison (GlyphProbe): compared, pixels, the largest channel difference, pixels differing. */
 const GLYPHS =
   /probe glyphs: (\d+) compared, (\d+) pixels, the largest channel difference (\d+), (\d+) pixels differing/;
@@ -748,15 +752,15 @@ async function run(kit: Kit): Promise<void> {
       busy < STREAM_CPU,
       `main thread CPU ${(busy * 100).toFixed(1)}% (${d.streamCPU.toFixed(0)} ms of ${d.streamWall.toFixed(0)} ms), awake ${(awake * 100).toFixed(1)}%; ${d.blankFrames} blank frame(s)`
     );
-    const said = heard
+    const logged = heard
       .slice(streamFrom)
       .map((h) => COMMIT.exec(h.line))
       .filter((m) => m !== null);
     // The app says every commit of 4 ms or more; the gate is 8.
-    const slow = said.filter((m) => Number(m[1]) >= COMMIT_MS);
-    const landing = said.filter((m) => m.input.includes("whole"));
+    const slow = logged.filter((m) => Number(m[1]) >= COMMIT_MS);
+    const whole = logged.filter((m) => m.input.includes("whole"));
     kit.note(
-      `streaming commits of 4 ms or more: ${said.length}; the whole ones (a block or an answer landing): ${landing.map((m) => `${m[1]} ms`).join(", ") || "none"}`
+      `streaming commits of 4 ms or more: ${logged.length}; the whole ones (a block or an answer landing): ${whole.map((m) => `${m[1]} ms`).join(", ") || "none"}`
     );
     kit.check(
       `while a turn streams, each commit of its rows takes under ${COMMIT_MS} ms`,
@@ -764,6 +768,17 @@ async function run(kit: Kit): Promise<void> {
       slow.length === 0
         ? "no commit of 8 ms or more"
         : `${slow.length} commit(s) of 8 ms or more, the longest ${Math.max(...slow.map((m) => Number(m[1]))).toFixed(1)} ms: ${slow[0]?.input.slice(slow[0].index) ?? ""}`
+    );
+    // The reply's message lands on the rows that streamed it (the live
+    // row's key): the same rows, drawn anew where they stand.
+    const landed = heard
+      .slice(streamFrom)
+      .map((h) => LANDING.exec(h.line))
+      .find((m) => m !== null);
+    kit.check(
+      `the streamed reply lands on its own rows, in place, in under ${COMMIT_MS} ms`,
+      landed?.[1] === "in place" && Number(landed[2]) < COMMIT_MS,
+      landed ? `${landed[1]}, ${landed[2]} ms` : "the app said no landing"
     );
     if (SAMPLE) {
       await readProfiles(kit, udid);
