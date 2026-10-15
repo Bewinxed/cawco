@@ -636,14 +636,14 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
             toggle.transform = open ? CGAffineTransform(rotationAngle: .pi) : .identity
             self?.setNeedsLayout()
         }, for: .touchUpInside)
-        let block = CommandRow(arrangedSubviews: [rule, text, toggle])
+        let block = PermissionCommandRow(arrangedSubviews: [rule, text, toggle])
         block.spacing = Space.space3
         block.alignment = .top
         block.isLayoutMarginsRelativeArrangement = true
         block.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0)
         block.measured = { [weak text, weak toggle] in
             guard let text, let toggle, !many, text.numberOfLines == 1 else { return }
-            let whole = text.sizeThatFits(CGSize(width: .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)).width
+            let whole = text.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)).width
             let fits = whole <= text.bounds.width + 0.5
             if toggle.isHidden != fits { toggle.isHidden = fits }
         }
@@ -878,7 +878,8 @@ public protocol RedrawsOnReveal: UIView {
 
 /// The command's row on a permission card: told after each layout, so the
 /// card can offer its chevron only when the one line cuts something off.
-final class CommandRow: UIStackView {
+/// (The composer's slash-command list has its own `CommandRow`.)
+final class PermissionCommandRow: UIStackView {
     var measured: (() -> Void)?
 
     override func layoutSubviews() {
