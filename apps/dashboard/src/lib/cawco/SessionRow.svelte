@@ -282,7 +282,9 @@
   <!-- The words (the title and, on two lines, what it is doing under
        it), and at the row's end the age, on the title's line, flush
        with the row's trailing edge. -->
-  <span class="words">
+  <!-- Each line's words stand on the middle of their cell (app.css, the mark
+       line), the line the mark centres on. -->
+  <span class="words mark-line">
     {#if draft !== null}
       <!-- svelte-ignore a11y_autofocus -->
       <input
@@ -290,6 +292,7 @@
         autocomplete="off"
         autofocus
         class="cell title field focus-inset"
+        data-box
         onblur={() => {
           // Left after a refusal, it stays as typed, said under the row; Try
           // again or Enter sends it.
@@ -333,11 +336,11 @@
     {/if}
   </span>
   <span class="end" {@attach trailWidth}>
-    <span class="cell num trail" title={pending ?? hint}>
+    <span class="cell num trail mark-line" title={pending ?? hint}>
       {#if compact && (pending || renaming !== null)}
         <Spinner aria-hidden="true" class="size-3.5" />
       {:else}
-        {trail}
+        <span>{trail}</span>
       {/if}
     </span>
     {#if !compact}
@@ -695,7 +698,7 @@
     display: block;
     align-content: center;
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

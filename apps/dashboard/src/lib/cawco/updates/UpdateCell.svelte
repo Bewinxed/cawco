@@ -47,7 +47,8 @@
         {:else}
           <Badge class={CHIP} variant={cell.fail ? "destructive" : "ghost"}>
             {#if cell.fail}
-              <span class="size-2 shrink-0 rounded-full bg-error"></span>
+              <span class="size-2 shrink-0 rounded-full bg-error" data-box
+              ></span>
             {:else if cell.icon === "clock"}
               <IconClock class="size-4 shrink-0" />
             {:else if cell.icon === "download"}

@@ -114,9 +114,11 @@
       {/if}</span
     >
     {#if runId && !here}
-      <a class="words press-tint" href={runHref(runId)}>{@render words()}</a>
+      <a class="words mark-line press-tint" data-box href={runHref(runId)}
+        >{@render words()}</a
+      >
     {:else}
-      <p class="words">{@render words()}</p>
+      <p class="words mark-line" data-box>{@render words()}</p>
     {/if}
   </div>
   {#if failure}
@@ -150,7 +152,7 @@
   .name {
     flex: 0 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--ink-strong);

@@ -203,7 +203,9 @@
           >
         {:else}
           <span class="face identity rail-line" in:faceIn out:faceOut
-            ><span class="icon rail-cell"><IconCpu /></span>Reasoning</span
+            ><span class="icon rail-cell"><IconCpu /></span><span
+              >Reasoning</span
+            ></span
           >
         {/if}
       </span>

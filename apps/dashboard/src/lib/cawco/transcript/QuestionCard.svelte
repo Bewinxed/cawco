@@ -234,8 +234,8 @@
         <span class="mark attn" in:pillSwap out:pillSwap><IconAsk /></span>
       {/if}
     </span>
-    Question from {asker}
-    <span class="state">
+    <span>Question from {asker}</span>
+    <span class="state" data-box>
       {#if answered}
         <span class="pill done" in:pillSwap out:pillSwap>answered</span>
       {:else if dismissed}

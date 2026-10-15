@@ -79,7 +79,7 @@
         ><Sprite /></span
       >
       <span class="tk">{branch.subagentType}</span>
-      <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+      <span aria-hidden="true" class="chev" data-box><IconChevronRight /></span>
       {#if title !== branch.subagentType}
         <span class="arg">{title}</span>
       {/if}
@@ -88,7 +88,7 @@
       {/if}
       <!-- The clock is a timer (live off): in the transcript's log the phase
            and its steps are read when they change, not every second. -->
-      <span class="pill {phase}" {@attach clock.watch}>
+      <span class="pill {phase}" data-box {@attach clock.watch}>
         {phase}
         {#if view.steps}
           · {view.steps} step{view.steps === 1 ? "" : "s"}
@@ -250,7 +250,7 @@
     color: var(--ink-strong);
     font-size: var(--text-label);
     flex: 0 0 auto;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     max-inline-size: 40%;
@@ -259,7 +259,7 @@
     color: var(--ink-muted);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-inline-size: 0;

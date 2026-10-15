@@ -970,6 +970,7 @@
   <span
     aria-hidden="true"
     class="mark m{markHue(item.instanceId)}"
+    data-box
     {@attach land(() => (flies ? flightKey(item.instanceId) : undefined))}
     ><Sprite /></span
   >
@@ -1008,7 +1009,7 @@
     {@attach measureFloor(item.id)}
   >
     {@render mark(item, flies)}
-    <span aria-hidden="true" class="words">
+    <span aria-hidden="true" class="words mark-line" data-box>
       <span class="title">{item.title}</span>
       {#if item.queued}
         <span class="note">{queuedWords(item)}</span>
@@ -1020,7 +1021,7 @@
         <span class="note">{tone}</span>
       {/if}
     </span>
-    <span aria-hidden="true" class="slot">
+    <span aria-hidden="true" class="slot" data-box>
       {#key slotOf(tone)}
         <span
           class="glyph"
@@ -1268,7 +1269,7 @@
   }
   .title {
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1277,7 +1278,7 @@
   .note {
     min-inline-size: 0;
     font-weight: var(--weight-body);
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

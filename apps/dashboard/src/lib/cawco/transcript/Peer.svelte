@@ -152,6 +152,7 @@
       <Collapsible.Trigger
         aria-label="{row.lead} {row.name}"
         class="peer-toggle press-tint"
+        data-box
       >
         <span aria-hidden="true" class="chev"><IconChevronRight /></span>
       </Collapsible.Trigger>
@@ -182,7 +183,7 @@
   .excerpt {
     flex: 1 1 0;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: var(--weight-body);

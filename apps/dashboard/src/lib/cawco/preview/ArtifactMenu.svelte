@@ -251,6 +251,7 @@
           <button
             aria-label="Remove {artifact.name}"
             class="row-remove"
+            data-box
             disabled={removing.has(artifact.id)}
             onclick={(event) => {
               own(event);

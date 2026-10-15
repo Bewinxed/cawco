@@ -26,6 +26,7 @@
   {#snippet children({ checked })}
     <span
       class="absolute right-2 flex size-4 items-center justify-center pointer-events-none"
+      data-box
     >
       <span class="kit-dot" data-on={checked}></span>
     </span>

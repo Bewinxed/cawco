@@ -24,10 +24,18 @@
   {...restProps}
 >
   {#snippet children({ selected, highlighted })}
-    <span class="absolute end-2 flex size-4 items-center justify-center">
+    <span
+      class="absolute end-2 flex size-4 items-center justify-center"
+      data-box
+    >
       <IconTick class="kit-tick" data-on={selected} />
     </span>
-    <span class="flex flex-1 gap-2 shrink-0 whitespace-nowrap">
+    <!-- The mark line the item's own words and marks stand on: a box to the
+         item around it. -->
+    <span
+      class="mark-line flex flex-1 gap-2 shrink-0 whitespace-nowrap"
+      data-box
+    >
       {#if childrenProp}
         {@render childrenProp({ selected, highlighted })}
       {:else}

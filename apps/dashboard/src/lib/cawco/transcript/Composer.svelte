@@ -2983,7 +2983,7 @@
           type="button"
           bind:this={askedChip}
         >
-          <span aria-hidden="true" class="asked-face">
+          <span aria-hidden="true" class="asked-face" data-box>
             <CawFace size={16} status="needs-you" />
           </span>
           <span class="asked-text">{first?.question ?? first?.header}</span>
@@ -3197,7 +3197,7 @@
                         value={entry.id}
                       >
                         {#if entry.thread}
-                          <span aria-hidden="true" class="e-face">
+                          <span aria-hidden="true" class="e-face" data-box>
                             <CawFace
                               size={16}
                               status={cawco.threadOf(entry.thread)?.status ??
@@ -3468,7 +3468,7 @@
   .asked-text {
     flex: 1 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-align: start;
     text-overflow: ellipsis;
     white-space: nowrap;

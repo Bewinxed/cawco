@@ -142,7 +142,8 @@
               class="{CHIP} cursor-pointer"
               variant="destructive"
             >
-              <span class="size-2 shrink-0 rounded-full bg-error"></span>
+              <span class="size-2 shrink-0 rounded-full bg-error" data-box
+              ></span>
               Failed
             </Badge>
           {/snippet}

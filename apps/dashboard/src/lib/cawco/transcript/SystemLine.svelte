@@ -193,7 +193,7 @@
               >{harness.status}</span
             >
           {/if}
-          <span class={["hchev", { open }]}><IconChevronRight /></span>
+          <span class={["hchev", { open }]} data-box><IconChevronRight /></span>
         </Collapsible.Trigger>
         <Collapsible.Content reveal>
           <div class="hbody rail-hang">
@@ -309,7 +309,7 @@
             >{eventClock}</time
           >
         {/if}
-        <span class={["hchev", { open }]}><IconChevronRight /></span>
+        <span class={["hchev", { open }]} data-box><IconChevronRight /></span>
       </Collapsible.Trigger>
       <Collapsible.Content reveal>
         {#if foldCommand}
@@ -394,7 +394,8 @@
     }
   }
   .ftitle {
-    overflow: hidden;
+    min-inline-size: 0;
+    overflow: clip;
     text-overflow: ellipsis;
   }
   .eat {
@@ -511,7 +512,7 @@
      wrapped, so the line stays a line. */
   .tsum {
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--ink-muted);

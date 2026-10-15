@@ -623,6 +623,8 @@ The three dense roles (meta, label, body) keep one size at every width because t
 
 **The Truncate Inside Rule.** Text truncates with an ellipsis in an inner span, never on the control or link itself, so the hit area is never clipped. In a row, the name gives way first and the meta line keeps one line.
 
+**The Mark Line Rule.** Words set beside a mark (an icon, a glyph, an avatar, a status dot, a keycap) have their x-height's middle on the mark's middle, within half a pixel, in every engine. Centring a line box does not do it: Figtree's ascent and descent sit unevenly about its x-height and Blink floors the half-leading, so a centred 13px label sat 0.3px below its mark in Blink and 1.25px below in WebKit and Gecko. The mark line recipe (app.css) trims each run of words to its x-height band (`text-box: trim-both ex alphabetic`) and pads back the room the trim took, half above and half below, so the run keeps its line's height and centring lands on the x-height. The kit's rows draw it by their own class (option and tray chips, menu items, segments, rail lines, and the button, badge and toggle); any other row takes `.mark-line`. Its words are elements, never bare text beside the mark. A box on the line (a mark's tile, a chevron's cell, a pill) says so with `data-box`. A run that truncates clips with `overflow: clip`, never `hidden`, which Gecko does not trim.
+
 **The 16px Field Rule.** On a phone or a coarse pointer every text field renders at 16px (an `!important` in the base layer), because iOS Safari zooms into any field under 16px.
 
 **Balanced wrapping.** Headings use `text-wrap: balance`. Paragraphs and list items use `pretty`.

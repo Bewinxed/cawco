@@ -389,11 +389,13 @@
           {@attach trayCard(() => id)}><Sprite /></span
         >
         <span class="tk">{label}</span>
-        <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+        <span aria-hidden="true" class="chev" data-box
+          ><IconChevronRight /></span
+        >
         {#if started}
-          <span class="kind">session</span>
+          <span class="kind" data-box>session</span>
         {:else if type}
-          <span class="kind">{type}</span>
+          <span class="kind" data-box>{type}</span>
         {/if}
         {#if harness}
           <span class="meta">{harness}</span>
@@ -404,7 +406,7 @@
         {#if mayDelegate}
           <span class="may">may delegate</span>
         {/if}
-        <span class="pill {tone}">
+        <span class="pill {tone}" data-box>
           <MorphText text={pillWords} />
           {#if elapsed}
             {pillWords ? " · " : ""}
@@ -591,7 +593,7 @@
     color: var(--ink-strong);
     flex: 0 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     transition: color var(--dur-control) var(--ease-out);
@@ -613,7 +615,7 @@
     font-weight: var(--weight-body);
     flex: 0 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

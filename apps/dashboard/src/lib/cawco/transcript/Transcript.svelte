@@ -3220,14 +3220,14 @@
       color: var(--ink-strong);
       flex: 0 1 auto;
       min-inline-size: 0;
-      overflow: hidden;
+      overflow: clip;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     & .arg {
       font-family: var(--font-mono);
       color: var(--ink-muted);
-      overflow: hidden;
+      overflow: clip;
       text-overflow: ellipsis;
       white-space: nowrap;
       min-inline-size: 0;

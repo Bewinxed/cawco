@@ -63,15 +63,19 @@
 
 <!-- The speaker line arrives with its row: it moves with the row's own
      entrance and has no motion of its own. -->
-<h2 class="who" class:grouped>
+<!-- With its mark the line is a mark line (app.css): the name and the clock
+     stand on the mark's middle. Grouped it has no mark, and its clock keeps
+     its own line box in the body's first line. -->
+<h2 class="who" class:grouped class:mark-line={!grouped}>
   {#if grouped}
     <span class="sr-only">{name}</span>
   {:else}
     {#if !you && voice?.face}
-      <span aria-hidden="true" class="dot face">{@render voice.face(live)}</span
+      <span aria-hidden="true" class="dot face" data-box
+        >{@render voice.face(live)}</span
       >
     {:else}
-      <span aria-hidden="true" class="dot {you ? 'u' : 'a'}">
+      <span aria-hidden="true" class="dot {you ? 'u' : 'a'}" data-box>
         {#if you}
           <IconUser />
         {:else}

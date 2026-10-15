@@ -48,8 +48,8 @@
   <div class="tools rail-row">
     {#each TOOLS as width (width)}
       <div class="trow rail-line">
-        <Skeleton class="ic rail-cell" /><Skeleton class="tk" />
-        <Skeleton class="arg" style="width: {width}" />
+        <Skeleton class="ic rail-cell" /><Skeleton class="tk" data-box />
+        <Skeleton class="arg" data-box style="width: {width}" />
       </div>
     {/each}
   </div>

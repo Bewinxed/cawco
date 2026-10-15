@@ -267,7 +267,7 @@
                 onSelect={() => chooseAuthor(author.token)}
                 value={`author:${author.token}`}
               >
-                <span class="jump-text">
+                <span class="jump-text" data-box>
                   <AuthorMark class="jump-mark" height={16} width={16} />
                   <span class="jump-name">{author.label}</span>
                   <span class="jump-trail">{trail}</span>
@@ -284,7 +284,7 @@
             {@const EntryMark = MARK[entry.kind]}
             <div data-flip>
               <Command.Item onSelect={() => jump(entry.href)} value={entry.id}>
-                <span class="jump-text">
+                <span class="jump-text" data-box>
                   {#if entry.kind === "thread"}
                     <span class="jump-mark">
                       <CawFace
@@ -329,14 +329,14 @@
             <div aria-hidden="true" class="jump-skeletons" out:crossOut>
               {#each SKELETONS as row (row)}
                 <div class="kit-item jump-hit jump-skeleton">
-                  <span class="jump-hit-head">
+                  <span class="jump-hit-head" data-box>
                     <Skeleton class="jump-skeleton-mark" />
                     <Skeleton
                       class="jump-skeleton-bar"
                       style="width: {38 - row * 6}%"
                     />
                   </span>
-                  <span class="jump-snippet">
+                  <span class="jump-snippet" data-box>
                     <Skeleton
                       class="jump-skeleton-bar"
                       style="width: {74 - row * 9}%"
@@ -362,8 +362,8 @@
               >
                 <!-- Which conversation this line came out of. Without it a list of
                    snippets is a list of strangers. -->
-                <span class="jump-hit-head">
-                  <span class="jump-text">
+                <span class="jump-hit-head" data-box>
+                  <span class="jump-text" data-box>
                     <IconDocument class="jump-mark" height={16} width={16} />
                     <span class="jump-name">
                       {index.sessionTitles.get(hit.sessionId) ??

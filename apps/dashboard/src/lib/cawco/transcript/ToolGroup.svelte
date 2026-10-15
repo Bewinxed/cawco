@@ -430,7 +430,7 @@
               type="button"
             >
               {@render line()}
-              <span class="chev"><IconChevronRight /></span>
+              <span class="chev" data-box><IconChevronRight /></span>
             </button>
             {#if disclosed.get() || opened.has(callId(m))}
               <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
@@ -772,14 +772,14 @@
     font-size: var(--text-label);
     flex: 0 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .arg {
     font-family: var(--font-mono);
     color: var(--ink-muted);
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-inline-size: 0;

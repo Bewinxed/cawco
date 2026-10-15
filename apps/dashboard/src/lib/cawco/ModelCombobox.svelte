@@ -175,7 +175,7 @@
             <Command.Group forceMount heading="Custom">
               <Command.Item forceMount onSelect={selectCustom} value={trimmed}>
                 <ProviderLogo model={trimmed} />
-                <span class="flex flex-col">
+                <span class="flex flex-col" data-box>
                   <span>Use <span class="font-mono">{trimmed}</span></span>
                   <span class="text-meta text-muted-foreground">
                     Sent to the selected harness exactly as typed
@@ -214,7 +214,7 @@
               onSelect={selectDefault}
               value="default-model"
             >
-              <span class="flex flex-col">
+              <span class="flex flex-col" data-box>
                 <span>Default</span>
                 <span class="text-meta text-muted-foreground">
                   Whatever the selected harness would have picked
@@ -231,7 +231,7 @@
               value={row.value}
             >
               <ProviderLogo model={row.value} />
-              <span class="flex flex-col">
+              <span class="flex flex-col" data-box>
                 <span>{row.displayName}</span>
                 <span class="text-meta text-muted-foreground"
                   >{row.description}</span
