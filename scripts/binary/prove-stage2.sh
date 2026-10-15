@@ -1626,20 +1626,23 @@ ws_listener_start() {
 }
 # The newest listener on the port: the one just started.
 ws_listener_pid() { as_user "$joinerc" pgrep -n -f "socat TCP-LISTEN:$WS_LISTENER_PORT"; }
-# What a listener answers in the network of the sandbox whose init is $1, reached as the agent's preview bridge
-# reaches a workspace's port (preview-bridge.ts: nsenter into the sandbox's user and network namespaces). nsenter's and
-# socat's own words come with it: an answer that is not the listener's says why.
-ws_listener_says() { as_user "$joinerc" nsenter --target "$1" --user --net --preserve-credentials socat -t2 -T3 - "TCP:127.0.0.1:$WS_LISTENER_PORT" < /dev/null 2>&1 || true; }
-# Why the sandbox whose init is $1 gave no listener's answer: the listener processes running, the TCP ports listened
-# on in that sandbox's network (its init's /proc/<pid>/net/tcp, state 0A, read without joining it), and the answer.
+# A listener is read only the way the owner reaches it: through the hub's preview of its port (ws_preview_says,
+# ws_preview_by_host), the agent's bridge joining the sandbox's network. The rig never joins that network itself: from
+# a shell in the machine's container the kernel refuses it (nightly ee52c2d6f: "nsenter: reassociate to namespace
+# 'ns/net' failed: Operation not permitted").
+#
+# Why a preview gave no listener's answer, read from outside without joining anything: the listeners running, the TCP
+# ports listened on in the network of the sandbox whose init is $1 (its /proc/<pid>/net/tcp, state 0A), and what the
+# joined machine's agent said of previews.
 ws_listener_why() {
-  echo "listeners running: $(as_user "$joinerc" pgrep -af "socat TCP-LISTEN:$WS_LISTENER_PORT" | tr '\n' ';')"
   local hex ports=""
+  echo "listeners running: $(as_user "$joinerc" pgrep -af "socat TCP-LISTEN:$WS_LISTENER_PORT" | tr '\n' ';')"
   for hex in $(as_user "$joinerc" cat "/proc/$1/net/tcp" | awk 'NR > 1 && $4 == "0A" { split($2, a, ":"); print a[2] }'); do
     ports+="$((16#$hex)) "
   done
   echo "ports listened on in $1's network: ${ports:-none}"
-  echo "its answer: $(ws_listener_says "$1")"
+  echo "the joined machine's agent on previews:"
+  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep -iE "preview|bridge|the way into workspace" | tail -n 8 || true
 }
 # The workspace's preview of the listener's port, opened as a session opens one (its `artifact_create` tool, here
 # from a command through the workspace's tool door), and the hub's preview port for it, as the dashboard learns it.
@@ -1783,7 +1786,12 @@ workspace_across_update() {
   wait_until 30 '[[ "$(ws_listener_pid)" =~ ^[0-9]+$ ]]' || { echo "ASSERTION FAILED: no listener runs after the command that started it ended"; ws_listener_why "$old_inner"; return 1; }
   listener=$(ws_listener_pid)
   ws_tree "$old_inner" | grep -qx "$listener" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $old_inner"; return 1; }
-  wait_until 30 '[[ "$(ws_listener_says "'"$old_inner"'")" == *gen-old* ]]' || { ws_listener_why "$old_inner"; return 1; }
+  # The delegate shows it: a preview of the port, which the owner reaches through the hub, the joined machine's agent
+  # and its bridge into the sandbox's network.
+  ws_preview_open
+  wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
+  echo "the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
+  wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
   # The new build reaches the hub's machine, then the joined machine, which installs it with the workspace open.
   use_feed next
   learn
@@ -1819,9 +1827,12 @@ workspace_across_update() {
   as_user "$joinerc" test -e "$(ws_state)/retiring-$gen.json"
   [[ "$(child_pids "$joinerc" "boundary-$id-$gen")" =~ ^[0-9]+$ ]]
   as_user "$joinerc" kill -0 "$old_inner"
-  # The listener ran through the update and still answers on its port, in the network it started in.
+  # The listener ran through the update and still answers on its port, in the network it started in: the preview,
+  # started again by the hub at the new agent's register, reaches it there (the session's port is read again, as a
+  # dashboard learns it after the hub's own restart).
   as_user "$joinerc" kill -0 "$listener"
-  [[ "$(ws_listener_says "$old_inner")" == *gen-old* ]]
+  wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
+  wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
   # With the job gone, the listener alone keeps the older boundary running: through four of the agent's looks at
   # it (boundary.ts STALE_LOOK_MS, 5 s), its record, its sandbox and the listener's answer stay.
   as_user "$joinerc" kill "$job"
@@ -1829,11 +1840,8 @@ workspace_across_update() {
   as_user "$joinerc" test -e "$(ws_state)/retiring-$gen.json" || { echo "ASSERTION FAILED: the older boundary closed while the setsid listener ran in it"; return 1; }
   as_user "$joinerc" kill -0 "$old_inner"
   as_user "$joinerc" kill -0 "$listener"
-  # A preview of the port reaches the listener in the older generation: the newest that listens on it.
-  ws_preview_open
-  wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
-  echo "the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
-  wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; return 1; }
+  # The preview of the port still reaches the listener in the older generation: the newest that listens on it.
+  wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
   # The same in host mode, the owner's: a request without a pass gets the lock's 401 page; one with the pass a
   # ticket bought reaches the listener in the older generation.
   answer=$(ws_preview_mode host)
@@ -1851,14 +1859,15 @@ workspace_across_update() {
   # taken over, and it closes with what runs in it (boundary.ts supersededPorts). Its sandbox, its srt host, its
   # record and its files go, the old listener with them.
   ws_listener_start gen-new
-  wait_until 30 '[[ "$(ws_listener_says "'"$new_inner"'")" == *gen-new* ]]' || { ws_listener_why "$new_inner"; return 1; }
+  wait_until 30 '[[ "$(ws_listener_pid)" =~ ^[0-9]+$ && "$(ws_listener_pid)" != "'"$listener"'" ]]' || { echo "ASSERTION FAILED: no second listener runs after the command that started it ended"; ws_listener_why "$new_inner"; return 1; }
+  ws_tree "$new_inner" | grep -qx "$(ws_listener_pid)" || { echo "ASSERTION FAILED: the listener $(ws_listener_pid) does not descend from the new sandbox's init $new_inner"; return 1; }
   wait_until 120 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)/retiring-'"$gen"'.json" && ! as_user "$joinerc" test -e "$(ws_state)/boundaries/'"$gen"'"'
   ! as_user "$joinerc" kill -0 "$old_inner" 2> /dev/null
   ! as_user "$joinerc" kill -0 "$listener" 2> /dev/null || { echo "ASSERTION FAILED: the older generation's listener $listener outlived its generation"; return 1; }
   as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its older boundary .* a newer generation listens on every port its work listened on ($WS_LISTENER_PORT)"
   # The same preview now reaches the new generation's listener: in host mode with the same pass, then by port once
   # the fleet is back in port mode.
-  wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *gen-new*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; return 1; }
+  wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *gen-new*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; ws_listener_why "$new_inner"; return 1; }
   [[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")" == *"HTTP 401" ]] || { echo "ASSERTION FAILED: host mode answered a request without a pass"; return 1; }
   answer=$(ws_preview_mode port)
   echo "the hub answered port mode: $answer"
@@ -1868,7 +1877,7 @@ workspace_across_update() {
   # `barred`, `portFor`).
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
   echo "back in port mode the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
-  wait_until 60 '[[ "$(ws_preview_says)" == *gen-new* ]]' || { echo "the preview answered: $(ws_preview_says)"; return 1; }
+  wait_until 60 '[[ "$(ws_preview_says)" == *gen-new* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$new_inner"; return 1; }
   # The current one is untouched.
   [[ "$(ws_gen)" == "$new" ]]
   [[ "$(child_pids "$joinerc" "boundary-$id-$new")" =~ ^[0-9]+$ ]]
@@ -1882,8 +1891,9 @@ workspace_archive_ends_all() {
   id=$(cat "$rigdir/ws-id")
   gen=$(ws_gen)
   read -r _ inner _ <<< "$(ws_place "$gen")"
-  # The `setsid -f` listener the update's check started again in this generation.
-  [[ "$(ws_listener_says "$inner")" == *gen-new* ]]
+  # The `setsid -f` listener the update's check started again in this generation, answering its preview by port (the
+  # across check ends in port mode, with the port it read last).
+  wait_until 60 '[[ "$(ws_preview_says)" == *gen-new* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$inner"; return 1; }
   listener=$(ws_listener_pid)
   tree=$(ws_tree "$inner")
   grep -qx "$listener" <<< "$tree" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $inner"; return 1; }
@@ -1906,7 +1916,7 @@ workspace_archive_ends_all() {
   [[ -z $left ]] || { echo "ASSERTION FAILED: these processes of the archived workspace's sandbox still run:$left"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_listener_start ws_listener_pid ws_listener_says ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_listener_start ws_listener_pid ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
 export WS_LISTENER_PORT
 rig_workspace() {
   local across="a workspace open across an update keeps its job and a setsid listener running, a preview reaching the listener in the older generation by port and by host behind the lock, its next command runs in the new build's boundary, and once the listener is started again on its port in the new generation the old boundary closes with it and the preview reaches the new one in both modes"
