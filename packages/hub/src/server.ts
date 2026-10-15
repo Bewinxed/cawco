@@ -18983,7 +18983,7 @@ export const createServer = (
           query: t.Object({
             note: t.Optional(t.String()),
             // Sized as a restart from the person's asks: nothing to summarise.
-            asks: t.Optional(t.Literal("1")),
+            asks: t.Optional(t.Boolean()),
           }),
         },
         async ({ params, query, status }) => {
@@ -18991,7 +18991,7 @@ export const createServer = (
             const prepared = await prepareContinuation(
               params.id,
               query.note,
-              query.asks === "1"
+              query.asks === true
             );
             return {
               asks: prepared.extracted.asks.length,

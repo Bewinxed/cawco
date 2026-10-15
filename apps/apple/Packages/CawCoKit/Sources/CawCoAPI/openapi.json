@@ -13361,8 +13361,7 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "const": "1"
+              "type": "boolean"
             }
           }
         ],

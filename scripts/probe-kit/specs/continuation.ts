@@ -247,7 +247,7 @@ const run = async (kit: Kit) => {
   // ── 2. from the person's asks ───────────────────────────────────────────
   const asks = [FIRST_ASK, ...LATER_ASKS];
   const sized = await fleet.api<{ asks: number; summariseInputTokens: number }>(
-    `/api/instances/${id}/continue?asks=1`
+    `/api/instances/${id}/continue?asks=true`
   );
   kit.check(
     "2: sized as a restart from the asks: their count, nothing to summarise",

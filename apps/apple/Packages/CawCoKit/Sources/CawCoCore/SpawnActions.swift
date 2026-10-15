@@ -8,6 +8,8 @@ import OpenAPIRuntime
 
 /// The hub's sizing of what a continuation carries (`GET /api/instances/{id}/continue`).
 public struct ContinuationEstimate: Sendable, Equatable {
+    /// How many of the person's messages a restart from them carries.
+    public let asks: Double
     public let liveContextTokens: Double
     public let summariseInputTokens: Double
     public let openingTokens: Double
@@ -53,12 +55,14 @@ extension HubConnection {
         return (snapshot.skills.map(\.name), snapshot.config.plugins.map(\.id))
     }
 
-    public func continuationEstimate(instanceId: String) async throws -> ContinuationEstimate {
-        switch try await api.instances.prepareContinuation(.init(path: .init(id: instanceId))) {
+    /// `asks`: sized as a restart from the person's own messages, which summarises nothing.
+    public func continuationEstimate(instanceId: String, asks: Bool) async throws -> ContinuationEstimate {
+        let input = Operations.GetApiInstancesByIdContinue.Input(path: .init(id: instanceId), query: .init(asks: asks ? true : nil))
+        switch try await api.instances.prepareContinuation(input) {
         case let .ok(ok):
             let sized = try ok.body.json
-            return ContinuationEstimate(liveContextTokens: sized.liveContextTokens, summariseInputTokens: sized.summariseInputTokens,
-                                        openingTokens: sized.openingTokens)
+            return ContinuationEstimate(asks: sized.asks, liveContextTokens: sized.liveContextTokens,
+                                        summariseInputTokens: sized.summariseInputTokens, openingTokens: sized.openingTokens)
         case let .unprocessableContent(refused):
             throw ControlError(message: try await Self.text(refused.body))
         case let .undocumented(statusCode, payload):
@@ -72,6 +76,9 @@ extension HubConnection {
         switch try await api.instances.continueSession(.init(path: .init(id: sourceId), body: .json(request))) {
         case let .ok(ok):
             return try ok.body.json.continuationId
+        // Neither a summariser nor `asksOnly`, in the hub's words.
+        case let .badRequest(refused):
+            throw ControlError(message: try await Self.text(try refused.body.plainText))
         case let .conflict(refused):
             throw ControlError(message: try await Self.text(try refused.body.plainText))
         case let .unprocessableContent(refused):

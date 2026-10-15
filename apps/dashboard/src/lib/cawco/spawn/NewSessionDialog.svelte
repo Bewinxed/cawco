@@ -1080,7 +1080,7 @@
     try {
       const [response] = await Promise.all([
         fetch(
-          `/api/instances/${encodeURIComponent(instanceId)}/continue${asked === "asks" ? "?asks=1" : ""}`
+          `/api/instances/${encodeURIComponent(instanceId)}/continue${asked === "asks" ? "?asks=true" : ""}`
         ),
         loadModelWindows(),
       ]);

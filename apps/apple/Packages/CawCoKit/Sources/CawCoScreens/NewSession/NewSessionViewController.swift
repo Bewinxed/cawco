@@ -41,6 +41,8 @@ public struct SessionDraft: Sendable {
     var projectId: String?
     var summarizerHarness: String
     var summarizerModel: String
+    /// Continue from the person's own messages alone: nothing is summarised.
+    var asks: Bool
     var usedModel: String
 }
 
@@ -94,6 +96,10 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var plugins: [String] = []
     private var summarizerHarness = "claude"
     private var summarizerModel = ""
+    /// Continue mode: the new session opens on the person's own messages
+    /// alone, verbatim and in order, and nothing is summarised; otherwise on
+    /// a summary, the artifact index and the last turns.
+    private var fromAsks = false
     private var estimate: ContinuationEstimate?
     /// The continuation this form started and follows. Closing the form hands
     /// it to the caller; only Cancel stops it.
@@ -146,6 +152,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// Full Send chosen, however it got there: in view beside Start, outside the body's scroll.
     private let fullSendNote = KitAlert(tone: .warning, glyph: .shield)
     private let sizing = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    /// Continue mode: what the new session opens on (Segmented.svelte's "From a summary / From my asks").
+    private let carryRow = UIStackView()
     private let models = UIStackView()
     private var summarizerSection: ModelSectionView?
     private var modelSection: ModelSectionView?
@@ -237,6 +245,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             prompt = restore.prompt
             summarizerHarness = restore.summarizerHarness
             summarizerModel = restore.summarizerModel
+            fromAsks = restore.asks
             machineIds = restore.machineIds
             machinesTouched = true
             cwd = restore.baseCwd
@@ -262,14 +271,26 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// What continuing the source would carry, sized by the hub, and the
     /// claude windows the pickers size models by. The source is only read.
     private func loadEstimate(_ instanceId: String, _ request: Int) async {
+        let asks = fromAsks
         do {
-            async let sized = hub.continuationEstimate(instanceId: instanceId)
+            async let sized = hub.continuationEstimate(instanceId: instanceId, asks: asks)
             async let windows: Void = hub.readModelWindows()
             let (read, _) = try await (sized, windows)
-            if request == submission { estimate = read }
+            if request == submission, asks == fromAsks { estimate = read }
         } catch {
-            if request == submission { self.error = error.localizedDescription }
+            if request == submission, asks == fromAsks { self.error = error.localizedDescription }
         }
+        requestRefresh()
+    }
+
+    /// Continue mode: the other start, sized afresh by the hub.
+    private func chooseCarry(asks: Bool) {
+        guard asks != fromAsks, let source = continuing else { return }
+        fromAsks = asks
+        estimate = nil
+        buildMode()
+        let request = submission
+        Task { [weak self] in await self?.loadEstimate(source.instanceId, request) }
         requestRefresh()
     }
 
@@ -493,7 +514,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         guard continuing != nil else { return false }
         guard let estimate, let selected else { return true }
         if targetRefusal(selected) != nil { return true }
-        guard estimate.summariseInputTokens > 0 else { return false }
+        guard !fromAsks, estimate.summariseInputTokens > 0 else { return false }
         return summarizerSelected.map { summarizerRefusal($0) != nil } ?? true
     }
 
@@ -743,6 +764,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         contentComb = NsComb()
         content.addArrangedSubview(contentComb)
         content.setCustomSpacing(18, after: contentComb)
+        content.addArrangedSubview(carryRow)
+        content.setCustomSpacing(8, after: carryRow)
         sizing.tabular = true
         content.addArrangedSubview(sizing)
         content.setCustomSpacing(18, after: sizing)
@@ -864,8 +887,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             moveTray.addArrangedSubview(words)
         }
         let change: @MainActor @Sendable () -> Void = { [self] in
-            for part in [promptHeader, promptComb, editor as UIView, reading, contentComb, sizing, models] as [UIView] {
-                part.isHidden = step || (part === sizing && continuing == nil)
+            for part in [promptHeader, promptComb, editor as UIView, reading, contentComb, carryRow, sizing, models] as [UIView] {
+                part.isHidden = step || ((part === sizing || part === carryRow) && continuing == nil)
             }
             moveTray.isHidden = !step
             moveTray.alpha = step ? 1 : 0
@@ -907,9 +930,23 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             return (source.harness, label, title)
         }
         sizing.isHidden = !continues
+        carryRow.isHidden = !continues
+        carryRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        if continues {
+            let carry = NsSegmented([
+                ("From a summary", nil, nil, nil),
+                ("From my asks", nil, nil, nil),
+            ], selected: fromAsks ? 1 : 0)
+            carry.accessibilityLabel = "What the new session opens on"
+            carry.onChange = { [weak self] index in self?.chooseCarry(asks: index == 1) }
+            // `justify-self: start`: the switch hugs its items.
+            carry.setContentHuggingPriority(.required, for: .horizontal)
+            carryRow.addArrangedSubview(carry)
+            carryRow.addArrangedSubview(UIView())
+        }
         models.arrangedSubviews.forEach { $0.removeFromSuperview() }
         summarizerSection = nil
-        if continues {
+        if continues, !fromAsks {
             let section = ModelSectionView(hub: hub, label: "Summarise with", state: summarizerState, presenter: self)
             section.onHarness = { [weak self] value in
                 self?.summarizerHarness = value
@@ -1123,8 +1160,11 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         if moveStep { reading.isHidden = connected && error.isEmpty }
 
         if continuing != nil {
-            sizing.text = estimate.map { "Current context \(Self.tokens($0.liveContextTokens)) → \(Self.tokens($0.summariseInputTokens)) to summarise" }
-                ?? "Reading the session's context…"
+            sizing.text = estimate.map { sized in
+                fromAsks
+                    ? "Current context \(Self.tokens(sized.liveContextTokens)) → your \(Int(sized.asks)) message\(sized.asks == 1 ? "" : "s"), \(Self.tokens(sized.openingTokens))"
+                    : "Current context \(Self.tokens(sized.liveContextTokens)) → \(Self.tokens(sized.summariseInputTokens)) to summarise"
+            } ?? "Reading the session's context…"
         }
         summarizerSection?.update(summarizerState)
         modelSection?.update(modelState)
@@ -1134,7 +1174,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         scroll.isUserInteractionEnabled = !busy
         start.setLabel(startLabel)
         let stage = job.flatMap { id in fleet.continuations.first { $0.id == id }?.stage }
-        start.setPending(busy, label: continuing != nil && stage != .starting ? "Summarising…" : "Starting…")
+        start.setPending(busy, label: continuing != nil && !fromAsks && stage != .starting ? "Summarising…" : "Starting…")
         start.isEnabled = !cantStart
         cancel.isEnabled = !busy || job != nil
     }
@@ -1366,7 +1406,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             machineIds: machineIds, baseCwd: path, cwd: workdir, prompt: prompt, harness: harness, permissionMode: permissionMode, model: model,
             effort: effort, spinOff: spinOff, repo: repo?.trimmingCharacters(in: .whitespaces), projectId: projectId,
             // The person's own picks; "" when they left the harness's default.
-            summarizerHarness: summarizerHarness, summarizerModel: summarizerModel, usedModel: model
+            summarizerHarness: summarizerHarness, summarizerModel: summarizerModel, asks: fromAsks, usedModel: model
         )
         let sendsMode = !modeless
         // The folder there is already the project's: the session starts in it.
@@ -1474,8 +1514,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         guard let target = draft.machineIds.first else { return }
         guard await verifyBeforeSpawn(target, draft.baseCwd, current: current), current() else { return }
         let note = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let request = HubConnection.ContinuationRequest(
-            summarizer: .init(harness: try Self.wire(draft.summarizerHarness), model: draft.summarizerModel.isEmpty ? nil : draft.summarizerModel),
+        var request = HubConnection.ContinuationRequest(
             target: .init(
                 harness: try Self.wire(draft.harness), model: Self.shown(draft).isEmpty ? nil : Self.shown(draft), machineId: target, cwd: draft.cwd,
                 effort: try draft.effort.map(Self.wire),
@@ -1486,6 +1525,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             ),
             note: note.isEmpty ? nil : note
         )
+        // From the person's asks nothing is summarised: no summariser goes.
+        if draft.asks {
+            request.asksOnly = true
+        } else {
+            request.summarizer = .init(harness: try Self.wire(draft.summarizerHarness), model: draft.summarizerModel.isEmpty ? nil : draft.summarizerModel)
+        }
         let id = try await hub.startContinuation(sourceId: source.instanceId, request: request)
         // Closed while the hub was starting it: the caller sees it through.
         if current() {
@@ -1494,7 +1539,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         } else {
             onDetach(id, source, draft)
         }
-        SpawnMemory.recordUse(harness: draft.summarizerHarness, model: draft.summarizerModel)
+        if !draft.asks { SpawnMemory.recordUse(harness: draft.summarizerHarness, model: draft.summarizerModel) }
         SpawnMemory.recordUse(harness: draft.harness, model: draft.usedModel)
         try remember(draft)
         requestRefresh()
