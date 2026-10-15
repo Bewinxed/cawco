@@ -75,14 +75,14 @@ type Phase = (typeof PHASES)[number];
 interface Reading {
   /** The main thread's CPU over the phase, ms. */
   cpuMs: number;
-  /** How many hub messages the page took over the phase. */
-  messages: number;
   interactions: number;
   /** Long tasks by the wall clock (PerformanceObserver `longtask`). */
   longTasks: number;
   /** The longest task's CPU, ms. */
   maxCpu: number;
   maxInput: number;
+  /** How many hub messages the page took over the phase. */
+  messages: number;
   /** The longest animation frame's account of itself: what ran in it. */
   worstFrame: string;
 }
