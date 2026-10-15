@@ -35,6 +35,8 @@ export interface ContinueSource {
 export interface SessionDraft {
   /** The account picked for the session; absent: placement chooses. */
   account?: string;
+  /** Continue from the person's own messages alone: nothing is summarised. */
+  asks: boolean;
   baseCwd: string;
   cwd: string;
   effort: EffortLevel | null;

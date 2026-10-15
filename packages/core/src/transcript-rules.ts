@@ -1695,6 +1695,32 @@ export function sentRow(
   );
 }
 
+/**
+ * What the person said in a stored entry, verbatim, with an `[image]` line
+ * per image they sent: a main-loop turn that {@link sentRow} draws as their
+ * own words. Null for everything else: the agent's turns, tool results, a
+ * compaction summary, cawco's deliveries on someone else's behalf (a hand-off,
+ * a report, a rule) and the harness's own notes.
+ */
+export function personWords(entry: SessionMessage): string | null {
+  if (entry.compactSummary) {
+    return null;
+  }
+  const start = turnStart(entry);
+  if (!start) {
+    return null;
+  }
+  const row = sentRow(start.text, entry.message, { id: "", instanceId: "" });
+  if (row.type !== "user") {
+    return null;
+  }
+  const said = [
+    start.text.trim(),
+    ...(start.images ?? []).map(() => "[image]"),
+  ].filter(Boolean);
+  return said.length ? said.join("\n") : null;
+}
+
 /** Folds a tool result into the `tool.use` it answers; returns the block it changed. */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one dispatch over every tool-result shape a `tool.use` can be answered by
 export function applyToolResult(

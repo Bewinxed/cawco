@@ -24,6 +24,7 @@ import {
   type HarnessKind,
   type NeutralContentBlock,
   type PermissionMode,
+  personWords,
   type SendAttachment,
   type SendPayload,
   type SessionMessage,
@@ -42,6 +43,12 @@ export interface ContinuationSource {
 /** What "continue in new session" is asked: who summarises, what starts. */
 export interface ContinueRequest {
   /**
+   * The new session opens on the person's own messages alone
+   * ({@link Extracted.asks}), verbatim and in order ({@link asksOpening}):
+   * nothing is summarised, and nothing the agent said or did is carried.
+   */
+  asksOnly?: true;
+  /**
    * What rides the new session's opening message beside its words, as a
    * send carries it: texts and the hub's files, and images (base64). Kept
    * with the job until the opening goes; the summariser never sees them.
@@ -49,8 +56,12 @@ export interface ContinueRequest {
   attachments?: SendAttachment[];
   images?: SendPayload["images"];
   note?: string;
-  /** Absent `model`: the harness's own default. Absent `account`: placed as any start is. */
-  summarizer: { harness: HarnessKind; model?: string; account?: string };
+  /**
+   * Who writes the summary; absent only with {@link asksOnly}, which writes
+   * none. Absent `model`: the harness's own default. Absent `account`:
+   * placed as any start is.
+   */
+  summarizer?: { harness: HarnessKind; model?: string; account?: string };
   /** The same options a dashboard spawn sends; machine and cwd default to the source's. */
   target: {
     /** The account it runs on; absent, placed as any start is. */
@@ -119,6 +130,12 @@ export interface Extracted {
   /** Files changed, files read, commands run — as plain text. */
   artifacts: string;
   /**
+   * Every message the person sent the session, over its whole transcript,
+   * verbatim and oldest first ({@link personWords}): what a continuation
+   * from the person's asks opens with, and all it carries.
+   */
+  asks: string[];
+  /**
    * The uuid of the last transcript entry before the tail: how far a summary
    * of {@link middle} reaches. A summary made at another `covers` answers
    * for another conversation. Null when nothing comes before the tail.
@@ -136,6 +153,7 @@ const TAIL_USER_TURNS = 6;
 const TAIL_CHARS = 16_000;
 const ERROR_CHARS = 300;
 const TOOL_ARGUMENT_CHARS = 300;
+const FILES_CHANGED_SHOWN = 30;
 const FILES_READ_SHOWN = 30;
 const COMMANDS_SHOWN = 40;
 /**
@@ -153,6 +171,12 @@ const CHANGE_TOOLS = new Set([
   "apply_patch",
 ]);
 const READ_TOOLS = new Set(["read"]);
+/**
+ * Shell calls are listed as commands, never read for the files they wrote:
+ * a command's text holds `>` in a comparison, a commit message or a heredoc
+ * as often as in a redirect, and every such read named files that never
+ * existed. The git section is what changed on disk.
+ */
 const SHELL_TOOLS = new Set(["bash", "shell"]);
 /** Where each harness's file tools put the path. */
 const PATH_ARGUMENTS = ["file_path", "filePath", "notebook_path", "path"];
@@ -172,38 +196,6 @@ const MAIN_ARGUMENTS = [
 /** The files an apply-patch body names (`*** Update File: path`). */
 const PATCH_FILE = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm;
 const WHITESPACE = /\s+/g;
-/**
- * Files a shell command wrote, as the command text names them: an output
- * redirect (`>`/`>>`, heredocs included), `tee`, and Python's
- * `open("path", "w"|"a")`. A write through a variable holds no path to copy.
- */
-const SHELL_WRITES = [
-  /(?:^|[^<>&\d])>>?\s*(?!&)(["']?)([\w./~@+-][^\s;&|<>"'()]*)\1/g,
-  /\btee\s+(?:-a\s+)?(["']?)([\w./~@+-][^\s;&|<>"'()]*)\1/g,
-  /\bopen\(\s*(["'])([^"']+)\1\s*,\s*["'][wa]/g,
-];
-/** `sed -i` edits the files its last arguments name. */
-const SED_IN_PLACE =
-  /\bsed\s+-i\S*\s+(?:-e\s+)?(?:'[^']*'|"[^"]*"|\S+)\s+([^;&|<>]+)/g;
-/** One file of a git diffstat (`path | 12 ++--`), as git answers `--stat`. */
-const DIFFSTAT_FILE = /^\s*(\S+)\s+\|\s+(?:\d+|Bin)/gm;
-const NOT_FILES = new Set(["/dev/null", "/dev/stderr", "/dev/stdout"]);
-
-/** The files a shell command changed, by its text and by the git output it printed. */
-function shellChanges(command: string, output: string): string[] {
-  const paths = [
-    ...SHELL_WRITES.flatMap((pattern) =>
-      [...command.matchAll(pattern)].map((match) => match[2])
-    ),
-    ...[...command.matchAll(SED_IN_PLACE)].flatMap((match) =>
-      match[1].trim().split(WHITESPACE)
-    ),
-    ...(command.includes("git ")
-      ? [...output.matchAll(DIFFSTAT_FILE)].map((match) => match[1])
-      : []),
-  ];
-  return paths.filter((path) => path && !NOT_FILES.has(path));
-}
 
 interface StoredMessage {
   content: string | NeutralContentBlock[];
@@ -350,12 +342,6 @@ function noteArtifact(
   }
   const command = stringField(call.input, ["command"]);
   if (SHELL_TOOLS.has(kind) && command) {
-    for (const changed of shellChanges(
-      command,
-      result ? resultText(result.content) : ""
-    )) {
-      touch(artifacts.changed, changed);
-    }
     const outcome = result?.is_error
       ? `failed: ${oneLine(resultText(result.content), ERROR_CHARS)}`
       : "ok";
@@ -394,8 +380,8 @@ function artifactIndex(entries: SessionMessage[]): string {
   ];
   return [
     ...section(
-      "Files changed (most recent first, with number of changes; by edit tools, shell writes and git diffstats)",
-      files(artifacts.changed, artifacts.changed.size)
+      `Files changed by edit tools (${FILES_CHANGED_SHOWN} most recent, with number of changes; the git section has the rest)`,
+      files(artifacts.changed, FILES_CHANGED_SHOWN)
     ),
     "",
     ...section(
@@ -607,6 +593,7 @@ export function extractTranscript(
   }
   return {
     artifacts: artifactIndex(ownMessages(whole)),
+    asks: ownMessages(whole).flatMap((entry) => personWords(entry) ?? []),
     covers: turns[split - 1]?.at(-1)?.uuid ?? null,
     middle: turns
       .slice(0, split)
@@ -706,6 +693,26 @@ export function openingMessage(
     "",
     "## The last turns, verbatim",
     extracted.tail,
+    ...(note ? ["", `Next: ${note}`] : []),
+  ].join("\n");
+}
+
+/** The heading each of the person's messages goes under in {@link asksOpening}. */
+export const askHeading = (at: number): string => `## Message ${at + 1}`;
+
+/**
+ * The new session's first message when it restarts from the person's asks:
+ * every message they sent the source, verbatim and in order, and none of
+ * what its agent said or did.
+ */
+export function asksOpening(
+  source: ContinuationSource,
+  asks: string[],
+  note: string | undefined
+): string {
+  return [
+    `Restarting session "${source.title}" (instance ${source.instanceId}, ${source.harness}, ${source.model}, in ${source.cwd}) from the person's own messages: every one they sent it, verbatim and in order. Nothing its agent said or did is carried. Some of that work may already be on disk: run \`git status\` and \`git log\` before acting.`,
+    ...asks.flatMap((ask, at) => ["", askHeading(at), ask]),
     ...(note ? ["", `Next: ${note}`] : []),
   ].join("\n");
 }

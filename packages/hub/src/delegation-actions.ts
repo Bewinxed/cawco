@@ -676,12 +676,15 @@ export interface HandoffActions {
    * with the summary, and that one is only read. This one (`session`
    * omitted): it goes on itself, in place, in a fresh conversation seeded
    * with the summary once the turn that asked ends — same id, row, parent
-   * and children.
+   * and children. `from: "asks"`: nothing is summarised, and the new
+   * conversation opens on the person's own messages alone, verbatim and in
+   * order.
    */
   readonly continueSession: (input: {
     session?: string;
-    summarizer_harness: "claude" | "opencode" | "pi";
-    summarizer_model: string;
+    from?: "summary" | "asks";
+    summarizer_harness?: "claude" | "opencode" | "pi";
+    summarizer_model?: string;
     target_harness: "claude" | "opencode" | "pi";
     target_model: string;
     note?: string;
@@ -1080,6 +1083,49 @@ export function coldRefusalText(
   return `Refused: "${title}" (${row.id}) is cold. ${age} and its prompt cache (${cache}) has expired, so the next message makes it re-read its whole transcript (${size}) at full price. Nothing was sent.\n\nCheck first:\n1. Does this task need context that session already holds, which a brief could not carry?\n2. Would a fresh delegate with a tight brief cost less than that transcript?\n3. Is the message still needed at all, or was it meant for a session that has moved on?\n\nThen: if a fresh delegate fits, start one with delegate and no workspace. If no message is needed, stop. If this session is the right one, make the same call again and it will be delivered.`;
 }
 
+type ContinueSessionInput = Parameters<HandoffActions["continueSession"]>[0];
+
+/** The summariser as `continue_session` names it: `harness/model`. */
+const summariserOf = (input: ContinueSessionInput): string =>
+  `${input.summarizer_harness}/${input.summarizer_model}`;
+
+/**
+ * What a continuation goes on from, as the hub's continue route takes it:
+ * the person's asks alone, or a summary by the summariser named. Refused
+ * when neither is asked.
+ */
+const continuedFrom = (
+  input: ContinueSessionInput
+): { asksOnly: true } | { summarizer: { harness: string; model: string } } => {
+  if (input.from === "asks") {
+    return { asksOnly: true };
+  }
+  if (!(input.summarizer_harness && input.summarizer_model)) {
+    throw new Error(
+      'Name summarizer_harness and summarizer_model, or continue with from: "asks", which summarises nothing.'
+    );
+  }
+  return {
+    summarizer: {
+      harness: input.summarizer_harness,
+      model: input.summarizer_model,
+    },
+  };
+};
+
+/** What a continuation in a new session opened on, as its report says. */
+const openedOnWords = (
+  input: ContinueSessionInput,
+  summariserInstanceId: string | null
+): string => {
+  if (input.from === "asks") {
+    return "It opened on the person's own messages alone; nothing was summarised. ";
+  }
+  return summariserInstanceId
+    ? `${summariserOf(input)} summarised it. `
+    : "It was short enough that no summary was needed. ";
+};
+
 export const handoffActions = ({
   instanceId,
   instanceById,
@@ -1135,16 +1181,14 @@ export const handoffActions = ({
     // does, where its harness has modes; the hub settles it, never the
     // machine's default.
     const fallbackPermissionMode = callerMode(rows, instanceId);
+    const asks = input.from === "asks";
     const response = await fetch(
       `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          summarizer: {
-            harness: input.summarizer_harness,
-            model: input.summarizer_model,
-          },
+          ...continuedFrom(input),
           target: {
             harness: input.target_harness,
             model: input.target_model,
@@ -1172,8 +1216,10 @@ export const handoffActions = ({
         targetInstanceId: instanceId,
         text:
           `This session goes on as itself, in a fresh ${input.target_harness} conversation on ${input.target_model}, ` +
-          `once this turn ends: ${input.summarizer_harness}/${input.summarizer_model} summarises it then, and the new conversation opens on that summary, ` +
-          'the artifact index and your last turns. Same id, parent, delegates and work item; your transcript reads on through a "Continued" line. ' +
+          (asks
+            ? "once this turn ends: nothing is summarised, and the new conversation opens on the person's own messages alone, verbatim and in order. "
+            : `once this turn ends: ${summariserOf(input)} summarises it then, and the new conversation opens on that summary, the artifact index and your last turns. `) +
+          'Same id, parent, delegates and work item; your transcript reads on through a "Continued" line. ' +
           `End your turn now. (continuation ${continuationId})`,
       };
     }
@@ -1195,9 +1241,7 @@ export const handoffActions = ({
       text:
         `Continued session ${source} in a new ${input.target_harness} session ` +
         `${done.targetInstanceId} on ${input.target_model}. ` +
-        (done.summariserInstanceId
-          ? `${input.summarizer_harness}/${input.summarizer_model} summarised it. `
-          : "It was short enough that no summary was needed. ") +
+        openedOnWords(input, done.summariserInstanceId) +
         `The source session was not touched. The new session opened with:\n\n${done.opening}`,
     };
   },

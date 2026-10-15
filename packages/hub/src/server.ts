@@ -365,6 +365,7 @@ import {
 } from "./config";
 import { connectionRoutes, createConnections } from "./connections";
 import {
+  asksOpening,
   type ContinuationSource,
   type ContinueRequest,
   extractTranscript,
@@ -1146,10 +1147,16 @@ const permissionModeSchema = t.Union([
 ]);
 
 const continueBody = t.Object({
-  summarizer: t.Object({
-    harness: harnessSchema,
-    model: t.Optional(t.String({ minLength: 1 })),
-  }),
+  // Who writes the summary; left out with `asksOnly`, which writes none.
+  summarizer: t.Optional(
+    t.Object({
+      harness: harnessSchema,
+      model: t.Optional(t.String({ minLength: 1 })),
+    })
+  ),
+  // The new session opens on the person's own messages alone, verbatim and
+  // in order: nothing is summarised and nothing the agent did is carried.
+  asksOnly: t.Optional(t.Literal(true)),
   target: t.Object({
     harness: harnessSchema,
     model: t.Optional(t.String({ minLength: 1 })),
@@ -11226,7 +11233,9 @@ export const createServer = (
    */
   const prepareContinuation = async (
     sourceId: string,
-    note?: string
+    note?: string,
+    /** From the person's asks alone: nothing to summarise, and the opening is {@link asksOpening}. */
+    asksOnly = false
   ): Promise<PreparedContinuation> => {
     const [row] = db.getInstancesByIds([sourceId]);
     const where = await locateSession(sourceId);
@@ -11266,18 +11275,20 @@ export const createServer = (
     };
     const extracted = extractTranscript(scope, whole);
     extracted.artifacts = `${extracted.artifacts}\n\n${gitSection(git, since)}`;
-    const prompt = extracted.middle.length
-      ? summariserPrompt(extracted.middle, note)
-      : undefined;
+    const prompt =
+      extracted.middle.length && !asksOnly
+        ? summariserPrompt(extracted.middle, note)
+        : undefined;
     return {
       source,
       extracted,
       prompt,
       liveContextTokens: await contextTokensOf(row, scope),
       summariseInputTokens: prompt ? estimateTokens(prompt.length) : 0,
-      openingTokens:
-        estimateTokens(openingMessage(source, "", extracted, note).length) +
-        SUMMARY_CAP_TOKENS,
+      openingTokens: asksOnly
+        ? estimateTokens(asksOpening(source, extracted.asks, note).length)
+        : estimateTokens(openingMessage(source, "", extracted, note).length) +
+          SUMMARY_CAP_TOKENS,
       compacted: scope[0]?.compactSummary === true,
       entries: { live: live.length, whole: whole.length, scope: scope.length },
     };
@@ -11292,6 +11303,9 @@ export const createServer = (
     request: ContinueRequest
   ): Promise<string | undefined> => {
     if (prepared.prompt) {
+      if (!request.summarizer) {
+        return "Choose who summarises the session, or continue from your asks alone.";
+      }
       const { harness, model } = request.summarizer;
       const refusal = contextFitRefusal(
         await contextWindowOf(prepared.source.machineId, harness, model),
@@ -11392,18 +11406,41 @@ export const createServer = (
 
   /** The opening a job's new session is handed: the same words however often it resumes. */
   const openingOf = (row: ContinuationRow): string =>
-    openingMessage(
-      row.prepared.source,
-      row.summary ?? undefined,
-      row.prepared.extracted,
-      row.request.note
-    );
+    row.request.asksOnly
+      ? asksOpening(
+          row.prepared.source,
+          row.prepared.extracted.asks,
+          row.request.note
+        )
+      : openingMessage(
+          row.prepared.source,
+          row.summary ?? undefined,
+          row.prepared.extracted,
+          row.request.note
+        );
+
+  /** A continuation's start, as the hub's log line says it. */
+  const startedWords = (
+    prepared: PreparedContinuation,
+    request: ContinueRequest,
+    askedBy: ContinuationAsker,
+    summarise: boolean
+  ): string => {
+    const { inPlace, account } = request.target;
+    const where = `${inPlace ? "as itself, in a fresh conversation" : "in a new session"}${account ? ` on ${accountWords(account)}` : ""}, asked by ${askerWords(askedBy)}`;
+    const opens = inPlace ? "fresh conversation" : "new session";
+    if (request.asksOnly) {
+      return `[continuation] ${prepared.source.title} restarts from the person's ${prepared.extracted.asks.length} message(s) ${where}. Nothing is summarised; the ${opens} opens on those messages alone.`;
+    }
+    return `[continuation] ${prepared.source.title} goes on from a summary ${where}. ${summarise ? "Its summary is written first; the" : "The"} ${opens} opens on it.`;
+  };
 
   /**
-   * A continuation from a summary, as a job the hub owns and records:
-   * summarise the source's live context once with the summariser the caller
-   * chose (skipped when there is nothing before the tail), then start a
-   * conversation seeded with the summary, the artifact index and the tail.
+   * A continuation, as a job the hub owns and records: summarise the
+   * source's live context once with the summariser the caller chose (skipped
+   * when there is nothing before the tail, and for one from the person's
+   * asks), then start a conversation seeded with the summary, the artifact
+   * index and the tail, or with the person's own messages alone.
    * Returns at once; the job is carried to its end whatever happens to whoever
    * asked or to this hub, and only its Cancel — while it is still summarising
    * — stops it. "Continue in new session" starts a new session and only reads
@@ -11421,7 +11458,8 @@ export const createServer = (
   ): ContinuationRow => {
     const { inPlace } = request.target;
     // One the session asked for reads its conversation once the turn that
-    // asked has ended, and summarises it then.
+    // asked has ended, and summarises it then: from its asks alone, it reads
+    // it then and summarises nothing (`prompt` stays empty).
     const asked = !!inPlace && !inPlace.atLimit;
     const summarise = asked || (!!prepared.prompt && written === undefined);
     const row = db.insertContinuation({
@@ -11429,7 +11467,8 @@ export const createServer = (
       sourceInstanceId: prepared.source.instanceId,
       request,
       prepared,
-      summariserInstanceId: summarise ? crypto.randomUUID() : null,
+      summariserInstanceId:
+        summarise && !request.asksOnly ? crypto.randomUUID() : null,
       targetInstanceId: inPlace
         ? prepared.source.instanceId
         : crypto.randomUUID(),
@@ -11438,9 +11477,7 @@ export const createServer = (
       stage: summarise ? "summarising" : "starting",
       error: null,
     });
-    console.info(
-      `[continuation] ${prepared.source.title} goes on from a summary ${inPlace ? "as itself, in a fresh conversation" : "in a new session"}${request.target.account ? ` on ${accountWords(request.target.account)}` : ""}, asked by ${askerWords(askedBy)}. ${summarise ? "Its summary is written first; the" : "The"} ${inPlace ? "fresh conversation" : "new session"} opens on it.`
-    );
+    console.info(startedWords(prepared, request, askedBy, summarise));
     publishInstances(prepared.source.machineId);
     // The job runs on its own; its record is what anyone follows.
     detach(advanceContinuation(row.id), "continuation");
@@ -11579,7 +11616,11 @@ export const createServer = (
     let ready: ContinuationRow | undefined = job;
     if (!inPlace.atLimit && job.stage === "summarising" && !job.summary) {
       ready = moveContinuation(job.id, {
-        prepared: await prepareContinuation(row.id, job.request.note),
+        prepared: await prepareContinuation(
+          row.id,
+          job.request.note,
+          job.request.asksOnly
+        ),
       });
     }
     if (!db.atLimit.events([row.id]).some((event) => event.id === job.id)) {
@@ -11592,6 +11633,7 @@ export const createServer = (
           kind: "continuing",
           to: to ? namedAccount(to) : null,
           ...(inPlace.atLimit ? {} : { asked: true as const }),
+          ...(job.request.asksOnly ? { asks: true as const } : {}),
           tokens: inPlace.contextTokens,
         },
         job.id
@@ -11633,7 +11675,7 @@ export const createServer = (
     db.atLimit.dropHold(id);
     db.atLimit.dropSummary(id);
     console.info(
-      `[continuation] ${sessionName(row)} goes on in a fresh conversation${move.to ? ` on ${move.to.name}` : ""}, opened on its summary. Its last conversation is kept and reads on above a "Continued" line in its transcript.`
+      `[continuation] ${sessionName(row)} goes on in a fresh conversation${move.to ? ` on ${move.to.name}` : ""}, opened on ${job.request.asksOnly ? "the person's own messages" : "its summary"}. Its last conversation is kept and reads on above a "Continued" line in its transcript.`
     );
     // What was kept for it while it went on goes once the opening is read
     // ({@link readSend}); one a restart found read already goes now.
@@ -11807,7 +11849,7 @@ export const createServer = (
   const keepAtMove = (row: ContinuationRow, summary: string): void => {
     const { inPlace } = row.request.target;
     const { covers } = row.prepared.extracted;
-    const writtenOn = row.request.summarizer.account;
+    const writtenOn = row.request.summarizer?.account;
     if (!(inPlace?.atLimit && inPlace.fromAccountId && covers && writtenOn)) {
       return;
     }
@@ -11842,8 +11884,9 @@ export const createServer = (
       from: named(inPlace?.fromAccountId),
       to,
       writtenOn:
-        named(written?.onAccountId ?? request.summarizer.account) ?? to,
+        named(written?.onAccountId ?? request.summarizer?.account) ?? to,
       ...(inPlace?.atLimit ? {} : { asked: true as const }),
+      ...(request.asksOnly ? { asks: true as const } : {}),
       tokens: inPlace?.contextTokens ?? null,
       preparedAtPct: written?.atPct ?? null,
     };
@@ -11942,7 +11985,8 @@ export const createServer = (
    */
   const continuationSummary = async (row: ContinuationRow): Promise<string> => {
     const { source, prompt } = row.prepared;
-    if (!(prompt && row.summariserInstanceId)) {
+    const { summarizer } = row.request;
+    if (!(prompt && row.summariserInstanceId && summarizer)) {
       throw new Error("a summarising continuation has no summariser prompt");
     }
     const cancelled = () => cancelledContinuation(row.id);
@@ -11954,7 +11998,7 @@ export const createServer = (
     if (db.getInstancesByIds([current]).length === 0) {
       return summariserRun(
         source,
-        row.request.summarizer,
+        summarizer,
         prompt,
         current,
         cancelled,
@@ -11973,7 +12017,7 @@ export const createServer = (
     moveContinuation(row.id, { summariserInstanceId: replacement });
     return summariserRun(
       source,
-      row.request.summarizer,
+      summarizer,
       prompt,
       replacement,
       cancelled,
@@ -18064,7 +18108,14 @@ export const createServer = (
     const account = row?.accountId ?? undefined;
     return {
       ...asked,
-      summarizer: { ...asked.summarizer, ...(account ? { account } : {}) },
+      ...(asked.summarizer
+        ? {
+            summarizer: {
+              ...asked.summarizer,
+              ...(account ? { account } : {}),
+            },
+          }
+        : {}),
       target: {
         ...asked.target,
         ...(row ? { machineId: row.machineId, cwd: row.cwd } : {}),
@@ -18096,7 +18147,7 @@ export const createServer = (
     return db
       .continuationRows()
       .some((job) => job.sourceInstanceId === id && !SETTLED.has(job.stage))
-      ? `${sessionName(row)} is already going on from a summary.`
+      ? `${sessionName(row)} is already going on in a fresh conversation.`
       : undefined;
   };
 
@@ -18929,12 +18980,21 @@ export const createServer = (
       .get(
         "/api/instances/:id/continue",
         {
-          query: t.Object({ note: t.Optional(t.String()) }),
+          query: t.Object({
+            note: t.Optional(t.String()),
+            // Sized as a restart from the person's asks: nothing to summarise.
+            asks: t.Optional(t.Literal("1")),
+          }),
         },
         async ({ params, query, status }) => {
           try {
-            const prepared = await prepareContinuation(params.id, query.note);
+            const prepared = await prepareContinuation(
+              params.id,
+              query.note,
+              query.asks === "1"
+            );
             return {
+              asks: prepared.extracted.asks.length,
               liveContextTokens: prepared.liveContextTokens,
               summariseInputTokens: prepared.summariseInputTokens,
               openingTokens: prepared.openingTokens,
@@ -18985,13 +19045,20 @@ export const createServer = (
         },
         async ({ params, body, status }) => {
           const { inPlace: itself, askedBy, ...asked } = body;
+          if (!(asked.summarizer || asked.asksOnly)) {
+            return status(400, "summarizer is required unless asksOnly is set");
+          }
           let prepared: PreparedContinuation;
           let refusal: string | undefined;
           const request: ContinueRequest = itself
             ? inPlaceRequest(params.id, asked)
             : asked;
           try {
-            prepared = await prepareContinuation(params.id, body.note);
+            prepared = await prepareContinuation(
+              params.id,
+              body.note,
+              body.asksOnly
+            );
             refusal =
               (itself ? inPlaceRefusal(params.id, asked) : undefined) ??
               (await continuationRefusal(prepared, request));

@@ -983,6 +983,8 @@ export type AccountMove =
       to: NamedAccount | null;
       /** The session asked for it (`continue_session`), not its account's limit. */
       asked?: true;
+      /** It restarts from the person's own messages alone: nothing is summarised. */
+      asks?: true;
       tokens: number | null;
     }
   | {
@@ -998,6 +1000,8 @@ export type AccountMove =
       writtenOn: NamedAccount | null;
       /** The session asked for it (`continue_session`), not its account's limit. */
       asked?: true;
+      /** It restarted from the person's own messages alone: nothing was summarised. */
+      asks?: true;
       tokens: number | null;
       /** The window's percent when the summary was written ahead of the limit; null when it was written at the move. */
       preparedAtPct: number | null;
@@ -1234,10 +1238,16 @@ export const accountMoveWords = (
         detail: unmovedNext(move),
       };
     case "continuing":
-      return {
-        line: move.to ? `Summarising for ${move.to.name}…` : "Summarising…",
-        detail: `It goes on from the summary in a fresh conversation · ${tokenWords(move.tokens)} to summarise`,
-      };
+      return move.asks
+        ? {
+            line: `Restarting from the person's messages${move.to ? ` on ${move.to.name}` : ""}…`,
+            detail:
+              "It goes on in a fresh conversation that opens on the person's own messages alone · nothing is summarised",
+          }
+        : {
+            line: move.to ? `Summarising for ${move.to.name}…` : "Summarising…",
+            detail: `It goes on from the summary in a fresh conversation · ${tokenWords(move.tokens)} to summarise`,
+          };
     default:
       return continuedWords(move);
   }
@@ -1313,6 +1323,13 @@ const continuedWords = (
   move: Extract<AccountMove, { kind: "continued" }>
 ): { line: string; detail: string } => {
   const stayed = `${tokenWords(move.tokens)} stayed ${move.from ? `on ${move.from.name}` : "in the conversation before"}`;
+  if (move.asks) {
+    return {
+      line: `Restarted${move.to ? ` on ${move.to.name}` : ""} from the person's messages · ${stayed}`,
+      detail:
+        "Nothing was summarised: the fresh conversation opened on the person's own messages alone",
+    };
+  }
   let detail = `Summary written at ${Math.round(move.preparedAtPct ?? 0)}%, before the move`;
   if (move.preparedAtPct === null) {
     detail = move.writtenOn

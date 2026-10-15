@@ -816,11 +816,10 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "continue_session",
-      "Summarise a session with a model you choose and go on from that summary. Name another " +
-        "`session` and a new session starts on the model and harness you choose, seeded with the " +
-        "summary; the named one is only read. Omit `session` and this session goes on itself, in place: " +
-        "once this turn ends it is summarised and starts a fresh conversation on `target_model` (its own " +
-        "harness), keeping its id, parent, delegates and work item. Takes a few minutes on a long session.",
+      "Go on from a summary of a session, written by a model you choose. Name another `session`: a new " +
+        "session starts on the model and harness you choose; the named one is only read. Omit it: this " +
+        "session goes on itself once this turn ends, in a fresh conversation on `target_model` (its own " +
+        "harness), keeping its id, parent, delegates and work item.",
       {
         session: z
           .string()
@@ -828,12 +827,20 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "Another session to continue in a new session: its id, short id, or directory name. Omit it to continue this session itself, in place."
           ),
+        from: z
+          .enum(["summary", "asks"])
+          .optional()
+          .describe(
+            '"asks": open on the person\'s own messages alone, verbatim, in order; nothing is summarised.'
+          ),
         summarizer_harness: z
           .enum(["claude", "opencode", "pi"])
+          .optional()
           .describe("The harness that writes the summary."),
         summarizer_model: z
           .string()
           .min(1)
+          .optional()
           .describe(
             "The model that writes the summary, e.g. opencode-go/deepseek-v4.1-flash."
           ),

@@ -83,6 +83,7 @@ export {
   COMPACT_SUMMARY_KIND,
   getToolGlance,
   interruptLine,
+  personWords,
   transcriptUserText,
 } from "./transcript-rules";
 export * from "./transcript-types";

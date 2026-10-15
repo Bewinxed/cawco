@@ -115,6 +115,7 @@
   } from "./ns-types";
   import ProjectChip from "./ProjectChip.svelte";
   import PromptEditor from "./PromptEditor.svelte";
+  import Segmented from "./Segmented.svelte";
   import SessionFooter from "./SessionFooter.svelte";
   import { effortNotExposed } from "./ToolChips.svelte";
   import "./ns-theme.css";
@@ -262,8 +263,16 @@
   /** Continue mode: who writes the summary. Reset on every open; never remembered. */
   let summarizerHarness = $state<HarnessKind>(spawnPrefs.harness);
   let summarizerModel = $state("");
+  /**
+   * Continue mode: what the new session opens on. `summary`: a summary, the
+   * artifact index and the last turns. `asks`: the person's own messages
+   * alone, verbatim and in order; nothing is summarised. Reset on every open.
+   */
+  let carry = $state<"summary" | "asks">("summary");
   /** Continue mode: the hub's sizing of what the continuation carries. */
   let estimate = $state<{
+    /** How many of the person's messages a restart from them carries. */
+    asks: number;
     liveContextTokens: number;
     summariseInputTokens: number;
     openingTokens: number;
@@ -832,10 +841,30 @@
     Boolean(continueFrom) &&
       (!(estimate && selected) ||
         Boolean(targetRefusal(selected)) ||
-        (estimate.summariseInputTokens > 0 &&
+        (carry === "summary" &&
+          estimate.summariseInputTokens > 0 &&
           (!summarizerSelected ||
             Boolean(summarizerRefusal(summarizerSelected)))))
   );
+  /** The line over the pickers: what the continuation carries, sized. */
+  const sizing = $derived.by(() => {
+    if (!estimate) {
+      return "Reading the session's context…";
+    }
+    if (carry === "asks") {
+      return `Current context ${tokens(estimate.liveContextTokens)} → your ${estimate.asks} message${estimate.asks === 1 ? "" : "s"}, ${tokens(estimate.openingTokens)}`;
+    }
+    return `Current context ${tokens(estimate.liveContextTokens)} → ${tokens(estimate.summariseInputTokens)} to summarise`;
+  });
+  /** Continue mode: the other start, sized afresh by the hub. */
+  function chooseCarry(value: "summary" | "asks") {
+    if (value === carry || !continueFrom) {
+      return;
+    }
+    carry = value;
+    estimate = null;
+    loadEstimate(continueFrom.instanceId, submission);
+  }
   /** The last start failed: the footer shows no check. */
   const startFailed = $derived(error !== "");
   /** The line under the chips says why Start can't go: it stays on step 2 too. */
@@ -868,7 +897,7 @@
     if (pressedFor !== null) {
       return "Checking the folder…";
     }
-    return continueFrom && followed?.stage !== "starting"
+    return continueFrom && carry === "summary" && followed?.stage !== "starting"
       ? "Summarising…"
       : "Starting…";
   });
@@ -954,6 +983,7 @@
       fullSendCarried = permissionMode === "fullSend";
       summarizerHarness = spawnPrefs.harness;
       summarizerModel = "";
+      carry = "summary";
       estimate = null;
       model = "";
       effort = null;
@@ -981,6 +1011,7 @@
         fullSendCarried = permissionMode === "fullSend";
         ({ harness: summarizerHarness, model: summarizerModel } =
           restore.summarizer);
+        carry = restore.asks ? "asks" : "summary";
         machineIds = [...restore.machineIds];
         machinesTouched = true;
         cwd = restore.baseCwd;
@@ -1044,20 +1075,24 @@
    * windows the pickers size models by. The source is only read.
    */
   async function loadEstimate(instanceId: string, request: number) {
+    const asked = carry;
+    const current = () => request === submission && asked === carry;
     try {
       const [response] = await Promise.all([
-        fetch(`/api/instances/${encodeURIComponent(instanceId)}/continue`),
+        fetch(
+          `/api/instances/${encodeURIComponent(instanceId)}/continue${asked === "asks" ? "?asks=1" : ""}`
+        ),
         loadModelWindows(),
       ]);
       if (!response.ok) {
         throw new Error(await response.text());
       }
       const sized = (await response.json()) as NonNullable<typeof estimate>;
-      if (request === submission) {
+      if (current()) {
         estimate = sized;
       }
     } catch (cause) {
-      if (request === submission) {
+      if (current()) {
         error = failureWords(cause);
       }
     }
@@ -1406,6 +1441,7 @@
         harness: summarizerHarness,
         model: summarizerModel,
       },
+      asks: carry === "asks",
       // The person's own pick; "" when they left the harness's default.
       usedModel: model,
       ...(accountTool && account ? { account } : {}),
@@ -1547,10 +1583,16 @@
     }
     const toAttach = attachable(draft.projectId, target);
     const id = await startContinuation(source, draft, {
-      summarizer: {
-        harness: draft.summarizer.harness,
-        ...(draft.summarizer.model ? { model: draft.summarizer.model } : {}),
-      },
+      ...(draft.asks
+        ? { asksOnly: true }
+        : {
+            summarizer: {
+              harness: draft.summarizer.harness,
+              ...(draft.summarizer.model
+                ? { model: draft.summarizer.model }
+                : {}),
+            },
+          }),
       target: {
         machineId: target,
         cwd: draft.cwd,
@@ -1578,7 +1620,9 @@
     } else {
       detachContinuation(id);
     }
-    recordModelUse(draft.summarizer.harness, draft.summarizer.model);
+    if (!draft.asks) {
+      recordModelUse(draft.summarizer.harness, draft.summarizer.model);
+    }
     recordModelUse(draft.harness, draft.usedModel);
     rememberSpawn({
       harness: draft.harness,
@@ -1884,14 +1928,24 @@
       <div class="fai-comb comb-gap"></div>
       <div class="stack">
         {#if continueFrom}
-          <p aria-live="polite" class="sizing" in:unfold|global out:unfold>
-            {estimate
-              ? `Current context ${tokens(estimate.liveContextTokens)} → ${tokens(estimate.summariseInputTokens)} to summarise`
-              : "Reading the session's context…"}
-          </p>
+          <div class="carry" in:unfold|global out:unfold>
+            <Segmented
+              items={[
+                { value: "summary", label: "From a summary" },
+                { value: "asks", label: "From my asks" },
+              ]}
+              label="What the new session opens on"
+              onchange={chooseCarry}
+              value={carry}
+            />
+            <p aria-live="polite" class="sizing">{sizing}</p>
+          </div>
         {/if}
-        <div class="models" class:pair={Boolean(continueFrom)}>
-          {#if continueFrom}
+        <div
+          class="models"
+          class:pair={Boolean(continueFrom) && carry === "summary"}
+        >
+          {#if continueFrom && carry === "summary"}
             <div class="sec" style="--delay:60ms">
               <ModelSection
                 harness={summarizerHarness}
@@ -2121,6 +2175,13 @@
     display: grid;
     gap: 18px;
     margin-top: 18px;
+  }
+  /* Continue mode: what the new session opens on, and that start sized. */
+  .carry {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
   }
   .sizing {
     margin: 0;

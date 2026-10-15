@@ -13355,6 +13355,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "asks",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
           }
         ],
         "operationId": "getApiInstancesByIdContinue",
@@ -13423,6 +13432,10 @@
                     "required": [
                       "harness"
                     ]
+                  },
+                  "asksOnly": {
+                    "type": "boolean",
+                    "const": true
                   },
                   "target": {
                     "type": "object",
@@ -13602,7 +13615,6 @@
                   }
                 },
                 "required": [
-                  "summarizer",
                   "target"
                 ]
               }
@@ -13617,6 +13629,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdContinue200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiInstancesByIdContinue 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -22208,6 +22230,9 @@
       "getApiInstancesByIdContinue200": {
         "type": "object",
         "properties": {
+          "asks": {
+            "type": "number"
+          },
           "liveContextTokens": {
             "type": "number"
           },
@@ -22241,6 +22266,7 @@
           }
         },
         "required": [
+          "asks",
           "compacted",
           "entries",
           "liveContextTokens",
@@ -36333,6 +36359,11 @@
                     "const": true,
                     "type": "boolean"
                   },
+                  "asks": {
+                    "description": "It restarts from the person's own messages alone: nothing is summarised.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "tokens": {
                     "type": [
                       "null",
@@ -36367,6 +36398,11 @@
                   },
                   "asked": {
                     "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "asks": {
+                    "description": "It restarted from the person's own messages alone: nothing was summarised.",
                     "const": true,
                     "type": "boolean"
                   },
@@ -42209,6 +42245,11 @@
                     "const": true,
                     "type": "boolean"
                   },
+                  "asks": {
+                    "description": "It restarts from the person's own messages alone: nothing is summarised.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "tokens": {
                     "type": [
                       "null",
@@ -42243,6 +42284,11 @@
                   },
                   "asked": {
                     "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "asks": {
+                    "description": "It restarted from the person's own messages alone: nothing was summarised.",
                     "const": true,
                     "type": "boolean"
                   },
