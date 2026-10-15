@@ -291,8 +291,11 @@
   :global(.artifact-list .artifact-row[aria-current="true"]) {
     color: var(--ink-strong);
   }
+  /* The name is what a row is chosen by: it keeps its own width, and in a
+     row too narrow for everything the promoted tag gives up its room first
+     (its title and the row's name still say it). */
   .row-name {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -304,6 +307,13 @@
     color: var(--ink-muted);
     font-size: var(--text-meta);
     font-variant-numeric: tabular-nums;
+  }
+  .row-promoted {
+    flex-shrink: 100;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   :global(.artifact-list .artifact-row[aria-busy="true"]) {
     opacity: 0.5;
