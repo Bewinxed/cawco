@@ -5,7 +5,7 @@
  * the edits back where they were; a save or Cancel ends them.
  *
  * Kept the way the composer keeps a conversation's unsent message
- * (transcript/draft-store.ts): IndexedDB, one record per key, read back
+ * (draft-store.ts): IndexedDB, one record per key, read back
  * before anything is written (the untouched form an editor opens with never
  * replaces what was stored), written at most every 250ms and at once when
  * the page goes away or the editor closes, and held under a byte cap by

@@ -142,6 +142,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case away = "cloud-cross-bold-duotone"
     /// The preview's Comment (PreviewPane.svelte `IconComment`).
     case comment = "chat-round-dots-bold-duotone"
+    /// The preview's Draw (PreviewPane.svelte `IconPen`).
+    case pen = "pen-bold-duotone"
     /// A pin's Reopen (PinCard.svelte `IconReopen`).
     case reopen = "restart-bold-duotone"
     /// The pins' moved tray (PinList.svelte `IconMapPoint`).

@@ -14,8 +14,9 @@
  *
  * Call while a component initialises: the keeping lives as long as it does.
  */
+
+import { loadDraft, saveDraft } from "../draft-store";
 import { keepsDrafts } from "../reload.svelte";
-import { loadDraft, saveDraft } from "../transcript/draft-store";
 
 /** At most this often a pin's words are written, ms: the composer's. */
 const WRITE_MS = 250;

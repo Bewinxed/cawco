@@ -1,12 +1,16 @@
 <script lang="ts">
   /**
-   * The artifact panel's pins (Projects spec §5.7; tsk-3; DESIGN.md Artifact
-   * panel, canvas and ink), under its head: the list recipe's 44px rows, each
-   * the pin's number on its coral disc, what it stands on in the label role
-   * and its thread's last line in meta ink, with the live dot while the
-   * agent works on it. Open and Resolved are a segmented filter; pins whose
-   * element is gone stand in the moved tray at the end, each with Place
-   * again, which pins it anew with the next tap on the page.
+   * The preview's Comments panel (Projects spec §5.7; tsk-3; DESIGN.md
+   * Artifact panel, canvas and ink), floating over the page's top-right
+   * from the head's Comments, never a band that takes the page's height
+   * (Magnific's floating panel; Figma keeps its list off the canvas until
+   * asked). Its head names it beside Close; Open and Resolved are a
+   * segmented filter; under them the list recipe's 44px rows scroll on
+   * their own, each the pin's number on its coral disc, what it stands on in
+   * the label role and its thread's last line in meta ink, with the live dot
+   * while the agent works on it. Pins whose element is gone stand in the
+   * moved tray at the end, each with Place again, which pins it anew with
+   * the next tap on the page.
    */
   import type { Pin } from "@cawco/core/comments";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -15,7 +19,7 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { IconMapPoint } from "#lib/icons.js";
+  import { IconClose, IconMapPoint } from "#lib/icons.js";
   import PinDisc from "./PinDisc.svelte";
   import { pinName } from "./pin-name";
 
@@ -26,6 +30,7 @@
     placing,
     onopen,
     onplace,
+    onclose,
   }: {
     pins: Pin[];
     /** The pin J and K stand on, whose row takes the selection pill. */
@@ -36,6 +41,7 @@
     placing: string | null;
     onopen: (id: string) => void;
     onplace: (id: string) => void;
+    onclose: () => void;
   } = $props();
 
   let filter = $state<"open" | "resolved">("open");
@@ -84,28 +90,49 @@
   </li>
 {/snippet}
 
-{#if pins.length > 0}
-  <section aria-label="Pins" class="pin-list">
-    {#if placed.length > 0}
-      <div class="filter">
-        <Tabs
-          onValueChange={(next) => {
-            filter = next as "open" | "resolved";
-          }}
-          size="compact"
-          value={filter}
-        >
-          <TabsList aria-label="Which pins">
-            <TabItem label={`Open ${open.length}`} value="open" />
-            <TabItem label={`Resolved ${resolved.length}`} value="resolved" />
-          </TabsList>
-        </Tabs>
-      </div>
+<section aria-label="Comments" class="pin-list">
+  <header class="head">
+    <h2 class="title">Comments</h2>
+    <Button
+      aria-label="Close comments"
+      icon={IconClose}
+      onclick={onclose}
+      size="icon-sm"
+      title="Close comments"
+      variant="ghost"
+    />
+  </header>
+  <div class="filter">
+    <Tabs
+      onValueChange={(next) => {
+        filter = next as "open" | "resolved";
+      }}
+      size="compact"
+      value={filter}
+    >
+      <TabsList aria-label="Which pins">
+        <TabItem label={`Open ${open.length}`} value="open" />
+        <TabItem label={`Resolved ${resolved.length}`} value="resolved" />
+      </TabsList>
+    </Tabs>
+  </div>
+  <div class="scroll kit-edge-fade-block">
+    {#if shown.length > 0}
       <ul class="rows">
         {#each shown as pin (pin.id)}
           {@render row(pin)}
         {/each}
       </ul>
+    {:else if filter === "open"}
+      <p class="empty">
+        <span class="empty-title">No open comments</span>
+        Choose Comment, then click the page to pin one.
+      </p>
+    {:else}
+      <p class="empty">
+        <span class="empty-title">No resolved comments</span>
+        A pin you resolve leaves the page and waits here.
+      </p>
     {/if}
     {#if moved.length > 0}
       <section aria-label="Moved" class="moved">
@@ -130,22 +157,54 @@
         </ul>
       </section>
     {/if}
-  </section>
-{/if}
+  </div>
+</section>
 
 <style>
+  /* A column the panel's height bounds: the head and the filter stand, the
+     rows under them scroll on their own. */
   .pin-list {
     display: flex;
+    flex: 0 1 auto;
     flex-direction: column;
     gap: var(--space-1);
-    max-height: 40%;
+    min-height: 0;
+  }
+  .head {
+    display: flex;
     flex-shrink: 0;
-    margin-block-end: var(--space-2);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding-inline-start: var(--space-2);
+  }
+  .title {
+    margin: 0;
+    color: var(--ink-strong);
+    font: var(--type-label);
+  }
+  .filter {
+    flex-shrink: 0;
+    padding: var(--space-1) var(--space-2);
+  }
+  .scroll {
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  .filter {
-    padding-block: var(--space-1);
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin: 0;
+    padding: var(--space-3) var(--space-2);
+    color: var(--ink-muted);
+    font-size: var(--text-meta);
+  }
+  .empty-title {
+    color: var(--ink-strong);
+    font: var(--type-label);
   }
   .rows {
     margin: 0;

@@ -152,6 +152,7 @@ const SOLAR_ICONS = [
   "cloud-cross-bold-duotone",
   // The preview's pins (preview/PreviewPane.svelte, PinCard.svelte, PinList.svelte).
   "chat-round-dots-bold-duotone", // IconComment
+  "pen-bold-duotone", // IconPen: the preview's Draw
   "restart-bold-duotone", // IconReopen
   "map-point-bold-duotone", // IconMapPoint: the moved tray
   // Configure → Accounts (accounts/AccountEditor.svelte, AccountMachines.svelte, KeyPanel.svelte).

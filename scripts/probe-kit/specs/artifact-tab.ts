@@ -67,9 +67,12 @@ const MAIN_KB = { page: 1289, canvas: 2728 } as const;
 /**
  * What each tab may transfer now: outside the app's group, on its own
  * session socket, with no fleet store (measured 576 and 2015 KB; 649 and
- * 2088 KB with the fleet store).
+ * 2088 KB with the fleet store, about 73 KB more). Measured 632 and 2082 KB
+ * with the pane's floating Comments panel (the kit's Popover) and its modes
+ * (2026-10-15); the canvas tab had grown to 2069 KB before them. Each budget
+ * stays under that weight plus the fleet store, which it still refuses.
  */
-const BUDGET_KB = { page: 620, canvas: 2060 } as const;
+const BUDGET_KB = { page: 640, canvas: 2100 } as const;
 /**
  * What a tab may ask for, by path on the dashboard's origin (`$sid` is the
  * artifact's session, `$id` the artifact), beside its build's files and the
@@ -392,6 +395,8 @@ const run = async (kit: Kit) => {
       ],
     });
   });
+  // The pin's row is in the Comments panel, opened from the head.
+  await tab.locator(".preview-pane button.comments").click({ timeout: 20_000 });
   await tab.locator('[data-pin-row="1"]').click({ timeout: 20_000 });
   const thumb = tab.getByRole("button", { name: "Pin 1's picture, full size" });
   await thumb.waitFor({ timeout: 30_000 });

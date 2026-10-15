@@ -16,7 +16,7 @@
  *    (to drag the conversation back out), the composer is put away, and the
  *    control reads Back to conversation.
  * 3. Esc in order: an open pin card closes first, then Comment mode, then
- *    the expansion.
+ *    the Comments panel, then the expansion.
  * 4. Back, the side pane's size is the kept width (±0.5%).
  * 5. Dragged (CDP mouse) to the session area's far edge, the conversation's
  *    pane is 0, the head reads Back to conversation and the frame fills the
@@ -198,7 +198,7 @@ const pinOne = (frame: Frame) =>
     });
   });
 
-/** 3: Esc in order, expanded: the pin card, Comment mode, then the expansion. */
+/** 3: Esc in order, expanded: the pin card, Comment mode, the Comments panel, then the expansion. */
 const escOrder = async (
   kit: Kit,
   desk: Page,
@@ -207,32 +207,41 @@ const escOrder = async (
 ): Promise<void> => {
   await pinOne(frame);
   // Comment on first: a press on it, outside an open card, would close the card.
-  const commentButton = desk.locator('.side-head button[title="Comment (C)"]');
-  await commentButton.click();
-  await desk.locator('.pin-list .pin-row[data-pin-row="1"]').click();
+  const commentTab = desk.locator(
+    '.side-head [role="tab"][aria-keyshortcuts="C"]'
+  );
+  await commentTab.click();
+  const comments = desk.locator(".preview-pane button.comments");
+  if ((await comments.getAttribute("aria-expanded")) !== "true") {
+    await comments.click();
+  }
+  const row = desk.locator('.pin-list-pop .pin-row[data-pin-row="1"]');
+  await row.click();
   const card = desk.locator('.pin-card[data-pin-card="1"]');
   await card.waitFor({ timeout: 20_000 });
-  await desk.locator('.pin-list .pin-row[data-pin-row="1"]').focus();
+  await row.focus();
   const state = async () => ({
     card: await card.count(),
-    commenting: await commentButton.getAttribute("aria-pressed"),
+    commenting: await commentTab.getAttribute("aria-selected"),
+    panel: await comments.getAttribute("aria-expanded"),
     expanded: (await measure(desk, sid)).expanded,
   });
   const steps = [await state()];
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each Esc after the last has landed
     await desk.keyboard.press("Escape");
     await settle(desk);
     steps.push(await state());
   }
   const want = [
-    { card: 1, commenting: "true", expanded: true },
-    { card: 0, commenting: "true", expanded: true },
-    { card: 0, commenting: "false", expanded: true },
-    { card: 0, commenting: "false", expanded: false },
+    { card: 1, commenting: "true", panel: "true", expanded: true },
+    { card: 0, commenting: "true", panel: "true", expanded: true },
+    { card: 0, commenting: "false", panel: "true", expanded: true },
+    { card: 0, commenting: "false", panel: "false", expanded: true },
+    { card: 0, commenting: "false", panel: "false", expanded: false },
   ];
   kit.check(
-    "3: Esc closes the pin card first, then Comment mode, then the expansion",
+    "3: Esc closes the pin card first, then Comment mode, then the Comments panel, then the expansion",
     JSON.stringify(steps) === JSON.stringify(want),
     JSON.stringify(steps)
   );

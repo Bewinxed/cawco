@@ -1,7 +1,10 @@
 /**
  * Where a conversation's unsent message waits out a reload: IndexedDB, one
  * record per session id, holding everything the composer holds — the text,
- * the images, the file attachments and the canvas.
+ * the images, the file attachments and the canvas. A pin's unsaid words
+ * wait here too (preview/pin-drafts.svelte.ts), so it stands outside the
+ * transcript: an artifact's own tab, which loads none of the transcript's
+ * modules, keeps its pins' drafts through it.
  *
  * IndexedDB rather than localStorage because the attachments are binary and
  * large: images are stored as Blobs, not as base64 strings in a 5 MB string
@@ -9,13 +12,13 @@
  * drafts edited longest ago are dropped until it fits, never the one being
  * written.
  */
-import { newId } from "../id";
+import { newId } from "./id";
 import type {
   DraftCanvas,
   PendingFile,
   PendingImage,
   PendingText,
-} from "./composer-draft.svelte";
+} from "./transcript/composer-draft.svelte";
 
 /** A file as a stored draft keeps it: the hub's reference, or its bytes to upload again. */
 type StoredFile = Pick<PendingFile, "name" | "mediaType" | "size" | "ref"> & {

@@ -12,7 +12,7 @@ const PNG_MAX = 4_000_000;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const PIN_ID = /^[0-9a-f-]{36}$/;
 /** The keys a page hands the pane (overlay `PANE_KEYS`). */
-const PANE_KEYS = new Set(["c", "j", "k", "Enter", "Escape"]);
+const PANE_KEYS = new Set(["v", "c", "d", "C", "j", "k", "Enter", "Escape"]);
 
 const text = (value: unknown, max: number): string | null =>
   typeof value === "string" ? value.slice(0, max) : null;
@@ -96,11 +96,12 @@ export function previewPinAt(
   return x === null || y === null || r === null ? null : { x, y, r };
 }
 
+/** The pane's keys: V, C and D its modes, `C` (⇧C) its pins shown or hidden, J and K a step, Enter and Esc. */
+export type PaneKey = "v" | "c" | "d" | "C" | "j" | "k" | "Enter" | "Escape";
+
 /** One of the pane's keys pressed while the page had the keyboard. */
-export function previewKey(
-  value: unknown
-): "c" | "j" | "k" | "Enter" | "Escape" | null {
+export function previewKey(value: unknown): PaneKey | null {
   return typeof value === "string" && PANE_KEYS.has(value)
-    ? (value as "c" | "j" | "k" | "Enter" | "Escape")
+    ? (value as PaneKey)
     : null;
 }

@@ -12,9 +12,9 @@
  * Call while a component initialises: the keeping lives as long as it does.
  */
 import { untrack } from "svelte";
+import { type DraftContent, loadDraft, saveDraft } from "../draft-store";
 import { keepsDrafts } from "../reload.svelte";
 import type { ComposerDraft } from "./composer-draft.svelte";
-import { type DraftContent, loadDraft, saveDraft } from "./draft-store";
 
 export function keepDraft(
   draft: ComposerDraft,

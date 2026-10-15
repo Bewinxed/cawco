@@ -12,7 +12,10 @@ import {
   type PageAnchor,
   type Pin,
   type PinnedElement,
+  type PreviewMode,
+  pinFirstLine,
   pinUnsent,
+  previewMode,
   replyToPin,
   resolvePin,
   withdrawPin,
@@ -44,8 +47,13 @@ const PNG_PREFIX = /^data:image\/png;base64,/;
 /** The page hash on the overlay's tag in a page's HTML (core `injectOverlay`). */
 const SERVED_HASH =
   /<script src="\/__cawco\/overlay\.js" data-page-hash="([0-9a-f]{64})"/;
-/** Comment mode is on: a tap on the page pins a comment to what it lands on. */
-let commenting = false;
+/**
+ * The pane's mode (its head's Interact | Comment | Draw): Interact gives the
+ * page every press; Comment takes them, and a tap pins a comment to what it
+ * lands on; Draw takes them, and any pointer inks. A pen inks in every mode.
+ */
+let modeNow: PreviewMode = "interact";
+const commenting = () => modeNow === "comment";
 /** The moved pin a tap in Comment mode places again, instead of a new one. */
 let placing: string | null = null;
 /** The tag that loaded the script (core's `injectOverlay`), as the entry read it. */
@@ -71,6 +79,8 @@ sheet.textContent = `
   :host { color-scheme: light dark; }
   .layer { position:fixed; inset:0; pointer-events:none; cursor:crosshair; }
   .layer.comment { pointer-events:auto; }
+  .layer.draw { pointer-events:auto; touch-action:none; }
+  .peek { position:fixed; pointer-events:none; max-width:240px; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm); background:var(--surface-raised); color:var(--ink-row); font:var(--type-meta); border:1px solid var(--border-control); box-shadow:var(--shadow-tile); }
   .rect { position:fixed; pointer-events:none; outline:var(--focus-ring-width, 2px) solid var(--brand-solid); outline-offset:2px; border-radius:var(--radius-xs); background:color-mix(in srgb, var(--brand-solid) 8%, transparent); }
   .label { position:fixed; pointer-events:none; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--space-1) var(--space-2); border-radius:var(--radius-xs); background:var(--surface-raised); color:var(--ink-strong); font:var(--type-meta); border:1px solid var(--border-control); box-shadow:var(--shadow-tile); }
 `;
@@ -80,16 +90,35 @@ const highlight = document.createElement("div");
 highlight.className = "rect";
 const label = document.createElement("div");
 label.className = "label";
+/** A pin's first line, beside its disc while the pointer rests on it (Figma: "Hover over a pin to preview the comment"). */
+const peekLabel = document.createElement("div");
+peekLabel.className = "peek";
 highlight.hidden = true;
 label.hidden = true;
-shadow.append(sheet, layer, highlight, label);
+peekLabel.hidden = true;
+shadow.append(sheet, layer, highlight, label, peekLabel);
 document.documentElement.append(host);
 
 const chrome = inkChrome(shadow);
 
+/** Pin `pin`'s first line beside its disc, centred at the viewport's `x`, `y`, radius `r`; none hides it. */
+function peek(pin: Pin | null, x = 0, y = 0, r = 0) {
+  peekLabel.hidden = !pin;
+  if (!pin) {
+    return;
+  }
+  peekLabel.textContent =
+    pinFirstLine(pin) ??
+    (pin.kind === "annotation" ? "Annotation" : "Nothing written yet");
+  const gap = r + 6;
+  const right = x + gap + peekLabel.offsetWidth <= innerWidth;
+  peekLabel.style.left = `${right ? x + gap : Math.max(0, x - gap - peekLabel.offsetWidth)}px`;
+  peekLabel.style.top = `${Math.max(0, y - peekLabel.offsetHeight / 2)}px`;
+}
+
 /** The overlay's outline round `el`, the pin's element the person rests on or the host focuses; none hides it. */
 function outline(el: Element | null) {
-  if (commenting) {
+  if (commenting()) {
     return;
   }
   highlight.hidden = !el;
@@ -118,17 +147,42 @@ const pins: Pins = startPins({
   groupBox: (id) => ink.groupBox(id),
   locate,
   outline,
+  peek,
   post,
   waiting,
 });
 
-/** The ink a pen draws on the page, and the icon and menu at a stroke's end (ink.ts, radial.ts). */
+/**
+ * Whether a press that is not a pen's inks: in Draw mode, the main button or
+ * a first finger on the overlay's own layer. One on the ink's icon or menu is
+ * theirs, and one on a pin's disc opens that pin (the blockers below).
+ */
+function freehand(event: PointerEvent): boolean {
+  return (
+    modeNow === "draw" &&
+    event.isPrimary &&
+    event.button === 0 &&
+    event.composedPath()[0] === layer &&
+    !pinUnder(event.clientX, event.clientY)
+  );
+}
+
+/** The pin whose disc stands at the viewport's `x`, `y`, under the overlay's layer; null when none does. */
+function pinUnder(x: number, y: number): string | null {
+  return (
+    elementAt(x, y)?.closest("[data-pin-id]")?.getAttribute("data-pin-id") ??
+    null
+  );
+}
+
+/** The ink drawn on the page, a pen's in any mode and any pointer's in Draw, and the icon and menu at a stroke's end (ink.ts, radial.ts). */
 const ink = startInk({
   anchorOf,
   chrome,
   capture: pageCapture,
   describe,
   elementAt,
+  freehand,
   locate,
   pins: () => pins,
   post,
@@ -150,7 +204,7 @@ function framesChanged() {
   framesFrame = requestAnimationFrame(() => {
     framesFrame = 0;
     ink.replace();
-    if (commenting && hovered) {
+    if (commenting() && hovered) {
       hover(hovered);
     }
   });
@@ -484,7 +538,7 @@ const toldHost = () => undefined;
 window.addEventListener(
   "click",
   (event) => {
-    if (commenting || !(event.target instanceof Element)) {
+    if (modeNow !== "interact" || !(event.target instanceof Element)) {
       return;
     }
     const option = event.target.closest("[data-option]");
@@ -616,14 +670,16 @@ function navigated() {
   });
 }
 
-/** Comment mode on or off; `again` names the moved pin the next tap places again. */
-function mode(on: boolean, again: string | null = null) {
-  commenting = on;
-  placing = on ? again : null;
-  layer.classList.toggle("comment", on);
+/** The pane's mode; `again` names the moved pin the next tap in Comment places again. */
+function mode(next: PreviewMode, again: string | null = null) {
+  modeNow = next;
+  placing = next === "comment" ? again : null;
+  layer.classList.toggle("comment", next === "comment");
+  layer.classList.toggle("draw", next === "draw");
   hovered = null;
   highlight.hidden = true;
   label.hidden = true;
+  peek(null);
 }
 
 interface Fiber {
@@ -989,7 +1045,7 @@ function hover(el: Element | null) {
 window.addEventListener(
   "mousemove",
   (event) => {
-    if (commenting) {
+    if (commenting()) {
       hover(elementAt(event.clientX, event.clientY));
     }
   },
@@ -1031,7 +1087,7 @@ window.addEventListener(
   (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (
-      commenting ||
+      commenting() ||
       target?.closest("[data-pin-id], cawco-overlay") ||
       !artifact.keeps()
     ) {
@@ -1042,12 +1098,28 @@ window.addEventListener(
   { capture: true, passive: true }
 );
 
-// In Comment mode the whole press belongs to the overlay: a document-level
-// outside-click handler in the app must not dismiss the thing being pointed
-// at on pointerdown, before the click that would pin it arrives.
+/** A press on the overlay's own chrome (the ink's icon and menu), never the layer over the page: its own. */
+const onChrome = (event: Event) => {
+  const path = event.composedPath();
+  return path[0] !== layer && path.includes(host);
+};
+
+/** Whether the overlay takes this press from the page: every one in Comment and Draw, but a pen's and its own chrome's. */
+const taken = (event: Event) =>
+  modeNow !== "interact" &&
+  !(event instanceof PointerEvent && event.pointerType === "pen") &&
+  !(modeNow === "draw" && onChrome(event));
+
+// In Comment and Draw the whole press belongs to the overlay: a
+// document-level outside-click handler in the app must not dismiss the thing
+// being pointed at on pointerdown, before the click that would pin it
+// arrives. In Draw, a press the ink did not take (a disc's, a second finger)
+// is the page's no more than a stroke is; one on a pin's disc opens it.
 for (const type of [
   "pointerdown",
+  "pointermove",
   "pointerup",
+  "mousemove",
   "mousedown",
   "mouseup",
   "auxclick",
@@ -1059,13 +1131,20 @@ for (const type of [
     type,
     (event) => {
       // A pen draws, in Comment mode too: only a finger or a mouse pins.
-      if (
-        commenting &&
-        !(event instanceof PointerEvent && event.pointerType === "pen")
-      ) {
+      if (taken(event)) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (event.type === "pointerdown") {
+        if (modeNow === "draw") {
+          const disc =
+            event.type === "pointerdown" &&
+            pinUnder(
+              (event as PointerEvent).clientX,
+              (event as PointerEvent).clientY
+            );
+          if (disc) {
+            post("cawco:pin-open", { id: disc });
+          }
+        } else if (event.type === "pointerdown") {
           touchCaptured = false;
         } else if (event.type === "touchend") {
           const [touch] = (event as TouchEvent).changedTouches;
@@ -1084,20 +1163,20 @@ for (const type of [
 window.addEventListener(
   "click",
   (event) => {
-    if (!commenting) {
+    if (!taken(event)) {
       return;
     }
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (!touchCaptured) {
+    if (commenting() && !touchCaptured) {
       commentAt(event.clientX, event.clientY);
     }
   },
   true
 );
 
-/** The pane's keys, heard while the page has the keyboard: C, J, K, Enter and Esc. */
-const PANE_KEYS = new Set(["c", "j", "k", "Enter", "Escape"]);
+/** The pane's keys, heard while the page has the keyboard: V, C and D, ⇧C (as `C`), J, K, Enter and Esc. */
+const PANE_KEYS = new Set(["v", "c", "d", "C", "j", "k", "Enter", "Escape"]);
 
 /** Whether `target` takes typing: the page's own keys stay its own there. */
 const typing = (target: EventTarget | null) =>
@@ -1108,14 +1187,16 @@ const typing = (target: EventTarget | null) =>
 window.addEventListener(
   "keydown",
   (event) => {
-    if (commenting && event.key === "Escape") {
+    if (modeNow !== "interact" && event.key === "Escape") {
       event.preventDefault();
       event.stopImmediatePropagation();
-      mode(false);
+      mode("interact");
       post("cawco:escape");
       return;
     }
-    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    const letter = event.key.length === 1 ? event.key.toLowerCase() : null;
+    // ⇧C (Figma's hide/show comments) goes as `C`; every other letter as itself.
+    const key = letter === "c" && event.shiftKey ? "C" : (letter ?? event.key);
     if (
       !PANE_KEYS.has(key) ||
       event.metaKey ||
@@ -1265,9 +1346,11 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     },
     "cawco:mode": (message) =>
       mode(
-        message.mode === "comment",
+        previewMode(message.mode) ?? "interact",
         typeof message.place === "string" ? message.place : null
       ),
+    // ⇧C: every pin hidden from the page, or shown again.
+    "cawco:pins-shown": (message) => pins.show(message.shown !== false),
     "cawco:focus-pin": (message) =>
       pins.focus(idOf(message), message.scroll === true),
     "cawco:track-pin": (message) => pins.track(idOf(message)),

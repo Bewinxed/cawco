@@ -1,14 +1,16 @@
 /**
  * Ink on any artifact (Projects spec §5.10, D27; DESIGN.md, Artifact panel,
- * canvas and ink: "Ink on any artifact"). A pen inks at once, in Comment
- * mode too; a finger and a mouse never do (in Comment mode they pin).
+ * canvas and ink: "Ink on any artifact"). A pen inks at once, in every mode
+ * of the pane; a finger and a mouse ink in its Draw mode alone (in Comment
+ * they pin, in Interact they are the page's).
  *
  * The ink is an `<svg>` in the page's own document, at its origin and as big
  * as its scroll, so it scrolls with the page and never shifts; it takes the
- * pointer only while a pen is down. Strokes are Pointer Events with
- * `pointerType === "pen"`: their coalesced events are the points (WebKit
- * hands UIKit's coalesced touches, WebKit PR 31329), their predicted events
- * the live tail, drawn and never kept, with the pen's pressure. Each is
+ * pointer only while a stroke is down. Strokes are Pointer Events, a pen's
+ * or, in Draw, the main button's or a first finger's (`freehand`): their
+ * coalesced events are the points (WebKit hands UIKit's coalesced touches,
+ * WebKit PR 31329), their predicted events the live tail, drawn and never
+ * kept, with the pen's pressure (a mouse's or a finger's middle one). Each is
  * drawn as perfect-freehand's outline (MIT, pinned at 1.2.3) in
  * `brand-solid`, 2.5px at middle pressure, thinner by less, never under 1px.
  *
@@ -93,6 +95,8 @@ export interface InkDeps {
   chrome: InkChrome;
   describe: (el: Element) => PinnedElement;
   elementAt: (x: number, y: number) => Element | null;
+  /** Whether a press that is not a pen's inks: the pane's Draw mode, on the overlay's own layer. */
+  freehand: (event: PointerEvent) => boolean;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
   locate: (
     anchor: PageAnchor
@@ -192,9 +196,11 @@ export const fitToPage = (svg: SVGSVGElement) => {
   );
 };
 
-/** A pen's pressure, or the middle one where it reports none. */
+/** A pen's pressure, or the middle one where it reports none; a mouse's and a finger's are always the middle one. */
 const pressureOf = (event: PointerEvent) =>
-  event.pressure > 0 ? event.pressure : NO_PRESSURE;
+  event.pointerType === "pen" && event.pressure > 0
+    ? event.pressure
+    : NO_PRESSURE;
 
 export function startInk(deps: InkDeps): Ink {
   const { chrome } = deps;
@@ -323,7 +329,8 @@ export function startInk(deps: InkDeps): Ink {
   window.addEventListener(
     "pointerdown",
     (event) => {
-      if (event.pointerType !== "pen") {
+      const pen = event.pointerType === "pen";
+      if (!(pen || deps.freehand(event))) {
         return;
       }
       // The next stroke starts: the last one's icon leaves (on a canvas too).
@@ -340,7 +347,7 @@ export function startInk(deps: InkDeps): Ink {
       } catch {
         // A pointer the page has already let go of: its moves still reach the window.
       }
-      if (isEraser(event)) {
+      if (pen && isEraser(event)) {
         erasing = { id: event.pointerId, hits: new Map() };
         rub(event);
         return;

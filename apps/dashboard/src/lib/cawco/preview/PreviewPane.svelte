@@ -10,6 +10,7 @@
     previewRoute,
     type ShownFailure,
   } from "@cawco/core";
+  import { type PreviewMode, previewMode } from "@cawco/core/comments";
   import { type Snippet, untrack } from "svelte";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -18,9 +19,20 @@
   } from "#lib/components/ui/button/pending-content.svelte";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import {
     IconAlert,
+    IconChat,
     IconComment,
     IconExternal,
+    IconEyeClosed,
+    IconInteract,
+    IconPen,
     IconPlus,
     IconRefresh,
     IconSend,
@@ -64,6 +76,7 @@
   import { isSetupPage } from "./setup-page";
   import { previewPlace } from "./source";
   import {
+    type PaneKey,
     previewError,
     previewErrorOf,
     previewKey,
@@ -105,8 +118,62 @@
   /** The split's expansion, beside a conversation on a desk (SideSplit). */
   const expand = sideExpand();
   let iframe = $state<HTMLIFrameElement>();
-  /** Comment mode: a tap on the page pins a comment to what it lands on (key C). */
-  let commenting = $state(false);
+  /**
+   * The pane's mode, its head's segmented control, kept per session (core
+   * `PreviewMode`): Interact (V), the page gets every press and its pins
+   * stay pressable; Comment (C), a tap pins a comment to what it lands on;
+   * Draw (D), any pointer inks. Esc goes back to Interact. A pen inks in
+   * every mode.
+   */
+  let mode = $state<PreviewMode>("interact");
+  const modeKey = $derived(`cawco-preview-mode:${instanceId}`);
+  /**
+   * The Comments panel, floating over the page's top-right from the head's
+   * Comments; shut until opened, then kept per session as the mode is.
+   */
+  let listOpen = $state(false);
+  const listKey = $derived(`cawco-preview-comments:${instanceId}`);
+  $effect.pre(() => {
+    const keys = { mode: modeKey, list: listKey };
+    untrack(() => {
+      try {
+        mode = previewMode(localStorage.getItem(keys.mode)) ?? "interact";
+        listOpen = localStorage.getItem(keys.list) === "open";
+      } catch {
+        mode = "interact";
+        listOpen = false;
+      }
+    });
+  });
+  function showList(open: boolean) {
+    listOpen = open;
+    try {
+      localStorage.setItem(listKey, open ? "open" : "shut");
+    } catch {
+      // Storage refused: the panel holds for this view.
+    }
+  }
+  /** ⇧C: every pin on the page hidden, or shown (Figma's own key). */
+  let pinsShown = $state(true);
+  /** The open panel's width: a pin's card stands in the well beside it, never under it. */
+  let listPanel = $state<HTMLElement | null>(null);
+  let listWidth = $state(0);
+  $effect(() => {
+    const panel = listPanel;
+    if (!panel) {
+      listWidth = 0;
+      return;
+    }
+    // Its layout width: its entrance scales it, and a scale is not its room.
+    const watch = new ResizeObserver(() => {
+      listWidth = panel.offsetWidth;
+    });
+    watch.observe(panel);
+    return () => {
+      watch.disconnect();
+      listWidth = 0;
+    };
+  });
   let connected = $state(false);
   let loaded = $state(false);
   let captured = false;
@@ -510,6 +577,38 @@
         (entry) => !view?.sentAt || entry.at > view.sentAt
       )
   );
+  /** The head's Comments count: the panel's Open tab, the pins on the page not resolved (the app's `ArtifactComments.open`). */
+  const openCount = $derived(
+    pins.filter((pin) => !(pin.resolvedAt || pin.movedAt)).length
+  );
+  /** The well's box: the Comments panel's room under the head. */
+  let wellBox = $state({ w: 0, h: 0 });
+  $effect(() => {
+    const box = well;
+    if (!box) {
+      return;
+    }
+    const watch = new ResizeObserver(() => {
+      wellBox = { w: box.clientWidth, h: box.clientHeight };
+    });
+    watch.observe(box);
+    return () => watch.disconnect();
+  });
+  /** The well's gutter, px (`--space-2`): the panel's and the card's distance from its edges. */
+  const GUTTER = 8;
+  /**
+   * Where the Comments panel hangs: the well's top-right corner, under the
+   * head, so the panel's top and right stand a gutter inside the well
+   * whatever the head's controls are.
+   */
+  const wellCorner = {
+    getBoundingClientRect: () => {
+      const box = well?.getBoundingClientRect();
+      return box
+        ? new DOMRect(box.right - GUTTER, box.top, 0, 0)
+        : new DOMRect();
+    },
+  };
   let sending = $state(false);
   const artifactId = $derived(artifact?.id);
   $effect(() => {
@@ -623,16 +722,27 @@
       }
     });
   });
-  /** Comment mode on or off; `place` is the moved pin the next tap places again. */
-  function comment(on: boolean, place: string | null = null) {
-    commenting = on;
-    placing = on ? place : null;
-    post({ type: "cawco:mode", mode: on ? "comment" : "off", place: placing });
+  /** The pane's mode, kept for the session and told to the page; `place` is the moved pin the next tap in Comment places again. */
+  function setMode(next: PreviewMode, place: string | null = null) {
+    mode = next;
+    placing = next === "comment" ? place : null;
+    try {
+      localStorage.setItem(modeKey, next);
+    } catch {
+      // Storage refused (a private window's quota): the mode holds for this view.
+    }
+    post({ type: "cawco:mode", mode: next, place: placing });
+  }
+  /** ⇧C: every pin shown on the page, or hidden. */
+  function showPins(visible: boolean) {
+    pinsShown = visible;
+    post({ type: "cawco:pins-shown", shown: visible });
   }
 
   /*
-   * The pins (Projects spec §5.7; tsk-3): the list under the head, the
-   * card over the page beside its pin, J and K stepping through them.
+   * The pins (Projects spec §5.7; tsk-3): the Comments panel floating over
+   * the page, the card over the page beside its pin, J and K stepping
+   * through them.
    */
   /** The pin whose card is open. */
   let openPin = $state<string | null>(null);
@@ -640,9 +750,9 @@
   let pinAt = $state<{ r: number; x: number; y: number } | null>(null);
   /** The pin J and K stand on. */
   let focusedPin = $state<string | null>(null);
-  /** The moved pin a tap places again, and whether Comment mode was off before. */
+  /** The moved pin a tap places again, and the mode the pane goes back to once it is placed. */
   let placing = $state<string | null>(null);
-  let placingLeaves = false;
+  let placingFrom: PreviewMode | null = null;
   let thumbs = $state<Record<string, string | null>>({});
   /** What went wrong with the open card's reply, resolve or send. */
   let cardError = $state<string | null>(null);
@@ -670,8 +780,10 @@
         .map((pin) => pin.id)
     );
   });
-  /** The pins J and K step through: those on the page, by number. */
-  const stepping = $derived(pins.filter((pin) => !pin.movedAt));
+  /** The pins J and K step through: those on the page, by number (a resolved pin has left it). */
+  const stepping = $derived(
+    pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
+  );
 
   /** Each pin's half-written words, kept with the pin while its card is shut and across a reload. */
   const drafts = pinDrafts(() => artifactId);
@@ -735,19 +847,47 @@
       openCard(next.id);
     }
   }
+  /** A pin's own address (its card's Copy link): its artifact's tab, opening the pin's card. */
+  const pinLink = (number: number): string =>
+    artifactId
+      ? `${location.origin}/artifact/${encodeURIComponent(artifactId)}?pin=${number}`
+      : location.href;
+  /** The pin the address names (`?pin=N`), opened once its page is ready and its pins are read. */
+  let linkedFor: string | null = null;
+  function openLinkedPin() {
+    const number = Number(new URL(location.href).searchParams.get("pin"));
+    const pin = Number.isInteger(number)
+      ? pins.find((one) => one.number === number && !one.movedAt)
+      : undefined;
+    if (!(pin && artifactId) || linkedFor === artifactId) {
+      return;
+    }
+    linkedFor = artifactId;
+    openCard(pin.id);
+  }
+  $effect(() => {
+    if (connected && view) {
+      untrack(openLinkedPin);
+    }
+  });
   /** Place again: Comment mode until the next tap pins the moved pin anew. */
   function placeAgain(id: string) {
-    placingLeaves = !commenting;
+    placingFrom = mode;
     closeCard();
-    comment(true, id);
+    setMode("comment", id);
   }
+  /** The person's words in the open pin's thread; a resolved pin's reply reopens it ("Reply to reopen"). */
   function reply(text: string): boolean {
     if (!openPin) {
       return false;
     }
+    const reopens = !!cardPin?.resolvedAt;
     cardError = doc
       ? doc.reply(openPin, text)
       : "The pane lost the page's document, so the reply wasn't kept. Reload, then reply again.";
+    if (cardError === null && reopens && doc) {
+      cardError = doc.resolve(openPin, false);
+    }
     if (cardError === null) {
       // Said: the words are in the thread, so no draft is left to keep, and the pin stays.
       drafts.discard(openPin);
@@ -817,10 +957,18 @@
     });
   }
 
-  /** The pane's keys: C toggles Comment, J and K step through the pins, Enter opens one, Esc closes. */
-  function pressKey(name: "c" | "j" | "k" | "Enter" | "Escape") {
-    if (name === "c" && !isCanvas) {
-      comment(!commenting);
+  /** A key's mode: V Interact, C Comment, D Draw (Figma's V and C). */
+  const MODE_KEYS = { v: "interact", c: "comment", d: "draw" } as const;
+  /**
+   * The pane's keys: V, C and D its modes, ⇧C every pin hidden or shown, J
+   * and K a step through the pins, Enter opens one, Esc closes the card,
+   * then leaves Comment or Draw for Interact.
+   */
+  function pressKey(name: PaneKey) {
+    if ((name === "v" || name === "c" || name === "d") && !isCanvas) {
+      setMode(MODE_KEYS[name]);
+    } else if (name === "C" && !isCanvas) {
+      showPins(!pinsShown);
     } else if (name === "j") {
       step(1);
     } else if (name === "k") {
@@ -830,12 +978,12 @@
     } else if (name === "Escape") {
       if (openPin) {
         closeCard();
-      } else if (commenting) {
-        comment(false);
-      } else {
+      } else if (mode === "interact") {
         // Heard from the page (`cawco:key`): with nothing of the pane's to
         // close, Esc gives the split back. The window's Esc is SideSplit's.
         expand?.collapse();
+      } else {
+        setMode("interact");
       }
     }
   }
@@ -847,15 +995,20 @@
       event.metaKey ||
       event.ctrlKey ||
       event.altKey ||
-      !(target instanceof Node && section?.contains(target)) ||
+      // The pane's own, or its Comments panel's, which stands in a portal.
+      !(
+        target instanceof Node &&
+        (section?.contains(target) || listPanel?.contains(target))
+      ) ||
       (target instanceof HTMLElement &&
         (target.isContentEditable ||
           ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)))
     ) {
       return;
     }
+    const letter = event.key.length === 1 ? event.key.toLowerCase() : null;
     const name = previewKey(
-      event.key.length === 1 ? event.key.toLowerCase() : event.key
+      letter === "c" && event.shiftKey ? "C" : (letter ?? event.key)
     );
     if (name && name !== "Escape") {
       event.preventDefault();
@@ -870,7 +1023,7 @@
     ) {
       return;
     }
-    if (openPin || commenting) {
+    if (openPin || mode !== "interact") {
       pressKey("Escape");
       event.preventDefault();
     }
@@ -920,7 +1073,11 @@
         if (message.type === "cawco:ready") {
           connected = true;
           refusedEntries = 0;
-          comment(commenting, placing);
+          setMode(mode, placing);
+          if (!pinsShown) {
+            showPins(false);
+          }
+          openLinkedPin();
           if (openPin) {
             post({ type: "cawco:track-pin", id: openPin });
           }
@@ -947,11 +1104,12 @@
         }
         if (id === placing || (placing && message.made !== true)) {
           // Placed again: the mode goes back to how it was before.
-          if (placingLeaves) {
-            comment(false);
+          if (placingFrom && placingFrom !== "comment") {
+            setMode(placingFrom);
           } else {
             placing = null;
           }
+          placingFrom = null;
         }
         openCard(id, message.made === true);
         break;
@@ -989,8 +1147,8 @@
         break;
       }
       case "cawco:escape":
-        commenting = false;
-        placing = null;
+        // The page left Comment or Draw on its own Esc: the pane follows, and keeps it.
+        setMode("interact");
         break;
       case "cawco:error": {
         const said = previewError(message.message);
@@ -1231,16 +1389,58 @@
     >
   {/if}
   {#if !isCanvas}
+    <!-- The mode: Interact, Comment, Draw (V, C, D; Esc back to Interact),
+         the kit's segmented control, its indicator on the chosen one. -->
+    <div class="modes">
+      <Tabs
+        onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
+        size="compact"
+        value={mode}
+        values={["interact", "comment", "draw"]}
+      >
+        <TabsList aria-label="Preview mode">
+          <TabItem
+            aria-keyshortcuts="V"
+            icon={IconInteract}
+            label="Interact"
+            title="Interact (V): the page gets every click"
+            value="interact"
+          />
+          <TabItem
+            aria-keyshortcuts="C"
+            icon={IconComment}
+            label="Comment"
+            title="Comment (C): a click pins a comment"
+            value="comment"
+          />
+          <TabItem
+            aria-keyshortcuts="D"
+            icon={IconPen}
+            label="Draw"
+            title="Draw (D): drag to draw on the page"
+            value="draw"
+          />
+        </TabsList>
+      </Tabs>
+    </div>
+    <!-- The Comments panel, floating over the page's top-right; the count is the open pins'. -->
     <button
-      aria-keyshortcuts="C"
-      aria-pressed={commenting}
-      class="touch-hit"
-      disabled={!connected}
-      onclick={() => comment(!commenting)}
-      title="Comment (C)"
+      aria-expanded={listOpen}
+      aria-haspopup="dialog"
+      aria-label={`Comments, ${openCount} open${pinsShown ? "" : ", pins hidden"}`}
+      class="comments touch-hit"
+      onclick={() => showList(!listOpen)}
+      title={pinsShown
+        ? "Comments (⇧C hides the pins)"
+        : "Comments (⇧C shows the pins)"}
       type="button"
     >
-      <IconComment /><span class="comment-label">Comment</span>
+      <IconChat /><span class="comments-label">Comments</span>
+      <span class="count">{openCount}</span>
+      {#if !pinsShown}
+        <!-- ⇧C hid the pins: said where the person looks for them. -->
+        <IconEyeClosed class="pins-hidden" />
+      {/if}
     </button>
   {/if}
   <button
@@ -1269,21 +1469,53 @@
   {/if}
 {/snippet}
 
-{#snippet pinList()}
-  <PinList
-    focused={focusedPin}
-    {live}
-    onopen={openCard}
-    onplace={placeAgain}
-    {pins}
-    {placing}
-  />
-{/snippet}
+{#if !isCanvas}
+  <!-- The Comments panel: the kit's Popover, anchored under the head's
+       Comments at the page's top-right, over the page and never pushing it.
+       It stays while the person works the page and opens threads (a press
+       outside it is theirs), and goes with its Close, Comments again, or
+       an Esc once no card is open and the mode is Interact. -->
+  <Popover.Root onOpenChange={showList} open={listOpen && !!well}>
+    <Popover.Content
+      align="end"
+      class="pin-list-pop"
+      bind:ref={listPanel}
+      customAnchor={wellCorner}
+      onEscapeKeydown={(event) => {
+        // The panel's escape layer takes Esc before the window hears it, so
+        // Esc unwinds from the innermost here: the card, then Comment or
+        // Draw back to Interact, then the panel itself; the split's
+        // expansion is the next Esc's.
+        if (openPin || mode !== "interact") {
+          event.preventDefault();
+          pressKey("Escape");
+        }
+      }}
+      onInteractOutside={(event) => event.preventDefault()}
+      onOpenAutoFocus={(event) => event.preventDefault()}
+      side="bottom"
+      sideOffset={GUTTER}
+      style={`--pin-list-room: ${wellBox.h}px; --pin-list-pane: ${wellBox.w}px`}
+      trapFocus={false}
+    >
+      <PinList
+        focused={focusedPin}
+        {live}
+        onclose={() => showList(false)}
+        onopen={openCard}
+        onplace={placeAgain}
+        {pins}
+        {placing}
+      />
+    </Popover.Content>
+  </Popover.Root>
+{/if}
 
 <SideSurface
   actions={controls}
-  below={pins.length > 0 ? pinList : undefined}
-  class={commenting ? "preview-pane commenting" : "preview-pane"}
+  class={["preview-pane", mode !== "interact" && !isCanvas && `mode-${mode}`]
+    .filter(Boolean)
+    .join(" ")}
   closeFailed={failure?.again === "close"}
   {closing}
   label="Preview"
@@ -1439,6 +1671,7 @@
     {#if cardPin}
       <PinCard
         at={pinAt}
+        link={pinLink(cardPin.number)}
         live={live.has(cardPin.id)}
         onclose={closeCard}
         ondelete={deleteOpenPin}
@@ -1447,7 +1680,10 @@
         onresolve={resolvePin}
         pin={cardPin}
         problem={cardError}
-        room={{ w: roomW, h: roomH }}
+        room={{
+          w: listWidth > 0 && !sheet ? roomW - listWidth - GUTTER : roomW,
+          h: roomH,
+        }}
         {sheet}
         thumb={thumbs[cardPin.id] ?? null}
         bind:draft={
@@ -1483,21 +1719,69 @@
 </SideSurface>
 
 <style>
-  /* The header's controls are the card's (SideSurface); in Comment mode
-     the ones that would leave the page wait. */
-  :global(.preview-pane.commenting .other) {
+  /* The header's controls are the card's (SideSurface); in Comment and
+     Draw the ones that would leave the page wait. */
+  :global(.preview-pane:is(.mode-comment, .mode-draw) .other) {
     opacity: 0.5;
   }
-  /* The well is the card's (SideSurface). Comment mode turns the well's own border the accent, 2px, inside its
-       box: never a second ring round it. */
+  /* The well is the card's (SideSurface). Comment and Draw turn the well's
+     own border the accent, 2px, inside its box: never a second ring round
+     it. Interact leaves it as the page's own. */
   :global(.preview-pane .side-well) {
     outline: var(--focus-ring-width) solid transparent;
     outline-offset: var(--focus-ring-inset);
     transition: outline-color var(--dur-control) var(--ease-in-out);
   }
-  :global(.preview-pane.commenting .side-well) {
+  :global(.preview-pane:is(.mode-comment, .mode-draw) .side-well) {
     outline-color: var(--accent);
     cursor: crosshair;
+  }
+  /* The mode's segmented control sits among the head's controls at their
+     height, never wrapping its three segments. Its segments are their
+     glyphs, as a canvas tool's toolbar is (Figma, Framer, Miro): each name
+     stays its accessible name and its title, never drawn, so the control
+     keeps one width at every pane width and its indicator never moves as
+     the pane resizes (side-expand: the split slides on one clock). */
+  .modes {
+    display: flex;
+    flex-shrink: 0;
+  }
+  .modes :global(.ff-tab .label) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* Comments: the sm ghost with its glyph, its word and the open count in
+     tabular figures; pressed while its panel is open. */
+  .comments {
+    font-variant-numeric: tabular-nums;
+  }
+  .comments[aria-expanded="true"] {
+    background: var(--surface-fill);
+  }
+  .count,
+  .comments :global(.pins-hidden) {
+    min-width: 1ch;
+    color: var(--ink-muted);
+  }
+  /* The Comments panel: the kit's popover surface, about a fifth of the
+     pane wide, at most the well's height less its gutter, the rows
+     scrolling inside it. */
+  :global(.pin-list-pop) {
+    inline-size: clamp(
+      var(--c-pin-list-min),
+      calc(var(--pin-list-pane) * var(--c-pin-list-share)),
+      min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))
+    );
+    max-block-size: min(
+      calc(var(--pin-list-room) - var(--space-4)),
+      var(--bits-popover-content-available-height, 100dvh)
+    );
+    padding: var(--space-2);
+    gap: 0;
   }
   /* The room the open pin's card stands in: the well's box, letting every
      press through to the page but the card's own. */
@@ -1588,8 +1872,9 @@
       font-weight: var(--weight-body);
     }
   }
-  @container (max-width: 469px) {
-    .comment-label {
+  /* A narrow pane keeps Comments' glyph and count, and lets its word go. */
+  @container (max-width: 639px) {
+    .comments-label {
       display: none;
     }
   }

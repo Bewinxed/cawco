@@ -2348,8 +2348,23 @@
     },
     "c-pin-card-w": {
       "$type": "dimension",
-      "$value": "320px",
-      "$description": "A pin's card over the page, at its widest: the anchor line, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink)."
+      "$value": "280px",
+      "$description": "A pin's card over the page, at its widest: the anchor line with Resolve, ⋯ and Close, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink). Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px is the narrowest that keeps the anchor line beside its four controls."
+    },
+    "c-pin-list-share": {
+      "$type": "number",
+      "$value": "0.22",
+      "$description": "The preview's Comments panel, floating over the page's top-right: its share of the pane's width (Magnific's floating panel, about 22%), held between c-pin-list-min and c-pin-list-max."
+    },
+    "c-pin-list-min": {
+      "$type": "dimension",
+      "$value": "260px",
+      "$description": "The Comments panel at its narrowest: a row's disc, anchor line and last reply's first line."
+    },
+    "c-pin-list-max": {
+      "$type": "dimension",
+      "$value": "340px",
+      "$description": "The Comments panel at its widest."
     },
     "c-pin-thumb": {
       "$type": "dimension",

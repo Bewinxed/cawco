@@ -31,6 +31,23 @@ import type { Doc, Map as YMap } from "yjs";
 import type { PreviewElement } from "./index";
 import type { InkGroup } from "./ink";
 
+/**
+ * The preview pane's modes, its head's segmented control (V, C, D), told to
+ * the page's overlay as `cawco:mode`: `interact`, the page gets every press
+ * and its pins stay pressable; `comment`, a tap pins a comment and the page
+ * gets none; `draw`, any pointer inks and the page gets none. A pen inks in
+ * every mode.
+ */
+export const PREVIEW_MODES = ["interact", "comment", "draw"] as const;
+export type PreviewMode = (typeof PREVIEW_MODES)[number];
+/** `value` as a mode, or null when it names none. */
+export const previewMode = (value: unknown): PreviewMode | null =>
+  PREVIEW_MODES.find((mode) => mode === value) ?? null;
+
+/** The first line a pin's thread says, cut for a peek or a row; null when nothing is written yet. */
+export const pinFirstLine = (pin: Pin): string | null =>
+  pin.thread[0]?.text.split("\n")[0]?.trim() || null;
+
 export const COMMENT_LIMITS = {
   /** Pins an artifact keeps. */
   pins: 200,

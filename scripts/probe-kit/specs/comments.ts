@@ -6,12 +6,12 @@
  * from the engine: the page's doc (`window.cawcoArtifact.doc`), the pane's
  * DOM, the overlay's shadow root, and what the model was sent.
  *
- * 1. `C` turns Comment on (`aria-pressed`, the well's accent edge); a tap on
+ * 1. `C` turns Comment on (its segment `aria-selected`, the well's accent edge); a tap on
  *    a paragraph writes pin 1 with its selector, source and text and opens
  *    its card beside the pin; Esc closes the card, and Esc again leaves the
  *    mode.
  * 2. A pen stroke's radial Comment writes pin 2 on the ink, with the ink's
- *    box; the list shows two rows; J and K move the focus between the pins
+ *    box; the Comments panel shows two rows; J and K move the focus between the pins
  *    and the overlay's outline follows.
  * 3. A reply typed in the card is in pin 1's thread, by the person; with no
  *    Send it reaches the session by itself once quiet: the comments notice
@@ -43,7 +43,8 @@
  *    document; a tap stores an anchor with the frame chain and the button's
  *    inner selector and opens its card; a reload that moves the button finds
  *    the pin on it again; the inner frame's own scroll moves the disc.
- * c. Delete, asked in the card itself: the pin leaves the doc and the page,
+ * c. The card's head holds Resolve pin, ⋯ and Close, its foot Reply. Delete
+ *    pin (its ⋯), asked in the card itself: the pin leaves the doc and the page,
  *    its card closes, the other pins keep their numbers; the app's
  *    `cawco:delete` on a gone pin answers the refusal.
  *
@@ -261,6 +262,34 @@ const pageInComment = (frame: Frame, on: boolean) =>
     5000
   );
 
+/**
+ * The Comments panel, opened from the head's Comments when it is shut: it
+ * floats over the page's top-right, so a check that presses there shuts it
+ * first ({@link shutList}).
+ */
+const rowsOf = async (on: On) => {
+  const button = on.page.locator(".preview-pane button.comments");
+  if ((await button.getAttribute("aria-expanded")) !== "true") {
+    await button.click();
+  }
+  const list = on.page.locator(".pin-list-pop .pin-list");
+  await list.waitFor({ timeout: 5000 }).catch(() => undefined);
+  return list;
+};
+const shutList = async (on: On) => {
+  const button = on.page.locator(".preview-pane button.comments");
+  if ((await button.getAttribute("aria-expanded")) === "true") {
+    await button.click();
+    await on.page
+      .locator(".pin-list-pop")
+      .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => undefined);
+  }
+};
+/** The head's Interact: Comment's way back, as the old toggle's second press was. */
+const interactTab = (on: On) =>
+  on.page.locator(".preview-pane [role='tab'][aria-keyshortcuts='V']");
+
 /** The overlay's outline over the page, in the frame's viewport. */
 const outlineOf = (frame: Frame) =>
   frame.evaluate(() => {
@@ -314,12 +343,20 @@ const run = async (kit: Kit) => {
   await agentChecks(on, frame, one, two);
   await hostChecks(on, frame, one);
   await anchorChecks(on, frame, id, one);
-  await tapAndDeleteChecks(on, frame);
-  await frameChecks(on);
-  await scrollChecks(on, "window");
-  await scrollChecks(on, "container");
-  await dismissChecks(on);
-  await roomChecks(on);
+  // The Comments panel floats over the page's top-right: each check that
+  // presses the page starts with it shut, and opens it for its rows.
+  for (const checks of [
+    () => tapAndDeleteChecks(on, frame),
+    () => frameChecks(on),
+    () => scrollChecks(on, "window"),
+    () => scrollChecks(on, "container"),
+    () => dismissChecks(on),
+    () => roomChecks(on),
+  ]) {
+    // biome-ignore lint/performance/noAwaitInLoops: the checks run in order, one after another
+    await shutList(on);
+    await checks();
+  }
   await cutoverCheck(kit);
   kit.check(
     "the pages said no error",
@@ -350,11 +387,11 @@ const commentChecks = async (on: On, frame: Frame) => {
       accent,
     };
   });
-  const pressed = await comment.getAttribute("aria-pressed");
+  const pressed = await comment.getAttribute("aria-selected");
   on.kit.check(
-    "1: C turns Comment on: aria-pressed, the well's accent edge",
+    "1: C turns Comment on: its segment chosen (aria-selected), the well's accent edge",
     pressed === "true" && edge.outline === edge.accent,
-    `aria-pressed ${pressed}; outline ${edge.outline}, accent ${edge.accent}`
+    `aria-selected ${pressed}; outline ${edge.outline}, accent ${edge.accent}`
   );
 
   const b = await screenBox(on, frame, "#para");
@@ -408,11 +445,12 @@ const commentChecks = async (on: On, frame: Frame) => {
   await on.page.keyboard.press("Escape");
   const closed = (await card.count()) === 0;
   await on.page.keyboard.press("Escape");
-  const left = await comment.getAttribute("aria-pressed");
+  const left = await comment.getAttribute("aria-selected");
+  const back = await interactTab(on).getAttribute("aria-selected");
   on.kit.check(
-    "1: Esc closes the card, and Esc again leaves Comment mode",
-    closed && left === "false",
-    `card closed ${closed}; aria-pressed ${left}`
+    "1: Esc closes the card, and Esc again leaves Comment for Interact",
+    closed && left === "false" && back === "true",
+    `card closed ${closed}; Comment aria-selected ${left}, Interact ${back}`
   );
   return pin?.id ?? null;
 };
@@ -476,9 +514,9 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
   );
   await writeIn(on, 2, "This stroke, thicker.");
   await on.page.keyboard.press("Escape");
-  const rows = await on.page.locator(".pin-list .pin-row").count();
+  const rows = await (await rowsOf(on)).locator(".pin-row").count();
 
-  await on.page.locator(".pin-list .pin-row").first().focus();
+  await (await rowsOf(on)).locator(".pin-row").first().focus();
   const steps: { current: string | null; outline: boolean }[] = [];
   for (const [key, selector] of [
     ["j", "#para"],
@@ -509,7 +547,7 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
 
 /** 3. A reply in the card, delivered by itself once quiet; a second reply, one more delivery. */
 const sendChecks = async (on: On, frame: Frame, one: string) => {
-  await on.page.locator('.pin-list .pin-row[data-pin-row="1"]').click();
+  await (await rowsOf(on)).locator('.pin-row[data-pin-row="1"]').click();
   const card = on.page.locator('.pin-card[data-pin-card="1"]');
   const before = heard.length;
   const rows = await on.page.locator(".turn.you").count();
@@ -579,7 +617,7 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   );
 
   const again = heard.length;
-  await on.page.locator('.pin-list .pin-row[data-pin-row="1"]').click();
+  await (await rowsOf(on)).locator('.pin-row[data-pin-row="1"]').click();
   await card.getByRole("textbox").fill("And a little larger.");
   await card.getByRole("button", { name: "Reply" }).click();
   const second = await until(
@@ -614,7 +652,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   let live = false;
   // Polls the list while the agent's turn runs.
   const watch = setInterval(async () => {
-    if ((await on.page.locator(".pin-list .live").count()) > 0) {
+    if ((await (await rowsOf(on)).locator(".live").count()) > 0) {
       live = true;
     }
   }, 100);
@@ -635,7 +673,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     .catch(() => Number.NaN);
   await until(
     "the agent's turn to end",
-    () => on.page.locator(".pin-list .live").count(),
+    () => on.page.locator(".pin-list-pop .live").count(),
     (count) => count === 0,
     15_000
   ).catch(() => undefined);
@@ -656,7 +694,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     (opacity) => opacity === "0.4",
     5000
   ).catch(() => null);
-  const openRows = await on.page.locator(".pin-list .pin-row").count();
+  const openRows = await (await rowsOf(on)).locator(".pin-row").count();
   await on.page.getByRole("tab", { name: RESOLVED_TAB }).click();
   const resolved = await on.page
     .locator('.pin-list .pin-row[data-pin-row="1"]')
@@ -667,7 +705,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     `opacity ${dim}; open rows ${openRows}; resolved row ${resolved}`
   );
 
-  await on.page.locator('.pin-list .pin-row[data-pin-row="1"]').click();
+  await (await rowsOf(on)).locator('.pin-row[data-pin-row="1"]').click();
   await card.getByRole("button", { name: "Reopen" }).click();
   const reopened = await until(
     "pin 1 reopened",
@@ -825,7 +863,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
     (pin) => !!pin.movedAt,
     10_000
   ).catch(anchorOf);
-  const tray = on.page.locator('.pin-list .moved-row[data-moved-row="1"]');
+  const tray = (await rowsOf(on)).locator('.moved-row[data-moved-row="1"]');
   await tray.waitFor({ timeout: 5000 }).catch(() => undefined);
   const inTray = await tray.count();
   on.kit.check(
@@ -837,10 +875,10 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   const commentButton = on.page.locator(
     ".preview-pane button[aria-keyshortcuts='C']"
   );
-  const modeBefore = await commentButton.getAttribute("aria-pressed");
+  const modeBefore = await commentButton.getAttribute("aria-selected");
   await tray.getByRole("button", { name: "Place again" }).click();
   await pageInComment(frame, true);
-  const during = await commentButton.getAttribute("aria-pressed");
+  const during = await commentButton.getAttribute("aria-selected");
   const b = await screenBox(on, frame, "#third");
   await on.page.mouse.click(b.x + b.w * 0.5, b.y + b.h / 2);
   const placed = await until(
@@ -850,7 +888,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
     10_000
   ).catch(anchorOf);
   await settle(on.page, 300);
-  const mode = await commentButton.getAttribute("aria-pressed");
+  const mode = await commentButton.getAttribute("aria-selected");
   on.kit.check(
     "5: Place again turns Comment on for one tap, which pins it anew out of the tray, and Comment goes back off",
     modeBefore === "false" &&
@@ -1283,34 +1321,41 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   await on.page.keyboard.press("Escape");
 
   const target = tapped[0].number;
-  await on.page.locator(`.pin-list .pin-row[data-pin-row="${target}"]`).click();
+  await (
+    await rowsOf(on)
+  )
+    .locator(`.pin-row[data-pin-row="${target}"]`)
+    .click();
   const before = await numbersNow();
   const doomed = Object.entries(before).find(
     ([, number]) => number === target
   )?.[0];
   const card = on.page.locator(`[data-pin-card="${target}"]`);
-  // The footer holds Delete at its start and Resolve and Reply at its end, on one row.
-  const footer = await card.locator(".actions").evaluate((row) => {
-    // The card's 11px padding and 1px edge stand before the footer's first button.
-    const holder = row.closest(".pin-card")?.getBoundingClientRect();
-    const boxes = [...row.children].map((child) =>
-      child.getBoundingClientRect()
+  // The head holds what acts on the pin (Resolve, ⋯, Close) on its row; the foot holds Reply alone.
+  const parts = await card.evaluate((el) => {
+    const head = el.querySelector(".head");
+    const named = [...(head?.querySelectorAll("button") ?? [])].map(
+      (button) => button.getAttribute("aria-label") ?? ""
     );
-    return {
-      tops: boxes.map((box) => Math.round(box.top)),
-      deleteAtStart:
-        !!holder && Math.abs(boxes[0].left - holder.left - 12) <= 1,
-      labels: [...row.children].map((child) => child.textContent?.trim()),
-    };
+    const tops = [...(head?.querySelectorAll("button") ?? [])].map((button) =>
+      Math.round(button.getBoundingClientRect().top)
+    );
+    const foot = [...el.querySelectorAll(".actions button")].map((button) =>
+      button.textContent?.trim()
+    );
+    return { named, tops, foot };
   });
   on.kit.check(
-    "c: the card's footer has Delete at its start and Resolve and Reply at its end, on one row",
-    footer.deleteAtStart &&
-      new Set(footer.tops).size === 1 &&
-      footer.labels.join() === "Delete,Resolve,Reply",
-    JSON.stringify(footer)
+    "c: the card's head holds Resolve pin, its ⋯ and Close on one row, and its foot Reply alone",
+    parts.named[0] === "Resolve pin" &&
+      parts.named.at(-1) === "Close" &&
+      parts.named.length === 3 &&
+      new Set(parts.tops).size === 1 &&
+      parts.foot.join() === "Reply",
+    JSON.stringify(parts)
   );
-  await card.getByRole("button", { name: "Delete", exact: true }).click();
+  await card.locator(".head button").nth(1).click();
+  await on.page.getByRole("menuitem", { name: "Delete pin" }).click();
   const ask = card.locator('[data-ask="delete"]');
   const asked = await ask
     .waitFor({ timeout: 3000 })
@@ -1810,12 +1855,12 @@ const dismissChecks = async (on: On) => {
     return { held, number };
   };
 
-  // A new pin, nothing said: a press on the pane's chrome (Comment, which also ends the mode).
+  // A new pin, nothing said: a press on the pane's chrome (Interact, which also ends the mode).
   await comment.click();
   await pageInComment(frame, true);
   const empty = await tapNew();
   const openedEmpty = await cards();
-  await comment.click();
+  await interactTab(on).click();
   await pageInComment(frame, false);
   const closedEmpty = await shut();
   const takenBack = await until(
@@ -1837,15 +1882,15 @@ const dismissChecks = async (on: On) => {
   await writeIn(on, kept.number, "Draft kept.");
   await on.page.locator("textarea:not(.pin-card textarea)").first().click();
   const closedKept = await shut();
-  await comment.click();
+  await interactTab(on).click();
   await pageInComment(frame, false);
   const stays =
     String(kept.number) in
     Object.fromEntries(
       Object.values(await pinsNow()).map((pin) => [String(pin.number), true])
     );
-  const row = on.page.locator(
-    `.pin-list .pin-row[data-pin-row="${kept.number}"]`
+  const row = (await rowsOf(on)).locator(
+    `.pin-row[data-pin-row="${kept.number}"]`
   );
   await row.click();
   const reopened = await field(kept.number);
@@ -1969,7 +2014,7 @@ const roomChecks = async (on: On) => {
       }
     );
   }
-  await on.page.locator('.pin-list .pin-row[data-pin-row="1"]').click();
+  await (await rowsOf(on)).locator('.pin-row[data-pin-row="1"]').click();
   const card = on.page.locator('.pin-card[data-pin-card="1"]');
   await until(
     "the seeded replies in pin 1's card",
@@ -1984,9 +2029,12 @@ const roomChecks = async (on: On) => {
       return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
     };
     const room = el.querySelector("[data-pin-room]");
+    // By its words, or its name when it is a glyph (the head's Resolve pin).
     const button = (name: string) =>
       [...el.querySelectorAll("button")].find(
-        (one) => one.textContent?.trim() === name
+        (one) =>
+          one.textContent?.trim() === name ||
+          one.getAttribute("aria-label") === name
       ) ?? null;
     return {
       card: box(el),
@@ -1999,7 +2047,7 @@ const roomChecks = async (on: On) => {
           }
         : null,
       entries: el.querySelectorAll(".entry").length,
-      resolve: box(button("Resolve")),
+      resolve: box(button("Resolve pin")),
       reply: box(button("Reply")),
       field: box(el.querySelector("textarea")),
     };

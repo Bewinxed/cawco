@@ -32,7 +32,6 @@
     titleControl,
     subtitle,
     actions,
-    below,
     onclose,
     closing = false,
     closeFailed = false,
@@ -53,8 +52,6 @@
     subtitle?: string;
     /** The pane's own controls, before Close. */
     actions?: Snippet;
-    /** What stands between the header and the well: the artifact panel's pins. */
-    below?: Snippet;
     onclose: () => void | Promise<void>;
     closing?: boolean;
     closeFailed?: boolean;
@@ -121,7 +118,6 @@
       <PendingContent failed={closeFailed} icon={IconClose} pending={closing} />
     </button>
   </header>
-  {@render below?.()}
   {#if recessed}
     <div class="side-well" bind:this={well}>
       {@render children()}

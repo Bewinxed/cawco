@@ -6,7 +6,7 @@ import UIKit.UIGestureRecognizerSubclass
 import WebKit
 
 /// A session's preview (preview/PreviewPane.svelte): its header (the
-/// artifact's name and path, Send picks, Pins, Comment, Reload, Close) over the
+/// artifact's name and path, Send picks, the mode, Comments, Reload, Close) over the
 /// page, which a web view loads from the session's own preview origin (a
 /// port of the hub's, or a host name of its own). The page carries the agent's
 /// overlay, which talks to its host as an iframe talks to the dashboard: the
@@ -25,9 +25,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Send picks: the page's picks the session has not heard; pins and ink go by themselves.
     private var sendButton: UIButton!
     private var sending = false
+    /// Comments: the open pins' list, floating over the page's top-right (PinList.svelte).
     private var pinsButton: UIButton!
     private let pinsBadge = KitBadge("0")
-    private var commentButton: UIButton!
+    /// The mode, the kit's segmented control: Interact, Comment, Draw (PreviewPane.svelte `.modes`).
+    private var modes: KitSegmented!
     private var reloadButton: UIButton!
     /// Expand / Back to conversation (SideSurface.svelte): beside a
     /// transcript only, never in the phone's drawer.
@@ -56,9 +58,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private let grabber = UIView()
     private var headTop: NSLayoutConstraint!
     private let well = UIView()
-    /// While commenting, one line on the well's top edge says what a tap does now.
-    private let commentingNote = UIView()
-    private var commentingNoteHeight: NSLayoutConstraint!
     private let cover = UIView()
     /// The cover's loading line, hidden once the cover has faded so its sweep stops.
     private let coverLine = SkeletonView(height: 11)
@@ -71,12 +70,23 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var revision: String?
     private var artifactId: String?
     private var origin: URL?
-    /// Comment mode, which the person turns on and nothing else does: every
-    /// new document, revision, Reload and Close starts the page with it off.
-    private var commenting = false
-    /// The moved pin the next tap places again, and whether Comment mode was off before.
+    /// The pane's modes (core comments.ts `PreviewMode`): Interact, the page
+    /// takes every touch and its pins stay pressable; Comment, a tap pins a
+    /// comment; Draw, a finger inks. A pencil inks in every mode.
+    private enum Mode: String, CaseIterable {
+        case interact, comment, draw
+    }
+
+    /// The mode, which the person chooses and nothing else does: kept for
+    /// the session across documents, revisions, Reload and the app's
+    /// launches, as the web pane keeps it (`cawco-preview-mode:<session>`).
+    private var mode: Mode = .interact
+    private var modeKey: String { "cawco-preview-mode:\(instanceId)" }
+    /// ⇧C: every pin hidden from the page, or shown (Figma's key).
+    private var pinsShown = true
+    /// The moved pin the next tap places again, and the mode the pane goes back to once it is placed.
     private var placing: String?
-    private var placingLeaves = false
+    private var placingFrom: Mode?
     private var connected = false
     private var closing = false
     /// As the phone's drawer: the card stands at the well's foot.
@@ -165,30 +175,27 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             part.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
         sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
-        pinsButton = KitButton.make("Pins", glyph: .pin, variant: .ghost, height: .sm) { [weak self] in self?.openList() }
+        pinsButton = KitButton.make("Comments", glyph: .chat, variant: .ghost, height: .sm) { [weak self] in self?.openList() }
         pinsBadge.isUserInteractionEnabled = false
         pinsBadge.isAccessibilityElement = false
         pinsButton.addSubview(pinsBadge)
-        pinsButton.isHidden = true
-        commentButton = KitButton.make("Comment", glyph: .comment, variant: .ghost, height: .sm) { [weak self] in
-            guard let self else { return }
-            comment(!commenting)
-        }
-        commentButton.accessibilityLabel = "Comment"
-        // Commenting shows on Comment as `surface-fill`, as the web's
-        // `aria-pressed` header button does (SideSurface.svelte), over the kit's resting paint.
-        let restingComment = commentButton.configurationUpdateHandler
-        commentButton.configurationUpdateHandler = { button in
-            restingComment?(button)
-            if button.isSelected { button.configuration?.background.backgroundColor = Palette.surfaceFill }
-        }
+        // The mode as the person left it for this session; Interact the first time.
+        mode = UserDefaults.standard.string(forKey: modeKey).flatMap(Mode.init(rawValue:)) ?? .interact
+        modes = KitSegmented(["Interact", "Comment", "Draw"], glyphs: [.toolScreen, .comment, .pen],
+                             selected: Mode.allCases.firstIndex(of: mode))
+        modes.accessibilityLabel = "Preview mode"
+        modes.addAction(UIAction { [weak self] _ in
+            guard let self, let index = modes.selectedIndex, Mode.allCases.indices.contains(index) else { return }
+            setMode(Mode.allCases[index])
+        }, for: .valueChanged)
         let reload = KitButton.make("", glyph: .refresh, variant: .ghost, height: .sm) { [weak self] in self?.reload() }
         reload.accessibilityLabel = "Reload"
-        // While commenting, what would leave the page waits at half ink (PreviewPane.svelte `.commenting .other`).
+        // In Comment and Draw, what would leave the page waits at half ink
+        // (PreviewPane.svelte `.mode-comment .other`, `.mode-draw .other`).
         let restingReload = reload.configurationUpdateHandler
         reload.configurationUpdateHandler = { [weak self] button in
             restingReload?(button)
-            if self?.commenting == true { button.alpha = 0.5 }
+            if let self, mode != .interact { button.alpha = 0.5 }
         }
         reloadButton = reload
         expandButton = KitButton.make("", glyph: .maximize, variant: .ghost, height: .sm) { [weak self] in self?.onExpand() }
@@ -196,15 +203,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         expandButton.toolTip = "Expand"
         closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.close() }
         closeButton.accessibilityLabel = "Close"
-        commentButton.isEnabled = false
-        let head = UIStackView(arrangedSubviews: [identity, sendButton, pinsButton, commentButton, reload, expandButton, closeButton])
+        let head = UIStackView(arrangedSubviews: [identity, sendButton, modes, pinsButton, reload, expandButton, closeButton])
         head.spacing = Space.space1
         head.alignment = .center
         head.translatesAutoresizingMaskIntoConstraints = false
         dragArea = head
-        for button in [sendButton!, pinsButton!, commentButton!, reload, expandButton!, closeButton!] {
-            button.setContentHuggingPriority(.required, for: .horizontal)
-            button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        for control in [sendButton!, modes!, pinsButton!, reload, expandButton!, closeButton!] as [UIView] {
+            control.setContentHuggingPriority(.required, for: .horizontal)
+            control.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
         NSLayoutConstraint.activate([
             pinsBadge.centerYAnchor.constraint(equalTo: pinsButton.centerYAnchor),
@@ -229,25 +235,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         pencil.delegate = self
         web.addInteraction(pencil)
 
-        // `.well`: a hairline at `--radius-sm` on the recess; commenting turns its edge the accent.
+        // `.well`: a hairline at `--radius-sm` on the recess; Comment and Draw
+        // turn its edge the accent. The page keeps the well's whole height in
+        // every mode: the head's chosen segment says the mode.
         well.translatesAutoresizingMaskIntoConstraints = false
         well.layer.cornerRadius = Radius.radiusSm
         well.layer.cornerCurve = .continuous
         well.layer.borderWidth = 1
         well.clipsToBounds = true
         well.backgroundColor = Palette.surfaceRecess
-        // The mode in words, 28pt on the well's top edge, which the page gives
-        // way to while commenting and takes back when it ends.
-        commentingNote.translatesAutoresizingMaskIntoConstraints = false
-        commentingNote.backgroundColor = Palette.surfaceRecess
-        commentingNote.clipsToBounds = true
-        commentingNote.isUserInteractionEnabled = false
-        let noteLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-        noteLabel.text = "Commenting: tap an element on the page"
-        noteLabel.lineBreakMode = .byTruncatingTail
-        noteLabel.translatesAutoresizingMaskIntoConstraints = false
-        commentingNote.addSubview(noteLabel)
-        commentingNoteHeight = commentingNote.heightAnchor.constraint(equalToConstant: 0)
         cover.translatesAutoresizingMaskIntoConstraints = false
         cover.backgroundColor = Palette.surfaceRecess
         cover.isUserInteractionEnabled = false
@@ -258,12 +254,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         wellEdge.translatesAutoresizingMaskIntoConstraints = false
         wellEdge.isUserInteractionEnabled = false
         wellEdge.isHidden = true
-        for part in [commentingNote, web!, cover, wellEdge, card, failure] as [UIView] { well.addSubview(part) }
+        for part in [web!, cover, wellEdge, card, failure] as [UIView] { well.addSubview(part) }
 
         // The grabber, `space-1` from the top, centred, 100×6 in the control
         // edge; its hit area is 44pt tall about it (vaul's handle hit area),
         // over the header, which yields to the header's actions.
-        grabArea.yields = [sendButton, pinsButton, commentButton, reload, expandButton, closeButton]
+        grabArea.yields = [sendButton, modes, pinsButton, reload, expandButton, closeButton]
         grabber.translatesAutoresizingMaskIntoConstraints = false
         grabber.backgroundColor = Palette.borderControl
         grabber.layer.cornerRadius = 3
@@ -306,14 +302,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             wellLeading,
             wellTrailing,
             wellBottom,
-            commentingNote.topAnchor.constraint(equalTo: well.topAnchor),
-            commentingNote.leadingAnchor.constraint(equalTo: well.leadingAnchor),
-            commentingNote.trailingAnchor.constraint(equalTo: well.trailingAnchor),
-            commentingNoteHeight,
-            noteLabel.leadingAnchor.constraint(equalTo: commentingNote.leadingAnchor, constant: Space.space3),
-            noteLabel.trailingAnchor.constraint(lessThanOrEqualTo: commentingNote.trailingAnchor, constant: -Space.space3),
-            noteLabel.centerYAnchor.constraint(equalTo: commentingNote.topAnchor, constant: Space.space4),
-            web.topAnchor.constraint(equalTo: commentingNote.bottomAnchor),
+            web.topAnchor.constraint(equalTo: well.topAnchor),
             web.leadingAnchor.constraint(equalTo: well.leadingAnchor),
             web.trailingAnchor.constraint(equalTo: well.trailingAnchor),
             web.bottomAnchor.constraint(equalTo: well.bottomAnchor),
@@ -374,16 +363,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     @objc private func cameForward() { sayShown() }
 
-    /// Narrow (PreviewPane.svelte's container under 470px), Comment and Pins
-    /// say themselves by glyph alone; Done keeps its word, the way out.
-    private var narrow: Bool { view.bounds.width < 470 }
+    /// Narrow (PreviewPane.svelte's container under 640px), Comments says
+    /// itself by glyph and count alone.
+    private var narrow: Bool { view.bounds.width < 640 }
     private var laidNarrow: Bool?
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         if laidNarrow != narrow {
             laidNarrow = narrow
-            paintComment()
+            paintMode()
             paintPins()
         }
         placeCard()
@@ -450,8 +439,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     /// Esc on the pane (PreviewPane.svelte `pressKey`): a question standing
-    /// in the card goes first, then the card closes, then Comment mode ends.
-    /// False when none was there.
+    /// in the card goes first, then the card closes, then Comment or Draw
+    /// goes back to Interact. False when none was there.
     func escape() -> Bool {
         if openPin != nil, card.escape() {
             #if DEBUG
@@ -466,8 +455,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             #endif
             return true
         }
-        if commenting {
-            comment(false)
+        if mode != .interact {
+            setMode(.interact)
             return true
         }
         return false
@@ -482,7 +471,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let origin = route.origin
         guard frame.revision != revision else { return }
         revision = frame.revision
-        comment(false)
+        // A moved pin waiting to be placed again belongs to the page that showed it.
+        if placing != nil { setMode(placingFrom ?? mode) }
+        placingFrom = nil
         if frame.artifact.id != artifactId {
             // Another artifact: its pins are its own.
             artifactId = frame.artifact.id
@@ -497,8 +488,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         pathLabel.text = Self.place(frame)
         self.origin = origin
         connected = false
-        commentButton.isEnabled = false
-        commentButton.isHidden = frame.artifact.kind == .canvas
+        // A canvas draws with its own tools: no modes over it.
+        modes.isHidden = frame.artifact.kind == .canvas
         paintSend()
         cover.alpha = 1
         coverLine.isHidden = false
@@ -567,10 +558,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     // MARK: The page
 
     /// A new document (a load, the page's own reload or a link to another
-    /// page) starts its overlay out of Comment mode: Comment goes off with
-    /// it, so the button and the page never disagree.
+    /// page) starts its overlay in Interact: the pane's mode stands, and the
+    /// overlay hears it again once it says it is ready (`ready`), so the
+    /// head and the page never disagree.
     func webView(_: WKWebView, didCommit _: WKNavigation!) {
-        comment(false)
         #if DEBUG
         PreviewProbe.say("preview document")
         PreviewProbe.documents += 1
@@ -655,7 +646,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             guard let id = Self.pinId(body["id"]) else { return }
             if id == placing || (placing != nil && body["made"] as? Bool != true) {
                 // Placed again: the mode goes back to how it was before.
-                if placingLeaves { comment(false) } else { placing = nil }
+                if let from = placingFrom, from != .comment { setMode(from) } else { placing = nil }
+                placingFrom = nil
             }
             openCard(id, made: body["made"] as? Bool == true)
             refresh()
@@ -678,9 +670,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         case "cawco:key":
             if let key = Self.text(body["key"], 10) { press(key) }
         case "cawco:escape":
-            commenting = false
-            placing = nil
-            paintComment()
+            // The page left Comment or Draw on its own Esc: the pane follows, and keeps it.
+            setMode(.interact)
         case "cawco:error":
             // wire.ts `previewErrorOf`: a send or a field carry their own way back.
             let of = Self.text(body["of"], 20).flatMap { ["send", "field"].contains($0) ? $0 : nil }
@@ -712,16 +703,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         PreviewProbe.say("preview ready")
         if byHost { PreviewProbe.lapse(web) }
         #endif
-        commentButton.isEnabled = true
         paintSend()
-        // The page's mode as the person left it, and the open card's pin tracked again.
-        comment(commenting, place: placing)
+        // The page's mode as the person left it, its pins shown or hidden, and the open card's pin tracked again.
+        setMode(mode, place: placing)
+        if !pinsShown { deliver(["type": "cawco:pins-shown", "shown": false]) }
         if let openPin { deliver(["type": "cawco:track-pin", "id": openPin]) }
         if let revision { word(revision, failure: nil) }
         #if DEBUG
         if PreviewProbe.commentAtLaunch, !commentedAtLaunch {
             commentedAtLaunch = true
-            comment(true)
+            setMode(.comment)
             if PreviewProbe.tapAtLaunch {
                 web.evaluateJavaScript(PreviewProbe.click) { value, error in
                     PreviewProbe.say("preview probe click \((value as? String) ?? error?.localizedDescription ?? "?")")
@@ -731,28 +722,34 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         #endif
     }
 
-    // MARK: Comment mode
+    // MARK: The mode
 
-    /// Comment on or off, unmistakable while on: the button pressed and
-    /// reading Done (the way out on the button itself), the well's accent
-    /// edge, and the line on its top edge, 28pt. `place` is the moved pin
-    /// the next tap places again.
-    private func comment(_ on: Bool, place: String? = nil) {
-        commenting = on
-        placing = on ? place : nil
-        paintComment()
-        deliver(["type": "cawco:mode", "mode": on ? "comment" : "off", "place": placing.map { $0 as Any } ?? NSNull()])
+    /// The pane's mode, kept for the session and told to the page; the head's
+    /// segment chosen and, in Comment and Draw, the well's accent edge.
+    /// `place` is the moved pin the next tap in Comment places again.
+    private func setMode(_ next: Mode, place: String? = nil) {
         #if DEBUG
-        PreviewProbe.say("preview comment \(on ? "on" : "off")")
+        let was = mode
+        #endif
+        mode = next
+        placing = next == .comment ? place : nil
+        UserDefaults.standard.set(next.rawValue, forKey: modeKey)
+        paintMode()
+        deliver(["type": "cawco:mode", "mode": next.rawValue, "place": placing.map { $0 as Any } ?? NSNull()])
+        #if DEBUG
+        PreviewProbe.say("preview mode \(next.rawValue)")
+        // The probe's own words for entering and leaving Comment.
+        if next == .comment { PreviewProbe.say("preview comment on") }
+        if was == .comment, next != .comment { PreviewProbe.say("preview comment off") }
         #endif
     }
 
-    private func paintComment() {
+    /// The segments' glyphs alone, as the web's modes are (their names stay
+    /// VoiceOver's), so the head keeps its room at every width.
+    private func paintMode() {
         guard isViewLoaded else { return }
-        commentButton.isSelected = commenting
-        KitButton.setTitle(commenting ? "Done" : narrow ? "" : "Comment", of: commentButton, variant: .ghost, height: .sm)
-        commentButton.accessibilityLabel = commenting ? "Done" : "Comment"
-        commentingNoteHeight.constant = commenting ? Space.space4 * 2 : 0
+        modes.namesShown = false
+        modes.select(Mode.allCases.firstIndex(of: mode))
         reloadButton.setNeedsUpdateConfiguration()
         paintWell()
     }
@@ -778,8 +775,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     private func paintWell() {
-        let edge = (commenting ? Palette.accent : Palette.borderHairline).resolvedColor(with: traitCollection)
-        let width = commenting ? Size.focusRingWidth : 1
+        let marking = mode != .interact
+        let edge = (marking ? Palette.accent : Palette.borderHairline).resolvedColor(with: traitCollection)
+        let width = marking ? Size.focusRingWidth : 1
         // Expanded, only the top edge is drawn: the sides are the session area's own.
         well.layer.borderColor = edge.cgColor
         well.layer.borderWidth = expanded ? 0 : width
@@ -796,10 +794,17 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     /// The pane's keys, heard while the page has the keyboard (PreviewPane.svelte
-    /// `pressKey`): C toggles Comment, J and K step through the pins, Enter opens one, Esc closes.
+    /// `pressKey`): V, C and D the modes, ⇧C (`C`) every pin hidden or shown,
+    /// J and K a step through the pins, Enter opens one, Esc closes.
     private func press(_ key: String) {
         switch key {
-        case "c" where !commentButton.isHidden: comment(!commenting)
+        case "v" where !modes.isHidden: setMode(.interact)
+        case "c" where !modes.isHidden: setMode(.comment)
+        case "d" where !modes.isHidden: setMode(.draw)
+        case "C" where !modes.isHidden:
+            pinsShown.toggle()
+            deliver(["type": "cawco:pins-shown", "shown": pinsShown])
+            paintPins()
         case "j": step(1)
         case "k": step(-1)
         case "Enter": if let focusedPin { openCard(focusedPin) }
@@ -809,9 +814,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
     }
 
-    /// The next or the previous pin on the page, outlined and scrolled to.
+    /// The next or the previous pin on the page, outlined and scrolled to (a resolved one has left it).
     private func step(_ by: Int) {
-        let stepping = comments.pins.filter { !$0.moved }
+        let stepping = comments.pins.filter { !$0.moved && !$0.resolved }
         guard !stepping.isEmpty else { return }
         let at = stepping.firstIndex { $0.id == focusedPin } ?? -1
         let next = stepping[((at + by) % stepping.count + stepping.count) % stepping.count]
@@ -935,14 +940,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintCard()
     }
 
-    /// The head's Pins (shown once there is a pin), its badge the open pins, and Send picks.
+    /// The head's Comments, its badge the open pins (PreviewPane.svelte `.comments`), and Send picks.
     private func paintPins() {
         guard isViewLoaded else { return }
-        pinsButton.isHidden = comments.pins.isEmpty
         pinsBadge.text = "\(comments.open)"
         pinsBadge.isHidden = comments.open == 0
-        KitButton.setTitle(narrow ? "" : "Pins", of: pinsButton, variant: .ghost, height: .sm)
-        pinsButton.accessibilityLabel = "Pins, \(comments.open) open"
+        KitButton.setTitle(narrow ? "" : "Comments", of: pinsButton, variant: .ghost, height: .sm)
+        pinsButton.accessibilityLabel = "Comments, \(comments.open) open\(pinsShown ? "" : ", pins hidden")"
         let badge = comments.open == 0 ? 0 : pinsBadge.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width + Space.space1
         pinsButton.configuration?.contentInsets.trailing = Space.space3 + 1 + badge
         paintSend()
@@ -964,9 +968,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         sendButton.accessibilityHint = "Sends the page's picks to the session"
     }
 
-    /// The list, as a house sheet from the head (PinList.svelte).
+    /// The Comments panel (PinList.svelte), the kit's floating surface hung
+    /// off the well's top-right corner under the head, as the web's panel
+    /// is: about a fifth of the pane wide (`c-pin-list-*`), no taller than
+    /// the well less its gutters, its rows scrolling inside. It stands over
+    /// the page and never pushes it; the page keeps taking touches under it
+    /// (passthrough), and a tap anywhere else puts it away.
     private func openList() {
         let content = PinListController()
+        content.heading = true
         content.placing = placing
         content.show(comments.pins, live: live)
         content.onOpen = { [weak self, weak content] id in
@@ -977,17 +987,28 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             content?.dismiss(animated: true)
             self?.placeAgain(id)
         }
+        content.onClose = { [weak content] in content?.dismiss(animated: true) }
         list = content
-        let sheet = HouseSheetController(content, title: "Pins", scroller: content.scroller)
-        present(sheet, animated: !UIAccessibility.isReduceMotionEnabled)
+        let gutter: Double = Space.space2
+        let roomWidth = Double(well.bounds.width)
+        let roomHeight = Double(well.bounds.height)
+        let share: Double = roomWidth * Size.cPinListShare
+        let width: Double = Swift.min(Swift.max(share, Size.cPinListMin), Size.cPinListMax, roomWidth - gutter * 2)
+        content.loadViewIfNeeded()
+        let fits = Double(content.view.systemLayoutSizeFitting(CGSize(width: width, height: 0),
+                                                               withHorizontalFittingPriority: .required,
+                                                               verticalFittingPriority: .fittingSizeLevel).height)
+        content.preferredContentSize = CGSize(width: width, height: Swift.min(fits, roomHeight - gutter * 2))
+        KitPopover.present(content, from: well, rect: CGRect(x: roomWidth - gutter, y: 0, width: 0, height: 0), in: self,
+                           align: .end, side: .bottom, offset: gutter, passthrough: [web!])
         if let focusedPin { content.reveal(focusedPin) }
     }
 
     /// Place again: Comment mode until the next tap pins the moved pin anew.
     private func placeAgain(_ id: String) {
-        placingLeaves = !commenting
+        placingFrom = mode
         closeCard()
-        comment(true, place: id)
+        setMode(.comment, place: id)
     }
 
     // MARK: The card
@@ -1066,6 +1087,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return watcher
     }()
 
+    /// A pin's own address (its card's Copy link, PreviewPane.svelte
+    /// `pinLink`): its artifact's tab on the dashboard, opening the pin's
+    /// card; the hub's address, as a session's link is (PaneHost `link`).
+    private func pinLink(_ number: Int) -> URL? {
+        guard let artifactId, let tab = hub.address?.appendingPathComponent("artifact").appendingPathComponent(artifactId) else { return nil }
+        var parts = URLComponents(url: tab, resolvingAgainstBaseURL: false)
+        parts?.queryItems = [URLQueryItem(name: "pin", value: "\(number)")]
+        return parts?.url
+    }
+
     /// The open card as its pin stands in the hub's last read.
     private func paintCard() {
         guard let openPin else { return }
@@ -1076,6 +1107,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
         let arriving = card.isHidden
         card.isHidden = false
+        card.link = pinLink(pin.label)
         card.show(pin, live: live.contains(openPin), thumbnail: thumbs[openPin], problem: cardError, replying: replying,
                   draft: drafts[openPin] ?? "")
         if outsidePress.view == nil, let window = view.window { window.addGestureRecognizer(outsidePress) }
@@ -1170,9 +1202,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     /// The person's words in the open pin's thread: the page's overlay writes
     /// them into the artifact's doc, as every person's reply is written
-    /// (`cawco:reply`). A refusal stays under the field with the words still in it.
+    /// (`cawco:reply`). A refusal stays under the field with the words still
+    /// in it. A resolved pin's reply reopens it ("Reply to reopen").
     private func reply(_ text: String) {
         guard let pin = openPin, !replying else { return }
+        let reopens = comments.pins.first { $0.id == pin }?.resolved == true
         replying = true
         cardError = nil
         paintCard()
@@ -1189,6 +1223,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             cardError = refused
             replying = false
             paintCard()
+            if refused == nil, reopens, openPin == pin {
+                resolve(false)
+                return
+            }
             // The thread as the hub has it now, at once.
             if refused == nil { refresh() }
         }
@@ -1391,8 +1429,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         #if DEBUG
         PreviewProbe.say("preview close")
         #endif
-        // A preview the hub keeps open comes back with the page taking taps.
-        comment(false)
+        // The mode is the person's and stands; a moved pin waiting to be placed again does not.
+        if placing != nil { setMode(placingFrom ?? .interact) }
+        placingFrom = nil
         closeCard()
         closeButton.isEnabled = false
         Task { [weak self] in
@@ -1411,16 +1450,28 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     #if DEBUG
     // MARK: The simulator probe (scripts/probe-ios-preview-touch.ts)
 
-    /// The header as the probe reads it: Comment's words and centre, the open
-    /// pins and Pins' centre, Send's words and centre, Reload's, the
-    /// grabber's, the commenting line's height, and the web view's frame.
+    /// The header as the probe reads it: what toggles Comment and its centre
+    /// ("Comment" at Comment's segment, or while commenting "Interact" at
+    /// Interact's, the way out), the mode, Draw's centre, the open pins and
+    /// Comments' centre, Send's words and centre, Reload's, the grabber's,
+    /// and the web view's frame.
     private func headLine() -> String {
         let centre = PreviewProbe.centre
-        let words = commentButton.accessibilityLabel ?? "?"
+        let words = mode == .comment ? "Interact" : "Comment"
+        let toggle = segmentCentre(mode == .comment ? 0 : 1)
         let sendWords = sendButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
         let grab = grabArea.isHidden ? "none" : centre(grabber)
         let page = web.convert(web.bounds, to: nil)
-        return "preview head comment=\(words)@\(centre(commentButton)) pins=\(comments.open)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) note=\(Int(commentingNote.bounds.height)) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
+        return "preview head comment=\(words)@\(toggle) mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(comments.open)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
+    }
+
+    /// The centre of the mode's segment at `index` in the window: the segmented's width in three.
+    private func segmentCentre(_ index: Int) -> String {
+        guard modes.window != nil, !modes.isHidden else { return "none" }
+        let box = modes.convert(modes.bounds, to: nil)
+        let third = Double(box.width) / 3
+        let x = Double(box.minX) + third * (Double(index) + 0.5)
+        return "\(Int(x.rounded())),\(Int(Double(box.midY).rounded()))"
     }
 
     /// Expand's words and centre and Close's centre, for the session's `split` line.
@@ -1478,9 +1529,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The probe's page posts `cawco:probe` with its state and the viewport
     /// rects of what the probe taps: logged with each rect's centre in the
     /// window's points, where a simulator touch lands, after the header's own
-    /// line (Comment's words and its centre, Pins', Send's, Reload's, the
-    /// grabber's, the commenting line's height, and the web view's frame in
-    /// the window), so every post says where everything is now.
+    /// line (`headLine`: the mode's places, Comments', Send's, Reload's, the
+    /// grabber's, and the web view's frame in the window), so every post
+    /// says where everything is now.
     private func probePage(_ body: [String: Any]) {
         guard PreviewProbe.on, let web else { return }
         PreviewProbe.say(headLine())

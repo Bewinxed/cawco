@@ -4,9 +4,12 @@
  * a 20px coral disc (`action-solid`) with its number in `on-action`, drawn in
  * an `<svg>` in the page's own document like the ink, so it scrolls with the
  * page. A comment's pin stands where the person tapped its element in Comment
- * mode; an ink's pin at its group's top-right. A resolved pin is drawn at
- * 40%. Resting on a pin, or the host focusing it (J and K), outlines its
- * element; a press on it opens its card in the host.
+ * mode; an ink's pin at its group's top-right. A resolved pin leaves the
+ * page (Figma: resolving "will hide the comment from both the right sidebar
+ * and the canvas"), drawn again, at 40%, only while the host has its card
+ * open. Resting on a pin outlines its element and peeks its first
+ * line beside it; the host focusing it (J and K) outlines it; a press on it
+ * opens its card in the host. ⇧C hides every pin, and shows them again.
  *
  * A pin on an element inside a same-origin frame (frames.ts) is drawn here
  * too, in the top document, at the element's box mapped through its frames;
@@ -79,6 +82,8 @@ export interface PinsDeps {
   ) => { by: "source" | "selector" | "text"; el: Element } | null;
   /** The overlay's highlight round `el` (its box in the viewport), or none. */
   outline: (el: Element | null) => void;
+  /** Pin `pin`'s first line beside its disc, at the viewport's `x`, `y`, radius `r`; none hides it. */
+  peek: (pin: Pin | null, x?: number, y?: number, r?: number) => void;
   post: (type: string, payload?: object) => void;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
   waiting: (anchor: PageAnchor) => boolean;
@@ -106,6 +111,8 @@ export interface Pins {
   ) => void;
   /** Pin `id` placed again on `el` at the viewport's `x`, `y`: out of the moved tray. */
   placeAgain: (id: string, el: Element, x: number, y: number) => void;
+  /** Every pin shown on the page, or hidden (⇧C). */
+  show: (shown: boolean) => void;
   /** The pin whose card the host shows, whose place it hears as the page scrolls; or none. */
   track: (id: string | null) => void;
 }
@@ -237,10 +244,14 @@ export function startPins(deps: PinsDeps): Pins {
     number.style.userSelect = "none";
     number.textContent = String(pin.number);
     g.append(circle, number);
-    g.addEventListener("pointerenter", () => deps.outline(where.el));
-    g.addEventListener("pointerleave", () =>
-      deps.outline(focused ? (placed.get(focused)?.el ?? null) : null)
-    );
+    g.addEventListener("pointerenter", () => {
+      deps.outline(where.el);
+      deps.peek(pin, where.at[0] - scrollX, where.at[1] - scrollY, PIN_R);
+    });
+    g.addEventListener("pointerleave", () => {
+      deps.outline(focused ? (placed.get(focused)?.el ?? null) : null);
+      deps.peek(null);
+    });
     g.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -278,7 +289,9 @@ export function startPins(deps: PinsDeps): Pins {
       ink: chrome.token("--on-action"),
       font: chrome.token("--type-label", "font"),
     };
-    for (const pin of all.filter((one) => !one.movedAt)) {
+    // A resolved pin stands on the page only while the host has its card open.
+    const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
+    for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
       const where = standing(pin);
       if (!where) {
         if (goneFrom(pin)) {
@@ -483,8 +496,20 @@ export function startPins(deps: PinsDeps): Pins {
       deps.outline(el);
     },
     track: (id) => {
+      const before = tracked;
       tracked = id;
-      tell();
+      if (before === id) {
+        tell();
+      } else {
+        // Drawn again (a resolved pin stands while its card is open), which tells the host.
+        draw();
+      }
+    },
+    show: (shown) => {
+      layer.style.display = shown ? "" : "none";
+      if (!shown) {
+        deps.peek(null);
+      }
     },
     picture: async (id, thumb) => {
       const pin = pinsMap().get(id);

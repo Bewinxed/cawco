@@ -64,7 +64,11 @@ export {
 export { default as IconToolNavigate } from "~icons/solar/compass-bold-duotone";
 export { default as IconCopy } from "~icons/solar/copy-bold-duotone";
 export { default as IconCpu } from "~icons/solar/cpu-bold-duotone";
-export { default as IconToolScreen } from "~icons/solar/cursor-bold-duotone";
+/** A screen tool's row; the preview pane's Interact mode (the page gets the pointer). */
+export {
+  default as IconInteract,
+  default as IconToolScreen,
+} from "~icons/solar/cursor-bold-duotone";
 export { default as IconAlert } from "~icons/solar/danger-circle-bold-duotone";
 export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
 // A new thread: a conversation of two. Its full-weight marks are as large as

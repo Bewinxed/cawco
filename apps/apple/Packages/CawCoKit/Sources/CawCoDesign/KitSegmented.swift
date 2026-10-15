@@ -7,7 +7,10 @@ import UIKit
 /// (`--surface-lift`, `--shadow-raised`, `--radius-sm`), which glides to the
 /// next, its place and size together, over `durPop` on the in-out curve; a
 /// press tints the segment. Across, each segment is as wide as its name;
-/// down, they fill the column and their names start at its edge.
+/// down, they fill the column and their names start at its edge. A segment
+/// may lead with a 16pt glyph (the web's TabItem `icon`, the preview's
+/// modes), in its name's ink; `namesShown` off, a narrow pane keeps the
+/// glyphs alone, each still named for VoiceOver.
 public final class KitSegmented: UIControl {
     public enum Axis: Sendable { case across, down }
 
@@ -17,7 +20,16 @@ public final class KitSegmented: UIControl {
     private var cells: [Segment] = []
     private var placed = false
 
-    public init(_ labels: [String], selected: Int?, axis: Axis = .across, mono: Bool = false) {
+    /// The segments' names beside their glyphs; off, the glyphs alone.
+    public var namesShown = true {
+        didSet {
+            guard namesShown != oldValue else { return }
+            for cell in cells { cell.nameShown = namesShown }
+            setNeedsLayout()
+        }
+    }
+
+    public init(_ labels: [String], glyphs: [Glyph] = [], selected: Int?, axis: Axis = .across, mono: Bool = false) {
         selectedIndex = selected
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -42,7 +54,8 @@ public final class KitSegmented: UIControl {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
         ])
         for (index, label) in labels.enumerated() {
-            let cell = Segment(label, mono: mono, start: axis == .down)
+            let glyph = glyphs.indices.contains(index) ? glyphs[index] : nil
+            let cell = Segment(label, glyph: glyph, mono: mono, start: axis == .down)
             cell.addAction(UIAction { [weak self] _ in self?.choose(index) }, for: .touchUpInside)
             cells.append(cell)
             stack.addArrangedSubview(cell)
@@ -113,11 +126,21 @@ public final class KitSegmented: UIControl {
 
     private final class Segment: UIControl {
         private let label: KitLabel
+        /// The glyph before the name, when the segment has one.
+        private let mark: GlyphView?
+        /// The glyph and the name, centred as the name alone was.
+        private let content = UIStackView()
         var chosen = false {
             didSet {
                 label.ink = chosen ? Palette.inkStrong : Palette.inkMuted
+                mark?.tintColor = chosen ? Palette.inkStrong : Palette.inkMuted
                 accessibilityTraits = chosen ? [.button, .selected] : .button
             }
+        }
+
+        /// The name beside the glyph; a segment with no glyph keeps its name.
+        var nameShown = true {
+            didSet { label.isHidden = !nameShown && mark != nil }
         }
 
         var title: String {
@@ -129,10 +152,11 @@ public final class KitSegmented: UIControl {
             }
         }
 
-        init(_ text: String, mono: Bool, start: Bool) {
+        init(_ text: String, glyph: Glyph?, mono: Bool, start: Bool) {
             // `font: weight-strong text-label / 1`, in the mono face where the list names files.
             label = KitLabel(mono ? TypeScale.typeCode.with(points: TypeScale.typeLabel.points).withWeight(.medium) : TypeScale.typeLabel.withWeight(.medium),
                              ink: Palette.inkMuted)
+            mark = glyph.map { GlyphView($0, size: Size.iconMd, tint: Palette.inkMuted) }
             super.init(frame: .zero)
             layer.cornerRadius = Radius.radiusSm
             layer.cornerCurve = .continuous
@@ -140,18 +164,24 @@ public final class KitSegmented: UIControl {
             label.isUserInteractionEnabled = false
             label.lineBreakMode = .byTruncatingTail
             label.setContentCompressionResistancePriority(start ? .defaultLow : .required, for: .horizontal)
-            addSubview(label)
+            if let mark { content.addArrangedSubview(mark) }
+            content.addArrangedSubview(label)
+            content.spacing = Space.space1
+            content.alignment = .center
+            content.isUserInteractionEnabled = false
+            content.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(content)
             var pins = [
                 heightAnchor.constraint(equalToConstant: 30),
-                label.centerYAnchor.constraint(equalTo: centerYAnchor),
-                label.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 10),
-                label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
+                content.centerYAnchor.constraint(equalTo: centerYAnchor),
+                content.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 10),
+                content.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
             ]
             if start {
-                pins.append(label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10))
+                pins.append(content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10))
             } else {
-                pins.append(label.centerXAnchor.constraint(equalTo: centerXAnchor))
-                let snug = widthAnchor.constraint(equalTo: label.widthAnchor, constant: 20)
+                pins.append(content.centerXAnchor.constraint(equalTo: centerXAnchor))
+                let snug = widthAnchor.constraint(equalTo: content.widthAnchor, constant: 20)
                 snug.priority = .defaultHigh
                 pins.append(snug)
             }

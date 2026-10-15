@@ -500,8 +500,14 @@ public enum Size {
     public static let cArtifactRowH: Double = 44
     /// tsk-3's numbered pin: the coral disc on the page, in the pins list and on the card (DESIGN.md Artifact panel, canvas and ink).
     public static let cPin: Double = 20
-    /// A pin's card over the page, at its widest: the anchor line, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink).
-    public static let cPinCardW: Double = 320
+    /// A pin's card over the page, at its widest: the anchor line with Resolve, ⋯ and Close, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink). Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px is the narrowest that keeps the anchor line beside its four controls.
+    public static let cPinCardW: Double = 280
+    /// The preview's Comments panel, floating over the page's top-right: its share of the pane's width (Magnific's floating panel, about 22%), held between c-pin-list-min and c-pin-list-max.
+    public static let cPinListShare: Double = 0.22
+    /// The Comments panel at its narrowest: a row's disc, anchor line and last reply's first line.
+    public static let cPinListMin: Double = 260
+    /// The Comments panel at its widest.
+    public static let cPinListMax: Double = 340
     /// A pin's picture on its card: the element's crop or the ink's, opening full size in the lightbox.
     public static let cPinThumb: Double = 56
     public static let cMark: Double = 26

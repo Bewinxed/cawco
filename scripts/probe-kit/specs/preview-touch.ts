@@ -9,12 +9,12 @@
  * 390×844 (touch, mobile, 3×), real touches (`page.touchscreen.tap`, CDP
  * `Input.dispatchTouchEvent` for drags). Read from the DOM and the hub.
  *
- * 1. Comment off: a tap on the page's counter adds one; its anchor scrolls
+ * 1. Interact: a tap on the page's counter adds one; its anchor scrolls
  *    the page; a button in its fixed bar adds one.
  * 2. The head: the name menu opens, Reload loads the page again, Comment
- *    turns pressed, Close puts the drawer away.
- * 3. Comment on: a tap on the counter adds nothing and opens the new pin's
- *    card at the well's foot; Comment off, it adds one again.
+ *    becomes the chosen mode, Close puts the drawer away.
+ * 3. Comment: a tap on the counter adds nothing and opens the new pin's
+ *    card at the well's foot; Interact again, it adds one.
  * 4. A grabber drag moves the drawer between its heights; a drag inside the
  *    page scrolls the page and leaves the drawer where it is.
  * 5. After a drawer drag and a viewport resize, (1) still holds.
@@ -290,7 +290,7 @@ const probe = async (kit: Kit) => {
     JSON.stringify(opened)
   );
 
-  // 1. Comment off: the page is the finger's.
+  // 1. Interact: the page is the finger's.
   await operable(on, "1");
 
   // 6. A tap in the page at the lower height leaves the drawer open, there.
@@ -380,7 +380,8 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
   );
 
   // 3. Comment on: the overlay takes the tap; it pins a comment and opens its card.
-  const comment = page.locator(`${SHEET} button[aria-keyshortcuts="C"]`);
+  const comment = page.locator(`${SHEET} [role="tab"][aria-keyshortcuts="C"]`);
+  const interact = page.locator(`${SHEET} [role="tab"][aria-keyshortcuts="V"]`);
   const tapBox = async (
     box: {
       x: number;
@@ -394,7 +395,7 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
   };
   await tapBox(await comment.boundingBox());
   await page.waitForTimeout(300);
-  const pressed = await comment.getAttribute("aria-pressed");
+  const pressed = await comment.getAttribute("aria-selected");
   const pinning = await pageFrame(page);
   await pinning.evaluate(() => window.scrollTo(0, 0));
   const held = Number(await textIn(pinning, "#count"));
@@ -407,9 +408,9 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
   ).catch(() => 0);
   const unchanged = Number(await textIn(pinning, "#count")) === held;
   kit.check(
-    "2: Comment answers a tap and turns pressed",
+    "2: Comment answers a tap and is the chosen mode",
     pressed === "true",
-    `aria-pressed ${pressed}`
+    `aria-selected ${pressed}`
   );
   kit.check(
     "3: with Comment on, a tap on the counter adds nothing and opens the new pin's card at the well's foot",
@@ -419,16 +420,16 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
   await tapBox(
     await page.locator('.pin-card button[aria-label="Close"]').boundingBox()
   );
-  await tapBox(await comment.boundingBox());
+  await tapBox(await interact.boundingBox());
   await page.waitForTimeout(300);
   const off = Number(await textIn(pinning, "#count"));
   // Its pin stands on the counter's middle, where the comment was tapped, and a press on a pin opens its card: the tap lands beside it.
   const offHit = await tapIn(on, pinning, "#count", 0.15);
   kit.check(
-    "3: Comment off again, a tap on the counter adds one",
+    "3: Interact again, a tap on the counter adds one",
     Number(await textIn(pinning, "#count")) === off + 1 &&
-      (await comment.getAttribute("aria-pressed")) === "false",
-    `aria-pressed ${await comment.getAttribute("aria-pressed")}; count ${off} → ${await textIn(pinning, "#count")}; hit ${offHit}`
+      (await interact.getAttribute("aria-selected")) === "true",
+    `Interact aria-selected ${await interact.getAttribute("aria-selected")}; count ${off} → ${await textIn(pinning, "#count")}; hit ${offHit}`
   );
 
   // 2. The head: the name menu, Reload, Close.

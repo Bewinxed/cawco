@@ -6,8 +6,8 @@ import UIKit
 
 // The preview's pins (Projects spec §5.7, §5.10; tsk-3; DESIGN.md
 // "Artifact panel, canvas and ink"): the page's overlay draws each pin on
-// the page itself; the app draws their list (a house sheet from the head's
-// Pins) and the open pin's card over the page, as the web's PinList.svelte
+// the page itself; the app draws their list (the Comments panel, floating
+// over the page from the head's Comments) and the open pin's card over the page, as the web's PinList.svelte
 // and PinCard.svelte do beside the dashboard's pane.
 
 /// tsk-3's numbered pin as the app draws it (PinDisc.svelte): a 20pt disc
@@ -72,19 +72,28 @@ private func liveDot() -> Dot {
 
 // MARK: The list
 
-/// The pins' list, the content of the house sheet the head's Pins opens
-/// (PinList.svelte): Open and Resolved as a segmented filter over 44pt rows,
-/// each the pin's disc, what it stands on and its thread's last line; the
-/// pins whose element is gone wait in the moved tray at the end, each with
-/// Place again, which pins it anew with the next tap on the page.
+/// The Comments panel's content, floating over the page from the head's
+/// Comments (PinList.svelte): its head (Comments, Close), Open and Resolved
+/// as a segmented filter over 44pt rows, each the pin's disc, what it stands
+/// on and its thread's last line; the pins whose element is gone wait in the
+/// moved tray at the end, each with Place again, which pins it anew with the
+/// next tap on the page.
 final class PinListController: UIViewController {
     var onOpen: (String) -> Void = { _ in }
     var onPlace: (String) -> Void = { _ in }
+    /// Its head's Close.
+    var onClose: () -> Void = {}
+    /// Floating on its own (the kit's popover), it names itself beside Close; set before it loads.
+    var heading = false
     private(set) var pins: [Pin] = []
     /// The moved pin a tap on the page is placing again.
     var placing: String?
 
     private let filter = KitSegmented(["Open 0", "Resolved 0"], selected: 0)
+    /// What the filter's list says when it holds no pin (PinList.svelte `.empty`).
+    private let empty = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+    /// The head's Close, while it has a head.
+    private var closeControl: UIView?
     private let scroll = UIScrollView()
     private let rows = UIStackView()
     private let movedRows = UIStackView()
@@ -114,7 +123,24 @@ final class PinListController: UIViewController {
         let filterRow = UIStackView(arrangedSubviews: [filter, UIView()])
         filterRow.isLayoutMarginsRelativeArrangement = true
         filterRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space1, leading: 0, bottom: Space.space1, trailing: 0)
-        let column = UIStackView(arrangedSubviews: [filterRow, rows, moved])
+        let emptyRow = UIStackView(arrangedSubviews: [empty])
+        emptyRow.isLayoutMarginsRelativeArrangement = true
+        emptyRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space3, leading: Space.space2, bottom: Space.space3, trailing: Space.space2)
+        var parts: [UIView] = [filterRow, rows, emptyRow, moved]
+        if heading {
+            let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+            title.text = "Comments"
+            title.accessibilityTraits = .header
+            let close = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.onClose() }
+            close.accessibilityLabel = "Close comments"
+            closeControl = close
+            let head = UIStackView(arrangedSubviews: [title, UIView(), close])
+            head.alignment = .center
+            head.isLayoutMarginsRelativeArrangement = true
+            head.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: Space.space2, bottom: 0, trailing: 0)
+            parts.insert(head, at: 0)
+        }
+        let column = UIStackView(arrangedSubviews: parts)
         column.axis = .vertical
         column.spacing = Space.space1
         column.translatesAutoresizingMaskIntoConstraints = false
@@ -165,10 +191,8 @@ final class PinListController: UIViewController {
         view.layoutIfNeeded()
         let placed = pins.filter { !$0.moved }
         let shown = rows.arrangedSubviews.compactMap { $0 as? PinRow }
-        // A point on the scrim above the sheet, whose tap puts the sheet away:
-        // 100pt over its content's top, which the sheet's grabber and title stand under.
-        let top = view.convert(view.bounds, to: nil)
-        let scrim = "\(Int(top.midX.rounded())),\(Int(max(20, top.minY - 100).rounded()))"
+        // Where a tap puts the panel away: its head's Close.
+        let scrim = closeControl.map(PreviewProbe.centre) ?? "none"
         PreviewProbe.say("preview list open=\(placed.count { !$0.resolved }) resolved=\(placed.count(where: \.resolved)) moved=\(pins.count(where: \.moved)) filter=\(resolvedShown ? "resolved" : "open")@\(PreviewProbe.centre(filter)) rows=\(shown.map { "\($0.number)@\(PreviewProbe.centre($0))" }.joined(separator: ";")) live=\(shown.filter(\.live).map { "\($0.number)" }.joined(separator: ";")) scrim=\(scrim)")
     }
     #endif
@@ -187,9 +211,13 @@ final class PinListController: UIViewController {
         let away = pins.filter(\.moved)
         filter.setTitle("Open \(open.count)", at: 0)
         filter.setTitle("Resolved \(resolved.count)", at: 1)
-        filter.superview?.isHidden = placed.isEmpty
         for row in rows.arrangedSubviews + movedRows.arrangedSubviews { row.removeFromSuperview() }
-        for pin in resolvedShown ? resolved : open {
+        let shown = resolvedShown ? resolved : open
+        empty.text = resolvedShown
+            ? "No resolved comments. A pin you resolve leaves the page and waits here."
+            : "No open comments. Choose Comment, then tap the page to pin one."
+        empty.superview?.isHidden = !shown.isEmpty
+        for pin in shown {
             let row = PinRow(pin, live: live.contains(pin.id))
             row.addAction(UIAction { [weak self] _ in self?.onOpen(pin.id) }, for: .touchUpInside)
             rows.addArrangedSubview(row)
@@ -293,8 +321,10 @@ private final class MovedRow: UIView {
 /// in); on a phone standing at the well's foot in the house drawer's shape.
 /// What the pin stands on (its text, its file:line in mono) with its
 /// picture as a 56pt thumbnail that opens the lightbox; its thread, the
-/// agent's replies as the transcript sets markdown; the 16pt reply field,
-/// then Delete at the footer's start, Resolve or Reopen and Reply. Delete is
+/// agent's replies as the transcript sets markdown; the 16pt reply field and
+/// Reply. Its head carries what acts on the pin, as the web's does: Resolve
+/// or Reopen, ⋯ (Copy link, Delete pin) and Close; a resolved pin's field
+/// reopens it with its reply. Delete is
 /// asked in the card itself before it runs (AskHere under the footer, The
 /// Open Page Rule). What goes wrong is said under the field, a refused
 /// delete under its question. A tap anywhere outside it closes it, as Esc
@@ -315,6 +345,8 @@ final class PinCard: UIView, UITextViewDelegate {
     var onPicture: () -> Void = {}
     /// The reply field took the keyboard, or gave it back.
     var onWriting: (Bool) -> Void = { _ in }
+    /// The pin's own address, which ⋯'s Copy link copies; nil while the hub's address is unknown.
+    var link: URL?
     private var actions: UIStackView!
 
     private(set) var pinId: String?
@@ -345,7 +377,8 @@ final class PinCard: UIView, UITextViewDelegate {
     private var resolveButton: UIButton!
     private var replyButton: UIButton!
     private var closeButton: UIButton!
-    private var deleteButton: UIButton!
+    /// ⋯: Copy link and Delete pin.
+    private var moreButton: UIButton!
     /// The card's one question: Delete, asked under its footer.
     private let asks = AskHere()
     private var resolved = false
@@ -378,9 +411,27 @@ final class PinCard: UIView, UITextViewDelegate {
         closeRoom.widthAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
         closeRoom.heightAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
         liveMark.isHidden = true
-        let head = UIStackView(arrangedSubviews: [disc, pinWords(name, source), liveMark, closeRoom])
+        resolveButton = KitButton.make("", glyph: .passed, variant: .ghost, height: .sm) { [weak self] in
+            guard let self else { return }
+            onResolve(!resolved)
+        }
+        resolveButton.accessibilityLabel = "Resolve pin"
+        moreButton = KitButton.make("", glyph: .more, variant: .ghost, height: .sm) {}
+        moreButton.showsMenuAsPrimaryAction = true
+        moreButton.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.moreMenu() ?? []) }])
+        // While Delete's question stands, ⋯ wears `surface-hover`, as the web's `aria-expanded` ghost does.
+        let restingMore = moreButton.configurationUpdateHandler
+        moreButton.configurationUpdateHandler = { button in
+            restingMore?(button)
+            if button.isSelected { button.configuration?.background.backgroundColor = Palette.surfaceHover }
+        }
+        let head = UIStackView(arrangedSubviews: [disc, pinWords(name, source), liveMark, resolveButton, moreButton, closeRoom])
         head.spacing = Space.space2
         head.alignment = .center
+        for button in [resolveButton!, moreButton!] {
+            button.setContentHuggingPriority(.required, for: .horizontal)
+            button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        }
 
         thumb.translatesAutoresizingMaskIntoConstraints = false
         thumb.layer.cornerRadius = Radius.radiusSm
@@ -407,23 +458,10 @@ final class PinCard: UIView, UITextViewDelegate {
         problem.isHidden = true
         problem.accessibilityTraits = .staticText
 
-        resolveButton = KitButton.make("Resolve", glyph: .passed, variant: .outline, height: .sm) { [weak self] in
-            guard let self else { return }
-            onResolve(!resolved)
-        }
         replyButton = KitButton.make("Reply", variant: .action, height: .sm) { [weak self] in self?.reply() }
         replyButton.isEnabled = false
-        // Delete stands apart from Resolve and Reply, at the footer's start;
-        // while its question stands it wears `surface-hover`, as the web's
-        // `aria-expanded` ghost does.
-        deleteButton = KitButton.make("Delete", glyph: .trash, variant: .ghost, height: .sm) { [weak self] in self?.askDelete() }
-        let restingDelete = deleteButton.configurationUpdateHandler
-        deleteButton.configurationUpdateHandler = { button in
-            restingDelete?(button)
-            if button.isSelected { button.configuration?.background.backgroundColor = Palette.surfaceHover }
-        }
         asks.onResize = { [weak self] in self?.askMoved() }
-        actions = UIStackView(arrangedSubviews: [deleteButton, UIView(), resolveButton, replyButton])
+        actions = UIStackView(arrangedSubviews: [UIView(), replyButton])
         actions.spacing = Space.space2
         actions.alignment = .center
 
@@ -527,11 +565,12 @@ final class PinCard: UIView, UITextViewDelegate {
             Task { @MainActor [weak self] in self?.roomToEnd() }
         }
         if fresh { field.text = draft }
-        field.placeholder = pin.thread.isEmpty ? "Say what to change here" : "Reply"
+        field.placeholder = pin.resolved ? "Reply to reopen" : pin.thread.isEmpty ? "Say what to change here" : "Reply"
         field.accessibilityLabel = pin.thread.isEmpty ? "Comment" : "Reply"
         problem.text = said
         problem.isHidden = said == nil
-        KitButton.setTitle(pin.resolved ? "Reopen" : "Resolve", of: resolveButton, variant: .outline, height: .sm)
+        resolveButton.accessibilityLabel = pin.resolved ? "Reopen pin" : "Resolve pin"
+        resolveButton.toolTip = resolveButton.accessibilityLabel
         resolveButton.configuration?.image = (pin.resolved ? Glyph.reopen : Glyph.passed).image.resized(to: Size.iconMd)
         replyButton.configuration?.showsActivityIndicator = replying
         paintReply()
@@ -613,11 +652,26 @@ final class PinCard: UIView, UITextViewDelegate {
     /// The card closed: its question goes with it, as the web's card unmounts with its own.
     func closed() { asks.dismiss() }
 
-    /// The question unfolded, folded or said a refusal: Delete says whether
-    /// it stands, the card takes its new height, and the question is in view.
+    /// ⋯'s menu: Copy link (while the pin has an address) and Delete pin, asked in the card.
+    private func moreMenu() -> [UIMenuElement] {
+        var items: [UIMenuElement] = []
+        if let link {
+            items.append(UIAction(title: "Copy link", image: Glyph.link.image) { [weak self] _ in
+                UIPasteboard.general.url = link
+                Toast.success("Link copied", in: self)
+            })
+        }
+        items.append(UIAction(title: "Delete pin", image: Glyph.trash.image, attributes: .destructive) { [weak self] _ in
+            self?.askDelete()
+        })
+        return items
+    }
+
+    /// The question unfolded, folded or said a refusal: ⋯ says whether it
+    /// stands, the card takes its new height, and the question is in view.
     private func askMoved() {
-        deleteButton.isSelected = asks.asked != nil
-        deleteButton.accessibilityValue = asks.asked != nil ? "Asking" : nil
+        moreButton.isSelected = asks.asked != nil
+        moreButton.accessibilityValue = asks.asked != nil ? "Asking" : nil
         window?.layoutIfNeeded()
         keepAskInView()
         #if DEBUG
@@ -754,20 +808,21 @@ final class PinCard: UIView, UITextViewDelegate {
     }
 
     #if DEBUG
-    /// Where the probe taps: the field, Reply, Resolve or Reopen (its words), Close.
+    /// Where the probe taps: the field, Reply, Resolve or Reopen (its word), Close, ⋯ (`delete`, its menu's Delete pin).
     /// Its scroll's offset and content height, and whether the field has the keyboard.
     var probeScroll: String {
         "offset=\(Int(scroll.contentOffset.y)) content=\(Int(scroll.contentSize.height)) height=\(Int(scroll.bounds.height)) writing=\(field.isFirstResponder) room=\(Int(room.contentSize.height))/\(Int(room.bounds.height))@\(Int(room.contentOffset.y))"
     }
 
     func probeLine() -> String {
-        let words = resolveButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
-        return "preview card pin=\(number) field=\(PreviewProbe.centre(field)) reply=\(PreviewProbe.centre(replyButton)) resolve=\(words)@\(PreviewProbe.centre(resolveButton)) close=\(PreviewProbe.centre(closeButton)) live=\(liveMark.isHidden ? "no" : "yes") thread=\(shownThread.count) delete=\(PreviewProbe.centre(deleteButton)) writing=\(field.isFirstResponder) asking=\(asks.asked != nil) problem=\(problem.isHidden ? "none" : problem.text ?? "")"
+        // The head's Resolve is a glyph: its word is what it does.
+        let words = resolved ? "Reopen" : "Resolve"
+        return "preview card pin=\(number) field=\(PreviewProbe.centre(field)) reply=\(PreviewProbe.centre(replyButton)) resolve=\(words)@\(PreviewProbe.centre(resolveButton)) close=\(PreviewProbe.centre(closeButton)) live=\(liveMark.isHidden ? "no" : "yes") thread=\(shownThread.count) delete=\(PreviewProbe.centre(moreButton)) writing=\(field.isFirstResponder) asking=\(asks.asked != nil) problem=\(problem.isHidden ? "none" : problem.text ?? "")"
     }
 
-    /// The footer's buttons as frames in the window's points, `x,y,w,h`, to set against the keyboard's top.
+    /// The head's Resolve and ⋯ and the footer's Reply as frames in the window's points, `x,y,w,h`, to set against the keyboard's top.
     var probeFooter: String {
-        [("delete", deleteButton!), ("resolve", resolveButton!), ("reply", replyButton!)].map { name, button in
+        [("more", moreButton!), ("resolve", resolveButton!), ("reply", replyButton!)].map { name, button in
             let box = button.convert(button.bounds, to: nil)
             return "\(name)=\(Int(box.minX)),\(Int(box.minY)),\(Int(box.width)),\(Int(box.height))"
         }.joined(separator: " ")

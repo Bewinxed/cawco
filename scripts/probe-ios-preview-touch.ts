@@ -1,16 +1,18 @@
 #!/usr/bin/env bun
 /**
  * iOS preview touch probe: in the app's preview drawer a tap reaches the
- * page unless the person turned Comment on; while commenting a tap writes
- * a numbered pin on the page instead, and that shows (Done, the line on the
- * well's top edge); a tap outside the pin's card (the header, the page)
- * closes it, a new pin with nothing written is taken back, one with words
- * keeps them for its next opening; the pin's card and the Pins sheet carry it, a reply and
+ * page in Interact; in Comment (the head's mode) a tap writes a numbered pin
+ * on the page instead, and that shows (Comment's segment chosen, the well's
+ * accent edge, the page keeping its whole height); a tap outside the pin's
+ * card (the header, the page) closes it, a new pin with nothing written is
+ * taken back, one with words keeps them for its next opening; the pin's
+ * card and the Comments panel carry it, a reply and
  * Resolve go to the page's overlay, which writes the doc and answers, Send 1
  * sends its section with its picture, the pin then wears the live dot while
  * the session works (`-preview-working` holds it working) until it is
  * resolved, and the app tells the hub it has the page on screen (`shown`);
- * Done, Reload and a drag of the grabber leave the page taking taps.
+ * Interact, Reload (the mode standing through it) and a drag of the grabber
+ * leave the page taking taps.
  *
  *   bun scripts/probe-ios-preview-touch.ts [--keep] [--no-build]
  *
@@ -199,7 +201,7 @@ const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
 /** PreviewController's `preview page …` and `preview head …` lines. */
 const PAGE_LINE = /^preview page view=(\S+) selected=(\S+) count=(\d+)(.*)$/;
 const HEAD_LINE =
-  /^preview head comment=(.+)@(-?\d+),(-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) send=(.+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) note=(\d+) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
+  /^preview head comment=(.+)@(-?\d+),(-?\d+) mode=(interact|comment|draw) draw=(none|-?\d+,-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) send=(.+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
 /** Pins.swift's `preview card …` line: the open pin's number, where its controls stand, whether it wears the live dot. */
 const CARD_LINE =
   /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) delete=(?:none|-?\d+,-?\d+) writing=(?:true|false) asking=(?:true|false) problem=(.*)$/;
@@ -286,15 +288,17 @@ interface Frame {
   y: number;
 }
 /**
- * The header as the app logs it before each page post: Comment's words
- * ("Comment" or "Done") and centre, the open pins' count and Pins' centre
- * (none until there is a pin), Send's words and centre, Reload's, the
- * grabber's, the commenting line's height, the web view's frame.
+ * The header as the app logs it before each page post: what toggles
+ * Comment and its centre ("Comment" at Comment's segment, or while
+ * commenting "Interact" at Interact's, the way out), the mode, Draw's
+ * centre, the open pins' count and Comments' centre, Send picks' words and
+ * centre, Reload's, the grabber's, the web view's frame.
  */
 interface Head {
   comment: Point;
+  draw?: Point;
   grabber?: Point;
-  note: number;
+  mode: "interact" | "comment" | "draw";
   open: number;
   pins?: Point;
   reload: Point;
@@ -311,19 +315,20 @@ const headOf = (line: string): Head | undefined => {
   return {
     words: m[1],
     comment: { x: Number(m[2]), y: Number(m[3]) },
-    open: Number(m[4]),
-    pins: pointOf(m[5]),
-    sendWords: m[6],
-    send: pointOf(m[7]),
-    reload: { x: Number(m[8]), y: Number(m[9]) },
+    mode: m[4] as Head["mode"],
+    draw: pointOf(m[5]),
+    open: Number(m[6]),
+    pins: pointOf(m[7]),
+    sendWords: m[8],
+    send: pointOf(m[9]),
+    reload: { x: Number(m[10]), y: Number(m[11]) },
     grabber:
-      m[10] === undefined ? undefined : { x: Number(m[10]), y: Number(m[11]) },
-    note: Number(m[12]),
+      m[12] === undefined ? undefined : { x: Number(m[12]), y: Number(m[13]) },
     web: {
-      x: Number(m[13]),
-      y: Number(m[14]),
-      width: Number(m[15]),
-      height: Number(m[16]),
+      x: Number(m[14]),
+      y: Number(m[15]),
+      width: Number(m[16]),
+      height: Number(m[17]),
     },
   };
 };
@@ -414,7 +419,7 @@ const cardAfter = async (
     .filter((card): card is Card => card !== undefined && match(card))
     .at(-1);
 };
-/** The Pins sheet's rows as the app logs them when it draws the list. */
+/** The Comments panel's rows as the app logs them when it draws the list. */
 interface List {
   filter?: Point;
   /** The numbers of the rows that wear the live dot. */
@@ -423,7 +428,7 @@ interface List {
   open: number;
   resolved: number;
   rows: Record<string, Point | undefined>;
-  /** A point on the scrim above the sheet: a tap there puts the sheet away. */
+  /** Where a tap puts the Comments panel away: its head's Close. */
   scrim?: Point;
 }
 const listOf = (line: string): List | undefined => {
@@ -475,7 +480,6 @@ const headNow = async (what: string): Promise<Head> => {
   }
   return head;
 };
-const NOTE_HEIGHT = 28;
 
 const fleet = await scratchFleet({
   name: "probe-ios-preview-touch",
@@ -757,11 +761,15 @@ xcrun simctl install ${udid} "${app}"`);
   );
 
   // ── 6. Comment on: a tap writes pin 1 and does not reach the page ─────
-  let head = await headNow("the header with Comment off");
+  let head = await headNow("the header in Interact");
+  const restingPage = head.web;
   check(
-    "Comment rests off",
-    head.words === "Comment" && head.note === 0 && head.pins === undefined,
-    `button "${head.words}", commenting line ${head.note}pt, Pins ${head.pins ? "shown" : "hidden"}`
+    "the preview rests in Interact, Comments shown with no open pin",
+    head.words === "Comment" &&
+      head.mode === "interact" &&
+      head.pins !== undefined &&
+      head.open === 0,
+    `head says "${head.words}", mode ${head.mode}, Comments ${head.pins ? "shown" : "hidden"} with ${head.open} open`
   );
   mark = seen.length;
   await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
@@ -772,9 +780,13 @@ xcrun simctl install ${udid} "${app}"`);
   );
   head = await headNow("the header with Comment on");
   check(
-    "Comment turns on and shows",
-    on !== undefined && head.words === "Done" && head.note === NOTE_HEIGHT,
-    `comment ${on ? "on" : "not on"}; button "${head.words}"; commenting line ${head.note}pt`
+    "Comment turns on, its segment chosen, and the page keeps the well's whole height",
+    on !== undefined &&
+      head.words === "Interact" &&
+      head.mode === "comment" &&
+      head.web.y === restingPage.y &&
+      head.web.height === restingPage.height,
+    `comment ${on ? "on" : "not on"}; head says "${head.words}", mode ${head.mode}; page ${head.web.y},${head.web.height} (was ${restingPage.y},${restingPage.height})`
   );
   page = await pageNow("the page after the note");
   before = page.count;
@@ -807,7 +819,7 @@ xcrun simctl install ${udid} "${app}"`);
   // ── 6b. A tap outside the card dismisses it (the owner, 2026-10-14: "if
   // i click away from a comment it needs to dismiss the popover i don't
   // have to keep clicking X"): pin 1, nothing written, closes on a tap on
-  // Done (the header, outside the card), which ends the mode too, and is
+  // Interact (the header, outside the card), which ends the mode too, and is
   // taken back; made again and given words, it closes on the same tap and
   // keeps its pin and its words.
   const REPLY = "Make the count bigger";
@@ -816,9 +828,9 @@ xcrun simctl install ${udid} "${app}"`);
     lineAfter(what, from, (l) => l.startsWith("preview card dismissed "));
   head = await headNow("the header with pin 1's card open");
   mark = seen.length;
-  await tap(head.comment, `Done ("${head.words}"), outside the empty card`);
+  await tap(head.comment, `Interact ("${head.words}"), outside the empty card`);
   const dismissedEmpty = await dismissedAfter("the empty card dismissed", mark);
-  // The same tap is Done's own: the mode ends with it.
+  // The same tap is Interact's own: the mode ends with it.
   const endedEmpty = await lineAfter(
     "Comment off with the empty card's dismissal",
     mark,
@@ -836,7 +848,7 @@ xcrun simctl install ${udid} "${app}"`);
       "preview card dismissed by=outside draft=0 withdrawn=true" &&
       endedEmpty !== undefined &&
       takenBack.length === 0,
-    `${dismissedEmpty ?? "no dismissed line"}; Done ${endedEmpty ? "ended" : "did not end"} the mode; ${takenBack.length} pin(s) on the hub`
+    `${dismissedEmpty ?? "no dismissed line"}; Interact ${endedEmpty ? "ended" : "did not end"} the mode; ${takenBack.length} pin(s) on the hub`
   );
   head = await headNow("the header with Comment off again");
   mark = seen.length;
@@ -871,7 +883,7 @@ xcrun simctl install ${udid} "${app}"`);
   mark = seen.length;
   await tap(
     head.comment,
-    `Done ("${head.words}"), outside the card with words in it`
+    `Interact ("${head.words}"), outside the card with words in it`
   );
   const dismissedKept = await dismissedAfter(
     "the card with words dismissed",
@@ -885,35 +897,35 @@ xcrun simctl install ${udid} "${app}"`);
   await pause(1500);
   const keptPins = await pinsOnHub();
   check(
-    "a tap outside a new pin's card with words in it closes it, Done still ends the mode, and the pin and its words stay",
+    "a tap outside a new pin's card with words in it closes it, Interact still ends the mode, and the pin and its words stay",
     dismissedKept ===
       `preview card dismissed by=outside draft=${REPLY.length} withdrawn=false` &&
       endedKept !== undefined &&
       keptPins.length === 1 &&
       keptPins[0].number === 1,
-    `Comment ${onAgain ? "on" : "not on"} again; ${card ? `pin ${card.number}'s card opened` : "no card for pin 1"}; ${dismissedKept ?? "no dismissed line"}; Done ${endedKept ? "ended" : "did not end"} the mode; ${keptPins.length} pin(s) on the hub; words on the hub ${JSON.stringify(keptPins[0]?.thread ?? [])}`
+    `Comment ${onAgain ? "on" : "not on"} again; ${card ? `pin ${card.number}'s card opened` : "no card for pin 1"}; ${dismissedKept ?? "no dismissed line"}; Interact ${endedKept ? "ended" : "did not end"} the mode; ${keptPins.length} pin(s) on the hub; words on the hub ${JSON.stringify(keptPins[0]?.thread ?? [])}`
   );
 
-  // ── 7. The Pins sheet lists it; its row opens the card ────────────────
+  // ── 7. The Comments panel lists it; its row opens the card ────────────────
   // The card was dismissed, so the row is what opens it again.
   await pause(1200);
-  /** The Pins sheet opened from the header, as it lists the pins once it stands. */
+  /** The Comments panel opened from the header, as it lists the pins once it stands. */
   const openSheet = async (what: string) => {
     const now = await until(
-      "Pins in the header",
+      "Comments in the header",
       () => headNow(`the header before ${what}`),
       (h) => h.pins !== undefined,
       15_000
     ).catch(() => headLast() as Head);
     const from = seen.length;
     if (now.pins) {
-      await tap(now.pins, "Pins (from the newest header)");
+      await tap(now.pins, "Comments (from the newest header)");
     }
     return { list: await listAfter(what, from), pins: now.pins };
   };
-  let sheet = await openSheet("the Pins sheet");
+  let sheet = await openSheet("the Comments panel");
   check(
-    "the Pins sheet lists pin 1 as open",
+    "the Comments panel lists pin 1 as open",
     sheet.list?.open === 1 &&
       sheet.list.resolved === 0 &&
       sheet.list.rows["1"] !== undefined,
@@ -995,7 +1007,7 @@ xcrun simctl install ${udid} "${app}"`);
     `${clear ? `tapped the page's ${clear}` : "no point of the page clear of the card"} (card at ${over ? frameText(over) : "unlogged"}); ${byPage ?? "no dismissed line"}; the page ${pageDid ? "took it" : "did not take it"}`
   );
   await pause(1200);
-  sheet = await openSheet("the Pins sheet again");
+  sheet = await openSheet("the Comments panel again");
   await pause(800);
   mark = seen.length;
   const rowAgain = sheet.list?.rows["1"];
@@ -1135,7 +1147,7 @@ xcrun simctl install ${udid} "${app}"`);
     (l) => l.startsWith("preview pins ") && l.includes(` 1=open:${SEEDED + 1}`),
     15_000
   );
-  sheet = await openSheet("the Pins sheet after the send");
+  sheet = await openSheet("the Comments panel after the send");
   await pause(800);
   mark = seen.length;
   const liveRow = sheet.list?.rows["1"];
@@ -1219,22 +1231,22 @@ xcrun simctl install ${udid} "${app}"`);
   }
   await pause(1200);
 
-  // ── 9. Done: the page takes taps again ────────────────────────────────
-  head = await headNow("the header before Done");
-  if (head.words !== "Done") {
-    // 6b's tap on Done ended the mode: Comment goes on again for its Done.
+  // ── 9. Interact: the page takes taps again ────────────────────────────
+  head = await headNow("the header before Interact");
+  if (head.words !== "Interact") {
+    // 6b's tap on Interact ended the mode: Comment goes on again for its Interact.
     mark = seen.length;
-    await tap(head.comment, `Comment ("${head.words}"), on for Done`);
+    await tap(head.comment, `Comment ("${head.words}"), on for Interact`);
     await lineAfter(
-      "Comment on for Done",
+      "Comment on for Interact",
       mark,
       (l) => l === "preview comment on"
     );
-    // Where Done stands once it reads Done: its words change its width, and so where it stands.
+    // While commenting the head names Interact's segment, the way out.
     head = await until(
-      "the header reading Done",
-      () => headNow("the header with Comment on for Done"),
-      (h) => h.words === "Done",
+      "the header naming Interact",
+      () => headNow("the header with Comment on for Interact"),
+      (h) => h.words === "Interact",
       15_000
     ).catch(() => headLast() as Head);
   }
@@ -1245,8 +1257,8 @@ xcrun simctl install ${udid} "${app}"`);
     mark,
     (l) => l === "preview comment off"
   );
-  head = await headNow("the header after Done");
-  page = await pageNow("the page after Done");
+  head = await headNow("the header after Interact");
+  page = await pageNow("the page after Interact");
   before = page.count;
   mark = seen.length;
   await tapPage("button-end", page);
@@ -1257,15 +1269,15 @@ xcrun simctl install ${udid} "${app}"`);
     8000
   ).catch(() => pageAfter(mark));
   check(
-    "Done turns Comment off and a tap reaches the page",
+    "Interact ends Comment and a tap reaches the page",
     off !== undefined &&
       (page?.count ?? 0) === before + 1 &&
       head.words === "Comment" &&
-      head.note === 0,
-    `comment ${off ? "off" : "still on"}; count ${before} → ${page?.count ?? "?"}; button "${head.words}"; commenting line ${head.note}pt`
+      head.mode === "interact",
+    `comment ${off ? "off" : "still on"}; count ${before} → ${page?.count ?? "?"}; head says "${head.words}", mode ${head.mode}`
   );
 
-  // ── 10. Reload with Comment on: it comes back off ─────────────────────
+  // ── 10. Reload with Comment on: the mode stands; Interact leaves it ──
   mark = seen.length;
   await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
   await lineAfter("Comment on again", mark, (l) => l === "preview comment on");
@@ -1280,10 +1292,15 @@ xcrun simctl install ${udid} "${app}"`);
   await pause(1500);
   const modeAfter = seen
     .slice(mark)
-    .filter((l) => l.startsWith("preview comment "))
+    .filter((l) => l.startsWith("preview mode "))
     .at(-1);
   head = await headNow("the header after Reload");
-  page = await pageNow("the page after Reload");
+  const stood = head.mode === "comment" && head.words === "Interact";
+  mark = seen.length;
+  await tap(head.comment, `Interact ("${head.words}", from the newest header)`);
+  await lineAfter("Comment off", mark, (l) => l === "preview comment off");
+  head = await headNow("the header after Interact");
+  page = await pageNow("the page after Interact");
   before = page.count;
   const reloadMark = seen.length;
   await tapPage("button-end", page);
@@ -1294,14 +1311,13 @@ xcrun simctl install ${udid} "${app}"`);
     8000
   ).catch(() => pageAfter(reloadMark));
   check(
-    "Reload turns Comment off and a tap reaches the page",
+    "Reload keeps Comment (the page hears it again once ready); Interact leaves it and a tap reaches the page",
     reloaded !== undefined &&
-      modeAfter === "preview comment off" &&
-      head.words === "Comment" &&
-      head.note === 0 &&
-      !seen.slice(mark).includes("preview comment on") &&
+      modeAfter === "preview mode comment" &&
+      stood &&
+      head.mode === "interact" &&
       (page?.count ?? 0) === before + 1,
-    `document ${reloaded ? "reloaded" : "not reloaded"}; last mode "${modeAfter ?? "none"}"; button "${head.words}"; count ${before} → ${page?.count ?? "?"}`
+    `document ${reloaded ? "reloaded" : "not reloaded"}; last mode "${modeAfter ?? "none"}"; stood ${stood}; now ${head.mode}; count ${before} → ${page?.count ?? "?"}`
   );
 
   // ── 11. The grabber moves the drawer; the page still takes taps ───────

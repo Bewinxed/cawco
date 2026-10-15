@@ -5,10 +5,14 @@
    * control edge, hairline shadow, 11px padding), on a phone standing at the
    * well's foot as the house drawer does. What the pin stands on (its text
    * and file:line) with its picture, which opens full size in the lightbox;
-   * its thread, the agent's replies as markdown; the reply field, Reply, and
-   * Resolve or Reopen; Delete, asked in the card itself before it runs (The
-   * Open Page Rule: AskHere under the footer, the page still live). What goes
-   * wrong is said under the field, a refused delete under its question.
+   * its thread, the agent's replies as markdown; the reply field and Reply.
+   * Its head carries what acts on the pin, as Figma's, Vercel's and Miro's
+   * comment popovers do: Resolve (or Reopen), ⋯ (Copy link, Delete pin) and
+   * Close. A resolved pin's field reopens it with its reply ("Reply to
+   * reopen", Miro's and Rows' shape). Delete is asked in the card itself
+   * before it runs (The Open Page Rule: AskHere under the footer, the page
+   * still live). What goes wrong is said under the field, a refused delete
+   * under its question.
    *
    * A column: the head over it, the field and its actions at its foot, both
    * always in view, and between them the picture and the thread, the only
@@ -24,10 +28,18 @@
   import { tick, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import { IconClose, IconReopen, IconSuccess, IconTrash } from "#lib/icons.js";
+  import {
+    IconClose,
+    IconLink,
+    IconReopen,
+    IconSuccess,
+    IconTrash,
+  } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
+  import RowMenu from "../config/RowMenu.svelte";
+  import { copyToClipboard } from "../copy";
   import MessageBody from "../MessageBody.svelte";
   import { pressOutside } from "../press-outside";
   import PinDisc from "./PinDisc.svelte";
@@ -35,6 +47,7 @@
 
   let {
     pin,
+    link,
     at,
     room,
     sheet = false,
@@ -49,6 +62,8 @@
     onpicture,
   }: {
     pin: Pin;
+    /** The pin's own address: its artifact's page, opening this pin's card. */
+    link: string;
     /** The pin's disc in the well, px; null while it is not on screen. */
     at: { r: number; x: number; y: number } | null;
     /** The well's size, px. */
@@ -63,7 +78,7 @@
     problem: string | null;
     /** What the person has written and not yet said: the pin's, kept by the pane. */
     draft?: string;
-    /** Keeps the person's words in the thread: true once kept, false when refused (its reason is `problem`). */
+    /** Keeps the person's words in the thread (reopening a resolved pin): true once kept, false when refused (its reason is `problem`). */
     onreply: (text: string) => boolean;
     onresolve: (resolved: boolean) => void;
     /** Deletes the pin once the person confirmed; rejects with the refusal's sentence. */
@@ -140,10 +155,11 @@
     if (!card) {
       return;
     }
+    // So is one in the card's ⋯ menu, which stands outside it.
     return pressOutside(card, (event) => {
       if (!(
         event.target instanceof Element &&
-        event.target.closest("[aria-modal='true'], dialog[open]")
+        event.target.closest("[aria-modal='true'], dialog[open], [role='menu']")
       )) {
         onclose();
       }
@@ -173,6 +189,14 @@
       ? `${pin.anchor.source.file}${pin.anchor.source.line ? `:${pin.anchor.source.line}` : ""}`
       : null
   );
+
+  /** What the empty field says: a resolved pin's reopens it; a pin with a thread is replied to; a new one asks what to change. */
+  const fieldHint = $derived.by(() => {
+    if (pin.resolvedAt) {
+      return "Reply to reopen";
+    }
+    return pin.thread.length > 0 ? "Reply" : "Say what to change here";
+  });
 
   function reply() {
     const text = draft.trim();
@@ -233,6 +257,7 @@
   bind:this={card}
   style:left={place ? `${place.left}px` : undefined}
   style:top={place ? `${place.top}px` : undefined}
+  style:max-width={sheet ? undefined : `${Math.max(0, room.w - 2 * EDGE)}px`}
   class:sheet
   bind:offsetHeight={height}
   bind:offsetWidth={width}
@@ -249,6 +274,43 @@
       <span aria-label="The agent is working on it" class="live" role="img"
       ></span>
     {/if}
+    {#if pin.resolvedAt}
+      <Button
+        aria-label="Reopen pin"
+        icon={IconReopen}
+        onclick={() => onresolve(false)}
+        size="icon-sm"
+        title="Reopen pin"
+        variant="ghost"
+      />
+    {:else}
+      <Button
+        aria-label="Resolve pin"
+        icon={IconSuccess}
+        onclick={() => onresolve(true)}
+        size="icon-sm"
+        title="Resolve pin"
+        variant="ghost"
+      />
+    {/if}
+    <RowMenu
+      actions={[
+        {
+          icon: IconLink,
+          label: "Copy link",
+          onselect: () => {
+            copyToClipboard("Link", link);
+          },
+        },
+        {
+          destructive: true,
+          icon: IconTrash,
+          label: "Delete pin",
+          onselect: askDelete,
+        },
+      ]}
+      label={`pin ${pin.number}`}
+    />
     <Button
       aria-label="Close"
       icon={IconClose}
@@ -318,7 +380,7 @@
           reply();
         }
       }}
-      placeholder={pin.thread.length > 0 ? "Reply" : "Say what to change here"}
+      placeholder={fieldHint}
       rows={2}
       bind:ref={field}
       bind:value={draft}
@@ -327,32 +389,6 @@
       <p class="error" id={`pin-error-${pin.id}`} role="alert">{problem}</p>
     {/if}
     <footer class="actions">
-      <Button
-        aria-expanded={asks.pending !== null}
-        class="delete"
-        icon={IconTrash}
-        label="Delete"
-        onclick={askDelete}
-        size="sm"
-        variant="ghost"
-      />
-      {#if pin.resolvedAt}
-        <Button
-          icon={IconReopen}
-          label="Reopen"
-          onclick={() => onresolve(false)}
-          size="sm"
-          variant="outline"
-        />
-      {:else}
-        <Button
-          icon={IconSuccess}
-          label="Resolve"
-          onclick={() => onresolve(true)}
-          size="sm"
-          variant="outline"
-        />
-      {/if}
       <Button
         disabled={!draft.trim()}
         label="Reply"
@@ -547,9 +583,5 @@
     display: flex;
     justify-content: flex-end;
     gap: var(--space-2);
-  }
-  /* Delete stands apart from Resolve and Reply, at the footer's start. */
-  .actions :global(.delete) {
-    margin-inline-end: auto;
   }
 </style>
