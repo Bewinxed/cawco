@@ -17,6 +17,9 @@ extension HubConnection {
         switch try await api.moves.estimate(input) {
         case let .ok(ok):
             return try ok.body.json
+        // A target folder that is no absolute path on that machine (core MachinePath), in the hub's words.
+        case let .badRequest(refused):
+            throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .notFound(refused):
             throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .conflict(refused):
@@ -36,6 +39,9 @@ extension HubConnection {
         switch try await api.moves.start(.init(path: .init(id: projectId), body: .json(request))) {
         case let .ok(ok):
             return try ok.body.json
+        // A target folder that is no absolute path on that machine (core MachinePath), in the hub's words.
+        case let .badRequest(refused):
+            throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .notFound(refused):
             throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .conflict(refused):
@@ -59,6 +65,8 @@ extension HubConnection {
             let job = try ok.body.json
             fleet.heard(job)
             return job
+        case let .badRequest(refused):
+            throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .notFound(refused):
             throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .conflict(refused):
@@ -75,6 +83,8 @@ extension HubConnection {
         switch try await api.moves.retry(.init(path: .init(id: id))) {
         case let .ok(ok):
             fleet.heard(try ok.body.json)
+        case let .badRequest(refused):
+            throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .notFound(refused):
             throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .conflict(refused):

@@ -409,7 +409,7 @@ public final class FleetStore {
     private func threadRow(_ thread: Components.Schemas.ThreadSummary, project: Components.Schemas.GetApiProjects200Payload) -> InstanceRow {
         let place = project.primaryPlace ?? project.places.first
         return InstanceRow(
-            cwd: place?.path ?? "projects/\(project.id)",
+            cwd: place?.path.text ?? "projects/\(project.id)",
             id: ThreadTabs.tabId(thread.id),
             launchDir: .known,
             machineId: place?.machineId ?? "hub",

@@ -55,7 +55,7 @@ final class WorkflowLaunchController: KitDialogController {
         let defaults = workflow.graph?.settings
         let project = defaults?.defaultProject.flatMap { id in hub.fleet.projects.first { $0.id == id } }
         machineId = defaults?.defaultMachine ?? project?.primaryPlace?.machineId ?? ""
-        directory.text = project?.checkout(on: machineId)?.path ?? ""
+        directory.text = project?.checkout(on: machineId)?.path.text ?? ""
         supervisor = defaults?.defaultSupervisor?.delegateType ?? ""
 
         for field in workflow.fields {
@@ -180,7 +180,7 @@ final class WorkflowLaunchController: KitDialogController {
         chosenProject = id
         guard let home = hub.fleet.projects.first(where: { $0.id == id })?.primaryPlace else { return }
         machineId = home.machineId
-        directory.text = home.path
+        directory.text = home.path.text
         draw()
     }
 

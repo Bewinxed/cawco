@@ -406,7 +406,7 @@ final class ProjectViewController: ObservedViewController {
         osGlyph.isHidden = machine == nil
         osGlyph.glyph = Glyph.os(machine?.os ?? "")
         // Where the project lives (WORDS.md: place): its machine and folder.
-        place.text = primary.map { home in machine.map { "\($0.name) · \(home.path)" } ?? home.path } ?? "Its folder on the hub"
+        place.text = primary.map { home in machine.map { "\($0.name) · \(home.path.text)" } ?? home.path.text } ?? "Its folder on the hub"
         let checkouts = project.places.filter { $0.kind != .hub }.count
         places.isHidden = checkouts <= 1
         places.configuration?.attributedTitle = AttributedString("· \(checkouts) places", attributes: TypeScale.typeLabel.container(color: Palette.inkMuted))
@@ -729,7 +729,7 @@ final class ProjectViewController: ObservedViewController {
         let machines = context.hub.fleet.machines
         let list = PlacesList(project.places.map { each in
             let host = each.kind == .hub ? "The hub" : (machines.first { $0.machineId == each.machineId }?.name ?? "A machine not joined")
-            return (host, each.path)
+            return (host, each.path.text)
         })
         KitPopover.present(list, from: places, in: self, align: .start)
     }
@@ -739,7 +739,7 @@ final class ProjectViewController: ObservedViewController {
     /// The hub's refusal is thrown to whoever asked, which says it where it was asked.
     private func start(scratch: Bool, prompt: String?) async throws {
         guard let project, let home = project.primaryPlace else { return }
-        let id = try await context.hub.spawnSession(machineId: home.machineId, cwd: home.path, projectId: project.id, prompt: prompt, scratch: scratch)
+        let id = try await context.hub.spawnSession(machineId: home.machineId, cwd: home.path.text, projectId: project.id, prompt: prompt, scratch: scratch)
         context.openSession(id)
     }
 
