@@ -528,15 +528,18 @@ export const createRelay = ({
   };
 
   /** The receiver closed once no relay is active: a hub with no relay holds no extra port. */
-  const close = (): void => {
-    if (!listening) {
+  const close = async (): Promise<void> => {
+    const server = listening;
+    if (!server) {
       return;
     }
-    const was = listening.port;
-    listening.stop(true);
+    // Forgotten first, so a pass that runs while it stops finds no receiver.
     listening = undefined;
     receiverProblem = null;
-    console.log(`[relay] receiver on 127.0.0.1:${was} closed: no relay is on`);
+    await server.stop(true);
+    console.log(
+      `[relay] receiver on 127.0.0.1:${server.port} closed: no relay is on`
+    );
   };
 
   // --- GitHub ----------------------------------------------------------------------
@@ -728,7 +731,7 @@ export const createRelay = ({
   const applyOnce = async (registerNow: boolean): Promise<void> => {
     const active = store.active();
     if (active.length === 0) {
-      close();
+      await close();
       await removeMount();
       return;
     }
@@ -1193,9 +1196,12 @@ export const createRelay = ({
     ];
   };
 
+  // A release is synchronous (lifetime.ts): the stop finishes on its own.
   lifetime.onClose(() => {
     lifetime.cancel(timer);
-    listening?.stop(true);
+    if (listening) {
+      detach(listening.stop(true), "relay receiver stop");
+    }
   });
 
   return {

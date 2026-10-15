@@ -24,6 +24,7 @@ import type {
   PlanStep,
   SessionPlan,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
@@ -80,11 +81,14 @@ export const createPlans = (deps: PlansDeps) => {
     const next = (queues.get(instanceId) ?? Promise.resolve()).then(work, work);
     const tail = next.catch(() => undefined);
     queues.set(instanceId, tail);
-    tail.then(() => {
-      if (queues.get(instanceId) === tail) {
-        queues.delete(instanceId);
-      }
-    });
+    detach(
+      tail.then(() => {
+        if (queues.get(instanceId) === tail) {
+          queues.delete(instanceId);
+        }
+      }),
+      "plan queue cleanup"
+    );
     return next;
   };
 

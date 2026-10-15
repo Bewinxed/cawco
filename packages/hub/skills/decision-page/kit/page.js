@@ -121,7 +121,7 @@
     });
   }
 
-  send?.addEventListener("click", async () => {
+  const sendPicks = async () => {
     send.disabled = true;
     try {
       await bridge.send();
@@ -131,6 +131,11 @@
     } finally {
       send.disabled = false;
     }
+  };
+  send?.addEventListener("click", () => {
+    sendPicks().catch((error) => {
+      console.error("[decision-page] send failed:", error);
+    });
   });
   render();
 })();

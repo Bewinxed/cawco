@@ -470,7 +470,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
         for await (const chunk of request.body) {
           hash.update(chunk);
           length += chunk.length;
-          writer.write(chunk);
+          await writer.write(chunk);
           // Drained before the next chunk is read: memory holds one at a time.
           await writer.flush();
         }

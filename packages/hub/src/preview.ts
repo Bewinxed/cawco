@@ -13,6 +13,7 @@ import {
   type PreviewSource,
   readEnv,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import {
   causeOf,
   downResponse,
@@ -820,13 +821,14 @@ export function createPreviewListeners(
     }
   };
 
-  const stopAll = () => {
-    for (const server of sessions.values()) {
-      server.stop(true);
-    }
+  /** Every listener stopped, each one's connections closed, before the mode changes. */
+  const stopAll = async (): Promise<void> => {
+    const stopping = [...sessions.values(), ...(byHost ? [byHost] : [])].map(
+      (server) => server.stop(true)
+    );
     sessions.clear();
-    byHost?.stop(true);
     byHost = undefined;
+    await Promise.all(stopping);
   };
 
   return {
@@ -875,7 +877,10 @@ export function createPreviewListeners(
 
     /** The session ended: its listener stops and its port is free again. */
     release(instanceId: string): void {
-      sessions.get(instanceId)?.stop(true);
+      const server = sessions.get(instanceId);
+      if (server) {
+        detach(server.stop(true), "preview listener stop");
+      }
       sessions.delete(instanceId);
       db.dropPort(instanceId);
     },
@@ -907,7 +912,7 @@ export function createPreviewListeners(
           throw new PreviewRefusal(422, unreachable);
         }
         const before = settings;
-        stopAll();
+        await stopAll();
         settings = { mode: "host", pattern };
         const failed = startHostMode();
         if (failed) {
@@ -921,7 +926,7 @@ export function createPreviewListeners(
         db.setSettings(settings);
         return this.settings();
       }
-      stopAll();
+      await stopAll();
       settings = { mode: "port", pattern: null };
       db.setSettings(settings);
       this.start();
