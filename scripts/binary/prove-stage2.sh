@@ -96,16 +96,18 @@ orchestrate() {
   STARTED=$SECONDS
   mkdir -p "$out/tmp" "$out/shared" "$out/feeds" "$out/rigs" "$out/logs" "$out/images"
   orchestrator_done() {
-    trap - EXIT INT TERM
-    # Every rig still running ends, and cleans up its own containers and storage on the way out.
+    # It waits for every rig's cleanup to end: a second stop does not cut it short.
+    trap '' INT TERM
+    trap - EXIT
+    # Every rig still running ends, and cleans up its own containers and storage on the way out (rig_done).
     local pids
     pids=$(jobs -rp)
     [[ -z $pids ]] || { kill $pids 2> /dev/null; wait 2> /dev/null; }
     rm -f "$bins/keys/test-release-private.pem"
   }
   trap orchestrator_done EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
+  trap 'trap "" INT TERM; exit 130' INT
+  trap 'trap "" INT TERM; exit 143' TERM
   step() {
     local what=$1 log=$2 t0=$SECONDS
     shift 2
@@ -386,20 +388,26 @@ export feed="http://$release_ip:8000/ok"
 export key="$bins/keys/test-release-private.pem"
 
 RIG_STATUS=0
+# The rig's way out, on every exit and on a stop (its orchestrator's, the release's group signal): its running check
+# ended (its timeout ends the check's shell, whose on_exit steps run, within --kill-after), its containers removed and
+# its network with them (the last container gone, podman tears its rootless netns down), through its own instance;
+# then the instance gone whole, which ends whatever still names its run dir or storage (pasta, aardvark-dns, a conmon
+# whose removal failed), unmounts and removes them (podman_instance_gone). A second stop does not cut it short.
 rig_done() {
   local rc=$? pids
-  trap - EXIT INT TERM
+  trap '' INT TERM
+  trap - EXIT
   echo $((SECONDS - RIG_STARTED)) > "$rigdir/seconds"
   pids=$(jobs -p)
-  [[ -z $pids ]] || kill $pids 2> /dev/null || true
+  [[ -z $pids ]] || { kill $pids 2> /dev/null; wait 2> /dev/null; }
   $P rm -f -t 0 "$hubc" "$joinerc" "$freshc" "$releasec" > /dev/null 2>&1 || true
   $P network rm -f "$net" > /dev/null 2>&1 || true
-  podman_instance_gone "$RIG-$$" "$rigdir/storage" "$P"
+  podman_instance_gone "$RIG-$$" "$rigdir/storage" || { echo "rig $RIG: its cleanup failed: something it started may still be running"; (( rc != 0 )) || rc=1; }
   exit "$rc"
 }
 trap rig_done EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'trap "" INT TERM; exit 130' INT
+trap 'trap "" INT TERM; exit 143' TERM
 
 # ---------------------------------------------------------------- helpers
 

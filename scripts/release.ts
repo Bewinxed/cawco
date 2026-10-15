@@ -132,6 +132,15 @@ const signalGroup = (group: number, signal: NodeJS.Signals): void => {
   }
 };
 /**
+ * How long a stopped command has to end before its group is killed: the
+ * container proofs' own cleanup (prove-stage1.sh `finish`, prove-stage2.sh
+ * `rig_done`) removes every rig's containers through its podman instance and
+ * then its vfs storage, which takes tens of seconds; a group killed while it
+ * did left its containers, pasta and aardvark-dns running (obelisk,
+ * 2026-10-15, at 5 s). A command with nothing to clean ends at once.
+ */
+const STOP_GRACE_MS = 180_000;
+/**
  * Ends a command and everything it started: each command runs as the leader
  * of its own process group. A leader pid now held by another process means the
  * group ended long ago and the pid was reused; that process is left alone.
@@ -146,15 +155,19 @@ async function endGroup(group: Proc | undefined): Promise<void> {
     return;
   }
   signalGroup(group.pid, "SIGTERM");
-  for (const _ of Array.from({ length: 50 })) {
+  const deadline = performance.now() + STOP_GRACE_MS;
+  while (performance.now() < deadline) {
     if (
       !(await startedOf(group.pid)) &&
       (await groupMembers(group.pid)).length === 0
     ) {
       return;
     }
-    await Bun.sleep(100);
+    await Bun.sleep(250);
   }
+  console.error(
+    `[release] command group ${group.pid} still running ${STOP_GRACE_MS / 1000}s after SIGTERM: killed`
+  );
   signalGroup(group.pid, "SIGKILL");
 }
 /** Ends every command in `groups`, at once: a holder's, or this run's own. */
@@ -450,7 +463,36 @@ const release = async (): Promise<void> => {
   );
   mine = undefined;
 };
-/** A checkout and staging a build left: removed, the checkout as a worktree. */
+/**
+ * Ends what container proofs left (scripts/binary/proof-sweep.sh): every
+ * process naming one of `dirs` or, with `stale`, a proof run dir whose owner
+ * is gone (conmon and its container, pasta, aardvark-dns), their mounts in
+ * podman's rootless mount namespace, and the dirs themselves. Not a `run`: a
+ * stop runs it after its commands have ended.
+ */
+const sweep = async (dirs: string[], stale: boolean): Promise<void> => {
+  const args = [
+    "bash",
+    join(import.meta.dir, "binary", "proof-sweep.sh"),
+    ...(stale ? ["--stale"] : []),
+    ...dirs,
+  ];
+  const status = await Bun.spawn(args, {
+    cwd: repo,
+    stdout: "inherit",
+    stderr: "inherit",
+  }).exited;
+  if (status !== 0) {
+    throw new Error(
+      `The proof sweep failed with exit status ${status}: ${args.join(" ")}`
+    );
+  }
+};
+/**
+ * A checkout and staging a build left: the checkout removed as a worktree,
+ * the staging with everything its proofs left (`sweep`), and every proof run
+ * dir whose owner is gone: this build's rigs, ended by now.
+ */
 const clear = async (checkout?: string, staging?: string): Promise<void> => {
   if (checkout) {
     await Bun.spawn(["git", "worktree", "remove", "--force", checkout], {
@@ -465,9 +507,24 @@ const clear = async (checkout?: string, staging?: string): Promise<void> => {
       stderr: "ignore",
     }).exited;
   }
-  if (staging) {
-    await rm(staging, { recursive: true, force: true });
+  await sweep(staging ? [staging] : [], true);
+};
+/**
+ * Every staging no live build holds (by the holder records in the lock's
+ * generations): an earlier run's, left when it was killed or crashed.
+ */
+const unheldStagings = async (): Promise<string[]> => {
+  const held = new Set<string>();
+  for (const n of await generations()) {
+    const holder = await readHolder(join(locks, String(n)));
+    if (holder?.staging && (await alive(holder))) {
+      held.add(holder.staging);
+    }
   }
+  return (await readdir(state))
+    .filter((name) => name.startsWith("staging-"))
+    .map((name) => join(state, name))
+    .filter((path) => !held.has(path));
 };
 /** Where a failed build's proof evidence outlives its staging; the newest few are kept. */
 const failedEvidence = join(homedir(), ".cache", "cawco-release");
@@ -800,7 +857,14 @@ const stop = async (signal: "SIGTERM" | "SIGINT"): Promise<never> => {
   console.log(`Release build stopped by ${signal}: clearing its work`);
   await endGroups(me.groups);
   await Promise.all([...running].map((child) => child.exited));
-  await clear(me.checkout, me.staging);
+  try {
+    await clear(me.checkout, me.staging);
+  } catch (error) {
+    // The next run's sweep ends what this one could not.
+    console.error(
+      `Release build stopped, and clearing its work failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
   await release();
   process.exit(signal === "SIGINT" ? 130 : 143);
 };
@@ -817,6 +881,14 @@ if (!(await acquire())) {
       : `Queued ${commit}; one build is already running`
   );
   process.exit(0);
+}
+// Every run starts by ending what an earlier one left: a run killed outright
+// (SIGKILL, a crash, a reboot) never reached its own cleanup.
+try {
+  await sweep(await unheldStagings(), true);
+} catch (error) {
+  await release();
+  throw error;
 }
 
 /** The version a build carries and the notes that go with it. */
@@ -885,6 +957,7 @@ const build = async (current: Request): Promise<void> => {
   await run(["git", "fetch", "--quiet", "--tags", "origin"]);
   await run(["git", "worktree", "add", "--detach", checkout, current.commit]);
   await mkdir(staging, { recursive: true });
+  let failedClear: unknown;
   try {
     await run([process.execPath, "install", "--frozen-lockfile"], checkout);
     // Both only read the tree: at once.
@@ -1135,10 +1208,19 @@ const build = async (current: Request): Promise<void> => {
       { cause: error }
     );
   } finally {
-    await clear(checkout, staging);
+    // A build that failed fails with its own error; the sweep's, if it fails too, is said beside it.
+    await clear(checkout, staging).catch((error: unknown) => {
+      console.error(
+        `Clearing the build of ${current.commit} failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      failedClear = error;
+    });
     me.checkout = undefined;
     me.staging = undefined;
     await writeHolder();
+  }
+  if (failedClear) {
+    throw failedClear;
   }
 };
 

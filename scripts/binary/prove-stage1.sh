@@ -17,13 +17,20 @@ step="prepare the output folder"
 step_log=""
 P=""
 prefix="cawco-binary-stage1-$$"
+# Its background podman clients and browser ended, its containers removed through its own instance, then the instance
+# gone whole (podman_instance_gone: whatever still names its run dir or storage ended, unmounted, removed).
 cleanup(){
+  local pids
+  pids=$(jobs -p)
+  [[ -z $pids ]] || kill $pids 2> /dev/null || true
   [[ -n $P ]] || return 0
   $P rm -f -t 0 "$prefix-clean" "$prefix-systemd" >/dev/null 2>&1 || true
-  podman_instance_gone "stage1-$$" "$out/storage" "$P"
+  podman_instance_gone "stage1-$$" "$out/storage"
 }
 finish(){
   local rc=$?
+  # The cleanup runs to its end: a second stop (the release's own, after the group's) does not cut it short.
+  trap '' INT TERM
   trap - EXIT
   if (( rc != 0 )); then
     echo "prove-stage1: failed at step \"$step\" (exit status $rc)" >&2
@@ -33,12 +40,12 @@ finish(){
       echo "---- end of $step_log" >&2
     fi
   fi
-  cleanup
+  cleanup || { echo "prove-stage1: its cleanup failed: something it started may still be running" >&2; (( rc != 0 )) || rc=1; }
   exit "$rc"
 }
 trap finish EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'trap "" INT TERM; exit 130' INT
+trap 'trap "" INT TERM; exit 143' TERM
 # Usage: run_step "what it does" /path/to/its.log command...
 # Each step that ends prints its seconds: `step: <what it does> (<n>s)`.
 run_step(){ step=$1; step_log=$2; shift 2; local t0=$SECONDS; "$@" > "$step_log" 2>&1; echo "step: $step ($((SECONDS - t0))s)"; }

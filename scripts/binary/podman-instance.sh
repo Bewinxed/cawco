@@ -61,12 +61,17 @@ podman_instance_closed() {
   rm -rf "$(podman_instance_run "$name")" "$root.containers.conf" "$root.storage.conf" "$root.auth.json" 2> /dev/null || true
 }
 
-# The instance gone whole: its storage, written by mapped user ids, removed from inside its own user namespace (its
-# command P), then its run dir and config files.
+PROOF_SWEEP=$(dirname "$(realpath "${BASH_SOURCE[0]}")")/proof-sweep.sh
+
+# The instance gone whole, once its containers were removed through it: whatever still names its run dir or storage
+# (a container whose removal failed, its conmon, the rootless netns' pasta and aardvark-dns) ended, their mounts
+# unmounted and both dirs removed from inside the user namespace that wrote them (proof-sweep.sh), then its config
+# files.
 podman_instance_gone() {
-  local name=$1 root=$2 p=$3
-  $p unshare rm -rf "$root" > /dev/null 2>&1 || true
+  local name=$1 root=$2 rc=0
+  bash "$PROOF_SWEEP" "$(podman_instance_run "$name")" "$root" || rc=$?
   podman_instance_closed "$name" "$root"
+  return $rc
 }
 
 # THE IMAGE STORE OPENS WITH ONE RUN ROOT. libpod keeps its database at `<static dir>/db.sql`, the store's own
