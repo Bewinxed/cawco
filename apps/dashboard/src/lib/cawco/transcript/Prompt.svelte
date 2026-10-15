@@ -632,14 +632,13 @@
   aria-label={questions
     ? `Question from ${asker}`
     : `Permission request from ${presentation.asker}`}
-  class="hitl"
+  class={["hitl", { shown }]}
   ontouchcancel={() => {
     swipe = null;
   }}
   ontouchend={swipeEnd}
   ontouchstart={swipeStart}
   bind:this={card}
-  class:shown={shown}
 >
   {#if questions}
     {@render title(`Question from ${asker}`)}

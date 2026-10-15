@@ -86,9 +86,8 @@
      list itself is built only while it is open. -->
 {#if home.ready && home.recentCount > 0}
   <section
-    class="recent"
+    class={["recent", { inset }]}
     data-flip="box"
-    class:inset={inset}
     {@attach holdWhileInside("home:recent")}
   >
     <button

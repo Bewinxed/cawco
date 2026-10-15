@@ -163,7 +163,7 @@
   }
 </script>
 
-<div class="box" class:embedded={embedded}>
+<div class={["box", { embedded }]}>
   <div
     class="slider"
     style={`opacity:${n ? 1 : 0.55};pointer-events:${n ? "auto" : "none"}`}
@@ -190,9 +190,8 @@
         style={`width:calc(var(--kw) + ${p} * (100% - var(--kw)))`}
       >
         <div
-          class="knob"
+          class={["knob", { active }]}
           style={`opacity:${n ? 1 : 0.7};--bars:${n}`}
-          class:active={active}
           bind:offsetWidth={knobWidth}
         >
           <!-- The chip is as wide as its longest label so the rail never moves.

@@ -177,7 +177,7 @@
               >{harness.status}</span
             >
           {/if}
-          <span class="hchev" class:open={open}><IconChevronRight /></span>
+          <span class={["hchev", { open }]}><IconChevronRight /></span>
         </Collapsible.Trigger>
         <Collapsible.Content reveal>
           <div class="hbody rail-hang">
@@ -293,7 +293,7 @@
             >{eventClock}</time
           >
         {/if}
-        <span class="hchev" class:open={open}><IconChevronRight /></span>
+        <span class={["hchev", { open }]}><IconChevronRight /></span>
       </Collapsible.Trigger>
       <Collapsible.Content reveal>
         {#if foldCommand}

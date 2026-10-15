@@ -206,7 +206,7 @@
   />
 {/snippet}
 
-<div class="live" bind:this={box} class:tweening={tweening}>
+<div class={["live", { tweening }]} bind:this={box}>
   {#each faces as face (face.id)}
     <div
       aria-hidden={face.leaving ? true : undefined}

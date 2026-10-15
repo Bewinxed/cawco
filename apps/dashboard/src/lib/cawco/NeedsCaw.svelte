@@ -642,7 +642,7 @@
       data-needs-caw
       type="button"
     >
-      <span class="mug" class:pressed={pressed}>
+      <span class={["mug", { pressed }]}>
         <span
           class="face"
           data-caw-phase={phase}

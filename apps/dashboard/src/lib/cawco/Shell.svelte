@@ -980,7 +980,7 @@
     </Sheet.Root>
 
     <div class="main">
-      <header class="top" class:floating={floating} class:hosting={hosting}>
+      <header class={["top", { floating, hosting }]}>
         <!-- The sidebar toggle. -->
         <button
           aria-label="Open navigation"

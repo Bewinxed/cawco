@@ -87,9 +87,7 @@
   });
 </script>
 <article
-  class="wf-node"
-  class:map={node.kind === "map"}
-  class:selected={selected}
+  class={["wf-node", { map: node.kind === "map", selected }]}
 >
   {#if node.kind !== "start"}
     <Handle

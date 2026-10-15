@@ -440,11 +440,10 @@
 </script>
 
 <div
-  class="row"
+  class={["row", { continues }]}
   data-drawn={drawn || undefined}
   data-row={rowKey}
   bind:this={node}
-  class:continues={continues}
 >
   {@render children(ticket)}
 </div>

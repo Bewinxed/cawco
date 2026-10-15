@@ -17,7 +17,7 @@
   } = $props();
 </script>
 
-<div class="head" class:wrap={wrap}>
+<div class={["head", { wrap }]}>
   <div class="left">
     <Icon style={`color:${hue}`} />
     <span>{label}</span>

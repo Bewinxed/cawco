@@ -76,10 +76,9 @@
 
 <div
   aria-label="Permission mode"
-  class="perms"
+  class={["perms", { embedded }]}
   role="radiogroup"
   tabindex="-1"
-  class:embedded={embedded}
   {@attach highlight({ rows: "[data-fh]" })}
 >
   <span

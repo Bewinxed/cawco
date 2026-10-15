@@ -440,12 +440,11 @@
 <svelte:window onkeydown={escapeExpanded} />
 
 <div
-  class="side-split"
+  class={[
+    "side-split",
+    { expanded, open: desktopOpen, resizing, sliding },
+  ]}
   bind:this={root}
-  class:expanded={expanded}
-  class:open={desktopOpen}
-  class:resizing={resizing}
-  class:sliding={sliding}
   bind:clientWidth={width}
 >
   <Resizable.PaneGroup class="side-group" direction="horizontal">

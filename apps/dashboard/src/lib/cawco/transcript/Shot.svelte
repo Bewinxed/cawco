@@ -241,6 +241,7 @@
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: image load/error lifecycle events; the containing button owns interaction. -->
         <img
           {alt}
+          class={{ cached }}
           data-caption={caption}
           data-path={path}
           data-shot={size}
@@ -256,7 +257,6 @@
           {src}
           width={intrinsic?.width}
           bind:this={image}
-          class:cached={cached}
           class:loaded={loaded === src}
           {@attach mounted}
           {@attach sized}
