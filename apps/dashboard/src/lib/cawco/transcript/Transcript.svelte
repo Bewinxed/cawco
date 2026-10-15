@@ -632,6 +632,12 @@
     ) {
       from += 1;
     }
+    // Every row the last build drew is in its place, or every row it draws
+    // now is: what follows is new or gone, and nothing moved. A streamed
+    // word ends here, without a map of every row's place built for it.
+    if (from === prior.length || from === next.length) {
+      return;
+    }
     const was = new Map(prior.map((row, index) => [row.key, index]));
     const moved = next
       .slice(from)
@@ -1689,6 +1695,12 @@
     }
   }
 
+  /**
+   * How many rows there are, apart from the rows themselves: every build is
+   * a new list, a streamed word's included, and what asks for an older page
+   * cares only when a page has changed how many there are.
+   */
+  const rowCount = $derived(rows.length);
   // What can bring the first rows near without a scroll: the list drawn, a
   // page landed with few rows in it, the pane coming on screen. Measured in
   // the next frame, once virtua has moved the view by what the page added.
@@ -1703,7 +1715,7 @@
       return;
     }
     // biome-ignore lint/complexity/noVoid: a page landing changes the rows without moving the cursor's truthiness
-    void rows.length;
+    void rowCount;
     const frame = requestAnimationFrame(() => askOlder());
     return () => cancelAnimationFrame(frame);
   });
