@@ -47,15 +47,40 @@ const respond = (request: Seen): Reply => {
   return text("ok");
 };
 
-/** Every distinct confirm label and tray line the page shows, in order. */
+/**
+ * Every distinct confirm label and tray line the page shows, in order, and
+ * `probeShown`: the words a node shows. A kit Button keeps its label and its
+ * pending label both in the page, the one not shown `aria-hidden` (the
+ * cross-fade, pending-content.svelte), as MorphText keeps its letters
+ * hidden beside a plain copy; `textContent` runs them together ("Stop 2 and
+ * turn Caw offTurning Caw off…"), so the shown words skip hidden subtrees.
+ */
 const RECORD = () => {
   const seen: string[] = [];
-  (window as unknown as { probeSeen: string[] }).probeSeen = seen;
+  const shown = (node: Element | null): string => {
+    if (!node) {
+      return "";
+    }
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    let words = "";
+    for (let run = walker.nextNode(); run; run = walker.nextNode()) {
+      if (!run.parentElement?.closest('[aria-hidden="true"]')) {
+        words += run.textContent ?? "";
+      }
+    }
+    return words.replace(/\s+/g, " ").trim();
+  };
+  const probe = window as unknown as {
+    probeSeen: string[];
+    probeShown: (node: Element | null) => string;
+  };
+  probe.probeSeen = seen;
+  probe.probeShown = shown;
   const note = () => {
     for (const node of document.querySelectorAll(
       "[data-stop-confirm], [data-stop-tray] p.line"
     )) {
-      const words = (node.textContent ?? "").replace(/\s+/g, " ").trim();
+      const words = shown(node);
       if (words && seen.at(-1) !== words && !seen.includes(words)) {
         seen.push(words);
       }
@@ -67,6 +92,27 @@ const RECORD = () => {
     characterData: true,
   });
 };
+
+/** The words the tray's confirm shows (RECORD's `probeShown`). */
+const confirmWords = (page: Page) =>
+  page.evaluate(() =>
+    (
+      window as unknown as { probeShown: (node: Element | null) => string }
+    ).probeShown(document.querySelector("[data-stop-confirm]"))
+  );
+
+/** Waits until the tray's confirm shows `words`, or contains them with `part`. */
+const confirmShows = (page: Page, words: string, part = false) =>
+  page.waitForFunction(
+    ({ want, contains }) => {
+      const now = (
+        window as unknown as { probeShown: (node: Element | null) => string }
+      ).probeShown(document.querySelector("[data-stop-confirm]"));
+      return contains ? now.includes(want) : now === want;
+    },
+    { want: words, contains: part },
+    { timeout: 60_000 }
+  );
 
 const seenOn = (page: Page) =>
   page.evaluate(
@@ -209,7 +255,7 @@ const run = async (kit: Kit) => {
   await tray.waitFor({ timeout: 15_000 });
   const confirm = page.locator("[data-stop-confirm]");
   const rows = await page.locator("li[data-row]").count();
-  const listed = (await confirm.textContent())?.trim() ?? "";
+  const listed = await confirmWords(page);
   const other = (await page.locator("[data-stop-other]").textContent())?.trim();
   kit.check(
     "3: the tray names both sessions he started, and offers both ways",
@@ -223,30 +269,18 @@ const run = async (kit: Kit) => {
     `${rows} rows; confirm “${listed}”; other “${other}”`
   );
   await confirm.click();
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector("[data-stop-confirm]")
-        ?.textContent?.includes("mid-turn") ?? false,
-    null,
-    { timeout: 5000 }
-  );
+  await confirmShows(page, "mid-turn", true);
   // The label morphs letter by letter: read it once the morph has landed.
   await page.waitForTimeout(600);
+  const armed = await confirmWords(page);
   kit.check(
     "3: one press arms it in place",
-    ((await confirm.textContent())?.trim() ?? "") ===
-      "Stop 2 mid-turn and turn Caw off"
+    armed === "Stop 2 mid-turn and turn Caw off",
+    `“${armed}”`
   );
   await page.waitForTimeout(600);
   await confirm.click();
-  await page.waitForFunction(
-    () =>
-      document.querySelector("[data-stop-confirm]")?.textContent?.trim() ===
-      "Caw is off",
-    null,
-    { timeout: 60_000 }
-  );
+  await confirmShows(page, "Caw is off");
   const seen = await seenOn(page);
   kit.check(
     "3: it stops each as its machine confirms, then says Caw is off",
@@ -279,13 +313,7 @@ const run = async (kit: Kit) => {
   await confirm.click();
   await page.waitForTimeout(600);
   await confirm.click();
-  await page.waitForFunction(
-    () =>
-      document.querySelector("[data-stop-confirm]")?.textContent?.trim() ===
-      "Caw is off",
-    null,
-    { timeout: 60_000 }
-  );
+  await confirmShows(page, "Caw is off");
   const ended = await seenOn(page);
   kit.check(
     "4: an away machine's row says when it stops, and the stop is recorded",
@@ -329,18 +357,12 @@ const run = async (kit: Kit) => {
   await page.getByRole("menuitem", { name: "Forget project…" }).click();
   await tray.waitFor({ timeout: 15_000 });
   const forgetRows = await page.locator("li[data-row]").count();
-  const forgetFirst = (await confirm.textContent())?.trim() ?? "";
+  const forgetFirst = await confirmWords(page);
   await confirm.click();
   await page.waitForTimeout(600);
-  const forgetArmed = (await confirm.textContent())?.trim() ?? "";
+  const forgetArmed = await confirmWords(page);
   await confirm.click();
-  await page.waitForFunction(
-    () =>
-      document.querySelector("[data-stop-confirm]")?.textContent?.trim() ===
-      "Forgotten",
-    null,
-    { timeout: 90_000 }
-  );
+  await confirmShows(page, "Forgotten");
   const projects = await fleet.api<{ id: string }[]>("/api/projects");
   kit.check(
     "6: forget on the shared tray: lists, arms, stops, forgets",
