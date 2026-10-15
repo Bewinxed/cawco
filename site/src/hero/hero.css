@@ -88,9 +88,10 @@
 
 /*
  * The stage: scene 1 on isometric paper. Every machine is drawn at k px per millimetre, one scale
- * for the page (`--kpx`: 0.8 from 1200 up, 0.62 at 768, 0.32 at 390, 0.28 at 360, straight
- * between), and is placed by its floor origin. The laptop's origin sits on a node of the lattice
- * and desk-box stands a whole lattice vector from it, so both register with the paper.
+ * for the page (`--kpx`: 0.8 from 1200 up, 0.62 at 768, 0.449 at 552, 0.364 at 390, 0.316 at
+ * 360, straight between), and is placed by its floor origin. The laptop's origin sits on a node of
+ * the lattice and desk-box stands a whole lattice vector from it, so both register with the paper.
+ * On a phone the cards' type takes the room first, the machines what it leaves.
  *
  * Wide (1000 and up), left to right: the laptop, desk-box a lattice step clear of its lid, and
  * desk-box's sessions as a column of cards beside it. Narrow: desk-box and its cards above the
@@ -98,14 +99,20 @@
  */
 .hero-stage {
   --kpx: clamp(
-    0.28px,
-    min(0.28px + (100vw - 360px) * 0.00133, 0.32px + (100vw - 390px) * 0.000794),
+    0.316px,
+    min(
+      0.316px + (100vw - 360px) * 0.0016,
+      max(0.364px + (100vw - 390px) * 0.000522, 0.32px + (100vw - 390px) * 0.000794)
+    ),
     0.62px
   );
-  /* The size the cards are read at: 9.75px on a 390 phone, 13.5px from 1200 up. */
+  /*
+   * The size the cards are read at: 10px at 360, 10.5px from 390 (where a phone's cards drop
+   * their harness glyph and age, below 552), 13.5px from 1200 up.
+   */
   --reading: clamp(
-    9.3px,
-    min(9.3px + (100vw - 360px) * 0.015, 9.75px + (100vw - 390px) * 0.00463),
+    10px,
+    min(10px + (100vw - 360px) * 0.016667, max(10.5px, 10.5px + (100vw - 552px) * 0.00463)),
     13.5px
   );
   /*
@@ -180,7 +187,8 @@
   --glow: color-mix(in oklab, var(--lamp) 50%, transparent);
   /*
    * Everything's shadow on the floor is one shade, as one light casts them all: ink by day and
-   * black at night at `--shade-a` (14% by day, 90% at night). A machine's cast shadows are laid
+   * black at night at `--shade-a` (14% by day; 57% at night, the least that lays every shadow 14
+   * levels of luma under the night ground, not a hole in it). A machine's cast shadows are laid
    * down at once at that strength; a card's is the same shade made solid on the paper (`--floor`)
    * and laid with darken, so where shadows overlap the floor is no darker than either. The
    * contact is a dark rim round each machine's foot.
@@ -195,8 +203,13 @@
     color-mix(in oklab, var(--crow-ink) 24%, transparent),
     oklch(0% 0 0 / 0.85)
   );
-  /* The lit screen's light on the deck and the floor, and its bloom (night only). */
-  --pool: color-mix(in oklab, var(--brand-paper) 18%, transparent);
+  /*
+   * The lit screen's brightness: full by day; at night turned down, as a laptop's is in a dark
+   * room, so the words stay the brightest thing on the page. Its light on the deck and the
+   * floor, and its bloom (night only), are as strong as the screen.
+   */
+  --screen: 1;
+  --pool: color-mix(in oklab, var(--brand-paper) calc(18% * var(--screen)), transparent);
   /*
    * The light cards' edge is an ink line (35%); at night a card keeps the app's line for its
    * edge and the paper's 7% as its top highlight.
@@ -330,18 +343,20 @@
 }
 
 /*
- * The screen shows the app in its light scheme at every hour: lit, it is the brightest thing on
- * the laptop. Its surface goes out to the page's own off-screen tone as the lid closes.
+ * The screen shows the app in its light scheme at every hour, at the screen's brightness: each
+ * of its colours scaled toward black in linear light. Lit, it is the brightest thing on the
+ * laptop. Its surface goes out to the page's own off-screen tone as the lid closes.
  */
 .machine .face {
-  --scr-row: var(--app-line);
-  --scr-mark: var(--mark-2);
-  --scr-ink: var(--app-ink);
+  --scr-lit: color-mix(in srgb-linear, var(--app-raised) calc(var(--screen) * 100%), #000);
+  --scr-row: color-mix(in srgb-linear, var(--app-line) calc(var(--screen) * 100%), #000);
+  --scr-mark: color-mix(in srgb-linear, var(--mark-2) calc(var(--screen) * 100%), #000);
+  --scr-ink: color-mix(in srgb-linear, var(--app-ink) calc(var(--screen) * 100%), #000);
   color-scheme: light;
 }
 
 .machine .scr {
-  fill: color-mix(in oklab, var(--app-raised) var(--on), var(--m-off));
+  fill: color-mix(in oklab, var(--scr-lit) var(--on), var(--m-off));
 }
 
 /* The lit screen's pool on the deck and the floor, and its bloom: night only. */
@@ -350,7 +365,8 @@
 }
 
 :root[data-theme='dark'] .hero-stage {
-  --shade-a: 0.9;
+  --shade-a: 0.57;
+  --screen: 0.45;
 }
 
 :root[data-theme='dark'] .machine .pool {
@@ -359,13 +375,15 @@
 
 :root[data-theme='dark'] .machine .scr {
   filter: drop-shadow(
-    0 0 7px color-mix(in oklab, var(--brand-paper) calc(var(--on) * 0.4), transparent)
+    0 0 7px
+      color-mix(in oklab, var(--brand-paper) calc(var(--on) * 0.4 * var(--screen)), transparent)
   );
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .hero-stage {
-    --shade-a: 0.9;
+    --shade-a: 0.57;
+    --screen: 0.45;
   }
 
   :root:not([data-theme='light']) .machine .pool {
@@ -374,7 +392,8 @@
 
   :root:not([data-theme='light']) .machine .scr {
     filter: drop-shadow(
-      0 0 7px color-mix(in oklab, var(--brand-paper) calc(var(--on) * 0.4), transparent)
+      0 0 7px
+        color-mix(in oklab, var(--brand-paper) calc(var(--on) * 0.4 * var(--screen)), transparent)
     );
   }
 }
@@ -661,15 +680,22 @@
 /* A phone: the stage comes before the subhead and the install (styles.css orders the hero). */
 @media (max-width: 599px) {
   .hero-stage {
-    --card-w: 23;
+    --card-w: 23.9;
     --card-h: calc(2.4 * var(--reading) + 2px);
     margin-top: 18px;
   }
 
-  /* The cards sit a little tighter, so desk-box and the column share a phone's width. */
+  /*
+   * The cards sit a little tighter, so desk-box and the column share a phone's width. The state
+   * and the age are read at the card's own size, set apart by their colour and weight.
+   */
   .session-card {
     gap: 0.45em;
     padding: 0.5em 0.65em;
+  }
+
+  .session-card :is(.st, .pill, .card-age) {
+    font-size: 1em;
   }
 
   /* Parts under 0.75px at this scale step out. */
@@ -688,6 +714,20 @@
 
   .demo-pause {
     padding: 0 8px;
+  }
+}
+
+/*
+ * Below 552, where a whole card would read under 10.5px, the cards drop the harness's glyph (the
+ * eyebrow names all three) and the age: the title and its state are what a phone reads.
+ */
+@media (max-width: 551px) {
+  .hero-stage {
+    --card-w: 20;
+  }
+
+  .session-card :is(.hg, .card-age) {
+    display: none;
   }
 }
 
