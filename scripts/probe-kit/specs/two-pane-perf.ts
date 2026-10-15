@@ -589,13 +589,22 @@ async function measure(
               [".dock", "the composer"],
               [".session-tabs, [data-session-tab]", "the tabs"],
             ];
+            const nameOf = (box: Element) =>
+              [box.tagName.toLowerCase(), ...box.classList]
+                .filter((part) => !part.startsWith("svelte-"))
+                .slice(0, 3)
+                .join(".");
+            // The box it went into, and the nearest named one round it.
+            const boxOf = (box: Element) => {
+              const named = box.closest("[class]:not([class^='svelte-'])");
+              return named && named !== box
+                ? `${nameOf(box)} in ${nameOf(named)}`
+                : nameOf(box);
+            };
             const regionOf = (box: Element) =>
               `inserted into ${
-                regions.find(([where]) => box.closest(where))?.[1] ??
-                [box.tagName.toLowerCase(), ...box.classList]
-                  .slice(0, 3)
-                  .join(".")
-              }`;
+                regions.find(([where]) => box.closest(where))?.[1] ?? "the page"
+              }: ${boxOf(box)}`;
             for (const { added, at, name, target, was } of kept) {
               if (!(at >= since && at < since + within)) {
                 continue;
