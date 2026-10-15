@@ -44,7 +44,7 @@ import type {
 } from "./db/schema";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
-import { leafOf, sessionLabel } from "./labels";
+import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { type QueuedDelegate, resolveSpawnType } from "./work-items";
 import type { KeptWorkspace } from "./workspace-retire";
 
@@ -134,6 +134,8 @@ interface Peer {
   label: string;
   name: string;
   row: InstanceRow;
+  /** What the board calls it (`boardTitle`): its given title, else its first words, else its name. */
+  title: string;
 }
 
 /** How long ago the row moved, for a reader choosing between identical names. */
@@ -262,6 +264,7 @@ const toPeer = (row: InstanceRow, hosts: Map<string, string>): Peer => {
     row,
     dir,
     name,
+    title: boardTitle(row),
     label: tag,
     host: hosts.get(row.machineId) ?? row.machineId,
   };
@@ -341,8 +344,25 @@ const continuesWords = (followed: { former: string } | undefined): string =>
 /** An `@` prefix on a target name, optional. */
 const AT_PREFIX = /^@/;
 
-const needleOf = (target: string): string =>
-  target.trim().toLowerCase().replace(AT_PREFIX, "");
+/**
+ * A mention as a composer's chip serialises it (find.ts, the options doc's
+ * shared ground 9): the title in the person's words, then the handle the hub
+ * resolves, in angle brackets: `@Orchestrate cockpit fleet <cockpit#5a167bde>`.
+ * The handle alone names the target; the title is for the reader.
+ */
+const CHIP = /<([^<>]+)>\s*$/;
+
+/** What a target names: a chip's handle, else the words given; lowercased, without `@`. */
+const needleOf = (target: string): string => {
+  const handle = CHIP.exec(target.trim())?.[1];
+  return (handle ?? target).trim().toLowerCase().replace(AT_PREFIX, "");
+};
+
+/** A thread's handle (`thread#1a2b3c4d`), as find and a chip carry it. */
+const THREAD_HANDLE = /^thread#([0-9a-f-]{6,36})$/;
+
+/** What an id is made of, its dashes aside. */
+const HEX = /^[0-9a-f]+$/;
 
 /** The one session a full id, or a short id of six or more characters, names. */
 function resolveById(peers: Peer[], target: string): Peer | undefined {
@@ -361,13 +381,23 @@ function resolveById(peers: Peer[], target: string): Peer | undefined {
   return byShortId.length === 1 ? byShortId[0] : undefined;
 }
 
-/** The sessions a bare name picks out: those it names exactly, else those whose name holds it. */
+/**
+ * The sessions a bare name picks out, by their folder's name or their title:
+ * those it names exactly, else those whose name or title holds it.
+ */
 function named(peers: Peer[], target: string): Peer[] {
   const needle = needleOf(target);
-  const exact = peers.filter((peer) => peer.name.toLowerCase() === needle);
+  const exact = peers.filter(
+    (peer) =>
+      peer.name.toLowerCase() === needle || peer.title.toLowerCase() === needle
+  );
   return exact.length
     ? exact
-    : peers.filter((peer) => peer.name.toLowerCase().includes(needle));
+    : peers.filter(
+        (peer) =>
+          peer.name.toLowerCase().includes(needle) ||
+          peer.title.toLowerCase().includes(needle)
+      );
 }
 
 /**
@@ -397,7 +427,7 @@ function ambiguous(
     .slice(0, LISTED_AT_MOST)
     .map(
       (peer) =>
-        `${peer.label} on ${peer.host} (${restingWords(peer, asleep)}${ageOf(peer.row.updatedAt)})`
+        `“${peer.title}” ${peer.label} on ${peer.host} (${restingWords(peer, asleep)}${ageOf(lastSaid(peer, asleep))})`
     )
     .join(", ");
   const more = candidates.length - LISTED_AT_MOST;
@@ -407,9 +437,24 @@ function ambiguous(
   );
 }
 
-/** When a row last moved, for ordering: the most recent first. */
-const movedAt = (peer: Peer) =>
-  peer.row.updatedAt ? new Date(peer.row.updatedAt).getTime() || 0 : 0;
+/**
+ * When a session last said something: a live one's `updatedAt`, which its
+ * pulse moves; an asleep one's last turn's end (none recorded: its age is
+ * unknown), since a status write moves an asleep row's `updatedAt` without it
+ * saying anything (its machine registering again read a session asleep for
+ * weeks as "active 1m ago").
+ */
+const lastSaid = (
+  peer: Peer,
+  asleep: ReadonlySet<Peer>
+): InstanceRow["updatedAt"] =>
+  asleep.has(peer) ? (peer.row.turnEndedAt ?? null) : peer.row.updatedAt;
+
+/** When a session last said something ({@link lastSaid}), for ordering: the most recent first. */
+const saidAt = (peer: Peer, asleep: ReadonlySet<Peer>): number => {
+  const at = lastSaid(peer, asleep);
+  return at ? new Date(at).getTime() || 0 : 0;
+};
 
 /**
  * A hand-off's target, running or asleep (a never-started session counts as
@@ -454,9 +499,74 @@ function resolveHandoff(
     candidates.toSorted(
       (a, b) =>
         Number(sleeping.has(a)) - Number(sleeping.has(b)) ||
-        movedAt(b) - movedAt(a)
+        saidAt(b, sleeping) - saidAt(a, sleeping)
     ),
     sleeping
+  );
+}
+
+/**
+ * The thread a target names: `thread#<id>` always names a thread (refused
+ * when none or several answer); a full id or a short one of six or more
+ * characters names a thread when no session it could name has it.
+ */
+function threadOf(
+  threads: HandoffThreads | undefined,
+  target: string,
+  sessions: Peer[]
+): { id: string; title: string } | undefined {
+  const needle = needleOf(target);
+  const handle = THREAD_HANDLE.exec(needle)?.[1];
+  const id = handle ?? needle;
+  if (!handle) {
+    const hex = id.replaceAll("-", "");
+    const sessionHas = sessions.some((peer) => peer.row.id.startsWith(id));
+    if (sessionHas || hex.length < 6 || !HEX.test(hex)) {
+      return;
+    }
+  }
+  const found = threads?.byId(id) ?? [];
+  if (found.length === 1) {
+    return found[0];
+  }
+  if (!handle) {
+    return;
+  }
+  if (found.length === 0) {
+    throw new Error(`No thread has the id ${id}. Nothing was handed.`);
+  }
+  throw new Error(
+    `"${target}" matches ${found.length} threads: ${found
+      .slice(0, LISTED_AT_MOST)
+      .map((each) => `“${each.title}” (${each.id})`)
+      .join(", ")}. Name one by its full id.`
+  );
+}
+
+/**
+ * The sessions a short id names that the roster does not hold (the board
+ * lists a stopped session for a day): read by the id's prefix, those that a
+ * message can still wake, the caller itself never among them.
+ */
+function beyondBoard(
+  lookup: ((prefix: string) => InstanceRow[]) | undefined,
+  target: string,
+  listed: Peer[],
+  self: string
+): InstanceRow[] {
+  const needle = needleOf(target);
+  const idPart = needle.includes("#")
+    ? (needle.split("#").pop() ?? "")
+    : needle;
+  if (
+    !lookup ||
+    idPart.length < 6 ||
+    listed.some((peer) => peer.row.id.startsWith(idPart))
+  ) {
+    return [];
+  }
+  return lookup(idPart).filter(
+    (row) => row.id !== self && relaunchOf(row).kind !== "refused"
   );
 }
 
@@ -625,6 +735,12 @@ export interface HandoffDeps {
   readonly instanceById: (id: string) => InstanceRow | undefined;
   /** The session doing the handing over. */
   readonly instanceId: string;
+  /**
+   * Sessions whose id starts with `prefix` (six or more characters), in any
+   * state find holds: a mention of one the board no longer lists (stopped a
+   * day ago) still reaches it.
+   */
+  readonly instancesByShortId?: (prefix: string) => InstanceRow[];
   /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
   readonly lands?: LandsMode;
   /** Whether this session leads the project of the work item a session runs: it may steer, answer and stop it. */
@@ -658,10 +774,24 @@ export interface HandoffDeps {
       SpawnPayload & { fallbackPermissionMode?: PermissionMode }
     >
   ) => Promise<MachinePath>;
+  /** Threads a mention may name, and the hand-off into one; absent where tools are only listed. */
+  readonly threads?: HandoffThreads;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
   /** Delegate role: finish_item is available even before an item has checks. */
   readonly workItem?: boolean;
+}
+
+/** The threads a hand-off may name (`thread#1a2b3c4d`, a thread id), and the hand-off into one. */
+export interface HandoffThreads {
+  /** The threads whose id is `id`, or starts with it (six or more characters). */
+  readonly byId: (id: string) => { id: string; title: string }[];
+  /** Hands `message` to Caw in thread `threadId` (caw.ts `handed`); throws the hub's refusal. */
+  readonly hand: (
+    threadId: string,
+    from: { instanceId: string; name: string },
+    message: string
+  ) => Promise<string>;
 }
 
 /** The three hand-off actions, each answering with the text the tool returns. */
@@ -1206,6 +1336,8 @@ export const handoffActions = ({
   sendToUser,
   shownRefusal,
   fleet,
+  instancesByShortId,
+  threads,
 }: HandoffDeps): HandoffActions => ({
   async delegateList(include) {
     if (!delegateList) {
@@ -1513,6 +1645,20 @@ export const handoffActions = ({
     inputs?: string[]
   ): Promise<string> {
     const { peers, asleep, own, hosts } = roster(fleet, instanceId);
+    // A thread (`thread#1a2b3c4d`, or its id): Caw is handed it there.
+    const thread = threadOf(threads, target, [...peers, ...asleep]);
+    if (thread) {
+      if (!threads) {
+        throw new Error(
+          "Threads are not reachable from here; nothing was handed."
+        );
+      }
+      return threads.hand(
+        thread.id,
+        { instanceId, name: senderName(own, cwd) },
+        message
+      );
+    }
     // A session named by a former id is reached by its id now.
     const followed = formerOf(formerIds(), target);
     const addressed = followed?.now ?? target;
@@ -1520,7 +1666,19 @@ export const handoffActions = ({
       followed && ![...peers, ...asleep].some((p) => p.row.id === addressed)
         ? instanceById(addressed)
         : undefined;
-    const sleeping = unlisted ? [...asleep, toPeer(unlisted, hosts)] : asleep;
+    // A short id the board no longer lists (a session stopped a day ago):
+    // still the session it names, woken to read it like any asleep one.
+    const beyond = beyondBoard(
+      instancesByShortId,
+      addressed,
+      [...peers, ...asleep],
+      instanceId
+    );
+    const sleeping = [
+      ...asleep,
+      ...(unlisted ? [toPeer(unlisted, hosts)] : []),
+      ...beyond.map((row) => toPeer(row, hosts)),
+    ];
     const peer = resolveHandoff(peers, sleeping, addressed, own);
     if (peer.row.id !== own?.parentInstanceId) {
       await checkCold(peer.row.id, undefined, instanceId, message);

@@ -162,6 +162,11 @@ export const measureRoles = (): RoleSize[] => {
     runningOf: (harness) =>
       rows.filter((row) => row.harness === harness && row.status === "running"),
     instanceById: (id) => rows.find((row) => row.id === id),
+    instancesByShortId: () => [],
+    threads: {
+      byId: () => [],
+      hand: () => Promise.reject(new Error("A budget read hands nothing")),
+    },
     fleet: { instances: () => rows, machines: () => [] },
     formerIds: () => ({}),
     forward: () => Promise.resolve(),

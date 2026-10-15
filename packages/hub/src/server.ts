@@ -82,6 +82,7 @@ import type {
   ThreadSummary,
   ToolState,
   ToolStatus,
+  TranscriptAnswer,
   TranscriptWhere,
   UpdateReport,
   UsageBucket,
@@ -422,6 +423,14 @@ import { createDelegationTree } from "./delegation-tree";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
 import {
+  answerFind,
+  createFind,
+  FIND_QUERY,
+  markSeen,
+  SEEN_BODY,
+  TRANSCRIPT_ANSWER_MS,
+} from "./find";
+import {
   type FleetChoicesStore,
   fleetChoicesRoutes,
   setFleetChoices,
@@ -642,34 +651,13 @@ interface ReportTold {
   notice?: boolean;
 }
 
-/** A search hit as returned by the agent's TranscriptIndex. */
-interface SearchHitWire {
-  cwd: string | null;
-  docId: string;
-  harness: string;
-  model: string | null;
-  role: string;
-  score: number;
-  sessionId: string;
-  sidechain: boolean;
-  snippet: string;
-  timestamp: string | null;
-}
-
-/**
- * How long a fleet search waits on each machine. Search is one query per
- * keystroke, so a slow machine is named as one that didn't answer rather
- * than holding every other machine's hits back.
- */
-const SEARCH_ANSWER_MS = 1500;
-
-/** Why a machine's search came back empty-handed, as the clause after "couldn't search:". */
+/** Why a machine's transcripts gave no answer to a find, as the clause after "couldn't search:". */
 function searchMiss(answer: ControlResult | "offline" | "timeout"): string {
   if (answer === "offline") {
     return "it went offline";
   }
   if (answer === "timeout") {
-    return `it didn't answer within ${SEARCH_ANSWER_MS / 1000} s`;
+    return `it didn't answer within ${TRANSCRIPT_ANSWER_MS / 1000} s`;
   }
   return answer.error ?? "it gave no reason";
 }
@@ -12779,11 +12767,17 @@ export const createServer = (
   );
   /** The rows the database changed since the last publish took them. */
   let boardMoved = new Set<string>();
+  /**
+   * The find engine's sessions follow the same change log as the board
+   * (find.ts `instancesChanged`): told here, once the engine is made below.
+   */
+  let findHears: (ids: string[]) => void = () => undefined;
   const refreshBoard = (): void => {
     const changed = db.takeChangedInstances();
     if (changed.length === 0) {
       return;
     }
+    findHears(changed);
     const fresh = new Map(
       db.listedBoardInstancesByIds(changed).map((row) => [row.id, row] as const)
     );
@@ -16626,6 +16620,84 @@ export const createServer = (
     refreshPlace: (row) => ensureIdentityWorkspace(row),
   });
   lead = caw;
+  // The fleet's one finding engine (find.ts): the names the hub holds, and
+  // every machine's transcripts, under one ranking.
+  const find = createFind({
+    db,
+    refreshInstances: refreshBoard,
+    online: (machineId) => registry.agent(machineId) !== undefined,
+    needsYou: () =>
+      new Set(
+        pending
+          .list()
+          .flatMap((ask) => (ask.instanceId ? [ask.instanceId] : []))
+      ),
+    threads: () => caw.allThreads(),
+    stageKinds: async (projectId) =>
+      new Map(
+        (await tasks.stages(projectId)).stages.map((stage) => [
+          stage.name,
+          stage.kind,
+        ])
+      ),
+    tasksWaiting: async () => {
+      const read = await Promise.all(
+        db
+          .listProjects()
+          .filter((project) => project.tracker === "cawco")
+          .map(async (project) => {
+            try {
+              const list = await tasks.list(project.id);
+              return {
+                missing: [],
+                tasks: list.tasks
+                  .filter((task) => task.kind === "you")
+                  .map((task) => ({
+                    id: task.id,
+                    projectId: project.id,
+                    title: task.title,
+                    stage: task.stage,
+                    since: task.updatedAt,
+                  })),
+              };
+            } catch (error) {
+              return {
+                missing: [
+                  `${project.name}'s tasks could not be read: ${error instanceof Error ? error.message : String(error)}`,
+                ],
+                tasks: [],
+              };
+            }
+          })
+      );
+      return {
+        missing: read.flatMap((each) => each.missing),
+        tasks: read.flatMap((each) => each.tasks),
+      };
+    },
+    askMachine: async (machineId, query, options, timeoutMs) => {
+      const answer = await callAgent(
+        machineId,
+        CONTROL_SEARCH_TRANSCRIPTS,
+        [query, options],
+        timeoutMs
+      );
+      if (answer === "offline" || answer === "timeout" || !answer.ok) {
+        return { error: searchMiss(answer) };
+      }
+      // A machine on a build from before find answers a list of lines: named
+      // as one that did not answer, never read as one that found nothing.
+      const result = answer.result as Partial<TranscriptAnswer> | null;
+      if (!(result && Array.isArray(result.conversations))) {
+        return {
+          error:
+            "it runs an older build, which can't answer this search until it updates",
+        };
+      }
+      return result as TranscriptAnswer;
+    },
+  });
+  findHears = (ids) => find.instancesChanged(ids);
   // The owner's thread whose words went to Caw's session alone, before every
   // word to him went through his threads: written in once (thread-repair.ts),
   // now and, while his machine is away, as the next machine registers.
@@ -17175,6 +17247,19 @@ export const createServer = (
     instancesByIds: (ids) => db.listedInstancesByIds(ids),
     runningOf: (harness) => db.runningInstancesOf(harness),
     instanceById: (id) => db.getInstancesByIds([id])[0],
+    instancesByShortId: (prefix) =>
+      db.getInstancesByIds(db.find.idsByPrefix(prefix)),
+    threads: {
+      byId: (id) =>
+        db
+          .allThreads()
+          .filter(
+            (thread) =>
+              thread.id === id || (id.length >= 6 && thread.id.startsWith(id))
+          )
+          .map((thread) => ({ id: thread.id, title: thread.title })),
+      hand: (threadId, from, message) => caw.handed(threadId, from, message),
+    },
     // What `GET /api/instances` and `GET /api/agents` answer, without the
     // hub calling itself over HTTP for them.
     fleet: {
@@ -20281,72 +20366,14 @@ export const createServer = (
       // time anything else moved.
       .get("/api/handoffs", () => Object.fromEntries(handoffs))
       .get("/api/pending", () => pending.list().map(clientCopy))
-      .get(
-        "/api/search",
-        {
-          query: t.Object({
-            q: t.String(),
-            limit: t.Optional(t.String()),
-            role: t.Optional(t.String()),
-          }),
-        },
-        async ({ query, status }) => {
-          const q = query.q.trim();
-          if (!q) {
-            return status(400, "missing query");
-          }
-          const limit = Math.min(Math.max(1, Number(query.limit) || 20), 50);
-          // Who wrote the line. Anything else is no filter rather than an
-          // error: a reader who mistypes it gets everything, not nothing.
-          const role =
-            query.role === "user" || query.role === "assistant"
-              ? query.role
-              : undefined;
-          const machineIds = registry.machineIds();
-          // A machine that could not answer is named beside the others' hits,
-          // never dropped in silence: its sentence is the one every client
-          // shows as it is (WORDS.md's error formula).
-          const failures: { machineId: string; message: string }[] = [];
-          const results = await Promise.all(
-            machineIds.map(async (mid) => {
-              const answer = await callAgent(
-                mid,
-                CONTROL_SEARCH_TRANSCRIPTS,
-                [q, { limit, ...(role ? { role } : {}) }],
-                SEARCH_ANSWER_MS
-              );
-              if (answer === "offline" || answer === "timeout" || !answer.ok) {
-                failures.push({
-                  machineId: mid,
-                  message: `${machineName(mid)} couldn't search: ${searchMiss(answer)}. Its results are left out; the next search tries again.`,
-                });
-                return [];
-              }
-              return (answer.result as SearchHitWire[]).map((hit) => ({
-                ...hit,
-                machineId: mid,
-              }));
-            })
-          );
-          const merged = results
-            .flat()
-            .sort((a, b) => a.score - b.score)
-            .slice(0, limit);
-          // Annotate with instance id where the hub knows the session.
-          const sessionCache = new Map<string, string | null>();
-          for (const hit of merged) {
-            if (!sessionCache.has(hit.sessionId)) {
-              const row = db.instanceBySessionId(hit.sessionId);
-              sessionCache.set(hit.sessionId, row ? row.id : null);
-            }
-            const instanceId = sessionCache.get(hit.sessionId);
-            if (instanceId) {
-              (hit as SearchHitWire & { instanceId?: string }).instanceId =
-                instanceId;
-            }
-          }
-          return { hits: merged, machines: machineIds.length, failures };
-        }
+      // The fleet's one finding engine (find.ts): names and transcripts under
+      // one ranking, what waits on your eyes, and the reports you opened.
+      .get("/api/find", { query: FIND_QUERY }, ({ query }) =>
+        answerFind(find, query)
+      )
+      .get("/api/find/waiting", () => find.waiting())
+      .post("/api/find/seen", { body: SEEN_BODY }, ({ body }) =>
+        markSeen(find, body)
       )
       // What a delegate and its parent said to each other, oldest first. Broadcast
       // as it happens *and* readable here, for the same reason the hand-offs are:

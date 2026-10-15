@@ -15639,13 +15639,13 @@
         }
       }
     },
-    "/api/search": {
+    "/api/find": {
       "get": {
         "parameters": [
           {
             "name": "q",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -15659,38 +15659,136 @@
             }
           },
           {
-            "name": "role",
+            "name": "cursor",
             "in": "query",
             "required": false,
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "kinds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "me",
+                "agent",
+                "report",
+                "caw"
+              ]
+            }
+          },
+          {
+            "name": "transcripts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "0",
+                "1"
+              ]
+            }
           }
         ],
-        "operationId": "getApiSearch",
+        "operationId": "getApiFind",
         "responses": {
           "200": {
-            "description": "getApiSearch 200",
+            "description": "getApiFind 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiSearch200"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "getApiSearch 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/FindAnswer"
                 }
               }
             }
           },
           "422": {
-            "description": "getApiSearch 422",
+            "description": "getApiFind 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/find/waiting": {
+      "get": {
+        "operationId": "getApiFindWaiting",
+        "responses": {
+          "200": {
+            "description": "getApiFindWaiting 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitingAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/find/seen": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "artifact",
+                      "report"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiFindSeen",
+        "responses": {
+          "200": {
+            "description": "postApiFindSeen 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFindSeen200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFindSeen 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23311,98 +23409,18 @@
           ]
         }
       },
-      "getApiSearch200": {
+      "postApiFindSeen200": {
         "type": "object",
         "properties": {
-          "hits": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "machineId": {
-                  "type": "string"
-                },
-                "cwd": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "docId": {
-                  "type": "string"
-                },
-                "harness": {
-                  "type": "string"
-                },
-                "model": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "role": {
-                  "type": "string"
-                },
-                "score": {
-                  "type": "number"
-                },
-                "sessionId": {
-                  "type": "string"
-                },
-                "sidechain": {
-                  "type": "boolean"
-                },
-                "snippet": {
-                  "type": "string"
-                },
-                "timestamp": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                }
-              },
-              "required": [
-                "cwd",
-                "docId",
-                "harness",
-                "machineId",
-                "model",
-                "role",
-                "score",
-                "sessionId",
-                "sidechain",
-                "snippet",
-                "timestamp"
-              ]
-            }
-          },
-          "machines": {
-            "type": "number"
-          },
-          "failures": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "machineId": {
-                  "type": "string"
-                },
-                "message": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "machineId",
-                "message"
-              ]
-            }
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [
-          "failures",
-          "hits",
-          "machines"
+          "ok"
         ]
       },
       "getApiDelegateEvents200": {
@@ -38133,6 +38151,1172 @@
           "usage"
         ]
       },
+      "FindAnswer": {
+        "description": "`GET /api/find`'s answer.",
+        "type": "object",
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/FindCoverage"
+          },
+          "next": {
+            "description": "The cursor for the next page; null on the last.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "query": {
+            "description": "The words as the hub read them, after any kind words.",
+            "type": "string"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindResult"
+            }
+          },
+          "timing": {
+            "description": "What the hub took to answer, ms: names and transcripts apart.",
+            "type": "object",
+            "properties": {
+              "namesMs": {
+                "type": "number"
+              },
+              "transcriptsMs": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              }
+            },
+            "required": [
+              "namesMs",
+              "transcriptsMs"
+            ]
+          }
+        },
+        "required": [
+          "coverage",
+          "next",
+          "query",
+          "results",
+          "timing"
+        ]
+      },
+      "FindCoverage": {
+        "description": "Which machines an answer's transcript part heard from. `asked` false: the\nanswer did not ask (the names-only part, or no words to look for), so it\nsays nothing about what transcripts hold; `machines` are then the ones a\nfull find would ask, none answered, an offline one with its reason.",
+        "type": "object",
+        "properties": {
+          "asked": {
+            "type": "boolean"
+          },
+          "machines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindMachineCoverage"
+            }
+          }
+        },
+        "required": [
+          "asked",
+          "machines"
+        ]
+      },
+      "FindMachineCoverage": {
+        "description": "One machine's part in an answer that asked the machines.",
+        "type": "object",
+        "properties": {
+          "answered": {
+            "description": "Whether it answered in time.",
+            "type": "boolean"
+          },
+          "indexAgeMs": {
+            "description": "How old its index was when it answered, ms; null when it did not answer.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why it did not answer, as the clause after \"couldn't search:\"; null when it did.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tookMs": {
+            "description": "What it took to answer, ms (its sync, its query and the wire).",
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "answered",
+          "indexAgeMs",
+          "machineId",
+          "name",
+          "reason",
+          "tookMs"
+        ]
+      },
+      "FindResult": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/FindConversation"
+          },
+          {
+            "$ref": "#/components/schemas/FindThread"
+          },
+          {
+            "$ref": "#/components/schemas/FindTask"
+          },
+          {
+            "$ref": "#/components/schemas/FindRoutine"
+          },
+          {
+            "$ref": "#/components/schemas/FindProject"
+          },
+          {
+            "$ref": "#/components/schemas/FindMachine"
+          },
+          {
+            "$ref": "#/components/schemas/FindArtifact"
+          },
+          {
+            "$ref": "#/components/schemas/FindChange"
+          }
+        ]
+      },
+      "FindConversation": {
+        "type": "object",
+        "properties": {
+          "children": {
+            "description": "The delegates and attempts it started, and how many of them wait on you now.",
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number"
+              },
+              "needsYou": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "count",
+              "needsYou"
+            ]
+          },
+          "dir": {
+            "description": "The folder it was launched in, its leaf.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "harness": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instanceId": {
+            "description": "The hub's instance id; null for one the hub never started (a stored CLI session).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "conversation"
+            ]
+          },
+          "lastReport": {
+            "description": "The newest report about it: a delegate's own (its work item's\n`finish_item` headline), else, for a session that delegates, the newest\nreport one of its delegates sent it. `blocked`: the delegate said it was\nstopped by something outside its control.",
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "headline": {
+                "type": "string"
+              },
+              "outcome": {
+                "$ref": "#/components/schemas/FindConversationOutcome"
+              }
+            },
+            "required": [
+              "at",
+              "headline"
+            ]
+          },
+          "machine": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "moments": {
+            "description": "Its best moments, best first: present when its transcript matched.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindMoment"
+            }
+          },
+          "parent": {
+            "description": "The conversation that started it.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ]
+          },
+          "purpose": {
+            "description": "What it was for: its work item's title, else its plan step under way, else its first words when it was renamed.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/FindConversationRole",
+            "description": "How it came to be: the person's own, a delegate, a task's attempt, a spin-off."
+          },
+          "sessionId": {
+            "description": "The harness's session id, which its transcript is kept under.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ended",
+              "idle",
+              "needs-you",
+              "sleeping",
+              "unknown",
+              "working"
+            ]
+          },
+          "task": {
+            "description": "The task it is an attempt at (role `attempt`); null otherwise. `id` is `<projectId>:tsk-142`.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "taskId",
+              "title"
+            ]
+          },
+          "handle": {
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "type": "string"
+          },
+          "lastActivity": {
+            "description": "When it last moved, ms epoch; null when nothing says.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matched": {
+            "description": "Which recognisers matched; empty for a kind word alone.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindField"
+            }
+          },
+          "project": {
+            "description": "Its project, when it has one.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "score": {
+            "description": "Its rank among this answer's results; higher first.",
+            "type": "number"
+          },
+          "title": {
+            "description": "What it is called, in its own words (a title, a name, a hostname).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "children",
+          "dir",
+          "handle",
+          "harness",
+          "id",
+          "instanceId",
+          "kind",
+          "lastActivity",
+          "machine",
+          "matched",
+          "moments",
+          "purpose",
+          "role",
+          "score",
+          "sessionId",
+          "state",
+          "title"
+        ]
+      },
+      "FindMoment": {
+        "description": "A moment inside a conversation or thread: a jump target, and why it matched.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When it was said, ms epoch; null when the transcript kept no time.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/MomentAuthor"
+          },
+          "docId": {
+            "description": "The record to open at: a transcript's record (uuid, opencode message id), or a thread message's id.",
+            "type": "string"
+          },
+          "excerpt": {
+            "description": "The matching words, terms between 「 and 」.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "author",
+          "docId",
+          "excerpt"
+        ]
+      },
+      "MomentAuthor": {
+        "description": "Who said a moment: a transcript's author, or `caw`, a project's Caw in one\nof his threads (a thread's own messages are kept at the hub).",
+        "type": "string",
+        "enum": [
+          "agent",
+          "caw",
+          "injected",
+          "owner",
+          "report"
+        ]
+      },
+      "FindLiveState": {
+        "description": "A conversation's live state, as the board says it: working on a turn,\nwaiting on the person, idle (its process up, no turn), asleep (no process,\nwakes on a message), ended, or unknown (its machine is not connected, so\nnobody can say).",
+        "type": "string",
+        "enum": [
+          "ended",
+          "idle",
+          "needs-you",
+          "sleeping",
+          "unknown",
+          "working"
+        ]
+      },
+      "FindField": {
+        "description": "Which of a result's recognisers its words matched.",
+        "type": "string",
+        "enum": [
+          "dir",
+          "id",
+          "kind",
+          "machine",
+          "path",
+          "project",
+          "purpose",
+          "report",
+          "title",
+          "transcript"
+        ]
+      },
+      "FindThread": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "thread"
+            ]
+          },
+          "moments": {
+            "description": "Its best messages that matched, best first: present when its words did.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindMoment"
+            }
+          },
+          "state": {
+            "description": "Caw on it now: working, waiting on you, or ready.",
+            "enum": [
+              "needs-you",
+              "ready",
+              "working"
+            ],
+            "type": "string"
+          },
+          "handle": {
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "type": "string"
+          },
+          "lastActivity": {
+            "description": "When it last moved, ms epoch; null when nothing says.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matched": {
+            "description": "Which recognisers matched; empty for a kind word alone.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindField"
+            }
+          },
+          "project": {
+            "description": "Its project, when it has one.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "score": {
+            "description": "Its rank among this answer's results; higher first.",
+            "type": "number"
+          },
+          "title": {
+            "description": "What it is called, in its own words (a title, a name, a hostname).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handle",
+          "id",
+          "kind",
+          "lastActivity",
+          "matched",
+          "moments",
+          "score",
+          "state",
+          "title"
+        ]
+      },
+      "FindTask": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "task"
+            ]
+          },
+          "stage": {
+            "type": "string"
+          },
+          "stageKind": {
+            "$ref": "#/components/schemas/StageKind",
+            "description": "Its stage's kind (`you`: it waits on you); null while the project's stages are unread or it names no stage of them."
+          },
+          "taskId": {
+            "description": "`tsk-142`.",
+            "type": "string"
+          },
+          "todos": {
+            "type": "object",
+            "properties": {
+              "done": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "done",
+              "total"
+            ]
+          },
+          "handle": {
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "type": "string"
+          },
+          "lastActivity": {
+            "description": "When it last moved, ms epoch; null when nothing says.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matched": {
+            "description": "Which recognisers matched; empty for a kind word alone.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindField"
+            }
+          },
+          "project": {
+            "description": "Its project, when it has one.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "score": {
+            "description": "Its rank among this answer's results; higher first.",
+            "type": "number"
+          },
+          "title": {
+            "description": "What it is called, in its own words (a title, a name, a hostname).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handle",
+          "id",
+          "kind",
+          "lastActivity",
+          "matched",
+          "score",
+          "stage",
+          "taskId",
+          "title",
+          "todos"
+        ]
+      },
+      "FindRoutine": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "routine"
+            ]
+          },
+          "lastOutcome": {
+            "description": "Its last run's outcome; null before its first ended.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nextRun": {
+            "description": "Its next run, ms epoch.",
+            "type": "number"
+          },
+          "handle": {
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "type": "string"
+          },
+          "lastActivity": {
+            "description": "When it last moved, ms epoch; null when nothing says.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matched": {
+            "description": "Which recognisers matched; empty for a kind word alone.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindField"
+            }
+          },
+          "project": {
+            "description": "Its project, when it has one.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "score": {
+            "description": "Its rank among this answer's results; higher first.",
+            "type": "number"
+          },
+          "title": {
+            "description": "What it is called, in its own words (a title, a name, a hostname).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "handle",
+          "id",
+          "kind",
+          "lastActivity",
+          "lastOutcome",
+          "matched",
+          "nextRun",
+          "score",
+          "title"
+        ]
+      },
+      "FindProject": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "project"
+            ]
+          },
+          "handle": {
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "type": "string"
+          },
+          "lastActivity": {
+            "description": "When it last moved, ms epoch; null when nothing says.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matched": {
+            "description": "Which recognisers matched; empty for a kind word alone.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindField"
+            }
+          },
+          "project": {
+            "description": "Its project, when it has one.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "score": {
+            "description": "Its rank among this answer's results; higher first.",
+            "type": "number"
+          },
+          "title": {
+            "description": "What it is called, in its own words (a title, a name, a hostname).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handle",
+          "id",
+          "kind",
+          "lastActivity",
+          "matched",
+          "score",
+          "title"
+        ]
+      },
+      "FindMachine": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "machine"
+            ]
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "handle": {
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "type": "string"
+          },
+          "lastActivity": {
+            "description": "When it last moved, ms epoch; null when nothing says.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matched": {
+            "description": "Which recognisers matched; empty for a kind word alone.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindField"
+            }
+          },
+          "project": {
+            "description": "Its project, when it has one.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "score": {
+            "description": "Its rank among this answer's results; higher first.",
+            "type": "number"
+          },
+          "title": {
+            "description": "What it is called, in its own words (a title, a name, a hostname).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handle",
+          "id",
+          "kind",
+          "lastActivity",
+          "matched",
+          "online",
+          "score",
+          "title"
+        ]
+      },
+      "FindArtifact": {
+        "type": "object",
+        "properties": {
+          "artifactKind": {
+            "$ref": "#/components/schemas/ArtifactKind",
+            "description": "Which kind of artifact: a preview, an HTML page, a canvas."
+          },
+          "conversation": {
+            "description": "The session that made it.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "artifact",
+              "decision"
+            ],
+            "type": "string"
+          },
+          "picksToMake": {
+            "description": "A decision with no pick of yours yet.",
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "number"
+          },
+          "seen": {
+            "description": "Whether you have opened it at its current revision.",
+            "type": "boolean"
+          },
+          "handle": {
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "type": "string"
+          },
+          "lastActivity": {
+            "description": "When it last moved, ms epoch; null when nothing says.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matched": {
+            "description": "Which recognisers matched; empty for a kind word alone.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindField"
+            }
+          },
+          "project": {
+            "description": "Its project, when it has one.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "score": {
+            "description": "Its rank among this answer's results; higher first.",
+            "type": "number"
+          },
+          "title": {
+            "description": "What it is called, in its own words (a title, a name, a hostname).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactKind",
+          "conversation",
+          "handle",
+          "id",
+          "kind",
+          "lastActivity",
+          "matched",
+          "picksToMake",
+          "revision",
+          "score",
+          "seen",
+          "title"
+        ]
+      },
+      "FindChange": {
+        "description": "A commit a delegate's work item made, or a file it changed.",
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "conversation": {
+            "description": "The conversation that made it.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "commit",
+              "file"
+            ],
+            "type": "string"
+          },
+          "landed": {
+            "description": "Its work item has landed on the branch it lands on.",
+            "type": "boolean"
+          },
+          "what": {
+            "description": "A commit's subject; a file's path.",
+            "type": "string"
+          },
+          "workItemId": {
+            "type": "string"
+          },
+          "handle": {
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "type": "string"
+          },
+          "lastActivity": {
+            "description": "When it last moved, ms epoch; null when nothing says.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matched": {
+            "description": "Which recognisers matched; empty for a kind word alone.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindField"
+            }
+          },
+          "project": {
+            "description": "Its project, when it has one.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "score": {
+            "description": "Its rank among this answer's results; higher first.",
+            "type": "number"
+          },
+          "title": {
+            "description": "What it is called, in its own words (a title, a name, a hostname).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "branch",
+          "conversation",
+          "handle",
+          "id",
+          "kind",
+          "landed",
+          "lastActivity",
+          "matched",
+          "score",
+          "title",
+          "what",
+          "workItemId"
+        ]
+      },
+      "WaitingAnswer": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "description": "How far back it looks, days: nothing recorded what you opened before seen\nmarks did, so older things can't be told apart from ones you looked at.",
+            "type": "number"
+          },
+          "items": {
+            "description": "Oldest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingItem"
+            }
+          },
+          "missing": {
+            "description": "What could not be read, one sentence each (a project whose tasks did not read): the list may be short by it.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "days",
+          "items",
+          "missing"
+        ]
+      },
+      "WaitingItem": {
+        "type": "object",
+        "properties": {
+          "artifactKind": {
+            "$ref": "#/components/schemas/ArtifactKind",
+            "description": "For an artifact or decision: which kind of artifact."
+          },
+          "conversation": {
+            "description": "The conversation it came from, when one made it.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ]
+          },
+          "id": {
+            "description": "The object's id: an artifact's, a work item's, `project:tsk-142`.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WaitingKind"
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "revision": {
+            "description": "For an artifact or decision: the revision it waits at.",
+            "type": "number"
+          },
+          "since": {
+            "description": "When it began waiting, ms epoch: made, revised, reported, moved to its stage.",
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "why": {
+            "description": "Why it waits, in a few words: \"unseen\", \"new revision\", \"picks to make\", \"unread\", the stage.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "since",
+          "title",
+          "why"
+        ]
+      },
+      "WaitingKind": {
+        "description": "What waits on the person's eyes (`GET /api/find/waiting`).",
+        "type": "string",
+        "enum": [
+          "artifact",
+          "decision",
+          "report",
+          "task"
+        ]
+      },
       "DelegateEvent": {
         "description": "One line of what a delegate and its parent said to each other through the\nhub — a `delegate_events` row (packages/hub `db/schema.ts`), read over\n`GET /api/delegate-events` and pushed as a `delegate_event` frame. The hub is\nthe system of record: the transcript markers say the same things, but only\nfor a reader who was watching, and only as text to be parsed back.",
         "anyOf": [
@@ -45891,6 +47075,23 @@
           "plugin",
           "project",
           "user"
+        ]
+      },
+      "FindConversationOutcome": {
+        "type": "string",
+        "enum": [
+          "blocked",
+          "done",
+          "failed"
+        ]
+      },
+      "FindConversationRole": {
+        "type": "string",
+        "enum": [
+          "attempt",
+          "delegate",
+          "session",
+          "spin-off"
         ]
       },
       "FleetItemStateState": {

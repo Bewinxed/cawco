@@ -183,7 +183,7 @@ public struct HubAPI: Sendable {
         public func setFleetWatch(_ input: Operations.PutApiFleetWatch.Input) async throws -> Operations.PutApiFleetWatch.Output { try await client.putApiFleetWatch(input) }    }
     public struct Search: Sendable {
         let client: Client
-        public func transcripts(_ input: Operations.GetApiSearch.Input) async throws -> Operations.GetApiSearch.Output { try await client.getApiSearch(input) }
+        public func find(_ input: Operations.GetApiFind.Input) async throws -> Operations.GetApiFind.Output { try await client.getApiFind(input) }
         public func suggest(_ input: Operations.PostApiSuggest.Input) async throws -> Operations.PostApiSuggest.Output { try await client.postApiSuggest(input) }
     }
     public struct Delegates: Sendable {

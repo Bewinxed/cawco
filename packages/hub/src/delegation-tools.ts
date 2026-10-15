@@ -143,7 +143,7 @@ const handoffShape = () => ({
   target: z
     .string()
     .describe(
-      'The session to hand to: its id, or its directory name, e.g. "keeboard". A name reaches your own parent when it is theirs; a name that more than one session answers to is refused with their ids.'
+      'The session or thread: a mention copied whole ("@Title <cockpit#5a167bde>"), an id, a directory or a title. A name reaches your parent when theirs; one several sessions answer to is refused.'
     ),
   message: z
     .string()

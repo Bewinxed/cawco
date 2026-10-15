@@ -6,13 +6,14 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { TranscriptAnswer, TranscriptQuery } from "@cawco/core";
 import {
   listClaudeFiles,
   opencodeDatabases,
   transcriptIndexPath,
 } from "@cawco/core/paths";
 import type { TranscriptDoc } from "@cawco/jsonl-parser";
-import { type SearchHit, TranscriptIndex } from "@cawco/jsonl-parser/fts5";
+import { TranscriptIndex } from "@cawco/jsonl-parser/fts5";
 import { readOpenCodeDocs } from "@cawco/jsonl-parser/opencode";
 
 /** The `meta` key prefix of each OpenCode database's watermark, followed by its path. */
@@ -165,16 +166,15 @@ export class TranscriptSearchService {
 
   /**
    * Search the index, brought up to date first when its last sync began
-   * more than {@link SEARCH_FRESH_MS} ago.
+   * more than {@link SEARCH_FRESH_MS} ago: the conversations that match, each
+   * with its best moments, how old the index it answered from is, and what
+   * the sync and the query each took.
    */
   async search(
     query: string,
-    options?: {
-      limit?: number;
-      sessionId?: string;
-      role?: "user" | "assistant";
-    }
-  ): Promise<SearchHit[]> {
+    options?: TranscriptQuery
+  ): Promise<TranscriptAnswer> {
+    const started = performance.now();
     // Never answered from a stale index: a sync that fails refuses the
     // search, with the reason the hub names this machine by.
     if (Date.now() - this.#syncedAt > SEARCH_FRESH_MS) {
@@ -186,15 +186,21 @@ export class TranscriptSearchService {
         });
       }
     }
+    const queried = performance.now();
     const limit = Math.min(
       options?.limit ?? DEFAULT_SEARCH_LIMIT,
       MAX_SEARCH_LIMIT
     );
-    return this.#index.search(query, {
+    const conversations = this.#index.search(query, {
       limit,
-      sessionId: options?.sessionId,
-      role: options?.role,
+      ...(options?.author ? { author: options.author } : {}),
     });
+    return {
+      conversations,
+      syncedAt: this.#syncedAt,
+      syncMs: Math.round(queried - started),
+      queryMs: Math.round(performance.now() - queried),
+    };
   }
 
   /** Document count in the index. */

@@ -1,3 +1,5 @@
+import type { FindAnswer } from "@cawco/core";
+
 export interface TranscriptHit {
   cwd: string | null;
   docId: string;
@@ -130,20 +132,52 @@ export class JumpTranscriptSearch {
     const controller = new AbortController();
     this.#controller = controller;
     try {
-      const params = new URLSearchParams({ q, limit: "20" });
+      const params = new URLSearchParams({
+        q,
+        limit: "20",
+        kinds: "conversation",
+      });
       if (role) {
-        params.set("role", role);
+        params.set("by", role === "user" ? "me" : "agent");
       }
-      const response = await fetch(`/api/search?${params}`, {
+      const response = await fetch(`/api/find?${params}`, {
         signal: controller.signal,
       });
       if (!response.ok) {
         throw new Error(`Transcript search failed: ${response.status}`);
       }
-      const { hits, failures } = (await response.json()) as {
-        hits: TranscriptHit[];
-        failures: SearchFailure[];
-      };
+      const answer = (await response.json()) as FindAnswer;
+      // Each conversation whose transcript matched, by its best moment.
+      const hits = answer.results.flatMap((result): TranscriptHit[] => {
+        const moment =
+          result.kind === "conversation" ? result.moments[0] : undefined;
+        if (!(result.kind === "conversation" && result.sessionId && moment)) {
+          return [];
+        }
+        return [
+          {
+            cwd: result.dir,
+            docId: moment.docId,
+            harness: result.harness ?? "",
+            ...(result.instanceId ? { instanceId: result.instanceId } : {}),
+            machineId: result.machine.id,
+            model: null,
+            role: moment.author === "owner" ? "user" : "assistant",
+            score: result.score,
+            sessionId: result.sessionId,
+            sidechain: false,
+            snippet: moment.excerpt,
+            timestamp:
+              moment.at === null ? null : new Date(moment.at).toISOString(),
+          },
+        ];
+      });
+      const failures = answer.coverage.machines
+        .filter((machine) => !machine.answered)
+        .map((machine) => ({
+          machineId: machine.machineId,
+          message: `${machine.name} couldn't search: ${machine.reason ?? "it gave no reason"}. Its results are left out; the next search tries again.`,
+        }));
       if (controller.signal.aborted) {
         return;
       }

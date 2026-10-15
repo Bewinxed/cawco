@@ -530,7 +530,7 @@ try {
   await until(
     "a search through the hub brought the index up to date",
     async () => {
-      await fleet.api(`/api/search?q=${vocabulary[0]}`);
+      await fleet.api(`/api/find?q=${vocabulary[0]}&kinds=conversation`);
       const sizes = await Promise.all(live.map(sizeOf));
       const db = new Database(indexDb, { readonly: true });
       try {
@@ -589,26 +589,33 @@ try {
     "Bash",
     "Edit",
   ];
-  // The top hits by score, ties in docId order. Equal scores rank in the
-  // order their rows were inserted, which follows when each sync caught the
-  // writers, so the tie group a limit cuts through is left out.
-  const SEARCH_LIMIT = 500;
+  // Each conversation's moments by score, best first, ties in docId order.
+  // Equal scores rank in the order their rows were inserted, which follows
+  // when each sync caught the writers, so the tie group a limit cuts through
+  // (the last conversation's score, when the answer is full) is left out.
+  const SEARCH_LIMIT = 50;
   const search = Object.fromEntries(
     queries.map((q) => {
-      const hits = index
-        .search(q, { limit: SEARCH_LIMIT })
-        .map((hit) => ({
-          docId: hit.docId,
-          sessionId: hit.sessionId,
-          score: hit.score.toFixed(6),
-          snippet: hit.snippet,
-        }))
+      const conversations = index.search(q, { limit: SEARCH_LIMIT });
+      const cut =
+        conversations.length === SEARCH_LIMIT
+          ? conversations.at(-1)?.score.toFixed(6)
+          : undefined;
+      const hits = conversations
+        .filter((conversation) => conversation.score.toFixed(6) !== cut)
+        .flatMap((conversation) =>
+          conversation.moments.map((moment) => ({
+            docId: moment.docId,
+            sessionId: conversation.sessionId,
+            score: moment.score.toFixed(6),
+            snippet: moment.snippet,
+          }))
+        )
         .sort(
           (a, b) =>
-            Number(a.score) - Number(b.score) || a.docId.localeCompare(b.docId)
+            Number(b.score) - Number(a.score) || a.docId.localeCompare(b.docId)
         );
-      const cut = hits.length === SEARCH_LIMIT ? hits.at(-1)?.score : undefined;
-      return [q, hits.filter((hit) => hit.score !== cut)];
+      return [q, hits];
     })
   );
   const docs = index.count();

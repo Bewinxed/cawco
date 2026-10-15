@@ -31,7 +31,13 @@ export {
   type LineSpan,
   type ScanOptions,
 } from "./scan.ts";
-export { extractDoc, type ExtractOptions, type TranscriptDoc } from "./text.ts";
+export {
+  type DocAuthor,
+  extractDoc,
+  type ExtractOptions,
+  type TranscriptDoc,
+  userAuthor,
+} from "./text.ts";
 export type {
   AssistantRecord,
   ContentBlock,

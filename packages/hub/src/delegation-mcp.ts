@@ -20,7 +20,12 @@ import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
 import type { Caw } from "./caw";
 import type { Connections } from "./connections";
-import type { Fleet, HandoffDeps, SendDelivery } from "./delegation-actions";
+import type {
+  Fleet,
+  HandoffDeps,
+  HandoffThreads,
+  SendDelivery,
+} from "./delegation-actions";
 import {
   ALWAYS_LOAD,
   handoffInstructions,
@@ -161,6 +166,10 @@ export function createDelegationMcp(options: {
    * restored sessions' credential checks timed out behind it (2026-10-09).
    */
   instanceById: (id: string) => InstanceRow | undefined;
+  /** Sessions whose id starts with `prefix`, in any state find holds: a mention of one past the board's listing. */
+  instancesByShortId: (prefix: string) => InstanceRow[];
+  /** Threads a mention names, and the hand-off into one (delegation-actions.ts `HandoffThreads`). */
+  threads: HandoffThreads;
   /** The board and the machines, read in the hub's own process (delegation-actions.ts). */
   fleet: Fleet;
   /** Every former id, by the id its session has now (db `formerIds`). */
@@ -795,6 +804,8 @@ export function createDelegationMcp(options: {
         ? (message, attachments) => toUser(actor, message, attachments)
         : undefined,
       shownRefusal: (tool, paths) => options.shownRefusal?.(actor, tool, paths),
+      instancesByShortId: options.instancesByShortId,
+      threads: options.threads,
       deliver: (envelope) => options.deliver(envelope, actor),
       emit: (envelope) => emitted.push(envelope),
       spawn: (envelope) => options.spawn(envelope, actor),

@@ -62,6 +62,7 @@ import {
   CURATOR_DENIED_TOOLS,
   type Envelope,
   type EventThreadMessage,
+  handoffMarker,
   type InstanceRow,
   type ItemEnd,
   type NeutralOrigin,
@@ -2355,6 +2356,40 @@ export const createCaw = ({
       // which the wake then took for the same send again and never sent. A
       // send taken with no wake ("Make a note") is answered once it is kept.
       return kept.then(() => woken);
+    },
+
+    /**
+     * A session's hand-off to a thread (delegation-actions.ts `handoff`, a
+     * `@Title <thread#id8>` mention): Caw is woken for that thread with its
+     * words under the hand-off marker, as an outside event, never as yours.
+     * Refused while he is off, or cannot be woken: the words would reach no
+     * one. Answers what became of it.
+     */
+    async handed(
+      threadId: string,
+      from: { instanceId: string; name: string },
+      words: string
+    ): Promise<string> {
+      const into = db.thread(threadId) ?? refuse(404, `No thread ${threadId}.`);
+      const project = projectOf(into.projectId);
+      if (!project.caw) {
+        refuse(
+          409,
+          `${project.name}'s Caw is off, so nothing reads the thread “${into.title}”. Nothing was handed; turn Caw on, or hand it to a session.`
+        );
+      }
+      const woke = await wake(project.id, {
+        by: "event",
+        threadId: into.id,
+        text: `${handoffMarker(from.name, from.instanceId)}For the thread “${into.title}” (thread ${into.id}):\n\n${words}\n\nWhen the person should see your answer, post it there with thread_reply({ thread: "${into.id}", body }).`,
+      });
+      if (!woke) {
+        refuse(
+          409,
+          `Caw could not be woken for the thread “${into.title}” in ${project.name}. Nothing was handed.`
+        );
+      }
+      return `Handed to Caw in the thread “${into.title}” (${project.name}).`;
     },
 
     /**

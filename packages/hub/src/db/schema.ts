@@ -2717,6 +2717,28 @@ export const artifactUpdates = sqliteTable(
 );
 
 /**
+ * When a person last opened something that waits on their eyes (find.ts
+ * `waiting`): an artifact, at the revision they opened, or a delegate's
+ * report (its work item's id). One row per person and thing, moved by each
+ * open. An artifact revised past the revision here waits again.
+ */
+export const seenMarks = sqliteTable(
+  "seen_marks",
+  {
+    /** Who opened it; the hub has one person, `owner`. */
+    person: text("person").notNull(),
+    kind: text("kind").$type<"artifact" | "report">().notNull(),
+    objectId: text("object_id").notNull(),
+    /** The artifact's revision when it was opened; 0 for a report. */
+    revision: integer("revision").notNull().default(0),
+    seenAt: timestamp("seen_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.person, table.kind, table.objectId] }),
+  ]
+);
+
+/**
  * The turn a project's Caw is in, one row per lead session while it lasts
  * (caw.ts `turns`, its working copy): whose it is, so what he starts in it
  * after a hub restart is still that work's (work_items.origin). Written when

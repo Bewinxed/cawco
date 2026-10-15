@@ -14,7 +14,7 @@
  */
 
 import { Database } from "bun:sqlite";
-import type { TranscriptDoc } from "./text.ts";
+import { type DocAuthor, type TranscriptDoc, userAuthor } from "./text.ts";
 
 interface MessageData {
   time?: { created?: number; completed?: number };
@@ -46,34 +46,36 @@ interface Row {
   type: "user" | "assistant";
 }
 
-/** A message's words and the tools it called; null for one with neither, or an answer still streaming. */
+/** A message's words, its reasoning and the tools it called; null for one with none, or an answer still streaming. */
 function wordsOf(
   row: Row,
   message: MessageData,
   reasoning: boolean,
-): { text: string; tools: string[] } | null {
+): { author: DocAuthor; text: string; thinking: string; tools: string[] } | null {
   if (row.type === "user") {
-    return typeof message.text === "string" && message.text
-      ? { text: message.text, tools: [] }
-      : null;
+    if (typeof message.text !== "string") {
+      return null;
+    }
+    const said = userAuthor(message.text);
+    return said.text ? { ...said, thinking: "", tools: [] } : null;
   }
   if (message.time?.completed === undefined) {
     return null;
   }
   const texts: string[] = [];
+  const thoughts: string[] = [];
   const tools: string[] = [];
   for (const item of message.content ?? []) {
-    if (
-      typeof item.text === "string" &&
-      (item.type === "text" || (item.type === "reasoning" && reasoning))
-    ) {
+    if (typeof item.text === "string" && item.type === "text") {
       texts.push(item.text);
+    } else if (typeof item.text === "string" && item.type === "reasoning" && reasoning) {
+      thoughts.push(item.text);
     } else if (item.type === "tool" && typeof item.name === "string") {
       tools.push(item.name);
     }
   }
-  return texts.length > 0 || tools.length > 0
-    ? { text: texts.join("\n"), tools }
+  return texts.length > 0 || thoughts.length > 0 || tools.length > 0
+    ? { author: "agent", text: texts.join("\n"), thinking: thoughts.join("\n"), tools }
     : null;
 }
 
@@ -123,8 +125,10 @@ export function readOpenCodeDocs(
         sessionId: row.session_id,
         id: row.id,
         role: row.type,
+        author: words.author,
         timestamp: new Date(message.time?.created ?? row.time_created).toISOString(),
         text: words.text,
+        ...(words.thinking ? { thinking: words.thinking } : {}),
         tools: words.tools.length > 0 ? words.tools.join(" ") : undefined,
         cwd: row.directory,
         model: message.model?.id,

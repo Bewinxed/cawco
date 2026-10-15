@@ -99,6 +99,7 @@ import { type ActionsDb, actionsDb } from "./actions";
 import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type ConnectionsDb, connectionsDb } from "./connections";
+import { type FindDb, findDb } from "./find";
 import { type IngressDb, ingressDb } from "./ingress";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
@@ -699,6 +700,8 @@ export interface DbShape {
   ) => typeof instances.$inferSelect | undefined;
   /** The agent reported the session dead: what killed it, kept for late readers. */
   readonly failInstance: (id: string, error: string) => void;
+  /** What the find engine reads, and the person's seen marks (find.ts). */
+  readonly find: FindDb;
   /** Transcript deletion follows confirmed process exit, never precedes it. */
   readonly finishTranscriptDelete: (id: string) => void;
   readonly finishWorkspaceCreate: (id: string) => void;
@@ -7813,6 +7816,7 @@ const make = async (path: string): Promise<DbShape> => {
     ingress: ingressDb(db),
     relays: relaysDb(db),
     artifacts: artifactsDb(db),
+    find: findDb(db),
     previews: previewsDb(db),
     actions: actionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {

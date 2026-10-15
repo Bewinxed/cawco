@@ -200,9 +200,22 @@ enum JumpAuthor: String, CaseIterable {
     }
 }
 
-typealias TranscriptHit = Components.Schemas.GetApiSearch200.HitsPayloadPayload
+/// A transcript row: one conversation's best moment, as `GET /api/find` answers it.
+struct TranscriptHit: Equatable {
+    let docId: String
+    let sessionId: String
+    let machineId: String
+    /// Its launch folder's name, which names the row when the index holds no title.
+    let cwd: String?
+    let role: String
+    let snippet: String
+}
+
 /// A machine that couldn't answer, in the hub's own sentence (shown as it is).
-typealias SearchFailure = Components.Schemas.GetApiSearch200.FailuresPayloadPayload
+struct SearchFailure: Equatable {
+    let machineId: String
+    let message: String
+}
 
 /// The transcripts' full-text search: 150ms after the last keystroke, two
 /// characters or more, one hit per conversation, ten at most; any keystroke
@@ -236,13 +249,21 @@ final class JumpSearch {
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled else { return }
             do {
-                let response = try await hub.api.search.transcripts(.init(query: .init(q: parsed.text, limit: "20", role: scope?.role)))
+                let response = try await hub.api.search.find(.init(query: .init(q: parsed.text, limit: "20", kinds: "conversation", by: scope.flatMap { .init(rawValue: $0.rawValue) })))
                 guard !Task.isCancelled, let self else { return }
                 let body = try response.ok.body.json
-                var seen = Set<String>()
-                let next = Array(body.hits.filter { seen.insert($0.sessionId).inserted }.prefix(10))
+                // Each conversation whose transcript matched, by its best moment.
+                let next = Array(body.results.compactMap(\.value1).compactMap { conversation -> TranscriptHit? in
+                    guard let sessionId = conversation.sessionId, let moment = conversation.moments.first else { return nil }
+                    return TranscriptHit(docId: moment.docId, sessionId: sessionId, machineId: conversation.machine.id, cwd: conversation.dir,
+                                         role: moment.author == .owner ? "user" : "assistant", snippet: moment.excerpt)
+                }.prefix(10))
+                let missing = body.coverage.machines.filter { !$0.answered }.map {
+                    SearchFailure(machineId: $0.machineId,
+                                  message: "\($0.name) couldn't search: \($0.reason ?? "it gave no reason"). Its results are left out; the next search tries again.")
+                }
                 if next.map(\.docId) != hits.map(\.docId) { hits = next }
-                if body.failures.map(\.message) != failures.map(\.message) { failures = body.failures }
+                if missing.map(\.message) != failures.map(\.message) { failures = missing }
                 pending = false
             } catch {
                 guard !Task.isCancelled, let self else { return }

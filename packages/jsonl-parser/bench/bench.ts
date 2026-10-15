@@ -84,9 +84,9 @@ rmSync(`${indexPath}-shm`, { force: true });
     const t2 = performance.now();
     const hits = index.search(q, { limit: 5 });
     const ms2 = performance.now() - t2;
-    const top = hits[0];
+    const top = hits[0]?.moments[0];
     console.log(
-      `query ${ms2.toFixed(1).padStart(5)}ms  "${q}" → ${hits.length} hits${top ? ` | top: [${top.role}] ${top.snippet.slice(0, 70).replaceAll("\n", " ")}` : ""}`,
+      `query ${ms2.toFixed(1).padStart(5)}ms  "${q}" → ${hits.length} conversations${top ? ` | top: [${top.author}] ${top.snippet.slice(0, 70).replaceAll("\n", " ")}` : ""}`,
     );
   }
   console.log(`index         : ${index.count()} docs total`);

@@ -59,6 +59,7 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_LANDED,
   CONTROL_WORKSPACE_MIGRATE,
+  type TranscriptQuery,
   UPDATE_CAWCO,
 } from "@cawco/core";
 import { readInstallation } from "@cawco/core/binary-installation";
@@ -2624,16 +2625,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_SEARCH_TRANSCRIPTS,
       (query, options) =>
-        search.search(
-          query as string,
-          options as
-            | {
-                limit?: number;
-                sessionId?: string;
-                role?: "user" | "assistant";
-              }
-            | undefined
-        )
+        search.search(query as string, options as TranscriptQuery | undefined)
     );
 
     yield* Effect.logInfo(
