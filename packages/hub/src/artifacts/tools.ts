@@ -182,7 +182,7 @@ export const artifactDelete = {
 const pin = z
   .string()
   .regex(/^[0-9a-f-]{36}$/)
-  .describe("The pin's id, as its delivery names it.");
+  .describe("The pin's id, from its delivery.");
 
 export const commentRead = {
   name: "comment_read",
