@@ -6,7 +6,8 @@
  *   bun scripts/probe-kit/run.ts <spec>
  *
  * The second form runs one spec of its own in `specs/<spec>.ts`, beside the
- * web specs: a feature's probe (`artifacts`), on the same kit.
+ * web specs: a feature's probe (`artifacts`), on the same kit. A name found
+ * only in `specs/web/` runs as that web spec.
  *
  * Serves the dashboard as each spec needs it, once per run: the dev server
  * for the `/motion/` benches, the built dashboard (`vite preview`, built
@@ -35,6 +36,16 @@ const { sweepDeadFleets } = await import("../scratch-fleet");
 const { Run } = await import("./kit");
 
 const args = process.argv.slice(2);
+// A web spec named on its own (`run.ts new-session-layout`) runs as
+// `run.ts web new-session-layout`.
+if (
+  args[0] &&
+  args[0] !== "web" &&
+  !existsSync(join(import.meta.dir, "specs", `${args[0]}.ts`)) &&
+  existsSync(join(import.meta.dir, "specs", "web", `${args[0]}.ts`))
+) {
+  args.unshift("web");
+}
 const [kind, ...rest] = args;
 const own = kind ? join(import.meta.dir, "specs", `${kind}.ts`) : undefined;
 if (kind !== "web" && !(own && existsSync(own))) {
