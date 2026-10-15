@@ -1608,8 +1608,14 @@ rig_workspace() {
 # No single session can take a machine down: each child the keeper starts runs in a cgroup of its own, under
 # pids.max 8192 (cgroup.ts CHILD_TASKS) and, when the hub sets one, a memory limit (/api/session-limits). A runaway is
 # refused or killed inside its own child; the keeper says so (`proc.limit`), and the agent says it on the session,
-# where the hub keeps it. A cgroup's pids.current never passes its pids.max by fork (the kernel refuses the fork and
-# counts it in pids.events), so one read of each, with the refusals counted, is the proof; nothing is sampled.
+# where the hub keeps it. The kernel's cgroup v2 document (Documentation/admin-guide/cgroup-v2.rst, PID): "it is not
+# possible to violate a cgroup PID policy through fork() or clone()", and pids.peak is "The maximum value that the
+# number of processes in the cgroup and its descendants has ever reached". The limit held is read off pids.peak, never
+# pids.current: a refused fork adds to the counter, then checks it, then takes it back (kernel/cgroup/pids.c
+# pids_try_charge: `new = atomic64_add_return(…); if (new > limit) goto revert`), so a group held at its limit by a
+# runaway that keeps forking reads pids.max + 1 for an instant, holding no such task (the nightly of 2026-10-15 read
+# 8193 so). pids.peak moves only with a charge that stands, a fork's or a migration's (pids_update_watermark), so it
+# is the most the group ever held, over its whole life; pids.events max counts the refusals.
 # The keeper's last word on where its children run, since a moment (unix seconds): one of the lines cgroup.ts says.
 export KEEPER_TASKS=200
 export PLACED_RE='^\[sessiond\] each child runs in a cgroup of its own under (/sys/fs/cgroup/.+/cawco-sessiond-[^/]+\.service/children), under pids\.max 8192, all of them under pids\.max ([0-9]+) \(([0-9]+), less 64 kept for the keeper\); memory and CPU limits apply when they are set on the hub$'
@@ -1637,7 +1643,7 @@ group_of() { echo "/sys/fs/cgroup$(cgroup_of "$hubc" "$(child_pids "$hubc" "$1")
 runaway_gone() { as_user "$hubc" sh -c 'kill -KILL -"$(cat /tmp/limit-runaway.pid)" 2> /dev/null; rm -f /tmp/limit-runaway.pid' || true; }
 runaway_stays_its_own() {
   need_hub
-  local a=limit-tasks-a b=limit-tasks-b ack group children current pool token
+  local a=limit-tasks-a b=limit-tasks-b ack group children current peak pool token
   on_exit 'end_children "$hubc" limit-tasks-a limit-tasks-b'
   on_exit runaway_gone
   start_session "$hid" "$a" > /dev/null
@@ -1656,9 +1662,9 @@ runaway_stays_its_own() {
   # It stops at its own limit: the kernel refused its forks there.
   wait_until 120 '(( $(counter_on "$hubc" "'"$group"'/pids.events" max) > 0 ))' \
     || { echo "its pids.current $(as_user "$hubc" cat "$group/pids.current")"; return 1; }
-  current=$(as_user "$hubc" cat "$group/pids.current")
-  echo "its pids.current $current; pids.events max $(counter_on "$hubc" "$group/pids.events" max)"
-  (( current <= 8192 ))
+  peak=$(as_user "$hubc" cat "$group/pids.peak")
+  echo "its pids.peak $peak; its tasks now $(as_user "$hubc" sh -c 'wc -l < "$1/cgroup.threads"' sh "$group") (pids.current $(as_user "$hubc" cat "$group/pids.current")); pids.events max $(counter_on "$hubc" "$group/pids.events" max)"
+  (( peak <= 8192 ))
   # The machine's: all the keeper's children together stay far below their pool's cap.
   children=$(dirname "$group")
   current=$(as_user "$hubc" cat "$children/pids.current")
@@ -1737,7 +1743,7 @@ memory_limit_stays_its_own() {
 # set before the keeper starts: TasksMax on the keepers' units, in an administrator's drop-in for every unit named
 # cawco-sessiond-*, not on the user's whole tree (one there is shared with the hub, the agent and the dashboard).
 keeper_children_capped_on() {
-  local c=$1 since said group max limit keeper pid own forker ack current events
+  local c=$1 since said group max limit keeper pid own forker ack peak events
   on_exit "end_children $c cg-"
   echo "======== $c"
   $P exec "$c" sh -c "mkdir -p /etc/systemd/user/cawco-sessiond-.service.d && printf '[Service]\nTasksMax=%s\n' $KEEPER_TASKS > /etc/systemd/user/cawco-sessiond-.service.d/proof-tasks.conf"
@@ -1778,10 +1784,12 @@ keeper_children_capped_on() {
   echo "forker: $forker"
   [[ -n $forker ]]
   wait_until 60 '(( $(counter_on "$c" "'"$group"'/pids.events" max) > 0 ))'
-  current=$(as_user "$c" cat "$group/pids.current")
+  # The most the children ever held, pids.peak, never pids.current, which a refused fork lifts past the cap for an
+  # instant (see "one session's runaway is its own" above).
+  peak=$(as_user "$c" cat "$group/pids.peak")
   events=$(as_user "$c" cat "$group/pids.events")
-  echo "children's pids.current $current, pids.max $max; pids.events: $events"
-  (( current <= max ))
+  echo "children's pids.peak $peak (pids.current $(as_user "$c" cat "$group/pids.current")), pids.max $max; pids.events: $events"
+  (( peak <= max ))
   # The keeper still answers, is the same process, and refuses a further child in a sentence.
   keeper_list "$c" | json 'd => `the keeper answers list: ${d.procs.filter(p => p.alive).length} live children`'
   [[ "$(keeper_pid "$c")" == "$keeper" ]]
