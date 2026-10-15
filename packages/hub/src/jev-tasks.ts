@@ -401,9 +401,10 @@ export const createJevTasks = ({
       sendYours(attachTo, yours);
       return;
     }
-    const started = task.lastAttemptFailed
-      ? await dispatcher.retryFor(projectId, id, undefined)
-      : await dispatcher.startFor(projectId, id, undefined);
+    const started =
+      task.lastAttemptFailed || task.lastAttemptStopped
+        ? await dispatcher.retryFor(projectId, id, undefined)
+        : await dispatcher.startFor(projectId, id, undefined);
     console.log(
       `[tasks] ${id} in ${projectId}: a fresh attempt for your comment: ${started.text.split("\n")[0]}`
     );

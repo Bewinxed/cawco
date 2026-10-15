@@ -14,6 +14,7 @@ import type {
   DelegateAskStatus,
   DelegateEventKind,
   DelegateEventPayload,
+  EndedBy,
   Envelope,
   FleetMcpConfig,
   FleetScope,
@@ -1110,6 +1111,22 @@ export const workItems = sqliteTable(
      * caw-own.ts).
      */
     origin: text("origin").$type<WorkOrigin>().notNull().default("you"),
+    /**
+     * A person started it himself: an attempt at a task he started or
+     * retried from the dashboard, or that his own move into a `runs:` stage
+     * started (dispatch.ts). Only such an attempt's failure reaches his
+     * phone (push.ts); any other's is its starter's business.
+     */
+    byPerson: integer("by_person", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /**
+     * Who stopped it, for an item that ended `cancelled` (core `EndedBy`): a
+     * person, a session (its parent's or a lead's `stop_delegate`), the hub
+     * (`why`), or a signal from outside. Null for any other end, and for a
+     * cancel whose stopper the hub did not hear.
+     */
+    stoppedBy: text("stopped_by", { mode: "json" }).$type<EndedBy>(),
     /**
      * Where its commits go once its checks pass (landing.ts): onto the
      * workspace's base branch, to `cawco/<task or item>` on origin, to that

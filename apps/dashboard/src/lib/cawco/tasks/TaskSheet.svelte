@@ -92,6 +92,7 @@
       : {
           live: false,
           failed: false,
+          stopped: false,
           queued: false,
           startProblem: null,
           blockedBy: [] as string[],
@@ -396,6 +397,7 @@
       {#if shown?.needsYou ||
         flags.live ||
         flags.failed ||
+        flags.stopped ||
         flags.queued ||
         flags.blockedBy.length > 0 ||
         (shown?.labels.length ?? 0) > 0}
@@ -407,6 +409,9 @@
             <Badge variant="live"><IconWorking />Working</Badge>
           {:else if flags.failed}
             <Badge variant="fail"><IconError />Last attempt failed</Badge>
+          {:else if flags.stopped}
+            <!-- Who stopped it is the attempt's own line below. -->
+            <Badge variant="secondary">Stopped</Badge>
           {:else if flags.queued}
             <Badge variant="secondary">Queued</Badge>
           {/if}
@@ -547,7 +552,7 @@
               {/if}
             </h3>
             <RowFault reason={flags.startProblem} />
-            {#if flags.failed && !flags.live}
+            {#if (flags.failed || flags.stopped) && !flags.live}
               <div class="retry">
                 <Button
                   label="Retry"
@@ -573,6 +578,9 @@
                   <span class="attempt-when"
                     >{when(attempt.endedAt ?? attempt.startedAt)}</span
                   >
+                  {#if attempt.endedHow}
+                    <span class="attempt-how">{attempt.endedHow}</span>
+                  {/if}
                 </li>
               {/each}
             </ol>
@@ -733,6 +741,13 @@
     margin-inline-start: auto;
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  /* How it ended, on its own line under the attempt's name. */
+  .attempt-how {
+    flex-basis: 100%;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
   }
   .retry {
     display: flex;

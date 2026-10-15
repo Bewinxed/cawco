@@ -114,6 +114,12 @@ export type AttemptState =
 export interface TaskAttempt {
   /** When it ended, ms epoch; null while it is live. */
   endedAt: number | null;
+  /**
+   * How it ended when it did not land, as the hub words it: `Attempt
+   * failed: <why>`, or `Stopped by <who>` (`Stopped` when the hub did not
+   * hear who). Null while live and once done.
+   */
+  endedHow: string | null;
   /** The session running it. */
   instanceId: string;
   /** When it was filed, ms epoch. */
@@ -131,8 +137,13 @@ interface TaskFlags {
   attempts: TaskAttempt[];
   /** The tasks it waits on that have not landed. */
   blockedBy: string[];
-  /** Its newest attempt failed or was cancelled, and it is not done or dropped since. */
+  /**
+   * Its newest attempt failed, and it is not done or dropped since: its
+   * starter's business, never Needs you.
+   */
   lastAttemptFailed: boolean;
+  /** Its newest attempt was stopped (cancelled), and it is not done or dropped since: no failure. */
+  lastAttemptStopped: boolean;
   /** An attempt at it is starting or running. */
   liveAttempt: boolean;
   /** Its stage's `runs:` hook asked for an attempt, which waits for a slot. */
@@ -428,11 +439,13 @@ export function flagsOf(task: TaskSummary | TaskView): {
   live: boolean;
   queued: boolean;
   startProblem: string | null;
+  stopped: boolean;
 } {
   return {
     live: task.liveAttempt,
     blockedBy: task.blockedBy,
     failed: task.lastAttemptFailed,
+    stopped: task.lastAttemptStopped,
     queued: task.queuedStart,
     startProblem: task.startProblem,
   };

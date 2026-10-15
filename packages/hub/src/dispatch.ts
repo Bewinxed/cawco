@@ -17,7 +17,11 @@
  *   on. With Caw off there is no lead: such an attempt does not start.
  * - **The frontier** (tasks.ts `onFrontier`): tasks in a `todo` stage whose
  *   every `after` task is in a `done` stage, with no live attempt, whose last
- *   attempt did not fail, in rank order. A failed task waits for a person.
+ *   attempt neither failed nor was stopped, in rank order. A failed or
+ *   stopped attempt is its starter's business: its report goes to the
+ *   session that started it, the lead for the dispatcher's own (work-items
+ *   `reportees`), who retries it or moves on. It never waits for the person,
+ *   and only a person's own start's failure reaches his phone (push.ts).
  * - **Dispatch** starts the frontier on its own, only for a project with
  *   dispatch and Caw on, up to `max_attempts` live attempts, and not while
  *   `review_limit` tasks or more wait in `you` stages.
@@ -43,8 +47,8 @@
  *   request, to the first `you` stage (staying put without one) until the
  *   pull request merges ({@link Dispatcher.pullRequestMerged}); one that
  *   fails or is cancelled sends it back to the first `todo` stage, marked as
- *   failed.
- * - **A retry** of a task whose last attempt failed runs a fresh session in
+ *   failed or stopped (tasks.ts `TaskFlags`).
+ * - **A retry** of a task whose last attempt failed or was stopped runs a fresh session in
  *   that attempt's workspace when its clone is still there (else a new one),
  *   briefed with the failure and the to-dos as they stand; the failed
  *   attempt's session is stopped first (work-items.ts). Queued for owned
@@ -1038,6 +1042,9 @@ export const createDispatcher = ({
         ...taskLimits(task),
         ...placed,
         ...(origin ? { origin } : {}),
+        // Only a start a person asked for names `you` here: his dashboard
+        // start or retry, or his own move into a `runs:` stage.
+        byPerson: origin === "you",
         task: { id: task.id, projectId: project.id },
       });
       problems.delete(keyOf(project.id, task.id));
@@ -1202,11 +1209,11 @@ export const createDispatcher = ({
     const [previous] = db
       .projectAttempts(projectId)
       .filter((item) => item.taskId === task.id);
-    if (!(previous && task.lastAttemptFailed)) {
+    if (!(previous && (task.lastAttemptFailed || task.lastAttemptStopped))) {
       return refuse(
         409,
         previous
-          ? `${task.id}'s last attempt is ${previous.state}, not failed; start a new one with task_start.`
+          ? `${task.id}'s last attempt is ${previous.state}, not failed or stopped; start a new one with task_start.`
           : `${task.id} has no attempt to retry; start one with task_start.`
       );
     }

@@ -17,7 +17,7 @@
  *   next launch. A quiet device stays registered and is sent nothing.
  * - **Moments**: a session asks for permission or asks a question
  *   ({@link Push.onAsk}), a task enters a stage of kind `you`
- *   ({@link Push.taskChanged}), an attempt at a task fails
+ *   ({@link Push.taskChanged}), an attempt you started yourself fails
  *   ({@link Push.itemEnded}). Each item pushes at most once per transition:
  *   an ask once per request, and one collapse id per task, so a failed attempt
  *   that moves its task into a `you` stage is one push, not two.
@@ -1335,14 +1335,17 @@ export const createPush = ({
     },
 
     /**
-     * A work item ended (work-items.ts `itemEnded`). An attempt at a task that
-     * failed leaves the task waiting for you; a plain delegate's failure goes
-     * to its parent session, not to you. Named by its task's title, which the
+     * A work item ended (work-items.ts `itemEnded`). A failure is the
+     * business of whoever started the work, who hears its report: only an
+     * attempt you started yourself (`byPerson`: from the dashboard, or by
+     * your own move into a `runs:` stage) pushes its failure to you. One a
+     * session or the dispatcher started goes to that session or the lead,
+     * and nothing reaches the phone. Named by its task's title, which the
      * owner wrote; an item's own title is the delegating agent's words.
      */
     itemEnded(item: WorkItemRow): void {
       const { taskId, projectId } = item;
-      if (item.state !== "failed" || !taskId || !projectId) {
+      if (item.state !== "failed" || !item.byPerson || !taskId || !projectId) {
         return;
       }
       const at = new Date();

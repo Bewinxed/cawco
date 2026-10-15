@@ -446,6 +446,7 @@
       attempts: task.attempts,
       blockedBy: task.blockedBy,
       lastAttemptFailed: task.lastAttemptFailed,
+      lastAttemptStopped: task.lastAttemptStopped,
       liveAttempt: task.liveAttempt,
       queuedStart: task.queuedStart,
       startProblem: task.startProblem,

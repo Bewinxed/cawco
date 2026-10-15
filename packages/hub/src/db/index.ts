@@ -1942,6 +1942,7 @@ export interface DbShape {
         | "turns"
         | "instanceId"
         | "origin"
+        | "stoppedBy"
       >
     >
   ) => WorkItemRow | undefined;

@@ -189,6 +189,7 @@ public final class ProjectTaskList {
         row.blockedBy = task.blockedBy
         row.liveAttempt = task.liveAttempt
         row.lastAttemptFailed = task.lastAttemptFailed
+        row.lastAttemptStopped = task.lastAttemptStopped
         row.queuedStart = task.queuedStart
         row.updatedAt = task.updatedAt
         current.tasks[index] = row

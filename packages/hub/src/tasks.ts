@@ -27,13 +27,16 @@
  * - **Attempts** are work items at a task (dispatch.ts starts them). Every
  *   read carries a task's attempts and what follows from them and its edges:
  *   a live attempt, the tasks it still waits for, a last attempt that failed
- *   (it then waits for a person, in Needs you). The hub moves a task as
- *   `hub`: code, which the file's moves do not bind; its commits say so.
+ *   or was stopped, and how. That is its starter's business (the session
+ *   that started it, or the lead for the dispatcher's), never the person's
+ *   Needs you: a task waits for you only in a stage of kind `you`. The hub
+ *   moves a task as `hub`: code, which the file's moves do not bind; its
+ *   commits say so.
  *
  * Changes to one project's tasks are taken one at a time: two to-dos ticked
  * at once both land.
  */
-import type { InstanceRow, LandsMode } from "@cawco/core";
+import type { EndedBy, InstanceRow, LandsMode } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
@@ -193,6 +196,13 @@ export const sessionActor = (row: InstanceRow): TaskActor =>
 export interface TaskAttempt {
   /** When it ended, ms epoch; null while it is live. */
   endedAt: number | null;
+  /**
+   * How it ended when it did not land, in a sentence the task shows: failed,
+   * `Attempt failed: <why>` (the first line of what the hub reported);
+   * cancelled, `Stopped by <who>` (`Stopped` when the hub did not hear who).
+   * Null while live and once done.
+   */
+  endedHow: string | null;
   /** The session running it. */
   instanceId: string;
   /** When it was filed, ms epoch. */
@@ -212,8 +222,20 @@ export interface TaskFlags {
    * file deleted or moved out of tasks/ (task-history.ts `goneTasks`).
    */
   blockedBy: string[];
-  /** Its newest attempt failed or was cancelled, and it is not done or dropped since: it waits for a person. */
+  /**
+   * Its newest attempt failed, and it is not done or dropped since. The
+   * failure is its starter's business (the session that started it, or the
+   * lead for the dispatcher's), who hears the report: never the person's
+   * Needs you. It keeps the task off the dispatcher's frontier until someone
+   * starts or retries it.
+   */
   lastAttemptFailed: boolean;
+  /**
+   * Its newest attempt was cancelled (stopped), and it is not done or dropped
+   * since: no failure, and off the frontier as a failed one is. Who stopped
+   * it is its attempt's `endedHow`.
+   */
+  lastAttemptStopped: boolean;
   /** An attempt at it is starting or running. */
   liveAttempt: boolean;
   /** Its stage's `runs:` hook asked for an attempt, which waits for a slot under the project's max_attempts. */
@@ -271,7 +293,14 @@ export interface TaskStore {
     projectId: string
   ) => Pick<
     WorkItemRow,
-    "createdAt" | "endedAt" | "id" | "instanceId" | "state" | "taskId"
+    | "createdAt"
+    | "endedAt"
+    | "error"
+    | "id"
+    | "instanceId"
+    | "state"
+    | "stoppedBy"
+    | "taskId"
   >[];
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
@@ -343,8 +372,9 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   kind: StageKind | null;
   labels: string[];
   /**
-   * It waits for you: its stage is of kind `you`, or its last attempt failed.
-   * Derived on read, never stored.
+   * It waits for you: its stage is of kind `you`, where only you move it on.
+   * An attempt that failed or was stopped is its starter's business, not
+   * yours. Derived on read, never stored.
    */
   needsYou: boolean;
   number: number;
@@ -423,7 +453,7 @@ export interface TaskView extends TaskFlags, TaskTimes {
   labels: string[];
   /** Where an attempt's work lands, as the file says; null: the project's default. */
   lands: LandsMode | null;
-  /** It waits for you: its stage is of kind `you`, or its last attempt failed. */
+  /** It waits for you: its stage is of kind `you` (see {@link TaskSummary.needsYou}). */
   needsYou: boolean;
   number: number;
   outputs: string[];
@@ -751,6 +781,42 @@ const commentGist = (text: string): string => {
 const kindIn = (stages: Stages | undefined, stage: string): StageKind | null =>
   (stages && stageNamed(stages, stage)?.kind) ?? null;
 
+/** How long a failure's first line may run in its task's sentence. */
+const WHY_LIMIT = 200;
+
+/** Who stopped an attempt, as its task says it. */
+const stopperWords = (by: EndedBy): string => {
+  switch (by.kind) {
+    case "person":
+      return "you";
+    case "session":
+      return by.name;
+    case "hub":
+      return `the hub (${by.why})`;
+    default:
+      return `a ${by.signal} from outside CawCo`;
+  }
+};
+
+/** How an attempt ended when it did not land ({@link TaskAttempt.endedHow}). */
+const endedHowOf = (
+  item: ReturnType<TaskStore["attempts"]>[number]
+): string | null => {
+  if (item.state === "cancelled") {
+    return item.stoppedBy
+      ? `Stopped by ${stopperWords(item.stoppedBy)}`
+      : "Stopped";
+  }
+  if (item.state !== "failed") {
+    return null;
+  }
+  const why = item.error?.trim().split("\n")[0]?.trim();
+  if (!why) {
+    return "Attempt failed";
+  }
+  return `Attempt failed: ${why.length > WHY_LIMIT ? `${why.slice(0, WHY_LIMIT - 1)}…` : why}`;
+};
+
 /** An attempt as a task read shows it. */
 const attemptOf = (
   item: ReturnType<TaskStore["attempts"]>[number]
@@ -760,6 +826,7 @@ const attemptOf = (
   instanceId: item.instanceId,
   startedAt: item.createdAt.getTime(),
   endedAt: item.endedAt?.getTime() ?? null,
+  endedHow: endedHowOf(item),
 });
 
 /** What an edge to a task asks of it: its stage, and the task it repeats. */
@@ -769,21 +836,19 @@ type EdgeEnd = Pick<TaskIndexRow, "duplicateOf" | "stage">;
 const endsById = (rows: TaskIndexRow[]): Map<string, EdgeEnd> =>
   new Map(rows.map((row) => [row.id, row]));
 
-/** Whether a task waits for a person: its stage is of kind `you`, or its last attempt failed. */
-const waitsForYou = (kind: StageKind | null, flags: TaskFlags): boolean =>
-  kind === "you" || flags.lastAttemptFailed;
-
 /**
  * Whether the dispatcher may start an attempt at a task on its own (the
  * frontier): it is in a `todo` stage, everything it waits for is done, no
- * attempt at it is live, its last one did not fail, and the hub's last try
- * to start one did not fail on the task as it stands.
+ * attempt at it is live, its last one neither failed nor was stopped (so a
+ * failure is never restarted on its own, and a stop is never undone), and
+ * the hub's last try to start one did not fail on the task as it stands.
  */
 export const onFrontier = (task: TaskSummary): boolean =>
   task.kind === "todo" &&
   task.blockedBy.length === 0 &&
   !task.liveAttempt &&
   !task.lastAttemptFailed &&
+  !task.lastAttemptStopped &&
   task.startProblem === null;
 
 const summaryOf = (
@@ -804,7 +869,7 @@ const summaryOf = (
     title: row.title,
     stage: row.stage,
     kind,
-    needsYou: waitsForYou(kind, flags),
+    needsYou: kind === "you",
     ...flags,
     type: row.type,
     after: row.after,
@@ -837,7 +902,7 @@ const viewOf = (
   title,
   stage: parsed.fields.stage ?? "",
   kind: kindIn(stages, parsed.fields.stage ?? ""),
-  needsYou: waitsForYou(kindIn(stages, parsed.fields.stage ?? ""), flags),
+  needsYou: kindIn(stages, parsed.fields.stage ?? "") === "you",
   ...flags,
   type: parsed.fields.type,
   after: parsed.fields.after,
@@ -1282,6 +1347,7 @@ export const createTasks = (store: TaskStore) => {
     const attempts = byTask.get(task.id) ?? [];
     const [last] = attempts;
     const kind = kindIn(stages, task.stage);
+    const open = kind !== "done" && kind !== "dropped";
     /**
      * Done: in a done stage, or dropped as a duplicate of a task that is
      * done. A task the folder's history shows taken out of tasks/ is done
@@ -1310,10 +1376,8 @@ export const createTasks = (store: TaskStore) => {
       attempts,
       liveAttempt: attempts.some((attempt) => isLive(attempt.state)),
       blockedBy: task.after.filter((id) => !done(id, new Set())),
-      lastAttemptFailed:
-        (last?.state === "failed" || last?.state === "cancelled") &&
-        kind !== "done" &&
-        kind !== "dropped",
+      lastAttemptFailed: last?.state === "failed" && open,
+      lastAttemptStopped: last?.state === "cancelled" && open,
       queuedStart: queued.has(task.id),
       startProblem: store.startProblem?.(projectId, task) ?? null,
     };

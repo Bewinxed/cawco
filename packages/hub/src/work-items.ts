@@ -38,6 +38,7 @@ import type {
   CommandQueue,
   CommandResult,
   DelegateType,
+  EndedBy,
   Envelope,
   HarnessKind,
   InstanceRow,
@@ -461,6 +462,11 @@ export interface WorkItemRequest {
   account?: string;
   /** What it may spend before the hub stops it; the project's default fills what this leaves out. */
   budget?: WorkBudget;
+  /**
+   * A person started it himself (work_items.by_person): set by the
+   * dispatcher for an attempt he started from the dashboard.
+   */
+  byPerson?: boolean;
   canDelegate?: boolean;
   /** Its acceptance checks: at least one. */
   checks: WorkItemCheck[];
@@ -2883,6 +2889,7 @@ export const createWorkItems = ({
     const project = projectId ? db.project(projectId) : undefined;
     return {
       origin: originOf(request, parent),
+      byPerson: request.byPerson ?? false,
       ...(request.task ? { taskId: request.task.id } : {}),
       ...(projectId ? { projectId } : {}),
       lands: request.lands ?? "main",
@@ -4510,13 +4517,18 @@ export const createWorkItems = ({
     /** {@link followSessions}: the items of the sessions whose rows just moved follow them. */
     followSessions,
 
-    /** Its session was stopped or archived while the work was live. */
-    cancelled(row: InstanceRow): void {
+    /**
+     * Its session was stopped or archived while the work was live, by `by`
+     * (null: a stop whose stopper the hub did not hear), kept on the item so
+     * its task says who stopped it.
+     */
+    cancelled(row: InstanceRow, by: EndedBy | null): void {
       const item = itemOf(row);
       if (item) {
         quiet.delete(item.id);
         finish(item, {
           state: "cancelled",
+          stoppedBy: by,
           checkingSince: null,
           submission: null,
         });
@@ -4682,6 +4694,7 @@ export const createWorkItems = ({
       quiet.delete(item.id);
       const cancelled = finish(item, {
         state: "cancelled",
+        stoppedBy: { kind: "person" },
         dismissedAt,
         checkingSince: null,
         submission: null,

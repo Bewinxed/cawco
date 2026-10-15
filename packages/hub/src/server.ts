@@ -10224,7 +10224,7 @@ export const createServer = (
     const row = db.ownedInstance(instanceId);
     lifecycle.endSession(instanceId, intent, requestId);
     if (row) {
-      sessionEnding(row);
+      sessionEnding(row, by);
     }
     // Once per stop: a session already ending says nothing new.
     const [stored] = db.getInstancesByIds([instanceId]);
@@ -10239,23 +10239,29 @@ export const createServer = (
    * cuts its turn (Claude Code does), which its transcript then holds.
    */
   const sessionEnding = (
-    row: { id: string } & Parameters<typeof workItems.cancelled>[0]
+    row: { id: string } & Parameters<typeof workItems.cancelled>[0],
+    by: EndedBy
   ) => {
-    workItems.cancelled(row);
+    workItems.cancelled(row, by);
     forgetPending(row.id, UNREAD.stopped, false, "all");
     endPreviews(row.id);
   };
   /**
    * A stop stored without asking the machine first: its reconcile sends it
    * whenever the machine is there to take it. For a machine that is away,
-   * and for a session with no process to wait on.
+   * and for a session with no process to wait on. `by` stopped it.
    */
-  const oweStop = (instanceId: string): void => {
+  const oweStop = (instanceId: string, by: EndedBy): void => {
     const row = db.ownedInstance(instanceId);
     lifecycle.oweEndSession(instanceId, "stop");
     if (row) {
-      sessionEnding(row);
+      sessionEnding(row, by);
     }
+  };
+  /** Who stops a project's sessions: the hub, as the project goes or Caw is turned off. */
+  const PROJECT_STOP: EndedBy = {
+    kind: "hub",
+    why: "its project's sessions were stopped (the project is being forgotten, or Caw was turned off)",
   };
   // A project's running sessions, stopped before it is forgotten, each
   // reported to the dashboard as its machine confirms the end (project-stops.ts).
@@ -10263,14 +10269,10 @@ export const createServer = (
     db,
     lifetime,
     pulse: (id) => pulses.get(id),
-    stop: (id) =>
-      endSession(id, "stop", {
-        kind: "hub",
-        why: "its project's sessions were stopped (the project is being forgotten, or Caw was turned off)",
-      }),
+    stop: (id) => endSession(id, "stop", PROJECT_STOP),
     // A machine that is away: the stop is stored, and its next register's
     // reconcile sends it (session-lifecycle `reconcile`).
-    owe: (id) => oweStop(id),
+    owe: (id) => oweStop(id, PROJECT_STOP),
     online: (machineId) => !!registry.agent(machineId),
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
@@ -15004,6 +15006,11 @@ export const createServer = (
     }
     return answer.result;
   };
+  /** Who stops a work item's session once the item is over or its workspace closed: the hub. */
+  const ITEM_OVER: EndedBy = {
+    kind: "hub",
+    why: "its work item is over, or its workspace was closed",
+  };
   // A plain folder made a git repository when it is first needed as one.
   // Its note reaches Caw, made further down; nothing needs it before the hub is up.
   const placeRepos = createPlaceRepos({
@@ -15043,13 +15050,10 @@ export const createServer = (
         NO_PROCESS_STATUSES.has(row.status) &&
         !lifecycle.holds(row.machineId, instanceId)
       ) {
-        oweStop(instanceId);
+        oweStop(instanceId, ITEM_OVER);
         return;
       }
-      endSession(instanceId, "stop", {
-        kind: "hub",
-        why: "its work item is over, or its workspace was closed",
-      });
+      endSession(instanceId, "stop", ITEM_OVER);
       await waitForEnd(instanceId, waitMs);
     },
     // An attempt at a task ended: the dispatcher moves the task. Deferred: the
@@ -15103,10 +15107,11 @@ export const createServer = (
     },
     call: callMachine,
   });
-  // A hub crash after intent persistence cannot leave its work item reading live.
+  // A hub crash after intent persistence cannot leave its work item reading
+  // live. Who asked for the stop was not kept with its intent.
   for (const row of db.sessionOwnership()) {
     if (row.endIntent && !row.endConfirmedAt) {
-      workItems.cancelled(row);
+      workItems.cancelled(row, null);
     }
   }
   /** Who stops a workflow's step session: its workflow, when the step or its run ends. */
@@ -16049,13 +16054,11 @@ export const createServer = (
         );
       }
       if (envelope.verb === "stop") {
-        endSession(row.id, "stop", {
-          kind: "session",
-          name: sessionName(requester),
-        });
+        const by: EndedBy = { kind: "session", name: sessionName(requester) };
+        endSession(row.id, "stop", by);
         endPreviews(row.id);
         noteInterrupt(row.id);
-        workItems.cancelled(row);
+        workItems.cancelled(row, by);
         return;
       }
       const retired = workItems.refusal(row, {
@@ -22792,9 +22795,11 @@ export const createServer = (
                 heldSessions.delete(message.instanceId);
                 endPreviews(message.instanceId);
                 // Stopped by anyone while its work was live: the work is over.
-                // Read before the row is filed away, which a discard hides.
+                // Read before the row is filed away, which a discard hides. A
+                // stop the hub asked for cancelled it already, naming who; one
+                // still live here stopped without the hub hearing who did.
                 if (ended) {
-                  workItems.cancelled(ended);
+                  workItems.cancelled(ended, null);
                 }
                 // What it was sent and had not read did not go, unless it wrote
                 // some of it down as it stopped.

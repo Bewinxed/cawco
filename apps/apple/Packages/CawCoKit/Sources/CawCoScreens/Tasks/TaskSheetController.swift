@@ -276,7 +276,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             if !task.attempts.isEmpty || task.startProblem != nil {
                 items.append(.attemptsHead)
                 if task.startProblem != nil { items.append(.startProblem) }
-                if task.lastAttemptFailed && !task.liveAttempt { items.append(.retry) }
+                if (task.lastAttemptFailed || task.lastAttemptStopped) && !task.liveAttempt { items.append(.retry) }
                 items += task.attempts.map { .attempt($0.workItemId) }
             }
             items.append(.path)
@@ -337,6 +337,8 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
                 badges.append(KitBadge("Working", variant: .live, glyph: .working))
             } else if shown.lastAttemptFailed {
                 badges.append(KitBadge("Last attempt failed", variant: .fail, glyph: .failed))
+            } else if shown.lastAttemptStopped {
+                badges.append(KitBadge("Stopped", variant: .secondary))
             } else if shown.queuedStart {
                 badges.append(KitBadge("Queued", variant: .secondary))
             }
@@ -763,7 +765,25 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             let open = openSession
             dismiss(animated: true) { open(instanceId) }
         }, for: .primaryActionTriggered)
-        return row
+        // How it ended when it did not land ("Attempt failed: …", "Stopped by Caw"), on its own line under the row.
+        guard let how = attempt.endedHow else { return row }
+        row.accessibilityLabel = "Attempt \(number), \(how), \(when.text ?? "")"
+        let line = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+        line.text = how
+        line.isAccessibilityElement = false
+        let indented = UIView()
+        indented.addSubview(line)
+        line.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            line.topAnchor.constraint(equalTo: indented.topAnchor),
+            line.bottomAnchor.constraint(equalTo: indented.bottomAnchor),
+            line.leadingAnchor.constraint(equalTo: indented.leadingAnchor, constant: Space.space3),
+            line.trailingAnchor.constraint(equalTo: indented.trailingAnchor, constant: -Space.space3),
+        ])
+        let stack = UIStackView(arrangedSubviews: [row, indented])
+        stack.axis = .vertical
+        stack.spacing = Space.space1
+        return stack
     }
 
     // MARK: Small parts

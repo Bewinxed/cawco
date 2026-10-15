@@ -26897,7 +26897,7 @@
             }
           },
           "needsYou": {
-            "description": "It waits for you: its stage is of kind `you`, or its last attempt failed.\nDerived on read, never stored.",
+            "description": "It waits for you: its stage is of kind `you`, where only you move it on.\nAn attempt that failed or was stopped is its starter's business, not\nyours. Derived on read, never stored.",
             "type": "boolean"
           },
           "number": {
@@ -26974,7 +26974,11 @@
             }
           },
           "lastAttemptFailed": {
-            "description": "Its newest attempt failed or was cancelled, and it is not done or dropped since: it waits for a person.",
+            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nlead for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
+            "type": "boolean"
+          },
+          "lastAttemptStopped": {
+            "description": "Its newest attempt was cancelled (stopped), and it is not done or dropped\nsince: no failure, and off the frontier as a failed one is. Who stopped\nit is its attempt's `endedHow`.",
             "type": "boolean"
           },
           "liveAttempt": {
@@ -27059,6 +27063,7 @@
           "id",
           "labels",
           "lastAttemptFailed",
+          "lastAttemptStopped",
           "liveAttempt",
           "needsYou",
           "number",
@@ -27088,6 +27093,13 @@
               "number"
             ]
           },
+          "endedHow": {
+            "description": "How it ended when it did not land, in a sentence the task shows: failed,\n`Attempt failed: <why>` (the first line of what the hub reported);\ncancelled, `Stopped by <who>` (`Stopped` when the hub did not hear who).\nNull while live and once done.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "instanceId": {
             "description": "The session running it.",
             "type": "string"
@@ -27105,6 +27117,7 @@
         },
         "required": [
           "endedAt",
+          "endedHow",
           "instanceId",
           "startedAt",
           "state",
@@ -27249,7 +27262,7 @@
             "description": "Where an attempt's work lands, as the file says; null: the project's default."
           },
           "needsYou": {
-            "description": "It waits for you: its stage is of kind `you`, or its last attempt failed.",
+            "description": "It waits for you: its stage is of kind `you` (see {@link TaskSummary.needsYou}).",
             "type": "boolean"
           },
           "number": {
@@ -27354,7 +27367,11 @@
             }
           },
           "lastAttemptFailed": {
-            "description": "Its newest attempt failed or was cancelled, and it is not done or dropped since: it waits for a person.",
+            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nlead for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
+            "type": "boolean"
+          },
+          "lastAttemptStopped": {
+            "description": "Its newest attempt was cancelled (stopped), and it is not done or dropped\nsince: no failure, and off the frontier as a failed one is. Who stopped\nit is its attempt's `endedHow`.",
             "type": "boolean"
           },
           "liveAttempt": {
@@ -27447,6 +27464,7 @@
           "id",
           "labels",
           "lastAttemptFailed",
+          "lastAttemptStopped",
           "liveAttempt",
           "needsYou",
           "number",

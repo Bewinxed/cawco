@@ -100,6 +100,10 @@ type TaskLine = TaskList["tasks"][number];
 const attemptFields = (task: TaskLine) => ({
   ...(task.liveAttempt ? { attempt: "live" } : {}),
   ...(task.lastAttemptFailed ? { attempt: "failed" } : {}),
+  ...(task.lastAttemptStopped ? { attempt: "stopped" } : {}),
+  ...(task.lastAttemptFailed || task.lastAttemptStopped
+    ? { attemptEnded: task.attempts[0]?.endedHow }
+    : {}),
   ...(task.blockedBy.length > 0 ? { blockedBy: task.blockedBy } : {}),
   ...(task.startProblem ? { startProblem: task.startProblem } : {}),
 });
@@ -484,7 +488,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_retry",
-      "Retry a task whose last attempt failed or was cancelled: a fresh session in that attempt's workspace as it was left (a new one if the clone is gone), briefed from the task file with the failure and the to-dos done so far, reporting to you. Refused while an attempt is live or the last did not fail.",
+      "Retry a task whose last attempt failed or was cancelled: a fresh session in that attempt's workspace as it was left (a new one if the clone is gone), briefed from the task file with the failure and the to-dos done so far, reporting to you. Refused while an attempt is live or the last neither failed nor was stopped.",
       { id: taskRef() },
       async ({ id }) => {
         const { projectId } = scope();
