@@ -1297,22 +1297,19 @@
 
   /* A button's icon slot (Button with `label`): its icon at rest, the
      spinner while its work runs, the check when it is done, cross-fading in
-     one cell. A button with no icon at rest keeps the slot folded — no width
-     and no gap — and opens it as the work starts, over --dur-morph on
-     --ease-out, the pace its label morphs at. */
+     one cell over --dur-morph, the clock its label crosses on. A button with
+     no icon at rest keeps the slot folded for good (no width and no gap) and
+     draws what the slot shows over its label's start while the label fades
+     (PendingContent), so its width never changes. */
   .kit-slot {
     flex: none;
     inline-size: var(--btn-icon);
-    --icon-swap-dur: var(--dur-control);
+    --icon-swap-dur: var(--dur-morph);
 
-    &[data-shown="false"] {
+    &[data-over] {
       inline-size: 0;
       margin-inline-end: calc(-1 * var(--btn-gap));
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        inline-size var(--dur-morph) var(--ease-out),
-        margin-inline-end var(--dur-morph) var(--ease-out);
+      place-items: center start;
     }
   }
 
@@ -1374,6 +1371,15 @@
 
     & path {
       transition-duration: var(--dur-control);
+    }
+  }
+  /* In a button's slot, menu item or not, the check draws on the clock the
+     slot and the label cross on. */
+  .kit-slot .kit-tick {
+    transition-duration: var(--dur-morph);
+
+    & path {
+      transition-duration: var(--dur-morph);
     }
   }
 

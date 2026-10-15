@@ -23,8 +23,10 @@
    * What a button that runs something draws inside itself: the icon slot (its
    * icon at rest, the spinner while the work runs, a drawn check when it
    * ends well, cross-fading in one cell) and the label, which cross-fades to
-   * `pendingLabel` and back in a cell as wide as the wider of the two, so the
-   * button keeps its width. The kit Button draws it; a button in another skin (the
+   * `pendingLabel` and back in a cell as wide as the wider of the two, all
+   * on one clock (--dur-morph, ease-out), so the button keeps its width. A
+   * button with no rest icon keeps no slot: what the slot shows stands over
+   * its label's start while the words fade out. The kit Button draws it; a button in another skin (the
    * new-session dialog, a workflow form) draws it in its own element, sets
    * --btn-gap and --btn-icon to its gap and icon size, and takes presses
    * through `whileIdle`. An icon-only button passes no `label`: only its
@@ -121,6 +123,14 @@
     (progress ?? 0) > 0 && (phase === "pending" || (phase === "idle" && failed))
   );
   const share = $derived(Math.min(1, Math.max(0, progress ?? 0)));
+  /**
+   * A button with no rest icon has no slot of its own: the spinner, ring or
+   * check stands over its label's start while the words fade, so the button
+   * never changes width.
+   */
+  const covered = $derived(
+    Icon === undefined && (phase !== "idle" || ringShown)
+  );
 
   let spinnerCell = $state<HTMLElement | null>(null);
   let arc = $state<SVGCircleElement | null>(null);
@@ -166,10 +176,7 @@
   });
 </script>
 
-<span
-  class="icon-swap kit-slot"
-  data-shown={Icon !== undefined || phase !== "idle" || ringShown}
->
+<span class="icon-swap kit-slot" data-over={Icon === undefined || undefined}>
   {#if Icon}
     <span data-active={phase === "idle" && !ringShown}
       ><Icon class="size-(--btn-icon)" /></span
@@ -220,17 +227,19 @@
   <!-- Icon only: nothing to morph. -->
 {:else}
   <span class="kit-label"
-    >{#if swapsLabel}
-      <span class="kit-words"
-        ><span aria-hidden={pending || undefined} data-active={!pending}
-          ><MorphText text={label} /></span
-        ><span aria-hidden={!pending || undefined} data-active={pending}
-          >{pendingLabel}</span
-        ></span
-      >
-    {:else}
-      <MorphText text={label} />
-    {/if}
+    ><span class="kit-text" data-covered={covered}
+      >{#if swapsLabel}
+        <span class="kit-words"
+          ><span aria-hidden={pending || undefined} data-active={!pending}
+            ><MorphText text={label} /></span
+          ><span aria-hidden={!pending || undefined} data-active={pending}
+            >{pendingLabel}</span
+          ></span
+        >
+      {:else}
+        <MorphText text={label} />
+      {/if}</span
+    >
     {#if reason}
       <span class="kit-reason" role="alert" transition:unfold>{reason}</span>
     {/if}</span
@@ -257,6 +266,15 @@
     inline-size: 100%;
     block-size: 100%;
     pointer-events: none;
+  }
+  /* The words give way to what a label-only button's slot draws over them,
+     on the slot's clock. */
+  .kit-text {
+    transition: opacity var(--dur-morph) var(--ease-out);
+
+    &[data-covered="true"] {
+      opacity: 0;
+    }
   }
   /* The label and its pending wording in one cell, read from the start: the
      cell is as wide as the wider one, and the swap is one opacity and blur

@@ -20,6 +20,10 @@
  *   a slot that clips it.
  * - A step that lands mid-step starts from what is drawn: each letter from
  *   where it is and how opaque it is, the leaving ones fading on from there.
+ * - With less motion (`fade`) nothing moves: the old words fade out where
+ *   they stand and the new ones fade in where they lay out, in the same held
+ *   box, opacity only, on the same clock (DESIGN.md, The Reduced Motion
+ *   Rule: "It does not mean an instant swap").
  */
 import { diffSegments, type Segment, segmentText } from "torph";
 
@@ -60,9 +64,15 @@ const face = (el: HTMLElement): HTMLElement =>
     ? el
     : ((el.firstElementChild as HTMLElement | null) ?? el);
 
-/** A letter arriving fades up from 0.95; a digit rolls in from below. */
-function arrive(el: HTMLElement, run: Run): void {
+/**
+ * A letter arriving fades up from 0.95; a digit rolls in from below. With
+ * less motion it only fades up.
+ */
+function arrive(el: HTMLElement, run: Run, fade: boolean): void {
   run(el, [{ opacity: 0 }, { opacity: 1 }]);
+  if (fade) {
+    return;
+  }
   if (el.dataset.roll === undefined) {
     run(el, [{ transform: SHRINK }, { transform: "none" }]);
   } else {
@@ -86,9 +96,15 @@ function glide(el: HTMLElement, was: Drawn, origin: DOMRect, run: Run): void {
   }
 }
 
-/** A letter leaving fades down to 0.95 where it stands; a digit rolls out above. */
-function go(el: HTMLElement, opacity: number, run: Run): void {
+/**
+ * A letter leaving fades down to 0.95 where it stands; a digit rolls out
+ * above. With less motion it only fades out.
+ */
+function go(el: HTMLElement, opacity: number, run: Run, fade: boolean): void {
   run(el, [{ opacity }, { opacity: 0 }]);
+  if (fade) {
+    return;
+  }
   if (el.dataset.roll === undefined) {
     run(el, [{ transform: "none" }, { transform: SHRINK }]);
   } else {
@@ -100,6 +116,8 @@ export class Morph {
   readonly #root: HTMLElement;
   readonly #duration: number;
   readonly #easing: string;
+  /** Less motion: the old words fade out and the new ones in, in place. */
+  readonly #fade: boolean;
   #segments: Segment[] = [];
   /** The elements in flow, by segment id. */
   readonly #flow = new Map<string, HTMLElement>();
@@ -108,10 +126,14 @@ export class Morph {
   #clock: Animation[] = [];
   #step = 0;
 
-  constructor(root: HTMLElement, duration: number, easing: string) {
+  constructor(
+    root: HTMLElement,
+    options: { duration: number; easing: string; fade: boolean }
+  ) {
     this.#root = root;
-    this.#duration = duration;
-    this.#easing = easing;
+    this.#duration = options.duration;
+    this.#easing = options.easing;
+    this.#fade = options.fade;
   }
 
   /**
@@ -143,15 +165,15 @@ export class Morph {
       animation.cancel();
     }
 
-    const { segments, splits } = diffSegments(this.#segments, value, LOCALE, {
-      numbers: true,
-    });
-    this.#segments = segments;
-    for (const [id, pieces] of splits) {
-      this.#split(id, pieces, drawn);
+    if (this.#fade) {
+      // Nothing moves: every letter drawn leaves where it stands, and the
+      // new words arrive where they lay out.
+      this.#segments = segmentText(value, LOCALE, true);
+      this.#leave(new Set(), drawn);
+    } else {
+      this.#match(value, drawn);
     }
-    this.#leave(new Set(segments.map((segment) => segment.id)), drawn);
-    const { flow, arriving } = this.#lay(segments);
+    const { flow, arriving } = this.#lay(this.#segments);
     this.#hold(box);
 
     this.#clock = this.#run(flow, arriving, drawn);
@@ -172,6 +194,18 @@ export class Morph {
     }
     this.#clock = [];
     return true;
+  }
+
+  /** The new words matched letter by letter against the ones drawn. */
+  #match(value: string, drawn: Map<HTMLElement, Drawn>): void {
+    const { segments, splits } = diffSegments(this.#segments, value, LOCALE, {
+      numbers: true,
+    });
+    this.#segments = segments;
+    for (const [id, pieces] of splits) {
+      this.#split(id, pieces, drawn);
+    }
+    this.#leave(new Set(segments.map((segment) => segment.id)), drawn);
   }
 
   /** What is drawn now, where it is drawn: mid-step, its moves included. */
@@ -283,7 +317,7 @@ export class Morph {
         continue;
       }
       if (arriving.has(el)) {
-        arrive(el, run);
+        arrive(el, run, this.#fade);
         continue;
       }
       const was = drawn.get(el);
@@ -292,7 +326,7 @@ export class Morph {
       }
     }
     for (const el of this.#leaving) {
-      go(el, drawn.get(el)?.opacity ?? 1, run);
+      go(el, drawn.get(el)?.opacity ?? 1, run, this.#fade);
     }
     const start = document.timeline.currentTime;
     for (const animation of clock) {

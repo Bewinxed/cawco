@@ -53,8 +53,9 @@
    * twice (a plain copy for screen readers beside its aria-hidden letters).
    * It lays out the words the text had and starts the morph to the new ones
    * in the same frame, and the plain text returns once the morph has
-   * settled. First draw and
-   * reduced motion never morph: the text is just the new text.
+   * settled. The first draw never morphs: the text is just the text. With
+   * less motion nothing moves: the old words fade out and the new ones in,
+   * in the same held box, opacity only, over --dur-morph.
    *
    * `wrap`: the text is a paragraph that wraps. It stands in a block of its
    * own, and each side of the morph is handed over broken where it wraps at
@@ -81,7 +82,7 @@
 
   let morphMs = $state(0);
   $effect(() => {
-    morphMs = motionOk.current ? dur("--dur-morph") : 0;
+    morphMs = dur("--dur-morph");
   });
   let morphing = $state(false);
   /**
@@ -105,7 +106,11 @@
   // starts in the same frame, so the box takes its held size in one step.
   const letters: Attachment<HTMLElement> = (root) =>
     untrack(() => {
-      const drawn = new Morph(root, morphMs, CURVE.out);
+      const drawn = new Morph(root, {
+        duration: morphMs,
+        easing: CURVE.out,
+        fade: !motionOk.current,
+      });
       drawn.show(swap.from, swap);
       morph = drawn;
       step(drawn, swap.to);
