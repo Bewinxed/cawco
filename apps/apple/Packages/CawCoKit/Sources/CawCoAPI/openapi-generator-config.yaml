@@ -69,6 +69,7 @@ typeOverrides:
     KeepAliveTtl: OpenEnums.KeepAliveTtl
     LandsMode: OpenEnums.LandsMode
     MachineCapabilityId: OpenEnums.MachineCapabilityId
+    MemoryScopeRole: OpenEnums.MemoryScopeRole
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage
     MoveStage: OpenEnums.MoveStage
     MoveStep: OpenEnums.MoveStep

@@ -2,7 +2,9 @@
   /**
    * A picker as a chip: what is chosen, and a popover listing the rest. Used
    * for the narrowings — machine, project, harness, model — where "every" is
-   * the usual answer and the list can be long.
+   * the usual answer and the list can be long. Given `picked`, it holds
+   * several: a pick toggles one in or out and the list stays open, and the
+   * empty-string option (picked when nothing is) clears them.
    */
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -12,21 +14,32 @@
 
   let {
     label,
-    value,
+    value = "",
+    picked,
     options,
     onpick,
   }: {
     label: string;
     /** The chosen option's value; the empty string is the "every" option. */
-    value: string;
+    value?: string;
+    /** The chosen options' values, when it holds several. */
+    picked?: readonly string[];
     /** Options sharing a `group` are listed under that heading. */
     options: { value: string; label: string; group?: string }[];
     onpick: (next: string) => void;
   } = $props();
 
   let expanded = $state(false);
+  const labelOf = (of: string) =>
+    options.find((option) => option.value === of)?.label ?? of;
+  const isChosen = (of: string) =>
+    picked
+      ? picked.includes(of) || (of === "" && picked.length === 0)
+      : of === value;
   const chosen = $derived(
-    options.find((option) => option.value === value)?.label ?? value
+    picked && picked.length > 0
+      ? picked.map(labelOf).join(", ")
+      : labelOf(picked ? "" : value)
   );
 </script>
 
@@ -41,6 +54,7 @@
          the ghost's place under the pointer while the popover closes. -->
     <div
       aria-label={label}
+      aria-multiselectable={picked ? true : undefined}
       class="options"
       role="listbox"
       {@attach highlight({ rows: ".item", selected: '[aria-selected="true"]' })}
@@ -50,17 +64,18 @@
           <span class="group">{option.group}</span>
         {/if}
         <button
-          aria-selected={option.value === value}
+          aria-selected={isChosen(option.value)}
           class="kit-item item focus-inset"
           onclick={() => {
             onpick(option.value);
-            expanded = false;
+            // One of several stays open for the next.
+            expanded = picked !== undefined && option.value !== "";
           }}
           role="option"
           type="button"
         >
           <span class="label">{option.label}</span>
-          {#if option.value === value}
+          {#if isChosen(option.value)}
             <IconCheck />
           {/if}
         </button>

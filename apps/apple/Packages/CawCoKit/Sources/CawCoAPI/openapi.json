@@ -17667,6 +17667,25 @@
                   },
                   "expectedHash": {
                     "type": "string"
+                  },
+                  "scope": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "orchestrator",
+                          "leaf"
+                        ]
+                      },
+                      "projectIds": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
                   }
                 },
                 "required": [
@@ -23800,6 +23819,10 @@
           "path": {
             "type": "string"
           },
+          "scope": {
+            "$ref": "#/components/schemas/MemoryScope",
+            "description": "The sessions it is loaded into; absent is a linked document under `~/.claude/memories/`."
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
@@ -26520,6 +26543,13 @@
           },
           "instanceId": {
             "type": "string"
+          },
+          "instructions": {
+            "description": "The fleet's role-scoped memory documents this session loads, in path\norder: the hub picks them for its role and project as it grants the\nlaunch ({@link LaunchGrant}), and the harness puts them in the session's\nown instructions. Never set by a client; a reattach launches nothing and\nkeeps what its process started with.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionInstruction"
+            }
           },
           "keepAliveTurn": {
             "description": "The in-flight maintenance send a surviving Claude process is answering.",
@@ -38454,6 +38484,10 @@
           "path": {
             "type": "string"
           },
+          "scope": {
+            "$ref": "#/components/schemas/MemoryScope",
+            "description": "The sessions it is loaded into; absent is a linked document under `~/.claude/memories/`."
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
@@ -38465,6 +38499,22 @@
           "path",
           "updatedAt"
         ]
+      },
+      "MemoryScope": {
+        "description": "Which sessions a fleet memory document is loaded into. No scope at all is\na linked document under `~/.claude/memories/`, read on purpose (the\n`models/` documents). A scope makes it instructions every matching session\nloads at its start:\n\n- `role` alone: every session of that role, in any project or none;\n- `projectIds` alone: every session in a checkout or workspace of any of\n  those projects, written into each as `.claude/rules/cawco/<path>`\n  ({@link FleetPlacedMemoryDoc}): one document for every coding project,\n  and none for the projects it leaves out;\n- both: the sessions of that role in any of those projects.\n\nA document with a role reaches its sessions as they launch, from the hub\n({@link SessionInstruction}), never as a file on a machine.",
+        "type": "object",
+        "properties": {
+          "projectIds": {
+            "description": "Never empty when present: no project is `projectIds` left out.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "role": {
+            "$ref": "#/components/schemas/MemoryScopeRole"
+          }
+        }
       },
       "SignInStart": {
         "type": "object",
@@ -39454,7 +39504,7 @@
             "type": "number"
           },
           "strays": {
-            "description": "Set when the clone's folder is there and its `.git` is no repository\ngit can read: how many entries down its tree are not CawCo's (agent\nstand-ins.ts `straysIn`, which names each by its path relative to the\nfolder). CawCo's are a deny path's stand-in exactly as made, a mount\npoint a sandbox left on a deny path, a `.git/config` holding only\ngit-lfs's `[lfs] repositoryformatversion = 0` marker, a project skill\nexactly as CawCo placed it (agent fleet.ts `placedSkillsAsMade`), and a\ndir (`.git`, `.claude`) holding only those. None is a husk, a deleted\nclone a sandbox refilled, which holds nothing; any keeps the folder.",
+            "description": "Set when the clone's folder is there and its `.git` is no repository\ngit can read: how many entries down its tree are not CawCo's (agent\nstand-ins.ts `straysIn`, which names each by its path relative to the\nfolder). CawCo's are a deny path's stand-in exactly as made, a mount\npoint a sandbox left on a deny path, a `.git/config` holding only\ngit-lfs's `[lfs] repositoryformatversion = 0` marker, a project skill\nexactly as CawCo placed it (agent fleet.ts `placedAsMade`), and a\ndir (`.git`, `.claude`) holding only those. None is a husk, a deleted\nclone a sandbox refilled, which holds nothing; any keeps the folder.",
             "type": "number"
           }
         },
@@ -45176,6 +45226,23 @@
           "srcSeq"
         ]
       },
+      "SessionInstruction": {
+        "description": "One role-scoped document a session launches with: the hub picks them for\nthe session as it grants its launch (`LaunchGrant.instructions`), and the\nharness puts each in its own instructions (Claude Code's system prompt\nappend, an OpenCode instruction entry, a pi context file).",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "path": {
+            "description": "The document's path in the fleet's memory, which names it to the session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "path"
+        ]
+      },
       "WorkspaceRef": {
         "description": "A workspace as the machine that holds it is told about it.",
         "type": "object",
@@ -45495,6 +45562,13 @@
           "opencode",
           "pi",
           "service-manager"
+        ]
+      },
+      "MemoryScopeRole": {
+        "type": "string",
+        "enum": [
+          "leaf",
+          "orchestrator"
         ]
       },
       "MoveProgressFrameStage": {

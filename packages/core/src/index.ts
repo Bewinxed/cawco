@@ -136,7 +136,15 @@ export interface LaunchAsk {
  * with once.
  */
 export type LaunchGrant =
-  | (Pick<SpawnPayload, "accountDir" | "homeLoginMove"> & {
+  | (Pick<SpawnPayload, "accountDir" | "homeLoginMove" | "instructions"> & {
+      /**
+       * The project's memory documents for the place the session runs in
+       * (`FleetConfig.placedMemory`'s copies for that place), written there
+       * before the session starts: a workspace opened for this launch is
+       * placed in the same step, so the sync its place set off may land
+       * after the session has read its rules.
+       */
+      placedMemory?: import("./fleet").FleetPlacedMemoryDoc[];
       sessionCredential: string;
     })
   | { refusal: string };
@@ -251,6 +259,14 @@ export interface SpawnPayload {
   /** Hub ingest cursor for a recovery sent after the registration handover. */
   ingested?: import("./stream").IngestMark;
   instanceId: string;
+  /**
+   * The fleet's role-scoped memory documents this session loads, in path
+   * order: the hub picks them for its role and project as it grants the
+   * launch ({@link LaunchGrant}), and the harness puts them in the session's
+   * own instructions. Never set by a client; a reattach launches nothing and
+   * keeps what its process started with.
+   */
+  instructions?: import("./fleet").SessionInstruction[];
   /** The in-flight maintenance send a surviving Claude process is answering. */
   keepAliveTurn?: string;
   /**

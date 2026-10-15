@@ -11,6 +11,7 @@
  * makes, not only the text it ends with), and which named settings already
  * exist (so a put says whether it adds or replaces).
  */
+import { type MemoryScope, scopeWords } from "./fleet";
 import { editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 
@@ -78,6 +79,8 @@ export interface PresentationContext {
   named: (group: AdminGroup, key: string) => string | undefined;
   /** The asking session's project, by name; undefined when it is in none. */
   project?: string;
+  /** A project's name by its id; undefined when the hub keeps no such project. */
+  projectName?: (id: string) => string | undefined;
 }
 
 // ── line changes ─────────────────────────────────────────────────────────
@@ -320,11 +323,24 @@ function memoryWrite(
       const name = path ?? "(no path)";
       const now = path ? context.memory(path) : undefined;
       const { change: made, stat } = changeOf(name, now ?? "", content);
+      const scope = input.scope as MemoryScope | undefined;
       return {
         summary: now === undefined ? `Create ${name}` : `Change ${name}`,
         detail: statWords(stat),
         changes: [made],
-        fields: [],
+        // Named only when the write sets it; left out, the scope stays.
+        fields:
+          typeof scope === "object" && scope !== null
+            ? [
+                {
+                  key: "loaded into",
+                  value: scopeWords(
+                    scope,
+                    (id) => context.projectName?.(id) ?? `project ${id}`
+                  ),
+                },
+              ]
+            : [],
       };
     }
     case "remove_doc": {

@@ -36,6 +36,7 @@ import type {
   NeutralContentBlock,
   PermissionResult,
   SentMessage,
+  SessionInstruction,
   SlashCommand,
   UserAnswers,
   UserQuestion,
@@ -81,6 +82,7 @@ import type {
 } from "@opencode/client";
 import type { OpencodeRule } from "../denied-tools";
 import type { HarnessContext, HarnessSession } from "../harness";
+import { placedMemoryIn } from "../placed-memory";
 import { holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
 import {
@@ -328,6 +330,8 @@ const mcpFence = async (
 /** The instruction entry keys the owner's and the project's `CLAUDE.md` go under (settled #11: `^[a-z0-9][a-z0-9._-]*$`). */
 export const CLAUDE_MD_GLOBAL = "claude-md-global";
 export const CLAUDE_MD_PROJECT = "claude-md-project";
+/** The key prefix of a project memory document's entry ({@link instructionEntries}). */
+const PROJECT_ENTRY = "cawco-project.";
 
 /** The most an instruction entry's value may be, in JSON bytes (2.0.28's `Ohe=262144`, settled #11). */
 const INSTRUCTION_ENTRY_MAX = 262_144;
@@ -365,6 +369,45 @@ export const claudeMdEntries = async (
   return {
     ...(global ? { [CLAUDE_MD_GLOBAL]: global } : {}),
     ...(project ? { [CLAUDE_MD_PROJECT]: project } : {}),
+  };
+};
+
+/** What an instruction key may not hold (settled #11: `^[a-z0-9][a-z0-9._-]*$`). */
+const ENTRY_KEY_UNSAFE = /[^a-z0-9._-]+/g;
+
+/** The entry key of a fleet memory document, under `kind`: `cawco-role.roles-orchestrator.md`. */
+const memoryEntryKey = (kind: "role" | "project", path: string): string =>
+  `cawco-${kind}.${path.toLowerCase().replace(ENTRY_KEY_UNSAFE, "-")}`;
+
+/**
+ * Every instruction entry a session holds: the `CLAUDE.md` ones
+ * ({@link claudeMdEntries}); its project's memory documents, as CawCo placed
+ * them in its folder for every session there (agent fleet.ts
+ * `placedMemoryIn`), which OpenCode does not read itself; and its role's
+ * memory documents, which it launched with ({@link SpawnPayload.instructions}).
+ */
+export const instructionEntries = async (
+  directory: string,
+  instructions: readonly SessionInstruction[]
+): Promise<Record<string, string>> => {
+  const [claudeMd, placed] = await Promise.all([
+    claudeMdEntries(directory),
+    placedMemoryIn(directory),
+  ]);
+  return {
+    ...claudeMd,
+    ...Object.fromEntries(
+      placed.map(({ path, content }) => [
+        memoryEntryKey("project", path),
+        content,
+      ])
+    ),
+    ...Object.fromEntries(
+      instructions.map(({ path, content }) => [
+        memoryEntryKey("role", path),
+        content,
+      ])
+    ),
   };
 };
 
@@ -571,6 +614,8 @@ export interface OpencodeSessionOptions {
   /** A fenced session: it has CawCo's MCP server and no other. */
   fence: boolean;
   instanceId: string;
+  /** Its role's memory documents ({@link SpawnPayload.instructions}); none on an attach. */
+  instructions?: readonly SessionInstruction[];
   /**
    * Returns true while the harness's config gate holds this session's sends.
    * `joinsTurn`: the send goes into a turn running on the session's server,
@@ -628,6 +673,10 @@ export class OpencodeSession implements HarnessSession {
   readonly #canDelegate?: boolean;
   /** The instruction entries put on the session, by key, as the hash of the value put. */
   readonly #instructions = new Map<string, string>();
+  /** Its role's memory documents, as it launched with them; none on an attach. */
+  readonly #roleInstructions: readonly SessionInstruction[];
+  /** The project memory entries the session holds: read off it at the first sync ({@link #syncInstructions}), kept in step after. */
+  #projectEntries: Set<string> | undefined;
   readonly #registerChild: (childId: string, callID: string) => void;
   readonly #turnOutcome: (
     provider: string,
@@ -735,6 +784,7 @@ export class OpencodeSession implements HarnessSession {
     this.#lead = options.lead;
     this.#workflowStepId = options.workflowStepId;
     this.#canDelegate = options.canDelegate;
+    this.#roleInstructions = options.instructions ?? [];
     this.#registerChild = options.registerChild;
     this.#turnOutcome = options.turnOutcome;
     this.#onRelease = options.onRelease;
@@ -903,15 +953,44 @@ export class OpencodeSession implements HarnessSession {
   }
 
   /**
-   * The owner's and the project's `CLAUDE.md`, as they are now, put on the
-   * session as its instruction entries ({@link claudeMdEntries}); a changed
-   * file is put again, and 2.0 announces the change at the next step
-   * boundary (settled #11). A file larger than an entry may hold is the
-   * turn's refusal, with its size.
+   * The owner's and the project's `CLAUDE.md`, the project's memory
+   * documents and its role's, as they are now, put on the session as its
+   * instruction entries ({@link instructionEntries}); a changed file is put
+   * again, and 2.0 announces the change at the next step boundary (settled
+   * #11). A project document CawCo no longer places is taken off, read off
+   * the session itself the first time, as an agent that attached to it
+   * knows nothing it put; its role's stay for its life, as they were given
+   * at its launch. A file larger than an entry may hold is the turn's
+   * refusal, with its size.
    */
   async #syncInstructions(): Promise<void> {
     const sessionID = this.#opencodeSessionId();
-    const entries = await claudeMdEntries(this.#directory);
+    const options = { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) };
+    const entries = await instructionEntries(
+      this.#directory,
+      this.#roleInstructions
+    );
+    this.#projectEntries ??= new Set(
+      (
+        await this.#client.session.instructions.entry.list(
+          { sessionID },
+          options
+        )
+      )
+        .map((entry) => entry.key)
+        .filter((key) => key.startsWith(PROJECT_ENTRY))
+    );
+    for (const key of [...this.#projectEntries]) {
+      if (!(key in entries)) {
+        // biome-ignore lint/performance/noAwaitInLoops: a few entries, taken off in turn
+        await this.#client.session.instructions.entry.remove(
+          { sessionID, key },
+          options
+        );
+        this.#projectEntries.delete(key);
+        this.#instructions.delete(key);
+      }
+    }
     for (const [key, value] of Object.entries(entries)) {
       const hash = createHash("sha256").update(value).digest("hex");
       if (this.#instructions.get(key) === hash) {
@@ -923,12 +1002,15 @@ export class OpencodeSession implements HarnessSession {
           `${key} is ${bytes} bytes as an OpenCode instruction entry; OpenCode takes at most ${INSTRUCTION_ENTRY_MAX}.`
         );
       }
-      // biome-ignore lint/performance/noAwaitInLoops: two entries, put in turn
+      // biome-ignore lint/performance/noAwaitInLoops: a few entries, put in turn
       await this.#client.session.instructions.entry.put(
         { sessionID, key, value },
-        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        options
       );
       this.#instructions.set(key, hash);
+      if (key.startsWith(PROJECT_ENTRY)) {
+        this.#projectEntries.add(key);
+      }
     }
   }
 

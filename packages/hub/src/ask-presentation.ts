@@ -151,6 +151,7 @@ export const createAskPresenter = (
       ...askerOf(envelope.instanceId ?? payload.instanceId, payload),
       memory,
       named,
+      projectName: (id) => db.project(id)?.name,
     });
   };
 };

@@ -70,7 +70,7 @@ import {
 } from "./carry";
 import { excludedPaths } from "./checkout-exclude";
 import { prepareClone } from "./clone";
-import { placedSkillsAsMade } from "./fleet";
+import { placedAsMade } from "./fleet";
 import { expandHome } from "./fs";
 import { useHubCredentialHelper } from "./git-credential";
 import {
@@ -563,11 +563,11 @@ const createdPath = async (id: string): Promise<string | undefined> => {
 
 /**
  * The entries of a workspace's folder that is no git clone that are not
- * CawCo's (stand-ins.ts `straysIn`), the project's skills it placed there as
- * they were placed among CawCo's (fleet.ts `placedSkillsAsMade`).
+ * CawCo's (stand-ins.ts `straysIn`), the project's skills and memory documents it placed there as
+ * they were placed among CawCo's (fleet.ts `placedAsMade`).
  */
 const strayEntries = async (path: string): Promise<string[]> =>
-  straysIn(path, await placedSkillsAsMade(path));
+  straysIn(path, await placedAsMade(path));
 
 /** What {@link holding} reads: the counts, and the paths of the clone's own ignored files ({@link ignoredOwn}). */
 type Held = Omit<WorkspaceHolding, "bytes"> & { ignoredFiles: string[] };

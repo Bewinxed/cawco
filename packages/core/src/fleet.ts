@@ -478,6 +478,9 @@ export const memoryDocProblem = (path: string): string | undefined => {
   if (path.includes("\\")) {
     return `“${path}” uses backslashes — the path is the same string on every machine, so it is forward-slashed`;
   }
+  if (path.includes("@")) {
+    return `“${path}” has an @ — a machine reports a project's copy of a document as <path>@<place>`;
+  }
   const parts = path.split("/");
   if (parts.some((part) => part === "" || part === "." || part === "..")) {
     return `“${path}” is not a usable path — no empty, “.” or “..” segments`;
@@ -502,6 +505,104 @@ export interface FleetMemoryDoc {
   force?: boolean;
   /** sha256 hex of `content` (UTF-8) — what a machine compares before writing. */
   hash: string;
+  path: string;
+}
+
+/**
+ * The two kinds of session a role-scoped document is for. An orchestrator
+ * is a session holding the spawning tools (`delegate`): its role's toolset
+ * has them and it was not started as a leaf (`canDelegate: false`). Every
+ * other session is a leaf. The hub decides which a session is (roles.ts
+ * `memoryRoleOf`).
+ */
+export const MEMORY_ROLES = ["orchestrator", "leaf"] as const;
+export type MemoryRole = (typeof MEMORY_ROLES)[number];
+
+export const isMemoryRole = (value: string): value is MemoryRole =>
+  (MEMORY_ROLES as readonly string[]).includes(value);
+
+/**
+ * Which sessions a fleet memory document is loaded into. No scope at all is
+ * a linked document under `~/.claude/memories/`, read on purpose (the
+ * `models/` documents). A scope makes it instructions every matching session
+ * loads at its start:
+ *
+ * - `role` alone: every session of that role, in any project or none;
+ * - `projectIds` alone: every session in a checkout or workspace of any of
+ *   those projects, written into each as `.claude/rules/cawco/<path>`
+ *   ({@link FleetPlacedMemoryDoc}): one document for every coding project,
+ *   and none for the projects it leaves out;
+ * - both: the sessions of that role in any of those projects.
+ *
+ * A document with a role reaches its sessions as they launch, from the hub
+ * ({@link SessionInstruction}), never as a file on a machine.
+ */
+export interface MemoryScope {
+  /** Never empty when present: no project is `projectIds` left out. */
+  projectIds?: string[];
+  role?: MemoryRole;
+}
+
+/** Whether a scope binds a document to sessions: a role, projects, or both. */
+export const scoped = (scope: MemoryScope | undefined): boolean =>
+  !!(scope?.role || scope?.projectIds?.length);
+
+/** Names in a sentence: `A`, `A and B`, `A, B and C`. */
+const listed = (names: readonly string[]): string =>
+  names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/**
+ * The sessions a scope loads a document into, in a few words, each project
+ * by the name `projectName` gives it: what the dashboard's memory editor
+ * and an `admin_memory_write` ask both say.
+ */
+export const scopeWords = (
+  scope: MemoryScope | undefined,
+  projectName: (id: string) => string
+): string => {
+  const role = scope?.role;
+  const projects = scope?.projectIds?.length
+    ? listed(scope.projectIds.map(projectName))
+    : undefined;
+  if (role && projects) {
+    return `${role === "orchestrator" ? "Orchestrator" : "Leaf"} sessions in ${projects}`;
+  }
+  if (role) {
+    return `Every ${role} session`;
+  }
+  if (projects) {
+    return `Every session in ${projects}`;
+  }
+  return "No session on its own: linked, read on purpose";
+};
+
+/**
+ * One project-scoped document as a machine is sent it: once per checkout and
+ * workspace of its project there ({@link FleetPlacement}, `cwd` and
+ * `placeId` filled in by the hub), written to `<cwd>/.claude/rules/cawco/<path>`,
+ * which Claude Code loads at a session's launch ("Rules without `paths`
+ * frontmatter are loaded at launch with the same priority as
+ * `.claude/CLAUDE.md`", code.claude.com/docs/en/memory) and CawCo hands
+ * OpenCode and pi from the same file. Reported under `<path>@<placeId>`.
+ */
+export interface FleetPlacedMemoryDoc extends FleetPlacement {
+  content: string;
+  /** sha256 hex of `content` (UTF-8). */
+  hash: string;
+  path: string;
+}
+
+/**
+ * One role-scoped document a session launches with: the hub picks them for
+ * the session as it grants its launch (`LaunchGrant.instructions`), and the
+ * harness puts each in its own instructions (Claude Code's system prompt
+ * append, an OpenCode instruction entry, a pi context file).
+ */
+export interface SessionInstruction {
+  content: string;
+  /** The document's path in the fleet's memory, which names it to the session. */
   path: string;
 }
 
@@ -590,6 +691,12 @@ export interface FleetConfig {
    * them. Absent from a hub that predates them: converge nothing.
    */
   placedMcp?: FleetMcpServer[];
+  /**
+   * The project-scoped memory documents ({@link MemoryScope} with a project
+   * and no role), one copy per place as {@link placedMcp}. Absent is none:
+   * every copy cawco placed before is taken back.
+   */
+  placedMemory?: FleetPlacedMemoryDoc[];
   /**
    * Project-bound skills, one copy per place as {@link placedMcp}, files
    * always inline. Written into `<cwd>/.claude/skills/<name>/`, which Claude

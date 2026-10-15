@@ -12,6 +12,8 @@ import {
   type FleetSkillMeta,
   type MarketplaceLink,
   MCP_PLATFORMS,
+  MEMORY_ROLES,
+  type MemoryScope,
 } from "@cawco/core";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { z } from "zod";
@@ -167,13 +169,18 @@ function admin<T extends z.ZodRawShape>(
   handler: (
     args: { action: string } & Partial<z.infer<z.ZodObject<T>>>
   ) => Promise<unknown>,
-  writeNote = ""
+  writeNote = "",
+  /** The fields of `input` a read takes too, by name; none by default. */
+  readFields: readonly (keyof T & string)[] = []
 ) {
   const read = tool(
     `admin_${group}_read`,
     `Read ${about} \`action\`: ${reads.map((action) => `'${action}'`).join(", ")}.`,
-    { action: z.enum(reads) },
-    // A read names only its action; every other field is the write's.
+    {
+      action: z.enum(reads),
+      ...Object.fromEntries(readFields.map((name) => [name, input[name]])),
+    },
+    // A read names its action and the fields it was given; every other field is the write's.
     (args) =>
       handler(args as { action: string } & Partial<z.infer<z.ZodObject<T>>>)
   );
@@ -844,9 +851,10 @@ export function adminTools() {
     // ── memory (fleet CLAUDE.md) ─────────────────────────────────────────
     ...admin(
       "memory",
-      "the fleet's user-scope CLAUDE.md, the instructions every session loads, and " +
-        `its linked documents under ${userLayerLabel("memories")}/ (e.g. model-specific guidance ` +
-        "files). 'get' answers the CLAUDE.md, 'list_docs' the documents.",
+      "the fleet's CLAUDE.md, loaded into every session, and its documents: " +
+        `unscoped, linked under ${userLayerLabel("memories")}/; scoped, loaded into the ` +
+        "sessions of a `role` (orchestrator: has delegate; else leaf), `projectIds`, or " +
+        "both. 'get': CLAUDE.md; 'list_docs': the documents.",
       ["get", "list_docs"],
       ["set", "set_doc", "remove_doc"],
       {
@@ -860,8 +868,17 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            `The document path under ${userLayerLabel("memories")}/ (e.g. 'models/claude-opus-5.md'). ` +
-              "Required for 'set_doc' and 'remove_doc'."
+            "The document path (e.g. 'models/claude-opus-5.md'). Required for 'set_doc' " +
+              "and 'remove_doc'."
+          ),
+        scope: z
+          .object({
+            role: z.enum(MEMORY_ROLES).optional(),
+            projectIds: z.array(z.string()).min(1).optional(),
+          })
+          .optional()
+          .describe(
+            "set_doc: {} unscopes; omitted keeps it. list_docs: a filter."
           ),
         expectedHash: z
           .string()
@@ -872,7 +889,7 @@ export function adminTools() {
           ),
       },
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches all five memory actions (get, set, list_docs, set_doc, remove_doc) with their validation in one handler; splitting would scatter the action enum's contract across several functions.
-      async ({ action, content, path, expectedHash }) => {
+      async ({ action, content, path, scope, expectedHash }) => {
         if (action === "get") {
           const fleet = (await api("GET", "/api/fleet")) as {
             memory?: unknown;
@@ -881,9 +898,19 @@ export function adminTools() {
         }
         if (action === "list_docs") {
           const fleet = (await api("GET", "/api/fleet")) as {
-            memoryDocs?: unknown[];
+            memoryDocs?: { scope?: MemoryScope }[];
           };
-          return ok({ docs: fleet.memoryDocs ?? [] });
+          const docs = fleet.memoryDocs ?? [];
+          return ok({
+            docs: scope
+              ? docs.filter(
+                  (doc) =>
+                    doc.scope?.role === scope.role &&
+                    [...(doc.scope?.projectIds ?? [])].sort().join() ===
+                      [...(scope.projectIds ?? [])].sort().join()
+                )
+              : docs,
+          });
         }
         if (action === "set") {
           if (content === undefined) {
@@ -906,6 +933,7 @@ export function adminTools() {
             await api("PUT", "/api/fleet/memory/docs", {
               path,
               content,
+              ...(scope ? { scope } : {}),
               ...(expectedHash ? { expectedHash } : {}),
             })
           );
@@ -915,7 +943,9 @@ export function adminTools() {
           throw new Error("path is required to remove a memory document");
         }
         return ok(await api("DELETE", "/api/fleet/memory/docs", { path }));
-      }
+      },
+      "",
+      ["scope"]
     ),
 
     // ── previews ─────────────────────────────────────────────────────────

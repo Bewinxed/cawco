@@ -18,7 +18,7 @@ import {
   rmdir,
   stat,
 } from "node:fs/promises";
-import { basename, delimiter, isAbsolute, join } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import type {
   CliInstall,
   ConfigInspection,
@@ -32,6 +32,7 @@ import type {
   FleetMcpServer,
   FleetMemory,
   FleetMemoryDoc,
+  FleetPlacedMemoryDoc,
   FleetPluginPayload,
   FleetScope,
   FleetSkillPayload,
@@ -64,6 +65,7 @@ import {
 } from "./denied-tools";
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
+import { placedMemoryDir } from "./placed-memory";
 import { promptWrite } from "./prompt-writes";
 import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, resolveBin, toolEnv, toolPath } from "./tools";
@@ -213,6 +215,12 @@ interface Sidecar {
    */
   placedMcp: Record<string, PlacedRecord>;
   /**
+   * A project's memory documents cawco placed here, by `<path>@<place id>`
+   * (`name` is the path), with the hash written to
+   * `<cwd>/.claude/rules/cawco/<path>`.
+   */
+  placedMemory: Record<string, PlacedRecord & { hash: string }>;
+  /**
    * A project's skills cawco placed here, by `<name>@<place id>`, with the
    * hash written into `<cwd>/.claude/skills/<name>/`.
    */
@@ -334,6 +342,7 @@ const readSidecar = async (): Promise<Sidecar> => {
     hooks: stored?.hooks ?? {},
     // Likewise one written before a project's rows were placed: none was.
     placedMcp: stored?.placedMcp ?? {},
+    placedMemory: stored?.placedMemory ?? {},
     placedSkills: stored?.placedSkills ?? {},
   };
 };
@@ -1914,17 +1923,18 @@ const syncPlacedSkills = async (
 };
 
 /**
- * The copies of a project's skills in the folder `cwd` that are still
- * exactly what cawco placed there: each `<cwd>/.claude/skills/<name>/` the
- * sidecar records for that folder (`placedSkills`) whose tree has the hash
- * recorded for it. A copy edited since is someone's. Answered at the
+ * The copies of a project's rows in the folder `cwd` that are still exactly
+ * what cawco placed there: each `<cwd>/.claude/skills/<name>/` the sidecar
+ * records for that folder (`placedSkills`) whose tree has the hash recorded
+ * for it, and each `<cwd>/.claude/rules/cawco/<path>` (`placedMemory`)
+ * whose file has. A copy edited since is someone's. Answered at the
  * folder's real path, as `cwd` is given or as the record names it.
  */
-export const placedSkillsAsMade = async (cwd: string): Promise<string[]> => {
+export const placedAsMade = async (cwd: string): Promise<string[]> => {
   const real = (path: string): Promise<string> =>
     realpath(path).catch(() => path);
   const folder = await real(cwd);
-  const { placedSkills } = await readSidecar();
+  const { placedSkills, placedMemory } = await readSidecar();
   const made: string[] = [];
   for (const record of Object.values(placedSkills)) {
     // biome-ignore lint/performance/noAwaitInLoops: one record at a time, a folder holds a few
@@ -1934,6 +1944,16 @@ export const placedSkillsAsMade = async (cwd: string): Promise<string[]> => {
     const dir = join(placedSkillsDir(folder), record.name);
     if ((await treeHash(dir)) === record.hash) {
       made.push(dir);
+    }
+  }
+  for (const record of Object.values(placedMemory)) {
+    // biome-ignore lint/performance/noAwaitInLoops: one record at a time, a folder holds a few
+    if ((await real(record.cwd)) !== folder) {
+      continue;
+    }
+    const file = join(placedMemoryDir(folder), record.name);
+    if ((await fileHashAt(file)) === record.hash) {
+      made.push(file);
     }
   }
   return made;
@@ -2236,6 +2256,158 @@ const syncMemoryDocs = async (
   }
 
   return written;
+};
+
+/** The folders a placed document's removal emptied, from its own up to `.claude/rules/cawco/`. */
+const pruneEmptyPlaced = async (cwd: string, path: string): Promise<void> => {
+  const root = placedMemoryDir(cwd);
+  for (let dir = dirname(join(root, path)); ; dir = dirname(dir)) {
+    // biome-ignore lint/performance/noAwaitInLoops: deepest first, a parent only once its child is gone
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: a folder still holding something stays
+    await rmdir(dir).catch(() => {});
+    if (dir === root || dirname(dir) === dir) {
+      return;
+    }
+  }
+};
+
+/**
+ * One placed copy of a project's memory document, written to its folder's
+ * `.claude/rules/cawco/<path>` and kept out of the checkout's status, by the
+ * rules a placed skill keeps: a file there cawco did not write is the
+ * folder's own and stays, one edited since cawco wrote it is reported and
+ * left, and nothing is written into a delegate workspace's deleted clone.
+ * Answers the hash cawco now manages there, or nothing.
+ */
+const placeMemoryDoc = async (
+  doc: FleetPlacedMemoryDoc,
+  recorded: string | undefined,
+  report: Record<string, FleetItemState>
+): Promise<string | undefined> => {
+  const key = placedKey({ name: doc.path, placeId: doc.placeId });
+  const cwd = doc.cwd as string;
+  const problem = memoryDocProblem(doc.path);
+  if (problem) {
+    report[key] = { state: "failed", detail: problem };
+    return recorded;
+  }
+  if (!(await dirExists(cwd))) {
+    report[key] = { state: "failed", detail: `${cwd} is not on this machine` };
+    return recorded;
+  }
+  if (await deletedClone(cwd)) {
+    report[key] = {
+      state: "failed",
+      detail: `${cwd} is a delegate workspace whose clone was deleted, so nothing is placed there; archiving the workspace takes the folder away`,
+    };
+    return recorded;
+  }
+  const file = join(placedMemoryDir(cwd), doc.path);
+  const disk = await fileHashAt(file);
+  if (disk === doc.hash) {
+    report[key] = { state: "applied" };
+    return doc.hash;
+  }
+  if (disk !== null && !recorded) {
+    report[key] = {
+      state: "failed",
+      detail: `${file} is the folder's own; cawco leaves it as it is`,
+    };
+    return recorded;
+  }
+  if (disk !== null && disk !== recorded) {
+    report[key] = { state: "failed", detail: `${file}: ${DRIFTED}` };
+    return recorded;
+  }
+  try {
+    await writeAtomic(file, doc.content, `project memory ${doc.path}`);
+    await excludeFromCheckout(placedMemoryDir(cwd));
+    report[key] = { state: "applied" };
+    return doc.hash;
+  } catch (error) {
+    report[key] = { state: "failed", detail: tail(said(error)) };
+    return recorded;
+  }
+};
+
+/**
+ * A launch's own place's memory documents (`LaunchGrant.placedMemory`),
+ * written there before its session starts, by the rules a sync keeps and
+ * recorded as a sync records them, in the fleet's queue so no sync writes
+ * the sidecar beside it. A failure is said and the session starts; the sync
+ * its place set off writes it again.
+ */
+export const placeMemoryAtLaunch = (
+  docs: readonly FleetPlacedMemoryDoc[]
+): Promise<void> =>
+  inFleetQueue(async () => {
+    const managed = await readSidecar();
+    const report: Record<string, FleetItemState> = {};
+    const placed: Sidecar["placedMemory"] = {};
+    for (const doc of docs.filter((each) => each.cwd && each.placeId)) {
+      const key = placedKey({ name: doc.path, placeId: doc.placeId });
+      // biome-ignore lint/performance/noAwaitInLoops: one file written at a time, each recorded before the next
+      const hash = await placeMemoryDoc(
+        doc,
+        managed.placedMemory[key]?.hash,
+        report
+      );
+      if (hash !== undefined) {
+        placed[key] = { cwd: doc.cwd as string, name: doc.path, hash };
+      }
+    }
+    for (const [key, state] of Object.entries(report)) {
+      if (state.state === "failed") {
+        console.warn(`[fleet] memory ${key} at launch: ${state.detail}`);
+      }
+    }
+    await writeJson(SIDECAR, {
+      ...managed,
+      placedMemory: { ...managed.placedMemory, ...placed },
+    } satisfies Sidecar);
+  });
+
+/**
+ * A project's memory documents, placed at each of its checkouts and
+ * workspaces on this machine (`FleetConfig.placedMemory`), and the copies
+ * cawco placed before and no longer does taken away, unless edited since.
+ * Reported under `<path>@<place id>`; answers what cawco now manages.
+ */
+const syncPlacedMemory = async (
+  desired: FleetPlacedMemoryDoc[],
+  managed: Sidecar["placedMemory"],
+  report: Record<string, FleetItemState>
+): Promise<Sidecar["placedMemory"]> => {
+  const placed: Sidecar["placedMemory"] = {};
+  for (const doc of desired.filter((each) => each.cwd && each.placeId)) {
+    const key = placedKey({ name: doc.path, placeId: doc.placeId });
+    // biome-ignore lint/performance/noAwaitInLoops: one file written at a time, each recorded before the next
+    const hash = await placeMemoryDoc(doc, managed[key]?.hash, report);
+    if (hash !== undefined) {
+      placed[key] = { cwd: doc.cwd as string, name: doc.path, hash };
+    }
+  }
+  for (const [key, record] of Object.entries(managed)) {
+    if (placed[key]) {
+      continue;
+    }
+    const file = join(placedMemoryDir(record.cwd), record.name);
+    // biome-ignore lint/performance/noAwaitInLoops: one removal at a time, each recorded before the next
+    const disk = await fileHashAt(file);
+    if (disk !== null && disk !== record.hash) {
+      report[key] = { state: "removed", detail: "kept: edited in the folder" };
+      continue;
+    }
+    try {
+      await rm(file, { force: true });
+      await pruneEmptyPlaced(record.cwd, record.name);
+      report[key] = { state: "removed" };
+    } catch (error) {
+      placed[key] = record;
+      report[key] = { state: "failed", detail: said(error) };
+    }
+  }
+  return placed;
 };
 
 /**
@@ -2791,6 +2963,11 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   const docs = config.memory?.docs ?? [];
   const memoryDocs = await syncMemoryDocs(docs, managed.memoryDocs, docStates);
   const memoryHook = await syncMemoryHook(docs, managed.memoryHook, report);
+  const placedMemory = await syncPlacedMemory(
+    config.placedMemory ?? [],
+    managed.placedMemory,
+    docStates
+  );
   // A hub that predates hooks sends no `hooks`, which reads the same way: a
   // fleet that keeps none, and the machine gives back whatever cawco
   // registered before this daemon knew what that field meant.
@@ -2812,6 +2989,7 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
     ...(memoryHook ? { memoryHook } : {}),
     hooks,
     placedMcp,
+    placedMemory,
     placedSkills,
   } satisfies Sidecar);
   // The machine's own `claude` follows the fleet at once, not at the next
@@ -2970,6 +3148,18 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         : {
             state: "failed",
             detail: fileHash === null ? "not on disk" : DRIFTED,
+          };
+  }
+  for (const [key, record] of Object.entries(managed.placedMemory)) {
+    const file = join(placedMemoryDir(record.cwd), record.name);
+    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
+    const fileHash = await fileHashAt(file);
+    memoryDocs[key] =
+      fileHash === record.hash
+        ? { state: "applied" }
+        : {
+            state: "failed",
+            detail: fileHash === null ? `${file} is not on disk` : DRIFTED,
           };
   }
   if (managed.memoryHook !== undefined) {

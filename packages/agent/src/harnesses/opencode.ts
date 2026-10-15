@@ -4487,6 +4487,7 @@ export class OpencodeHarness implements Harness {
       effort: spec.effort,
       workflowStepId: spec.workflowStepId,
       canDelegate: spec.canDelegate,
+      instructions: spec.instructions,
       deniedRules,
       account,
       fence: spec.fence === true,

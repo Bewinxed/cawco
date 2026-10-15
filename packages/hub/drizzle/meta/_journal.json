@@ -1233,6 +1233,13 @@
       "when": 1792096305879,
       "tag": "0175_mcp_platforms",
       "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "6",
+      "when": 1792101767457,
+      "tag": "0176_fleet_memory_scopes",
+      "breakpoints": true
     }
   ]
 }

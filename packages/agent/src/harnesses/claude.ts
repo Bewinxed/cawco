@@ -36,6 +36,7 @@ import {
   type SDKMessage,
   type SDKSessionInfo,
   type SDKUserMessage,
+  type Options as SdkOptions,
   type SessionStore,
   type SessionStoreEntry,
   tagSession,
@@ -55,6 +56,7 @@ import type {
   NeutralSessionInfo,
   SendPayload,
   SentMessage,
+  SessionInstruction,
   SessionMessage,
   SpawnPayload,
   UserAnswers,
@@ -1441,6 +1443,56 @@ const fleetMcpStep = (
   return { do: "hold", redial: again };
 };
 
+type SystemPrompt = NonNullable<SdkOptions["systemPrompt"]>;
+
+/**
+ * The fleet's role-scoped memory documents as one block of a system prompt,
+ * each under the path it has in the fleet, as Claude Code itself heads a
+ * CLAUDE.md it loads ("Contents of <path> (…)").
+ */
+const instructionsBlock = (
+  instructions: readonly SessionInstruction[]
+): string =>
+  instructions
+    .map(
+      ({ path, content }) =>
+        `Contents of the fleet's memory document ${path} (CawCo loads it for this session's role):\n\n${content.trim()}`
+    )
+    .join("\n\n");
+
+/**
+ * The session's system prompt with its role's memory documents after
+ * whatever the caller gave: Claude Code's own prompt with them appended
+ * when the caller gave none, or after the caller's own append or prompt.
+ */
+const withInstructions = (
+  given: SystemPrompt | undefined,
+  instructions: readonly SessionInstruction[]
+): SystemPrompt => {
+  const block = instructionsBlock(instructions);
+  if (given === undefined) {
+    return { type: "preset", preset: "claude_code", append: block };
+  }
+  if (typeof given === "string") {
+    return `${given}\n\n${block}`;
+  }
+  if (Array.isArray(given)) {
+    return [...given, block];
+  }
+  if (given.type === "preset") {
+    return {
+      ...given,
+      append: given.append ? `${given.append}\n\n${block}` : block,
+    };
+  }
+  return {
+    ...given,
+    prompt: Array.isArray(given.prompt)
+      ? [...given.prompt, block]
+      : `${given.prompt}\n\n${block}`,
+  };
+};
+
 /**
  * The MCP servers a session launches with: the caller's and CawCo's, or
  * CawCo's alone for a fenced session.
@@ -1670,9 +1722,19 @@ class ClaudeSession implements HarnessSession {
      * How the hub marked the spawn: a project's Caw ({@link SpawnPayload.lead})
      * asks the hub before each shell and edit call; a fenced session
      * ({@link SpawnPayload.fence}) has CawCo's MCP server alone, from no
-     * source but this launch.
+     * source but this launch. `instructions` are the role's memory documents
+     * it launches with ({@link SpawnPayload.instructions}); an attach
+     * launches nothing and passes none.
      */
-    { lead, fence }: { lead: boolean; fence: boolean } = {
+    {
+      lead,
+      fence,
+      instructions = [],
+    }: {
+      lead: boolean;
+      fence: boolean;
+      instructions?: readonly SessionInstruction[];
+    } = {
       lead: false,
       fence: false,
     },
@@ -1781,6 +1843,19 @@ class ClaudeSession implements HarnessSession {
         ...(persistSession === false ? { persistSession: false } : {}),
         ...(cliMode ? { permissionMode: cliMode } : {}),
         ...(model && { model }),
+        // Its role's memory documents (SpawnPayload.instructions), after
+        // Claude Code's own prompt: "`{ type: 'preset', preset: 'claude_code',
+        // append: '...' }` - Use default prompt with appended instructions"
+        // (sdk.d.ts 0.3.296).
+        ...(instructions.length > 0
+          ? {
+              systemPrompt: withInstructions(
+                (options as { systemPrompt?: SystemPrompt } | undefined)
+                  ?.systemPrompt,
+                instructions
+              ),
+            }
+          : {}),
         env,
         // Left out entirely when nobody chose: the SDK's own default is the
         // model's, and writing a level here would put cawco's guess in its
@@ -3728,7 +3803,11 @@ export class ClaudeHarness implements Harness {
       spec.skills,
       spec.denyTools,
       fleetDenyList,
-      { lead: spec.lead === true, fence: spec.fence === true },
+      {
+        lead: spec.lead === true,
+        fence: spec.fence === true,
+        instructions: spec.instructions ?? [],
+      },
       { client, procId: procIdFor("claude", ctx.instanceId) }
     );
   }

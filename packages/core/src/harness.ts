@@ -1826,7 +1826,7 @@ export interface WorkspaceHolding {
    * folder). CawCo's are a deny path's stand-in exactly as made, a mount
    * point a sandbox left on a deny path, a `.git/config` holding only
    * git-lfs's `[lfs] repositoryformatversion = 0` marker, a project skill
-   * exactly as CawCo placed it (agent fleet.ts `placedSkillsAsMade`), and a
+   * exactly as CawCo placed it (agent fleet.ts `placedAsMade`), and a
    * dir (`.git`, `.claude`) holding only those. None is a husk, a deleted
    * clone a sandbox refilled, which holds nothing; any keeps the folder.
    */

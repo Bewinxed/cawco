@@ -26,6 +26,7 @@ import {
   type MarketplaceRead,
   type McpHttpServerConfig,
   type McpSSEServerConfig,
+  type MemoryScope,
   parseAgentFrontMatter,
 } from "@cawco/core";
 import { machineFs, onFleetFetch } from "./client.svelte";
@@ -40,11 +41,13 @@ export interface FleetMemoryRow {
 }
 
 /**
- * One document the main memory links, as the hub stores it: the path it lands
- * at under `~/.claude/memories/`, and the markdown that goes there.
+ * One document of the fleet's memory, as the hub stores it: its path, its
+ * markdown, and the sessions it is loaded into. No scope is a document the
+ * main memory links, landing at its path under `~/.claude/memories/`.
  */
 export interface FleetMemoryDocRow extends FleetMemoryRow {
   path: string;
+  scope?: MemoryScope;
 }
 
 /**
@@ -1011,13 +1014,16 @@ export const removeMemory = (): Promise<void> =>
   erase("/api/fleet/memory", "remove the memory");
 
 /**
- * Stores one linked document; every machine gets it under `~/.claude/memories/`.
- * The same save the main file gets, keyed by the path it lands at.
+ * Stores one document, keyed by its path: a linked one lands on every
+ * machine under `~/.claude/memories/`, a scoped one in the sessions its
+ * scope names. The same save the main file gets. `scope` replaces the
+ * stored one (`{}` makes it linked again); left out, it stays.
  */
 export async function saveMemoryDoc(
   path: string,
   content: string,
-  expectedHash?: string
+  expectedHash?: string,
+  scope?: MemoryScope
 ): Promise<
   | { ok: true; doc: FleetMemoryDocRow }
   | { ok: false; latest: FleetMemoryDocRow }
@@ -1025,7 +1031,7 @@ export async function saveMemoryDoc(
   const response = await fetch("/api/fleet/memory/docs", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, content, expectedHash }),
+    body: JSON.stringify({ path, content, expectedHash, scope }),
   });
   if (response.status === 409) {
     return { ok: false, latest: (await response.json()) as FleetMemoryDocRow };

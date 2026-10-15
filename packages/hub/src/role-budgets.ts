@@ -74,9 +74,13 @@ import type { Tasks } from "./tasks";
  * tokens for the worker alone (a leaf never has it), its words cut to a
  * line; interrupt_delegate now says its delegate stays idle, about 12 more
  * for the worker and the lead (worker 24,006, lead 15,654 measured).
+ * 2026-10-16: admin_memory_read and admin_memory_write take a document's
+ * `scope` (memory-scopes.ts): the fleet's orchestrator text reached every
+ * leaf and every non-code project. About 160 tokens for the worker, the
+ * groups' words cut to a clause each (worker 24,165 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 24_010,
+  worker: 24_170,
   delegate: 6500,
   lead: 15_660,
   overseer: 770,

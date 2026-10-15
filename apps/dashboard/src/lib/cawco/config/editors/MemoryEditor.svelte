@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
+  import {
+    isMemoryRole,
+    type MemoryScope,
+    machineLabel,
+    scoped,
+  } from "@cawco/core";
   import { untrack } from "svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
@@ -45,8 +50,10 @@
   import EditorSection from "../EditorSection.svelte";
   import {
     byteLength,
+    docLabel,
     fileHref,
     fileLabel,
+    loadedInto,
     MAIN,
     memoryStateOf,
   } from "../memory";
@@ -76,7 +83,22 @@
   const machines = $derived(orderMachines(cawco.machines));
 
   let text = $state(untrack(() => saved?.content ?? ""));
-  const dirty = $derived(text !== (saved?.content ?? ""));
+  /**
+   * The sessions a document is loaded into, as the editor holds it: saved
+   * with the text. The main file has none; every session loads it.
+   */
+  const savedScope = $derived<MemoryScope>(
+    saved && "scope" in saved ? (saved.scope ?? {}) : {}
+  );
+  let scope = $state<MemoryScope>(untrack(() => ({ ...savedScope })));
+  const scopeMoved = $derived(
+    (scope.role ?? "") !== (savedScope.role ?? "") ||
+      [...(scope.projectIds ?? [])].sort().join() !==
+        [...(savedScope.projectIds ?? [])].sort().join()
+  );
+  const dirty = $derived(text !== (saved?.content ?? "") || scopeMoved);
+  /** A role's document reaches its sessions as they start, from the hub: it is on no machine. */
+  const onMachines = $derived(!savedScope.role);
   /**
    * The version the edit started from. A save names it, so if the fleet's
    * copy has moved on since (another tab, another day, a draft kept across
@@ -90,11 +112,16 @@
       base = saved?.hash;
     }
   });
-  const kept = keepDraft(
+  const kept = keepDraft<{
+    text: string;
+    base: string | undefined;
+    scope?: MemoryScope;
+  }>(
     untrack(() => fileHref(path)),
-    () => (dirty ? { text, base } : null),
+    () => (dirty ? { text, base, scope } : null),
     (back) => {
       ({ text, base } = back);
+      scope = back.scope ?? scope;
     }
   );
   const bytes = $derived(byteLength(text));
@@ -133,7 +160,10 @@
       conflict = result.latest;
       return false;
     }
-    const result = await saveMemoryDoc(path, text, expectedHash);
+    const result = await saveMemoryDoc(path, text, expectedHash, {
+      ...(scope.role ? { role: scope.role } : {}),
+      ...(scope.projectIds?.length ? { projectIds: scope.projectIds } : {}),
+    });
     if (result.ok) {
       stored(result.doc);
       return true;
@@ -189,7 +219,7 @@
       return;
     }
     await question.ask({
-      title: `Delete ${fileLabel(path)}?`,
+      title: `Delete ${label}?`,
       body: "It is taken off every machine that still has CawCo's copy. A machine's own edited copy is left where it is.",
       confirmLabel: "Delete everywhere",
       destructive: true,
@@ -234,9 +264,43 @@
     { value: MAIN, label: fileLabel(MAIN) },
     ...(fleet?.memoryDocs ?? []).map((doc) => ({
       value: doc.path,
-      label: `${fileLabel(doc.path)}${drafts.paths.has(fileHref(doc.path)) ? " · unsaved" : ""}`,
+      label: `${docLabel(doc.path, doc.scope)}${drafts.paths.has(fileHref(doc.path)) ? " · unsaved" : ""}`,
     })),
   ]);
+  const label = $derived(main ? fileLabel(path) : docLabel(path, savedScope));
+
+  /** The scope's two narrowings, each "None" when it names nothing. */
+  const ROLE_OPTIONS = [
+    { value: "", label: "None" },
+    { value: "orchestrator", label: "Orchestrator" },
+    { value: "leaf", label: "Leaf" },
+  ];
+  const projectOptions = $derived([
+    { value: "", label: "None" },
+    ...cawco.projects
+      .map((project) => ({ value: project.id, label: project.name }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  ]);
+  const pickRole = (next: string) => {
+    scope = {
+      ...(isMemoryRole(next) ? { role: next } : {}),
+      ...(scope.projectIds ? { projectIds: scope.projectIds } : {}),
+    };
+  };
+  /** A project picked toggles in or out; "None" clears them all. */
+  const pickProject = (next: string) => {
+    const had = scope.projectIds ?? [];
+    let projectIds: string[] = [];
+    if (next) {
+      projectIds = had.includes(next)
+        ? had.filter((id) => id !== next)
+        : [...had, next];
+    }
+    scope = {
+      ...(scope.role ? { role: scope.role } : {}),
+      ...(projectIds.length > 0 ? { projectIds } : {}),
+    };
+  };
 
   // ── history ──────────────────────────────────────────────────────────
   let versions = $state<FleetMemoryVersion[] | null>(null);
@@ -415,15 +479,15 @@
   saveLabel="Save"
   saving={busy && !forcing}
   settling={!drawn || (versions === null && historyError === null)}
-  title={fileLabel(path)}
+  title={label}
 >
   {#snippet result()}
-    {#if saved}
+    {#if saved && onMachines}
       <RolloutChip
         kind={main ? "memory" : "memoryDocs"}
         {machines}
         name={path}
-        what={fileLabel(path)}
+        what={label}
       />
     {/if}
   {/snippet}
@@ -435,8 +499,27 @@
         options={files}
         value={path}
       />
+      {#if !main}
+        <PickerChip
+          label="Role"
+          onpick={pickRole}
+          options={ROLE_OPTIONS}
+          value={scope.role ?? ""}
+        />
+        <PickerChip
+          label="Projects"
+          onpick={pickProject}
+          options={projectOptions}
+          picked={scope.projectIds ?? []}
+        />
+      {/if}
     </div>
-    <h1 class="title">{fileLabel(path)}</h1>
+    <h1 class="title">{label}</h1>
+    {#if !main}
+      <p class="facts">
+        <span>Loaded into: {loadedInto(scope, cawco.projects)}</span>
+      </p>
+    {/if}
     <p class="facts num">
       <span>{formatBytes(bytes)}</span>
       <span
@@ -502,7 +585,7 @@
            kept for this file to be back. -->
       {#if kept.restored}
         <MarkdownEditor
-          label={fileLabel(path)}
+          {label}
           onready={() => {
             drawn = true;
           }}
@@ -617,118 +700,130 @@
     {/if}
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
-    {#if machines.length === 0}
-      <p class="note">
-        <AddMachineLink>No machines yet</AddMachineLink>
-        — this lands on the first one that registers.
-      </p>
-    {:else}
-      {#if applied.length > 0}
+  <!-- A machine holds a copy of the main file and of a linked document
+       alone: a scoped one is loaded into sessions, never adopted from one. -->
+  {#if !scoped(savedScope)}
+    <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
+      {#if machines.length === 0}
         <p class="note">
-          In sync on {applied.length} machine{applied.length === 1 ? "" : "s"}.
-          {#if asleep.length > 0}
-            {asleep.map((row) => machineLabel(row.hostname)).join(", ")}
-            offline — they sync when back.
-          {/if}
+          <AddMachineLink>No machines yet</AddMachineLink>
+          — this lands on the first one that registers.
         </p>
-      {/if}
-      <ul class="list">
-        {#each machines as machine, index (machine.machineId)}
-          {@const item = memoryStateOf(machine, path)}
-          {@const online = machine.status === "online"}
-          {@const drifted = item?.state === "failed"}
-          {@const comparingThis = comparing === machine.machineId}
-          <li class="entry">
-            <div class="line">
-              <MachineRow
-                hue={machineHue(index, online)}
-                icon={machineIcon(machine.os)}
-                meta="{SAID[item?.state ?? ''] ?? 'Not reported'} · {machineOs(
-                  machine.os
-                ).label}{online ? '' : ' · offline, it syncs when back'}"
-                name={machineLabel(machine.hostname)}
-                presence={online ? "online" : "off"}
-              />
-              {#if drifted || !saved}
-                {@const settle = settling[machine.machineId]}
-                <span class="acts" in:crossIn out:crossOut>
-                  {#if drifted}
+      {:else}
+        {#if applied.length > 0}
+          <p class="note">
+            In sync on {applied.length} machine{applied.length === 1
+              ? ""
+              : "s"}.
+            {#if asleep.length > 0}
+              {asleep.map((row) => machineLabel(row.hostname)).join(", ")}
+              offline — they sync when back.
+            {/if}
+          </p>
+        {/if}
+        <ul class="list">
+          {#each machines as machine, index (machine.machineId)}
+            {@const item = memoryStateOf(machine, path)}
+            {@const online = machine.status === "online"}
+            {@const drifted = item?.state === "failed"}
+            {@const comparingThis = comparing === machine.machineId}
+            <li class="entry">
+              <div class="line">
+                <MachineRow
+                  hue={machineHue(index, online)}
+                  icon={machineIcon(machine.os)}
+                  meta="{SAID[item?.state ?? ''] ??
+                    'Not reported'} · {machineOs(machine.os).label}{online
+                    ? ''
+                    : ' · offline, it syncs when back'}"
+                  name={machineLabel(machine.hostname)}
+                  presence={online ? "online" : "off"}
+                />
+                {#if drifted || !saved}
+                  {@const settle = settling[machine.machineId]}
+                  <span class="acts" in:crossIn out:crossOut>
+                    {#if drifted}
+                      <Button
+                        disabled={!online}
+                        onclick={() => compare(machine)}
+                        size="sm"
+                        variant={comparingThis ? "secondary" : "outline"}
+                      >
+                        {comparingThis ? "Hide" : "Compare"}
+                      </Button>
+                    {/if}
                     <Button
-                      disabled={!online}
-                      onclick={() => compare(machine)}
-                      size="sm"
-                      variant={comparingThis ? "secondary" : "outline"}
-                    >
-                      {comparingThis ? "Hide" : "Compare"}
-                    </Button>
-                  {/if}
-                  <Button
-                    disabled={!online || settle === "push"}
-                    failed={machine.machineId in settleFailed}
-                    label="Adopt this copy"
-                    onclick={() => adopt(machine)}
-                    pending={settle === "adopt"}
-                    pendingLabel="Adopting…"
-                    size="sm"
-                    variant="outline"
-                  />
-                  {#if drifted}
-                    <Button
-                      disabled={!online || settle === "adopt"}
+                      disabled={!online || settle === "push"}
                       failed={machine.machineId in settleFailed}
-                      label="Send ours"
-                      onclick={() => overwrite(machine)}
-                      pending={settle === "push"}
-                      pendingLabel="Sending…"
+                      label="Adopt this copy"
+                      onclick={() => adopt(machine)}
+                      pending={settle === "adopt"}
+                      pendingLabel="Adopting…"
                       size="sm"
                       variant="outline"
                     />
-                  {/if}
-                </span>
-              {/if}
-            </div>
-            <RowFault reason={settleFailed[machine.machineId]} />
-            {#if drifted && item?.detail}
-              <pre class="said" in:unfold out:unfold>{item.detail}</pre>
-            {/if}
-            {#if comparingThis}
-              <!-- The machine's copy folds open under its row; reading
-                   cross-fades to what was read as the box follows. -->
-              <div class="reveal" in:unfold out:unfold>
-                <div class="swap" {@attach morph()}>
-                  {#if peeking[machine.machineId]}
-                    <p class="note busy" role="status" in:crossIn out:crossOut>
-                      <Spinner class="size-4 shrink-0" />Reading this machine's
-                      copy…
-                    </p>
-                  {:else if unread[machine.machineId]}
-                    <p class="caution" role="alert" in:crossIn out:crossOut>
-                      {unread[machine.machineId]}
-                    </p>
-                  {:else if copies[machine.machineId] === null}
-                    <p class="note" in:crossIn out:crossOut>
-                      This machine has no copy of this file.
-                    </p>
-                  {:else if copies[machine.machineId] !== undefined}
-                    <div in:crossIn out:crossOut>
-                      {#key `${machine.machineId}:${saved?.hash ?? ""}`}
-                        <DiffView
-                          filePath={path}
-                          newContent={copies[machine.machineId] ?? ""}
-                          oldContent={saved?.content ?? ""}
-                        />
-                      {/key}
-                    </div>
-                  {/if}
-                </div>
+                    {#if drifted}
+                      <Button
+                        disabled={!online || settle === "adopt"}
+                        failed={machine.machineId in settleFailed}
+                        label="Send ours"
+                        onclick={() => overwrite(machine)}
+                        pending={settle === "push"}
+                        pendingLabel="Sending…"
+                        size="sm"
+                        variant="outline"
+                      />
+                    {/if}
+                  </span>
+                {/if}
               </div>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </EditorSection>
+              <RowFault reason={settleFailed[machine.machineId]} />
+              {#if drifted && item?.detail}
+                <pre class="said" in:unfold out:unfold>{item.detail}</pre>
+              {/if}
+              {#if comparingThis}
+                <!-- The machine's copy folds open under its row; reading
+                   cross-fades to what was read as the box follows. -->
+                <div class="reveal" in:unfold out:unfold>
+                  <div class="swap" {@attach morph()}>
+                    {#if peeking[machine.machineId]}
+                      <p
+                        class="note busy"
+                        role="status"
+                        in:crossIn
+                        out:crossOut
+                      >
+                        <Spinner class="size-4 shrink-0" />Reading this
+                        machine's copy…
+                      </p>
+                    {:else if unread[machine.machineId]}
+                      <p class="caution" role="alert" in:crossIn out:crossOut>
+                        {unread[machine.machineId]}
+                      </p>
+                    {:else if copies[machine.machineId] === null}
+                      <p class="note" in:crossIn out:crossOut>
+                        This machine has no copy of this file.
+                      </p>
+                    {:else if copies[machine.machineId] !== undefined}
+                      <div in:crossIn out:crossOut>
+                        {#key `${machine.machineId}:${saved?.hash ?? ""}`}
+                          <DiffView
+                            filePath={path}
+                            newContent={copies[machine.machineId] ?? ""}
+                            oldContent={saved?.content ?? ""}
+                          />
+                        {/key}
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </EditorSection>
+  {/if}
 </EditorFrame>
 
 <style>

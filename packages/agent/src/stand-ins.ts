@@ -291,8 +291,8 @@ const lfsMarker = async (path: string, found: Stats): Promise<boolean> =>
  * are not CawCo's, down its tree, each by its path in the folder: every one
  * but a deny path's stand-in as made ({@link asMade}), a mount point a
  * sandbox left there, the `.git/config` of git-lfs's marker alone
- * ({@link LFS_MARKER}), a project's skill exactly as CawCo placed it
- * (`placed`, the dirs fleet.ts `placedSkillsAsMade` answers for the folder),
+ * ({@link LFS_MARKER}), a project's skill or memory document exactly as CawCo placed it
+ * (`placed`, the paths fleet.ts `placedAsMade` answers for the folder),
  * and a dir above any of those (`.git`, `.claude`) holding only them. A husk
  * has none: nothing of anyone's is lost when it goes.
  */

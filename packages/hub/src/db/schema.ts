@@ -26,6 +26,7 @@ import type {
   LandsMode,
   LimitWindow,
   McpPlatform,
+  MemoryRole,
   ModelInfo,
   MoveRequest,
   MoveStage,
@@ -1628,10 +1629,36 @@ export const fleetMemoryDocs = sqliteTable("fleet_memory_docs", {
   content: text("content").notNull(),
   /** sha256 hex of the content, which is what a machine compares before writing. */
   hash: text("hash").notNull(),
+  /**
+   * The role of the sessions it is loaded into (core fleet.ts
+   * `MemoryScope`), `orchestrator` or `leaf`; its projects are
+   * {@link fleetMemoryDocProjects}. Neither is a linked document under
+   * `~/.claude/memories/`, read on purpose.
+   */
+  role: text("role").$type<MemoryRole>(),
   updatedAt: timestamp("updated_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * The projects a fleet memory document is scoped to, one row each: the
+ * sessions in their checkouts and workspaces load it. A document whose last
+ * project goes, goes with it (db `deleteProject`), never widening to every
+ * session.
+ */
+export const fleetMemoryDocProjects = sqliteTable(
+  "fleet_memory_doc_projects",
+  {
+    path: text("path")
+      .notNull()
+      .references(() => fleetMemoryDocs.path, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.path, table.projectId] })]
+);
 
 /**
  * What the fleet's memory used to say. Every change records the version it

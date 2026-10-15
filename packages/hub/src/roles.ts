@@ -38,7 +38,7 @@
  * call `memory_propose` (the lead's commits, the curator's waits for you),
  * and only the curator sorts the inbox.
  */
-import type { InstanceRow, SessionRole } from "@cawco/core";
+import type { InstanceRow, MemoryRole, SessionRole } from "@cawco/core";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
 
 /**
@@ -234,6 +234,17 @@ const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
 /** Whether a session in `role` may see and call the tool `name`. */
 export const allows = (role: SessionRole, name: string): boolean =>
   role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
+
+/**
+ * Which role-scoped memory a session loads (core fleet.ts `MemoryRole`): an
+ * orchestrator's when it holds the spawning tools, its role's toolset having
+ * `delegate` and its spawn not marking it a leaf (`canDelegate: false`, which
+ * keeps the spawning tools from it whatever its role); a leaf's otherwise.
+ */
+export const memoryRoleOf = (row: InstanceRow): MemoryRole =>
+  row.canDelegate !== false && allows(roleOf(row), "delegate")
+    ? "orchestrator"
+    : "leaf";
 
 /**
  * Which of a granted connection's tools (connections.ts) a role gets: a

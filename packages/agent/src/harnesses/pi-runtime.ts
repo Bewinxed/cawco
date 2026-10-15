@@ -52,6 +52,7 @@ import {
 import { type Boundary, boundaryCommand } from "../boundary";
 import { callDelegationTool, delegationTools } from "../delegation";
 import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
+import { placedMemoryIn } from "../placed-memory";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { accountRuntime } from "./pi-accounts";
 import {
@@ -927,6 +928,20 @@ export async function startPiHost(
   const shells = new PiShells();
   const agentDir = getAgentDir();
   const settingsManager = SettingsManager.create(ctx.cwd, agentDir);
+  // pi reads `AGENTS.md` and `CLAUDE.md` up from its folder itself
+  // (resource-loader.js `loadContextFileFromDir`, 1.0.1); the project's
+  // memory documents CawCo placed in its folder (fleet.ts `placedMemoryIn`)
+  // and its role's, which it launches with, join them as context files.
+  const memory = [
+    ...(await placedMemoryIn(ctx.cwd)).map(({ file, content }) => ({
+      path: file,
+      content,
+    })),
+    ...(spec.instructions ?? []).map(({ path, content }) => ({
+      path: `cawco memory: ${path}`,
+      content,
+    })),
+  ];
   const resourceLoader = new DefaultResourceLoader({
     cwd: ctx.cwd,
     agentDir,
@@ -934,6 +949,9 @@ export async function startPiHost(
     extensionFactories: [
       tools.extension(await piHandoffTools(ctx.instanceId, credential)),
     ],
+    agentsFilesOverride: (base) => ({
+      agentsFiles: [...base.agentsFiles, ...memory],
+    }),
   });
   await resourceLoader.reload();
   registerExtensionProviders(runtime, resourceLoader);

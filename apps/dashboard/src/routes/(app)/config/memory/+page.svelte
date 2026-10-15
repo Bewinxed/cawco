@@ -5,8 +5,10 @@
   import { drafts } from "#lib/cawco/config/drafts.svelte.js";
   import {
     byteLength,
+    docLabel,
     fileHref,
     fileLabel,
+    loadedInto,
     MAIN,
   } from "#lib/cawco/config/memory.js";
   import NewMemoryPopover from "#lib/cawco/config/NewMemoryPopover.svelte";
@@ -32,9 +34,10 @@
   import { formatDistanceToNow } from "#lib/utils/time.js";
 
   /**
-   * The fleet's memory: the user CLAUDE.md every session loads flat, and the
+   * The fleet's memory: the user CLAUDE.md every session loads flat, the
    * documents it links under ~/.claude/memories/ — a models/<model>.md is put
-   * in front of the session running that model only.
+   * in front of the session running that model only — and the scoped
+   * documents each session of a role, a project or both loads.
    */
   const store = configStore();
   const section = sectionOf("memory");
@@ -186,17 +189,23 @@
         href={fileHref(doc.path)}
         hue={HUE}
         icon={IconBook}
-        meta="{facts(doc)}{drafted(doc.path)}"
+        meta="{loadedInto(doc.scope, cawco.projects)} · {facts(doc)}{drafted(
+          doc.path
+        )}"
         mono
-        name={fileLabel(doc.path)}
+        name={docLabel(doc.path, doc.scope)}
       >
         {#snippet rollout()}
-          <RolloutChip
-            kind="memoryDocs"
-            {machines}
-            name={doc.path}
-            what={doc.path}
-          />
+          <!-- A role's document reaches its sessions as they start, from the
+               hub: it is on no machine. -->
+          {#if !doc.scope?.role}
+            <RolloutChip
+              kind="memoryDocs"
+              {machines}
+              name={doc.path}
+              what={doc.path}
+            />
+          {/if}
         {/snippet}
         {#snippet below()}
           <AskHere asker={asks} at={doc.path} />

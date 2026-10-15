@@ -212,6 +212,7 @@ import {
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
   type MachineProviderLists,
   MCP_PLATFORMS,
+  MEMORY_ROLES,
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
@@ -455,6 +456,11 @@ import {
   storeFile,
 } from "./media";
 import { createMemory, createTurnWatch, memoryRoutes } from "./memory";
+import {
+  placesHolding,
+  roleInstructions,
+  sessionProject,
+} from "./memory-scopes";
 import { mockupRoutes } from "./mockups";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
@@ -540,6 +546,7 @@ import {
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRepoPublish } from "./repo-publish";
+import { memoryRoleOf } from "./roles";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
@@ -5510,7 +5517,26 @@ export const createServer = (
     } else if (where.accountId) {
       account = { accountDir: { accountId: where.accountId } };
     }
-    return { sessionCredential: identities.mint(read.id), ...account };
+    // The fleet's documents for this session's role, in its project, as
+    // the fleet says them now (memory-scopes.ts); and its project's for its
+    // own place, which its machine writes there before the session starts.
+    const places = db.listProjects().flatMap((project) => project.places);
+    const instructions = roleInstructions(
+      db.listFleetMemoryDocs(),
+      memoryRoleOf(stored),
+      sessionProject(stored, places)
+    );
+    const placedMemory = placedCopies(
+      db.fleetConfig().placedMemory,
+      placesHolding(stored, places),
+      machineId
+    );
+    return {
+      sessionCredential: identities.mint(read.id),
+      ...account,
+      ...(instructions.length > 0 ? { instructions } : {}),
+      ...(placedMemory.length > 0 ? { placedMemory } : {}),
+    };
   };
   /**
    * The row of the launch asking ({@link grantLaunch}), when it is the one
@@ -13447,6 +13473,8 @@ export const createServer = (
             // always carries its files, as each place is its own copy.
             placedSkills: placedCopies(config.skills, places, machineId),
             placedMcp: placedCopies(mcpRows, places, machineId),
+            // A project's memory documents, likewise once per place.
+            placedMemory: placedCopies(config.placedMemory, places, machineId),
             pluginPayloads: config.pluginPayloads?.map((plugin) =>
               // Keyed by the fleet's id: two marketplaces may each carry a
               // plugin of the same name, and a machine holds both.
@@ -13602,6 +13630,7 @@ export const createServer = (
       config.plugins.length ||
       config.skills?.length ||
       config.hooks?.length ||
+      config.placedMemory?.length ||
       config.memory
     );
     if (
@@ -14267,9 +14296,9 @@ export const createServer = (
 
   // A place added or removed: every dashboard reads the projects again, and
   // its machine is sent its fleet config again, so the project's hooks, MCP
-  // servers and skills reach the new place or leave the old one. Only when
-  // the project has any; a place of a project without them changes nothing
-  // on its machine.
+  // servers, skills and memory documents reach the new place or leave the
+  // old one. Only when the project has any; a place of a project without
+  // them changes nothing on its machine.
   onPlacesChanged((machineId, projectId) => {
     projectsChanged();
     const agent = registry.agent(machineId);
@@ -14278,7 +14307,12 @@ export const createServer = (
       !agent ||
       (projectId &&
         !hasProjectRows(
-          [...(fleet.hooks ?? []), ...fleet.mcp, ...(fleet.skills ?? [])],
+          [
+            ...(fleet.hooks ?? []),
+            ...fleet.mcp,
+            ...(fleet.skills ?? []),
+            ...(fleet.placedMemory ?? []),
+          ],
           projectId
         ))
     ) {
@@ -18728,6 +18762,10 @@ export const createServer = (
       kind: peekKind(message.payload),
       permissionMode: settled.permissionMode,
       model: payload.model,
+      // A start that is a leaf is one on its row too: its machine withholds
+      // the spawning tools from it, and the hub reads its row for every
+      // other answer about it (who may spawn, its memory role, a restore).
+      canDelegate: payload.canDelegate,
       ...peekParent(message.payload),
       ...openedAccount(payload, placed),
     });
@@ -21152,8 +21190,12 @@ export const createServer = (
       // one edited by hand on a machine stays there, unmanaged. The set goes with
       // it — a linked document with no main file to link it is not a memory, and
       // the machines would keep converging on documents nothing points at.
+      // A scoped document is loaded on its own, linked by nothing, so it stays.
       .delete("/api/fleet/memory", () => {
         for (const doc of db.listFleetMemoryDocs()) {
+          if (doc.scope) {
+            continue;
+          }
           keepRemovedDoc(doc);
           db.deleteFleetMemoryDoc(doc.path);
         }
@@ -21161,9 +21203,11 @@ export const createServer = (
         fanOutFleet();
         return { ok: true };
       })
-      // One linked document. Same save as the main file's, keyed by the path it
-      // lands at — `models/claude-opus-5.md` is the same string on every machine,
-      // which is what makes it the row's identity.
+      // One document. Same save as the main file's, keyed by its path —
+      // `models/claude-opus-5.md` is the same string on every machine, which
+      // is what makes it the row's identity. `scope` names the sessions it is
+      // loaded into (core fleet.ts `MemoryScope`): a role, projects, or both;
+      // `{}` makes it a linked document again, and left out it stays.
       .put(
         "/api/fleet/memory/docs",
         {
@@ -21171,12 +21215,24 @@ export const createServer = (
             path: t.String(),
             content: t.String(),
             expectedHash: t.Optional(t.String()),
+            scope: t.Optional(
+              t.Object({
+                role: t.Optional(
+                  t.Union(MEMORY_ROLES.map((role) => t.Literal(role)))
+                ),
+                projectIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
+              })
+            ),
           }),
         },
         ({ body, status }) => {
           const problem = memoryDocProblem(body.path);
           if (problem) {
             return status(400, problem);
+          }
+          const unknown = body.scope?.projectIds?.find((id) => !db.project(id));
+          if (unknown) {
+            return status(400, `there is no project ${unknown}`);
           }
 
           const current = db.getFleetMemoryDoc(body.path);
@@ -21191,6 +21247,7 @@ export const createServer = (
           const doc = db.putFleetMemoryDoc({
             path: body.path,
             content: body.content,
+            ...(body.scope ? { scope: body.scope } : {}),
           });
           fanOutFleet();
           return doc;
@@ -21295,7 +21352,8 @@ export const createServer = (
           if (read.copy.docs) {
             const theirs = new Set(read.copy.docs.map((doc) => doc.path));
             for (const doc of db.listFleetMemoryDocs()) {
-              if (theirs.has(doc.path)) {
+              // A machine's `memories/` holds the linked documents alone.
+              if (theirs.has(doc.path) || doc.scope) {
                 continue;
               }
               keepRemovedDoc(doc);
@@ -25106,6 +25164,14 @@ export const createServer = (
                         : {}),
                       ...(peeked.hooks
                         ? { hooks: foldPlacedStates(peeked.hooks, pathOf) }
+                        : {}),
+                      ...(peeked.memoryDocs
+                        ? {
+                            memoryDocs: foldPlacedStates(
+                              peeked.memoryDocs,
+                              pathOf
+                            ),
+                          }
                         : {}),
                     }
                   : peeked;

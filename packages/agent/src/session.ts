@@ -113,6 +113,7 @@ import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
+import { placeMemoryAtLaunch } from "./fleet";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
 import {
@@ -2630,11 +2631,19 @@ export class SessionSupervisor {
       const grant = payload.reattachOnly
         ? undefined
         : await this.#granted(payload);
+      // Its project's memory documents are in its place before it reads
+      // them; a workspace opened for it got its place in the same step.
+      if (grant?.placedMemory) {
+        await placeMemoryAtLaunch(grant.placedMemory);
+      }
+      // Its role's memory documents are the grant's alone, whatever the
+      // spawn carried.
       const spec: SpawnPayload = grant
         ? {
             ...payload,
             accountDir: grant.accountDir,
             homeLoginMove: grant.homeLoginMove,
+            instructions: grant.instructions,
           }
         : payload;
       // A work item's session runs every shell command inside its workspace's

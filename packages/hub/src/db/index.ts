@@ -23,6 +23,7 @@ import type {
   HookEvent,
   HookHandler,
   McpPlatform,
+  MemoryScope,
   OnCap,
   OpenCodeGoLimits,
   PlanStep,
@@ -114,6 +115,7 @@ import {
   fleetMcpOauth,
   fleetMcpSessions,
   fleetMemory,
+  fleetMemoryDocProjects,
   fleetMemoryDocs,
   fleetMemoryHistory,
   fleetSkillHistory,
@@ -383,8 +385,28 @@ export interface MemoryDocRow {
   content: string;
   hash: string;
   path: string;
+  /** The sessions it is loaded into; absent is a linked document under `~/.claude/memories/`. */
+  scope?: MemoryScope;
   updatedAt: Date;
 }
+
+/** A stored row as the hub answers it, its projects read off the link table. */
+const memoryDocRow = (
+  row: typeof fleetMemoryDocs.$inferSelect,
+  projectIds: readonly string[]
+): MemoryDocRow => {
+  const scope: MemoryScope = {
+    ...(row.role ? { role: row.role } : {}),
+    ...(projectIds.length > 0 ? { projectIds: [...projectIds].sort() } : {}),
+  };
+  return {
+    path: row.path,
+    content: row.content,
+    hash: row.hash,
+    ...(scope.role || scope.projectIds ? { scope } : {}),
+    updatedAt: row.updatedAt,
+  };
+};
 
 /** One superseded version of one hook, as a listing reads it — without the material. */
 export interface HookVersion {
@@ -1387,10 +1409,15 @@ export interface DbShape {
    * actually compares before writing — so a hash can never be sent stale.
    */
   readonly putFleetHook: (hook: Omit<FleetHook, "hash">) => FleetHook;
-  /** Upsert of one document; the hash is read off the content, as everywhere. */
+  /**
+   * Upsert of one document; the hash is read off the content, as everywhere.
+   * `scope` given replaces the stored one whole (`{}` makes it a linked
+   * document again); left out, the stored scope stays.
+   */
   readonly putFleetMemoryDoc: (doc: {
     path: string;
     content: string;
+    scope?: MemoryScope;
   }) => MemoryDocRow;
   /** Stores the turn a project's Caw is in, replacing what his session had. */
   readonly putLeadTurn: (turn: typeof leadTurns.$inferInsert) => void;
@@ -3056,18 +3083,43 @@ const make = async (path: string): Promise<DbShape> => {
       : undefined;
   };
 
-  const listFleetMemoryDocs = (): MemoryDocRow[] =>
-    db
+  /** Each document's projects, by its path. */
+  const memoryDocProjects = (docPath?: string): Map<string, string[]> => {
+    const byPath = new Map<string, string[]>();
+    for (const link of db
+      .select()
+      .from(fleetMemoryDocProjects)
+      .where(
+        docPath === undefined
+          ? undefined
+          : eq(fleetMemoryDocProjects.path, docPath)
+      )
+      .all()) {
+      byPath.set(link.path, [...(byPath.get(link.path) ?? []), link.projectId]);
+    }
+    return byPath;
+  };
+
+  const listFleetMemoryDocs = (): MemoryDocRow[] => {
+    const projectsOf = memoryDocProjects();
+    return db
       .select()
       .from(fleetMemoryDocs)
       .orderBy(fleetMemoryDocs.path)
       .all()
-      .map(({ path: docPath, content, hash, updatedAt }) => ({
-        path: docPath,
-        content,
-        hash,
-        updatedAt,
-      }));
+      .map((row) => memoryDocRow(row, projectsOf.get(row.path) ?? []));
+  };
+
+  const getFleetMemoryDoc = (docPath: string): MemoryDocRow | undefined => {
+    const row = db
+      .select()
+      .from(fleetMemoryDocs)
+      .where(eq(fleetMemoryDocs.path, docPath))
+      .get();
+    return row
+      ? memoryDocRow(row, memoryDocProjects(docPath).get(docPath) ?? [])
+      : undefined;
+  };
 
   /** The column a usage summary groups on. */
   const usageKey = (groupBy: UsageGroupBy) => {
@@ -5168,15 +5220,30 @@ const make = async (path: string): Promise<DbShape> => {
           return {
             hash: stored.hash,
             content: stored.content,
-            docs: listFleetMemoryDocs().map(
-              ({ path: docPath, hash, content }) => ({
-                path: docPath,
-                hash,
-                content,
-              })
+            // The linked documents alone: a scoped one is loaded into its
+            // sessions, never written under `~/.claude/memories/`.
+            docs: listFleetMemoryDocs().flatMap(
+              ({ path: docPath, hash, content, scope }) =>
+                scope ? [] : [{ path: docPath, hash, content }]
             ),
           };
         })(),
+        // A project's documents for all its sessions, each placed once per
+        // checkout and workspace of it as the sync goes out (project-placements.ts).
+        // One with a role goes to its sessions as they launch instead.
+        // A document of several projects is one row per project.
+        placedMemory: listFleetMemoryDocs().flatMap(
+          ({ path: docPath, hash, content, scope }) =>
+            scope?.role
+              ? []
+              : (scope?.projectIds ?? []).map((projectId) => ({
+                  path: docPath,
+                  hash,
+                  content,
+                  projectId,
+                  scope: "project" as const,
+                }))
+        ),
         // Always an array, like `skills` above, never omitted: this hub is not
         // one that predates hooks, so there is no version-skew reason to leave
         // the field out the way an old daemon's absence is read. A disabled row
@@ -5697,40 +5764,37 @@ const make = async (path: string): Promise<DbShape> => {
       db.delete(fleetMemory).where(eq(fleetMemory.id, MEMORY_ID)).run();
     },
     listFleetMemoryDocs,
-    getFleetMemoryDoc: (docPath) => {
-      const row = db
-        .select()
-        .from(fleetMemoryDocs)
-        .where(eq(fleetMemoryDocs.path, docPath))
-        .get();
-      return row
-        ? {
-            path: row.path,
-            content: row.content,
-            hash: row.hash,
-            updatedAt: row.updatedAt,
-          }
-        : undefined;
-    },
-    putFleetMemoryDoc: ({ path: docPath, content }) => {
-      const row = {
-        path: docPath,
+    getFleetMemoryDoc,
+    putFleetMemoryDoc: ({ path: docPath, content, scope }) => {
+      const written = {
         content,
         hash: hashText(content),
         updatedAt: new Date(),
+        // Given, it replaces the stored scope whole; left out, the stored one stays.
+        ...(scope === undefined ? {} : { role: scope.role ?? null }),
       };
-      db.insert(fleetMemoryDocs)
-        .values(row)
-        .onConflictDoUpdate({
-          target: fleetMemoryDocs.path,
-          set: {
-            content: row.content,
-            hash: row.hash,
-            updatedAt: row.updatedAt,
-          },
-        })
-        .run();
-      return row;
+      db.transaction((tx) => {
+        tx.insert(fleetMemoryDocs)
+          .values({ path: docPath, ...written })
+          .onConflictDoUpdate({ target: fleetMemoryDocs.path, set: written })
+          .run();
+        if (scope === undefined) {
+          return;
+        }
+        tx.delete(fleetMemoryDocProjects)
+          .where(eq(fleetMemoryDocProjects.path, docPath))
+          .run();
+        for (const projectId of new Set(scope.projectIds ?? [])) {
+          tx.insert(fleetMemoryDocProjects)
+            .values({ path: docPath, projectId })
+            .run();
+        }
+      });
+      const stored = getFleetMemoryDoc(docPath);
+      if (!stored) {
+        throw new Error(`${docPath} was not stored`);
+      }
+      return stored;
     },
     deleteFleetMemoryDoc: (docPath) => {
       db.delete(fleetMemoryDocs).where(eq(fleetMemoryDocs.path, docPath)).run();
@@ -6847,6 +6911,21 @@ const make = async (path: string): Promise<DbShape> => {
         tx.delete(queuedTaskStarts)
           .where(eq(queuedTaskStarts.projectId, id))
           .run();
+        // A memory document scoped to it alone goes with it: losing its last
+        // project must not widen it to every session.
+        const links = tx.select().from(fleetMemoryDocProjects).all();
+        for (const link of links) {
+          if (
+            link.projectId === id &&
+            !links.some(
+              (other) => other.path === link.path && other.projectId !== id
+            )
+          ) {
+            tx.delete(fleetMemoryDocs)
+              .where(eq(fleetMemoryDocs.path, link.path))
+              .run();
+          }
+        }
         tx.delete(projects).where(eq(projects.id, id)).run();
       });
     },
@@ -6952,6 +7031,20 @@ const make = async (path: string): Promise<DbShape> => {
             .where(eq(table.projectId, dupId))
             .run();
         }
+        // A memory document of both stays one link to the kept project.
+        for (const link of tx
+          .select()
+          .from(fleetMemoryDocProjects)
+          .where(eq(fleetMemoryDocProjects.projectId, dupId))
+          .all()) {
+          tx.insert(fleetMemoryDocProjects)
+            .values({ path: link.path, projectId: keepId })
+            .onConflictDoNothing()
+            .run();
+        }
+        tx.delete(fleetMemoryDocProjects)
+          .where(eq(fleetMemoryDocProjects.projectId, dupId))
+          .run();
         tx.update(projectOffers)
           .set({ projectId: keepId })
           .where(eq(projectOffers.projectId, dupId))
