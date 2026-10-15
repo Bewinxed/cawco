@@ -775,9 +775,13 @@
           agentName="Caw"
           bare
           {focused}
+          latestInset={writable && foot.stack
+            ? `calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
+            : undefined}
           onshown={(drawn) => {
             shown = drawn;
           }}
+          parkedHeight={writable ? foot.parked : 0}
           {session}
           {visible}
         />
@@ -801,11 +805,7 @@
 <div class="pane" bind:clientWidth={paneWidth}>
   <div
     class="body"
-    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4)); --parked-room: {writable
-      ? foot.parked
-      : 0}px; {writable && foot.stack
-      ? `--latest-inset: calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
-      : ''}"
+    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
   >
     {#if docked}
       {@render slide()}

@@ -90,6 +90,10 @@ const SETTLE_MS = 900;
 const REST_MS = 2000;
 /** The longest a switch's own task may take on the slower CPU, ms: two frames. */
 const SWITCH_MS = 100;
+/** A box holding this many elements or more is named when a switch changes it. */
+const ROOT_ELEMENTS = 100;
+/** How long after its press a switch's own changes are taken to be, ms, the page's clock. */
+const CLICK_MS = 100;
 /** How much more a message's CPU two panes may take while streaming than one pane's. */
 const MESSAGE_SHARE = 1.1;
 interface Reading {
@@ -115,6 +119,14 @@ interface Reading {
 
 /** A long animation frame as the page tells it: its start, length, and what filled it. */
 type Frame = [number, number, string];
+
+/** One attribute change on the page, as its observer heard it: when, which, on what, from what. */
+interface Changed {
+  at: number;
+  name: string | null;
+  target: Node;
+  was: string | null;
+}
 
 interface Cost {
   events: [number, number][];
@@ -414,27 +426,30 @@ async function measure(
       );
     const markAt = (mark: string) =>
       main.marks.find((one) => one.name === mark)?.at;
+    // The phase's own tasks, from its mark on: the trace's first task is
+    // DevTools beginning it (the sampling profiler's start alone was 206ms
+    // of CPU), not the page's.
+    const begun = markAt(`two-pane:${name}`) ?? 0;
+    const own = main.tasks.filter((task) => task.at >= begun);
     const reaches: MainTask[] = [];
     const switches: MainTask[] = [];
     for (let n = 0; markAt(`two-pane:switch:${n}`) !== undefined; n += 1) {
       const reach = markAt(`two-pane:reach:${n}`) ?? 0;
       const made = markAt(`two-pane:switch:${n}`) ?? 0;
-      reaches.push(
-        ...main.tasks.filter((task) => task.at >= reach && task.at < made)
-      );
+      reaches.push(...own.filter((task) => task.at >= reach && task.at < made));
       switches.push(
-        ...main.tasks.filter(
+        ...own.filter(
           (task) => task.at >= made && task.at < made + SETTLE_MS * 1000
         )
       );
     }
     const longestSwitch = longestOf(switches);
-    const longest = longestSwitch ?? longestOf(main.tasks);
+    const longest = longestSwitch ?? longestOf(own);
     spans[name] = {
       from,
       to,
-      cpu: main.tasks.reduce((sum, task) => sum + task.cpu, 0),
-      maxCpu: longestOf(main.tasks)?.cpu ?? 0,
+      cpu: own.reduce((sum, task) => sum + task.cpu, 0),
+      maxCpu: longestOf(own)?.cpu ?? 0,
       reachCpu: longestOf(reaches)?.cpu ?? 0,
       switchCpu: longestSwitch?.cpu ?? 0,
       restyled: longest
@@ -516,8 +531,28 @@ async function measure(
       reach: (tab) => tab.hover(),
     },
   };
+  // What each switch changed on a box holding `ROOT_ELEMENTS` or more: an
+  // inherited style changing on one restyles all it holds, so this names
+  // the box and the attribute behind a switch's restyle. The observer only
+  // keeps the records, in the switch's own task; they are read, and the
+  // boxes counted, after it (`Changed`).
+  await page.evaluate(() => {
+    const kept: Changed[] = [];
+    new MutationObserver((records) => {
+      const at = performance.now();
+      for (const { target, attributeName, oldValue } of records) {
+        kept.push({ at, name: attributeName, target, was: oldValue });
+      }
+    }).observe(document.body, {
+      attributeOldValue: true,
+      attributes: true,
+      subtree: true,
+    });
+    (window as unknown as { __changed: Changed[] }).__changed = kept;
+  });
   for (const how of SWITCHES) {
     const way = ways[how];
+    const changed = new Map<string, number>();
     await page.waitForTimeout(REST_MS);
     await phase(how, async () => {
       for (const [n, id] of order.entries()) {
@@ -525,11 +560,55 @@ async function measure(
         await marked(`two-pane:reach:${n}`);
         await way.reach(tab);
         await page.waitForTimeout(way.dwell);
-        await marked(`two-pane:switch:${n}`);
+        const madeAt = await page.evaluate((mark) => {
+          performance.mark(mark);
+          return performance.now();
+        }, `two-pane:switch:${n}`);
         await way.make(tab);
         await page.waitForTimeout(SETTLE_MS);
+        const said = await page.evaluate(
+          // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialized into the page whole, so it cannot lean on helpers out here
+          ([since, within, least]) => {
+            const kept = (window as unknown as { __changed: Changed[] })
+              .__changed;
+            const clip = (value: string | null) => (value ?? "").slice(0, 80);
+            const ours: string[] = [];
+            for (const { at, name, target, was } of kept) {
+              if (!(at >= since && at < since + within)) {
+                continue;
+              }
+              if (!(target instanceof Element && name)) {
+                continue;
+              }
+              const holds = target.getElementsByTagName("*").length;
+              const is = target.getAttribute(name);
+              if (holds >= least && is !== was) {
+                const box = [target.tagName.toLowerCase(), ...target.classList]
+                  .slice(0, 3)
+                  .join(".");
+                ours.push(
+                  `${box} [${name}] "${clip(was)}" → "${clip(is)}" (${holds} inside)`
+                );
+              }
+            }
+            kept.length = 0;
+            return ours;
+          },
+          [madeAt, CLICK_MS, ROOT_ELEMENTS] as const
+        );
+        for (const what of said) {
+          changed.set(what, (changed.get(what) ?? 0) + 1);
+        }
       }
     });
+    kit.note(
+      `${mode} pane(s), ${how}: what its switches changed, within ${CLICK_MS}ms of each, on boxes of ${ROOT_ELEMENTS} elements or more: ${
+        [...changed]
+          .sort((a, b) => b[1] - a[1])
+          .map(([what, times]) => `${what} ${times}x`)
+          .join("; ") || "nothing"
+      }`
+    );
   }
   const seen = await page.evaluate(
     () => (window as unknown as { __cost: Cost }).__cost

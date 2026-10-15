@@ -1118,9 +1118,7 @@
     >
       <div
         class="body"
-        style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4)); --parked-room: {writable
-          ? parkedRoom
-          : 0}px"
+        style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
       >
         <!-- The transcript area. Movement between conversations is owned by the
            pane above this one, so nothing here animates on a switch — this is
@@ -1154,6 +1152,7 @@
                   onshown={(drawn) => {
                     shown = drawn;
                   }}
+                  parkedHeight={writable ? parkedRoom : 0}
                   {session}
                   {visible}
                 />

@@ -91,6 +91,8 @@
     onlanded,
     onshown,
     bare = false,
+    parkedHeight = 0,
+    latestInset,
 
     /**
      * Whether this transcript is on screen at all. Governs how OFTEN rows are
@@ -123,6 +125,17 @@
      * `@` to tell of).
      */
     bare?: boolean;
+    /**
+     * How far what rises past the composer lent to this conversation (an
+     * ask it grows into, an offer on its tray row) stands over the foot, px.
+     * Set on the two boxes that read it (`.parked-room`, `.dock`), never on
+     * a box around the list: it changes as the composer measures itself and
+     * as it is lent from tab to tab, and written above the list it restyled
+     * every row in the list each time.
+     */
+    parkedHeight?: number;
+    /** Where the way back to the tail rests over the foot, when the pane says (a thread). */
+    latestInset?: string;
   } = $props();
 
   setContext("cawco:machine", () => session.machineId);
@@ -3145,12 +3158,21 @@
        is: the tail's pin follows the list and the rows, not this, so the
        view holds still as a card parks, and the reader can scroll on to the
        last row, clear above it. -->
-  <div aria-hidden="true" class="parked-room" bind:this={parkedRoom}></div>
+  <div
+    aria-hidden="true"
+    class="parked-room"
+    style:--parked-room="{parkedHeight}px"
+    bind:this={parkedRoom}
+  ></div>
   <div aria-hidden="true" class="foot" bind:this={foot}></div>
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
        until it has appended, and — scrolled away from the tail — the way back. -->
-  <div class="dock">
+  <div
+    class="dock"
+    style:--latest-inset={latestInset}
+    style:--parked-room="{parkedHeight}px"
+  >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
     {#if behind}
       <Behind
