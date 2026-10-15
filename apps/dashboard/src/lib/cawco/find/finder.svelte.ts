@@ -367,6 +367,10 @@ export class FinderState {
   missing = $derived(
     (this.coverage?.machines ?? []).filter((m) => !m.answered)
   );
+  /** Machines that answered while their index was still catching up: their part may be short. */
+  indexing = $derived(
+    (this.coverage?.machines ?? []).filter((m) => m.answered && m.indexing)
+  );
   /** Asking the machines for the words in the field now. */
   searching = $derived(
     this.typed &&
@@ -384,6 +388,7 @@ export class FinderState {
       this.namesNow !== null &&
       this.everywhereNow !== null &&
       this.missing.length === 0 &&
+      this.indexing.length === 0 &&
       this.namesNow.results.length === 0 &&
       this.saidRows.length === 0
   );

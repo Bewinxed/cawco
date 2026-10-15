@@ -245,15 +245,32 @@ const STAGE_KIND_WORD: Record<string, string> = {
 
 type Reason = "name" | "moment";
 
+/**
+ * A session the hub never ran (started from a terminal): the hub can say
+ * where it was run, not whether it runs now, so the row says that and no
+ * live state. It cannot be named in a message (no handle); it opens by its
+ * session id, machine and folder.
+ */
+const TERMINAL: Shape = {
+  glyph: Unreachable,
+  tone: "quiet",
+  word: "From a terminal",
+};
+
 function conversationRow(r: FindConversation, reason: Reason): Drawn {
-  const s = STATE[r.state];
+  const fromTerminal = r.instanceId === null;
+  const s = fromTerminal ? TERMINAL : STATE[r.state];
   const [moment] = r.moments;
   return {
     title: r.title,
     glyph: s.glyph,
     breathes: r.state === "working",
     state: { word: s.word, tone: s.tone },
-    meta: words(r.project?.name, roleOf(r), r.machine.name),
+    meta: words(
+      r.project?.name,
+      fromTerminal ? null : roleOf(r),
+      r.machine.name
+    ),
     reason:
       reason === "moment" && moment ? momentReason(moment) : nameReason(r),
   };

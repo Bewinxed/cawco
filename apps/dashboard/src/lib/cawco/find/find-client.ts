@@ -136,6 +136,8 @@ export interface FindCoverage {
   machines: {
     answered: boolean;
     indexAgeMs: number | null;
+    /** It answered while its index was still catching up: its moments may be short. */
+    indexing: boolean;
     machineId: string;
     name: string;
     reason: string | null;

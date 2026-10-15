@@ -249,6 +249,7 @@
       (finder.searching ||
         saidRows.length > 0 ||
         finder.missing.length > 0 ||
+        finder.indexing.length > 0 ||
         finder.by !== null)
   );
   const machineCount = $derived(
@@ -258,6 +259,13 @@
     (finder.coverage?.machines ?? []).filter((m) => m.answered).length
   );
   const missingNames = $derived(finder.missing.map((m) => m.name).join(", "));
+  const indexingNames = $derived(
+    finder.indexing.map((m) => m.name).join(" and ")
+  );
+  /** The coverage line stands when the answer is short: a machine missing, or one still indexing. */
+  const short = $derived(
+    finder.missing.length > 0 || finder.indexing.length > 0
+  );
   const machines = (n: number) => (n === 1 ? "1 machine" : `${n} machines`);
 
   type Fold = Extract<GoTo, { type: "fold" }>;
@@ -359,7 +367,7 @@
         },
         { t: "chips", key: "chips" }
       );
-      if (finder.missing.length > 0) {
+      if (short) {
         said.lead.push({ t: "coverage", key: "coverage" });
       }
       said.units = saidRows.map((r) => rowUnit(r, "said"));
@@ -521,7 +529,7 @@
       <span class="searching" aria-hidden="true"
         >Searching {machines(finder.askable)}…<Spinner class="spin" /></span
       >
-    {:else if finder.coverage?.asked && finder.missing.length === 0}
+    {:else if finder.coverage?.asked && !short}
       <span class="covered"
         >{machineCount === 1
           ? "The machine answered"
@@ -662,12 +670,19 @@
     {@render whoChips()}
   {:else if item.t === "coverage"}
     <div class="coverage" data-flip>
-      <span class="num">{answered} of {machines(machineCount)}</span><span
-        class="dot">·</span
-      >{missingNames} didn't<span class="dot">·</span><button
-        class="link"
-        onclick={() => finder.retry()}
-        type="button">Retry</button
+      {#if finder.missing.length > 0}
+        <span class="num">{answered} of {machines(machineCount)}</span><span
+          class="dot">·</span
+        >{missingNames} didn't<span class="dot">·</span>
+      {/if}
+      {#if finder.indexing.length > 0}
+        {indexingNames}
+        {finder.indexing.length === 1 ? "is" : "are"} still indexing<span
+          class="dot">·</span
+        >
+      {/if}
+      <button class="link" onclick={() => finder.retry()} type="button"
+        >Retry</button
       >
     </div>
   {:else if item.t === "rule"}
