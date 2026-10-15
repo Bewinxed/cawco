@@ -49,6 +49,12 @@ export type SendRowState =
 export interface MessageMetadata extends BlockMetadata {
   /** A folded command line's command (SystemLine). */
   command?: string;
+  /**
+   * Your words to a project's Caw: where they stand until he answers
+   * ("sending…", "delivered · waking Caw", "delivered", "didn't wake"),
+   * said on your row's speaker line as a session's own send says "sending…".
+   */
+  delivery?: string;
   /** A project's Caw's turn: the project folder's files it wrote, drawn as chips under it. */
   files?: string[];
   /** A project's Caw's turn: the tasks it is about (`tsk-12`), drawn as cards under it. */

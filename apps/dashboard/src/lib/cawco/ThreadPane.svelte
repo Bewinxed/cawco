@@ -69,6 +69,7 @@
   import SideSplit from "./side/SideSplit.svelte";
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskSheet from "./tasks/TaskSheet.svelte";
+  import { threadBlockOf } from "./thread-blocks";
   import { newThreadProjectOf, threadIdOf, threadTabId } from "./thread-tabs";
   import type { ComposerAsk, ComposerFoot } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
@@ -76,7 +77,7 @@
   import HeadFade from "./transcript/HeadFade.svelte";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
-  import { CAW_EVENT, setVoice } from "./transcript/voice";
+  import { setVoice } from "./transcript/voice";
   import type { Message } from "./types";
   import {
     type ComposerBinding,
@@ -138,62 +139,8 @@
   });
 
   /** One message as the transcript's block (`Message`). */
-  function blockOf(message: ThreadMessage): Message {
-    const base = {
-      id: message.id,
-      instanceId: viewId,
-      timestamp: new Date(message.createdAt).toISOString(),
-    };
-    if (message.author === "caw") {
-      const metadata = {
-        ...(message.tasks?.length ? { tasks: message.tasks } : {}),
-        ...(message.files?.length ? { files: message.files } : {}),
-      };
-      return {
-        ...base,
-        type: "assistant",
-        content: message.body,
-        metadata: Object.keys(metadata).length ? metadata : undefined,
-      };
-    }
-    if (message.author === "event") {
-      return {
-        ...base,
-        type: "ui.system_note",
-        content: message.body ?? "",
-        metadata: { noteTitle: message.noteTitle, noteKind: CAW_EVENT },
-      };
-    }
-    if (message.question && message.answer) {
-      // Your answer to his question: the call that asked it, answered, which
-      // the transcript draws as the settled QuestionCard.
-      const call = message.question.toolUseId ?? message.id;
-      return {
-        ...base,
-        type: "tool.use",
-        content: "",
-        toolCallId: call,
-        metadata: {
-          toolName: "AskUserQuestion",
-          toolId: call,
-          toolInput: { questions: message.question.questions },
-          toolStatus: "success",
-          toolUseResult:
-            message.answer.outcome === "answered"
-              ? {
-                  outcome: "answered",
-                  answers: message.answer.answers,
-                  questions: message.question.questions,
-                  ...(message.answer.annotations
-                    ? { annotations: message.answer.annotations }
-                    : {}),
-                }
-              : { outcome: "dismissed", questions: message.question.questions },
-        },
-      };
-    }
-    return { ...base, type: "user", content: message.body };
-  }
+  const blockOf = (message: ThreadMessage): Message =>
+    threadBlockOf(message, viewId);
 
   /**
    * His questions withdrawn before they were answered (his turn

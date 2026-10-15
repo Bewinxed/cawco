@@ -322,6 +322,9 @@
   /** Edit hands the whole payload back to the composer, which only the outbox holds. */
   const editable = $derived(offered.edit === "restore");
   const whoNote = $derived.by(() => {
+    if (message.metadata?.delivery) {
+      return message.metadata.delivery;
+    }
     if (ghost) {
       return commandRecord(message.id)?.waiting
         ? "waiting for hub"

@@ -38,9 +38,11 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
+  import CawDock from "#lib/cawco/project/CawDock.svelte";
   import CawField from "#lib/cawco/project/CawField.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import CawStarters from "#lib/cawco/project/CawStarters.svelte";
+  import { cawDock } from "#lib/cawco/project/caw-dock.svelte.js";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import {
@@ -58,6 +60,7 @@
     type TaskView,
   } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
+  import SideSplit from "#lib/cawco/side/SideSplit.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import StagesControl from "#lib/cawco/tasks/StagesControl.svelte";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
@@ -270,6 +273,8 @@
    * the head. The line the shell hosts a conversation's tabs by.
    */
   const narrowQuery = new MediaQuery(NARROW_QUERY);
+  /** Under 900px Caw's dock is the kit's bottom sheet, not the split (SideSplit). */
+  const sheetQuery = new MediaQuery("(max-width: 899px)");
   const hosted = $derived(
     !(browser ? narrowQuery.current : Boolean(page.data.narrow))
   );
@@ -990,103 +995,128 @@
     </p>
   </div>
 {:else}
-  <div class="project-page">
-    <ProjectHead
+  {#snippet cawSide(
+    sheet: boolean
+  )}
+    <CawDock
       {lead}
-      {machine}
-      onask={canTalk ? ask : null}
-      onnewtask={() => {
-        choose("board");
-        adding = true;
-      }}
-      onstages={stages?.source === "template"
-        ? (anchor) => {
-            stagesAnchor = anchor;
-            stagesOpen = true;
-          }
-        : null}
-      {project}
-      seated={!standing}
+      onclose={() => cawDock.set(projectId, false)}
+      {projectId}
+      projectName={project?.name ?? ""}
+      {sheet}
+      starters={stages?.starters ?? []}
     />
+  {/snippet}
+  <!-- Caw's dock stands on the page's trailing edge: the page narrows beside
+       it on a desk, and it rises as a sheet on a phone. -->
+  <SideSplit
+    active
+    onsideclose={() => cawDock.set(projectId, false)}
+    phone={sheetQuery.current}
+    planOf={null}
+    side={cawSide}
+    sideOpen={cawDock.isOpen(projectId)}
+    viewId="caw:{projectId}"
+    visible
+  >
+    <div class="project-page">
+      <ProjectHead
+        {lead}
+        {machine}
+        onask={canTalk ? ask : null}
+        onnewtask={() => {
+          choose("board");
+          adding = true;
+        }}
+        onstages={stages?.source === "template"
+          ? (anchor) => {
+              stagesAnchor = anchor;
+              stagesOpen = true;
+            }
+          : null}
+        {project}
+        seated={!standing}
+      />
 
-    {#if lead.view?.problem}
-      <Alert class="notice" variant="warning">
-        <AlertDescription>{lead.view.problem}</AlertDescription>
-      </Alert>
-    {/if}
-    {#if stages && stages.problems.length > 0}
-      <Alert class="notice" variant="warning">
-        <AlertDescription>{unreadStages}</AlertDescription>
-      </Alert>
-    {:else if stagesProblem}
-      <Alert class="notice" variant="warning">
-        <AlertDescription>
-          The project's stages could not be read: {stagesProblem}
-        </AlertDescription>
-      </Alert>
-    {/if}
-    {#if list && list.problems.length > 0}
-      <Alert class="notice" variant="warning">
-        <AlertDescription>{list.problems.join(" ")}</AlertDescription>
-      </Alert>
-    {/if}
-    {#if viewsProblem}
-      <Alert class="notice" variant="warning">
-        <AlertDescription
-          >The project's views could not be read:
-          {viewsProblem}</AlertDescription
-        >
-      </Alert>
-    {/if}
-
-    {#if !hosted}
-      {@render strip(false)}
-    {/if}
-
-    <div
-      aria-busy={cawco.hub === "unreachable" || awaiting || reading}
-      class={[
-        "pane",
-        current !== "board" &&
-          current !== "canvas" &&
-          !reading &&
-          "kit-edge-fade-block",
-      ]}
-      data-view={reading ? "board" : current}
-    >
-      {#if reading}
-        <!-- The board at its real layout, its columns standing empty: the
-             next project's read cross-fades in over it. -->
-        <div aria-hidden="true" class="board-skeleton" out:crossOut>
-          {#each stageList.filter(
-            (stage) => stage.kind !== "dropped"
-          ) as stage (stage.name)}
-            <div class="skeleton-column">
-              <Skeleton class="h-3.5 w-3/5" />
-              <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
-              <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
-            </div>
-          {/each}
-        </div>
-      {:else}
-        <div class="swap" in:crossIn>
-          {#key shown}
-            <div
-              class="current"
-              style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
-              out:leave
-            >
-              {#if shown === "awaiting"}
-                <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
-              {:else}
-                {@render pane(shown)}
-              {/if}
-            </div>
-          {/key}
-        </div>
+      {#if lead.view?.problem}
+        <Alert class="notice" variant="warning">
+          <AlertDescription>{lead.view.problem}</AlertDescription>
+        </Alert>
       {/if}
+      {#if stages && stages.problems.length > 0}
+        <Alert class="notice" variant="warning">
+          <AlertDescription>{unreadStages}</AlertDescription>
+        </Alert>
+      {:else if stagesProblem}
+        <Alert class="notice" variant="warning">
+          <AlertDescription>
+            The project's stages could not be read: {stagesProblem}
+          </AlertDescription>
+        </Alert>
+      {/if}
+      {#if list && list.problems.length > 0}
+        <Alert class="notice" variant="warning">
+          <AlertDescription>{list.problems.join(" ")}</AlertDescription>
+        </Alert>
+      {/if}
+      {#if viewsProblem}
+        <Alert class="notice" variant="warning">
+          <AlertDescription
+            >The project's views could not be read:
+            {viewsProblem}</AlertDescription
+          >
+        </Alert>
+      {/if}
+
+      {#if !hosted}
+        {@render strip(false)}
+      {/if}
+
+      <div
+        aria-busy={cawco.hub === "unreachable" || awaiting || reading}
+        class={[
+          "pane",
+          current !== "board" &&
+            current !== "canvas" &&
+            !reading &&
+            "kit-edge-fade-block",
+        ]}
+        data-view={reading ? "board" : current}
+      >
+        {#if reading}
+          <!-- The board at its real layout, its columns standing empty: the
+             next project's read cross-fades in over it. -->
+          <div aria-hidden="true" class="board-skeleton" out:crossOut>
+            {#each stageList.filter(
+              (stage) => stage.kind !== "dropped"
+            ) as stage (stage.name)}
+              <div class="skeleton-column">
+                <Skeleton class="h-3.5 w-3/5" />
+                <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
+                <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="swap" in:crossIn>
+            {#key shown}
+              <div
+                class="current"
+                style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
+                out:leave
+              >
+                {#if shown === "awaiting"}
+                  <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+                {:else}
+                  {@render pane(shown)}
+                {/if}
+              </div>
+            {/key}
+          </div>
+        {/if}
+      </div>
     </div>
-  </div>
+  </SideSplit>
 
   <Popover.Root bind:open={askOpen}>
     <Popover.Content

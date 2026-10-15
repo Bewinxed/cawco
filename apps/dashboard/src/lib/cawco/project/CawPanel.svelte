@@ -1,21 +1,15 @@
 <script lang="ts">
   /**
-   * Caw's panel (fable-lead-switch.md §1, "switch in panel"): who he is and
-   * what he is doing in one sentence, the lead switch, the harness he runs
-   * on and the model his session runs, what he has spent with the way to
-   * the Usage page, and the way to talk to him, on or off. Off, he acts only
-   * when you write to him: no event wakes him (WORDS.md, Caw on and off).
+   * Caw's settings, folded under the gear in his dock (CawDock): the lead
+   * switch, the harness he runs on and the model his session runs, and what
+   * he has spent with the way to the Usage page. Off, he acts only when you
+   * write to him: no event wakes him (WORDS.md, Caw on and off). Talking to
+   * him is the dock's conversation, not a row here.
    */
   import type { CawHarness, CawInitiated, CawRunning } from "@cawco/core";
   import { untrack } from "svelte";
   import CawOffTray, { type CawOffAsk } from "#lib/cawco/CawOffTray.svelte";
-  import {
-    cawco,
-    onProjectStop,
-    startThread,
-    threadsOf,
-  } from "#lib/cawco/client.svelte.js";
-  import CawFace from "#lib/cawco/home/CawFace.svelte";
+  import { cawco, onProjectStop } from "#lib/cawco/client.svelte.js";
   import ModelCombobox from "#lib/cawco/ModelCombobox.svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { usd } from "#lib/cawco/usage.js";
@@ -23,7 +17,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
-  import CawField from "./CawField.svelte";
   import { CAW_HARNESS_LABEL, type CawLead } from "./caw-lead.svelte";
 
   let {
@@ -33,8 +26,6 @@
   }: { lead: CawLead; projectId: string; projectName: string } = $props();
 
   const on = $derived(lead.view?.on ?? false);
-  const lastThread = $derived(threadsOf(projectId)[0] ?? null);
-  let talking = $state(false);
 
   /**
    * Turning him off (The Stay In Context Rule): nothing he started runs,
@@ -133,11 +124,6 @@
 </script>
 
 <div class="caw-panel">
-  <p class="head">Caw · lead of {projectName}</p>
-  <div class="row status">
-    <CawFace size={18} status={lead.status} />
-    <span class="sentence">{lead.sentence}</span>
-  </div>
   {#if lead.capLine}
     <p class="capped">{lead.capLine}</p>
   {/if}
@@ -231,40 +217,6 @@
       >See spend →</a
     >
   </div>
-  {#if !lead.view?.problem || lastThread}
-    <div class="row actions">
-      {#if !(lead.view?.problem || talking)}
-        <Button
-          onclick={() => {
-            talking = true;
-          }}
-          size="sm"
-          variant="outline"
-          >Message Caw</Button
-        >
-      {/if}
-      {#if lastThread}
-        <Button
-          class="ml-auto"
-          href="/session/thread:{lastThread.id}"
-          size="sm"
-          variant="ghost"
-          >Open last thread</Button
-        >
-      {/if}
-    </div>
-  {/if}
-  {#if talking}
-    <CawField
-      autofocus
-      label="Message Caw"
-      onsend={async (text) => {
-        await startThread(projectId, text);
-        talking = false;
-      }}
-      placeholder="Message the project…"
-    />
-  {/if}
   {#if cawco.hub === "unreachable"}
     <p class="muted">The hub is not answering; what shows was read before.</p>
   {/if}
@@ -275,14 +227,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    inline-size: min(22rem, calc(100vw - 2 * var(--space-5)));
-    padding: var(--space-3) var(--space-4) var(--space-4);
     font: var(--type-label);
     color: var(--ink-strong);
-  }
-  .head {
-    font: var(--type-label);
-    font-weight: var(--weight-strong);
   }
   .row {
     display: flex;
@@ -291,16 +237,12 @@
     gap: var(--space-2);
     min-block-size: var(--c-btn-h-sm);
   }
-  /* The status line and the switch are read, not worked: a line's height. */
-  .row.status,
+  /* The switch is read, not worked: a line's height. */
   .row.switch {
     min-block-size: auto;
   }
   .switch {
     cursor: pointer;
-  }
-  .sentence {
-    min-inline-size: 0;
   }
   .muted,
   .meta {
@@ -317,9 +259,6 @@
       text-decoration: underline;
       text-underline-offset: 3px;
     }
-  }
-  .actions {
-    justify-content: flex-start;
   }
   /* His own turn, asked about under the switch: its words, then the two ways. */
   .turn-words {
