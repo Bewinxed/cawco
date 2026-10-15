@@ -99,6 +99,7 @@ import {
   workspaceMaestroEnv,
   workspaceMaestroHome,
   workspacePolicyFile,
+  workspaceProjectFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
   workspaceScratchRoot,
@@ -1272,11 +1273,14 @@ export const hookMissing = (hook: LaunchedHook): string | undefined =>
  * account's user layer. A new workspace's first session finds its account
  * there already (`createWorkspace`), so its boundary's form is unchanged; one
  * started without it (a later session on another account) is handed over,
- * its form changed with its policy.
+ * its form changed with its policy. The project a work item's session
+ * belongs to is the workspace's ({@link setProject}), so a workspace cut
+ * before it was kept reads its project's folder from its next item on.
  */
 export const boundaryFor = async (
   workspace: WorkspaceRef | undefined,
-  account: string | undefined
+  account: string | undefined,
+  project?: string
 ): Promise<Boundary | undefined> => {
   if (!workspace) {
     return;
@@ -1284,7 +1288,34 @@ export const boundaryFor = async (
   if (account) {
     await addAccount(workspace.id, account);
   }
+  if (project) {
+    await setProject(workspace.id, project);
+  }
   return ensureBoundary(workspace);
+};
+
+/**
+ * Keeps `project` as the project workspace `id`'s work belongs to
+ * ({@link workspaceProjectFile}): its policy reads that project's folder on
+ * the hub's machine. Written only when it changes, so the boundary's form
+ * changes only then.
+ */
+export const setProject = async (
+  id: string,
+  project: string
+): Promise<void> => {
+  const file = workspaceProjectFile(id);
+  // A damaged record is written over with the project the hub names now.
+  const kept = await readRecord<unknown>(file).catch((error: unknown) => {
+    if (!isDamagedRecord(error)) {
+      throw error;
+    }
+  });
+  if (kept === project) {
+    return;
+  }
+  await mkdir(stateDir(id), { recursive: true });
+  await writeWhole(file, `${JSON.stringify(project)}\n`, 0o644);
 };
 
 /**

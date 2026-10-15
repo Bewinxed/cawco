@@ -2632,11 +2632,14 @@ export class SessionSupervisor {
       // it: the boundary reads that account's user layer by the paths the
       // session is given.
       const place = spec.workspace ?? (await cloneHolding(workdir));
+      // A work item's spawn names its workspace and its project, the
+      // workspace's: its boundary reads that project's folder.
       const boundary = await boundaryFor(
         place,
         (spec.harness ?? "claude") === "claude"
           ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
-          : undefined
+          : undefined,
+        spec.workspace ? spec.projectId : undefined
       );
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(

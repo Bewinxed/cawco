@@ -55,6 +55,7 @@ import {
   addAccount,
   closeBoundary,
   ensureBoundary,
+  setProject,
   shellQuote,
 } from "./boundary";
 import {
@@ -294,6 +295,9 @@ export const createWorkspace = async (
     await copyOwnSecrets(repoRoot, path, plain);
     if (typeof account === "string" && account) {
       await addAccount(id, account);
+    }
+    if (typeof projectId === "string" && projectId) {
+      await setProject(id, projectId);
     }
     const boundary = await ensureBoundary({ id, path });
     return {

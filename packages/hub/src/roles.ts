@@ -11,7 +11,7 @@
  * - **worker**: a session you started. Everything, fleet settings included
  *   (an `admin_*_write` waits for you to approve it, admin-asks.ts).
  * - **delegate**: a delegated session or work item: the session tools, reads
- *   of its project's tasks and its own task's to-dos; changes to tasks and
+ *   of its project's tasks, folder and its own task's to-dos; changes to tasks and
  *   fleet settings go to its parent through handoff.
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
  *   drafting views, its project's folder on the hub and decision pages in it,
@@ -175,6 +175,9 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...DELEGATE_SESSION,
     ...TASK_READ,
     "memory_note",
+    // Its own project's folder, read only (caw.ts): what an earlier delegate
+    // handed in, from any machine.
+    "folder_read",
   ]),
   lead: new Set([
     ...CORE,

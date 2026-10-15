@@ -18,7 +18,8 @@
  *   Claude Code (CLAUDE.md, memories, skills, plugins, agents, commands,
  *   rules, output styles, workflows, themes, plans), also by its names in
  *   the config dir of each account the workspace's sessions run on
- *   (`accountLayers`). A Claude session also
+ *   (`accountLayers`). On the hub's machine, its project's folder there
+ *   (`projectFolder`). A Claude session also
  *   reads its own `projects/<slug>/` dir, which the judge adds from the
  *   transcript the CLI names.
  * - Writes: the clone, the scratch dir and the workspace caches only; never
@@ -42,6 +43,7 @@ import {
   darwinDeveloperBundle,
   darwinUserDirs,
   hostToolCaches,
+  hubProjectsDir,
   projectClaudeDir,
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
@@ -49,6 +51,7 @@ import {
   workspaceAccountsFile,
   workspaceCaches,
   workspaceDoorDir,
+  workspaceProjectFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
   xdgDataHome,
@@ -686,6 +689,40 @@ const accountLayers = async (id: string): Promise<string[]> => {
     });
 };
 
+/** A project id as the hub mints and accepts it (hub project-folder.ts `PROJECT_ID`). */
+const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+/**
+ * The folder of the project the workspace's work belongs to
+ * ({@link workspaceProjectFile}), as a real path, read only: what one
+ * delegate hands in (`outputs`, copied into `assets/<item>/`), its project's
+ * `knowledge/` and tasks, for the next delegate to read. It lies in the
+ * hub's data dir, a credential store (the hub's database with its tokens and
+ * keys, its backups, the transcript index, every other project's folder), so
+ * only this one folder opens, the deeper entry deciding; nothing writes it.
+ * None for a workspace of no project, and none on a machine that is not the
+ * hub's, where the folder does not exist (its delegates read the folder with
+ * `folder_read`).
+ */
+const projectFolder = async (id: string): Promise<string[]> => {
+  const file = workspaceProjectFile(id);
+  const project = await readRecord<unknown>(file);
+  if (project === undefined) {
+    return [];
+  }
+  if (typeof project !== "string" || !PROJECT_ID.test(project)) {
+    throw new DamagedRecord(file, "it is not a project id");
+  }
+  const folder = join(hubProjectsDir(), project);
+  const found = await stat(folder).catch(() => undefined);
+  if (!found?.isDirectory()) {
+    return [];
+  }
+  const real = resolveReal(folder);
+  // Only the folder itself, never one its name leads out of the projects dir.
+  return dirname(real) === resolveReal(hubProjectsDir()) ? [real] : [];
+};
+
 /**
  * The workspace's policy on this machine as it stands now, every path a real
  * path but the account layer names ({@link accountLayers}).
@@ -731,6 +768,7 @@ export const workspacePolicy = async (
         : []),
     ]),
     ...(await accountLayers(workspace.id)),
+    ...(await projectFolder(workspace.id)),
   ]);
   // A lead's place: what only its owner may read in it is hidden from the
   // lead's shell and file tools, for reading and writing (`ownerOnlyIn`).

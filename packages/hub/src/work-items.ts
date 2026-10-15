@@ -129,6 +129,7 @@ import {
   FOLDER_FILE_LIMIT,
   FolderRefusal,
   folderPath,
+  projectRoot,
   writeFolderFiles,
 } from "./project-folder";
 import { placesChanged } from "./project-placements";
@@ -3853,9 +3854,13 @@ export const createWorkItems = ({
         author: { name: item.title },
         message: `assets: ${item.taskId ? `outputs of ${item.taskId}, attempt ${item.id.slice(0, 8)}` : `outputs of work item ${item.id.slice(0, 8)}`}`,
       });
+      // Absolute, as the project's workspaces on the hub's machine read them
+      // (core workspace-policy.ts `projectFolder`); a delegate on any machine
+      // reads them by the folder path with `folder_read`.
+      const root = projectRoot(item.projectId);
       return {
         ok: true,
-        line: `\n\nOutputs, copied into the project's folder ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}:\n${written.paths.map((path) => `- ${path}`).join("\n")}`,
+        line: `\n\nOutputs, copied into the project's folder ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}, readable by the project's delegates (on the hub's machine at these paths, on any machine with folder_read and the path after ${root}/):\n${written.paths.map((path) => `- ${root}/${path}`).join("\n")}`,
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);

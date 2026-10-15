@@ -33,6 +33,11 @@
  *    argument's access (c09c4a28f) refuses `show_image` on the read-only
  *    dir as a write (the live refusal of 2026-10-15), so the probe catches
  *    what each fix ends.
+ * 4. A project's folder ({@link projectChecks}), by the real policy: a
+ *    workspace reads its own project's assets and writes nothing there;
+ *    another project's folder, the projects dir and the hub's database stay
+ *    refused; a workspace of no project, or whose project's folder is on no
+ *    disk here, opens nothing in the hub's data dir.
  *
  *   bun scripts/probe-kit/run.ts mcp-file-args
  */
@@ -640,6 +645,249 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
   );
 };
 
+/** A project and its workspaces in {@link projectChecks}. */
+const PROJECTS = {
+  own: "70ac3d41-5a28-4a31-8e9e-3be2b03d1516",
+  other: "0b0b0b0b-5a28-4a31-8e9e-3be2b03d1516",
+  /** A project whose folder is on no disk here: a machine that is not the hub's. */
+  away: "0c0c0c0c-5a28-4a31-8e9e-3be2b03d1516",
+} as const;
+const WORKSPACES = {
+  own: "a142d818-0000-4000-8000-000000000000",
+  none: "a2a2a2a2-0000-4000-8000-000000000000",
+  away: "a3a3a3a3-0000-4000-8000-000000000000",
+} as const;
+
+/**
+ * A workspace reads its own project's folder on the hub's machine, read
+ * only, and nothing else in the hub's data dir. The policy is the real one
+ * (core workspace-policy.ts `workspacePolicy`), computed in a child whose
+ * home is a scratch home holding the hub's data dir as the hub keeps it
+ * (`cawco.db`, `projects/<id>/assets/<item>/…`) and each workspace's
+ * `project.json` as the agent writes it (boundary.ts `setProject`); the
+ * judge then decides each call as the Claude hook and OpenCode's plugin
+ * hand it over. The live refusal: workspace a142d818 of project 70ac3d41
+ * could not read `assets/22abb250/routines-patterns.md`.
+ */
+const projectChecks = async (kit: Kit, root: string): Promise<void> => {
+  const home = join(root, "project-home");
+  const data = join(home, ".local", "share", "cawco");
+  const projects = join(data, "projects");
+  const asset = (project: string) =>
+    join(projects, project, "assets", "22abb250", "routines-patterns.md");
+  await Promise.all(
+    [PROJECTS.own, PROJECTS.other].map(async (project) => {
+      await mkdir(join(projects, project, "assets", "22abb250"), {
+        recursive: true,
+      });
+      await writeFile(asset(project), "# patterns\n");
+    })
+  );
+  await writeFile(join(data, "cawco.db"), "");
+  const clones: Record<keyof typeof WORKSPACES, string> = {
+    own: join(home, ".worktrees", `cockpit-${WORKSPACES.own.slice(0, 8)}`),
+    none: join(home, ".worktrees", `cockpit-${WORKSPACES.none.slice(0, 8)}`),
+    away: join(home, ".worktrees", `cockpit-${WORKSPACES.away.slice(0, 8)}`),
+  };
+  await Promise.all(
+    Object.entries(WORKSPACES).flatMap(([key, id]) => [
+      mkdir(clones[key as keyof typeof WORKSPACES], { recursive: true }),
+      mkdir(join(home, ".cawco", "workspaces", id), { recursive: true }),
+    ])
+  );
+  await writeFile(
+    join(home, ".cawco", "workspaces", WORKSPACES.own, "project.json"),
+    `${JSON.stringify(PROJECTS.own)}\n`
+  );
+  await writeFile(
+    join(home, ".cawco", "workspaces", WORKSPACES.away, "project.json"),
+    `${JSON.stringify(PROJECTS.away)}\n`
+  );
+  const child = join(root, "project-policy.ts");
+  await writeFile(
+    child,
+    `import { workspacePolicy } from ${JSON.stringify(join(import.meta.dir, "../../../packages/core/src/workspace-policy"))};
+const [id, path] = process.argv.slice(2);
+console.log(JSON.stringify(await workspacePolicy({ id, path })));
+`
+  );
+  // The hub's database where its unit puts it: no CAWCO_DB_PATH.
+  const { CAWCO_DB_PATH: _db, ...inherited } = process.env;
+  const env: Record<string, string> = {
+    ...(inherited as Record<string, string>),
+    HOME: home,
+    XDG_DATA_HOME: join(home, ".local", "share"),
+    XDG_CONFIG_HOME: join(home, ".config"),
+  };
+  const policyOf = async (key: keyof typeof WORKSPACES): Promise<Policy> =>
+    JSON.parse(
+      await Bun.$`bun ${child} ${WORKSPACES[key]} ${clones[key]}`
+        .env(env)
+        .quiet()
+        .text()
+    ) as Policy;
+  const [own, none, away] = await Promise.all([
+    policyOf("own"),
+    policyOf("none"),
+    policyOf("away"),
+  ]);
+  const judged = (
+    policy: Policy,
+    harness: "claude" | "opencode",
+    tool: string,
+    input: Record<string, unknown>
+  ): Verdict => judgeCall(policy, { harness, tool, input, cwd: policy.clone });
+  const cases: {
+    allowed: boolean;
+    label: string;
+    policy: Policy;
+    says?: "reading" | "writing";
+    claude: [string, Record<string, unknown>];
+    opencode: [string, Record<string, unknown>];
+  }[] = [
+    {
+      label: "its own project's asset",
+      policy: own,
+      allowed: true,
+      claude: ["Read", { file_path: asset(PROJECTS.own) }],
+      opencode: ["read", { path: asset(PROJECTS.own) }],
+    },
+    {
+      label: "a listing of its own project's assets",
+      policy: own,
+      allowed: true,
+      claude: [
+        "Glob",
+        { pattern: "**/*.md", path: join(projects, PROJECTS.own, "assets") },
+      ],
+      opencode: [
+        "glob",
+        { pattern: "**/*.md", path: join(projects, PROJECTS.own, "assets") },
+      ],
+    },
+    {
+      label: "writing into its own project's assets",
+      policy: own,
+      allowed: false,
+      says: "writing",
+      claude: ["Write", { file_path: asset(PROJECTS.own), content: "x" }],
+      opencode: ["write", { path: asset(PROJECTS.own), content: "x" }],
+    },
+    {
+      label: "a new file in its own project's folder",
+      policy: own,
+      allowed: false,
+      says: "writing",
+      claude: [
+        "Write",
+        { file_path: join(projects, PROJECTS.own, "new.md"), content: "x" },
+      ],
+      opencode: [
+        "write",
+        { path: join(projects, PROJECTS.own, "new.md"), content: "x" },
+      ],
+    },
+    {
+      label: "another project's asset",
+      policy: own,
+      allowed: false,
+      says: "reading",
+      claude: ["Read", { file_path: asset(PROJECTS.other) }],
+      opencode: ["read", { path: asset(PROJECTS.other) }],
+    },
+    {
+      label: "the projects dir's listing",
+      policy: own,
+      allowed: false,
+      says: "reading",
+      claude: ["Glob", { pattern: "*", path: projects }],
+      opencode: ["glob", { pattern: "*", path: projects }],
+    },
+    {
+      label: "the hub's database",
+      policy: own,
+      allowed: false,
+      says: "reading",
+      claude: ["Read", { file_path: join(data, "cawco.db") }],
+      opencode: ["read", { path: join(data, "cawco.db") }],
+    },
+    {
+      label: "a climb from its own project's folder into another's",
+      policy: own,
+      allowed: false,
+      says: "reading",
+      claude: [
+        "Read",
+        {
+          file_path: `${join(projects, PROJECTS.own)}/../${PROJECTS.other}/assets/22abb250/routines-patterns.md`,
+        },
+      ],
+      opencode: [
+        "read",
+        {
+          path: `${join(projects, PROJECTS.own)}/../${PROJECTS.other}/assets/22abb250/routines-patterns.md`,
+        },
+      ],
+    },
+    {
+      label: "a project's asset, from a workspace of no project",
+      policy: none,
+      allowed: false,
+      says: "reading",
+      claude: ["Read", { file_path: asset(PROJECTS.own) }],
+      opencode: ["read", { path: asset(PROJECTS.own) }],
+    },
+  ];
+  for (const harness of ["claude", "opencode"] as const) {
+    for (const one of cases) {
+      const [tool, input] = one[harness];
+      const verdict = judged(one.policy, harness, tool, input);
+      const said =
+        verdict.ok ||
+        one.says === undefined ||
+        verdict.reason.includes(`was refused: ${one.says} `);
+      kit.check(
+        `${harness} ${tool}: ${one.label} is ${one.allowed ? "allowed" : `refused for ${one.says}`}`,
+        verdict.ok === one.allowed && said,
+        verdict.ok ? "allowed" : verdict.reason
+      );
+    }
+  }
+  // What a project adds in the hub's data dir, over a workspace of none's
+  // (which already reads the cawco binary there, `binaryRoot`).
+  const underData = (policy: Policy) =>
+    policy.allowRead.filter(
+      (path) =>
+        path.startsWith(`${resolveReal(data)}/`) &&
+        !none.allowRead.includes(path)
+    );
+  kit.check(
+    "a workspace's project opens exactly its folder in the hub's data dir",
+    JSON.stringify(underData(own)) ===
+      JSON.stringify([resolveReal(join(projects, PROJECTS.own))]),
+    underData(own).join(", ")
+  );
+  kit.check(
+    "a workspace of no project opens nothing under the projects dir",
+    !none.allowRead.some((path) => path.startsWith(resolveReal(projects))),
+    none.allowRead
+      .filter((path) => path.startsWith(resolveReal(projects)))
+      .join(", ") || "nothing"
+  );
+  kit.check(
+    "a workspace whose project's folder is not on this machine opens nothing more",
+    underData(away).length === 0,
+    underData(away).join(", ") || "nothing"
+  );
+  kit.check(
+    "the hub's data dir stays denied for reading and writing",
+    own.denyRead.includes(resolveReal(data)) &&
+      own.denyWrite.includes(resolveReal(data)) &&
+      !own.allowWrite.some((path) => path.startsWith(resolveReal(data))),
+    `denyRead ${own.denyRead.includes(resolveReal(data))}, denyWrite ${own.denyWrite.includes(resolveReal(data))}`
+  );
+};
+
 const spec: Spec = {
   name: "mcp-file-args",
   run: async (kit) => {
@@ -648,6 +896,7 @@ const spec: Spec = {
     );
     try {
       await judgeChecks(kit, root);
+      await projectChecks(kit, root);
       const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
       fleet.launch("hub");
       await fleet.hubUp();

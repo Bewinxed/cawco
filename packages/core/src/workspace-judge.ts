@@ -270,7 +270,7 @@ export const judge = (
       (allowed === undefined || allowed.length <= denied.length)
     ) {
       return refused(
-        `${named} lies in ${denied}, which this workspace does not read. It reads its clone (${policy.clone}), its scratch dir (${policy.scratch}), toolchains and the user's Claude Code layer.`
+        `${named} lies in ${denied}, which this workspace does not read. It reads its clone (${policy.clone}), its scratch dir (${policy.scratch}), toolchains, the user's Claude Code layer and, on the hub's machine, its own project's folder.`
       );
     }
     return ALLOWED;

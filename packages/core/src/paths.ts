@@ -665,6 +665,28 @@ export const workspaceAccountsFile = (id: string): string =>
   join(workspaceStateDir(id), "accounts.json");
 
 /**
+ * The project a workspace's work belongs to, a JSON string of its id the
+ * agent writes as the workspace is cut and as each work item's session
+ * spawns there (`boundaryFor`), so the workspace reads that project's folder
+ * on the hub's machine (`workspacePolicy`). In the state dir, which nothing
+ * inside the boundary writes.
+ */
+export const workspaceProjectFile = (id: string): string =>
+  join(workspaceStateDir(id), "project.json");
+
+/**
+ * Where the hub keeps every project's folder: `projects/` beside its
+ * database (hub project-folder.ts `PROJECTS_DIR`), the database where the
+ * hub's unit puts it (`CAWCO_DB_PATH`, else `cawco.db` in
+ * {@link hubDataDir}). Only on the hub's machine does it exist.
+ */
+export const hubProjectsDir = (): string =>
+  join(
+    dirname(process.env.CAWCO_DB_PATH ?? join(hubDataDir(), "cawco.db")),
+    "projects"
+  );
+
+/**
  * The caches a workspace writes besides its clone and scratch dir: the
  * workspaces' own cache, and on macOS the provisioning profile folders
  * automatic signing fills. Every host cache is read-only to a workspace: a

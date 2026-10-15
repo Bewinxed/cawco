@@ -113,6 +113,7 @@ import {
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
+import { roleOf } from "./roles";
 import { setupEvent } from "./setup";
 import {
   readStages,
@@ -2784,6 +2785,22 @@ export const createCaw = ({
         }
         return project.id;
       };
+      /**
+       * The project whose folder `folder_read` reads: the lead's, or a
+       * delegate's own project (roles.ts), what one delegate hands in for the
+       * next to read on any machine. Never another's.
+       */
+      const readsFolder = (): string => {
+        if (actor && roleOf(actor) === "delegate") {
+          if (!(actor.projectId && db.project(actor.projectId))) {
+            throw new Error(
+              "This delegate belongs to no project, so it has no project folder to read."
+            );
+          }
+          return actor.projectId;
+        }
+        return mine();
+      };
       const ok = (data: unknown) => ({
         content: [{ type: "text" as const, text: JSON.stringify(data) }],
       });
@@ -2853,7 +2870,7 @@ export const createCaw = ({
           "Read a file, or list a folder (no path: the root), of your project's folder on the hub.",
           { path: z.string().optional() },
           async ({ path }) => {
-            const projectId = mine();
+            const projectId = readsFolder();
             return ok(
               await folderCall(() =>
                 readFolderFile(projectId, path ?? "").catch(
