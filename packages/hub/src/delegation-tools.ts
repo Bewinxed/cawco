@@ -548,7 +548,13 @@ export function handoffTools(deps: HandoffDeps) {
           permissionMode,
           machine,
         });
-        const sc = { instanceId: result.id, title: result.title };
+        // The sentence rides in the structured result: Claude Code hands the
+        // model `structuredContent` when a tool returns one, not `content`.
+        const sc = {
+          instanceId: result.id,
+          title: result.title,
+          text: result.text,
+        };
         return {
           content: [{ type: "text" as const, text: result.text }],
           structuredContent: sc,
@@ -716,6 +722,7 @@ export function handoffTools(deps: HandoffDeps) {
           workspaceId: result.workspaceId,
           ...(result.workspaceTmp ? { workspaceTmp: result.workspaceTmp } : {}),
           ...(result.queued ? { queued: result.queued } : {}),
+          text: result.text,
         };
         return {
           content: [{ type: "text" as const, text: result.text }],
@@ -850,6 +857,7 @@ export function handoffTools(deps: HandoffDeps) {
           structuredContent: {
             targetInstanceId: result.targetInstanceId,
             summariserInstanceId: result.summariserInstanceId,
+            text: result.text,
           },
         };
       }

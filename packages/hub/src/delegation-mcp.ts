@@ -756,16 +756,14 @@ export function createDelegationMcp(options: {
       // biome-ignore lint/performance/noAwaitInLoops: spawn must finish before its first send is relayed
       await options.forward(envelope, actor);
     }
-    // Keep routing metadata recoverable in stored transcripts even when a harness drops structuredContent.
+    // Keep routing metadata recoverable in stored transcripts even when a
+    // harness drops structuredContent (OpenCode's carries transport metadata
+    // only; core transcript-rules reads the JSON). A tool that answers with a
+    // sentence keeps it in its structured result as `text`, which is what
+    // Claude Code hands the model; this is that same result, serialised.
     if (result.structuredContent) {
       result.content = [
-        {
-          type: "text",
-          text: JSON.stringify({
-            ...result.structuredContent,
-            text: result.content,
-          }),
-        },
+        { type: "text", text: JSON.stringify(result.structuredContent) },
       ];
     }
     return result;
