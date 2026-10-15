@@ -1588,6 +1588,24 @@ const depthOf = (node: Element): number => {
   return depth;
 };
 
+/** A node that takes room: an element, or text with something to show. */
+const takesRoom = (node: Node): boolean =>
+  node.nodeType === Node.ELEMENT_NODE ||
+  (node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim()));
+
+/**
+ * Whether a change heard in a container can have moved a row: anything but
+ * nodes coming and going that take no room — the anchors a block leaves
+ * behind (Svelte's comments), empty text. A composer handed to the next
+ * conversation renders that conversation's offer where the last one's
+ * stood, and with neither drawing a card, the swap was those anchors alone:
+ * every tab switch read every place in the stack, and the page's layout
+ * with it, for a change that moved nothing.
+ */
+const canMove = (record: MutationRecord): boolean =>
+  record.type !== "childList" ||
+  [...record.addedNodes, ...record.removedNodes].some(takesRoom);
+
 export function reflow() {
   return (node: HTMLElement) => {
     node.setAttribute("data-reflow", "");
@@ -1601,7 +1619,11 @@ export function reflow() {
     const state = new Reflow(node, watching.rendered);
     states.set(node, state);
     const depth = depthOf(node);
-    const watcher = new MutationObserver(() => heard(state, depth));
+    const watcher = new MutationObserver((records) => {
+      if (records.some(canMove)) {
+        heard(state, depth);
+      }
+    });
     watcher.observe(node, {
       subtree: true,
       childList: true,

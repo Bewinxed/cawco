@@ -397,17 +397,19 @@
             paneId === swipe.leaving))}
       {@const ctx = contextOf(paneId)}
       {@const laidOut = settling.has(paneId) || warm.holds(leaf.id, paneId)}
-      <!-- A pane laid out off screen is out of reach by its `visibility`
-           (`.pane-settling`): nothing hidden takes a pointer, the focus or a
-           reader's notice. It is not made inert as well: `inert` is an
-           inherited style (CSS `interactivity`), and lifting it at the switch
-           restyled the pane's every element in the click; `visibility` is
-           one Blink hands down without restyling them. -->
+      <!-- Inert only where it is drawn and not the one being worked in: a
+           swipe's neighbours. A pane put away is out of reach already —
+           skipped content "must not be accessible to user-agent features,
+           such as find-in-page, tab-order navigation, etc., nor be selectable
+           or focusable" (`content-visibility: hidden`, `.pane-hidden`) — and a
+           pane laid out off screen is hidden (`.pane-settling`). Said again
+           with `inert`, an inherited style (CSS `interactivity`), every switch
+           set and lifted it on two panes, restyling each of their elements. -->
       <div
         class="pane"
         data-delta={delta}
         data-pane={paneId}
-        inert={!(isActive || (laidOut && !shown))}
+        inert={shown && !isActive}
         class:pane-hidden={!(shown || laidOut)}
         class:pane-settling={!shown && laidOut}
         use:slot={{ id: paneId, shown }}

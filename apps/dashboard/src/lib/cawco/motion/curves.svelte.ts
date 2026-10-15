@@ -404,8 +404,7 @@ export const pinned =
  * leave's keyframes were built (during Svelte's delay) or after a frame under
  * 1 has played is told by that alone. Between the two, the fade's own
  * animation tells them: Svelte starts it on the node just after building its
- * keyframes, and a reset has cancelled it. The node's other animations (a
- * row's reflow) were there before the keyframes and do not count.
+ * keyframes, and a reset has aborted it (`catchFade` takes it as it starts).
  */
 export function lifting(
   node: HTMLElement,
@@ -416,13 +415,27 @@ export function lifting(
   let held: [string, string, string][] | null = null;
   /** This leave's keyframes are built and no frame under 1 has played. */
   let opening = false;
-  /** The node's animations as this leave's keyframes were built. */
-  let before = new Set<Animation>();
-  /** The fade Svelte started after the keyframes is still playing. */
-  const fading = () =>
-    node
-      .getAnimations()
-      .some((one) => !before.has(one) && one.playState === "running");
+  /** The fade Svelte started after this leave's keyframes, taken as it started. */
+  let fade: Animation | null = null;
+  /** That fade is still playing: a reset aborts it first. */
+  const fading = () => fade?.playState === "running";
+  /**
+   * Takes the fade Svelte starts on the node straight after asking for its
+   * keyframes, the node's next `animate` (svelte/src/internal/client/dom/
+   * elements/transitions.js `animate`: `animation = element.animate(
+   * keyframes, { duration, fill: 'forwards' })`), and hands it on. Listing
+   * the node's animations to tell the fade from the rest instead styled
+   * the whole page in the middle of the frame the leave began in — every
+   * tab switch's frame, for the composer's tray — and once more for what
+   * the frame went on to change.
+   */
+  const catchFade = () => {
+    node.animate = (keyframes, options) => {
+      Reflect.deleteProperty(node, "animate");
+      fade = Element.prototype.animate.call(node, keyframes, options);
+      return fade;
+    };
+  };
   const up = () => {
     if (held) {
       return;
@@ -455,7 +468,8 @@ export function lifting(
       if (!(held && opening)) {
         up();
         opening = true;
-        before = new Set(node.getAnimations());
+        fade = null;
+        catchFade();
       }
       return css?.(t, u) ?? "";
     },
