@@ -513,11 +513,18 @@ h1 {
  */
 .hero-stage {
   --kpx: clamp(0.42px, 0.42px + (100vw - 390px) * 0.000529, 0.62px);
-  /* The laptop's floor origin, and desk-box's, a lattice vector away (24m + 12n, 20.8n). */
+  /*
+   * The laptop's floor origin, and desk-box's: 427 by -92.4 units away on screen, snapped to the
+   * nearest lattice vector on an even row (a whole 24px across, a whole 41.6px down), so both
+   * machines stand on nodes of the paper at every k.
+   */
   --lap-x: calc(50cqw - 96px);
   --lap-y: 400px;
-  --box-dx: 384px;
-  --box-dy: -83.2px;
+  --box-dx: round(calc(427 * var(--kpx)), 24px);
+  --box-dy: round(calc(-92.4 * var(--kpx)), 41.6px);
+  /* Desk-box's front corner on the floor: its cards stand off it. */
+  --corner-x: calc(var(--lap-x) + var(--box-dx) - 38 * var(--kpx));
+  --corner-y: calc(var(--lap-y) + var(--box-dy) + 76 * var(--kpx));
   /* The size the cards are read at: the feature scenes' (`.scene`) reading size. */
   --reading: clamp(10.5px, 10.5px + (100vw - 390px) * 0.0037, 13.5px);
   --dusk: 0;
@@ -728,9 +735,11 @@ h1 {
   pointer-events: none;
 }
 
+/* A card never passes the window's right edge: its place, or as far right as its width allows. */
 .drift {
+  --edge: calc(100cqw + var(--gutter) - 8px);
   position: absolute;
-  left: var(--cx);
+  left: min(var(--cx), calc(var(--edge) - var(--w)));
   top: var(--cy);
   translate: calc(var(--t, 0) * var(--v) * -0.866 * var(--kpx))
     calc(var(--t, 0) * var(--v) * 0.5 * var(--kpx));
@@ -738,21 +747,24 @@ h1 {
 
 /* The cards stand off desk-box's front corner, the farthest back slowest (10, 14, 18 px/s at k 0.9). */
 .drift:nth-child(1) {
-  --cx: calc(var(--lap-x) + 372px);
-  --cy: calc(var(--lap-y) - 2px);
+  --cx: calc(var(--corner-x) + 22px);
+  --cy: calc(var(--corner-y) + 13px);
   --v: 11.1;
+  --w: 19em;
 }
 
 .drift:nth-child(2) {
-  --cx: calc(var(--lap-x) + 424px);
-  --cy: calc(var(--lap-y) + 58px);
+  --cx: calc(var(--corner-x) + 74px);
+  --cy: calc(var(--corner-y) + 73px);
   --v: 15.6;
+  --w: 21.7em;
 }
 
 .drift:nth-child(3) {
-  --cx: calc(var(--lap-x) + 352px);
-  --cy: calc(var(--lap-y) + 116px);
+  --cx: calc(var(--corner-x) + 2px);
+  --cy: calc(var(--corner-y) + 131px);
   --v: 20;
+  --w: 24em;
 }
 
 .session-card {
@@ -2625,32 +2637,36 @@ mark {
   }
 }
 
-/* Between a phone and a desktop the floor keeps the desktop's plan, drawn smaller. */
+/*
+ * Between a phone and a desktop the floor keeps the desktop's plan, drawn smaller, and the cards
+ * have no room to desk-box's right, so they stand under its front corner.
+ */
 @media (max-width: 1199px) {
   .hero-stage {
     --lap-x: calc(50cqw - 72px);
     --lap-y: calc(36px + 405 * var(--kpx));
-    --box-dx: 264px;
-    --box-dy: -62.4px;
   }
 
   .drift:nth-child(1) {
-    --cx: calc(var(--lap-x) + 226px);
-    --cy: calc(var(--lap-y) - 4px);
+    --cx: calc(var(--corner-x) - 65px);
+    --cy: calc(var(--corner-y) + 33px);
   }
 
   .drift:nth-child(2) {
-    --cx: calc(var(--lap-x) + 268px);
-    --cy: calc(var(--lap-y) + 46px);
+    --cx: calc(var(--corner-x) - 45px);
+    --cy: calc(var(--corner-y) + 70px);
   }
 
   .drift:nth-child(3) {
-    --cx: calc(var(--lap-x) + 214px);
-    --cy: calc(var(--lap-y) + 100px);
+    --cx: calc(var(--corner-x) - 76px);
+    --cy: calc(var(--corner-y) + 107px);
   }
 }
 
-/* A phone: the stage comes before the subhead and the install, so the fold shows it. */
+/*
+ * A phone: the stage comes before the subhead and the install, so the fold shows it. Desk-box
+ * stands a lattice step nearer, and the cards line up under both machines.
+ */
 @media (max-width: 599px) {
   .hero {
     grid-template-areas: 'eyebrow' 'title' 'stage' 'beats' 'lede' 'install';
@@ -2658,29 +2674,38 @@ mark {
 
   .hero-stage {
     --lap-x: calc(50cqw - 30px);
-    --lap-y: 214px;
+    --lap-y: 200px;
     --box-dx: 144px;
     --box-dy: -41.6px;
     margin-top: 18px;
   }
 
   .beats {
+    gap: 4px;
     margin-top: 0;
   }
 
+  .beat {
+    width: 44px;
+  }
+
+  .demo-pause {
+    padding: 0 8px;
+  }
+
   .drift:nth-child(1) {
-    --cx: calc(var(--lap-x) + 44px);
-    --cy: calc(var(--lap-y) + 52px);
+    --cx: calc(var(--corner-x) - 148px);
+    --cy: calc(var(--corner-y) + 69px);
   }
 
   .drift:nth-child(2) {
-    --cx: calc(var(--lap-x) + 70px);
-    --cy: calc(var(--lap-y) + 92px);
+    --cx: calc(var(--corner-x) - 128px);
+    --cy: calc(var(--corner-y) + 97px);
   }
 
   .drift:nth-child(3) {
-    --cx: calc(var(--lap-x) + 28px);
-    --cy: calc(var(--lap-y) + 136px);
+    --cx: calc(var(--corner-x) - 157px);
+    --cy: calc(var(--corner-y) + 130px);
   }
 }
 
