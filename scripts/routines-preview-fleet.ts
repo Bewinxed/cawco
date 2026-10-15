@@ -5,6 +5,8 @@
  *
  * - "cawco" (code template, Caw on): tasks across its stages, three of
  *   them archived (the T5 switch draws them), and the owner's four routines;
+ * - "Fleet ops" (code template, Caw on): forty routines with event sources
+ *   and actions, for how the page holds a long list;
  * - "Field notes" (no template, Caw on): nothing at all, for the empty
  *   board's and the empty Routines page's starters.
  *
@@ -63,6 +65,13 @@ const cockpit = await fleet.api<{ id: string }>("/api/projects", {
   name: "cawco",
   machineId: MACHINE,
   cwd: await folder("cawco"),
+  caw: true,
+  template: "code",
+});
+await fleet.api<{ id: string }>("/api/projects", {
+  name: "Fleet ops",
+  machineId: MACHINE,
+  cwd: await folder("fleet-ops"),
   caw: true,
   template: "code",
 });

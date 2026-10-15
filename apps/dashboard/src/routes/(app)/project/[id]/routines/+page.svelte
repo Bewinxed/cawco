@@ -97,7 +97,15 @@
     color: var(--ink-strong);
   }
   .body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-block-size: 0;
     padding: 0 var(--space-6) var(--space-6) var(--space-7);
+  }
+  /* The routines bento fills the page under its head; its panels scroll. */
+  .page:has(:global(.routines-view[data-layout="bento"])) {
+    overflow: hidden;
   }
   @media (max-width: 899px) {
     .head {

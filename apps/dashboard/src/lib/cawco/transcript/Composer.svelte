@@ -162,6 +162,7 @@
     recallOf,
     switchDir = 0,
     landing = { done: Promise.resolve(), ms: () => 0 },
+    attach = true,
   }: {
     /**
      * The conversation's half-written message. The composer draws it and
@@ -262,6 +263,12 @@
      * motion has left.
      */
     landing?: { done: Promise<void>; ms: () => number };
+    /**
+     * Files and images can ride with the words: the attach control, and a
+     * file pasted or dropped on the field. Off where what the words go to
+     * takes words alone (a view asked of Caw, a new project's first words).
+     */
+    attach?: boolean;
   } = $props();
 
   $effect(() => {
@@ -2843,16 +2850,20 @@
     recalled?.harness === "claude" ? "Queued" : undefined
   );
 
-  /** Files and a long paste join the draft as attachments; other text lands in the field. */
+  /**
+   * Files and a long paste join the draft as attachments; other text lands
+   * in the field. Where nothing rides with the words (`attach` off), all of
+   * a paste is the field's own.
+   */
   function onpaste(event: ClipboardEvent): void {
-    if (draft.paste(event.clipboardData)) {
+    if (attach && draft.paste(event.clipboardData)) {
       event.preventDefault();
     }
   }
 
   /** A file over the field is one it takes; text keeps the field's own drop. */
   function ondragover(event: DragEvent): void {
-    if (event.dataTransfer && carriesFiles(event.dataTransfer)) {
+    if (attach && event.dataTransfer && carriesFiles(event.dataTransfer)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
     }
@@ -2860,7 +2871,7 @@
 
   /** A file dropped on the field joins the draft as a pasted one does. */
   function ondrop(event: DragEvent): void {
-    if (event.dataTransfer && carriesFiles(event.dataTransfer)) {
+    if (attach && event.dataTransfer && carriesFiles(event.dataTransfer)) {
       event.preventDefault();
       draft.paste(event.dataTransfer);
     }
@@ -3322,10 +3333,12 @@
              trailing end, which is not a control: Esc, ↓ past the draft or
              a press outside put the wheel away. -->
         <div class="ctrls" inert={!!recall} bind:this={ctrls}>
-          <AttachButton
-            {draft}
-            ondraw={recallOf ? () => room.open() : undefined}
-          />
+          {#if attach}
+            <AttachButton
+              {draft}
+              ondraw={recallOf ? () => room.open() : undefined}
+            />
+          {/if}
           <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
           <button

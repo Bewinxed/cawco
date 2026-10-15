@@ -595,8 +595,8 @@ public enum Size {
     public static let cRoutineTimeW: Double = 144
     /// The widest the routines ledger runs: a few rows of name, schedule and two times read as one line each, never across a 2560px screen (Hex's and Cursor's bounded schedule tables).
     public static let cRoutinesW: Double = 1120
-    /// The routines page's right rail, beside the ledger once its place is 1280px wide or more: Event sources over Approved actions (Databricks' job panel, Attio's run history).
-    public static let cRoutinesRailW: Double = 340
+    /// The page width from which the routines page holds its three parts at once, a bento filling the page's height (Routines two thirds, Event sources over Approved actions in the last third, each scrolling in itself); narrower, they are views behind tabs, each at --c-routines-w.
+    public static let cRoutinesBentoAt: Double = 1600
     /// The delegate tray's row: a chip, and the step down to the pill.
     public static let cTrayChip: Double = 28
     /// `cTrayChip` under a coarse pointer (touch).

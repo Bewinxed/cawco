@@ -15,8 +15,9 @@
  * routes yet; this line needs one.
  *
  * "cawco" holds the owner's own four routines, as he has them: three Caw made
- * for the X account, and the memory curator the hub makes. Every other
- * project holds nothing, for the empty page's starters.
+ * for the X account, and the memory curator the hub makes. "Fleet ops"
+ * holds forty routines with event sources and actions, for a long list.
+ * Every other project holds nothing, for the empty page's starters.
  */
 import type { Starter } from "#lib/cawco/project-tasks.js";
 
@@ -336,11 +337,167 @@ function routinesOf(projectId: string): Routine[] {
   ];
 }
 
-/** What the routines page holds for a project: the owner's four for cawco, nothing elsewhere. */
+/** The busy fleet's forty routines' names, crons and zones, cycled. */
+const BUSY = [
+  ["Triage new issues", "0 9 * * 1-5", NEW_YORK],
+  ["Smoke tests on merge", "", NEW_YORK],
+  ["Bump dependencies", "0 7 * * 1", QATAR],
+  ["Write the changelog", "30 18 * * *", QATAR],
+  ["Check the relay's health", "15 * * * *", QATAR],
+  ["Sum up yesterday's sessions", "30 8 * * *", QATAR],
+  ["Label duplicate issues", "0 12 * * 1-5", NEW_YORK],
+  ["Weekly release notes", "0 16 * * 5", QATAR],
+] as const;
+
+/**
+ * PREVIEW: a project with forty routines, event sources and actions, for
+ * how the page holds a long list beside its two quiet parts.
+ */
+function busyPage(projectId: string): RoutinesPage {
+  const now = Date.now();
+  const routines = Array.from({ length: 40 }, (_, index): Routine => {
+    const [name, cron, zone] = BUSY[index % BUSY.length] ?? BUSY[0];
+    const event = cron === "";
+    const failed = index % 9 === 3;
+    const started = now - (index + 1) * 47 * MIN;
+    return {
+      id: `busy-${index}`,
+      name:
+        index < BUSY.length
+          ? name
+          : `${name} (${Math.floor(index / BUSY.length) + 1})`,
+      cron: event ? "0 0 * * *" : cron,
+      timeZone: zone,
+      projectId,
+      createdBy: "caw",
+      disabledReason: null,
+      enabled: index % 11 !== 5,
+      expiresAt: index % 13 === 7 ? now + 3 * DAY : null,
+      keep: index % 13 !== 7,
+      lastSlot: started,
+      nextSlot: now + (index + 1) * 53 * MIN,
+      prompt: `Do the ${name.toLowerCase()} for this project.\n\n- Read what changed since the last run\n- Say what you did in one line`,
+      runs:
+        index % 17 === 16
+          ? []
+          : [
+              run(`busy-${index}-r`, started, {
+                outcome: failed ? "failed" : "delivered",
+                output: failed ? null : `${name}: done.`,
+                reason: failed ? "the GitHub token was refused" : null,
+              }),
+            ],
+      target: "delegate",
+      threadId: `th-busy-${index}`,
+      trigger: event ? "a pull request merges on main" : null,
+    };
+  });
+  return {
+    routines,
+    routes: [
+      {
+        id: "rt-1",
+        source: "github",
+        kinds: ["pull_request.closed"],
+        filter: "merged to main",
+        routine: "Smoke tests on merge",
+      },
+      {
+        id: "rt-2",
+        source: "linear",
+        kinds: ["issue.created"],
+        filter: null,
+        routine: "Triage new issues",
+      },
+      {
+        id: "rt-3",
+        source: "slack",
+        kinds: ["message.posted"],
+        filter: "#releases",
+        routine: "Weekly release notes",
+      },
+    ],
+    polls: [
+      {
+        id: "pl-1",
+        service: "gmail",
+        what: "Support inbox",
+        every: "every 15 minutes",
+        last: { at: now - 6 * MIN, ok: true },
+      },
+      {
+        id: "pl-2",
+        service: "github",
+        what: "Stars and forks",
+        every: "hourly",
+        last: { at: now - 2 * HOUR, ok: false, error: "rate limited" },
+      },
+    ],
+    relay: { state: "live" },
+    actions: [
+      {
+        id: "ac-1",
+        service: "github",
+        what: "Close 3 duplicate issues",
+        routine: "Label duplicate issues",
+        decided: null,
+        outcome: null,
+      },
+      {
+        id: "ac-2",
+        service: "slack",
+        what: "Post the release notes in #releases",
+        routine: "Weekly release notes",
+        decided: null,
+        outcome: null,
+      },
+      {
+        id: "ac-3",
+        service: "github",
+        what: "Open the dependency bump pull request",
+        routine: "Bump dependencies",
+        decided: { at: now - DAY, kind: "approved" },
+        outcome: {
+          at: now - DAY + 2 * MIN,
+          kind: "ran",
+          result: "Opened #412",
+        },
+      },
+      {
+        id: "ac-4",
+        service: "gmail",
+        what: "Reply to a support thread",
+        routine: "Sum up yesterday's sessions",
+        decided: { at: now - 2 * DAY, kind: "denied" },
+        outcome: null,
+      },
+      {
+        id: "ac-5",
+        service: "linear",
+        what: "Move 4 issues to Ready",
+        routine: "Triage new issues",
+        decided: { at: now - 3 * DAY, kind: "approved" },
+        outcome: {
+          at: now - 3 * DAY + MIN,
+          kind: "failed",
+          result: "Linear refused the token",
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * What the routines page holds for a project: the owner's four for cawco,
+ * forty for "Fleet ops" (PREVIEW: a long list), nothing elsewhere.
+ */
 export function routinesPageOf(project: {
   id: string;
   name: string;
 }): RoutinesPage {
+  if (project.name === "Fleet ops") {
+    return busyPage(project.id);
+  }
   if (project.name !== "cawco") {
     return {
       routines: [],

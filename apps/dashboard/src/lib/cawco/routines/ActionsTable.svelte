@@ -1,0 +1,168 @@
+<script lang="ts" module>
+  import type { ApprovedAction } from "./preview-data";
+  import type { Status } from "./RunStatus.svelte";
+
+  /** An approved action's status, its word, and when. */
+  export function actionOf(action: ApprovedAction): {
+    status: Status;
+    word: string;
+    at: number | null;
+  } {
+    if (!action.decided) {
+      return { status: "waiting", word: "Waiting on you", at: null };
+    }
+    if (action.outcome) {
+      const { at, kind } = action.outcome;
+      return kind === "failed"
+        ? { status: "failed", word: "Failed", at }
+        : { status: "done", word: "Ran", at };
+    }
+    const { at, kind } = action.decided;
+    return kind === "denied"
+      ? { status: "neutral", word: "Denied", at }
+      : { status: "done", word: "Approved", at };
+  }
+</script>
+
+<script lang="ts">
+  /**
+   * Actions routines proposed and what came of them, as a ledger (the
+   * routines table's band and rows): the service's mark; the action, with
+   * the routine it came from unless the table stands in that routine's own
+   * detail; its status in the page's glyph vocabulary; when.
+   */
+  import { since } from "#lib/cawco/rules.js";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Table from "#lib/components/ui/table/index.js";
+  import RunStatus from "./RunStatus.svelte";
+  import { exactOf } from "./schedule";
+
+  let {
+    actions,
+    label,
+    from = true,
+  }: {
+    actions: ApprovedAction[];
+    /** The table's name, read out. */
+    label: string;
+    /** Say the routine each came from (off in a routine's own detail). */
+    from?: boolean;
+  } = $props();
+</script>
+
+<div class="actions-ledger">
+  <Table.Root aria-label={label} class="actions table-fixed">
+    <Table.Header>
+      <Table.Row class="band border-0">
+        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+        <Table.Head class="col-mark" scope="col"
+          ><span class="sr-only">Service</span></Table.Head
+        >
+        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+        <Table.Head class="col-action" scope="col">Action</Table.Head>
+        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+        <Table.Head class="col-status" scope="col">Status</Table.Head>
+        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+        <Table.Head class="col-when" scope="col">When</Table.Head>
+      </Table.Row>
+    </Table.Header>
+    <Table.Body>
+      {#each actions as action (action.id)}
+        {@const said = actionOf(action)}
+        <Table.Row class="action" data-status={said.status}>
+          <Table.Cell class="col-mark"
+            ><span class="mark"><ProviderLogo provider={action.service} /></span
+            ></Table.Cell
+          >
+          <Table.Cell class="col-action">
+            <span class="what">{action.what}</span>
+            {#if from}
+              <span class="from">From {action.routine}</span>
+            {/if}
+          </Table.Cell>
+          <Table.Cell class="col-status" data-cell="status">
+            <RunStatus status={said.status} text={said.word} />
+          </Table.Cell>
+          <Table.Cell class="col-when" data-cell="when">
+            {#if said.at !== null}
+              <time class="when num" title={exactOf(said.at)}
+                >{since(said.at)}</time
+              >
+            {/if}
+          </Table.Cell>
+        </Table.Row>
+      {/each}
+    </Table.Body>
+  </Table.Root>
+</div>
+
+<style>
+  .actions-ledger :global(table.actions) {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .actions-ledger :global(tr.band) {
+    background: var(--surface-band);
+  }
+  .actions-ledger :global(tr.band th) {
+    block-size: var(--c-toolbar-ctl);
+    padding-inline: var(--space-3);
+    font: var(--type-label);
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+  .actions-ledger :global(tr.action > td) {
+    block-size: var(--c-btn-h-lg);
+    padding-block: var(--space-2);
+    padding-inline: var(--space-3);
+    font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
+    vertical-align: middle;
+  }
+  .actions-ledger :global(tr.action + tr.action > td) {
+    border-block-start: 1px solid var(--border-hairline);
+  }
+  .actions-ledger :global(th.col-mark) {
+    inline-size: calc(var(--c-row-lead) + var(--space-3));
+    padding-inline-end: 0;
+  }
+  .actions-ledger :global(td.col-mark) {
+    padding-inline-end: 0;
+  }
+  .actions-ledger :global(th.col-status) {
+    inline-size: var(--c-routine-time-w);
+  }
+  .actions-ledger :global(th.col-when) {
+    inline-size: 6rem;
+  }
+  .mark {
+    display: grid;
+    place-items: center;
+    inline-size: var(--c-row-lead);
+  }
+  .mark :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
+  .what,
+  .from {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .what {
+    font: var(--type-label);
+    color: var(--ink-row);
+  }
+  .from {
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .when {
+    white-space: nowrap;
+  }
+</style>

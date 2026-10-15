@@ -1,102 +1,201 @@
 <script lang="ts">
   /**
-   * A routine opened in place under its row: what it does, when it runs,
-   * and what its last runs said, nothing else (the owner, 2026-10-14).
+   * A routine opened in place under its row: only what the row does not say
+   * (the owner: "why are you repeating this info that is already up
+   * there"). Its name, schedule, last and next run are the row's.
    *
-   * 1. Its instruction, as written.
-   * 2. Its schedule in words, its zone a chip only when it is not the
-   *    reader's own; an event routine says what fires it.
-   * 3. Recent runs, the newest three: when, then the run's own result, the
-   *    words its run set (Caw's `routine_result`, a delegate's
-   *    `finish_item`), two lines at most, and Read the run. A silent run
-   *    answered `NO_REPLY`: "Nothing to report", with the hub's reason when
-   *    it kept one (the curator's empty inbox). A failed one says why, from
-   *    the hub's reason. A run going now says so.
-   *
-   * No spend, no who runs it, nothing drawn over time: the row already says
-   * when it runs next, and its actions are in the row's ⋯.
+   * 1. Its instruction, as the markdown it is written in (the messages'
+   *    Markdown, at body size), four lines at most until More.
+   * 2. Recent runs, the newest five, as a ledger (the routines table's own
+   *    band and rows): When (how long ago, the exact time on hover),
+   *    Outcome (the page's status glyph and its word), Took, and Result,
+   *    the words the run set (Caw's `routine_result`, a delegate's
+   *    `finish_item`, the hub's reason for a failure or an empty run), a
+   *    link to the run's thread where it is read whole.
+   * 3. Actions, when its runs proposed any: the Approved actions table
+   *    (ActionsTable), without the routine's name, which is the row's.
    */
+  import { since } from "#lib/cawco/rules.js";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
-  import { IconClock, IconGlobe, IconHook } from "#lib/icons.js";
-  import type { Routine, RoutineRun } from "./preview-data";
-  import { readerTimeOf, scheduleOf, whenOf } from "./schedule";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Markdown } from "#lib/components/ui/markdown/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Table from "#lib/components/ui/table/index.js";
+  import ActionsTable from "./ActionsTable.svelte";
+  import type { ApprovedAction, Routine, RoutineRun } from "./preview-data";
+  import RunStatus, { type Status } from "./RunStatus.svelte";
+  import { exactOf } from "./schedule";
 
-  let { routine }: { routine: Routine } = $props();
+  let {
+    routine,
+    actions = [],
+  }: {
+    routine: Routine;
+    /** What its runs proposed and what came of it. */
+    actions?: ApprovedAction[];
+  } = $props();
 
-  /** The runs shown: the newest three. */
-  const SHOWN = 3;
-
-  const schedule = $derived(scheduleOf(routine.cron, routine.timeZone));
+  /** The runs shown: the newest five. */
+  const SHOWN = 5;
   const recent = $derived(routine.runs.slice(0, SHOWN));
   /** Where a run is read whole: the routine's thread, where its result is noted. */
   const runHref = $derived(
     routine.threadId ? threadHref(routine.threadId) : null
   );
 
-  /** A run's line, from what the hub keeps for it. */
-  function lineOf(run: RoutineRun): string {
+  /** A run's outcome, in the page's status vocabulary. */
+  function outcomeOf(run: RoutineRun): { status: Status; word: string } {
     if (run.state === "running" || run.state === "starting") {
-      return "Running…";
+      return { status: "running", word: "Running" };
     }
     if (run.state === "queued") {
-      return "Waiting for the run before it";
+      return { status: "neutral", word: "Queued" };
     }
     if (run.state === "skipped") {
-      return `Skipped: ${run.reason ?? "nothing started"}`;
-    }
-    if (run.outcome === "silent") {
-      return run.reason
-        ? `Nothing to report: ${run.reason}`
-        : "Nothing to report";
+      return { status: "neutral", word: "Skipped" };
     }
     if (run.outcome === "failed") {
-      return `Failed: ${run.reason ?? "no reason was kept"}`;
+      return { status: "failed", word: "Failed" };
     }
     if (run.outcome === "cancelled") {
-      return "Stopped before it finished";
+      return { status: "neutral", word: "Stopped" };
     }
-    return run.output ?? "Nothing to report";
+    if (run.outcome === "silent") {
+      return { status: "done", word: "Nothing to report" };
+    }
+    return { status: "done", word: "Delivered" };
   }
+
+  /** What the run set, or why it had nothing. */
+  function resultOf(run: RoutineRun): string {
+    if (run.state === "skipped" || run.outcome === "failed") {
+      return run.reason ?? "";
+    }
+    return run.output ?? run.reason ?? "";
+  }
+
+  /** How long it ran: "4m", "1h 5m", "<1m"; nothing while it goes. */
+  function tookOf(run: RoutineRun): string {
+    if (run.endedAt === null) {
+      return "";
+    }
+    const minutes = Math.round((run.endedAt - run.startedAt) / 60_000);
+    if (minutes < 1) {
+      return "<1m";
+    }
+    return minutes < 60
+      ? `${minutes}m`
+      : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  }
+
+  // --- the instruction's clamp --------------------------------------------------
+
+  let body = $state<HTMLElement | null>(null);
+  /** It runs past four lines: More shows the rest. */
+  let long = $state(false);
+  let whole = $state(false);
+  $effect(() => {
+    const node = body;
+    if (!node || whole) {
+      return;
+    }
+    const measure = () => {
+      long = node.scrollHeight > node.clientHeight + 1;
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(node);
+    return () => watch.disconnect();
+  });
 </script>
 
 <div class="detail">
-  <p class="instruction">{routine.prompt}</p>
-
-  <p class="when">
-    {#if routine.trigger}
-      <IconHook aria-hidden="true" class="when-glyph" />
-      <span>When {routine.trigger}</span>
-    {:else}
-      <IconClock aria-hidden="true" class="when-glyph" />
-      <span class:code={schedule.raw}>{schedule.words}</span>
-      {#if schedule.zone}
-        <Badge
-          class="zone"
-          title="{schedule.words} in {schedule.zone} · the next is {readerTimeOf(
-            routine.nextSlot
-          )}"
-          variant="secondary"
-          ><IconGlobe aria-hidden="true" />{schedule.zone}</Badge
-        >
-      {/if}
+  <div class="instruction-wrap">
+    <div
+      bind:this={body}
+      class="instruction"
+      data-clamped={whole ? undefined : ""}
+      id="instruction-{routine.id}"
+    >
+      <Markdown source={routine.prompt} />
+    </div>
+    {#if long}
+      <Button
+        aria-controls="instruction-{routine.id}"
+        aria-expanded={whole}
+        class="more"
+        onclick={() => {
+          whole = !whole;
+        }}
+        size="xs"
+        variant="ghost">{whole ? "Less" : "More"}</Button
+      >
     {/if}
-  </p>
+  </div>
 
   {#if recent.length > 0}
     <section aria-labelledby="runs-{routine.id}" class="runs">
       <h4 class="runs-head" id="runs-{routine.id}">Recent runs</h4>
-      <ol>
-        {#each recent as run (run.id)}
-          <li class="run" data-outcome={run.outcome ?? run.state}>
-            <span class="run-when num">{whenOf(run.startedAt)}</span>
-            <span class="run-line">{lineOf(run)}</span>
-            {#if runHref}
-              <a class="read" href={runHref}>Read the run</a>
-            {/if}
-          </li>
-        {/each}
-      </ol>
+      <div class="runs-ledger">
+        <Table.Root
+          aria-labelledby="runs-{routine.id}"
+          class="runs table-fixed"
+        >
+          <Table.Header>
+            <Table.Row class="band border-0">
+              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+              <Table.Head class="col-when" scope="col">When</Table.Head>
+              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+              <Table.Head class="col-outcome" scope="col">Outcome</Table.Head>
+              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+              <Table.Head class="col-took" scope="col">Took</Table.Head>
+              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+              <Table.Head class="col-result" scope="col">Result</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {#each recent as run (run.id)}
+              {@const outcome = outcomeOf(run)}
+              {@const result = resultOf(run)}
+              <Table.Row class="run" data-outcome={outcome.status}>
+                <Table.Cell class="col-when" data-cell="when">
+                  <time
+                    class="num"
+                    datetime={new Date(run.startedAt).toISOString()}
+                    title={exactOf(run.startedAt)}>{since(run.startedAt)}</time
+                  >
+                </Table.Cell>
+                <Table.Cell class="col-outcome" data-cell="outcome">
+                  <RunStatus status={outcome.status} text={outcome.word} />
+                </Table.Cell>
+                <Table.Cell class="col-took" data-cell="took">
+                  <span class="num">{tookOf(run)}</span>
+                </Table.Cell>
+                <Table.Cell class="col-result" data-cell="result">
+                  {#if runHref}
+                    <a class="result" href={runHref} title={result || undefined}
+                      >{result || "Read the run"}</a
+                    >
+                  {:else}
+                    <span class="result" title={result || undefined}
+                      >{result}</span
+                    >
+                  {/if}
+                </Table.Cell>
+              </Table.Row>
+            {/each}
+          </Table.Body>
+        </Table.Root>
+      </div>
+    </section>
+  {/if}
+
+  {#if actions.length > 0}
+    <section aria-labelledby="actions-{routine.id}" class="runs">
+      <h4 class="runs-head" id="actions-{routine.id}">Actions</h4>
+      <div class="runs-ledger">
+        <ActionsTable {actions} from={false} label="Actions" />
+      </div>
     </section>
   {/if}
 </div>
@@ -105,123 +204,122 @@
   .detail {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
-    padding: 0 var(--space-3) var(--space-3);
+    gap: var(--space-4);
+    padding: 0 var(--space-3) var(--space-4);
   }
   /* On a ledger 400px wide or more, on the row's name column (the state
-     column, then the name cell's own inset), at 72ch. */
+     column, then the name cell's own inset). */
   @container routines-ledger (min-width: 400px) {
     .detail {
       padding-inline-start: calc(var(--c-row-lead) + var(--space-3) * 2);
-      max-inline-size: calc(72ch + var(--c-row-lead) + var(--space-3) * 2);
     }
   }
-  .instruction {
-    max-inline-size: 72ch;
-    margin: 0;
-    font: var(--type-prose);
-    color: var(--ink-strong);
-    text-wrap: pretty;
-  }
-  .when {
+
+  /* The instruction: markdown at body size, 72ch, four lines until More. */
+  .instruction-wrap {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    margin: 0;
-    font: var(--type-label);
-    color: var(--ink-row);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+    max-inline-size: 72ch;
   }
-  .when :global(.when-glyph) {
-    flex: none;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--ink-muted);
+  .instruction {
+    --lines: 4;
+    font: var(--type-body);
+    color: var(--ink-strong);
   }
-  .code {
-    font: var(--type-code);
-    font-variant-ligatures: none;
+  .instruction[data-clamped] {
+    max-block-size: calc(var(--lines) * 1lh);
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1lh), transparent);
   }
+  .instruction :global(.md > :first-child) {
+    margin-block-start: 0;
+  }
+  .instruction-wrap :global(.more) {
+    margin-inline-start: calc(var(--space-2) * -1);
+  }
+
   .runs {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    margin-block-start: var(--space-2);
-
-    & ol {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
   }
   .runs-head {
     margin: 0;
     font: var(--type-label);
     color: var(--ink-strong);
   }
-  /* When in a fixed column, so the results line up and read down. */
-  /* When, the result, Read the run: one row each, every run's link ending
-     on the same edge, so the results read down between them. */
-  .run {
-    display: grid;
-    grid-template-columns: 15ch minmax(0, 1fr) auto;
-    align-items: baseline;
-    gap: var(--space-3);
-    font: var(--type-meta);
-  }
-  .run-when {
-    color: var(--ink-muted);
-  }
-  /* Two lines at most: the whole result is read in the run's thread. */
-  .run-line {
-    display: -webkit-box;
+  /* The routines table's band and rows, on the well. */
+  .runs-ledger {
     overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    color: var(--ink-row);
-    text-wrap: pretty;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
   }
-  .run[data-outcome="silent"] .run-line {
+  .runs-ledger :global(table.runs) {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .runs-ledger :global(tr.band) {
+    background: var(--surface-band);
+  }
+  .runs-ledger :global(tr.band th) {
+    block-size: var(--c-toolbar-ctl);
+    padding-inline: var(--space-3);
+    font: var(--type-label);
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
     color: var(--ink-muted);
   }
-  .run[data-outcome="failed"] .run-line {
-    color: var(--status-fail-ink);
+  .runs-ledger :global(tr.run td) {
+    block-size: var(--c-btn-h-lg);
+    padding-block: 0;
+    padding-inline: var(--space-3);
+    border-block-start: 1px solid var(--border-hairline);
+    font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
   }
-  .run[data-outcome="running"] .run-line,
-  .run[data-outcome="starting"] .run-line {
-    color: var(--status-live-ink);
+  .runs-ledger :global(.col-when) {
+    inline-size: 6rem;
   }
-  .read {
-    color: var(--link-ink);
+  .runs-ledger :global(.col-outcome) {
+    inline-size: 11rem;
+  }
+  .runs-ledger :global(.col-took) {
+    inline-size: 5rem;
+  }
+  .result {
+    display: block;
+    overflow: hidden;
+    color: var(--ink-row);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  a.result {
     text-decoration: none;
   }
   @media (hover: hover) {
-    .read:hover {
+    a.result:hover {
+      color: var(--link-ink);
       text-decoration: underline;
       text-underline-offset: 3px;
     }
   }
-  /* A finger's link: 44px tall, its words where they were. */
-  @media (pointer: coarse) {
-    .read {
-      display: inline-flex;
-      align-items: center;
-      min-block-size: var(--c-row-h);
-      margin-block: calc((var(--c-row-h) - 1lh) / -2);
-    }
+  .runs-ledger :global(tr.run[data-outcome="failed"] .result) {
+    color: var(--status-fail-ink);
   }
-  /* A phone: when over the result, the result the whole width. */
+  /* A phone: Took gives its room to the result. */
   @container routines-ledger (max-width: 399px) {
-    .run {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 2px;
+    .runs-ledger :global(.col-took) {
+      display: none;
     }
-    .read {
-      justify-self: start;
+    .runs-ledger :global(.col-when) {
+      inline-size: 4.5rem;
+    }
+    .runs-ledger :global(.col-outcome) {
+      inline-size: 8rem;
     }
   }
 </style>

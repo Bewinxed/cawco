@@ -1339,6 +1339,15 @@
   .pane[data-view="canvas"] .current {
     flex: 1 1 auto;
   }
+  /* PREVIEW: the routines bento fills the pane, as the board does, and its
+     panels scroll in themselves. */
+  .pane:has(:global(.routines-view[data-layout="bento"])) {
+    overflow: hidden;
+  }
+  .pane:has(:global(.routines-view[data-layout="bento"])) .swap,
+  .pane:has(:global(.routines-view[data-layout="bento"])) .current {
+    flex: 1 1 auto;
+  }
   .pane[data-view="canvas"] {
     padding-block-end: var(--space-5);
   }

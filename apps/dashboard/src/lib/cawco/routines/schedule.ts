@@ -2,8 +2,9 @@
  * A routine's schedule and its runs' times, in words.
  *
  * - `scheduleOf`: its cron as a person says it ("Daily at 13:30", "Weekdays
- *   at 09:00", "Mondays at 10:00"), in its own zone, and that zone as a place
- *   name when it is not the reader's.
+ *   at 09:00", "Mondays at 10:00") on the reader's clock, one clock with the
+ *   Next run; its own zone's words ("Daily at 06:30 New York time") when
+ *   that zone is not the reader's, for a hover.
  * - `whenOf`: a time in the reader's zone, near now said near ("Today 09:00",
  *   "Yesterday 23:30", "Mon 09:00"), further off with its date.
  * - `exactOf`: the same time whole, for a hover ("Thu 15 Oct 2026, 13:30").
@@ -31,79 +32,121 @@ const two = (n: number) => String(n).padStart(2, "0");
 const SPACES = /\s+/;
 const NUMBER = /^\d+$/;
 
-/** The days a cron's day-of-week field names, as words; null when it names none we say. */
-function daysOf(field: string): string | null {
+/** The days a cron's day-of-week field names (0 Sunday … 6 Saturday); null when it names a form we don't read. */
+function dayNumbersOf(field: string): Set<number> | null {
   if (field === "*") {
+    return new Set([0, 1, 2, 3, 4, 5, 6]);
+  }
+  const days = new Set<number>();
+  for (const part of field.split(",")) {
+    const [from, to = from] = part.split("-");
+    if (!(from && NUMBER.test(from) && NUMBER.test(to))) {
+      return null;
+    }
+    for (let day = Number(from); day <= Number(to); day += 1) {
+      if (day > 7) {
+        return null;
+      }
+      days.add(day % 7);
+    }
+  }
+  return days;
+}
+
+/** A set of days as words: "Daily", "Weekdays", "Weekends", "Mondays", "Mondays and Thursdays". */
+function daysWords(days: Set<number>): string {
+  const sorted = [...days].sort((a, b) => a - b);
+  const key = sorted.join(",");
+  if (sorted.length === 7) {
     return "Daily";
   }
-  if (field === "1-5") {
+  if (key === "1,2,3,4,5") {
     return "Weekdays";
   }
-  if (field === "0,6" || field === "6,0") {
+  if (key === "0,6") {
     return "Weekends";
   }
-  const days = field.split(",").map(Number);
-  if (days.every((day) => Number.isInteger(day) && day >= 0 && day <= 7)) {
-    const names = days.map((day) => DAY_NAMES[day % 7] ?? "");
-    return names.length === 1
-      ? (names[0] ?? null)
-      : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-  }
-  return null;
+  const names = sorted.map((day) => DAY_NAMES[day] ?? "");
+  return names.length === 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 export interface ScheduleWords {
+  /**
+   * The schedule in the routine's own zone ("Daily at 06:30 New York time"),
+   * for a hover; null when its zone is the reader's.
+   */
+  local: string | null;
   /** The words are the cron itself: set it as code. */
   raw: boolean;
-  /** The schedule as said, or the cron itself when it says something we don't. */
+  /**
+   * The schedule on the reader's clock ("Daily at 13:30"), the clock the
+   * Next run is read on; the cron itself when it says something we don't.
+   */
   words: string;
-  /** The zone's place when it is not the reader's own; null when it is. */
-  zone: string | null;
 }
 
-/** A cron in its zone, as words. Five fields; a minute and an hour, any day of month and month. */
-export function scheduleOf(cron: string, zone: string): ScheduleWords {
-  const away = zone === readerZone() ? null : placeOf(zone);
+/** The calendar day of `at` in `zone`, as a day count, to compare two zones' days. */
+function dayIn(zone: string | undefined, at: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(at);
+  const get = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return Date.UTC(get("year"), get("month") - 1, get("day")) / 86_400_000;
+}
+
+/**
+ * A cron in its zone, as words on the reader's clock. Five fields: a minute
+ * and an hour on some days of the week, or a minute every hour. `next` is
+ * its next run: the reader's time of day is read off it, and the days move
+ * with it when the two zones' dates differ then (Weekdays 22:00 in New York
+ * is Tuesdays to Saturdays 05:00 in Doha).
+ */
+export function scheduleOf(
+  cron: string,
+  zone: string,
+  next: number
+): ScheduleWords {
+  const away = zone !== readerZone();
   const [minute, hour, dom, month, dow, extra] = cron.trim().split(SPACES);
   const fixed = (field: string | undefined) =>
     field !== undefined && NUMBER.test(field);
-  if (
-    extra === undefined &&
-    fixed(minute) &&
-    fixed(hour) &&
-    dom === "*" &&
-    month === "*" &&
-    dow !== undefined
-  ) {
-    const days = daysOf(dow);
+  const plain = extra === undefined && dom === "*" && month === "*";
+  if (plain && fixed(minute) && fixed(hour) && dow !== undefined) {
+    const days = dayNumbersOf(dow);
     if (days) {
+      const shift = dayIn(undefined, next) - dayIn(zone, next);
+      const readerDays = new Set([...days].map((day) => (day + shift + 7) % 7));
       return {
-        words: `${days} at ${two(Number(hour))}:${two(Number(minute))}`,
+        words: `${daysWords(readerDays)} at ${TIME.format(next)}`,
         raw: false,
-        zone: away,
+        local: away
+          ? `${daysWords(days)} at ${two(Number(hour))}:${two(Number(minute))} ${placeOf(zone)} time`
+          : null,
       };
     }
   }
-  if (
-    extra === undefined &&
-    fixed(minute) &&
-    hour === "*" &&
-    dom === "*" &&
-    month === "*" &&
-    dow === "*"
-  ) {
+  if (plain && fixed(minute) && hour === "*" && dow === "*") {
+    // Every hour: the same minute on every clock but a half-hour zone's.
+    const at = `:${two(new Date(next).getMinutes())}`;
     return {
-      words: `Hourly at :${two(Number(minute))}`,
+      words: `Hourly at ${at}`,
       raw: false,
-      zone: away,
+      local: away
+        ? `Hourly at :${two(Number(minute))} ${placeOf(zone)} time`
+        : null,
     };
   }
-  return { words: cron, raw: true, zone: away };
-}
-
-/** The same time read on the reader's clock: "16:00 your time". */
-export function readerTimeOf(at: number): string {
-  return `${TIME.format(at)} your time`;
+  return {
+    words: cron,
+    raw: true,
+    local: away ? `${placeOf(zone)} time` : null,
+  };
 }
 
 const TIME = new Intl.DateTimeFormat(undefined, {
