@@ -231,9 +231,11 @@ export interface SpawnPayload {
   /**
    * How hard that model thinks, and how much it spends doing it. Hoisted for
    * the same reason again — and it is the third setting a `setEffort`
-   * {@link ControlPayload} can still move mid-session. Absent leaves the level
-   * to the harness, which is not the same as asking for its default: only the
-   * model knows which stops it has.
+   * {@link ControlPayload} can still move mid-session. Named, it is the
+   * session's chosen effort from then on ({@link InstanceRow.chosenEffort});
+   * absent, the hub starts the process at the one already chosen, or, when
+   * nobody chose, leaves the level to the harness, which is not the same as
+   * asking for its default: only the model knows which stops it has.
    */
   effort?: import("./harness").EffortLevel;
   /**
@@ -1063,6 +1065,13 @@ export interface InstanceRow {
    * session nobody delegated, which may.
    */
   canDelegate?: boolean | null;
+  /**
+   * The effort the operator chose for the session: its spawn's level, or the
+   * last `setEffort` sent it. The hub starts every process of the session at
+   * it, whatever brings it back; a reading never moves it. Null: nobody
+   * chose, and the harness runs its model's default.
+   */
+  chosenEffort?: import("./harness").EffortLevel | null;
   /** The directory the session was launched in; see `launchDir`. */
   cwd: string;
   /**
@@ -1084,8 +1093,8 @@ export interface InstanceRow {
   /**
    * The effort the session actually sends, as its agent last read it back from
    * the harness ({@link import("./harness").EFFORT_READ}): a level, `none` when
-   * it sends no effort, null until the first reading lands. A restart hands a
-   * level back to the new process, so it keeps working at the one it was on.
+   * it sends no effort, null until the first reading lands. What its chip
+   * shows; never what a launch of it asks for ({@link chosenEffort}).
    */
   effort?: import("./harness").SessionEffort | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */

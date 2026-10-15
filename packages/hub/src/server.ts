@@ -164,6 +164,7 @@ import {
   CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
+  CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SET_PROVIDER_KEY,
@@ -186,6 +187,7 @@ import {
   deriveTitleFromFirstMessage,
   EFFORT_NONE,
   EFFORT_READ,
+  type EffortLevel,
   type EndedBy,
   estimateTokens,
   FLEET_STATUS,
@@ -5568,16 +5570,31 @@ export const createServer = (
    * which a picker shows before anyone chooses.
    */
   const effortUnasked = new Set<string>();
-  /** Notes whether a launch going out asked for an effort of its own. */
-  const noteEffortAsked = (payload: SpawnPayload): void => {
+  /**
+   * The effort a launch going out asks for: the operator's, from one place.
+   * The level the spawn names is a new choice (a first spawn's, a
+   * continuation target's) and is kept on the row; every other launch (a
+   * wake, a restore, a move, a relaunch) asks for the one kept. What the CLI
+   * reads back never becomes it (db `chooseEffort`). A reattach launches
+   * nothing and asks nothing. Notes, too, whether the launch asked any.
+   */
+  const launchEffort = (
+    payload: SpawnPayload,
+    row: { chosenEffort: EffortLevel | null }
+  ): Pick<SpawnPayload, "effort"> => {
     if (payload.reattachOnly) {
-      return;
+      return {};
     }
     if (payload.effort) {
-      effortUnasked.delete(payload.instanceId);
-    } else {
-      effortUnasked.add(payload.instanceId);
+      db.chooseEffort(payload.instanceId, payload.effort);
     }
+    const effort = payload.effort ?? row.chosenEffort;
+    if (!effort) {
+      effortUnasked.add(payload.instanceId);
+      return {};
+    }
+    effortUnasked.delete(payload.instanceId);
+    return { effort };
   };
   /**
    * The session's account, every time it is launched: its Claude Code runs
@@ -5661,7 +5678,7 @@ export const createServer = (
     if (!payload.reattachOnly) {
       launchGoes(payload, stored);
     }
-    noteEffortAsked(payload);
+    const effort = launchEffort(payload, stored);
     noteFork(payload, stored);
     // A process launched now runs where this launch says, whatever the one
     // before it ran from.
@@ -5673,6 +5690,7 @@ export const createServer = (
       // call put to the hub's gate (lead-gate.ts): every spawn of his row —
       // the first, and each revive, restore and relaunch — says so.
       ...withCawDenials(asked, row, harness),
+      ...effort,
       ...(owned?.scratchWorktree
         ? { scratchWorktree: owned.scratchWorktree }
         : {}),
@@ -5904,8 +5922,8 @@ export const createServer = (
       : {}),
     ...(relaunch ? { relaunch: true as const } : {}),
     ...(row.kind === "scratch" ? { scratch: {} } : {}),
+    // Its effort is the one chosen for it, which `bounded` puts on every launch.
     ...(row.model ? { model: row.model } : {}),
-    ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
     ...(row.projectId ? { projectId: row.projectId } : {}),
     // A leaf stays a leaf whatever brings it back (as `restore` says).
     ...(row.canDelegate === false ? { canDelegate: false } : {}),
@@ -12165,7 +12183,10 @@ export const createServer = (
           prepared.source,
           row.targetInstanceId,
           source?.projectId ?? request.target.projectId,
-          source?.parentInstanceId
+          source?.parentInstanceId,
+          source && (source.harness ?? "claude") === request.target.harness
+            ? source.chosenEffort
+            : null
         ),
         request.target.scratch ? "scratch" : "mainline",
         request.target.fallbackPermissionMode
@@ -12326,22 +12347,33 @@ export const createServer = (
     /** The project the source is in: the new session joins it. */
     projectId: string | null | undefined,
     /** The session that started the source, if one did. */
-    parent: string | null | undefined
-  ): SpawnPayload => ({
-    ...(parent ? { parent: { instanceId: parent } } : {}),
-    instanceId,
-    cwd: target.cwd ?? source.cwd,
-    harness: target.harness,
-    ...(target.model ? { model: target.model } : {}),
-    ...(target.effort ? { effort: target.effort } : {}),
-    ...(target.permissionMode ? { permissionMode: target.permissionMode } : {}),
-    ...(target.scratch ? { scratch: target.scratch } : {}),
-    ...(target.bootstrap ? { bootstrap: target.bootstrap } : {}),
-    ...(projectId ? { projectId } : {}),
-    ...(target.account ? { account: target.account } : {}),
-    title: `${source.title} (continued)`,
-    spawnedBy: { instanceId: source.instanceId },
-  });
+    parent: string | null | undefined,
+    /**
+     * The effort chosen for the source, on a target of its own harness (one
+     * effort scale): the new session goes on at it unless the caller chose
+     * another.
+     */
+    sourceEffort: EffortLevel | null | undefined
+  ): SpawnPayload => {
+    const effort = target.effort ?? sourceEffort;
+    return {
+      ...(parent ? { parent: { instanceId: parent } } : {}),
+      instanceId,
+      cwd: target.cwd ?? source.cwd,
+      harness: target.harness,
+      ...(target.model ? { model: target.model } : {}),
+      ...(effort ? { effort } : {}),
+      ...(target.permissionMode
+        ? { permissionMode: target.permissionMode }
+        : {}),
+      ...(target.scratch ? { scratch: target.scratch } : {}),
+      ...(target.bootstrap ? { bootstrap: target.bootstrap } : {}),
+      ...(projectId ? { projectId } : {}),
+      ...(target.account ? { account: target.account } : {}),
+      title: `${source.title} (continued)`,
+      spawnedBy: { instanceId: source.instanceId },
+    };
+  };
 
   /** What a started continuation reports: its sessions, and what it carried. */
   const outcomeOf = (row: ContinuationRow): ContinueOutcome => {
@@ -12463,7 +12495,6 @@ export const createServer = (
               row.permissionMode as SpawnPayload["permissionMode"],
           }
         : {}),
-      ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
       ...(row.projectId ? { projectId: row.projectId } : {}),
       // A leaf stays a leaf across a restart: the daemon builds the toolset
       // from the payload, and a restore that dropped this would hand a leaf
@@ -15128,6 +15159,16 @@ export const createServer = (
 
   /** A control that interrupts a session's turn cuts into it ({@link noteInterrupt}). */
   const noteControl = (message: Envelope<ControlPayload>): void => {
+    // The operator's effort for the session, which every later launch of it
+    // asks for ({@link bounded}); the CLI's reading of it only moves the chip.
+    const effort = message.payload.args?.[0];
+    if (
+      message.payload.method === CONTROL_SET_EFFORT &&
+      message.instanceId &&
+      isEffortLevel(effort)
+    ) {
+      db.chooseEffort(message.instanceId, effort);
+    }
     if (message.payload.method === CONTROL_INTERRUPT && message.instanceId) {
       noteInterrupt(message.instanceId);
       // The error closing that turn is the stop's receipt, on every screen.
@@ -18266,8 +18307,8 @@ export const createServer = (
           harness,
           machineId: row.machineId,
           cwd: row.cwd,
+          // No effort: the session goes on at the one chosen for it.
           ...(row.model ? { model: row.model } : {}),
-          ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
           ...(row.permissionMode
             ? { permissionMode: row.permissionMode as PermissionMode }
             : {}),
@@ -24338,8 +24379,11 @@ export const createServer = (
                   );
                   break;
                 }
-                // The session's effort as its agent read it back: the row's
-                // word on it, and no screen's line.
+                // The session's effort as its agent read it back: what its
+                // chip shows, and no screen's line. Never the effort its
+                // launches ask for: a launch that ran at its CLI's default
+                // or a clamp would otherwise hand that level to every later
+                // launch (`chosenEffort`, {@link bounded}).
                 if (
                   frame.message.type === "system" &&
                   frame.message.subtype === EFFORT_READ

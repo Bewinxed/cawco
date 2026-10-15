@@ -7,6 +7,7 @@ import type {
   DelegateEvent,
   DelegateEventKind,
   DelegateEventPayload,
+  EffortLevel,
   Envelope,
   FleetAgent,
   FleetConfig,
@@ -341,7 +342,8 @@ export type SentMessageRow = typeof sentMessages.$inferSelect;
  */
 export interface InPlaceSwitch {
   accountId: string | null;
-  effort?: string | null;
+  /** The effort the caller chose for the new conversation; absent, it keeps the session's chosen one. */
+  effort?: EffortLevel;
   harness: string;
   model: string | null;
   /** The `limit_events` id of the line drawn between the two conversations. */
@@ -557,6 +559,12 @@ export interface DbShape {
   readonly cawSpentSince: (projectId: string, since: number) => number;
   /** The check workspaces, still with their checkout, that run a workspace's checks on other machines. */
   readonly checkWorkspacesOf: (workspaceId: string) => WorkspaceRow[];
+  /**
+   * The effort the operator chose for the session: what its every launch asks
+   * for. Written by a spawn that names one and by a `set-effort`, never by a
+   * reading ({@link DbShape.noteInstanceEffort}).
+   */
+  readonly chooseEffort: (id: string, effort: EffortLevel) => void;
   /** Claims one harness completion before any turn-end side effect. */
   readonly claimCompletedTurn: (
     instanceId: string,
@@ -1127,7 +1135,8 @@ export interface DbShape {
   /**
    * The effort the session's agent read back from its harness (`EFFORT_READ`).
    * Returns whether the row moved, so a reading repeated at every turn's end
-   * does not re-publish the board.
+   * does not re-publish the board. A reading never moves the session's
+   * chosen effort ({@link DbShape.chooseEffort}).
    */
   readonly noteInstanceEffort: (id: string, effort: SessionEffort) => boolean;
   /**
@@ -4381,9 +4390,7 @@ const make = async (path: string): Promise<DbShape> => {
             accountId: to.accountId,
             harness: to.harness,
             model: to.model,
-            ...(to.effort === undefined
-              ? {}
-              : { effort: to.effort as SessionEffort | null }),
+            ...(to.effort ? { chosenEffort: to.effort } : {}),
             // The new conversation has read nothing and spent nothing yet.
             contextTokens: null,
             contextReadAt: null,
@@ -4594,6 +4601,13 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .returning({ id: instances.id })
         .all().length > 0,
+    // `updatedAt` untouched for the same reason: a choice is not the session moving.
+    chooseEffort: (id, effort) => {
+      db.update(instances)
+        .set({ chosenEffort: effort })
+        .where(eq(instances.id, id))
+        .run();
+    },
     noteInstanceSession: (id, sessionId, cwd, harness, tooling) => {
       // A harness key naming the row itself is confusion, never identity: hub
       // ids are hub-minted, harness sids are harness-minted, and the two only

@@ -96,7 +96,6 @@ import {
   classifyCommand,
   HEARTBEAT_DEADLINE_MS,
   HEARTBEAT_INTERVAL_MS,
-  isEffortLevel,
   questionsOf,
   RESOLVE_PERMISSION,
   relaunchOf,
@@ -4898,7 +4897,7 @@ export async function forkSession({
           permissionMode: unpickedMode(source.permissionMode as PermissionMode),
         }
       : {}),
-    ...(isEffortLevel(source?.effort) ? { effort: source.effort } : {}),
+    ...(source?.chosenEffort ? { effort: source.chosenEffort } : {}),
   });
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
@@ -5020,7 +5019,8 @@ export async function ensureAlive(
         row?.permissionMode ??
         undefined) as PermissionMode | undefined,
       model: target.model ?? row?.model ?? undefined,
-      effort: effortToResend(target.effort ?? row?.effort),
+      // No effort: the hub starts it at the one chosen for it, never at the
+      // level it last read back.
       requestId,
     });
     target.relaunching = true;
@@ -6988,17 +6988,6 @@ export async function setModel(
 }
 
 /**
- * The effort a new process for this session is started at: the level it was
- * sending, and nothing when it sent none or was never read — the harness then
- * starts it on the model's own default.
- */
-function effortToResend(
-  effort: SessionEffort | null | undefined
-): EffortLevel | undefined {
-  return isEffortLevel(effort) ? effort : undefined;
-}
-
-/**
  * `bypassPermissions` is a launch decision — the SDK refuses to switch a running
  * session into it — and so is `fullSend`, which runs the CLI in bypass. A
  * session that wants either from another mode is started again in place:
@@ -7041,10 +7030,8 @@ export async function relaunchSession(
     scratch: target.scratch ? {} : undefined,
     permissionMode,
     // Only the mode is being changed, so the model the session was answering on
-    // and the level it was thinking at both carry over — the spawn is the row's
-    // new word on all three.
+    // carries over, and the hub starts it at the effort chosen for it.
     model: target.model ?? undefined,
-    effort: effortToResend(target.effort),
     requestId,
   });
 
@@ -7231,12 +7218,11 @@ export async function editAndResend(
     cwd: target.cwd,
     harness: target.harness,
     resume: { sessionKey, atMessage: point },
-    // The same four a relaunch carries: a rewind changes what the session has
-    // said, not what it is.
+    // What a relaunch carries: a rewind changes what the session has said, not
+    // what it is. Its effort is the one chosen for it, which the hub supplies.
     scratch: target.scratch ? {} : undefined,
     permissionMode: target.permissionMode ?? undefined,
     model: target.model ?? undefined,
-    effort: effortToResend(target.effort),
     requestId,
   });
 

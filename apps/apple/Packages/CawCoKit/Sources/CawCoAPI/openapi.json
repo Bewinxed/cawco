@@ -22657,6 +22657,9 @@
               "effort": {
                 "$ref": "#/components/schemas/InstanceRowEffort"
               },
+              "chosenEffort": {
+                "$ref": "#/components/schemas/EffortLevel"
+              },
               "canDelegate": {
                 "type": [
                   "null",
@@ -22893,6 +22896,9 @@
                 },
                 "effort": {
                   "$ref": "#/components/schemas/InstanceRowEffort"
+                },
+                "chosenEffort": {
+                  "$ref": "#/components/schemas/EffortLevel"
                 },
                 "canDelegate": {
                   "type": [
@@ -26534,7 +26540,7 @@
             }
           },
           "effort": {
-            "description": "How hard that model thinks, and how much it spends doing it. Hoisted for\nthe same reason again — and it is the third setting a `setEffort`\n{@link ControlPayload} can still move mid-session. Absent leaves the level\nto the harness, which is not the same as asking for its default: only the\nmodel knows which stops it has.",
+            "description": "How hard that model thinks, and how much it spends doing it. Hoisted for\nthe same reason again — and it is the third setting a `setEffort`\n{@link ControlPayload} can still move mid-session. Named, it is the\nsession's chosen effort from then on ({@link InstanceRow.chosenEffort});\nabsent, the hub starts the process at the one already chosen, or, when\nnobody chose, leaves the level to the harness, which is not the same as\nasking for its default: only the model knows which stops it has.",
             "enum": [
               "high",
               "low",
@@ -43424,6 +43430,10 @@
               "boolean"
             ]
           },
+          "chosenEffort": {
+            "$ref": "#/components/schemas/EffortLevel",
+            "description": "The effort the operator chose for the session: its spawn's level, or the\nlast `setEffort` sent it. The hub starts every process of the session at\nit, whatever brings it back; a reading never moves it. Null: nobody\nchose, and the harness runs its model's default."
+          },
           "cwd": {
             "description": "The directory the session was launched in; see `launchDir`.",
             "type": "string"
@@ -43455,7 +43465,7 @@
           },
           "effort": {
             "$ref": "#/components/schemas/InstanceRowEffort",
-            "description": "The effort the session actually sends, as its agent last read it back from\nthe harness ({@link import (\"./harness\").EFFORT_READ}): a level, `none` when\nit sends no effort, null until the first reading lands. A restart hands a\nlevel back to the new process, so it keeps working at the one it was on."
+            "description": "The effort the session actually sends, as its agent last read it back from\nthe harness ({@link import (\"./harness\").EFFORT_READ}): a level, `none` when\nit sends no effort, null until the first reading lands. What its chip\nshows; never what a launch of it asks for ({@link chosenEffort})."
           },
           "harness": {
             "description": "Which harness owns {@link sessionId} — what a resume and a catalog read route on.",

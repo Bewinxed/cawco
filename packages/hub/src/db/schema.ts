@@ -14,6 +14,7 @@ import type {
   DelegateAskStatus,
   DelegateEventKind,
   DelegateEventPayload,
+  EffortLevel,
   EndedBy,
   Envelope,
   FleetMcpConfig,
@@ -897,10 +898,18 @@ export const instances = sqliteTable("instances", {
   /**
    * The third: how hard that model thinks, as the session's agent last read it
    * back from the harness (`EFFORT_READ`) — a level, or `none` when the session
-   * sends no effort. Null until the first reading. A restart hands a level back
-   * to the new process, so it keeps working at the one it was on.
+   * sends no effort. Null until the first reading. What the session runs at,
+   * shown on its chip; never what a launch asks for ({@link chosenEffort}).
    */
   effort: text("effort").$type<SessionEffort>(),
+  /**
+   * The effort the operator chose for the session: the level its spawn named,
+   * or the last `set-effort` sent it. Every launch of the session asks for it
+   * (`bounded`), whatever brings it back. Null: nobody chose, and its launches
+   * name none, so the harness runs its model's default. Only a choice writes
+   * it, never a reading.
+   */
+  chosenEffort: text("chosen_effort").$type<EffortLevel>(),
   /**
    * Whether the session may delegate or start sessions of its own. `false` on a
    * leaf delegate — one spawned with `can_delegate: false`, which is what a

@@ -357,12 +357,12 @@ public final class SessionDetailsController: ObservedViewController {
         permissionBeforeRelaunch = permissionMode
         relaunching = true
         requestRefresh()
-        // Only the mode changes: the model it was answering on and the level it was thinking at carry over.
+        // Only the mode changes: the model it was answering on carries over, and the
+        // hub starts it at the effort chosen for it (the level it reads back is not one).
         var payload = Components.Schemas.SpawnPayload(cwd: row.cwd, instanceId: id)
         payload.harness = harness.flatMap(Components.Schemas.SpawnPayload.HarnessPayload.init(rawValue:))
         payload.permissionMode = mode
         payload.model = model
-        payload.effort = effort.flatMap(Components.Schemas.SpawnPayload.EffortPayload.init(rawValue:))
         payload.scratch = row.kind == "scratch" ? .init() : nil
         Task { [weak self, hub] in
             do {
