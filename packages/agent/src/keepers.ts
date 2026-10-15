@@ -13,12 +13,47 @@ import {
   machineEndpoint,
 } from "@cawco/core/keepers";
 import type { SessiondProcInfo } from "@cawco/core/sessiond";
-import { ensureSessiond, SessiondClient } from "./sessiond-client";
+import {
+  DIAL_TIMEOUT_MS,
+  ensureSessiond,
+  SessiondClient,
+  type SessiondWelcomeInfo,
+} from "./sessiond-client";
 
 /** A dial that found no keeper there: a file left by one that is gone, or none at all. */
 const NOBODY_THERE = new Set(["ECONNREFUSED", "ENOENT"]);
 const nobodyThere = (error: unknown): boolean =>
   NOBODY_THERE.has((error as NodeJS.ErrnoException).code ?? "");
+
+const reasonOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * How long a keeper's listing may take once dialled: as long as its welcome
+ * ({@link DIAL_TIMEOUT_MS}); the keeper answers a `list` in the same turn of
+ * its loop as it reads it.
+ */
+const LIST_TIMEOUT_MS = DIAL_TIMEOUT_MS;
+
+/**
+ * Keepers that are there and did not answer: whether one of them holds a
+ * child is not known, so "no keeper holds it" is never said past them.
+ */
+export class KeepersUnanswered extends Error {
+  readonly unanswered: readonly string[];
+  constructor(procId: string, unanswered: readonly string[]) {
+    super(
+      `[sessiond] no keeper that answered holds ${procId}, and ${unanswered.length === 1 ? "one" : unanswered.length} did not answer: ${unanswered.join("; ")}`
+    );
+    this.unanswered = unanswered;
+  }
+}
+
+/** One keeper's answer to a reading of all of them ({@link KeeperPool}). */
+interface Listing {
+  client: SessiondClient;
+  welcome: SessiondWelcomeInfo;
+}
 
 /** One held child, with the keeper that holds it and the epoch its seqs count in. */
 export interface HeldProc extends SessiondProcInfo {
@@ -59,11 +94,7 @@ export class KeeperPool {
     const clients = await Promise.all(
       found.map(({ endpoint }) =>
         this.#client(endpoint).catch((error: unknown) => {
-          if (!nobodyThere(error)) {
-            console.warn(
-              `[sessiond] ${endpoint}: ${error instanceof Error ? error.message : String(error)}`
-            );
-          }
+          this.#sayUnanswered(endpoint, error);
         })
       )
     );
@@ -72,24 +103,23 @@ export class KeeperPool {
     );
   }
 
-  /** Every child each keeper lists, live or not, with its keeper; the current keeper's first. */
+  /** Every child each keeper that answers lists, live or not, with its keeper; the current keeper's first. */
   async held(): Promise<HeldProc[]> {
-    const listings = await Promise.all(
-      (await this.all()).map(async (client) => ({
-        client,
-        welcome: await client.list(),
-      }))
-    );
+    const { listings } = await this.#survey();
     return listings.flatMap(({ client, welcome }) =>
       welcome.procs.map((proc) => ({ ...proc, client, epoch: welcome.epoch }))
     );
   }
 
-  /** The keeper holding a live child under `procId`, the current one asked first. */
+  /**
+   * The keeper holding a live child under `procId`, the current one's answer
+   * first; undefined only once every keeper there answered and none holds
+   * it. A keeper that is there and did not answer makes it unknown: {@link
+   * KeepersUnanswered}, naming each.
+   */
   async holding(procId: string): Promise<HeldProc | undefined> {
-    for (const client of await this.all()) {
-      // biome-ignore lint/performance/noAwaitInLoops: the current keeper is asked first, and the one that holds it ends the search
-      const welcome = await client.list();
+    const { listings, unanswered } = await this.#survey();
+    for (const { client, welcome } of listings) {
       const proc = welcome.procs.find(
         (one) => one.procId === procId && one.alive
       );
@@ -97,7 +127,57 @@ export class KeeperPool {
         return { ...proc, client, epoch: welcome.epoch };
       }
     }
+    if (unanswered.length > 0) {
+      throw new KeepersUnanswered(procId, unanswered);
+    }
     return undefined;
+  }
+
+  /**
+   * One reading of every keeper there, the current one first: each one's
+   * listing, and each one that is there and did not answer, with why. An
+   * endpoint nothing listens on (`ECONNREFUSED`, `ENOENT`) is a file a keeper
+   * that is gone left, and is no keeper ({@link keeperEndpoints}); it is
+   * named once in the log.
+   */
+  async #survey(): Promise<{ listings: Listing[]; unanswered: string[] }> {
+    const found = await keeperEndpoints();
+    const read = await Promise.all(
+      found.map(async ({ endpoint }): Promise<Listing | string | undefined> => {
+        try {
+          const client = await this.#client(endpoint);
+          return { client, welcome: await listWithin(client, endpoint) };
+        } catch (error) {
+          this.#sayUnanswered(endpoint, error);
+          return nobodyThere(error)
+            ? undefined
+            : `${endpoint}: ${reasonOf(error)}`;
+        }
+      })
+    );
+    return {
+      listings: read.filter(
+        (one): one is Listing => typeof one === "object" && one !== undefined
+      ),
+      unanswered: read.filter((one): one is string => typeof one === "string"),
+    };
+  }
+
+  /** The endpoints already named as answering nothing, each named once. */
+  readonly #saidGone = new Set<string>();
+
+  /** Names an endpoint that did not answer: each time when it is there, once when nothing listens on it. */
+  #sayUnanswered(endpoint: string, error: unknown): void {
+    if (!nobodyThere(error)) {
+      console.warn(`[sessiond] ${endpoint} did not answer: ${reasonOf(error)}`);
+      return;
+    }
+    if (!this.#saidGone.has(endpoint)) {
+      this.#saidGone.add(endpoint);
+      console.info(
+        `[sessiond] ${endpoint} answers nothing (${(error as NodeJS.ErrnoException).code}): read as a file a keeper that is gone left`
+      );
+    }
   }
 
   /** The keeper whose boot epoch is `epoch` (each connection learns its keeper's from its welcome), while it answers. */
@@ -170,6 +250,26 @@ export class KeeperPool {
     return dialled;
   }
 }
+
+/** A keeper's listing, or why it did not come within {@link LIST_TIMEOUT_MS}. */
+const listWithin = (
+  client: SessiondClient,
+  endpoint: string
+): Promise<SessiondWelcomeInfo> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    client.list(),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(`no listing from ${endpoint} within ${LIST_TIMEOUT_MS}ms`)
+          ),
+        LIST_TIMEOUT_MS
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+};
 
 /** One keeper as {@link withKeepers} hands it: a connection of its own, closed after. */
 export interface KeeperConnection {

@@ -189,7 +189,7 @@ EOF
       fixture broken-binary "$out/shared/broken-cawco" &&
       fixture broken-binary "$out/shared/migrating-cawco" migrates &&
       bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))" &&
-      cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-send.ts" "$here/stage2-during-install.ts" "$here/stage2-hook-calls.ts" "$here/stage2-answer-prompts.py" "$out/shared/" &&
+      cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-send.ts" "$here/stage2-during-install.ts" "$here/stage2-hook-calls.ts" "$here/stage2-preview-port.ts" "$here/stage2-answer-prompts.py" "$out/shared/" &&
       write_machine_scripts "$out/shared"
   }
   echo "preparing (images and fixtures at once)"
@@ -1601,14 +1601,25 @@ ws_exec() { as_user "$joinerc" sh -c 'cd "$1" && exec "$2" "$3"' sh "$(cat "$rig
 ws_place() { as_user "$joinerc" cat "$(ws_state)/boundaries/$1/sandbox"; }
 ns_of() { as_user "$joinerc" readlink "/proc/$1/ns/pid"; }
 # A listener a workspace command leaves behind as a dev server does: `setsid -f`, its own session, reparented to the
-# sandbox's init once the command's shell ends. It answers each connection with one line.
+# sandbox's init once the command's shell ends. It answers each connection with an HTTP response whose body is the
+# word it was started with ($1), so a preview reaches it as it reaches a dev server, and an answer names the
+# listener that gave it. Its script lies in the workspace's scratch dir (socat's address syntax takes no `:` or `,`
+# in a SYSTEM command).
 WS_LISTENER_PORT=5199
-WS_LISTENER_SAYS=cawco-proof-listener
-ws_listener_start() { ws_exec "setsid -f socat TCP-LISTEN:$WS_LISTENER_PORT,fork,reuseaddr SYSTEM:'echo $WS_LISTENER_SAYS' < /dev/null > /dev/null 2>&1"; }
-ws_listener_pid() { as_user "$joinerc" pgrep -o -f "socat TCP-LISTEN:$WS_LISTENER_PORT"; }
-# What the listener answers in the network of the sandbox whose init is $1, reached as the agent's preview bridge
+ws_listener_start() {
+  ws_exec "printf '%s\n' \"printf 'HTTP/1.0 200 OK\\\\r\\\\nContent-Type: text/plain\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n%s\\\\n' $1\" > \"\$TMPDIR/answer-$1.sh\" && setsid -f socat TCP-LISTEN:$WS_LISTENER_PORT,fork,reuseaddr SYSTEM:\"sh \$TMPDIR/answer-$1.sh\" < /dev/null > /dev/null 2>&1"
+}
+# The newest listener on the port: the one just started.
+ws_listener_pid() { as_user "$joinerc" pgrep -n -f "socat TCP-LISTEN:$WS_LISTENER_PORT"; }
+# What a listener answers in the network of the sandbox whose init is $1, reached as the agent's preview bridge
 # reaches a workspace's port (preview-bridge.ts: nsenter into the sandbox's user and network namespaces).
 ws_listener_says() { as_user "$joinerc" nsenter --target "$1" --user --net --preserve-credentials socat -t2 -T3 - "TCP:127.0.0.1:$WS_LISTENER_PORT" < /dev/null 2> /dev/null || true; }
+# The workspace's preview of the listener's port, opened as a session opens one (its `artifact_create` tool, here
+# from a command through the workspace's tool door), and the hub's preview port for it, as the dashboard learns it.
+ws_preview_open() { ws_exec "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"name\":\"proof-listener\",\"port\":$WS_LISTENER_PORT}'"; }
+ws_preview_port() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$(cat "$rigdir/ws-delegate")"; }
+# What the preview answers, through the hub's preview listener, the joined machine's agent and its bridge.
+ws_preview_says() { as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$(cat "$rigdir/ws-preview-port")/" 2>&1 || true; }
 # Every process that descends from the sandbox init $1, by each one's parent: the tree boundary.ts inTree judges.
 ws_tree() { as_user "$joinerc" ps -e -o pid=,ppid= | awk -v root="$1" '{ parent[$1] = $2 } END { tree[root] = 1; do { grew = 0; for (p in parent) if (!(p in tree) && (parent[p] in tree)) { tree[p] = 1; grew = 1 } } while (grew); for (p in tree) print p }'; }
 # A POST to the hub, answering its body and a last line `HTTP <status>`, so a refusal shows the hub's words.
@@ -1713,8 +1724,8 @@ workspace_across_update() {
   job=$(as_user "$joinerc" pgrep -fx 'sleep 2999')
   [[ "$(ns_of "$job")" == "$old_ns" ]]
   # And a listener one command leaves behind with `setsid -f`, as a delegate starts the dev server a preview shows.
-  ws_listener_start
-  wait_until 30 '[[ "$(ws_listener_says "'"$old_inner"'")" == "$WS_LISTENER_SAYS" ]]'
+  ws_listener_start gen-old
+  wait_until 30 '[[ "$(ws_listener_says "'"$old_inner"'")" == *gen-old* ]]'
   listener=$(ws_listener_pid)
   [[ $listener =~ ^[0-9]+$ ]]
   ws_tree "$old_inner" | grep -qx "$listener" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $old_inner"; return 1; }
@@ -1755,7 +1766,7 @@ workspace_across_update() {
   as_user "$joinerc" kill -0 "$old_inner"
   # The listener ran through the update and still answers on its port, in the network it started in.
   as_user "$joinerc" kill -0 "$listener"
-  [[ "$(ws_listener_says "$old_inner")" == "$WS_LISTENER_SAYS" ]]
+  [[ "$(ws_listener_says "$old_inner")" == *gen-old* ]]
   # With the job gone, the listener alone keeps the older boundary running: through four of the agent's looks at
   # it (boundary.ts STALE_LOOK_MS, 5 s), its record, its sandbox and the listener's answer stay.
   as_user "$joinerc" kill "$job"
@@ -1763,11 +1774,22 @@ workspace_across_update() {
   as_user "$joinerc" test -e "$(ws_state)/retiring-$gen.json" || { echo "ASSERTION FAILED: the older boundary closed while the setsid listener ran in it"; return 1; }
   as_user "$joinerc" kill -0 "$old_inner"
   as_user "$joinerc" kill -0 "$listener"
-  [[ "$(ws_listener_says "$old_inner")" == "$WS_LISTENER_SAYS" ]]
-  # Once the listener ends it closes by itself: its sandbox, its srt host, its record and its files go.
-  as_user "$joinerc" kill "$listener"
+  # A preview of the port reaches the listener in the older generation: the newest that listens on it.
+  ws_preview_open
+  wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
+  echo "the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
+  wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; return 1; }
+  # The delegate starts its server again, on the same port, in the new generation: the older generation's work is
+  # taken over, and it closes with what runs in it (boundary.ts supersededPorts). Its sandbox, its srt host, its
+  # record and its files go, the old listener with them.
+  ws_listener_start gen-new
+  wait_until 30 '[[ "$(ws_listener_says "'"$new_inner"'")" == *gen-new* ]]'
   wait_until 120 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)/retiring-'"$gen"'.json" && ! as_user "$joinerc" test -e "$(ws_state)/boundaries/'"$gen"'"'
   ! as_user "$joinerc" kill -0 "$old_inner" 2> /dev/null
+  ! as_user "$joinerc" kill -0 "$listener" 2> /dev/null || { echo "ASSERTION FAILED: the older generation's listener $listener outlived its generation"; return 1; }
+  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its older boundary .* a newer generation listens on every port its work listened on ($WS_LISTENER_PORT)"
+  # The same preview now reaches the new generation's listener.
+  wait_until 60 '[[ "$(ws_preview_says)" == *gen-new* ]]' || { echo "the preview answered: $(ws_preview_says)"; return 1; }
   # The current one is untouched.
   [[ "$(ws_gen)" == "$new" ]]
   [[ "$(child_pids "$joinerc" "boundary-$id-$new")" =~ ^[0-9]+$ ]]
@@ -1781,8 +1803,8 @@ workspace_archive_ends_all() {
   id=$(cat "$rigdir/ws-id")
   gen=$(ws_gen)
   read -r _ inner _ <<< "$(ws_place "$gen")"
-  ws_listener_start
-  wait_until 30 '[[ "$(ws_listener_says "'"$inner"'")" == "$WS_LISTENER_SAYS" ]]'
+  # The `setsid -f` listener the update's check started again in this generation.
+  [[ "$(ws_listener_says "$inner")" == *gen-new* ]]
   listener=$(ws_listener_pid)
   tree=$(ws_tree "$inner")
   grep -qx "$listener" <<< "$tree" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $inner"; return 1; }
@@ -1805,14 +1827,15 @@ workspace_archive_ends_all() {
   [[ -z $left ]] || { echo "ASSERTION FAILED: these processes of the archived workspace's sandbox still run:$left"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_listener_start ws_listener_pid ws_listener_says ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
-export WS_LISTENER_PORT WS_LISTENER_SAYS
+export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_listener_start ws_listener_pid ws_listener_says ws_preview_open ws_preview_port ws_preview_says ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export WS_LISTENER_PORT
 rig_workspace() {
+  local across="a workspace open across an update keeps its job and a setsid listener running, a preview reaching the listener in the older generation, its next command runs in the new build's boundary, and once the listener is started again on its port in the new generation the old boundary closes with it and the preview reaches the new one"
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
   check "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" workspace_opens 600
-  check "a workspace open across an update keeps its job and a setsid listener running, the listener answering on its port, its next command runs in the new build's boundary, and the old boundary closes only once the listener ends" workspace_across_update 900 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
-  check "archiving a workspace ends a setsid listener and every other process its sandbox started" workspace_archive_ends_all 300 "a workspace open across an update keeps its job and a setsid listener running, the listener answering on its port, its next command runs in the new build's boundary, and the old boundary closes only once the listener ends"
+  check "$across" workspace_across_update 900 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
+  check "archiving a workspace ends a setsid listener and every other process its sandbox started" workspace_archive_ends_all 300 "$across"
 }
 
 # ---------------------------------------------------------------- one session's runaway is its own

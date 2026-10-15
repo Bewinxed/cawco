@@ -2287,15 +2287,7 @@ const busyOld = async (
   old: Retiring,
   current: Held | undefined
 ): Promise<boolean> => {
-  const exec = join(stateDir(id), "exec");
-  // Checked again as the executor itself, not by the record alone: a record
-  // written before {@link runsExecutor} lists the judge too.
-  if (
-    seen.some(
-      (one) =>
-        old.executors.includes(one.pid) && runsExecutor(one.command, exec)
-    )
-  ) {
+  if (inFlight(seen, id, old)) {
     return true;
   }
   if (process.platform === "linux" && old.identity) {
@@ -2324,9 +2316,98 @@ const busyOld = async (
   );
 };
 
+/**
+ * Whether an executor that was on its way into the older boundary `old` as it
+ * was handed over is still there, its command not yet answered. Checked
+ * again as the executor itself, not by the record alone: a record written
+ * before {@link runsExecutor} lists the judge too.
+ */
+const inFlight = (seen: Seen[], id: string, old: Retiring): boolean => {
+  const exec = join(stateDir(id), "exec");
+  return seen.some(
+    (one) => old.executors.includes(one.pid) && runsExecutor(one.command, exec)
+  );
+};
+
+/**
+ * Linux: the ports the work of the older boundary `old` listens on, when a
+ * newer generation of the workspace whose sandbox runs ({@link sandboxes})
+ * listens on every one of them: its work was started again there (a
+ * delegate's dev server, restarted after an update on the port it had), so
+ * the older one is done. Undefined when its work listens on no port (a job, a
+ * build: it closes once that ends), or on one no newer generation listens on
+ * (it stays, reached there, {@link workspaceNetworks}).
+ *
+ * Its work's ports are the listening sockets of its sandbox's network
+ * ({@link listeners}) that a process of its work has open: one that descends
+ * from its sandbox's init and was not there when its runner was ready
+ * ({@link inTree}), by the socket inodes in its `/proc/<pid>/fd`. srt's own
+ * relays inside (its proxies' ports) are its runner's plumbing, never its
+ * work's. A newer generation listens on a port when its network's tables
+ * list it listening, whoever holds it.
+ */
+const supersededPorts = async (
+  seen: Seen[],
+  old: Retiring,
+  generations: readonly RunningSandbox[]
+): Promise<number[] | undefined> => {
+  const mine = generations.find(
+    (one) => (one.boundary.gen ?? FIRST_GEN) === (old.gen ?? FIRST_GEN)
+  );
+  if (!mine || old.identity) {
+    return;
+  }
+  const idle = new Set(mine.place.idle);
+  const work = inTree(seen, mine.place.inner).filter(
+    (one) => !idle.has(one.pid)
+  );
+  const open = new Set(
+    (await Promise.all(work.map((one) => socketsOf(one.pid)))).flat()
+  );
+  const ports = [
+    ...new Set(
+      (await listeners(mine.place.inner))
+        .filter((one) => open.has(one.inode))
+        .map((one) => one.port)
+    ),
+  ].sort((a, b) => a - b);
+  if (ports.length === 0) {
+    return;
+  }
+  const newer = new Set(
+    (
+      await Promise.all(
+        generations
+          .filter((one) => one.started > mine.started)
+          .map((one) => listeners(one.place.inner))
+      )
+    )
+      .flat()
+      .map((one) => one.port)
+  );
+  return ports.every((port) => newer.has(port)) ? ports : undefined;
+};
+
+/** The socket inodes process `pid` has open, as its `/proc/<pid>/fd` links name them (`socket:[INODE]`); none once it is gone. */
+const socketsOf = async (pid: number): Promise<string[]> => {
+  const fds = await readdir(`/proc/${pid}/fd`).catch(() => [] as string[]);
+  const links = await Promise.all(
+    fds.map((fd) => readlink(`/proc/${pid}/fd/${fd}`).catch(() => undefined))
+  );
+  return links.flatMap((link) => {
+    const inode = link && SOCKET_LINK.exec(link)?.[1];
+    return inode ? [inode] : [];
+  });
+};
+
+const SOCKET_LINK = /^socket:\[(\d+)\]$/;
+
 /** Where an older boundary still running beside the current one is recorded ({@link Retiring}). */
 const retiringFileOf = (id: string, old: Pick<Held, "gen">): string =>
-  join(stateDir(id), `retiring-${old.gen ?? "first"}.json`);
+  join(stateDir(id), `retiring-${old.gen ?? FIRST_GEN}.json`);
+
+/** The name a boundary from before generations goes by where one is named by its generation. */
+const FIRST_GEN = "first";
 
 const RETIRING_FILE = /^retiring-[^/]+\.json$/;
 
@@ -2384,24 +2465,36 @@ const handOver = async (
 
 /**
  * Closes every older boundary of workspace `id` that nothing runs in any
- * more, or that is no longer running, and cleans its files; one that still
- * runs something is left as it is. Answers whether any is left.
+ * more, that is no longer running, or whose work a newer generation took
+ * over ({@link supersededPorts}), with every process in it, and cleans its
+ * files; one that still runs something of its own is left as it is. Answers
+ * whether any is left.
  */
 const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
   const current = await readHeld(id).catch(() => undefined);
+  const now = process.platform === "linux" ? await sandboxes(id) : [];
   let left = false;
   for (const old of await readRetiring(id)) {
     // biome-ignore lint/performance/noAwaitInLoops: one older boundary at a time
     const alive = Boolean(await running(id, old));
+    let closed = alive
+      ? "has nothing left running in it and is closed"
+      : "is gone";
     if (alive && (await busyOld(seen, id, old, current))) {
-      left = true;
-      continue;
+      const ports = inFlight(seen, id, old)
+        ? undefined
+        : await supersededPorts(seen, old, now);
+      if (!ports) {
+        left = true;
+        continue;
+      }
+      closed = `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})`;
     }
     await stopBoundary(id, old);
     await cleanGeneration(id, old);
     await rm(retiringFileOf(id, old), { force: true });
     console.info(
-      `[workspace] ${id}: its older boundary ${old.pid} (form ${old.form ?? "none"}) ${alive ? "has nothing left running in it and is closed" : "is gone"}`
+      `[workspace] ${id}: its older boundary ${old.pid} (form ${old.form ?? "none"}) ${closed}`
     );
   }
   return left;
@@ -3074,8 +3167,12 @@ const OWN_INODE_BATCH = 64;
  * installed outside a boundary shares inodes with the host's bun cache and
  * every host tree installed from it, and a write inside the clone would
  * change a file the host runs. Inside a boundary the cache is the workspaces'
- * own, so after a clone's first start this finds nothing. Runs before the
- * boundary starts, with nothing inside to write.
+ * own: what a command installs there shares inodes with that cache alone,
+ * which no host tree runs. It copies and renames files in place, so it runs
+ * only before a boundary starts with no sandbox of the workspace running
+ * (its first start, a start after a reboot, a replacement once the one before
+ * is stopped), never beside an older generation still running in the clone
+ * at a handover ({@link launch}).
  */
 const ownInodes = async (path: string): Promise<number> => {
   const listed =
@@ -3111,50 +3208,133 @@ const isBwrap = async (pid: number): Promise<boolean> =>
     .split("\0")[0]
     ?.endsWith("bwrap") ?? false;
 
+/** Linux: one generation of a workspace whose sandbox runs now ({@link sandboxes}). */
+interface RunningSandbox {
+  readonly boundary: Held;
+  readonly place: Place;
+  /** Its host's start, in clock ticks since boot (a later generation's host starts later); the current generation's reads as the newest. */
+  readonly started: number;
+}
+
+/** Whether `outer` is a bwrap that `host` started: the sandbox the srt host `host` runs now. */
+const hostsSandbox = async (host: number, outer: number): Promise<boolean> => {
+  const text = await readFile(`/proc/${outer}/stat`, "utf8").catch(() => "");
+  const parent = Number(text.slice(text.lastIndexOf(")") + 2).split(" ")[1]);
+  return parent === host && (await isBwrap(outer));
+};
+
 /**
- * Where a workspace's servers listen: on Linux each running boundary's own
- * network, named by its sandbox's init (`inner`), the current boundary first,
- * then each older one still running beside it ({@link handOver}), whose
- * servers run on there, newest first: a port is served from the newest
- * generation that listens on it, so a server one generation started is
- * reached over one an older generation still runs on the same port. On
- * macOS, which gives a boundary no network of its own, the host's (`host`)
- * while its boundary runs. Empty when no boundary of the workspace runs on
- * this machine.
+ * Linux: the generations of workspace `id` whose sandbox runs now, the
+ * current one first, then each older one still running beside it ({@link
+ * handOver}), newest first. A generation's sandbox runs while the outer bwrap
+ * its srt host names ({@link placeOf}) is alive and is that host's own child:
+ * the host removes the name as it ends, and the bwrap ends with the host
+ * (`--die-with-parent`). Read off the generation's own files and `/proc`
+ * alone, never a keeper: what a keeper answers or not, during a keeper's
+ * handover among others, says nothing of whether a sandbox runs.
+ */
+const sandboxes = async (id: string): Promise<RunningSandbox[]> => {
+  const held = await readHeld(id).catch(() => undefined);
+  const named = new Set<string>();
+  // During a handover the older one is both the record and retiring.
+  const records = [
+    ...(held ? [{ boundary: held as Held, current: true }] : []),
+    ...(await readRetiring(id)).map((boundary) => ({
+      boundary: boundary as Held,
+      current: false,
+    })),
+  ].filter(({ boundary }) => {
+    const gen = boundary.gen ?? FIRST_GEN;
+    if (named.has(gen)) {
+      return false;
+    }
+    named.add(gen);
+    return true;
+  });
+  const found = await Promise.all(
+    records.map(async ({ boundary, current }) => {
+      const place = await readPlace(id, boundary.gen);
+      if (!(place && (await hostsSandbox(boundary.pid, place.outer)))) {
+        return;
+      }
+      return {
+        boundary,
+        place,
+        started: current
+          ? Number.POSITIVE_INFINITY
+          : Number(await processStart(boundary.pid)) || 0,
+      };
+    })
+  );
+  return found
+    .filter((one): one is RunningSandbox => one !== undefined)
+    .sort((a, b) => (a.started === b.started ? 0 : b.started - a.started));
+};
+
+/** A TCP table's state for a listening socket (`/proc/net/tcp`'s `st`). */
+const TCP_LISTEN = "0A";
+
+/**
+ * Linux: the TCP sockets listening in the network of the sandbox whose init
+ * is `inner`, each with its port and socket inode, from `/proc/<inner>/net/tcp`
+ * and `tcp6`: the tables of the network namespace that process is in. Empty
+ * once it is gone.
+ */
+export const listeners = async (
+  inner: number
+): Promise<{ inode: string; port: number }[]> => {
+  const tables = await Promise.all(
+    ["tcp", "tcp6"].map((table) =>
+      readFile(`/proc/${inner}/net/${table}`, "utf8").catch(() => "")
+    )
+  );
+  return tables.flatMap((text) =>
+    text
+      .split("\n")
+      .slice(1)
+      .flatMap((line) => {
+        // sl local_address rem_address st tx:rx tr:when retrnsmt uid timeout inode
+        const [, local, , state, , , , , , inode] = line
+          .trim()
+          .split(WHITESPACE);
+        if (state !== TCP_LISTEN || !local || !inode) {
+          return [];
+        }
+        return [
+          {
+            port: Number.parseInt(local.slice(local.indexOf(":") + 1), 16),
+            inode,
+          },
+        ];
+      })
+  );
+};
+
+/**
+ * Where a workspace's servers listen: on Linux each network of a generation
+ * whose sandbox runs ({@link sandboxes}), named by its sandbox's init
+ * (`inner`), the current one first, then each older one newest first: a port
+ * is served from the newest generation that listens on it, so a server one
+ * generation started is reached over one an older generation still runs on
+ * the same port. On macOS, which gives a boundary no network of its own, the
+ * host's (`host`) while its boundary runs. Empty when no boundary of the
+ * workspace runs on this machine.
  */
 export const workspaceNetworks = async (
   id: string
 ): Promise<({ inner: number } | "host")[]> => {
+  if (process.platform === "linux") {
+    return (await sandboxes(id)).map(({ place }) => ({ inner: place.inner }));
+  }
   const held = await readHeld(id).catch(() => undefined);
-  const older = await Promise.all(
-    (await readRetiring(id)).map(async (boundary) => ({
-      boundary,
-      // Its host's start, in clock ticks since boot: a later generation's
-      // host starts later. Gone reads as 0, and `running` drops it below.
-      started: Number(await processStart(boundary.pid)) || 0,
-    }))
-  );
-  const boundaries = [
-    ...(held ? [held] : []),
-    ...older
-      .sort((a, b) => b.started - a.started)
-      .map(({ boundary }) => boundary),
-  ];
-  const networks: ({ inner: number } | "host")[] = [];
+  const boundaries = [...(held ? [held] : []), ...(await readRetiring(id))];
   for (const boundary of boundaries) {
-    // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, current first
-    if (!(await running(id, boundary))) {
-      continue;
-    }
-    if (process.platform !== "linux") {
+    // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, current first; the first that runs answers
+    if (await running(id, boundary)) {
       return ["host"];
     }
-    const place = await readPlace(id, boundary.gen);
-    if (place && (await isBwrap(place.outer))) {
-      networks.push({ inner: place.inner });
-    }
   }
-  return networks;
+  return [];
 };
 
 /** Every process a macOS workspace started, found by the marker its runner handed them all. */
@@ -3269,7 +3449,12 @@ const launch = async (
   const own = !isLeadPlace(ref.id);
   const procId = boundaryProcId(ref.id, gen);
   if (linux) {
-    const split = own ? await ownInodes(ref.path) : 0;
+    // Only with no sandbox of the workspace running: a handover starts this
+    // one beside an older one whose work runs on in the same clone.
+    const split =
+      own && (await sandboxes(ref.id)).length === 0
+        ? await ownInodes(ref.path)
+        : 0;
     if (split > 0) {
       console.info(
         `[workspace] ${ref.id}: ${split} file(s) in its clone shared an inode with a file outside it, and each now has its own`

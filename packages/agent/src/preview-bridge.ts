@@ -12,12 +12,17 @@
  * namespaces failed: Operation not permitted` for `--user-parent`, the page
  * for `--user --net`).
  *
- * A bridge is opened on the preview's first request and again whenever the
- * one it had is gone: its socat exited, or the boundary it joined closed (its
- * init's network is not the one it joined). It goes with its preview, and
- * with the agent: it runs under `setpriv --pdeathsig KILL`, and the hub
- * starts each preview again at the agent's next register. A workspace with no
- * boundary running answers {@link WorkspaceDown}; a port named for a
+ * Each request chooses its network: the newest generation of the workspace
+ * whose sandbox runs and listens on the port, else the current one's
+ * ({@link target}). A bridge is opened into it on the preview's first request,
+ * and again whenever the network chosen is another one (a server started
+ * again in a newer generation) or the one it had is gone: its socat exited,
+ * or the boundary it joined closed (its init's network is not the one it
+ * joined). It goes with its preview, and with the agent: it runs under
+ * `setpriv --pdeathsig KILL`, and the hub starts each preview again at the
+ * agent's next register. A workspace with no sandbox running answers
+ * {@link WorkspaceDown}, judged off its generations' own files and `/proc`,
+ * never a keeper's answer (`sandboxes` in boundary.ts); a port named for a
  * workspace is reached there, never on the host.
  */
 import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
@@ -27,7 +32,7 @@ import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import type { Subprocess } from "bun";
-import { workspaceNetworks } from "./boundary";
+import { listeners, workspaceNetworks } from "./boundary";
 
 /** The workspace a preview names has no boundary running on this machine. */
 export class WorkspaceDown extends Error {
@@ -58,7 +63,7 @@ interface Bridge {
 /** Each preview's bridge, by its instance id. */
 const bridges = new Map<string, Bridge>();
 /** Each preview's bridge while it opens: one open, however many requests ask. */
-const opening = new Map<string, Promise<string | "host">>();
+const opening = new Map<string, Promise<string>>();
 /**
  * How many times each preview was stopped: an open that finds the count
  * changed once its spawn settles was stopped under it, and takes down what it
@@ -84,28 +89,7 @@ const netOf = (pid: number): string | undefined => {
   }
 };
 
-const FIELDS = /\s+/;
 const PID = /^\d+$/;
-
-/** Whether something in `inner`'s network listens on TCP `port`. */
-const listening = (inner: number, port: number): boolean => {
-  const hex = `:${port.toString(16).toUpperCase().padStart(4, "0")}`;
-  return ["tcp", "tcp6"].some((table) => {
-    let text: string;
-    try {
-      text = readFileSync(`/proc/${inner}/net/${table}`, "utf8");
-    } catch {
-      return false;
-    }
-    return text
-      .split("\n")
-      .slice(1)
-      .some((line) => {
-        const [, local, , state] = line.trim().split(FIELDS);
-        return state === "0A" && local?.endsWith(hex) === true;
-      });
-  });
-};
 
 const tool = (name: string): string => {
   const found = Bun.which(name, { PATH: SYSTEM_PATH });
@@ -204,34 +188,47 @@ const alive = (bridge: Bridge): boolean =>
   netOf(bridge.inner) === bridge.net;
 
 /**
- * Opens a bridge into the workspace's network that serves `port`: the one
- * where something listens on it, else the current boundary's.
+ * Where `port` of workspace `workspace` is served now: the network of the
+ * newest generation whose sandbox runs and listens on it, else the current
+ * one's (`workspaceNetworks` lists them newest first); `host` on macOS.
+ * Throws {@link WorkspaceDown} when no sandbox of the workspace runs.
  */
-const open = async (
-  instanceId: string,
+const target = async (
   workspace: string,
   port: number
-): Promise<string | "host"> => {
-  const stop = stops.get(instanceId);
-  const stopped = () => stops.get(instanceId) !== stop;
-  await teardown(instanceId);
+): Promise<number | "host"> => {
   const networks = await workspaceNetworks(workspace);
-  if (stopped()) {
-    throw new BridgeStopped();
-  }
   const [first] = networks;
   if (!first) {
     throw new WorkspaceDown();
   }
   if (first === "host") {
-    onHost.add(instanceId);
     return "host";
   }
-  const { inner } =
-    networks.find(
-      (network): network is { inner: number } =>
-        network !== "host" && listening(network.inner, port)
-    ) ?? first;
+  const inners = networks.flatMap((network) =>
+    network === "host" ? [] : [network.inner]
+  );
+  const listens = await Promise.all(
+    inners.map(async (inner) =>
+      (await listeners(inner)).some((one) => one.port === port)
+    )
+  );
+  return inners[listens.indexOf(true)] ?? first.inner;
+};
+
+/** Opens preview `instanceId`'s bridge into the network of the sandbox whose init is `inner`, replacing the one it had. */
+const open = async (
+  instanceId: string,
+  workspace: string,
+  port: number,
+  inner: number
+): Promise<string> => {
+  const stop = stops.get(instanceId);
+  const stopped = () => stops.get(instanceId) !== stop;
+  await teardown(instanceId);
+  if (stopped()) {
+    throw new BridgeStopped();
+  }
   const net = netOf(inner);
   if (!net) {
     throw new WorkspaceDown();
@@ -312,31 +309,43 @@ export const workspaceGone = async (workspace: string): Promise<boolean> =>
   (await workspaceNetworks(workspace)).length === 0;
 
 /**
- * Where preview `instanceId`'s requests for workspace `workspace`'s `port` go:
- * the socket of its bridge into the workspace's network, opened now when it
- * has none that still reaches there; `host` on macOS, whose boundaries share
- * the host's network. Throws {@link WorkspaceDown} when no boundary of the
- * workspace runs here; a request that then finds nothing answering asks
- * {@link workspaceGone}.
+ * Where one request of preview `instanceId` for workspace `workspace`'s
+ * `port` goes, chosen for each request ({@link target}): the socket of its
+ * bridge into that network, opened now when the bridge it has joined another
+ * network or no longer reaches it; `host` on macOS, whose boundaries share the
+ * host's network. A bridge is never held to the generation it first opened
+ * into: once a newer generation listens on the port (its server started
+ * again there), the next request goes there. Throws {@link WorkspaceDown}
+ * when no sandbox of the workspace runs here; a request that then finds
+ * nothing answering asks {@link workspaceGone}.
  */
-export const reachWorkspace = (
+export const reachWorkspace = async (
   instanceId: string,
   workspace: string,
   port: number
 ): Promise<string | "host"> => {
   if (!WORKSPACE_ID.test(workspace)) {
-    return Promise.reject(new Error(`${workspace} is not a workspace id.`));
+    throw new Error(`${workspace} is not a workspace id.`);
   }
   if (onHost.has(instanceId)) {
-    return Promise.resolve("host");
+    return "host";
+  }
+  // An open under way finishes first: one bridge per preview at a time.
+  await opening.get(instanceId)?.catch(() => {
+    // Its own request was told why; this one chooses again below.
+  });
+  const inner = await target(workspace, port);
+  if (inner === "host") {
+    onHost.add(instanceId);
+    return "host";
   }
   const bridge = bridges.get(instanceId);
-  if (bridge && alive(bridge)) {
-    return Promise.resolve(bridge.socket);
+  if (bridge && bridge.inner === inner && alive(bridge)) {
+    return bridge.socket;
   }
   let pending = opening.get(instanceId);
   if (!pending) {
-    pending = open(instanceId, workspace, port).finally(() =>
+    pending = open(instanceId, workspace, port, inner).finally(() =>
       opening.delete(instanceId)
     );
     opening.set(instanceId, pending);

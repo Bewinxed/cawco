@@ -779,6 +779,14 @@ export class SessiondClient {
 
   /** Ask again what is alive. Answered with a fresh `welcome`. */
   list(): Promise<SessiondWelcomeInfo> {
+    // An ended connection failed its waiters as it closed: one queued now
+    // would wait for a welcome that never comes.
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: set true at runtime by the socket's "close" and by close(); biome's inference sees only the initializer
+    if (this.#closed) {
+      return Promise.reject(
+        new Error("[sessiond] the keeper's connection has ended")
+      );
+    }
     return new Promise((resolve, reject) => {
       this.#send({ type: "list" });
       this.#welcomeWaiters.push({ resolve, reject });
