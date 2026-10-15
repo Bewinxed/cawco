@@ -164,6 +164,7 @@ import {
   HeldProcessRefused,
   type TurnExtras,
 } from "../harness";
+import { HUB_AWAY_BOUND_MS } from "../hub-away";
 import { type HeldProc, KeeperPool } from "../keepers";
 import {
   beginAccountLogin,
@@ -3125,10 +3126,8 @@ class ClaudeSession implements HarnessSession {
 
   /** One reading of the cawco slot for {@link #dialCawco}: whether the dial is done. */
   async #dialOnce(credential: string): Promise<"done" | "again"> {
-    const cawco = (await this.#handle.mcpServerStatus()).find(
-      (server) => server.name === MCP_SERVER_NAME
-    );
-    if (cawco?.status === "connected") {
+    const read = await this.#readCawcoSlot();
+    if (read.slot === "connected") {
       if (await this.#acknowledged(credential)) {
         console.info(
           `[claude] held credential verified ${this.instanceId}: its CawCo MCP connected after it was attached`
@@ -3136,21 +3135,59 @@ class ClaudeSession implements HarnessSession {
       }
       return "done";
     }
-    if (cawco?.status === "needs-auth") {
+    if (read.slot === "refused") {
       this.#credentialRefused();
       return "done";
     }
-    if (cawco?.status === "failed") {
-      await this.#handle.reconnectMcpServer(MCP_SERVER_NAME);
-      return "again";
-    }
-    if (cawco?.status === "pending") {
+    if (read.slot === "again") {
       return "again";
     }
     console.warn(
-      `[claude] ${this.instanceId}: its CawCo MCP reads ${cawco?.status ?? "missing"}; it is not dialled again`
+      `[claude] ${this.instanceId}: its CawCo MCP reads ${read.status}; it is not dialled again`
     );
     return "done";
+  }
+
+  /**
+   * THE ONE READING OF THE CAWCO SLOT, for a launch's gate and a held
+   * child's dial alike. `connected`: the hub took the slot's header as this
+   * session. `refused`: `needs-auth`, the hub's 401 for a credential it does
+   * not know. `again`: still connecting, or `failed` and dialled again now on
+   * the header it was launched with, so no credential changes: the hub away
+   * (a restart) or slow to answer the slot's `initialize` is no refusal, and
+   * Claude Code does not dial a server again whose first connect failed.
+   * `off`: a status nothing dials (`disabled`, or no slot at all).
+   */
+  async #readCawcoSlot(): Promise<
+    | { slot: "connected"; servers: McpServerStatus[] }
+    | { slot: "refused" }
+    | { slot: "again"; why: string }
+    | { slot: "off"; status: string }
+  > {
+    const servers = await this.#handle.mcpServerStatus();
+    const cawco = servers.find((server) => server.name === MCP_SERVER_NAME);
+    switch (cawco?.status) {
+      case "connected":
+        return { slot: "connected", servers };
+      case "needs-auth":
+        return { slot: "refused" };
+      case "pending":
+        return { slot: "again", why: "connecting" };
+      case "failed": {
+        const why = `failed${cawco.error ? `: ${cawco.error}` : ""}`;
+        try {
+          await this.#handle.reconnectMcpServer(MCP_SERVER_NAME);
+        } catch (error) {
+          return {
+            slot: "again",
+            why: `${why}; dialled again: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+        return { slot: "again", why };
+      }
+      default:
+        return { slot: "off", status: cawco?.status ?? "missing" };
+    }
   }
 
   /**
@@ -3172,27 +3209,50 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * A fresh launch's cawco slot, connected, within 30 s: the ACK that settles
-   * the hub's launch goes only once the slot carries the launch's header, so
-   * a launch whose slot never connects fails once rather than staying in
-   * flight (e75772bb).
+   * A fresh launch's cawco slot, connected: the ACK that settles the hub's
+   * launch goes only once the slot carries the launch's header, so a launch
+   * whose slot never connects fails once rather than staying in flight
+   * (e75772bb). A slot that `failed` is dialled again on that same header
+   * ({@link #readCawcoSlot}) until {@link HUB_AWAY_BOUND_MS}: it once failed
+   * the launch at its first reading, and delegates were stopped before their
+   * first turn with "CawCo MCP is not connected (failed)." (2026-10-08 07:43,
+   * 2026-10-15 07:23) while the hub was up a moment later. Only the hub's
+   * refusal of the credential (`needs-auth`) fails it at once.
    */
   async #connectedCawcoSnapshot(): Promise<McpServerStatus[]> {
-    const deadline = Date.now() + 30_000;
+    const deadline = Date.now() + HUB_AWAY_BOUND_MS;
+    let said = "connecting";
     for (;;) {
       // biome-ignore lint/performance/noAwaitInLoops: only the cawco slot gates its credential ACK.
-      const servers = await this.#handle.mcpServerStatus();
-      const cawco = servers.find((server) => server.name === MCP_SERVER_NAME);
-      if (cawco?.status === "connected") {
-        return servers;
+      const read = await this.#readCawcoSlot();
+      if (read.slot === "connected") {
+        if (said !== "connecting") {
+          console.info(
+            `[claude] ${this.instanceId}: its CawCo MCP connected on its launch credential after it was dialled again`
+          );
+        }
+        return read.servers;
       }
-      if (cawco && cawco.status !== "pending") {
-        throw new Error(`CawCo MCP is not connected (${cawco.status}).`);
+      if (read.slot === "again" && read.why !== said) {
+        said = read.why;
+        console.info(
+          `[claude] ${this.instanceId}: its CawCo MCP reads ${read.why} at launch; dialled again on its launch credential`
+        );
+      }
+      if (read.slot === "refused") {
+        throw new Error(
+          "CawCo MCP refused this session's credential (needs-auth)."
+        );
+      }
+      if (read.slot === "off") {
+        throw new Error(`CawCo MCP is not connected (${read.status}).`);
       }
       if (Date.now() >= deadline) {
-        throw new Error("CawCo MCP did not connect within 30 seconds.");
+        throw new Error(
+          `CawCo MCP did not connect within ${HUB_AWAY_BOUND_MS / 1000} seconds (${read.why}).`
+        );
       }
-      await Bun.sleep(250);
+      await Bun.sleep(read.why === "connecting" ? 250 : 1000);
     }
   }
 

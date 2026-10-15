@@ -5,6 +5,7 @@ import {
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
+import { hubAnswer } from "./hub-away";
 
 export const MCP_SERVER_NAME = "cawco";
 const WS_SCHEME = /^ws/;
@@ -48,18 +49,20 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
 /**
  * The CawCo tools a session lists. `lister: "pi"` says this is the session's
  * own listing (pi's host), which the hub remembers so it can tell the session
- * when its list changes; a listing for anyone else is just read.
+ * when its list changes; a listing for anyone else is just read. A pi host
+ * lists them as it starts, so the hub away (a restart) is waited through
+ * ({@link hubAnswer}) rather than failing the start.
  */
 export async function delegationTools(instanceId?: string, lister?: "pi") {
   const query = new URLSearchParams({
     ...(instanceId ? { instanceId } : {}),
     ...(lister ? { lister } : {}),
   }).toString();
-  const response = await fetch(
+  const response = await hubAnswer(
     harnessMcpUrl(`/api/delegation/tools${query ? `?${query}` : ""}`),
-    {
-      signal: AbortSignal.timeout(5000),
-    }
+    {},
+    5000,
+    "Could not discover CawCo tools"
   );
   if (!response.ok) {
     throw new Error(`Could not discover CawCo tools: HTTP ${response.status}`);

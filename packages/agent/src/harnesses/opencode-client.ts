@@ -222,10 +222,10 @@ export interface McpNotConnected {
  * session to say. A `disabled` server is nobody's concern.
  *
  * CawCo's own server is the one that must connect: the session's hub tools
- * come through it. One that failed, needs sign-in or is disabled refuses at
- * once, and one not connected at the deadline refuses then, as Claude's
- * harness refuses a launch whose CawCo slot never connects (claude.ts
- * `#connectedCawcoSnapshot`).
+ * come through it. One that needs sign-in or is disabled refuses at once;
+ * one that failed is dialled again until the deadline, and one not connected
+ * at the deadline refuses then, as Claude's harness refuses a launch whose
+ * CawCo slot never connects (claude.ts `#connectedCawcoSnapshot`).
  */
 export const waitForMcp = async (
   client: OpencodeClient,
@@ -243,16 +243,30 @@ export const waitForMcp = async (
     const cawco = listed.data.find(
       (server) => server.name === CAWCO_MCP_SERVER
     )?.status;
-    if (
-      cawco?.status === "failed" ||
-      cawco?.status === "needs_auth" ||
-      cawco?.status === "disabled"
-    ) {
+    if (cawco?.status === "needs_auth" || cawco?.status === "disabled") {
       throw new Error(
         `CawCo's MCP server at ${directory} is not connected (${cawco.status}${"error" in cawco ? `: ${cawco.error}` : ""}).`
       );
     }
     const over = Date.now() >= deadline;
+    // The hub away (a restart) or slow to answer is no refusal: CawCo's
+    // server is dialled again until the deadline, as Claude's launch gate
+    // dials its slot (claude.ts `#readCawcoSlot`).
+    if (cawco?.status === "failed") {
+      if (over) {
+        throw new Error(
+          `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds (failed: ${cawco.error}).`
+        );
+      }
+      await client.mcp
+        .connect(
+          { server: CAWCO_MCP_SERVER, ...at(directory) },
+          { signal: oneRead(signal) }
+        )
+        .catch(() => undefined);
+      await Bun.sleep(1000);
+      continue;
+    }
     const connecting = listed.data.some(
       (server) => server.status.status === "pending"
     );
