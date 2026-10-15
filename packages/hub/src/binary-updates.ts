@@ -276,6 +276,14 @@ export function createBinaryUpdates(options: Options) {
         return status(409, refused());
       }
       const found = await discover();
+      // Every online machine looks now, as it does when the policy changes,
+      // rather than at its next poll a minute on: a person who asked for a
+      // check sees each machine's answer to what it found. One that does not
+      // answer (restarting) looks at its own next poll; the check stands.
+      const policy = policyNow();
+      await Promise.allSettled(
+        options.online().map((id) => options.configure(id, policy))
+      );
       return {
         version: found.manifest.version,
         sequence: found.manifest.sequence,

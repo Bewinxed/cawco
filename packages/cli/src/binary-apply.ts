@@ -61,6 +61,7 @@ import {
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+import { timerMs } from "@cawco/core/clock";
 import {
   answers,
   currentKeeper,
@@ -96,13 +97,13 @@ const MIGRATION_CAP_MS = 30 * 60_000;
 const SERVICE_TIMEOUT_MS = 120_000;
 /**
  * How long a build has to become healthy, from the swap or from a resumed
- * helper's start, before it is rolled back. Ours: a build that starts at all
- * answers in seconds (the hub's first 200 on obelisk's data is under a
+ * helper's start, before it is rolled back: 180 s. Ours: a build that starts
+ * at all answers in seconds (the hub's first 200 on obelisk's data is under a
  * second), and a migration moves the deadline for as long as it runs.
  */
-const TRIAL_WINDOW_S = 180;
-/** How long the build must stay healthy, unbroken, to be confirmed. */
-const CONFIRM_MS = 60_000;
+const TRIAL_WINDOW_S = timerMs(180_000) / 1000;
+/** How long the build must stay healthy, unbroken, to be confirmed: a minute. */
+const CONFIRM_MS = timerMs(60_000);
 
 const lockPath = lockFilePath;
 const note = (line: string) =>

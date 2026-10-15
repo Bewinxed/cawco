@@ -56,8 +56,9 @@
  *   bun scripts/probe-kit/run.ts workspace-retire
  */
 import { existsSync } from "node:fs";
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { cloneDenies } from "../../../packages/core/src/workspace-policy";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -337,6 +338,7 @@ const archivePhase = async (
 
   const m = await delegate("M");
   const wm = workspaceOf(m.workspaceId);
+  await cloneReadsClean(kit, wm);
   const landed = await archiveOver(fleet, wm.id);
   check(
     "(e) M, landed and clean, archives with 200 and no carry; its clone is gone",
@@ -346,6 +348,98 @@ const archivePhase = async (
       !existsSync(wm.path) &&
       workspaceOf(wm.id).state === "archived",
     `${m.item.state}; ${landed.status} ${landed.text.slice(0, 400)}`
+  );
+  await nothingOfItLeft(kit, fleet, wm);
+};
+
+/**
+ * (e) A clone after its boundary ran a session: no stand-in left a broken file
+ * there (bwrap's mount point, an empty file with no write bits and one link,
+ * srt's own isStaleBwrapMountPoint; at each path the policy guards, an empty
+ * file where a config with content stands in, which a host harness would read
+ * as its config, or a file where a dir stands in), and git reads it as it left
+ * it.
+ */
+const cloneReadsClean = async (
+  kit: Kit,
+  workspace: Workspace
+): Promise<void> => {
+  // Anywhere in the clone: what a sandbox leaves where nothing stood.
+  const mountPoints = (
+    await Bun.$`find ${workspace.path} -path ${join(workspace.path, ".git", "objects")} -prune -o -type f -size 0 ! -perm /222 -links 1 -print`
+      .quiet()
+      .nothrow()
+  ).stdout
+    .toString()
+    .split("\n")
+    .filter(Boolean)
+    .map(
+      (path) =>
+        `${path}: an empty file with no write bits, as a sandbox leaves a mount point`
+    );
+  // At each path the workspace's policy guards (core workspace-policy.ts
+  // `cloneDenies`): where a dir stands in, a dir; where a config file with
+  // content stands in, never an empty one, which its reader would take as its
+  // config.
+  const standIns = (
+    await Promise.all(
+      cloneDenies(workspace.path).map(async ({ path, empty }) => {
+        const found = await stat(path).catch(() => undefined);
+        if (!found) {
+          return [];
+        }
+        if (empty.kind === "dir" && !found.isDirectory()) {
+          return [`${path}: not a dir, where a dir stands in`];
+        }
+        if (
+          empty.kind === "file" &&
+          empty.text !== "" &&
+          found.isFile() &&
+          found.size === 0
+        ) {
+          return [`${path}: an empty file at a harness or git config name`];
+        }
+        return [];
+      })
+    )
+  ).flat();
+  const broken = [...mountPoints, ...standIns].join("\n");
+  const status = (
+    await Bun.$`git -C ${workspace.path} -c core.hooksPath=/dev/null -c core.fsmonitor=false status --porcelain`
+      .quiet()
+      .nothrow()
+  ).stdout
+    .toString()
+    .trim();
+  kit.check(
+    "(e) M's clone, its boundary having run, holds no broken stand-in and reads clean to git status",
+    broken === "" && status === "",
+    `broken: ${broken || "(none)"}; status: ${status || "(clean)"}`
+  );
+};
+
+/** (e) Nothing of an archived workspace is left on the machine: no boundary or judge of it on the keeper, and no state dir. */
+const nothingOfItLeft = async (
+  kit: Kit,
+  fleet: Fleet,
+  workspace: Workspace
+): Promise<void> => {
+  const left = await until(
+    "M's boundary and judge gone from the keeper",
+    async () =>
+      (await fleet.heldProcs()).filter(
+        ({ procId }) =>
+          procId.startsWith(`boundary-${workspace.id}`) ||
+          procId.startsWith(`judge-${workspace.id}`)
+      ),
+    (procs) => procs.length === 0,
+    60_000
+  ).catch(() => undefined);
+  const stateDir = join(fleet.home, ".cawco", "workspaces", workspace.id);
+  kit.check(
+    "(e) after M's archive no boundary or judge of it runs on the keeper, and its state dir is gone",
+    left !== undefined && !existsSync(stateDir),
+    `${left === undefined ? "a boundary or judge of M still runs" : "none runs"}; state dir ${existsSync(stateDir) ? "stands" : "gone"}`
   );
 };
 

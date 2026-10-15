@@ -365,6 +365,17 @@ export async function buildBinary(options: {
               resolveDir: dirname(path),
             })
           );
+          if (options.stubHarness) {
+            // The stage 2 proof's builds run the update's timed steps at the
+            // pace its machines set (scripts/binary/proof-clock.ts).
+            build.onLoad({ filter: /packages\/core\/src\/clock\.ts$/ }, () => ({
+              contents: readFileSync(
+                join(ROOT, "scripts/binary/proof-clock.ts"),
+                "utf8"
+              ),
+              loader: "ts",
+            }));
+          }
           if (options.proof || options.stubHarness) {
             build.onLoad(
               { filter: /packages\/agent\/src\/harnesses\/index\.ts$/ },

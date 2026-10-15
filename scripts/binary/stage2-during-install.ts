@@ -1,28 +1,21 @@
 /**
- * Fires requests the moment a machine's update phase becomes `installing`, and writes down what each got.
- * Run inside a container by the installed binary acting as bun (BUN_BE_BUN=1). It polls the hub's
- * update state every 20 ms with no other sleep, so the window between the machine saying `installing`
- * and the restart it is about to cause is hit by construction, not by luck.
+ * Asks the hub to start sessions on a machine the moment its update phase becomes `installing`, and writes
+ * down what each got. Run inside a container by the installed binary acting as bun (BUN_BE_BUN=1). It polls
+ * the hub's update state every 20 ms with no other sleep, so the window between the machine saying
+ * `installing` and the restart it is about to cause is hit by construction, not by luck.
  *
- *   cawco stage2-during-install.ts hub-start <hub url> <machineId> <idPrefix>
- *       asks the hub, over its dashboard socket and as the dashboard does, to start a session on the machine
- *   cawco stage2-during-install.ts keeper-child <hub url> <machineId> <idPrefix>
- *       asks the machine's own session keeper (its socket) to start a held child
+ *   cawco stage2-during-install.ts <hub url> <machineId> <idPrefix>
  *
- * Output, one line each: `sent <id> before=<phase> after=<phase> answer=<what came back>`, then
- * `accepted <id>` when the hub reported `installing` before and after and nothing refused the request
- * (in keeper-child mode: the keeper acked the spawn `applied`; one it refused for want of room under its
- * task limit was never started, and is reported with its reason),
- * and a last line `done sent=<n> accepted=<n> sawInstalling=<bool> ...`. It ends by itself once the
- * machine has left `installing` (three answers in a row), or after 900 s.
+ * Each start goes over the hub's dashboard socket, as the dashboard sends one. Output, one line each:
+ * `sent <id> before=<phase> after=<phase> answer=<what came back>`, then `accepted <id>` when the hub
+ * reported `installing` before and after and nothing refused the request, and a last line
+ * `done sent=<n> accepted=<n> sawInstalling=<bool> ...`. It ends by itself once the machine has left
+ * `installing` (three answers in a row), or after 900 s.
  */
-const [, , mode, hub, machineId, prefix] = Bun.argv;
+const [, , hub, machineId, prefix] = Bun.argv;
 const POLL_MS = 20;
 const ANSWER_MS = 150;
 const DEADLINE = Date.now() + 900_000;
-/** The keeper's socket: where the proof's machines have it, unless its own variable says otherwise. */
-const KEEPER_SOCKET =
-  process.env.CAWCO_SESSIOND_ENDPOINT ?? "/run/user/1000/cawco/sessiond.sock";
 
 async function phase(): Promise<string | undefined> {
   try {
@@ -79,102 +72,44 @@ function refusalOf(text: string, id: string): string | undefined {
   }
 }
 
-/** One request; resolves to what came back and whether anything refused it. */
+/** One start; resolves to what came back and whether anything refused it. */
 async function fire(id: string): Promise<{ answer: string; refused: boolean }> {
-  if (mode === "hub-start") {
-    const socket = await dashboardSocket();
-    if (!socket) {
-      return { answer: "the dashboard socket did not open", refused: true };
-    }
-    heard = [];
-    socket.send(
-      JSON.stringify({
-        verb: "spawn",
-        machineId,
+  const socket = await dashboardSocket();
+  if (!socket) {
+    return { answer: "the dashboard socket did not open", refused: true };
+  }
+  heard = [];
+  socket.send(
+    JSON.stringify({
+      verb: "spawn",
+      machineId,
+      instanceId: id,
+      payload: {
         instanceId: id,
-        payload: {
-          instanceId: id,
-          cwd: "/tmp",
-          harness: "claude",
-          model: "stub",
-        },
-      })
-    );
-    await Bun.sleep(ANSWER_MS);
-    const refusal = heard
-      .map((text) => refusalOf(text, id))
-      .find((one) => one !== undefined);
-    const answer = heard.map((text) => text.slice(0, 160)).join(" | ");
-    return {
-      answer: refusal
-        ? `refused: ${refusal}`
-        : answer || "no answer within 150ms",
-      refused:
-        refusal !== undefined ||
-        answer.includes('"ok":false') ||
-        answer.includes("failure"),
-    };
-  }
-  let reply = "";
-  try {
-    const connection = await Bun.connect({
-      unix: KEEPER_SOCKET,
-      socket: {
-        data(_socket, data) {
-          reply += Buffer.from(data).toString("utf8");
-        },
+        cwd: "/tmp",
+        harness: "claude",
+        model: "stub",
       },
-    });
-    connection.write(
-      `${JSON.stringify({
-        type: "spawn",
-        commandId: `hold-${id}`,
-        procId: id,
-        spec: { command: "sleep", args: ["3000"] },
-      })}\n`
-    );
-    await Bun.sleep(ANSWER_MS);
-    connection.end();
-  } catch (error) {
-    return { answer: `the keeper refused: ${error}`, refused: true };
-  }
-  // The keeper's answer to this spawn: a child it started says `applied`; one
-  // it refused (no room under its task limit, a fork the kernel refused) says
-  // `failed` with the reason, and is not a session that was started.
-  const acked = reply
-    .split("\n")
-    .flatMap((line) => {
-      try {
-        return [
-          JSON.parse(line) as {
-            type?: string;
-            commandId?: string;
-            stage?: string;
-            reason?: string;
-          },
-        ];
-      } catch {
-        return [];
-      }
     })
-    .find(
-      (message) => message.type === "ack" && message.commandId === `hold-${id}`
-    );
-  if (!acked) {
-    return { answer: "no answer from the keeper within 150ms", refused: true };
-  }
-  return acked.stage === "applied"
-    ? { answer: "the keeper started it", refused: false }
-    : {
-        answer: `refused by the keeper: ${acked.reason ?? acked.stage}`,
-        refused: true,
-      };
+  );
+  await Bun.sleep(ANSWER_MS);
+  const refusal = heard
+    .map((text) => refusalOf(text, id))
+    .find((one) => one !== undefined);
+  const answer = heard.map((text) => text.slice(0, 160)).join(" | ");
+  return {
+    answer: refusal
+      ? `refused: ${refusal}`
+      : answer || "no answer within 150ms",
+    refused:
+      refusal !== undefined ||
+      answer.includes('"ok":false') ||
+      answer.includes("failure"),
+  };
 }
 
-if (mode === "hub-start") {
-  // Connected before anything is asked, so the first request is not delayed by opening the socket.
-  await dashboardSocket();
-}
+// Connected before anything is asked, so the first request is not delayed by opening the socket.
+await dashboardSocket();
 let sent = 0;
 let accepted = 0;
 let sawInstalling = false;

@@ -70,8 +70,8 @@ interface Proc {
 /** Who holds the build lock and what it is building, for whoever finds it dead. */
 interface Holder extends Proc {
   checkout?: string;
-  /** The process group of the command it is running: everything it started. */
-  group?: Proc;
+  /** The process groups of the commands it is running (some run at once): everything it started. */
+  groups?: Proc[];
   staging?: string;
 }
 const WHITESPACE = /\s+/;
@@ -149,18 +149,26 @@ async function endGroup(group: Proc | undefined): Promise<void> {
   }
   signalGroup(group.pid, "SIGKILL");
 }
+/** Ends every command in `groups`, at once: a holder's, or this run's own. */
+const endGroups = async (groups: Proc[] | undefined): Promise<void> => {
+  await Promise.all((groups ?? []).map(endGroup));
+};
 
-/** The command this run is waiting on, so a stop can end it too. */
-let running: Subprocess | undefined;
+/** The commands this run is waiting on (the proofs run beside the compiles), so a stop can end them too. */
+const running = new Set<Subprocess>();
 /** Set once a SIGTERM or SIGINT has begun stopping this run. */
 let stopped: Promise<never> | undefined;
 async function run(
   command: string[],
   cwd = repo,
-  capture = false
+  capture = false,
+  env?: Record<string, string>
 ): Promise<string> {
   if (stopped) {
     await stopped;
+  }
+  if (abandoned) {
+    throw abandoned;
   }
   const started = performance.now();
   const child = Bun.spawn(command, {
@@ -168,9 +176,11 @@ async function run(
     stdout: capture ? "pipe" : "inherit",
     stderr: "inherit",
     detached: true,
+    ...(env ? { env: { ...process.env, ...env } } : {}),
   });
-  running = child;
-  me.group = { pid: child.pid, started: (await startedOf(child.pid)) ?? "" };
+  running.add(child);
+  const group = { pid: child.pid, started: (await startedOf(child.pid)) ?? "" };
+  me.groups = [...(me.groups ?? []), group];
   await writeHolder();
   try {
     const text = capture
@@ -189,8 +199,38 @@ async function run(
     }
     return text.trim();
   } finally {
-    running = undefined;
+    running.delete(child);
+    me.groups = me.groups?.filter((one) => one !== group);
     logStep(command.join(" "), started);
+  }
+}
+/** Set while the steps `together` runs are being stopped: no command starts then. */
+let abandoned: Error | undefined;
+/**
+ * Runs steps at once and waits for every one of them. The first to fail ends
+ * every command still running (each leads its own process group) and no other
+ * starts, so nothing writes into the checkout or staging once the build is
+ * failing; that first error is thrown once every step has stopped.
+ */
+async function together(steps: Promise<unknown>[]): Promise<void> {
+  let first: { error: unknown } | undefined;
+  await Promise.allSettled(
+    steps.map((step) =>
+      step.catch(async (error: unknown) => {
+        if (!first) {
+          first = { error };
+          abandoned = new Error(
+            "Not started: another step of this build failed"
+          );
+          await endGroups(me.groups);
+        }
+        throw error;
+      })
+    )
+  );
+  abandoned = undefined;
+  if (first) {
+    throw first.error;
   }
 }
 /** One line per step with its seconds, so a slow release says where the time went. */
@@ -319,33 +359,241 @@ const clear = async (checkout?: string, staging?: string): Promise<void> => {
 /** Where a failed build's proof evidence outlives its staging; the newest few are kept. */
 const failedEvidence = join(homedir(), ".cache", "cawco-release");
 const KEPT_FAILURES = 5;
-/** The proof's own working state: container storage and scratch, not evidence. */
-const PROOF_SCRATCH = new Set(["storage", "run", "tmp", "cache", "config"]);
 /**
- * Copies the container proof's logs and outputs out of `staging` before it is
- * cleared, and prunes older copies. Undefined when the build never reached it.
+ * What the container proofs prove is made of: the product's packages, the
+ * dashboard the binary embeds, the binary's build and proof scripts and the
+ * dependencies. A verdict stands on the tree of exactly these at a commit
+ * (`git ls-tree`), so a commit that changes none of them (the Apple app, docs,
+ * the probe kit) stands on the verdict of the last that did. No version
+ * string is in it: every proof build is named by the proof itself.
+ */
+const PROOF_INPUTS = [
+  "packages",
+  "apps/dashboard",
+  "scripts/binary",
+  "scripts/build-binary.ts",
+  "scripts/lib",
+  "bun.lock",
+  "package.json",
+];
+/** Each proven verdict, by the inputs it stands on: `<inputs>/stage1`, and `<inputs>/stage2/<rig>` per stage 2 rig. */
+const proofVerdicts = join(
+  homedir(),
+  ".cache",
+  "cawco-release",
+  "proof-verdicts"
+);
+const proofInputs = async (
+  checkout: string,
+  commitId: string
+): Promise<string> =>
+  new Bun.CryptoHasher("sha256")
+    .update(
+      await run(
+        ["git", "ls-tree", "-r", commitId, "--", ...PROOF_INPUTS],
+        checkout,
+        true
+      )
+    )
+    .digest("hex")
+    .slice(0, 24);
+const proven = (path: string): Promise<boolean> => Bun.file(path).exists();
+const recordProven = async (path: string, commitId: string): Promise<void> => {
+  await mkdir(resolve(path, ".."), { recursive: true });
+  await writeFile(path, `${commitId}\n`);
+};
+
+/** Stage 1 (prove-stage1.sh) on the proof build, unless it passed on these inputs. */
+async function proveStage1(
+  checkout: string,
+  staging: string,
+  proofBinary: string,
+  inputs: string,
+  commitId: string
+): Promise<void> {
+  const verdict = join(proofVerdicts, inputs, "stage1");
+  if (await proven(verdict)) {
+    console.log(
+      `Stage 1 passed on these inputs (${inputs}) before: not run again`
+    );
+    return;
+  }
+  await run(
+    [
+      "bash",
+      "scripts/binary/prove-stage1.sh",
+      join(staging, "container-proof"),
+      proofBinary,
+    ],
+    checkout
+  );
+  await recordProven(verdict, commitId);
+}
+
+/** Stage 2's rigs and how many checks each has, as the script lists them (`PROOF_LIST`). */
+async function stage2Rigs(
+  checkout: string,
+  out: string,
+  bins: string
+): Promise<Map<string, number>> {
+  const listed = await run(
+    ["bash", "scripts/binary/prove-stage2.sh", out, bins],
+    checkout,
+    true,
+    { PROOF_LIST: "1" }
+  );
+  const rigs = new Map<string, number>();
+  let rig: string | undefined;
+  for (const line of listed.split("\n")) {
+    const [, named] = RIG_LINE.exec(line) ?? [];
+    if (named) {
+      rig = named;
+      rigs.set(rig, 0);
+    } else if (rig && line.startsWith("  ")) {
+      rigs.set(rig, (rigs.get(rig) ?? 0) + 1);
+    }
+  }
+  if (rigs.size === 0) {
+    throw new Error(`prove-stage2.sh listed no rig: ${listed}`);
+  }
+  return rigs;
+}
+const RIG_LINE = /^rig (\S+):$/;
+
+/**
+ * Stage 2: the rigs that have not passed on these inputs, from their builds
+ * (build-stage2.ts, a compile, so run before the release's own) to their
+ * verdicts. A rig passes when every one of its checks says PASS; each one that
+ * does is recorded, so a stage 2 that failed runs only its failed rigs again.
+ * Answers once the builds are made, with the run itself to wait on.
+ */
+async function stage2(
+  checkout: string,
+  staging: string,
+  inputs: string,
+  commitId: string
+): Promise<{ proving: Promise<void> }> {
+  const out = join(staging, "stage2");
+  const bins = join(staging, "stage2-bins");
+  const rigs = await stage2Rigs(checkout, out, bins);
+  const passed = join(proofVerdicts, inputs, "stage2");
+  const todo: string[] = [];
+  for (const rig of rigs.keys()) {
+    if (!(await proven(join(passed, rig)))) {
+      todo.push(rig);
+    }
+  }
+  if (todo.length === 0) {
+    console.log(
+      `Stage 2 passed on these inputs (${inputs}) before, every rig: not run again`
+    );
+    return { proving: Promise.resolve() };
+  }
+  if (todo.length < rigs.size) {
+    console.log(
+      `Stage 2 runs the rigs that have not passed on these inputs (${inputs}): ${todo.join(", ")}`
+    );
+  }
+  await run(
+    [process.execPath, "scripts/binary/build-stage2.ts", bins],
+    checkout
+  );
+  const proving = (async () => {
+    let failure: unknown;
+    await run(
+      ["bash", "scripts/binary/prove-stage2.sh", out, bins],
+      checkout,
+      false,
+      {
+        PROOF_ONLY: `^(${todo.join("|")})$`,
+      }
+    ).catch((error: unknown) => {
+      failure = error;
+    });
+    for (const rig of todo) {
+      const lines = (
+        await readFile(join(out, "rigs", rig, "verdicts.tsv"), "utf8").catch(
+          () => ""
+        )
+      )
+        .split("\n")
+        .filter(Boolean);
+      if (
+        lines.length === rigs.get(rig) &&
+        lines.every((line) => line.split("\t")[1]?.startsWith("PASS"))
+      ) {
+        await recordProven(join(passed, rig), commitId);
+      }
+    }
+    // Not a release's: the three proof builds and the proof key's copy, and the proof's own scratch.
+    await Promise.all(
+      [
+        bins,
+        ...["feeds", "images", "shared", "tmp"].map((name) => join(out, name)),
+      ].map((path) => rm(path, { recursive: true, force: true }))
+    );
+    if (failure) {
+      throw failure;
+    }
+  })();
+  return { proving };
+}
+
+/** The container proofs' folders in a build's staging: stage 1's and stage 2's. */
+const PROOF_DIRS = ["container-proof", "stage2"];
+/**
+ * A proof's own working state, not evidence: container storage and scratch,
+ * stage 2's published feeds (whole builds) and image recipes, and a rig's
+ * storage (by its last two path parts, `rigs/<rig>` holding `storage`).
+ */
+const PROOF_SCRATCH = new Set([
+  "storage",
+  "run",
+  "tmp",
+  "cache",
+  "config",
+  "feeds",
+  "images",
+]);
+/**
+ * Copies the container proofs' logs and outputs out of `staging` before it is
+ * cleared, and prunes older copies. Undefined when the build reached neither.
  */
 const keepEvidence = async (
   commitId: string,
   staging: string
 ): Promise<string | undefined> => {
-  const proof = join(staging, "container-proof");
-  if (!(await stat(proof).catch(() => undefined))) {
+  const found = (
+    await Promise.all(
+      PROOF_DIRS.map(async (name) =>
+        (await stat(join(staging, name)).catch(() => undefined))
+          ? name
+          : undefined
+      )
+    )
+  ).filter((name): name is string => name !== undefined);
+  if (found.length === 0) {
     return;
   }
   const time = new Date().toISOString().replace(/[:.]/g, "-");
   const kept = join(failedEvidence, `failed-${commitId.slice(0, 12)}-${time}`);
-  await cp(proof, kept, {
-    recursive: true,
-    filter: async (source) => {
-      const rel = relative(proof, source);
-      if (PROOF_SCRATCH.has(rel)) {
-        return false;
-      }
-      const info = await lstat(source);
-      return info.isFile() || info.isDirectory();
-    },
-  });
+  for (const name of found) {
+    const proof = join(staging, name);
+    await cp(proof, join(kept, name), {
+      recursive: true,
+      filter: async (source) => {
+        const rel = relative(proof, source);
+        if (
+          PROOF_SCRATCH.has(rel) ||
+          PROOF_SCRATCH.has(rel.split("/").at(-1) ?? "")
+        ) {
+          return false;
+        }
+        const info = await lstat(source);
+        return info.isFile() || info.isDirectory();
+      },
+    });
+  }
   const older = await Promise.all(
     (await readdir(failedEvidence))
       .filter((name) => name.startsWith("failed-"))
@@ -401,7 +649,7 @@ const acquire = async (): Promise<boolean> => {
       );
       // What it was running outlives it and still writes into its checkout
       // and staging, which a build of the same commit uses again.
-      await endGroup(holder.group);
+      await endGroups(holder.groups);
       await clear(holder.checkout, holder.staging);
     }
     for (const n of seen) {
@@ -416,8 +664,8 @@ const acquire = async (): Promise<boolean> => {
 // after it: `run` waits on it instead of spawning.
 const stop = async (signal: "SIGTERM" | "SIGINT"): Promise<never> => {
   console.log(`Release build stopped by ${signal}: clearing its work`);
-  await endGroup(me.group);
-  await running?.exited;
+  await endGroups(me.groups);
+  await Promise.all([...running].map((child) => child.exited));
   await clear(me.checkout, me.staging);
   await release();
   process.exit(signal === "SIGINT" ? 130 : 143);
@@ -487,6 +735,12 @@ const build = async (current: Request): Promise<void> => {
   if (freemem() < 4 * 1024 ** 3) {
     throw new Error("Release build refused: less than 4 GiB available memory");
   }
+  // No build is released unproven: without podman the container proofs cannot run.
+  if (!Bun.which("podman")) {
+    throw new Error(
+      "Release build refused: podman is not on this machine, so the container proofs cannot run and nothing is released without them"
+    );
+  }
   const checkout = join(state, `checkout-${current.commit.slice(0, 12)}`);
   const staging = join(state, `staging-${current.commit.slice(0, 12)}`);
   me.checkout = checkout;
@@ -496,8 +750,11 @@ const build = async (current: Request): Promise<void> => {
   await mkdir(staging, { recursive: true });
   try {
     await run([process.execPath, "install", "--frozen-lockfile"], checkout);
-    await run([process.execPath, "run", "typecheck"], checkout);
-    await run([process.execPath, "run", "lint"], checkout);
+    // Both only read the tree: at once.
+    await together([
+      run([process.execPath, "run", "typecheck"], checkout),
+      run([process.execPath, "run", "lint"], checkout),
+    ]);
     const { version, notes } = await versionAndNotes(current, checkout);
     // One compile at a time, sharing only immutable prepared assets.
     const proofBinary = join(staging, "cawco-proof");
@@ -513,22 +770,6 @@ const build = async (current: Request): Promise<void> => {
       ],
       checkout
     );
-    const podman = Bun.which("podman");
-    if (podman) {
-      await run(
-        [
-          "bash",
-          "scripts/binary/prove-stage1.sh",
-          join(staging, "container-proof"),
-          proofBinary,
-        ],
-        checkout
-      );
-    } else {
-      console.log(
-        "Container runtime absent: proof must be run by the operator before accepting this build"
-      );
-    }
     // Only grows: no path installs a build whose sequence is not above the running one.
     const sequence = Number(
       await run(
@@ -577,115 +818,131 @@ const build = async (current: Request): Promise<void> => {
       testSigned: false,
       artifacts: [],
     };
+    // THE PROOFS RUN BESIDE THE RELEASE'S OWN BUILDS. One compile at a time
+    // (the owner's rule, line 2): the proof build above, then stage 2's builds,
+    // then each release target in turn, signed on the Mac as it comes. The
+    // container proofs are no compile: stage 1 runs from here on, and stage 2
+    // once its builds are made, each beside the targets' compiles and the Mac
+    // signing, which do not depend on them. Nothing is signed into a manifest
+    // until all three have ended, and a failure in any one stops the others.
+    const inputs = await proofInputs(checkout, current.commit);
+    const stage2Builds = stage2(checkout, staging, inputs, current.commit);
     // A darwin build ships as its own CawCo Agent.app, signed with the team's
     // Developer ID (packages/core/src/agent-bundle.ts,
     // scripts/binary/sign-agent-bundle.sh) on the Mac, in a folder under its
     // home, with its Info.plist from this commit; the Mac tars the bundle as
     // signed, and runs what it tarred, before the archive comes back.
-    const mac = current.macHost;
-    const macDir = `build/cawco-agent-sign/${current.commit.slice(0, 12)}`;
-    const bundleFiles = join(staging, "agent-bundle");
-    await mkdir(bundleFiles, { recursive: true });
-    await run(
-      [
-        process.execPath,
-        "-e",
-        `const { AGENT_INFO_PLIST } = await import(${JSON.stringify(join(checkout, "packages/core/src/agent-bundle.ts"))}); await Bun.write(${JSON.stringify(join(bundleFiles, "Info.plist"))}, AGENT_INFO_PLIST);`,
-      ],
-      checkout
-    );
-    await run(["ssh", mac, `rm -rf '${macDir}' && mkdir -p '${macDir}'`]);
-    try {
-      await run([
-        "scp",
-        join(bundleFiles, "Info.plist"),
-        join(checkout, "scripts/binary/agent.entitlements"),
-        join(checkout, "scripts/binary/sign-agent-bundle.sh"),
-        `${mac}:${macDir}/`,
-      ]);
-      for (const target of TARGETS) {
-        if (freemem() < 4 * 1024 ** 3) {
-          throw new Error(
-            "Release build refused: less than 4 GiB available memory"
-          );
-        }
-        const dir = join(staging, target);
-        await mkdir(dir, { recursive: true });
-        const binary = join(dir, "cawco");
-        const darwin = target.startsWith("darwin");
-        await run(
-          [
-            process.execPath,
-            "scripts/build-binary.ts",
-            target,
-            binary,
-            version,
-            current.commit,
-            "--skip-prepare",
-          ],
-          checkout
-        );
-        // The tag form, so the file name carries no `+`.
-        const archive = `cawco-${releaseTag(manifest)}-${target}.tar.gz`;
-        // What the manifest's binarySha256 names: the executable as the installer and the updater find it.
-        let executable = binary;
-        if (darwin) {
-          await run(["scp", binary, `${mac}:${macDir}/cawco`]);
-          await run([
-            "ssh",
-            mac,
-            `bash --norc '${macDir}/sign-agent-bundle.sh' '${macDir}' '${target}' '${version}' '${archive}'`,
-          ]);
-          await run([
-            "scp",
-            `${mac}:${macDir}/${archive}`,
-            join(staging, archive),
-          ]);
-          await rm(binary);
-          // Unpacked here only to hash the signed executable it carries; libarchive's own pax keywords are not GNU tar's.
+    const buildTargets = async (): Promise<void> => {
+      const mac = current.macHost;
+      const macDir = `build/cawco-agent-sign/${current.commit.slice(0, 12)}`;
+      const bundleFiles = join(staging, "agent-bundle");
+      await mkdir(bundleFiles, { recursive: true });
+      await run(
+        [
+          process.execPath,
+          "-e",
+          `const { AGENT_INFO_PLIST } = await import(${JSON.stringify(join(checkout, "packages/core/src/agent-bundle.ts"))}); await Bun.write(${JSON.stringify(join(bundleFiles, "Info.plist"))}, AGENT_INFO_PLIST);`,
+        ],
+        checkout
+      );
+      await run(["ssh", mac, `rm -rf '${macDir}' && mkdir -p '${macDir}'`]);
+      try {
+        await run([
+          "scp",
+          join(bundleFiles, "Info.plist"),
+          join(checkout, "scripts/binary/agent.entitlements"),
+          join(checkout, "scripts/binary/sign-agent-bundle.sh"),
+          `${mac}:${macDir}/`,
+        ]);
+        for (const target of TARGETS) {
+          if (freemem() < 4 * 1024 ** 3) {
+            throw new Error(
+              "Release build refused: less than 4 GiB available memory"
+            );
+          }
+          const dir = join(staging, target);
+          await mkdir(dir, { recursive: true });
+          const binary = join(dir, "cawco");
+          const darwin = target.startsWith("darwin");
           await run(
             [
-              "tar",
-              "--warning=no-unknown-keyword",
-              "-xzf",
-              join(staging, archive),
-              "-C",
-              dir,
-              AGENT_BUNDLE,
+              process.execPath,
+              "scripts/build-binary.ts",
+              target,
+              binary,
+              version,
+              current.commit,
+              "--skip-prepare",
             ],
             checkout
           );
-          executable = join(dir, AGENT_BUNDLE_EXECUTABLE);
-        } else {
-          await run(
-            ["tar", "-czf", join(staging, archive), "-C", dir, "cawco"],
-            checkout
+          // The tag form, so the file name carries no `+`.
+          const archive = `cawco-${releaseTag(manifest)}-${target}.tar.gz`;
+          // What the manifest's binarySha256 names: the executable as the installer and the updater find it.
+          let executable = binary;
+          if (darwin) {
+            await run(["scp", binary, `${mac}:${macDir}/cawco`]);
+            await run([
+              "ssh",
+              mac,
+              `bash --norc '${macDir}/sign-agent-bundle.sh' '${macDir}' '${target}' '${version}' '${archive}'`,
+            ]);
+            await run([
+              "scp",
+              `${mac}:${macDir}/${archive}`,
+              join(staging, archive),
+            ]);
+            await rm(binary);
+            // Unpacked here only to hash the signed executable it carries; libarchive's own pax keywords are not GNU tar's.
+            await run(
+              [
+                "tar",
+                "--warning=no-unknown-keyword",
+                "-xzf",
+                join(staging, archive),
+                "-C",
+                dir,
+                AGENT_BUNDLE,
+              ],
+              checkout
+            );
+            executable = join(dir, AGENT_BUNDLE_EXECUTABLE);
+          } else {
+            await run(
+              ["tar", "-czf", join(staging, archive), "-C", dir, "cawco"],
+              checkout
+            );
+          }
+          const sha256 = new Bun.CryptoHasher("sha256")
+            .update(await Bun.file(join(staging, archive)).bytes())
+            .digest("hex");
+          const binarySha256 = new Bun.CryptoHasher("sha256")
+            .update(await Bun.file(executable).bytes())
+            .digest("hex");
+          manifest.artifacts.push({
+            target,
+            archive,
+            sha256,
+            size: (await stat(join(staging, archive))).size,
+            binarySha256,
+            binarySize: (await stat(executable)).size,
+          });
+          await writeFile(
+            join(staging, `${archive}.sha256`),
+            `${sha256}  ${archive}\n`
           );
         }
-        const sha256 = new Bun.CryptoHasher("sha256")
-          .update(await Bun.file(join(staging, archive)).bytes())
-          .digest("hex");
-        const binarySha256 = new Bun.CryptoHasher("sha256")
-          .update(await Bun.file(executable).bytes())
-          .digest("hex");
-        manifest.artifacts.push({
-          target,
-          archive,
-          sha256,
-          size: (await stat(join(staging, archive))).size,
-          binarySha256,
-          binarySize: (await stat(executable)).size,
-        });
-        await writeFile(
-          join(staging, `${archive}.sha256`),
-          `${sha256}  ${archive}\n`
-        );
+      } finally {
+        await run(["ssh", mac, "rm", "-rf", macDir]);
+        // Not an artifact: only the archives and the manifest are published.
+        await rm(bundleFiles, { recursive: true, force: true });
       }
-    } finally {
-      await run(["ssh", mac, "rm", "-rf", macDir]);
-      // Not an artifact: only the archives and the manifest are published.
-      await rm(bundleFiles, { recursive: true, force: true });
-    }
+    };
+    await together([
+      proveStage1(checkout, staging, proofBinary, inputs, current.commit),
+      stage2Builds.then(({ proving }) => proving),
+      stage2Builds.then(buildTargets),
+    ]);
     await writeFile(
       join(staging, "SHA256SUMS"),
       manifest.artifacts.map((a) => `${a.sha256}  ${a.archive}\n`).join("")
@@ -706,13 +963,10 @@ const build = async (current: Request): Promise<void> => {
     }
     await writeFile(join(staging, "release.json"), manifestText);
     await writeFile(join(staging, "release.json.sig"), `${signature}\n`);
-    const next = await readJson<Request>(queued);
-    if (next?.id !== current.id) {
-      console.log(
-        `Built ${current.commit} was superseded; artifacts are not promoted`
-      );
-      return;
-    }
+    // A proven build is promoted even when a newer commit was queued while it
+    // was built: that one is built next (the loop at the end of this file). A
+    // build skipped for the newer one left nothing published while commits
+    // kept coming.
     await mkdir(current.output, { recursive: true });
     const published = join(current.output, version);
     await rename(staging, published);

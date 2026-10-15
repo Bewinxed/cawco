@@ -49,6 +49,7 @@ import {
   UPDATE_WAIT_CAP_MS,
 } from "@cawco/core/binary-updates";
 import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
+import { timerMs } from "@cawco/core/clock";
 import {
   answers,
   currentKeeper,
@@ -169,9 +170,9 @@ const readKeepers = (): Promise<
 /**
  * How long a retiring keeper must hold nothing, over two looks of the
  * updater's watch, before it is removed: past the two seconds a keeper gives
- * what an ended child started before it kills it.
+ * what an ended child started before it kills it. 20 s.
  */
-const RETIRING_EMPTY_MS = 20_000;
+const RETIRING_EMPTY_MS = timerMs(20_000);
 
 /**
  * A failed updater step, said in the log: a filesystem error's message names
@@ -215,7 +216,7 @@ async function recordFailure(version: string, error: string): Promise<void> {
     version,
     count,
     error,
-    nextAt: Date.now() + minutes * 60_000,
+    nextAt: Date.now() + timerMs(minutes * 60_000),
   } satisfies Failure);
 }
 
