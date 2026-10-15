@@ -1624,8 +1624,12 @@ WS_LISTENER_PORT=5199
 ws_listener_start() {
   ws_exec "printf '%s\n' \"printf 'HTTP/1.0 200 OK\\\\r\\\\nContent-Type: text/plain\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n%s\\\\n' $1\" > \"\$TMPDIR/answer-$1.sh\" && setsid -f socat TCP-LISTEN:$WS_LISTENER_PORT,fork,reuseaddr SYSTEM:\"sh \$TMPDIR/answer-$1.sh\" < /dev/null > /dev/null 2>&1"
 }
-# The newest listener on the port: the one just started.
-ws_listener_pid() { as_user "$joinerc" pgrep -n -f "socat TCP-LISTEN:$WS_LISTENER_PORT"; }
+# The listener ws_listener_start $1 started: the oldest socat naming its answer script. Each connection it takes runs
+# in a fork of it under the same command line, newer than it, and a connection to another listener (the older
+# generation's, answering its preview) runs under that one's script: the newest match on the port alone was such a fork
+# at times, outside the sandbox the check looked in (rig b5fda3adb: "the listener 3971 does not descend from the new
+# sandbox's init 3560" while 3971 itself ran in that sandbox's cgroup).
+ws_listener_pid() { as_user "$joinerc" pgrep -o -f "socat TCP-LISTEN:$WS_LISTENER_PORT,.*answer-$1\\.sh"; }
 # A listener is read only the way the owner reaches it: through the hub's preview of its port (ws_preview_says,
 # ws_preview_by_host), the agent's bridge joining the sandbox's network. The rig never joins that network itself.
 # (Nightly ee52c2d6f's `nsenter --target <init> --user --net` from a shell here, "reassociate to namespace 'ns/net'
@@ -1818,8 +1822,8 @@ workspace_across_update() {
   [[ "$(ns_of "$job")" == "$old_ns" ]]
   # And a listener one command leaves behind with `setsid -f`, as a delegate starts the dev server a preview shows.
   ws_listener_start gen-old
-  wait_until 30 '[[ "$(ws_listener_pid)" =~ ^[0-9]+$ ]]' || { echo "ASSERTION FAILED: no listener runs after the command that started it ended"; ws_listener_why "$old_inner"; return 1; }
-  listener=$(ws_listener_pid)
+  wait_until 30 '[[ "$(ws_listener_pid gen-old)" =~ ^[0-9]+$ ]]' || { echo "ASSERTION FAILED: no listener runs after the command that started it ended"; ws_listener_why "$old_inner"; return 1; }
+  listener=$(ws_listener_pid gen-old)
   ws_tree "$old_inner" | grep -qx "$listener" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $old_inner"; return 1; }
   # The delegate shows it: a preview of the port, which the owner reaches through the hub, the joined machine's agent
   # and its bridge into the sandbox's network.
@@ -1908,8 +1912,8 @@ workspace_across_update() {
   # taken over, and it closes with what runs in it (boundary.ts supersededPorts). Its sandbox, its srt host, its
   # record and its files go, the old listener with them.
   ws_listener_start gen-new
-  wait_until 30 '[[ "$(ws_listener_pid)" =~ ^[0-9]+$ && "$(ws_listener_pid)" != "'"$listener"'" ]]' || { echo "ASSERTION FAILED: no second listener runs after the command that started it ended"; ws_listener_why "$new_inner"; return 1; }
-  ws_tree "$new_inner" | grep -qx "$(ws_listener_pid)" || { echo "ASSERTION FAILED: the listener $(ws_listener_pid) does not descend from the new sandbox's init $new_inner"; return 1; }
+  wait_until 30 '[[ "$(ws_listener_pid gen-new)" =~ ^[0-9]+$ ]]' || { echo "ASSERTION FAILED: no second listener runs after the command that started it ended"; ws_listener_why "$new_inner"; return 1; }
+  ws_tree "$new_inner" | grep -qx "$(ws_listener_pid gen-new)" || { echo "ASSERTION FAILED: the listener $(ws_listener_pid gen-new) does not descend from the new sandbox's init $new_inner"; return 1; }
   wait_until 120 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)/retiring-'"$gen"'.json" && ! as_user "$joinerc" test -e "$(ws_state)/boundaries/'"$gen"'"'
   ! as_user "$joinerc" kill -0 "$old_inner" 2> /dev/null
   ! as_user "$joinerc" kill -0 "$listener" 2> /dev/null || { echo "ASSERTION FAILED: the older generation's listener $listener outlived its generation"; return 1; }
@@ -1943,7 +1947,7 @@ workspace_archive_ends_all() {
   # The `setsid -f` listener the update's check started again in this generation, answering its preview by port (the
   # across check ends in port mode, with the port it read last).
   wait_until 60 '[[ "$(ws_preview_says)" == *gen-new* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$inner"; return 1; }
-  listener=$(ws_listener_pid)
+  listener=$(ws_listener_pid gen-new)
   tree=$(ws_tree "$inner")
   grep -qx "$listener" <<< "$tree" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $inner"; return 1; }
   echo "the sandbox's tree before the archive: $(tr '\n' ' ' <<< "$tree")"
