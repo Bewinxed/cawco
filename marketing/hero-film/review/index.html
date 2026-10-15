@@ -19,6 +19,7 @@
         --action: #c9452f;
         --on-action: #ffffff;
         --chosen: #c9452f;
+        --focus: #c9452f;
         font-family:
           system-ui,
           -apple-system,
@@ -34,6 +35,7 @@
           --tile: #1c1a18;
           --action: #e2604a;
           --chosen: #e2604a;
+          --focus: #e2604a;
         }
       }
       * {
@@ -58,20 +60,17 @@
         margin: 4px 0 4px;
       }
       .lede {
+        max-width: 72ch;
         font-size: 14px;
         line-height: 1.45;
         color: var(--muted);
         margin: 0 0 16px;
       }
+      /* A phone: two small tiles to a row. */
       .grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 12px;
-      }
-      @media (min-width: 720px) {
-        .grid {
-          gap: 18px;
-        }
       }
       .option {
         display: flex;
@@ -86,7 +85,7 @@
         -webkit-user-select: none;
         -webkit-touch-callout: none;
       }
-      .option[aria-checked="true"] {
+      .option[data-checked] {
         border-color: var(--chosen);
         box-shadow: 0 0 0 1.5px var(--chosen);
       }
@@ -97,14 +96,16 @@
         overflow: hidden;
         background: var(--tile);
       }
-      .frame video,
-      .frame img {
+      .frame video {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
         object-fit: cover;
-        pointer-events: none;
+        background: #000;
+      }
+      video:fullscreen {
+        object-fit: contain;
       }
       .frame .none {
         position: absolute;
@@ -131,23 +132,87 @@
         color: var(--muted);
         font-variant-numeric: tabular-nums;
       }
-      .night {
-        align-self: flex-start;
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: auto;
+      }
+      .actions button {
         font: inherit;
-        font-size: 12px;
-        padding: 6px 10px;
+        font-size: 13px;
+        min-height: 36px;
+        padding: 6px 12px;
         border-radius: 8px;
         border: 1px solid var(--edge);
         background: var(--tile);
         color: var(--ink);
+        cursor: pointer;
       }
-      .night[aria-pressed="true"] {
+      .actions button:focus-visible,
+      .bar button:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+      .actions .pick[aria-checked="true"] {
+        border-color: var(--action);
+        background: var(--action);
+        color: var(--on-action);
+      }
+      .actions .night[aria-pressed="true"] {
         border-color: var(--ink);
       }
       .hint {
         font-size: 12px;
         color: var(--muted);
         margin: 14px 0 0;
+      }
+      .hint .desk {
+        display: none;
+      }
+      /* A desk: large tiles, two to a row at most, each film with its
+         controls. */
+      @media (min-width: 900px) {
+        main {
+          max-width: 1440px;
+          padding: 32px 32px 112px;
+        }
+        h1 {
+          font-size: 24px;
+        }
+        .lede {
+          font-size: 15px;
+          margin-bottom: 24px;
+        }
+        .grid {
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(min(100%, 600px), 1fr)
+          );
+          gap: 24px;
+        }
+        .option {
+          padding: 12px;
+          gap: 10px;
+        }
+        .label {
+          font-size: 17px;
+        }
+        .detail {
+          font-size: 14px;
+        }
+        .facts {
+          font-size: 13px;
+        }
+        .actions button {
+          font-size: 14px;
+        }
+        .hint .desk {
+          display: inline;
+        }
+        .hint .phone {
+          display: none;
+        }
       }
       /* The pick, kept to hand at the foot. */
       .bar {
@@ -174,11 +239,12 @@
         border-radius: 8px;
         background: var(--action);
         color: var(--on-action);
+        cursor: pointer;
       }
       .bar button:disabled {
         opacity: 0.4;
       }
-      /* Press and hold: the candidate at full size. */
+      /* Press and hold on a phone: the candidate at full size. */
       .full {
         position: fixed;
         inset: 0;
@@ -215,7 +281,12 @@
         role="radiogroup"
       ></div>
       <p class="hint">
-        Press and hold a film to see it at full size. Tap to pick it.
+        <span class="desk"
+          >Full size (or a click on a film) shows it at full size; Esc leaves.
+          Pick one, then copy your pick.</span
+        ><span class="phone"
+          >Press and hold a film to see it at full size. Tap to pick it.</span
+        >
       </p>
     </main>
     <div class="bar">
@@ -234,6 +305,11 @@
       const fullVideo = full.querySelector("video");
       const pickOut = document.getElementById("pick");
       const copy = document.getElementById("copy");
+      /** A desk's width: the films carry their native controls. */
+      const desk = window.matchMedia("(min-width: 900px)");
+      /** The height of a video's native control bar, which a click on keeps for itself. */
+      const CONTROL_BAR = 56;
+      const tiles = [];
       let chosen = null;
 
       const sourcesOf = (video, take) => {
@@ -254,21 +330,29 @@
         video.load();
       };
 
-      const choose = (option, tile) => {
+      const button = (className, text) => {
+        const made = document.createElement("button");
+        made.type = "button";
+        made.className = className;
+        made.textContent = text;
+        return made;
+      };
+
+      const choose = (option) => {
         chosen = option;
-        for (const one of grid.children) {
-          one.setAttribute("aria-checked", String(one === tile));
+        for (const tile of tiles) {
+          const mine = tile.option === option;
+          tile.element.toggleAttribute("data-checked", mine);
+          tile.pick.setAttribute("aria-checked", String(mine));
+          tile.pick.textContent = mine ? "Picked" : "Pick";
         }
         pickOut.textContent = `${decision.id}: ${option.id}`;
         copy.disabled = false;
       };
 
       for (const option of decision.options) {
-        const tile = document.createElement("div");
-        tile.className = "option";
-        tile.setAttribute("role", "radio");
-        tile.setAttribute("aria-checked", "false");
-        tile.tabIndex = 0;
+        const element = document.createElement("article");
+        element.className = "option";
         const frame = document.createElement("div");
         frame.className = "frame";
         let video = null;
@@ -280,6 +364,7 @@
           video.autoplay = true;
           video.playsInline = true;
           video.preload = "auto";
+          video.setAttribute("aria-label", option.label);
           sourcesOf(video, take);
           frame.append(video);
         } else {
@@ -294,23 +379,34 @@
         const detail = document.createElement("div");
         detail.className = "detail";
         detail.textContent = option.detail;
-        tile.append(frame, label, detail);
+        element.append(frame, label, detail);
         if (option.facts) {
           const facts = document.createElement("div");
           facts.className = "facts";
           facts.textContent = option.facts;
-          tile.append(facts);
+          element.append(facts);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        const pick = button("pick", "Pick");
+        pick.setAttribute("role", "radio");
+        pick.setAttribute("aria-checked", "false");
+        pick.setAttribute("aria-label", `Pick ${option.label}`);
+        pick.addEventListener("click", () => choose(option));
+        actions.append(pick);
+        if (video) {
+          const fullSize = button("full-size", "Full size");
+          fullSize.setAttribute("aria-label", `Full size: ${option.label}`);
+          fullSize.addEventListener("click", () => video.requestFullscreen());
+          actions.append(fullSize);
         }
         if (option.night && video) {
           // The night render beside the paper one: the same film, the
           // site's coming dark mode.
-          const night = document.createElement("button");
-          night.type = "button";
-          night.className = "night";
-          night.textContent = "Show at night";
+          const night = button("night", "Show at night");
           night.setAttribute("aria-pressed", "false");
-          night.addEventListener("click", (event) => {
-            event.stopPropagation();
+          night.addEventListener("click", () => {
             const dark = night.getAttribute("aria-pressed") !== "true";
             night.setAttribute("aria-pressed", String(dark));
             night.textContent = dark ? "Show by day" : "Show at night";
@@ -318,18 +414,41 @@
             sourcesOf(video, take);
             video.play();
           });
-          tile.append(night);
+          actions.append(night);
         }
+        element.append(actions);
+        tiles.push({ element, option, pick });
 
-        // Tap picks; press and hold (400ms) shows it at full size until
-        // the finger lifts.
+        /** Whether a press landed on a control of the tile's own. */
+        const onControl = (event) => event.target.closest("button") !== null;
+
+        // A mouse on the film opens it at full size; its control bar keeps
+        // its own clicks. A press anywhere else on the tile picks it.
+        element.addEventListener("click", (event) => {
+          if (onControl(event) || touchPress) {
+            return;
+          }
+          if (video && event.target === video) {
+            const bar = video.getBoundingClientRect().bottom - CONTROL_BAR;
+            if (video.controls && event.clientY >= bar) {
+              return;
+            }
+            event.preventDefault();
+            video.requestFullscreen();
+            return;
+          }
+          choose(option);
+        });
+
+        // A finger: a tap picks; a press held 400ms shows the film at full
+        // size until the finger lifts.
+        let touchPress = false;
         let holdTimer = null;
         let held = false;
-        // The night switch is its own control: it neither picks nor holds.
-        const onSwitch = (event) => event.target.closest(".night") !== null;
-        tile.addEventListener("pointerdown", (event) => {
+        element.addEventListener("pointerdown", (event) => {
+          touchPress = event.pointerType === "touch";
           held = false;
-          if (!video || onSwitch(event)) {
+          if (!(touchPress && video) || onControl(event)) {
             return;
           }
           holdTimer = setTimeout(() => {
@@ -347,23 +466,36 @@
             fullVideo.pause();
           }
         };
-        tile.addEventListener("pointerup", (event) => {
+        element.addEventListener("pointerup", (event) => {
           release();
-          if (!(held || onSwitch(event))) {
-            choose(option, tile);
-          }
-        });
-        tile.addEventListener("pointercancel", release);
-        tile.addEventListener("pointerleave", release);
-        tile.addEventListener("contextmenu", (event) => event.preventDefault());
-        tile.addEventListener("keydown", (event) => {
-          if (event.key === " " || event.key === "Enter") {
+          if (touchPress && !held && !onControl(event)) {
             event.preventDefault();
-            choose(option, tile);
+            choose(option);
           }
         });
-        grid.append(tile);
+        element.addEventListener("pointercancel", release);
+        element.addEventListener("pointerleave", release);
+        element.addEventListener("contextmenu", (event) => {
+          if (touchPress) {
+            event.preventDefault();
+          }
+        });
+
+        if (video) {
+          const showControls = () => {
+            video.controls = desk.matches;
+          };
+          showControls();
+          desk.addEventListener("change", showControls);
+        }
+        grid.append(element);
       }
+      // Esc leaves full size, whether or not the browser took the key first.
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && document.fullscreenElement) {
+          document.exitFullscreen();
+        }
+      });
       full.addEventListener("pointerup", () => {
         full.removeAttribute("data-open");
         fullVideo.pause();
