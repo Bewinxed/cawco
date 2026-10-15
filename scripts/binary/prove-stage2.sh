@@ -1644,9 +1644,27 @@ ws_listener_why() {
   echo "the joined machine's agent on previews:"
   as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep -iE "preview|bridge|the way into workspace" | tail -n 8 || true
 }
-# The workspace's preview of the listener's port, opened as a session opens one (its `artifact_create` tool, here
-# from a command through the workspace's tool door), and the hub's preview port for it, as the dashboard learns it.
-ws_preview_open() { ws_exec "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"name\":\"proof-listener\",\"port\":$WS_LISTENER_PORT}'"; }
+# The delegate's identity as its shell has it: CAWCO_INSTANCE_ID and CAWCO_SESSION_CREDENTIAL from the environment of
+# the process its session holds, which the proof harness starts with the env the Claude harness gives a real session
+# (scripts/binary/proof-harnesses.ts, claude.ts `sessionEnv`), one NAME=value per line.
+ws_session_env() {
+  local pid
+  pid=$(child_pids "$joinerc" "$(cat "$rigdir/ws-delegate")")
+  [[ $pid =~ ^[0-9]+$ ]] || { echo "the delegate's session holds no one process: '$pid'" >&2; return 1; }
+  as_user "$joinerc" cat "/proc/$pid/environ" | tr '\0' '\n' | grep -E '^CAWCO_(INSTANCE_ID|SESSION_CREDENTIAL)='
+}
+# One command through the workspace's executor from the delegate's shell, as its harness's shell tool runs one: the
+# session's identity in the caller's environment, which the executor hands the command (boundary.ts execScript).
+ws_exec_as_session() {
+  local vars
+  mapfile -t vars < <(ws_session_env)
+  [[ " ${vars[*]} " == *" CAWCO_SESSION_CREDENTIAL="* && " ${vars[*]} " == *" CAWCO_INSTANCE_ID=$(cat "$rigdir/ws-delegate") "* ]] || { echo "ASSERTION FAILED: the delegate's process carries not both its id and its credential: ${vars[*]%%=*}" >&2; return 1; }
+  as_user "$joinerc" env "${vars[@]}" sh -c 'cd "$1" && exec "$2" "$3"' sh "$(cat "$rigdir/ws-clone")" "$(ws_state)/exec" "$1"
+}
+# The workspace's preview of the listener's port, opened as the delegate opens one: its `artifact_create` tool,
+# called from its shell through the workspace's tool door (`cawco tool`, packages/cli/src/tools.ts). The hub's preview
+# port for it is read as the dashboard learns it.
+ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"name\":\"proof-listener\",\"port\":$WS_LISTENER_PORT}'"; }
 ws_preview_port() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$(cat "$rigdir/ws-delegate")"; }
 # What the preview answers, through the hub's preview listener, the joined machine's agent and its bridge.
 ws_preview_says() { as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$(cat "$rigdir/ws-preview-port")/" 2>&1 || true; }
@@ -1916,7 +1934,7 @@ workspace_archive_ends_all() {
   [[ -z $left ]] || { echo "ASSERTION FAILED: these processes of the archived workspace's sandbox still run:$left"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_listener_start ws_listener_pid ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ns_of ws_listener_start ws_listener_pid ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
 export WS_LISTENER_PORT
 rig_workspace() {
   local across="a workspace open across an update keeps its job and a setsid listener running, a preview reaching the listener in the older generation by port and by host behind the lock, its next command runs in the new build's boundary, and once the listener is started again on its port in the new generation the old boundary closes with it and the preview reaches the new one in both modes"

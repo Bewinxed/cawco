@@ -200,11 +200,15 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
         args: ["3000"],
         cwd: ctx.cwd,
         // A real session's env as the Claude harness gives it (claude.ts
-        // `sessionEnv`): the agent's own as a session gets it, and the
-        // session's id. The keeper puts its own, as a session gets it, under.
+        // `sessionEnv`): the agent's own as a session gets it, the session's
+        // id, and its credential, so its shell's `cawco tool` acts as it. The
+        // keeper puts its own, as a session gets it, under.
         env: {
           ...sessionEnvironment(process.env),
           [CAWCO_ENV.instanceId]: ctx.instanceId,
+          ...(ctx.sessionCredential
+            ? { [CAWCO_ENV.sessionCredential]: ctx.sessionCredential }
+            : {}),
         },
       });
       return session(held, ctx.instanceId, ctx, client);
