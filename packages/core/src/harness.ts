@@ -1841,8 +1841,9 @@ export interface WorkspaceHolding {
  * name no rule knows, and carries are never pruned (`~/.cawco/carries`),
  * while a machine's disk filling with spent work is what retiring
  * workspaces is for. Past it the workspace is kept and listed, naming the
- * size, until a person archives it with discard (which saves them all) or
- * moves them. Decimal, as {@link sizeWords} says sizes.
+ * size, until a person moves them, or archives it with discard, which saves
+ * none of them (its unlanded commits, changes and stashes are still saved).
+ * Decimal, as {@link sizeWords} says sizes.
  */
 export const IGNORED_CARRY_LIMIT = 64e6;
 

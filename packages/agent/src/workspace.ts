@@ -66,7 +66,9 @@ import {
   carrySteps,
   copyStrays,
   ownFilesOnly,
+  unlessGone,
 } from "./carry";
+import { excludedPaths } from "./checkout-exclude";
 import { prepareClone } from "./clone";
 import { placedSkillsAsMade } from "./fleet";
 import { expandHome } from "./fs";
@@ -573,10 +575,13 @@ type Held = Omit<WorkspaceHolding, "bytes"> & { ignoredFiles: string[] };
 /**
  * What the workspace holds that is nowhere else ({@link CONTROL_WORKSPACE_LANDED}),
  * read by git inside its boundary; `skip` are paths `git status` passes over.
+ * `ignored` false (a discard) leaves its own ignored files unlisted and
+ * unwalked: none is counted.
  */
 const holding = async (
   workspace: WorkspaceRef,
-  skip: readonly string[]
+  skip: readonly string[],
+  ignored: boolean
 ): Promise<Held> => {
   // A clone already deleted (an archive that died after its `rm`) holds nothing.
   const gone = await stat(workspace.path).then(
@@ -608,7 +613,7 @@ const holding = async (
     .map((path) => shellQuote(`:(exclude,literal)${path}`))
     .join(" ");
   const lines = (out: string): number => out.split("\n").filter(Boolean).length;
-  const [ahead, status, stashes, ignored] = await Promise.all([
+  const [ahead, status, stashes, own] = await Promise.all([
     git("git rev-list --count HEAD --branches --not --remotes"),
     git(
       excluded
@@ -616,16 +621,16 @@ const holding = async (
         : "git status --porcelain"
     ),
     git("git stash list"),
-    ignoredOwn(workspace, skip),
+    ignored ? ignoredOwn(workspace, skip) : { bytes: 0, files: [] },
   ]);
   return {
     ahead: Number(ahead),
     dirty: lines(status),
     stashes: lines(stashes),
-    ...(ignored.files.length > 0
-      ? { ignored: ignored.files.length, ignoredBytes: ignored.bytes }
+    ...(own.files.length > 0
+      ? { ignored: own.files.length, ignoredBytes: own.bytes }
       : {}),
-    ignoredFiles: ignored.files,
+    ignoredFiles: own.files,
   };
 };
 
@@ -685,15 +690,29 @@ const notOwnName = (name: string): boolean =>
  * them inside the boundary, a wholly ignored folder as one entry; such a
  * folder is walked here, by `lstat`, never through a link. A link is
  * listed as it is, and the carry names it without following it.
+ *
+ * Nothing at or under a path `info/exclude` names (checkout-exclude.ts
+ * `excludedPaths`) is the clone's own, down a walked folder too: a
+ * `.gitignore` that ignores `.claude/` whole hands git's listing that one
+ * folder, and the walk would find in it the stand-ins the boundary keeps
+ * there (`settings.local.json`) and the skills CawCo placed. The stand-ins
+ * go as the boundary closes, before the carry copies (2026-10-15: two
+ * archives failed on ENOENT for `.claude/settings.local.json`). A listed
+ * path gone by the time it is read is not counted.
  */
 const ignoredOwn = async (
   workspace: WorkspaceRef,
   skip: readonly string[]
 ): Promise<{ bytes: number; files: string[] }> => {
   const list = `"$TMPDIR"/.cawco-ignored-${crypto.randomUUID()}`;
-  const out = await insideGit(workspace)(
-    `git ls-files -z --others --ignored --exclude-standard --directory > ${list} && { git check-ignore -z -v --stdin < ${list}; s=$?; rm -f ${list}; [ "$s" -le 1 ]; }`
-  );
+  const [out, cawcos] = await Promise.all([
+    insideGit(workspace)(
+      `git ls-files -z --others --ignored --exclude-standard --directory > ${list} && { git check-ignore -z -v --stdin < ${list}; s=$?; rm -f ${list}; [ "$s" -le 1 ]; }`
+    ),
+    excludedPaths(workspace.path),
+  ]);
+  const cawcoPath = (entry: string): boolean =>
+    cawcos.some((path) => entry === path || entry.startsWith(`${path}/`));
   // Records of four: source, line, pattern, path.
   const fields = out.split("\0");
   const entries: string[] = [];
@@ -709,6 +728,7 @@ const ignoredOwn = async (
       entry &&
       !source.endsWith("info/exclude") &&
       !entry.split("/").some(notOwnName) &&
+      !cawcoPath(entry) &&
       !skip.includes(entry)
     ) {
       entries.push(entry);
@@ -717,9 +737,7 @@ const ignoredOwn = async (
   const files: string[] = [];
   let bytes = 0;
   const walk = async (entry: string): Promise<void> => {
-    const found = await lstat(join(workspace.path, entry)).catch(
-      () => undefined
-    );
+    const found = await unlessGone(lstat(join(workspace.path, entry)));
     if (!found) {
       return;
     }
@@ -728,8 +746,9 @@ const ignoredOwn = async (
       bytes += found.isFile() ? found.size : 0;
       return;
     }
-    for (const name of await readdir(join(workspace.path, entry))) {
-      if (!notOwnName(name)) {
+    const names = await unlessGone(readdir(join(workspace.path, entry)));
+    for (const name of names ?? []) {
+      if (!(notOwnName(name) || cawcoPath(join(entry, name)))) {
         // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, as a delegate's own ignored folders are small
         await walk(join(entry, name));
       }
@@ -761,7 +780,7 @@ export const workspaceLanded = async (
 ): Promise<WorkspaceHolding> => {
   const workspace = ref as WorkspaceRef;
   const [{ ignoredFiles: _files, ...held }, bytes] = await Promise.all([
-    holding(workspace, Array.isArray(skip) ? skip.map(String) : []),
+    holding(workspace, Array.isArray(skip) ? skip.map(String) : [], true),
     sizeOf(workspace.path),
   ]);
   return { ...held, bytes };
@@ -917,10 +936,13 @@ export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
 
 /**
  * {@link CONTROL_WORKSPACE_DISCARD}: as {@link archiveWorkspace}, but what
- * the clone holds that is nowhere else is written to a carry in
- * `~/.cawco/carries` (carry.ts), which must be whole before anything is
- * deleted. A folder that is no git clone any more has its own entries
- * copied there as they are (carry.ts `copyStrays`), with no boundary.
+ * the clone holds that is nowhere else (its unlanded commits, changes and
+ * stashes) is written to a carry in `~/.cawco/carries` (carry.ts), which
+ * must be whole before anything is deleted. Its own ignored files are
+ * neither listed, walked nor carried: a person letting the workspace go
+ * past core `IGNORED_CARRY_LIMIT` lets them go with it. A folder that is no
+ * git clone any more has its own entries copied there as they are (carry.ts
+ * `copyStrays`), with no boundary.
  */
 export const discardWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
   closeClone({ ...(ref as WorkspaceArchive), unlanded: "keep" }, true);
@@ -945,11 +967,11 @@ const closeClone = async (
   const workspace: WorkspaceRef = { id: request.id, path };
   const skip = request.skip ?? [];
   const { ignoredFiles, ...held }: Held = read
-    ? await holding(workspace, skip)
+    ? await holding(workspace, skip, !carryHeld)
     : { ahead: 0, dirty: 0, stashes: 0, ignoredFiles: [] };
   if (!(holdsNothing({ ...held, bytes: 0 }) || carryHeld)) {
     throw new Error(
-      `Workspace ${request.id} was not archived: its clone ${path} holds ${holdingWords({ ...held, bytes: 0 })}, and nothing was deleted.`
+      `Workspace ${request.id} was not archived: its clone ${path} holds ${holdingWords({ ...held, bytes: 0 })}, and nothing was deleted. Pass discard: true to archive without saving its ignored files; unlanded commits, changes and stashes are still kept.`
     );
   }
   const words = savedWords(held, ignoredFiles.length);
@@ -963,7 +985,7 @@ const closeClone = async (
     ({ carry, left } = await carryStrays(request.id, path));
   } else if (!holdsNothing({ ...held, bytes: 0 }) || ignoredFiles.length > 0) {
     // The clone's own ignored files go into it too, below: every archive
-    // saves them, a discard or not.
+    // but a discard saves them; a discard never listed them.
     inScratch = join(
       (await ensureBoundary(workspace)).scratch,
       await writeCarryInside(workspace, held, skip)

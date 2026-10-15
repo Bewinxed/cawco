@@ -17,7 +17,8 @@
  *   clone's; a worktree shares its repository's stash, which outlives it);
  * - `ignored/`: a workspace clone's own files git ignores (workspace.ts
  *   `ignoredOwn`), copied at their paths on this host once its boundary is
- *   closed; every archive of a clone holding any writes a carry for them;
+ *   closed; every archive of a clone holding any writes a carry for them,
+ *   but a discard, which neither lists nor copies them;
  * - `head` and `branch`: the commit and branch it was on;
  * - `README.md`: what it is and how to take each part back.
  *
@@ -72,7 +73,9 @@ export type CarrySource = CarryCheckout | "folder";
  * no git and no boundary run in a folder that is no clone. A dir is walked
  * and a regular file copied; anything else (a link, a socket) is not, being
  * no file of the carry's own ({@link ownFilesOnly}), and is answered by its
- * path and what it is, for the README.
+ * path and what it is, for the README. An entry gone since it was listed
+ * (ENOENT as it is read or copied) is not carried and is no error: nothing
+ * of anyone's is there to lose. Any other error fails the copy.
  */
 export const copyStrays = async (
   from: string,
@@ -83,18 +86,28 @@ export const copyStrays = async (
   const copy = async (entry: string): Promise<void> => {
     const source = join(from, entry);
     const target = join(folder, entry);
-    const found = await lstat(source);
+    const found = await unlessGone(lstat(source));
+    if (!found) {
+      return;
+    }
     if (found.isDirectory()) {
+      const names = await unlessGone(readdir(source));
+      if (!names) {
+        return;
+      }
       await mkdir(target, { recursive: true, mode: 0o700 });
-      for (const name of await readdir(source)) {
+      for (const name of names) {
         // biome-ignore lint/performance/noAwaitInLoops: a stray holds a handful of files
         await copy(join(entry, name));
       }
     } else if (found.isFile()) {
       await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-      await copyFile(source, target, constants.COPYFILE_EXCL);
+      await unlessGone(copyFile(source, target, constants.COPYFILE_EXCL));
     } else if (found.isSymbolicLink()) {
-      left.push(`${entry}: a link to ${await readlink(source)}`);
+      const to = await unlessGone(readlink(source));
+      if (to !== undefined) {
+        left.push(`${entry}: a link to ${to}`);
+      }
     } else {
       left.push(`${entry}: neither a file nor a folder`);
     }
@@ -106,6 +119,18 @@ export const copyStrays = async (
   }
   return left;
 };
+
+/**
+ * What `read` answers, or undefined when the path it reads is gone (ENOENT):
+ * a path listed a moment ago that no longer exists. Any other error throws.
+ */
+export const unlessGone = <T>(read: Promise<T>): Promise<T | undefined> =>
+  read.catch((error: NodeJS.ErrnoException): undefined => {
+    if (error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  });
 
 /** The rev-list arguments naming the commits a checkout alone has. */
 export const LOST_COMMITS: Record<CarryCheckout, string> = {

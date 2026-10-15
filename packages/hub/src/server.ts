@@ -21953,8 +21953,9 @@ export const createServer = (
       })
       // Refused (409, in words naming what and how big) when its clone holds
       // work that is nowhere else, and nothing is deleted. `discard: true` is
-      // a person letting that work go: its machine writes it to a carry
-      // first, whose folder the answer names as `carry`.
+      // a person letting that work go: its machine writes its unlanded
+      // commits, changes and stashes to a carry first, whose folder the
+      // answer names as `carry`, and neither walks nor saves its ignored files.
       .post(
         "/api/workspaces/:id/archive",
         { body: t.Optional(t.Object({ discard: t.Optional(t.Boolean()) })) },

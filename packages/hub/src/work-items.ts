@@ -254,14 +254,15 @@ export interface ArchivedWorkspace {
 /**
  * An archive refused because the clone holds work that is nowhere else: it
  * names what, and nothing is deleted. `discard` archives it anyway, its
- * work saved to a carry first.
+ * unlanded commits, changes and stashes saved to a carry first and its
+ * ignored files not saved.
  */
 export class WorkspaceHoldsWork extends WorkItemRefusal {
   readonly held: HeldWork;
   constructor(held: HeldWork) {
     super(
       409,
-      `Workspace ${held.workspaceId} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted. Land or push its work, or archive it with discard: true, which first saves its commits and changes to a carry in ~/.cawco/carries on ${held.machine}.`
+      `Workspace ${held.workspaceId} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted. Land or push its work, or pass discard: true to archive without saving its ignored files; unlanded commits, changes and stashes are still kept, in a carry in ~/.cawco/carries on ${held.machine}.`
     );
     this.held = held;
   }
@@ -4750,9 +4751,13 @@ export const createWorkItems = ({
         );
       }
       const skip = handedOver(workspace);
-      const held = await heldIn(workspace, skip);
-      if (!(holdsNothing(held) || discard)) {
-        throw new WorkspaceHoldsWork(held);
+      // A discard archives whatever the clone holds: nothing to read first,
+      // and no walk of its ignored files.
+      if (!discard) {
+        const held = await heldIn(workspace, skip);
+        if (!holdsNothing(held)) {
+          throw new WorkspaceHoldsWork(held);
+        }
       }
       // Bounded well inside the HTTP call's own idle timeout: a machine that
       // never confirms leaves the workspace active, and the answer says so.

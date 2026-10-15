@@ -5909,7 +5909,8 @@ export async function workspaceHeld(
  * its machine kills the boundary with everything in it and deletes the
  * clone and its records, a damaged one among them. The hub's refusal (a live
  * item there, or work in the clone that is nowhere else) is the error.
- * `discard` lets that work go: its machine saves it to a carry first.
+ * `discard` lets that work go: its machine saves its unlanded commits,
+ * changes and stashes to a carry first, and none of its ignored files.
  */
 export async function archiveWorkspace(
   workspaceId: string,

@@ -113,6 +113,28 @@ const readExclude = async (
 export const excludedStandIns = async (clone: string): Promise<string[]> =>
   (await readExclude(await excludeFileOf(clone))).listed.filter(Boolean);
 
+/** A line of `info/exclude` that is a pattern, not one path: a glob, a negation or an escape. */
+const PATTERN = /[*?[\\!]/;
+const TRAILING_SLASHES = /\/+$/;
+
+/**
+ * Every path a clone's `info/exclude` names by an anchored line, relative to
+ * the clone: what CawCo wrote into it, each listed there as it was put there
+ * (its stand-ins in CawCo's block, a project's placed skills and the hook
+ * settings it wrote by {@link excludeFromCheckout}). A line that is a pattern
+ * names no one path and is not among them.
+ */
+export const excludedPaths = async (clone: string): Promise<string[]> => {
+  const { listed, rest } = await readExclude(await excludeFileOf(clone));
+  const anchored = rest
+    .map((line) => line.trimEnd())
+    .filter((line) => line.startsWith("/") && !PATTERN.test(line))
+    .map((line) => line.replace(LEADING_SLASH, ""));
+  return [...listed, ...anchored]
+    .map((path) => path.replace(TRAILING_SLASHES, ""))
+    .filter(Boolean);
+};
+
 /**
  * CawCo's block in a clone's `info/exclude`, written whole: one anchored line
  * for each of `paths` (relative to the clone), the stand-ins it made there,
