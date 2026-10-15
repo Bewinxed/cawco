@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
     "tokens": "bun scripts/build-tokens.ts && biome format --write src/lib/tokens/tokens.css ../../packages/hub/skills/decision-page/kit/tokens.css ../apple/Packages/CawCoKit/Sources/CawCoDesign/Resources",
-    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json"
+    "typecheck": "svelte-kit sync && bun scripts/svelte-check.ts && tsc -p tsconfig.node.json"
   },
   "overrides": {
     "vite": "^8.3.1"
@@ -68,7 +68,7 @@
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
     "@types/bun": "^1.4.2",
-    "@typescript/native": "npm:typescript@^7.0.2",
+    "@typescript/native": "npm:typescript@~7.0.2",
     "colorjs.io": "^0.7.1",
     "jsrepo": "^3.8.1",
     "paneforge": "^1.0.2",

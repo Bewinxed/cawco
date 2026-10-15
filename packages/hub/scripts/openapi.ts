@@ -23,6 +23,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
+import { baseRefOf, checkGate, outsideInputs } from "./openapi-inputs";
 import { shippedBaselines } from "./shipped";
 import {
   APP_SCHEMA,
@@ -35,6 +36,17 @@ import {
   wireProtocolAt,
   withoutBridge,
 } from "./wire-compat";
+
+const check = process.argv.includes("--check");
+// Before the hub and the program are built: a check whose inputs are the
+// ones it last passed with has nothing new to find (openapi-inputs.ts).
+const gate = check ? await checkGate(process.argv) : undefined;
+if (gate?.fresh) {
+  console.log(
+    "openapi:check: inputs unchanged since its last pass (scripts/openapi-inputs.ts), skipped"
+  );
+  process.exit(0);
+}
 
 const HUB = resolve(import.meta.dir, "..");
 const CORE = resolve(HUB, "../core/src");
@@ -189,6 +201,14 @@ const program = ts.createProgram([routesFile, ...frameFiles], {
   // must explicitly include both the repository and the scratch directory.
   rootDir: parse(HUB).root,
 });
+const unrecorded = outsideInputs(
+  program.getSourceFiles().map((file) => file.fileName)
+);
+if (unrecorded.length) {
+  throw new Error(
+    `The hub's program reads files scripts/openapi-inputs.ts does not record as inputs; add their directory there:\n${unrecorded.join("\n")}`
+  );
+}
 const routeErrors = ts
   .getPreEmitDiagnostics(program, program.getSourceFile(routesFile))
   .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
@@ -1261,14 +1281,7 @@ const git = (...args: string[]): string => {
   }
   return run.stdout.toString();
 };
-const baseFlag = process.argv.indexOf("--base");
-const baseRef =
-  baseFlag >= 0
-    ? process.argv[baseFlag + 1]
-    : git("merge-base", "HEAD", "origin/main").trim();
-if (!baseRef) {
-  throw new Error("--base needs a git ref");
-}
+const baseRef = baseRefOf(process.argv);
 // One compare per commit: a shipped build can be the base itself.
 const byCommit = new Map<string, { label: string; commit: string }>();
 for (const base of [
@@ -1346,7 +1359,6 @@ const outputs: [string, string][] = [
   [join(dirname(OUT), "OpenEnums.swift"), swiftEnums],
   [join(dirname(OUT), "openapi-generator-config.yaml"), generatorConfig],
 ];
-const check = process.argv.includes("--check");
 if (!check) {
   mkdirSync(dirname(OUT), { recursive: true });
   for (const [path, text] of outputs) {
@@ -1369,6 +1381,7 @@ if (check) {
     }
     process.exit(1);
   }
+  await gate?.record();
   console.log(
     "openapi.json, OpenEnums.swift and the generator config are up to date"
   );
