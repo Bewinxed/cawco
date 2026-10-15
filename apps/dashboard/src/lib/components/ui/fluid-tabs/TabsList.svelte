@@ -206,6 +206,14 @@
    */
   const STILL_FRAMES = 3;
   let watching = 0;
+  /**
+   * The runs moving the tabs' boxes, found once a watch: asking every tab
+   * for its animations restyles the page, and asked on every frame it
+   * restyled the page on every frame. Asked again only until some are found
+   * (a slide starts a frame after the change that watches for it), and
+   * after a new change while a watch runs (`watchFolds` drops them).
+   */
+  let boxRuns: Animation[] = [];
   /** A run that still stands somewhere between its ends: playing, or held there. */
   const underWay = (run: Animation) =>
     run.playState === "running" || run.playState === "paused";
@@ -214,13 +222,20 @@
    * them: a lifted tab, or a slide or settle of a tab's box.
    */
   function watchFolds(track: HTMLElement) {
+    boxRuns = [];
     if (watching) {
       return;
     }
     let still = 0;
-    const moving = () =>
-      lifted !== null ||
-      [...track.children].some((laid) => laid.getAnimations().some(underWay));
+    const moving = () => {
+      if (lifted !== null) {
+        return true;
+      }
+      if (boxRuns.length === 0) {
+        boxRuns = [...track.children].flatMap((laid) => laid.getAnimations());
+      }
+      return boxRuns.some(underWay);
+    };
     const step = () => {
       fold(rects.items);
       still = moving() ? 0 : still + 1;
@@ -832,8 +847,11 @@
   /**
    * A scrolling track's edge fades never lie over a tab drawn chosen (the
    * chosen tab, and the one a switch is leaving) while it stands clear of
-   * that edge: the edge's fade is cut short at the nearest of them
-   * (`--fade-cap-start`, `--fade-cap-end`, read by the fade's mask). One the
+   * that edge: the edge's fade is cut short at the nearest of them, at the
+   * tip of its foot (a folder tab's `--flare` past its box: a fade over the
+   * foot washed out the sheet under the outline there, the one edge where
+   * a card hangs from it), `--fade-cap-start`, `--fade-cap-end`, read by
+   * the fade's mask. One the
    * track has been scrolled past, cut by the edge, caps nothing there: that
    * edge's fade is drawn whole, the cue that the strip goes on that way
    * (a phone that swiped its views on showed none, its chosen tab half cut
@@ -847,13 +865,16 @@
     }
     const at = track.scrollLeft;
     const { width } = rects.viewport;
+    const feet =
+      Number.parseFloat(getComputedStyle(track).getPropertyValue("--flare")) ||
+      0;
     let start = Number.POSITIVE_INFINITY;
     let end = Number.POSITIVE_INFINITY;
     for (const i of [list.optimisticIndex, outgoing]) {
       const r = i === null ? undefined : rects.at(i);
       if (r) {
-        const before = r.left - at;
-        const after = at + width - (r.left + r.width);
+        const before = r.left - feet - at;
+        const after = at + width - (r.left + r.width + feet);
         if (before >= -0.5) {
           start = Math.min(start, before);
         }
