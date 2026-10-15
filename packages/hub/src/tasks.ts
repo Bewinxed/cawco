@@ -48,17 +48,21 @@ import {
   FolderRefusal,
   FolderTaken,
   type FolderWriteOptions,
+  fileExtension,
   folderFileNames,
   folderFileTimes,
   folderHistory,
   folderUncommitted,
   HISTORY_LIMIT,
   hasProjectFolder,
+  IMAGE_TYPES,
   listFolder,
   moveFolderFile,
+  readFolderBytes,
   readFolderFile,
   readFolderFileAt,
   refused,
+  servedFile,
   turnTaker,
   writeFolderFile,
   writeFolderFiles,
@@ -120,7 +124,12 @@ import {
   TRAILERS,
   taskFileIn,
 } from "./task-history";
-import { budgetProblem, isLive, ownsProblem } from "./work-items";
+import {
+  budgetProblem,
+  isLive,
+  outputsFolder,
+  ownsProblem,
+} from "./work-items";
 
 /**
  * Who moves a task: one of the movers stages.md names, or `hub`, the hub's
@@ -203,11 +212,32 @@ export interface TaskAttempt {
    * Null while live and once done.
    */
   endedHow: string | null;
+  /**
+   * What its session said it did, in one or two sentences: its
+   * `finish_item`'s headline. Null until an attempt finishes that way.
+   */
+  headline: string | null;
   /** The session running it. */
   instanceId: string;
   /** When it was filed, ms epoch. */
   startedAt: number;
   state: WorkItemState;
+  workItemId: string;
+}
+
+/**
+ * What a task's newest finished attempt handed back, read whole on a task's
+ * own read (never on the list: a report runs to pages): its session's report
+ * of what it did, which is how an attempt presents its result whatever the
+ * work, beside the outputs it handed in (`assets/<task>/`).
+ */
+export interface TaskResult {
+  /** When the attempt finished, ms epoch. */
+  at: number;
+  /** Its `finish_item`'s headline, one or two sentences; null when it gave none. */
+  headline: string | null;
+  /** Its `finish_item`'s summary, in full (markdown). */
+  report: string;
   workItemId: string;
 }
 
@@ -296,10 +326,12 @@ export interface TaskStore {
     | "createdAt"
     | "endedAt"
     | "error"
+    | "headline"
     | "id"
     | "instanceId"
     | "state"
     | "stoppedBy"
+    | "summary"
     | "taskId"
   >[];
   readonly drop: (projectId: string, paths: string[]) => void;
@@ -464,6 +496,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   problems: string[];
   rank: string | null;
   related: string[];
+  /** What its newest finished attempt handed back; null until one has. */
+  result: TaskResult | null;
   /** Where its attempts run (runs-on.ts), as the file says; null: the project's. */
   runsOn: string | null;
   /** The body's other `## ` sections, as written. */
@@ -783,6 +817,8 @@ const kindIn = (stages: Stages | undefined, stage: string): StageKind | null =>
 
 /** How long a failure's first line may run in its task's sentence. */
 const WHY_LIMIT = 200;
+/** The largest output a task's read serves: a picture an attempt made fits. */
+const OUTPUT_FILE_LIMIT = 10 * 1024 * 1024;
 
 /** Who stopped an attempt, as its task says it. */
 const stopperWords = (by: EndedBy): string => {
@@ -827,7 +863,25 @@ const attemptOf = (
   startedAt: item.createdAt.getTime(),
   endedAt: item.endedAt?.getTime() ?? null,
   endedHow: endedHowOf(item),
+  headline: item.headline?.trim() || null,
 });
+
+/** The newest attempt that finished with a report, as a task's read shows it ({@link TaskResult}). */
+const resultOf = (
+  attempts: ReturnType<TaskStore["attempts"]>
+): TaskResult | null => {
+  const done = attempts.find(
+    (item) => item.state === "done" && item.summary?.trim()
+  );
+  return done
+    ? {
+        workItemId: done.id,
+        at: (done.endedAt ?? done.createdAt).getTime(),
+        headline: done.headline?.trim() || null,
+        report: done.summary?.trim() ?? "",
+      }
+    : null;
+};
 
 /** What an edge to a task asks of it: its stage, and the task it repeats. */
 type EdgeEnd = Pick<TaskIndexRow, "duplicateOf" | "stage">;
@@ -894,7 +948,8 @@ const viewOf = (
   hash: string,
   stages: Stages | undefined,
   flags: TaskFlags,
-  times: TaskTimes
+  times: TaskTimes,
+  result: TaskResult | null
 ): TaskView => ({
   id: taskId(number),
   number,
@@ -904,6 +959,7 @@ const viewOf = (
   kind: kindIn(stages, parsed.fields.stage ?? ""),
   needsYou: kindIn(stages, parsed.fields.stage ?? "") === "you",
   ...flags,
+  result,
   type: parsed.fields.type,
   after: parsed.fields.after,
   parent: parsed.fields.parent,
@@ -2292,7 +2348,12 @@ export const createTasks = (store: TaskStore) => {
           stages,
         }
       ),
-      times.get(path) as TaskTimes
+      times.get(path) as TaskTimes,
+      resultOf(
+        store
+          .attempts(projectId)
+          .filter((item) => item.taskId === taskId(number))
+      )
     );
   };
 
@@ -3422,6 +3483,37 @@ export const taskRoutes = (tasks: Tasks) =>
         return refused(error);
       }
     })
+    // One output an attempt handed in, by the name the task gives it
+    // (`outputs: [post.md]`), from where the hub copied it
+    // (`assets/tsk-12/post.md`): a picture as itself, anything else as
+    // text, so a page reads every output the one way and draws it.
+    .get(
+      "/api/projects/:id/tasks/:taskId/outputs/file",
+      { query: t.Object({ name: t.String() }) },
+      async ({ params, query }) => {
+        try {
+          const task = await tasks.get(params.id, params.taskId);
+          if (!task.outputs.includes(query.name)) {
+            throw new FolderRefusal(
+              404,
+              `${task.id} hands in no output named ${query.name}; its outputs are ${task.outputs.join(", ") || "none"}.`
+            );
+          }
+          const { bytes } = await readFolderBytes(
+            params.id,
+            `${outputsFolder({ id: "", taskId: task.id })}/${query.name}`,
+            OUTPUT_FILE_LIMIT
+          );
+          return servedFile(
+            bytes,
+            IMAGE_TYPES[fileExtension(query.name)] ??
+              "text/plain; charset=utf-8"
+          );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     .patch(
       "/api/projects/:id/tasks/:taskId",
       {

@@ -2176,6 +2176,145 @@
         }
       }
     },
+    "/api/projects/{id}/tasks/{taskId}/outputs/file": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdTasksByTaskIdOutputsFile",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 200",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/tasks/{taskId}/comments": {
       "post": {
         "parameters": [
@@ -28033,6 +28172,13 @@
               "string"
             ]
           },
+          "headline": {
+            "description": "What its session said it did, in one or two sentences: its\n`finish_item`'s headline. Null until an attempt finishes that way.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "instanceId": {
             "description": "The session running it.",
             "type": "string"
@@ -28051,6 +28197,7 @@
         "required": [
           "endedAt",
           "endedHow",
+          "headline",
           "instanceId",
           "startedAt",
           "state",
@@ -28240,6 +28387,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "result": {
+            "description": "What its newest finished attempt handed back; null until one has.",
+            "$ref": "#/components/schemas/TaskResult"
           },
           "runsOn": {
             "description": "Where its attempts run (runs-on.ts), as the file says; null: the project's.",
@@ -28484,6 +28635,36 @@
           "id",
           "mover",
           "name"
+        ]
+      },
+      "TaskResult": {
+        "description": "What a task's newest finished attempt handed back, read whole on a task's\nown read (never on the list: a report runs to pages): its session's report\nof what it did, which is how an attempt presents its result whatever the\nwork, beside the outputs it handed in (`assets/<task>/`).",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When the attempt finished, ms epoch.",
+            "type": "number"
+          },
+          "headline": {
+            "description": "Its `finish_item`'s headline, one or two sentences; null when it gave none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "report": {
+            "description": "Its `finish_item`'s summary, in full (markdown).",
+            "type": "string"
+          },
+          "workItemId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "headline",
+          "report",
+          "workItemId"
         ]
       },
       "TaskTodo": {

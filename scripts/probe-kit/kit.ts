@@ -68,6 +68,12 @@ export interface Kit {
   bench: () => Promise<string>;
   /** The built dashboard against no hub (built once per run): a bench a runtime spec times. */
   built: () => Promise<string>;
+  /**
+   * The built dashboard served against `hub`, a hub the spec stands up
+   * itself (a stub answering the reads one surface makes, server-side
+   * rendering included): its address. It stops when the spec ends.
+   */
+  builtFor: (hub: string) => Promise<string>;
   /** One assertion: a PASS or FAIL line. Returns `ok`. */
   check: (assertion: string, ok: boolean, detail?: string) => boolean;
   /**
@@ -318,6 +324,13 @@ export class Run {
       },
       bench: () => this.bench(),
       built: () => this.builtBench(),
+      builtFor: async (hub) => {
+        const served = this.build().then(() => serve("preview", hub));
+        ends.push(async () => {
+          (await served).child.kill();
+        });
+        return (await served).base;
+      },
       fleet: async (respond) => {
         // Heavy while it builds and boots, and only then: the dashboard's
         // build holds one of the machine's slots while it runs (`build`),

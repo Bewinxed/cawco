@@ -1119,6 +1119,13 @@ const landingKey = (item: Pick<WorkItemRow, "id" | "taskId">): string =>
   item.taskId ?? item.id.slice(0, 8);
 
 /** The branch an item that lands `branch` or `pr` is pushed to: `cawco/tsk-12`. */
+/**
+ * Where an item's outputs land in its project's folder: `assets/tsk-12/`
+ * for an attempt at a task, `assets/<item>/` for a work item of none.
+ */
+export const outputsFolder = (item: Pick<WorkItemRow, "id" | "taskId">) =>
+  `assets/${landingKey(item)}`;
+
 export const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
   `cawco/${landingKey(item)}`;
 
@@ -4179,7 +4186,7 @@ export const createWorkItems = ({
         line: "\n\nOutputs not collected: the item belongs to no project.",
       };
     }
-    const folder = `assets/${landingKey(item)}`;
+    const folder = outputsFolder(item);
     try {
       const files: { path: string; content: Uint8Array }[] = [];
       for (const path of outputs) {

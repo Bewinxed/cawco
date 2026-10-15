@@ -706,10 +706,45 @@ export const readFolderFile = async (
   return { path: rel, content, size: bytes.byteLength };
 };
 
+/** The pictures the hub serves a folder file as, by extension. */
+export const IMAGE_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  avif: "image/avif",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+};
+
+/** A path's extension, lowercase, without its dot (`png`); empty when none. */
+export const fileExtension = (path: string): string => {
+  const name = basename(path);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+};
+
+/**
+ * A folder file's bytes as served to a page: as `type`, never sniffed as
+ * anything else, read again every time, and an SVG opened on its own runs
+ * nothing.
+ */
+export const servedFile = (bytes: Uint8Array<ArrayBuffer>, type: string) =>
+  new Response(bytes, {
+    headers: {
+      "content-type": type,
+      "cache-control": "no-cache",
+      "x-content-type-options": "nosniff",
+      "content-security-policy":
+        "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    },
+  });
+
 /**
  * One file's bytes, whole, text or not, up to `limit`: what a mockup draws
- * from a project's design (a font, an image). Refused like a read: a path
- * out of the folder, a link out of it, a folder, or too large.
+ * from a project's design (a font, an image), or an output an attempt
+ * handed in. Refused like a read: a path out of the folder, a link out of
+ * it, a folder, or too large.
  */
 export const readFolderBytes = async (
   projectId: string,
@@ -729,7 +764,7 @@ export const readFolderBytes = async (
   if (info.size > limit) {
     throw new FolderRefusal(
       413,
-      `${rel} is ${size(info.size)}; a design file is ${size(limit)} at most.`
+      `${rel} is ${size(info.size)}; reads stop at ${size(limit)}.`
     );
   }
   return { path: rel, bytes: new Uint8Array(await readFile(real)) };

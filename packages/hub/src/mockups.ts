@@ -53,10 +53,13 @@ import {
 import { Elysia, t } from "elysia";
 import { CLOUD_MARKER, refuse, unsafe } from "./openui";
 import {
+  fileExtension as extension,
   FolderRefusal,
+  IMAGE_TYPES,
   readFolderBytes,
   readFolderFile,
   refused,
+  servedFile,
 } from "./project-folder";
 
 // lang-core's runtime telemetry is opt-in; this process turns it off
@@ -75,17 +78,6 @@ const FONT_TYPES: Record<string, string> = {
   ttf: "font/ttf",
   otf: "font/otf",
 };
-const IMAGE_TYPES: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  webp: "image/webp",
-  avif: "image/avif",
-  gif: "image/gif",
-  svg: "image/svg+xml",
-};
-const extension = (path: string): string =>
-  posix.extname(path).slice(1).toLowerCase();
 
 interface Built extends ProjectMockups {
   components: string[];
@@ -723,19 +715,10 @@ export const mockupRoutes = (projectExists: (id: string) => boolean) => {
             DESIGN_FILE_LIMIT
           );
           const ext = extension(query.path);
-          return new Response(bytes, {
-            headers: {
-              "content-type":
-                IMAGE_TYPES[ext] ??
-                FONT_TYPES[ext] ??
-                "application/octet-stream",
-              "cache-control": "no-cache",
-              "x-content-type-options": "nosniff",
-              // An SVG opened on its own runs nothing.
-              "content-security-policy":
-                "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-            },
-          });
+          return servedFile(
+            bytes,
+            IMAGE_TYPES[ext] ?? FONT_TYPES[ext] ?? "application/octet-stream"
+          );
         } catch (error) {
           return refused(error);
         }

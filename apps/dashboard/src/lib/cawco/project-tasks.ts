@@ -105,11 +105,27 @@ export interface TaskAttempt {
    * hear who). Null while live and once done.
    */
   endedHow: string | null;
+  /** What its session said it did, in one or two sentences; null until it finished that way. */
+  headline: string | null;
   /** The session running it. */
   instanceId: string;
   /** When it was filed, ms epoch. */
   startedAt: number;
   state: AttemptState;
+  workItemId: string;
+}
+
+/**
+ * What a task's newest finished attempt handed back (the hub's
+ * `TaskResult`): its session's report of what it did, the way an attempt
+ * presents its result, beside the outputs it handed in.
+ */
+export interface TaskResult {
+  /** When the attempt finished, ms epoch. */
+  at: number;
+  headline: string | null;
+  /** Its report, in full (markdown). */
+  report: string;
   workItemId: string;
 }
 
@@ -235,6 +251,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   problems: string[];
   rank: string | null;
   related: string[];
+  /** What its newest finished attempt handed back; null until one has. */
+  result: TaskResult | null;
   /** The body's other `## ` sections, as written. */
   sections: { heading: string; text: string }[];
   stage: string;
@@ -436,12 +454,90 @@ export function flagsOf(task: TaskSummary | TaskView): {
   };
 }
 
-/** An attempt's state as a status word (WORDS.md: working / done / failed). */
-export const attemptWord = (state: AttemptState): string =>
-  ({
-    starting: "Working",
-    running: "Working",
-    done: "Done",
-    failed: "Failed",
-    cancelled: "Stopped",
-  })[state];
+/**
+ * A fresh attempt at a task, reporting to the session named or the project's
+ * lead: what Try again runs when the last attempt finished (a failed or
+ * stopped one is retried in its own workspace, `retryTask`).
+ */
+export const startAttempt = (
+  projectId: string,
+  taskId: string,
+  parentInstanceId?: string
+): Promise<AttemptStart> =>
+  send(
+    `${one(projectId, taskId)}/attempts`,
+    json("POST", parentInstanceId ? { parentInstanceId } : {})
+  );
+
+/**
+ * One output an attempt handed in, by the name the task file gives it
+ * (`outputs: [post.md]`): the hub serves it from where it copied it, a
+ * picture as itself and anything else as text.
+ */
+export const outputUrl = (
+  projectId: string,
+  taskId: string,
+  name: string
+): string =>
+  `${one(projectId, taskId)}/outputs/file?name=${encodeURIComponent(name)}`;
+
+/**
+ * An output, whole, as the hub served it: read as text, or as a picture's
+ * bytes. Throws the hub's sentence when it refuses.
+ */
+export async function readOutput(
+  projectId: string,
+  taskId: string,
+  name: string
+): Promise<Response> {
+  const response = await fetch(outputUrl(projectId, taskId, name));
+  if (unreachedAnswer(response)) {
+    throw new HubUnreachable(HUB_UNREACHABLE);
+  }
+  if (!response.ok) {
+    throw new Error(await said(response));
+  }
+  return response;
+}
+
+/** A span of time in plain words: `40 s`, `12 min`, `2 h 5 min`. */
+export const spanWords = (ms: number): string => {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) {
+    return `${seconds} s`;
+  }
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours} h ${rest} min` : `${hours} h`;
+};
+
+/** The status tint an attempt's state takes (DESIGN.md, status chips). */
+export type AttemptTone = "live" | "done" | "fail" | "idle";
+
+/**
+ * An attempt's state said in plain words, with how long it took or has taken
+ * so far (WORDS.md: attempt): "Finished in 1 min", "Failed after 3 min",
+ * "Stopped after 40 s", "Working for 2 min".
+ */
+export const attemptSentence = (
+  attempt: TaskAttempt,
+  now: number
+): { tone: AttemptTone; text: string; word: string } => {
+  const took = spanWords((attempt.endedAt ?? now) - attempt.startedAt);
+  switch (attempt.state) {
+    case "starting":
+      return { word: "Starting", tone: "live", text: "Starting" };
+    case "running":
+      return { word: "Working", tone: "live", text: `Working for ${took}` };
+    case "done":
+      return { word: "Finished", tone: "done", text: `Finished in ${took}` };
+    case "failed":
+      return { word: "Failed", tone: "fail", text: `Failed after ${took}` };
+    default:
+      return { word: "Stopped", tone: "idle", text: `Stopped after ${took}` };
+  }
+};

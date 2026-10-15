@@ -1,25 +1,32 @@
 <script lang="ts">
   import { failureWords as message } from "#lib/cawco/hub-read.js";
-  import { rowHref } from "#lib/cawco/links.js";
   /**
-   * A task, whole, in the side sheet: its title, stage, description,
-   * acceptance criteria, to-dos, edges and attempts. Every change is the
-   * hub's to make (each is a commit in the project folder), so each waits
-   * for the hub's answer and shows the task as the hub wrote it back; a
-   * refusal is said beside what it refused, in the hub's own words.
+   * A task, whole, in the side sheet, read to review it: what its attempts
+   * handed in (its result, each output drawn as the thing it is), its
+   * attempts and their transcripts, then its title, stage, description,
+   * acceptance criteria, to-dos and edges. Every part says what it is: the
+   * header's facts are labelled, its labels are labels (badges, which take
+   * no press) and its actions are buttons with a verb.
+   *
+   * Every change is the hub's to make (each is a commit in the project
+   * folder), so each waits for the hub's answer and shows the task as the
+   * hub wrote it back; a refusal is said beside what it refused, in the
+   * hub's own words.
    *
    * The stage picker offers the moves the project's stages allow you from
    * where the task is; the rest are listed, disabled, so the stages read in
    * order. The hub checks the move again either way.
+   *
+   * An attempt's transcript opens under it; expanded, it takes a pane of its
+   * own beside the task at the sheet's full height (over it on a narrow
+   * screen), and the sheet widens to hold both.
    */
   import {
     addTodo,
-    attemptWord,
     changeTodo,
     flagsOf,
     linkTask,
     readTask,
-    retryTask,
     type StagesView,
     stageLabel,
     type TaskEdge,
@@ -28,7 +35,7 @@
     updateTask,
   } from "#lib/cawco/project-tasks.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
-  import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -37,14 +44,22 @@
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
+    IconClock,
     IconClose,
     IconError,
     IconLock,
     IconNeedsYou,
+    IconReport,
+    IconStop,
     IconWorking,
   } from "#lib/icons.js";
   import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
+  import MessageBody from "../MessageBody.svelte";
   import RowFault from "../RowFault.svelte";
+  import AttemptTranscript from "./AttemptTranscript.svelte";
+  import ResultCard from "./ResultCard.svelte";
+  import ResultView from "./ResultView.svelte";
+  import TaskAttempts from "./TaskAttempts.svelte";
   import TextSection from "./TextSection.svelte";
   import TodoList from "./TodoList.svelte";
 
@@ -77,9 +92,11 @@
   let titleDraft = $state<string | null>(null);
   let titleProblem = $state<string | null>(null);
   let moving = $state(false);
-  let retrying = $state(false);
-  let retryProblem = $state<string | null>(null);
   let sheet = $state<HTMLElement | null>(null);
+  /** The attempt shown, by work item; null: the newest. */
+  let chosenAttempt = $state<string | null>(null);
+  /** The shown attempt's transcript is in its own pane at the sheet's height. */
+  let expanded = $state(false);
 
   const summary = $derived(tasks.find((each) => each.id === taskId) ?? null);
   const byId = $derived(new Map(tasks.map((each) => [each.id, each])));
@@ -127,8 +144,42 @@
       stageProblem = null;
       edgeProblem = null;
       titleProblem = null;
-      retryProblem = null;
+      chosenAttempt = null;
+      expanded = false;
     }
+  });
+
+  /** The attempt whose transcript the pane holds, and what it is called. */
+  const paneAttempt = $derived.by(() => {
+    const attempts = shown?.attempts ?? [];
+    const index = Math.max(
+      0,
+      attempts.findIndex((each) => each.workItemId === chosenAttempt)
+    );
+    const attempt = attempts[index];
+    return attempt
+      ? { attempt, name: `Attempt ${attempts.length - index}` }
+      : null;
+  });
+  const open = $derived(expanded && paneAttempt !== null);
+  /** An attempt has finished, so its outputs are in the project's folder. */
+  const handedIn = $derived(
+    shown?.attempts.some((attempt) => attempt.state === "done") ?? false
+  );
+  /** What the Result section is: which attempt reported it and when, or what will be there. */
+  const resultLine = $derived.by(() => {
+    const result = shown?.result;
+    const attempts = shown?.attempts ?? [];
+    if (result) {
+      const at = attempts.findIndex(
+        (each) => each.workItemId === result.workItemId
+      );
+      const who = at < 0 ? "The attempt" : `Attempt ${attempts.length - at}`;
+      return `${who} finished ${formatDistanceToNow(new Date(result.at))} and handed this in.`;
+    }
+    return handedIn
+      ? "What the finished attempt handed in."
+      : "What an attempt hands in shows here once one finishes.";
   });
 
   async function read(id: string) {
@@ -195,35 +246,6 @@
       edgeProblem = message(error);
     }
   }
-
-  /** A fresh attempt at a task whose last one failed; it reports to the project's lead. */
-  async function retry() {
-    if (!shown) {
-      return;
-    }
-    const { id } = shown;
-    retrying = true;
-    retryProblem = null;
-    try {
-      await retryTask(projectId, id);
-      const fresh = await readTask(projectId, id);
-      if (taskId === id) {
-        took(fresh);
-      }
-    } catch (error) {
-      retryProblem = message(error);
-    } finally {
-      retrying = false;
-    }
-  }
-
-  /** An attempt's status word takes its status tint; anything else has none. */
-  const TINT: Record<string, BadgeVariant> = {
-    Working: "live",
-    "Needs you": "attn",
-    Done: "done",
-    Failed: "fail",
-  };
 
   const titleOf = (id: string) => byId.get(id)?.title;
   const when = (at: number) => new Date(at).toLocaleString();
@@ -295,7 +317,10 @@
        button would otherwise open ringed, as if the keyboard had put it
        there. Tab walks in from the top. -->
   <Sheet.Content
-    class="task-sheet gap-0 p-0 data-[side=right]:w-full max-sm:data-[side=right]:border-l-0 data-[side=right]:sm:max-w-md"
+    class="task-sheet gap-0 p-0 data-[side=right]:w-full max-sm:data-[side=right]:border-l-0 {open
+      ? 'data-[side=right]:sm:max-w-none'
+      : 'data-[side=right]:sm:max-w-2xl'}"
+    data-transcript-open={open}
     onOpenAutoFocus={(event) => {
       event.preventDefault();
       sheet?.focus({ preventScroll: true });
@@ -303,288 +328,362 @@
     side="right"
     bind:ref={sheet}
   >
-    <Sheet.Header class="head">
-      <div class="meta">
-        <span class="id">{taskId}</span>
-        {#if shown}
-          <Select.Root
-            disabled={moving}
-            onValueChange={move}
-            type="single"
-            value={shown.stage}
-          >
-            <Select.Trigger aria-label="Stage" press="tint" size="sm">
-              {stageLabel(shown.stage)}
-            </Select.Trigger>
-            <Select.Content>
-              {#each stages.stages as stage (stage.name)}
-                <Select.Item
-                  disabled={stage.name !== shown.stage &&
-                    !allowed.has(stage.name)}
-                  label={stageLabel(stage.name)}
-                  value={stage.name}
-                >
-                  <span>{stageLabel(stage.name)}</span>
-                  {#if stage.kind === "you"}
-                    <IconNeedsYou class="text-[var(--status-attn-glyph)]" />
-                  {/if}
-                </Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-          <span class="dates">
-            Created
-            <time
-              datetime={new Date(shown.createdAt).toISOString()}
-              title={when(shown.createdAt)}
-              >{formatTimestamp(new Date(shown.createdAt))}</time
-            >
-            · Updated
-            <time
-              datetime={new Date(shown.updatedAt).toISOString()}
-              title={when(shown.updatedAt)}
-              >{formatDistanceToNow(new Date(shown.updatedAt))}</time
-            >
-          </span>
-        {:else}
-          <Skeleton class="h-[var(--c-btn-h-sm)] w-24" />
-        {/if}
-      </div>
-      {#if titleDraft !== null}
-        <form
-          onsubmit={(event) => {
-            event.preventDefault();
-            saveTitle();
-          }}
-        >
-          <Input
-            aria-label="Title"
-            autocomplete="off"
-            class="text-title"
-            onblur={saveTitle}
-            onkeydown={(event) => {
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                titleDraft = null;
-                titleProblem = null;
-              }
+    <div class="frame" class:split={open}>
+      {#if open && paneAttempt}
+        <div class="side">
+          <AttemptTranscript
+            attempt={paneAttempt.name}
+            expanded
+            instanceId={paneAttempt.attempt.instanceId}
+            ontoggle={() => {
+              expanded = false;
             }}
-            bind:value={titleDraft}
-            {@attach (node) => node.focus()}
           />
-        </form>
-      {:else}
-        <Sheet.Title class="title">
-          <button
-            class="title-button press-tint focus-inset"
-            disabled={!shown}
-            onclick={() => {
-              titleDraft = shown?.title ?? "";
-            }}
-            title="Edit the title"
-            type="button"
-          >
-            {shown?.title ?? summary?.title ?? ""}
-          </button>
-        </Sheet.Title>
-      {/if}
-      <RowFault again={saveTitle} reason={titleProblem} />
-      <RowFault reason={stageProblem} />
-      {#if shown?.needsYou || flags.live || flags.failed || flags.stopped || flags.queued || flags.blockedBy.length > 0 || (shown?.labels.length ?? 0) > 0}
-        <div class="flags">
-          {#if shown?.needsYou}
-            <Badge variant="attn"><IconNeedsYou /><span>Needs you</span></Badge>
-          {/if}
-          {#if flags.live}
-            <Badge variant="live"><IconWorking /><span>Working</span></Badge>
-          {:else if flags.failed}
-            <Badge variant="fail"
-              ><IconError /><span>Last attempt failed</span></Badge
-            >
-          {:else if flags.stopped}
-            <!-- Who stopped it is the attempt's own line below. -->
-            <Badge variant="secondary"><span>Stopped</span></Badge>
-          {:else if flags.queued}
-            <Badge variant="secondary"><span>Queued</span></Badge>
-          {/if}
-          {#if flags.blockedBy.length > 0}
-            <Badge variant="secondary"
-              ><IconLock /><span>Waits on {flags.blockedBy.join(", ")}</span
-              ></Badge
-            >
-          {/if}
-          {#each shown?.labels ?? [] as label (label)}
-            <Badge variant="secondary"><span>{label}</span></Badge>
-          {/each}
         </div>
       {/if}
-      <Sheet.Description class="sr-only">
-        The task's description, acceptance criteria, to-dos, edges and attempts.
-      </Sheet.Description>
-    </Sheet.Header>
-
-    <div class="body">
-      {#if readProblem}
-        <Alert variant="destructive">
-          <AlertDescription>
-            {readProblem}
-            <Button
-              class="mt-2"
-              onclick={() => taskId && read(taskId)}
-              size="sm"
-              variant="outline">Retry</Button
+      <div class="review">
+        <Sheet.Header class="task-head">
+          <div class="meta">
+            <span class="id" title={taskId ?? undefined}
+              >Task {shown?.number ?? summary?.number ?? ""}</span
             >
-          </AlertDescription>
-        </Alert>
-      {:else if !shown}
-        <div aria-hidden="true" class="skeleton">
-          <Skeleton class="h-4 w-1/3" />
-          <Skeleton class="h-3.5 w-full" />
-          <Skeleton class="h-3.5 w-11/12" />
-          <Skeleton class="h-3.5 w-3/5" />
-          <Skeleton class="mt-4 h-4 w-1/4" />
-          <Skeleton class="h-[var(--c-btn-h-sm)] w-full" />
-          <Skeleton class="h-[var(--c-btn-h-sm)] w-full" />
-        </div>
-      {:else}
-        {#if shown.problems.length > 0}
-          <Alert variant="warning">
-            <AlertDescription>{shown.problems.join(" ")}</AlertDescription>
-          </Alert>
-        {/if}
-
-        <TextSection
-          empty="Say what this task is for, so a session picking it up starts from it."
-          heading="Description"
-          onsave={async (description) => {
-            if (shown) {
-              took(await updateTask(projectId, shown.id, { description }));
-            }
-          }}
-          text={shown.description}
-        />
-
-        <TextSection
-          empty="List what has to be true for this task to count as done."
-          heading="Acceptance criteria"
-          onsave={async (acceptance) => {
-            if (shown) {
-              took(await updateTask(projectId, shown.id, { acceptance }));
-            }
-          }}
-          text={shown.acceptance}
-        />
-
-        <TodoList
-          onadd={async (text, under) => {
-            if (shown) {
-              took(await addTodo(projectId, shown.id, { text, under }));
-            }
-          }}
-          onedit={async (todo, text) => {
-            if (shown) {
-              took(await changeTodo(projectId, shown.id, todo, { text }));
-            }
-          }}
-          ontick={async (todo, done) => {
-            if (shown) {
-              took(await changeTodo(projectId, shown.id, todo, { done }));
-            }
-          }}
-          todos={shown.todos}
-        />
-
-        <section class="part">
-          <h3 class="kit-section-head">Edges</h3>
-          <RowFault reason={edgeProblem} />
-          <div class="edge">
-            <span class="edge-name">After</span>
-            <div class="edge-list">
-              {#each shown.after as id (id)}
-                {@render ref(id, () => link("after", id, true))}
-              {/each}
-              {@render pick(
-                shown.after.length > 0
-                  ? "Add another"
-                  : "Add a task it waits on",
-                "after"
-              )}
-            </div>
+            {#if shown}
+              <span class="dates">
+                Created
+                <time
+                  datetime={new Date(shown.createdAt).toISOString()}
+                  title={when(shown.createdAt)}
+                  >{formatTimestamp(new Date(shown.createdAt))}</time
+                >
+                · Updated
+                <time
+                  datetime={new Date(shown.updatedAt).toISOString()}
+                  title={when(shown.updatedAt)}
+                  >{formatDistanceToNow(new Date(shown.updatedAt))}</time
+                >
+              </span>
+            {/if}
           </div>
-          <div class="edge">
-            <span class="edge-name">Parent</span>
-            <div class="edge-list">
-              {#if shown.parent}
-                {@render ref(shown.parent, () =>
-                  link("parent", shown?.parent ?? "", true)
-                )}
-              {:else}
-                {@render pick("Set a parent", "parent")}
-              {/if}
-            </div>
-          </div>
-          {#if shown.related.length > 0}
-            <div class="edge">
-              <span class="edge-name">Related</span>
-              <div class="edge-list">
-                {#each shown.related as id (id)}
-                  {@render ref(id)}
-                {/each}
-              </div>
-            </div>
+          {#if titleDraft !== null}
+            <form
+              onsubmit={(event) => {
+                event.preventDefault();
+                saveTitle();
+              }}
+            >
+              <Input
+                aria-label="Title"
+                autocomplete="off"
+                class="text-title"
+                onblur={saveTitle}
+                onkeydown={(event) => {
+                  if (event.key === "Escape") {
+                    event.stopPropagation();
+                    titleDraft = null;
+                    titleProblem = null;
+                  }
+                }}
+                bind:value={titleDraft}
+                {@attach (node) => node.focus()}
+              />
+            </form>
+          {:else}
+            <Sheet.Title class="title">
+              <button
+                class="title-button press-tint focus-inset"
+                disabled={!shown}
+                onclick={() => {
+                  titleDraft = shown?.title ?? "";
+                }}
+                title="Edit the title"
+                type="button"
+              >
+                {shown?.title ?? summary?.title ?? ""}
+              </button>
+            </Sheet.Title>
           {/if}
-        </section>
-
-        {#if shown.attempts.length > 0 || flags.startProblem}
-          <section class="part">
-            <h3 class="kit-section-head">
-              Attempts
-              {#if shown.attempts.length > 0}
-                <span class="count num">{shown.attempts.length}</span>
-              {/if}
-            </h3>
-            <RowFault reason={flags.startProblem} />
-            {#if (flags.failed || flags.stopped) && !flags.live}
-              <div class="retry">
-                <Button
-                  label="Retry"
-                  onclick={retry}
-                  pending={retrying}
-                  pendingLabel="Retrying…"
-                  size="sm"
-                  variant="outline"
-                />
-                <RowFault reason={retryProblem} />
+          <RowFault again={saveTitle} reason={titleProblem} />
+          <!-- The task's facts, each under its name: the stage is a picker (a
+           control), the rest are labels (badges, which take no press). -->
+          <dl class="facts">
+            <div class="fact">
+              <dt>Stage</dt>
+              <dd>
+                {#if shown}
+                  <Select.Root
+                    disabled={moving}
+                    onValueChange={move}
+                    type="single"
+                    value={shown.stage}
+                  >
+                    <Select.Trigger aria-label="Stage" press="tint" size="sm">
+                      {stageLabel(shown.stage)}
+                    </Select.Trigger>
+                    <Select.Content>
+                      {#each stages.stages as stage (stage.name)}
+                        <Select.Item
+                          disabled={stage.name !== shown.stage &&
+                            !allowed.has(stage.name)}
+                          label={stageLabel(stage.name)}
+                          value={stage.name}
+                        >
+                          <span>{stageLabel(stage.name)}</span>
+                          {#if stage.kind === "you"}
+                            <IconNeedsYou
+                              class="text-[var(--status-attn-glyph)]"
+                            />
+                          {/if}
+                        </Select.Item>
+                      {/each}
+                    </Select.Content>
+                  </Select.Root>
+                {:else}
+                  <Skeleton class="h-[var(--c-btn-h-sm)] w-24" />
+                {/if}
+              </dd>
+            </div>
+            {#if shown?.needsYou || flags.live || flags.failed || flags.stopped || flags.queued}
+              <div class="fact">
+                <dt>Status</dt>
+                <dd class="badges">
+                  {#if shown?.needsYou}
+                    <Badge data-label variant="attn"
+                      ><IconNeedsYou /><span>Needs you</span></Badge
+                    >
+                  {/if}
+                  {#if flags.live}
+                    <Badge data-label variant="live"
+                      ><IconWorking /><span>An attempt is working</span></Badge
+                    >
+                  {:else if flags.failed}
+                    <Badge data-label variant="fail"
+                      ><IconError /><span>Last attempt failed</span></Badge
+                    >
+                  {:else if flags.stopped}
+                    <Badge data-label variant="secondary"
+                      ><IconStop /><span>Last attempt stopped</span></Badge
+                    >
+                  {:else if flags.queued}
+                    <Badge data-label variant="secondary"
+                      ><IconClock /><span>Waiting for a free slot</span></Badge
+                    >
+                  {/if}
+                </dd>
               </div>
             {/if}
-            <ol class="attempts">
-              {#each shown.attempts as attempt, index (attempt.workItemId)}
-                {@const word = attemptWord(attempt.state)}
-                <li class="attempt">
-                  <a
-                    class="attempt-name focus-inset"
-                    href={rowHref(attempt.instanceId)}
-                    >Attempt {shown.attempts.length - index}</a
-                  >
-                  <Badge variant={TINT[word] ?? "secondary"}
-                    ><span>{word}</span></Badge
-                  >
-                  <span class="attempt-when"
-                    >{when(attempt.endedAt ?? attempt.startedAt)}</span
-                  >
-                  {#if attempt.endedHow}
-                    <span class="attempt-how">{attempt.endedHow}</span>
-                  {/if}
-                </li>
-              {/each}
-            </ol>
-          </section>
-        {/if}
+            {#if flags.blockedBy.length > 0}
+              <div class="fact">
+                <dt>Waits on</dt>
+                <dd class="badges">
+                  {#each flags.blockedBy as id (id)}
+                    <Badge data-label title={titleOf(id)} variant="secondary"
+                      ><IconLock /><span>{id}</span></Badge
+                    >
+                  {/each}
+                </dd>
+              </div>
+            {/if}
+            {#if (shown?.labels.length ?? 0) > 0}
+              <div class="fact">
+                <dt>Labels</dt>
+                <dd class="badges">
+                  {#each shown?.labels ?? [] as label (label)}
+                    <Badge data-label variant="secondary"
+                      ><span>{label}</span></Badge
+                    >
+                  {/each}
+                </dd>
+              </div>
+            {/if}
+          </dl>
+          <RowFault reason={stageProblem} />
+          <Sheet.Description class="sr-only">
+            What the task's attempts handed in, its attempts and their
+            transcripts, its description, acceptance criteria, to-dos and edges.
+          </Sheet.Description>
+        </Sheet.Header>
 
-        <p class="path" title="The task's file in the project folder">
-          {shown.path}
-        </p>
-      {/if}
+        <div class="body">
+          {#if readProblem}
+            <Alert variant="destructive">
+              <AlertDescription>
+                {readProblem}
+                <Button
+                  class="mt-2"
+                  onclick={() => taskId && read(taskId)}
+                  size="sm"
+                  variant="outline">Retry</Button
+                >
+              </AlertDescription>
+            </Alert>
+          {:else if !shown}
+            <div aria-hidden="true" class="skeleton">
+              <Skeleton class="h-4 w-1/3" />
+              <Skeleton class="h-3.5 w-full" />
+              <Skeleton class="h-3.5 w-11/12" />
+              <Skeleton class="h-3.5 w-3/5" />
+              <Skeleton class="mt-4 h-4 w-1/4" />
+              <Skeleton class="h-[var(--c-btn-h-sm)] w-full" />
+              <Skeleton class="h-[var(--c-btn-h-sm)] w-full" />
+            </div>
+          {:else}
+            {#if shown.problems.length > 0}
+              <Alert variant="warning">
+                <AlertDescription>{shown.problems.join(" ")}</AlertDescription>
+              </Alert>
+            {/if}
+
+            {#if shown.result || shown.outputs.length > 0}
+              <section class="part" data-task-result>
+                <div class="part-head">
+                  <h3 class="kit-section-head">Result</h3>
+                  <p class="hint">{resultLine}</p>
+                </div>
+                {#if shown.result || handedIn}
+                  <div class="results">
+                    {#if shown.result}
+                      <!-- mark-line: the card draws its glyph and kind on its own mark line -->
+                      <ResultCard
+                        data-task-report=""
+                        glyph={IconReport}
+                        kind="Report"
+                      >
+                        {#if shown.result.headline}
+                          <p class="lead">{shown.result.headline}</p>
+                        {/if}
+                        <MessageBody source={shown.result.report} />
+                      </ResultCard>
+                    {/if}
+                    {#if handedIn}
+                      {#each shown.outputs as output (output)}
+                        <ResultView
+                          name={output}
+                          {projectId}
+                          taskId={shown.id}
+                        />
+                      {/each}
+                    {/if}
+                  </div>
+                {/if}
+              </section>
+            {/if}
+
+            {#if shown.attempts.length > 0}
+              <TaskAttempts
+                onchanged={(fresh) => {
+                  if (taskId === fresh.id) {
+                    took(fresh);
+                  }
+                }}
+                {projectId}
+                task={shown}
+                bind:chosen={chosenAttempt}
+              >
+                {#snippet transcript(attempt, name)}
+                  {#if open}
+                    <p class="hint">
+                      {name}'s transcript is open in its own pane.
+                    </p>
+                  {:else}
+                    <AttemptTranscript
+                      attempt={name}
+                      expanded={false}
+                      instanceId={attempt.instanceId}
+                      ontoggle={() => {
+                        expanded = true;
+                      }}
+                    />
+                  {/if}
+                {/snippet}
+              </TaskAttempts>
+            {:else if flags.startProblem}
+              <RowFault reason={flags.startProblem} />
+            {/if}
+
+            <TextSection
+              empty="Say what this task is for, so a session picking it up starts from it."
+              heading="Description"
+              onsave={async (description) => {
+                if (shown) {
+                  took(await updateTask(projectId, shown.id, { description }));
+                }
+              }}
+              text={shown.description}
+            />
+
+            <TextSection
+              empty="List what has to be true for this task to count as done."
+              heading="Acceptance criteria"
+              onsave={async (acceptance) => {
+                if (shown) {
+                  took(await updateTask(projectId, shown.id, { acceptance }));
+                }
+              }}
+              text={shown.acceptance}
+            />
+
+            <TodoList
+              onadd={async (text, under) => {
+                if (shown) {
+                  took(await addTodo(projectId, shown.id, { text, under }));
+                }
+              }}
+              onedit={async (todo, text) => {
+                if (shown) {
+                  took(await changeTodo(projectId, shown.id, todo, { text }));
+                }
+              }}
+              ontick={async (todo, done) => {
+                if (shown) {
+                  took(await changeTodo(projectId, shown.id, todo, { done }));
+                }
+              }}
+              todos={shown.todos}
+            />
+
+            <section class="part">
+              <h3 class="kit-section-head">Edges</h3>
+              <RowFault reason={edgeProblem} />
+              <div class="edge">
+                <span class="edge-name">After</span>
+                <div class="edge-list">
+                  {#each shown.after as id (id)}
+                    {@render ref(id, () => link("after", id, true))}
+                  {/each}
+                  {@render pick(
+                    shown.after.length > 0
+                      ? "Add another"
+                      : "Add a task it waits on",
+                    "after"
+                  )}
+                </div>
+              </div>
+              <div class="edge">
+                <span class="edge-name">Parent</span>
+                <div class="edge-list">
+                  {#if shown.parent}
+                    {@render ref(shown.parent, () =>
+                      link("parent", shown?.parent ?? "", true)
+                    )}
+                  {:else}
+                    {@render pick("Set a parent", "parent")}
+                  {/if}
+                </div>
+              </div>
+              {#if shown.related.length > 0}
+                <div class="edge">
+                  <span class="edge-name">Related</span>
+                  <div class="edge-list">
+                    {#each shown.related as id (id)}
+                      {@render ref(id)}
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            </section>
+          {/if}
+        </div>
+      </div>
     </div>
   </Sheet.Content>
 </Sheet.Root>
@@ -594,7 +693,9 @@
   :global(.task-sheet:focus-visible) {
     outline: none;
   }
-  :global(.task-sheet) :global(.head) {
+  /* The sheet's own head, by a name no part inside it uses (a result
+     card's and the transcript pane's heads are `.head` too). */
+  :global(.task-sheet) :global(.task-head) {
     gap: var(--space-2);
     padding: var(--space-5) var(--space-5) var(--space-3);
     border-block-end: 1px solid var(--border-hairline);
@@ -606,18 +707,14 @@
     gap: var(--space-2);
     padding-inline-end: var(--space-8);
   }
-  /* Its own line under the id and stage: the sheet is too narrow for all three. */
   .dates {
-    flex-basis: 100%;
     font: var(--type-meta);
     color: var(--ink-muted);
-    white-space: nowrap;
   }
   .id {
     font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
   }
   :global(.task-sheet) :global(.title) {
     font: var(--type-title);
@@ -639,10 +736,62 @@
       background: var(--surface-hover);
     }
   }
-  .flags {
+  /* The task's facts: each name in the label role over a fixed column, its
+     value beside it. */
+  .facts {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+  }
+  .fact {
+    display: contents;
+  }
+  .fact dt {
+    font: var(--type-label);
+    color: var(--ink-muted);
+  }
+  .fact dd {
+    min-inline-size: 0;
+    margin: 0;
+  }
+  .badges {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
+  }
+
+  /* The sheet's frame: the review alone, or — the transcript expanded — the
+     transcript's pane and the review side by side, the review where it
+     stood at the sheet's right edge. A narrow sheet holds the pane alone. */
+  .frame {
+    display: grid;
+    flex: 1 1 auto;
+    grid-template-columns: minmax(0, 1fr);
+    min-block-size: 0;
+  }
+  .review,
+  .side {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    min-inline-size: 0;
+  }
+  .frame.split .review {
+    display: none;
+  }
+  @media (width >= 64rem) {
+    .frame.split {
+      /* The review takes 40% of the sheet, between the narrow sheet's
+         26rem and its own 42rem, so the transcript keeps the larger share
+         on a tablet as on a desk. */
+      grid-template-columns: minmax(0, 1fr) clamp(26rem, 40%, 42rem);
+    }
+    .frame.split .review {
+      display: flex;
+      border-inline-start: 1px solid var(--border-hairline);
+    }
   }
   .body {
     display: flex;
@@ -710,51 +859,24 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .attempts {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  .part-head {
+    min-inline-size: 0;
   }
-  .attempt {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
+  .hint {
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
-  .attempt-name {
-    font: var(--type-label);
+  /* A report's headline: its outcome, read first. */
+  .lead {
+    font: var(--type-body);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
+    text-wrap: pretty;
   }
-  .attempt-when {
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* How it ended, on its own line under the attempt's name. */
-  .attempt-how {
-    flex-basis: 100%;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  .retry {
+  .results {
     display: flex;
     flex-direction: column;
-    align-items: start;
-    gap: var(--space-1);
-  }
-  .path {
-    margin-block-start: auto;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-    overflow-wrap: anywhere;
+    gap: var(--space-4);
+    min-inline-size: 0;
   }
 </style>
