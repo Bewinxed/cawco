@@ -1673,20 +1673,20 @@ const replaceOlder = async (
   // answer its previews but never its own next curl (5be5bfbb, 2026-10-15:
   // its server on 5222 "gone" at each turn after a handover). So a boundary
   // whose work serves on a port is kept as it is, armed, and handed over at
-  // the first ensure after its last listener ends; one nothing holds closes
-  // once quiet ({@link sweepQuiet}), and its next start is of this form.
+  // the first look after its last listener ends ({@link handOverStale}); one
+  // nothing holds closes once quiet ({@link sweepQuiet}), and its next start
+  // is of this form.
   const serving = (await servedPorts(ref.id, held)).join(", ");
   if (serving) {
-    forgetStale(ref.id);
+    replaceSoon(ref);
     if (keptServing.get(ref.id) !== serving) {
       keptServing.set(ref.id, serving);
       console.info(
-        `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work listens on ${serving}, and handed over at the first start after that ends`
+        `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work listens on ${serving}, and handed over once that ends`
       );
     }
     return armHook(ref.id, held);
   }
-  keptServing.delete(ref.id);
   const fresh = await handOver(client, ref, held);
   forgetStale(ref.id);
   return fresh;
@@ -2509,8 +2509,9 @@ const servedPorts = async (id: string, held: Held): Promise<number[]> => {
 
 /**
  * The workspaces whose boundary of an older form, or on a retiring keeper,
- * is kept as it is because its work serves on a port ({@link ensure}), each
- * with those ports as last said: a handover is said once per change.
+ * is kept as it is because its work serves on a port ({@link replaceOlder}),
+ * each with those ports as last said: said once per change. Each stays
+ * {@link stale}, looked at until its last listener ends, then handed over.
  */
 const keptServing = new Map<string, string>();
 
@@ -2789,6 +2790,14 @@ const handOverStale = async (): Promise<void> => {
         forgetStale(ref.id);
         continue;
       }
+      // One kept while its work serves ({@link replaceOlder}) is only looked
+      // at, not ensured: an ensure is a use, and its quiet time must run.
+      if (
+        keptServing.has(ref.id) &&
+        (await servedPorts(ref.id, held)).length > 0
+      ) {
+        continue;
+      }
       await ensureBoundary(ref);
     } catch (error) {
       console.warn(
@@ -2867,6 +2876,7 @@ const stopLooking = (): void => {
 
 const forgetStale = (id: string): void => {
   stale.delete(id);
+  keptServing.delete(id);
   stopLooking();
 };
 
@@ -3184,7 +3194,6 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     forgetStale(id);
     forgetRetiring(id);
     forgetStubbed(id);
-    keptServing.delete(id);
     const boundaries = [held, ...(await readRetiring(id))];
     for (const boundary of boundaries) {
       // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, as an archive closes them
