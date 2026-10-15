@@ -6,12 +6,16 @@
  * open, with a bottom sheet open, and across the sidebar's own theme
  * switch. Each state is read once:
  *
- *  - `.edge-top::after` and `.edge-bottom::after`: fixed, pressing nothing,
- *    at least 12px tall, opaque;
+ *  - `.edge-top` and `.edge-bottom`: fixed, pressing nothing, at least 12px
+ *    tall, opaque;
+ *  - what WebKit's edge sampler finds at the middle of each edge (the first
+ *    fixed box up from the element hit, pointer-events ignored) is that
+ *    strip, in the composited colour of the surface under it: the dimmed
+ *    bar with a bottom sheet open, the bar itself on the home;
  *  - each strip's colour is the colour the page paints where the strip
  *    stands (the stack of backgrounds under it, composited as drawn);
- *  - html's background is the top colour, body's the bottom;
- *  - `theme-color` is the top colour;
+ *  - html's background is the composited top colour, body's the bottom;
+ *  - `theme-color` is the composited top colour;
  *  - no box around either strip has a transform;
  *  - the theme switch moves all of them (the colours before and after it
  *    differ);
@@ -40,6 +44,11 @@ interface Edges {
   htmlBg: Rgba;
   meta: Rgba | null;
   metaRaw: string | null;
+  /** What WebKit's edge sampler finds at each edge's middle, and its colour. */
+  safari: {
+    bottom: { colour: Rgba; who: string };
+    top: { colour: Rgba; who: string };
+  };
   strips: {
     name: string;
     height: number;
@@ -159,17 +168,51 @@ function readEdges(page: Page): Promise<Edges> {
       if (!el) {
         throw new Error(`no ${selector}`);
       }
-      const after = getComputedStyle(el, "::after");
+      const style = getComputedStyle(el);
       return {
         el,
         name: selector,
-        colour: after.backgroundColor,
-        height: Number.parseFloat(after.height),
-        opacity: Number(after.opacity),
-        pointerEvents: after.pointerEvents,
-        position: after.position,
+        colour: style.backgroundColor,
+        height: Number.parseFloat(style.height),
+        opacity: Number(style.opacity),
+        pointerEvents: style.pointerEvents,
+        position: style.position,
       };
     });
+    /**
+     * The colour Safari extends past an edge, found as WebKit finds it
+     * (LocalFrameView.cpp, fixedContainerEdges): hit-test the middle of the
+     * viewport's edge ignoring pointer-events, walk up from the element hit
+     * to the first visible fixed or sticky box, and take its background; with
+     * none, the page's background (the body's, as the iPhone Simulator showed
+     * on nightly 3353).
+     */
+    const safariPick = (px: number, py: number) => {
+      const hit = document.createElement("style");
+      hit.textContent = "* { pointer-events: auto !important; }";
+      document.head.append(hit);
+      const target = document.elementFromPoint(px, py);
+      hit.remove();
+      for (let at = target; at; at = at.parentElement) {
+        const style = getComputedStyle(at);
+        if (
+          ["fixed", "sticky"].includes(style.position) &&
+          Number(style.opacity) > 0 &&
+          style.visibility !== "hidden"
+        ) {
+          return {
+            colour: solid(style.backgroundColor),
+            who: `${at.tagName.toLowerCase()}.${String(at.className).split(" ")[0]}`,
+          };
+        }
+      }
+      return {
+        colour: solid(getComputedStyle(document.body).backgroundColor),
+        who: "the page's background (body)",
+      };
+    };
+    const pickTop = safariPick(innerWidth / 2, 0);
+    const pickBottom = safariPick(innerWidth / 2, innerHeight - 1);
     const transformed: string[] = [];
     for (const strip of strips) {
       for (let at = strip.el.parentElement; at; at = at.parentElement) {
@@ -201,6 +244,7 @@ function readEdges(page: Page): Promise<Edges> {
       topUnder: topUnder.painted,
       bottomUnder: bottomUnder.painted,
       under: { top: topUnder.who, bottom: bottomUnder.who },
+      safari: { top: pickTop, bottom: pickBottom },
       htmlBg: solid(getComputedStyle(document.documentElement).backgroundColor),
       bodyBg: solid(getComputedStyle(document.body).backgroundColor),
       metaRaw,
@@ -235,21 +279,35 @@ const show = (c: Rgba | null) => (c ? `rgba(${c.join(",")})` : "none");
 function checkEdges(kit: Kit, label: string, e: Edges, drawn: boolean) {
   for (const strip of e.strips) {
     kit.check(
-      `${label}: ${strip.name}::after is fixed, presses nothing, ≥12px`,
+      `${label}: ${strip.name} is fixed, presses nothing, ≥12px`,
       strip.position === "fixed" &&
         strip.pointerEvents === "none" &&
         strip.height >= 12,
       `${strip.position}, ${strip.pointerEvents}, ${strip.height}px`
     );
     kit.check(
-      `${label}: ${strip.name}::after is ${drawn ? "drawn" : "not drawn"}`,
+      `${label}: ${strip.name} is ${drawn ? "drawn" : "not drawn"}`,
       strip.opacity === (drawn ? 1 : 0),
       `opacity ${strip.opacity}`
     );
   }
-  const top = drawn ? e.top : e.topUnder;
-  const bottom = drawn ? e.bottom : e.bottomUnder;
+  // The colours the page paints at each edge, composited as drawn: what the
+  // document, theme-color and Safari's pick must all be.
+  const top = e.topUnder;
+  const bottom = e.bottomUnder;
   if (drawn) {
+    kit.check(
+      `${label}: Safari's sampler picks the top strip, the composited top surface`,
+      e.safari.top.who.startsWith("div.edge-top") &&
+        same(e.safari.top.colour, top),
+      `${e.safari.top.who} ${show(e.safari.top.colour)} vs ${show(top)}`
+    );
+    kit.check(
+      `${label}: Safari's sampler picks the bottom strip, the composited bottom surface`,
+      e.safari.bottom.who.startsWith("div.edge-bottom") &&
+        same(e.safari.bottom.colour, bottom),
+      `${e.safari.bottom.who} ${show(e.safari.bottom.colour)} vs ${show(bottom)}`
+    );
     kit.check(
       `${label}: both strips are opaque`,
       e.top[3] === 255 && e.bottom[3] === 255,

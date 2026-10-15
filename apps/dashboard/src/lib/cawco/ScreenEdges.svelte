@@ -43,23 +43,29 @@
    *     As it closes they come back on the scrim's way out.
    * An edge under a scrim follows it in and out on the scrim's own clock.
    */
-  import { onMount } from "svelte";
+  import { theme } from "#lib/theme.svelte.js";
 
   let top = $state<HTMLElement | null>(null);
   /** The top edge's colour as drawn, for `theme-color`; none until read. */
   let topColour = $state<string | undefined>(undefined);
 
   /**
-   * Every change of either edge colour runs a transition on its strip (a
+   * Every change of an edge's state runs a transition on its strip (a
    * scrim's fade, or a step a millisecond long), so its end is where the
-   * colour is read: one listener for every state, the theme's included.
+   * colour is read. A theme switch turns every transition off while it
+   * flips (app.css `theme-flip`), so the scheme on screen is read too.
    */
   const read = () => {
     if (top) {
-      topColour = getComputedStyle(top, "::after").backgroundColor;
+      topColour = getComputedStyle(top).backgroundColor;
     }
   };
-  onMount(read);
+  $effect(() => {
+    // Again whenever the scheme drawn changes: the theme class is set by then.
+    if (theme.resolved) {
+      read();
+    }
+  });
 </script>
 
 <svelte:head>
@@ -172,9 +178,18 @@
     --edge-bottom-background: var(--sidebar);
   }
 
-  .edge-top::after,
-  .edge-bottom::after {
-    content: "";
+  /* The strips are fixed elements themselves, not a static element's
+     ::after: WebKit finds the colour to extend by hit-testing the middle of
+     each edge of the viewport (ignoring pointer-events) and walking up the
+     hit element's renderer lineage to the first fixed or sticky box, whose
+     own background it takes (LocalFrameView.cpp, fixedContainerEdges:
+     `midpointOnSide`, `findFixedContainer`). A pseudo-element hits as its
+     host, so a static host led the walk to <body> and <html>, found no fixed
+     box, and Safari fell back to the page's background (the body's, the
+     bottom edge): the status bar took the page's ground on the home and the
+     drawer's surface while it was open. */
+  .edge-top,
+  .edge-bottom {
     position: fixed;
     inset-inline: 0;
     /* Over every layer, toasts' (sonner, 1000) included: the strip is the
@@ -183,7 +198,7 @@
     pointer-events: none;
     opacity: var(--edge-shown);
   }
-  .edge-top::after {
+  .edge-top {
     top: -7px;
     block-size: max(12px, env(safe-area-inset-top));
     background-color: var(--edge-top-background);
@@ -191,7 +206,7 @@
       background-color var(--edge-top-fade) var(--ease-out),
       opacity var(--edge-show-fade) var(--ease-out);
   }
-  .edge-bottom::after {
+  .edge-bottom {
     bottom: -7px;
     block-size: max(12px, env(safe-area-inset-bottom));
     background-color: var(--edge-bottom-background);
