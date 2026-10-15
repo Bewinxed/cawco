@@ -66,6 +66,43 @@ podman_instance_gone() {
   podman_instance_closed "$name" "$root"
 }
 
+# THE IMAGE STORE OPENS WITH ONE RUN ROOT. libpod keeps its database at `<static dir>/db.sql`, the store's own
+# (podman v5.7.0 libpod/sqlite_state.go:59-63, :84), records the static dir, tmp dir, graph root, run root, graph driver
+# and volume path the first instance opened it with, and refuses every later one whose own differ ("database %s %q
+# does not match our %s %q", ValidateDBConfig, :308-437). So the instance that builds into the store is always the
+# one named here, its run root and tmp dir the same paths every time; one writer at a time holds it (flock). A rig
+# or stage 1 never opens this database: each reads the store as an additional image store (containers/storage), and
+# its own libpod database is in its own graph root.
+PROOF_STORE_INSTANCE=images
+
+# The store's libpod database, when it records another instance's paths (a store first opened under a per-run name,
+# before PROOF_STORE_INSTANCE), goes: it holds no image (those are containers/storage's, beside it) and, the builds'
+# containers each removed as their build ends, no container either, which is checked first.
+proof_store_database() {
+  local db="$PROOF_STORE/libpod/db.sql" run
+  [[ -f $db ]] || return 0
+  run=$(podman_instance_run "$PROOF_STORE_INSTANCE")
+  bun -e '
+    import { Database } from "bun:sqlite";
+    const [db, runRoot, tmpDir] = process.argv.slice(-3);
+    const handle = new Database(db, { readonly: true });
+    const config = handle.query("SELECT RunRoot, TmpDir FROM DBConfig").get();
+    const containers = handle.query("SELECT count(*) AS n FROM ContainerConfig").get().n;
+    if (!config || (config.RunRoot === runRoot && config.TmpDir === tmpDir)) process.exit(0);
+    if (containers > 0) {
+      console.error(`${db} records the run root ${config.RunRoot} and ${containers} container(s): it is not reset; remove the store to rebuild it`);
+      process.exit(2);
+    }
+    console.error(`${db} records the run root ${config.RunRoot} and tmp dir ${config.TmpDir}, not ${runRoot} and ${tmpDir}: it is reset (no container in it; the images stay)`);
+    process.exit(1);
+  ' "$db" "$run/run" "$run/tmp"
+  case $? in
+    0) return 0 ;;
+    1) rm -f "$db" "$db-wal" "$db-shm" ;;
+    *) return 1 ;;
+  esac
+}
+
 # proof_images CONTEXT NAME...: each image whose recipe is CONTEXT/NAME.Containerfile, in the image store, built
 # there unless it is already; prints `NAME=TAG` for each.
 proof_images() {
@@ -75,8 +112,9 @@ proof_images() {
   (
     flock 8
     local p name tag
-    p=$(podman_instance "images-$$" "$PROOF_STORE")
-    trap 'podman_instance_closed "images-$$" "$PROOF_STORE"' EXIT
+    proof_store_database >&2 || exit 1
+    p=$(podman_instance "$PROOF_STORE_INSTANCE" "$PROOF_STORE")
+    trap 'podman_instance_closed "$PROOF_STORE_INSTANCE" "$PROOF_STORE"' EXIT
     $p image exists "$BASE_LOCAL" || seed_base_image "$context/base-image.tar" $p >&2 || exit 1
     for name in "$@"; do
       tag="localhost/cawco-proof-$name:$(cat "$context/$name.Containerfile" <(echo "$BASE_IMAGE_ID") | sha256sum | cut -c1-16)"
