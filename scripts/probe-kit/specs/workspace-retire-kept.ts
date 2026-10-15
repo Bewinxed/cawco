@@ -12,16 +12,20 @@
  * `node_modules` and `.env*`. Two delegates of one parent each commit a
  * file and land it; I also leaves `.probe/x.ts`, `.probe/node_modules/dep.js`
  * and `.env.local` in its clone. The parent holds a preview artifact of P's
- * workspace, shown in its panel (rows as the hub keeps them: an artifact
- * goes only with its session, there is no route that deletes one). Both
- * set past the two idle hours:
+ * workspace, shown in its panel (its rows written as the hub keeps them: a
+ * preview of a port starts only with a server there to answer). Both set
+ * past the two idle hours:
  *
- * (a) A sweep leaves P, listing it in `previewed` with the artifact's name,
- *     its clone and row standing; the hub logs it once.
- * (b) The same sweep retires I and names a carry; the carry's `ignored/`
+ * (a) A sweep leaves P, its clone and row standing, and keeps it listed
+ *     with `previewedBy: ["task-review"]` in the sweep's `kept`, at GET
+ *     /api/workspaces/kept and in the parent's delegate_list; a second
+ *     sweep changes nothing, and the hub logs it kept once.
+ * (b) The first sweep retires I and names a carry; the carry's `ignored/`
  *     holds `.probe/x.ts` as written, and neither the dependency tree nor
  *     the secret file; its README names `ignored/`; I's clone is gone.
- * (c) The artifact deleted, the next sweep retires P, its clone gone.
+ * (c) DELETE /api/instances/<parent>/artifacts/<id> answers `showing: null`,
+ *     its artifact and shown-preview rows gone; the next sweep retires P,
+ *     its clone gone, and nothing is kept.
  *
  *   bun scripts/probe-kit/run.ts workspace-retire-kept
  */
@@ -34,6 +38,8 @@ import type { Kit, Spec } from "../kit";
 const TAG = /PROBE-KEPT-([PI])/;
 const FINISH = "mcp__cawco__finish_item";
 const BACKDATE_MS = 3 * 3_600_000;
+/** A size in words (core `sizeWords`). */
+const SIZE = /^\d+(\.\d)? (GB|MB|KB)$/;
 
 const commitCommand = (tag: string) =>
   [
@@ -92,9 +98,17 @@ interface Workspace {
   state: string;
 }
 
+interface Kept {
+  holds: string;
+  machine: string;
+  previewedBy?: string[];
+  size: string;
+  workspaceId: string;
+}
+
 interface Sweep {
   failed: { workspaceId: string; reason: string }[];
-  previewed: { workspaceId: string; artifacts: string[] }[];
+  kept: Kept[];
   retired: { workspaceId: string; carry: string | null }[];
 }
 
@@ -215,14 +229,52 @@ const spec: Spec = {
 
     // ── (a) a previewed workspace stays ─────────────────────────────────
     const first = await fleet.api<Sweep>("/api/workspaces/retire", {});
-    const shown = first.previewed.find((one) => one.workspaceId === wp.id);
+    const shownP = (kept: Kept[]) =>
+      kept.find((one) => one.workspaceId === wp.id);
     check(
-      "(a) the sweep leaves P, listed in previewed with task-review; its clone and row stand",
-      shown?.artifacts.join(",") === "task-review" &&
+      "(a) the sweep leaves P, kept with previewedBy task-review, nothing unlanded and its size; its clone and row stand",
+      shownP(first.kept)?.previewedBy?.join(",") === "task-review" &&
+        shownP(first.kept)?.holds === "nothing unlanded" &&
+        SIZE.test(shownP(first.kept)?.size ?? "") &&
         !first.retired.some((one) => one.workspaceId === wp.id) &&
         existsSync(wp.path) &&
         workspaceOf(wp.id).state === "active",
       JSON.stringify(first)
+    );
+    const { kept: listedKept } = await fleet.api<{ kept: Kept[] }>(
+      "/api/workspaces/kept"
+    );
+    const credential = (
+      await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text()
+    )
+      .split("\0")
+      .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
+      ?.slice("CAWCO_SESSION_CREDENTIAL=".length);
+    const listing = await fetch(`${fleet.base}/api/delegation/call/${parent}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${credential ?? ""}`,
+      },
+      body: JSON.stringify({ name: "delegate_list", arguments: {} }),
+    });
+    const said = await listing.text();
+    check(
+      "(a) GET /api/workspaces/kept and the parent's delegate_list list P with previewedBy task-review",
+      shownP(listedKept)?.previewedBy?.join(",") === "task-review" &&
+        listing.ok &&
+        said.includes(wp.id) &&
+        said.includes("previewedBy") &&
+        said.includes("task-review"),
+      `${JSON.stringify(listedKept)} | ${listing.status} ${said.slice(0, 1500)}`
+    );
+    const again = await fleet.api<Sweep>("/api/workspaces/retire", {});
+    check(
+      "(a) a second sweep leaves P as it was",
+      again.retired.length === 0 &&
+        shownP(again.kept)?.previewedBy?.join(",") === "task-review" &&
+        existsSync(wp.path),
+      JSON.stringify(again)
     );
 
     // ── (b) ignored files go to a carry ─────────────────────────────────
@@ -264,15 +316,35 @@ const spec: Spec = {
     );
 
     // ── (c) the artifact gone, P goes ───────────────────────────────────
-    fleet.write("DELETE FROM shown_previews WHERE artifact_id = ?", artifactId);
-    fleet.write("DELETE FROM artifacts WHERE id = ?", artifactId);
+    const deleted = await fetch(
+      `${fleet.base}/api/instances/${parent}/artifacts/${artifactId}`,
+      { method: "DELETE", signal: AbortSignal.timeout(60_000) }
+    );
+    const deletedText = await deleted.text();
+    const rowsLeft = [
+      ...fleet.query<{ id: string }>(
+        "SELECT id FROM artifacts WHERE id = ?",
+        artifactId
+      ),
+      ...fleet.query<{ id: string }>(
+        "SELECT artifact_id AS id FROM shown_previews WHERE artifact_id = ?",
+        artifactId
+      ),
+    ];
+    check(
+      "(c) DELETE on the parent's artifact answers 200, its panel showing nothing (no other artifact); its artifact and shown-preview rows are gone",
+      deleted.status === 200 &&
+        (JSON.parse(deletedText) as { showing?: unknown }).showing === null &&
+        rowsLeft.length === 0,
+      `${deleted.status} ${deletedText}; rows left: ${rowsLeft.length}`
+    );
     const second = await fleet.api<Sweep>("/api/workspaces/retire", {});
     check(
-      "(c) with the artifact deleted, the next sweep retires P, with no carry; its clone is gone, its row archived",
+      "(c) with the artifact deleted, the next sweep retires P, with no carry; nothing kept, its clone gone, its row archived",
       second.retired.some(
         (one) => one.workspaceId === wp.id && one.carry === null
       ) &&
-        second.previewed.length === 0 &&
+        second.kept.length === 0 &&
         !existsSync(wp.path) &&
         workspaceOf(wp.id).state === "archived",
       JSON.stringify(second)
@@ -281,9 +353,11 @@ const spec: Spec = {
       .split("\n")
       .filter((line) => line.includes("[workspace-retire]"));
     check(
-      "the hub logged P left once for its artifact, then retired; I retired with its carry",
+      "the hub logged P kept once for its artifact, then retired; I retired with its carry",
       hub.filter(
-        (line) => line.includes(`${wp.id} on `) && line.includes(": left,")
+        (line) =>
+          line.includes(`${wp.id} on `) &&
+          line.includes(": kept, its work over but shown in the artifact")
       ).length === 1 &&
         hub.some(
           (line) => line.includes(`${wp.id} on `) && line.includes(": retired")

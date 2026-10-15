@@ -20,7 +20,8 @@
  *   landed and was retired while it served the owner's two open previews,
  *   and the preview harness it kept in git-ignored files went with it. A
  *   previewed workspace is retired by the first sweep after its last such
- *   artifact goes (its session deleted), or archived by hand;
+ *   artifact goes (a person deletes it from the panel, a session with
+ *   `artifact_delete`, or it goes with its session), or archived by hand;
  * - its clone holds nothing that is nowhere else: no commit on HEAD or a
  *   local branch that no remote-tracking ref has, no `git status` entry
  *   (untracked files count; its items' handed-over outputs do not), no stash
@@ -39,10 +40,12 @@
  * Whatever is ended or idle longer is no longer a place work continues, and
  * a handoff to it is refused with words saying to delegate afresh.
  *
- * A workspace that holds unlanded work is never removed: it is kept and
- * listed (machine, workspace, what it holds, its clone's size), in
+ * A spent workspace that holds unlanded work, or that an artifact shows, is
+ * never removed: it is kept and listed (machine, workspace, what it holds,
+ * its clone's size, and `previewedBy`, the artifacts showing it), in
  * `delegate_list`'s `kept` and at `GET /api/workspaces/kept`, re-read every
- * sweep until it lands, is cleaned, or is archived by hand.
+ * sweep until it lands, is cleaned, its artifacts go, or it is archived by
+ * hand.
  */
 import type { DbShape, PublicInstanceRow, WorkspaceRow } from "./db";
 import type { HubLifetimeShape } from "./lifetime";
@@ -58,9 +61,11 @@ export const RETIRE_IDLE_MS = 2 * 3_600_000;
 /** How often the hub looks for spent workspaces on every online machine. */
 const RETIRE_SWEEP_MS = 10 * 60_000;
 
-/** A spent workspace kept for the unlanded work in it. */
+/** A spent workspace kept for the unlanded work in it, or for the artifacts that show it. */
 export interface KeptWorkspace extends HeldWork {
   checkedAt: string;
+  /** The names of the artifacts, any session's, that show what it serves: it is retired once they go. */
+  previewedBy?: string[];
 }
 
 /** What one sweep did. */
@@ -68,8 +73,6 @@ export interface RetireSweep {
   /** Workspaces whose machine could not be asked, or whose archive failed, with why. */
   failed: { workspaceId: string; reason: string }[];
   kept: KeptWorkspace[];
-  /** Spent workspaces left because an artifact shows what they serve, with those artifacts' names. */
-  previewed: { artifacts: string[]; machine: string; workspaceId: string }[];
   retired: {
     /** The carry its machine saved first (files git ignores that its work wrote), when it wrote one. */
     carry: string | null;
@@ -92,7 +95,7 @@ export interface WorkspaceRetireDeps {
   machineName: (machineId: string) => string;
   /** The machines connected now. */
   online: () => string[];
-  workItems: Pick<WorkItems, "archive">;
+  workItems: Pick<WorkItems, "archive" | "held">;
 }
 
 const time = (at: Date | null | undefined): number => at?.getTime() ?? 0;
@@ -101,8 +104,6 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
   const { db } = deps;
   /** The last sweep's kept workspaces, by id; a machine's are read again each sweep it is online. */
   const kept = new Map<string, KeptWorkspace>();
-  /** The spent workspaces the last sweep left for an artifact showing them: each is logged once. */
-  let previewed = new Set<string>();
   let running: Promise<RetireSweep> | undefined;
 
   /** Whether the workspace is spent: a delegate's, its items all ended, its sessions idle {@link RETIRE_IDLE_MS}. */
@@ -180,66 +181,68 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
   };
 
   /**
-   * Whether an artifact shows what the spent workspace serves (db
-   * artifacts.ts `previewing`): then it is listed in the sweep's `previewed`,
-   * logged the first sweep it is, and left.
+   * A spent workspace an artifact shows (db artifacts.ts `previewing`),
+   * left as it is: kept and listed with those artifacts' names in
+   * `previewedBy`, beside what its machine reads it holds and its size, so
+   * a person sees what each one costs and which preview to let go. Logged
+   * when it is first kept so, or its artifacts change.
    */
-  const shown = (
+  const keepShown = async (
     machineId: string,
     workspace: WorkspaceRow,
-    done: RetireSweep,
-    shownNow: Set<string>
-  ): boolean => {
-    const names = db.artifacts
-      .previewing(workspace)
-      .map((artifact) => artifact.name);
-    if (names.length === 0) {
-      return false;
-    }
+    previewedBy: string[],
+    now: number,
+    done: RetireSweep
+  ): Promise<void> => {
     const machine = deps.machineName(machineId);
-    shownNow.add(workspace.id);
-    done.previewed.push({
-      workspaceId: workspace.id,
-      machine,
-      artifacts: names,
-    });
-    if (!previewed.has(workspace.id)) {
-      console.log(
-        `[workspace-retire] ${workspace.id} on ${machine}: left, its work over but shown in the artifact${names.length === 1 ? "" : "s"} ${names.join(", ")}; it is retired once ${names.length === 1 ? "that goes" : "those go"}`
+    try {
+      const entry: KeptWorkspace = {
+        ...(await deps.workItems.held(workspace.id)),
+        previewedBy,
+        checkedAt: new Date(now).toISOString(),
+      };
+      if (
+        kept.get(workspace.id)?.previewedBy?.join(",") !== previewedBy.join(",")
+      ) {
+        console.log(
+          `[workspace-retire] ${workspace.id} on ${machine}: kept, its work over but shown in the artifact${previewedBy.length === 1 ? "" : "s"} ${previewedBy.join(", ")} (${entry.size} at ${workspace.path}); it is retired once ${previewedBy.length === 1 ? "that goes" : "those go"}`
+        );
+      }
+      kept.set(workspace.id, entry);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      done.failed.push({ workspaceId: workspace.id, reason });
+      console.warn(
+        `[workspace-retire] ${workspace.id} on ${machine}: shown in ${previewedBy.join(", ")}, and what it holds could not be read: ${reason}`
       );
     }
-    return true;
   };
 
   const sweepOnce = async (now: number): Promise<RetireSweep> => {
-    const done: RetireSweep = {
-      kept: [],
-      failed: [],
-      previewed: [],
-      retired: [],
-    };
-    const shownNow = new Set<string>();
+    const done: RetireSweep = { kept: [], failed: [], retired: [] };
     for (const machineId of deps.online()) {
-      const ready = db
+      const spentHere = db
         .activeWorkspacesOn(machineId)
-        .filter(
-          (one) => spent(one, now) && !shown(machineId, one, done, shownNow)
-        );
-      // A kept one archived by hand, no longer spent, or shown now leaves the list.
+        .filter((one) => spent(one, now));
+      // A kept one archived by hand, or no longer spent, leaves the list.
       for (const [id, entry] of kept) {
         if (
           entry.machineId === machineId &&
-          !ready.some((workspace) => workspace.id === id)
+          !spentHere.some((workspace) => workspace.id === id)
         ) {
           kept.delete(id);
         }
       }
-      for (const workspace of ready) {
+      for (const workspace of spentHere) {
+        const previewedBy = db.artifacts
+          .previewing(workspace)
+          .map((artifact) => artifact.name);
         // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, so a sweep never loads a machine with many git reads at once
-        await retireOne(machineId, workspace, now, done);
+        await (previewedBy.length > 0
+          ? keepShown(machineId, workspace, previewedBy, now, done)
+          : retireOne(machineId, workspace, now, done));
       }
     }
-    previewed = shownNow;
     done.kept = [...kept.values()];
     return done;
   };
@@ -262,7 +265,7 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
 
   return {
     sweep,
-    /** The spent workspaces kept for unlanded work, as the last sweep read them. */
+    /** The spent workspaces kept for unlanded work or the artifacts showing them, as the last sweep read them. */
     kept: (): KeptWorkspace[] => [...kept.values()],
   };
 };

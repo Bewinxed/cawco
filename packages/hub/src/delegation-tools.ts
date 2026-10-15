@@ -733,7 +733,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate_list",
-      "Your delegation tree: each delegate you started, theirs nested, with its work item's state, last activity, cache warmth, queued messages, what it waits on, and plan progress; and under queued, your delegates still waiting for owned files (state queued), each with when it was queued and the live item and globs holding it; and under kept, spent workspaces not retired because they hold unlanded work. Read it before handing off to a delegate or calling one stuck.",
+      "Your delegation tree: each delegate you started, theirs nested, with its work item's state, last activity, cache warmth, queued messages, what it waits on, and plan progress; and under queued, your delegates still waiting for owned files (state queued), each with when it was queued and the live item and globs holding it; and under kept, spent workspaces held by unlanded work or a preview (`previewedBy`). Read it before handing off to a delegate or calling one stuck.",
       {
         include: z
           .enum(["live", "all"])
