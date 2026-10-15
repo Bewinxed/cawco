@@ -875,14 +875,9 @@ export function adminTools() {
       "previews",
       "how every session's previews are reached, fleet-wide: 'port' (the default, " +
         "no setup) gives each session a port of the hub's preview range on the hub's " +
-        "host; 'host' gives each session an origin from `pattern`: the scheme the " +
-        "names are served on (http or https, whatever scheme a client reached the hub " +
-        "by), then a host name with `{session}` standing for its id or `{port}` for " +
-        "the preview port it keeps (one DNS name per port of the range then serves " +
-        "every session), for a fleet whose DNS or proxy sends those names to the " +
-        "range's first port. Host-mode names open only with the hub's own pass, which " +
-        "the dashboard and the app ask for, so they need no sign-in in front of them. " +
-        "Every preview is an origin of its own either way. " +
+        "host; 'host' gives each its own origin from `pattern`, for DNS or a proxy " +
+        "that sends those names to the range's first port. The hub locks host-mode " +
+        "names to its own pass, so they need no sign-in in front. " +
         "'get' answers the mode, the pattern and the range.",
       ["get"],
       ["set"],
@@ -895,11 +890,10 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            "Host mode's origins: http:// or https://, then a host name with exactly one of " +
-              "{session} or {port}, e.g. 'https://p-{session}.example.com' or " +
-              "'https://p-{port}.example.com', a port after it or not. " +
-              "Required when mode is 'host'; the hub refuses one whose generated name doesn't resolve " +
-              "(for {port}, the range's first port's name)."
+            "Required for 'host': the scheme the names are served on, then a host name with " +
+              "{session} (the session's id) or {port} (its kept preview port: one name per " +
+              "port serves every session), e.g. 'https://p-{port}.example.com'. Refused when " +
+              "its first name doesn't resolve."
           ),
       },
       async ({ action, mode, pattern }) => {
