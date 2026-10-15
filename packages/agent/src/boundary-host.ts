@@ -870,7 +870,11 @@ for (;;) {
   if (stopping || !lost) {
     await finish({ status });
   }
-  console.error(
-    `cawco: ${lost} was changed on the host, which drops its protection inside the sandbox, so the sandbox was stopped with everything in it and starts again`
+  // On stdout, as a line: the keeper drains stderr unread, and the agent
+  // says each line its host says after the sandbox is ready (`watchHost` in
+  // boundary.ts), so a restart, which ends everything in the workspace, is
+  // in its log.
+  console.log(
+    `cawco: ${lost} was changed on the host, which drops its protection inside the sandbox, so the sandbox ${current?.inner} was stopped with everything in it and starts again`
   );
 }

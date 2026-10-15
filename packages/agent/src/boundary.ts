@@ -649,6 +649,56 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
   });
 };
 
+/** Each boundary's srt host followed ({@link watchHost}), by its proc id, with the connection it is followed on. */
+const watchedHosts = new Map<string, SessiondClient>();
+
+/**
+ * Says in the agent's log each line the srt host of workspace `id`'s
+ * boundary `held` says after its sandbox is ready, on whichever keeper holds
+ * it: above all a sandbox it starts again because a guarded path changed on
+ * the host, which ends everything in the workspace (`boundary-host.ts`). Its
+ * stderr the keeper drains unread, so these lines are the one record of it.
+ * From `afterSeq` (its ready line, so nothing is missed between the start and
+ * this), or from now for a boundary an earlier agent started. A watch lives
+ * on its keeper connection, so a new connection watches again.
+ */
+const watchHost = async (
+  id: string,
+  held: Pick<Held, "gen" | "identity" | "pid">,
+  afterSeq?: number
+): Promise<void> => {
+  if (process.platform !== "linux" || held.identity) {
+    return;
+  }
+  const procId = boundaryProcId(id, held.gen);
+  const proc = await keepers.holding(procId);
+  if (!proc || watchedHosts.get(procId) === proc.client) {
+    return;
+  }
+  const { client } = proc;
+  watchedHosts.set(procId, client);
+  client.subscribe(
+    procId,
+    {
+      line: (event) => {
+        const text = event.data.trim();
+        if (text && text !== READY) {
+          console.info(
+            `[workspace] ${id}: its boundary ${held.pid} says: ${text}`
+          );
+        }
+      },
+      exit: () => {
+        if (watchedHosts.get(procId) === client) {
+          watchedHosts.delete(procId);
+        }
+        client.unsubscribe(procId);
+      },
+    },
+    afterSeq
+  );
+};
+
 /** A macOS workspace's shims, first on the PATH of every command in its boundary: read-only inside. */
 const shimsOf = (id: string): string => join(roOf(id), "bin");
 
@@ -887,6 +937,7 @@ const armHook = async (
   }
   await openToolDoor(id);
   await openGitDoor({ id, path: held.path });
+  await watchHost(id, held);
   const armed: Held = { ...held, hook, policy };
   await writeWhole(
     join(stateDir(id), "boundary.json"),
@@ -3307,23 +3358,23 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   quietTimer.unref();
 };
 
-/** Waits for a process's `line` (the boundary's {@link READY}); answers every line said before it, or its own words if it dies first. */
+/** Waits for a process's `line` (the boundary's {@link READY}); answers that line's seq, or rejects with the process's own words if it dies first. */
 const ready = (
   client: SessiondClient,
   procId: string,
   line: string,
   what: string
-): Promise<string[]> =>
+): Promise<number> =>
   new Promise((resolve, reject) => {
     const said: string[] = [];
     const words = (): string => (said.length ? `: ${said.join(" / ")}` : "");
-    const finish = (error?: Error): void => {
+    const finish = (outcome: Error | number): void => {
       clearTimeout(timer);
       client.unsubscribe(procId);
-      if (error) {
-        reject(error);
+      if (typeof outcome === "number") {
+        resolve(outcome);
       } else {
-        resolve(said);
+        reject(outcome);
       }
     };
     const timer = setTimeout(
@@ -3341,7 +3392,7 @@ const ready = (
         line: (event) => {
           const text = event.data.trim();
           if (text === line) {
-            finish();
+            finish(event.seq);
           } else if (text) {
             said.push(text);
           }
@@ -3975,9 +4026,11 @@ const launch = async (
     throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
   }
   await client.spawnProc(procId, plan.spec);
-  await ready(client, procId, READY, "the boundary").catch((error: Error) => {
-    throw refusal(ref.id, error.message);
-  });
+  const readyAt = await ready(client, procId, READY, "the boundary").catch(
+    (error: Error) => {
+      throw refusal(ref.id, error.message);
+    }
+  );
   const proc = (await client.list()).procs.find(
     (candidate) => candidate.procId === procId
   );
@@ -4004,6 +4057,8 @@ const launch = async (
     // beside it held one there ({@link stubbed}).
     restartWhenIdle(ref);
   }
+  // Followed from its ready line on, before armHook would follow it from now.
+  await watchHost(ref.id, held, readyAt);
   // armHook writes the executor.
   return armHook(ref.id, held);
 };

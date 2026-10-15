@@ -1615,24 +1615,17 @@ ws_gen() { ws_json boundary.json 'd => d.gen'; }
 ws_exec() { as_user "$joinerc" sh -c 'cd "$1" && exec "$2" "$3"' sh "$(cat "$rigdir/ws-clone")" "$(ws_state)/exec" "$1"; }
 # A boundary generation's sandbox, as its srt host names it: `OUTER INNER IDLE...`.
 ws_place() { as_user "$joinerc" cat "$(ws_state)/boundaries/$1/sandbox"; }
-# A generation's srt host starts its sandbox again, with everything in it gone, when a path it guards is renamed or
-# unlinked on the host, which drops that path's bind inside (boundary-host.ts `guard`, then its loop: "… was changed on
-# the host, which drops its protection inside the sandbox, so the sandbox was stopped with everything in it and starts
-# again"). That line goes to the host's stderr, which the keeper drains unread (sessiond server.ts), so the sandbox
-# file is the one record of it. Each path generation $1 guards (`guarded`, as /proc/<pid>/mountinfo spells it), with
-# its device and inode, `gone` once there is nothing at it.
-ws_guarded() {
-  as_user "$joinerc" sh -c 'while IFS= read -r p; do f=$(printf "%b" "$p"); printf "%s %s\n" "$(stat -c %d:%i "$f" 2> /dev/null || echo gone)" "$f"; done < "$1"' sh "$(ws_state)/boundaries/$1/guarded"
-}
-# Generation $1 still runs the sandbox whose init is $2: its host has not started it again. If it has, says so, with
-# each guarded path whose inode moved since the handover ($rigdir/ws-guarded-$1), the change that set the restart off.
+# Generation $1 still runs the sandbox whose init is $2. Its srt host starts the sandbox again, with everything in it
+# gone, when a path it guards is renamed or unlinked on the host, which drops that path's bind inside
+# (boundary-host.ts `guard`, then its loop), and the agent says the host's line naming the path ("[workspace] <id>:
+# its boundary <pid> says: cawco: <path> was changed on the host, … so the sandbox <init> was stopped …",
+# boundary.ts `watchHost`). If it has, says so with those lines.
 ws_same_sandbox() {
   local now
   read -r _ now _ <<< "$(ws_place "$1")"
   [[ $now == "$2" ]] && return 0
-  echo "ASSERTION FAILED: generation $1's srt host started its sandbox again after the handover, ending everything in it (its init was $2, now ${now:-none})"
-  echo "its guarded paths at the handover and now (device:inode path):"
-  diff "$rigdir/ws-guarded-$1" <(ws_guarded "$1") || true
+  echo "ASSERTION FAILED: generation $1's srt host started its sandbox again after the handover, ending everything in it (its init was $2, now ${now:-none}); what its host said:"
+  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$(cat "$rigdir/ws-id"): its boundary .* says: " || echo "(the agent's log has no line of it)"
   return 1
 }
 ns_of() { as_user "$joinerc" readlink "/proc/$1/ns/pid"; }
@@ -1950,7 +1943,6 @@ workspace_across_update() {
   as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its older boundary .* has nothing left running in it and is closed"
   # The next command runs in the new generation's sandbox, and still reads no credential.
   read -r _ new_inner _ <<< "$(ws_place "$new")"
-  ws_guarded "$new" > "$rigdir/ws-guarded-$new"
   [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$new_inner")" ]]
   [[ "$(ns_of "$new_inner")" != "$old_ns" ]]
   [[ "$(ws_exec 'cat README.md')" == proof ]]
@@ -2022,7 +2014,7 @@ workspace_archive_ends_all() {
   [[ -z $left ]] || { echo "ASSERTION FAILED: these processes of the archived workspace's sandbox still run:$left"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_guarded ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
 export WS_LISTENER_PORT
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from
