@@ -4,14 +4,15 @@
    * ink): the shown artifact's name as a menu button listing the session's
    * artifacts, newest first, each promoted one tagged with its commit;
    * choosing one shows it. Each row's Remove (its trailing glyph, or Delete
-   * on the highlighted row) removes it where it stands: a light action, no
-   * confirm. The row leaves once the hub says it is gone, closing as the
+   * or Backspace on the highlighted row) removes it where it stands: a light
+   * action, no confirm; focus goes on to the row that takes its place. The row leaves once the hub says it is gone, closing as the
    * rows under it slide up (motion/rows), in every tab: the panel's frame
    * lists the session's artifacts (`held`), and the panel follows that frame
    * when the removed one was shown.
    */
   import type { ArtifactKind, ArtifactSummary } from "@cawco/core";
   import type { Component } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -123,6 +124,74 @@
   const own = (event: Event) => {
     event.stopPropagation();
   };
+
+  /** Each row's name is its name and tags, never its Remove's words. */
+  const uid = $props.id();
+  const part = (id: string, what: "name" | "promoted" | "age") =>
+    `${uid}-${what}-${id}`;
+
+  /**
+   * A row that leaves while it holds focus (removed here, in another tab, or
+   * by the agent) hands it to the row that took its place, else the one above
+   * it, else the menu, so the keys keep working where the reader was.
+   */
+  let list = $state<HTMLElement | null>(null);
+  /** The rows as last drawn, to find a leaving row's neighbours. */
+  let drawn: string[] = [];
+  /**
+   * The row that holds focus, kept from its own focus events: the row's
+   * element is gone, and focus with it, before the list's effects run.
+   */
+  let focusedRow: string | undefined;
+  const keepFocus: Attachment<HTMLElement> = (node) => {
+    const into = (event: FocusEvent) => {
+      focusedRow = (event.target as Element).closest<HTMLElement>(
+        "[data-artifact]"
+      )?.dataset.artifact;
+    };
+    // Focus the reader moved out of the menu is no longer the menu's to keep.
+    const out = (event: FocusEvent) => {
+      if (
+        event.relatedTarget instanceof Node &&
+        !node.contains(event.relatedTarget)
+      ) {
+        focusedRow = undefined;
+      }
+    };
+    node.addEventListener("focusin", into);
+    node.addEventListener("focusout", out);
+    return () => {
+      node.removeEventListener("focusin", into);
+      node.removeEventListener("focusout", out);
+    };
+  };
+  $effect(() => {
+    const ids = rows.map((row) => row.id);
+    const before = drawn;
+    drawn = ids;
+    const left = focusedRow;
+    if (
+      left === undefined ||
+      ids.includes(left) ||
+      list?.contains(document.activeElement)
+    ) {
+      return;
+    }
+    const at = before.indexOf(left);
+    const heir =
+      before.slice(at + 1).find((id) => ids.includes(id)) ??
+      before
+        .slice(0, at)
+        .reverse()
+        .find((id) => ids.includes(id));
+    const next =
+      heir === undefined
+        ? null
+        : list?.querySelector<HTMLElement>(
+            `.artifact-row[data-artifact="${CSS.escape(heir)}"]:not([data-reflow-ghost])`
+          );
+    (next ?? list)?.focus();
+  });
 </script>
 
 <DropdownMenu.Root bind:open>
@@ -132,14 +201,25 @@
     <span class="artifact-name">{shown.name}</span>
     <IconChevronDown />
   </DropdownMenu.Trigger>
-  <DropdownMenu.Content align="start" class="artifact-list w-64">
-    <div {@attach reflow()}>
+  <DropdownMenu.Content
+    align="start"
+    class="artifact-list w-64"
+    bind:ref={list}
+  >
+    <div {@attach reflow()} {@attach keepFocus}>
       {#each rows as artifact (artifact.id)}
         {@const Glyph = GLYPHS[artifact.kind]}
         <DropdownMenu.Item
           aria-busy={removing.has(artifact.id) || undefined}
           aria-current={artifact.id === shown.id || undefined}
-          aria-keyshortcuts="Delete"
+          aria-keyshortcuts="Delete Backspace"
+          aria-labelledby={[
+            part(artifact.id, "name"),
+            artifact.promoted ? part(artifact.id, "promoted") : "",
+            artifact.createdAt ? part(artifact.id, "age") : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           class="artifact-row"
           data-artifact={artifact.id}
           data-flip
@@ -152,16 +232,19 @@
           onSelect={() => choose(artifact)}
         >
           <Glyph />
-          <span class="row-name">{artifact.name}</span>
+          <span class="row-name" id={part(artifact.id, "name")}
+            >{artifact.name}</span
+          >
           {#if artifact.promoted}
             <span
               class="row-promoted"
+              id={part(artifact.id, "promoted")}
               title="Promoted into the project's folder at artifacts/{artifact.name}/"
               >Promoted {artifact.promoted.commit.slice(0, 7)}</span
             >
           {/if}
           {#if artifact.createdAt}
-            <span class="row-age"
+            <span class="row-age" id={part(artifact.id, "age")}
               >{formatAgeShort(Date.parse(artifact.createdAt))}</span
             >
           {/if}
@@ -244,8 +327,10 @@
   :global(.artifact-row[data-highlighted]) .row-remove {
     opacity: 1;
   }
-  .row-remove:hover {
-    color: var(--destructive);
+  @media (hover: hover) {
+    .row-remove:hover {
+      color: var(--destructive);
+    }
   }
   @media (pointer: coarse) {
     .row-remove {

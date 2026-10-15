@@ -1125,7 +1125,13 @@
             role="status"
           >
             {#if everConnected}
-              <span>Hub connection lost — retrying in {retryIn}s</span>
+              <!-- The countdown is a timer (live off): the band is read when
+                   it comes, not again on every second it counts. -->
+              <span
+                >Hub connection lost — retrying in <span role="timer"
+                  >{retryIn}s</span
+                ></span
+              >
             {:else}
               <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
             {/if}
