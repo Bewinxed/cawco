@@ -435,16 +435,50 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
 };
 
 /**
- * The path parameters of the fleet's own MCP servers whose names the suffix
- * rule ({@link PATH_KEY}) misses: cawco `generate_image` `reference_images`,
- * `send_to_user` `attachments`, chrome-devtools `upload_file` `filePaths`.
- * Every other path parameter of chrome-devtools (`filePath`,
- * `baseFilePath`, `currentFilePath`, `outputDirPath`) and cawco
- * (`output_path`, `path`) ends in a suffix the rule covers. backlot, Exa,
- * Firecrawl and mobbins take no local path; a `file://` URL any of them is
- * handed is judged by {@link URL_KEY}.
+ * CawCo's own MCP server: the arguments of each of its tools that name a
+ * file on the machine, from the input schemas the hub serves
+ * (packages/hub/src: artifacts/tools.ts, delegation-tools.ts). Each is
+ * judged as a write, the strictest case. Every other argument of a cawco
+ * tool names no file, whatever its name: `artifact_create`'s `path` is a
+ * preview's URL path, `artifact_update`'s `patch[].path` a JSON Pointer,
+ * `workflow_read`'s `path` a path into a result, `run_workflow`'s
+ * `workspace.path` where on its machine a workflow's steps run, `folder_*`
+ * and `memory_*`'s `path` a file in the project's folder on the hub,
+ * `admin_memory_write`'s `path` a document under the fleet's memories, a
+ * connector's or relay's `*_path` a dot path into what it is answered,
+ * `delegate`'s and `task_*`'s `outputs` files in the delegate's own
+ * workspace. A cawco tool missing here names no file. The `mcp-file-args`
+ * probe holds this table to the hub's schemas.
  */
-const PATH_PARAMS = new Set(["reference_images", "attachments", "filePaths"]);
+export const CAWCO_FILE_ARGS: Readonly<Record<string, readonly string[]>> = {
+  artifact_create: ["dir"],
+  generate_image: ["output_path", "reference_images"],
+  send_to_user: ["attachments"],
+  show_image: ["path"],
+};
+
+/** The cawco tool a harness's tool name is: Claude Code's `mcp__cawco__<tool>`, OpenCode's `cawco_<tool>`. */
+const CAWCO_PREFIX: Partial<Record<Call["harness"], string>> = {
+  claude: "mcp__cawco__",
+  opencode: "cawco_",
+};
+
+const cawcoTool = (call: Call): string | undefined => {
+  const prefix = CAWCO_PREFIX[call.harness];
+  return prefix && call.tool.startsWith(prefix)
+    ? call.tool.slice(prefix.length)
+    : undefined;
+};
+
+/**
+ * The path parameters of the fleet's other MCP servers whose names the
+ * suffix rule ({@link PATH_KEY}) misses: chrome-devtools `upload_file`
+ * `filePaths`. Every other path parameter of chrome-devtools (`filePath`,
+ * `baseFilePath`, `currentFilePath`, `outputDirPath`) ends in a suffix the
+ * rule covers. backlot, Exa, Firecrawl and mobbins take no local path; a
+ * `file://` URL any of them is handed is judged by {@link URL_KEY}.
+ */
+const PATH_PARAMS = new Set(["filePaths"]);
 
 /** A parameter named as a path: one ending in path, file, dir, directory or filename. */
 const PATH_KEY = /(path|file|dir|directory|filename)$/i;
@@ -464,9 +498,11 @@ const strings = (value: unknown): string[] => {
 };
 
 /**
- * Every path an argument of a tool outside the built-in tables names, at any
- * depth: each value of a parameter named as a path ({@link PATH_KEY},
- * {@link PATH_PARAMS}), and each `file://` value of one named as a URL.
+ * Every path an argument of a tool in no table names, at any depth: each
+ * value of a parameter named as a path ({@link PATH_KEY}, {@link
+ * PATH_PARAMS}), and each `file://` value of one named as a URL. A server
+ * whose schemas are not known here is judged by its arguments' names, so a
+ * path it is handed never escapes the policy.
  */
 const argumentPaths = (input: unknown): string[] => {
   const found: string[] = [];
@@ -572,10 +608,16 @@ const targets = (policy: Policy, call: Call): Target[] => {
   const input = call.input as Record<string, unknown>;
   const fields = BUILT_INS[call.harness][call.tool];
   if (!fields) {
-    // A tool outside the table, an MCP tool among them: every path it names is
-    // judged as a write, the strictest case, against the call's directory and
-    // the clone, where an MCP server may resolve it.
-    return argumentPaths(input).flatMap((path) =>
+    // An MCP tool: every path it names is judged as a write, the strictest
+    // case, against the call's directory and the clone, where an MCP server
+    // may resolve it. A cawco tool names the files its table says; any other
+    // tool, those its arguments' names say.
+    const cawco = cawcoTool(call);
+    const paths =
+      cawco === undefined
+        ? argumentPaths(input)
+        : (CAWCO_FILE_ARGS[cawco] ?? []).flatMap((key) => strings(input[key]));
+    return paths.flatMap((path) =>
       against(path, [...new Set([call.cwd, policy.clone])], policy.home).map(
         (resolved) => ({
           path: resolved,
