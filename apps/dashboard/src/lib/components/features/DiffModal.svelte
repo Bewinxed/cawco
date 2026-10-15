@@ -7,7 +7,6 @@
    */
   import {
     type FileContents,
-    FileDiff,
     type FileDiffMetadata,
     parseDiffFromFile,
   } from "@pierre/diffs";
@@ -19,6 +18,7 @@
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { IconAlignLeft, IconColumns } from "#lib/icons.js";
   import { fileName, languageOf } from "./diff-language";
+  import { houseDiff } from "./diff-theme.svelte";
 
   interface Props {
     fileDiff?: FileDiffMetadata;
@@ -38,7 +38,7 @@
   const drawn = (style: "unified" | "split") => (layer: HTMLElement) => {
     const lang = languageOf(filePath) as FileContents["lang"];
     const name = fileName(filePath);
-    const diff = new FileDiff({
+    const diff = houseDiff({
       disableFileHeader: true,
       diffStyle: style,
       expandUnchanged: !fileDiff?.isPartial,
@@ -146,13 +146,12 @@
     overflow: auto;
   }
   /* @pierre/diffs renders into a shadowRoot, so it can only be themed through
-     the inherited custom properties it documents in its core stylesheet. */
+     the inherited custom properties it documents in its core stylesheet;
+     every diff's colours are app.css's, the full view's size is its own. */
   .layer {
     min-height: 100%;
     --diffs-font-size: 0.8125rem;
     --diffs-line-height: 1.6;
-    --diffs-bg-addition-override: var(--diff-add-bg);
-    --diffs-bg-deletion-override: var(--diff-del-bg);
     --diffs-bg-separator-override: var(--muted);
   }
 </style>

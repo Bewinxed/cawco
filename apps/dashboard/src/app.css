@@ -296,6 +296,37 @@
     @media (width <= 900px) {
       --seam-inset: var(--space-2);
     }
+
+    /* The house code theme (components/features/code-theme.ts): each role
+       Shiki's css-variables theme names, on the syntax token DESIGN.md gives
+       it. Set here because every code surface reads them: a transcript's
+       well, and a diff, whose shadow root inherits them. */
+    --code-syntax-foreground: var(--code-ink);
+    --code-syntax-background: var(--code-bg);
+    --code-syntax-token-keyword: var(--code-keyword);
+    --code-syntax-token-function: var(--code-fn);
+    --code-syntax-token-link: var(--code-fn);
+    --code-syntax-token-string: var(--code-string);
+    --code-syntax-token-string-expression: var(--code-string);
+    --code-syntax-token-constant: var(--code-number);
+    --code-syntax-token-comment: var(--code-comment);
+    --code-syntax-token-parameter: var(--code-ink);
+    --code-syntax-token-punctuation: var(--code-ink);
+    /* A diff's added, removed and changed lines (@pierre/diffs), on the
+       grounds the syntax tokens are measured against (tokens: code-ink). The
+       library reads its line colours from a theme's git colours, which a
+       css-variables theme hands over as Shiki's placeholders, so everything
+       is set where it documents overrides. Line numbers are text: each
+       ramp's text step, not its fill. */
+    --diffs-addition-color-override: var(--success-9);
+    --diffs-deletion-color-override: var(--error-9);
+    --diffs-modified-color-override: var(--code-fn);
+    --diffs-bg-addition-override: var(--diff-add-bg);
+    --diffs-bg-deletion-override: var(--diff-del-bg);
+    --diffs-bg-addition-emphasis-override: var(--diff-add-emphasis);
+    --diffs-bg-deletion-emphasis-override: var(--diff-del-emphasis);
+    --diffs-fg-number-addition-override: var(--success-11);
+    --diffs-fg-number-deletion-override: var(--error-11);
   }
 
   html {

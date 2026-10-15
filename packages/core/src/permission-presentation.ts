@@ -11,6 +11,7 @@
  * makes, not only the text it ends with), and which named settings already
  * exist (so a put says whether it adds or replaces).
  */
+import { editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
@@ -82,11 +83,6 @@ export interface PresentationContext {
 // ── line changes ─────────────────────────────────────────────────────────
 
 const HEADING = /^#{1,6}\s+(.+?)\s*#*\s*$/;
-/** Past this many cells the line table is not built: every line on each side counts as changed. */
-const TABLE_CAP = 4_000_000;
-
-const linesOf = (source: string): string[] =>
-  source === "" ? [] : source.split("\n");
 
 /** Each line's markdown section: the nearest heading at or above it. */
 const sectionsOf = (lines: string[]): (string | undefined)[] => {
@@ -107,90 +103,7 @@ interface LineStat {
   sections: string[];
 }
 
-/** Where two line lists stop agreeing: the common head's length and the common tail's. */
-function commonEnds(a: string[], b: string[]): { head: number; tail: number } {
-  let head = 0;
-  while (head < a.length && head < b.length && a[head] === b[head]) {
-    head += 1;
-  }
-  let tail = 0;
-  while (
-    tail < a.length - head &&
-    tail < b.length - head &&
-    a.at(-1 - tail) === b.at(-1 - tail)
-  ) {
-    tail += 1;
-  }
-  return { head, tail };
-}
-
-/** The LCS table over `a[head, head+n)` and `b[head, head+m)`: cell (i, j) is the LCS length of their suffixes. */
-function lcsTable(
-  a: string[],
-  b: string[],
-  head: number,
-  n: number,
-  m: number
-): Uint32Array {
-  const width = m + 1;
-  const table = new Uint32Array((n + 1) * width);
-  for (let i = n - 1; i >= 0; i -= 1) {
-    for (let j = m - 1; j >= 0; j -= 1) {
-      table[i * width + j] =
-        a[head + i] === b[head + j]
-          ? table[(i + 1) * width + j + 1] + 1
-          : Math.max(table[(i + 1) * width + j], table[i * width + j + 1]);
-    }
-  }
-  return table;
-}
-
-/** The changed lines between the common ends: indexes into `a` removed, into `b` added. */
-function editScript(
-  a: string[],
-  b: string[]
-): { removedAt: number[]; addedAt: number[] } {
-  const { head, tail } = commonEnds(a, b);
-  const n = a.length - head - tail;
-  const m = b.length - head - tail;
-  const removedAt: number[] = [];
-  const addedAt: number[] = [];
-  if (n * m > TABLE_CAP || n === 0 || m === 0) {
-    for (let i = 0; i < n; i += 1) {
-      removedAt.push(head + i);
-    }
-    for (let j = 0; j < m; j += 1) {
-      addedAt.push(head + j);
-    }
-    return { removedAt, addedAt };
-  }
-  const width = m + 1;
-  const table = lcsTable(a, b, head, n, m);
-  let i = 0;
-  let j = 0;
-  while (i < n || j < m) {
-    if (i < n && j < m && a[head + i] === b[head + j]) {
-      i += 1;
-      j += 1;
-    } else if (
-      j < m &&
-      (i === n || table[i * width + j + 1] >= table[(i + 1) * width + j])
-    ) {
-      addedAt.push(head + j);
-      j += 1;
-    } else {
-      removedAt.push(head + i);
-      i += 1;
-    }
-  }
-  return { removedAt, addedAt };
-}
-
-/**
- * The line diff of two texts, counted: an LCS over the lines between the
- * common head and tail (the same script DiffView.swift and @pierre/diffs
- * draw on inputs this size), and the markdown sections it touches.
- */
+/** The line diff of two texts (line-diff.ts), counted, and the markdown sections it touches. */
 export function lineStat(before: string, after: string): LineStat {
   const a = linesOf(before);
   const b = linesOf(after);

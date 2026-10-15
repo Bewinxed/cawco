@@ -10,7 +10,6 @@
    */
   import {
     type FileContents,
-    FileDiff,
     type FileDiffMetadata,
     isHighlighterLoaded,
     parseDiffFromFile,
@@ -29,6 +28,7 @@
   import { IconAlert, IconMaximize } from "#lib/icons.js";
   import DiffModal from "./DiffModal.svelte";
   import { fileName, languageOf } from "./diff-language";
+  import { houseDiff } from "./diff-theme.svelte";
 
   interface Props {
     /** How tall the rows stand before they scroll, as a CSS length; the transcript's cap when not given. */
@@ -81,7 +81,7 @@
 
   /** Draws the diff into the box; `drawn` once it has a height. */
   const draw = (_attempt: number) => (box: HTMLElement) => {
-    const diff = new FileDiff({ disableFileHeader: true });
+    const diff = houseDiff({ disableFileHeader: true });
     const sizes = new ResizeObserver(() => {
       if (box.offsetHeight > 0) {
         drawn = true;

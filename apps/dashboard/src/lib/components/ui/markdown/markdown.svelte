@@ -267,8 +267,8 @@
 	     writes it as inline colours — registering a custom pair through its
 	     `shikiThemes` pins every fence to whichever theme is listed first, and
 	     following the appearance instead means re-tokenizing every block on every
-	     switch, through a second shiki with a second cache. Ours carries both inks
-	     on the token and lets CSS choose. Prose dresses every `pre` and `code` it
+	     switch, through a second shiki with a second cache. Ours paints each token
+	     with a house code token that carries both appearances. Prose dresses every `pre` and `code` it
 	     contains, so the well opts out of that dressing here; inline code
 	     (`codespan`) keeps it, because it is prose, not a listing. -->
     {#snippet code({ token })}

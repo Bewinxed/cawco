@@ -1293,8 +1293,8 @@
       "code-keyword": {
         "role": "tertiary",
         "displayName": "Code Keyword",
-        "canonical": "light-dark(oklch(0.5 0.15 33), oklch(0.76 0.12 34))",
-        "hex": "#a73923",
+        "canonical": "light-dark(oklch(0.45 0.15 33), oklch(0.76 0.12 34))",
+        "hex": "#972812",
         "hexDark": "#f3947e",
         "tonalRamp": [
           "#340000",
@@ -1327,8 +1327,8 @@
       "code-string": {
         "role": "tertiary",
         "displayName": "Code String",
-        "canonical": "light-dark(oklch(0.5 0.12 122), oklch(0.84 0.1 118))",
-        "hex": "#586d03",
+        "canonical": "light-dark(oklch(0.44 0.11 122), oklch(0.84 0.1 118))",
+        "hex": "#495b00",
         "hexDark": "#c4d488",
         "tonalRamp": [
           "#060f00",
@@ -1344,8 +1344,8 @@
       "code-number": {
         "role": "tertiary",
         "displayName": "Code Number",
-        "canonical": "light-dark(oklch(0.52 0.13 55), oklch(0.84 0.1 70))",
-        "hex": "#a05000",
+        "canonical": "light-dark(oklch(0.46 0.12 55), oklch(0.84 0.1 70))",
+        "hex": "#894100",
         "hexDark": "#f5bf81",
         "tonalRamp": [
           "#2d0000",
@@ -1357,6 +1357,13 @@
           "#ffb174",
           "#ffd799"
         ]
+      },
+      "code-comment": {
+        "role": "tertiary",
+        "displayName": "Code Comment",
+        "canonical": "light-dark(oklch(0.45 0.014 74), oklab(0.68143 0.00276557 0.0116703))",
+        "hex": "#5a544d",
+        "hexDark": "#9d9891"
       },
       "presence-online": {
         "role": "tertiary",
@@ -1904,6 +1911,16 @@
         "role": "tertiary",
         "displayName": "Diff Del Bg",
         "canonical": "light-dark(oklch(0.5 0.17 15 / 0.15), oklch(0.58 0.17 15 / 0.15))"
+      },
+      "diff-add-emphasis": {
+        "role": "tertiary",
+        "displayName": "Diff Add Emphasis",
+        "canonical": "light-dark(oklch(0.559 0.134 122.9 / 0.1), oklch(0.605 0.132 121.2 / 0.1))"
+      },
+      "diff-del-emphasis": {
+        "role": "tertiary",
+        "displayName": "Diff Del Emphasis",
+        "canonical": "light-dark(oklch(0.5 0.17 15 / 0.1), oklch(0.58 0.17 15 / 0.1))"
       }
     },
     "typographyMeta": {

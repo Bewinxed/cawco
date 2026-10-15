@@ -385,8 +385,14 @@
       oklch(from var(--error-9) 46% 0.135 h),
       oklch(from var(--error-9) 81% 0.13 h)
     );
+    /* A diff's added row, over code-bg. */
     --diff-add-bg: oklch(from var(--success-9) l c h / 0.15);
+    /* A diff's removed row, over code-bg. */
     --diff-del-bg: oklch(from var(--error-9) l c h / 0.15);
+    /* The words an added row changed, over diff-add-bg. */
+    --diff-add-emphasis: oklch(from var(--success-9) l c h / 0.1);
+    /* The words a removed row changed, over diff-del-bg. */
+    --diff-del-emphasis: oklch(from var(--error-9) l c h / 0.1);
     /* Release-note section labels (ReleaseNotes): New green, Improved cyan, Fixed amber. Each ink sits on its own faint fill at 4.5:1 or more in both themes. */
     --note-new-ink: light-dark(oklch(44% 0.11 149), oklch(86% 0.12 149));
     --note-new-bg: light-dark(oklch(95% 0.04 149), oklch(31% 0.055 149));
@@ -400,13 +406,14 @@
     --chart-3: var(--mark-7);
     --chart-4: var(--warning-9);
     --chart-5: var(--neutral-9);
-    /* Syntax (code blocks and diffs). */
+    /* Syntax (code blocks and diffs). Every syntax token holds 4.5:1 or more on every ground a code surface draws: code-bg, a diff's added and removed rows (diff-add-bg, diff-del-bg) and their word emphasis over them (diff-add-emphasis, diff-del-emphasis), in both themes. */
     --code-ink: var(--ink-strong);
-    --code-keyword: light-dark(oklch(50% 0.15 33), oklch(76% 0.12 34));
+    --code-keyword: light-dark(oklch(45% 0.15 33), oklch(76% 0.12 34));
     --code-fn: light-dark(oklch(45% 0.1 245), oklch(80% 0.07 240));
-    --code-string: light-dark(oklch(50% 0.12 122), oklch(84% 0.1 118));
-    --code-number: light-dark(oklch(52% 0.13 55), oklch(84% 0.1 70));
-    --code-comment: var(--ink-subtle);
+    --code-string: light-dark(oklch(44% 0.11 122), oklch(84% 0.1 118));
+    --code-number: light-dark(oklch(46% 0.12 55), oklch(84% 0.1 70));
+    /* By day a step under ink-subtle's lightness, which reads 4.3:1 on a diff's tinted row; at night ink-subtle itself. */
+    --code-comment: light-dark(oklch(45% 0.014 74), var(--ink-subtle));
     /* The transcript rail: one flat 2px line down a run of tool rows. An image, not a colour: rows paint it as a sized background layer (2px wide), and a colour would fill the whole row. Head and continuing rows paint the same, so no seam shows between them. */
     --rail: linear-gradient(
       oklch(from var(--neutral-11) l c h / 0.4),

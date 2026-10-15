@@ -14,6 +14,7 @@
  * apps/apple/Packages/CawCoKit/Sources/CawCoTranscript/Generated/ToolPresentation.swift;
  * `bun run tools:check` fails while that file is stale).
  */
+import { lineCounts, linesOf } from "./line-diff";
 
 /** Which body an opened call shows; each exists once per client. */
 export type Renderer =
@@ -999,8 +1000,8 @@ export interface FileChange {
   removed: number;
 }
 
-const lineCount = (text: string): number =>
-  text ? text.split("\n").length : 0;
+/** Lines as a diff counts them (line-diff.ts): "a\nb\n" is two, as "a\nb" is. */
+const lineCount = (text: string): number => linesOf(text).length;
 
 /**
  * The file changes an edit or write call made, one per replacement. The
@@ -1054,12 +1055,13 @@ export function fileChanges(
     };
     const oldContent = pick(["old_string", "old_str", "oldString", "oldText"]);
     const newContent = pick(["new_string", "new_str", "newString", "newText"]);
+    // Counted as the diff the row opens draws it: the lines the replacement
+    // keeps are neither added nor removed.
     return {
       path,
       oldContent,
       newContent,
-      added: lineCount(newContent),
-      removed: lineCount(oldContent),
+      ...lineCounts(oldContent, newContent),
     };
   });
 }

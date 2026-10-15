@@ -1,8 +1,10 @@
 <script lang="ts">
   /**
    * The one code surface the console opens into — a tool result's output and a
-   * markdown fence share it. Colour rides on the token as a light/dark pair and
-   * CSS picks, so a theme switch repaints without tokenizing a line again; a
+   * markdown fence share it, on the house code theme (code-theme.ts): a
+   * token's colour names a syntax role, app.css maps each role to a house code
+   * token that carries both appearances, so a theme switch repaints without
+   * tokenizing a line again; a
    * grammar the highlighter does not carry falls back to a plain mono well.
    */
   import {
@@ -54,8 +56,7 @@
   {#if lines}
     <pre><code
         >{#each lines as line}<span class="ln"
-          >{#each line as token}<span
-            style="--l:{token.light ?? 'inherit'};--d:{token.dark ?? 'inherit'}"
+          >{#each line as token}<span style:color={token.color}
             >{token.content}</span
           >{/each}{"\n"}</span
         >{/each}</code
@@ -67,20 +68,17 @@
 
 <style>
   .well {
-    background: var(--surface-recess);
+    background: var(--code-syntax-background);
     border-radius: var(--radius-sm);
     padding: 10px 12px;
     overflow-x: auto;
     font-family: var(--font-mono);
     font-size: var(--text-label);
     line-height: var(--leading-body);
-    color: var(--ink-strong);
+    color: var(--code-syntax-foreground);
   }
   pre {
     margin: 0;
     white-space: pre;
-  }
-  .ln span {
-    color: light-dark(var(--l), var(--d));
   }
 </style>

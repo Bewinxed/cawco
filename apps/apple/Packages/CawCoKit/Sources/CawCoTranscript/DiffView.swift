@@ -20,34 +20,17 @@ enum DiffModel {
 
     static let context = 3
 
-    /// The line diff of two texts (an LCS over lines; Myers would give the same
-    /// script on the inputs an edit call carries, which are a few hundred lines).
+    /// The line diff of two texts (LineDiff: an LCS over lines; Myers would give
+    /// the same script on the inputs an edit call carries, which are a few
+    /// hundred lines). A row shows its line without the newline that ends it.
     static func parts(old: String, new: String) -> [Part] {
-        let a = old.isEmpty ? [] : old.components(separatedBy: "\n")
-        let b = new.isEmpty ? [] : new.components(separatedBy: "\n")
-        var script: [DiffLine] = []
-        let n = a.count, m = b.count
-        if n * m > 4_000_000 {
-            script = a.enumerated().map { DiffLine(kind: .deletion, text: $1, old: $0 + 1, new: nil) }
-                + b.enumerated().map { DiffLine(kind: .addition, text: $1, old: nil, new: $0 + 1) }
-        } else {
-            var table = [[Int32]](repeating: [Int32](repeating: 0, count: m + 1), count: n + 1)
-            for i in stride(from: n - 1, through: 0, by: -1) {
-                for j in stride(from: m - 1, through: 0, by: -1) {
-                    table[i][j] = a[i] == b[j] ? table[i + 1][j + 1] + 1 : max(table[i + 1][j], table[i][j + 1])
-                }
-            }
-            // On a tie the old line goes first, as @pierre/diffs orders a
-            // replacement: what was there, then what replaces it.
-            var i = 0, j = 0
-            while i < n || j < m {
-                if i < n, j < m, a[i] == b[j] {
-                    script.append(DiffLine(kind: .context, text: a[i], old: i + 1, new: j + 1)); i += 1; j += 1
-                } else if i < n, j == m || table[i + 1][j] >= table[i][j + 1] {
-                    script.append(DiffLine(kind: .deletion, text: a[i], old: i + 1, new: nil)); i += 1
-                } else {
-                    script.append(DiffLine(kind: .addition, text: b[j], old: nil, new: j + 1)); j += 1
-                }
+        let a = LineDiff.lines(old), b = LineDiff.lines(new)
+        func shown(_ line: String) -> String { line.hasSuffix("\n") ? String(line.dropLast()) : line }
+        let script: [DiffLine] = LineDiff.script(a, b).map { step in
+            switch step {
+            case let .context(i, j): DiffLine(kind: .context, text: shown(a[i]), old: i + 1, new: j + 1)
+            case let .deletion(i): DiffLine(kind: .deletion, text: shown(a[i]), old: i + 1, new: nil)
+            case let .addition(j): DiffLine(kind: .addition, text: shown(b[j]), old: nil, new: j + 1)
             }
         }
         // Keep `context` lines around each change; collapse the rest.

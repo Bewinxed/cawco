@@ -1584,11 +1584,23 @@
     },
     "diff-add-bg": {
       "$type": "color",
-      "$value": "oklch(from {color.success-9} l c h / 0.15)"
+      "$value": "oklch(from {color.success-9} l c h / 0.15)",
+      "$description": "A diff's added row, over code-bg."
     },
     "diff-del-bg": {
       "$type": "color",
-      "$value": "oklch(from {color.error-9} l c h / 0.15)"
+      "$value": "oklch(from {color.error-9} l c h / 0.15)",
+      "$description": "A diff's removed row, over code-bg."
+    },
+    "diff-add-emphasis": {
+      "$type": "color",
+      "$value": "oklch(from {color.success-9} l c h / 0.10)",
+      "$description": "The words an added row changed, over diff-add-bg."
+    },
+    "diff-del-emphasis": {
+      "$type": "color",
+      "$value": "oklch(from {color.error-9} l c h / 0.10)",
+      "$description": "The words a removed row changed, over diff-del-bg."
     },
     "note-new-ink": {
       "$type": "color",
@@ -1677,11 +1689,11 @@
     "code-ink": {
       "$type": "color",
       "$value": "{color.ink-strong}",
-      "$description": "Syntax (code blocks and diffs)."
+      "$description": "Syntax (code blocks and diffs). Every syntax token holds 4.5:1 or more on every ground a code surface draws: code-bg, a diff's added and removed rows (diff-add-bg, diff-del-bg) and their word emphasis over them (diff-add-emphasis, diff-del-emphasis), in both themes."
     },
     "code-keyword": {
       "$type": "color",
-      "$value": "oklch(50% 0.15 33)",
+      "$value": "oklch(45% 0.15 33)",
       "$extensions": {
         "dev.cawco": {
           "dark": "oklch(76% 0.12 34)"
@@ -1699,7 +1711,7 @@
     },
     "code-string": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 122)",
+      "$value": "oklch(44% 0.11 122)",
       "$extensions": {
         "dev.cawco": {
           "dark": "oklch(84% 0.10 118)"
@@ -1708,7 +1720,7 @@
     },
     "code-number": {
       "$type": "color",
-      "$value": "oklch(52% 0.13 55)",
+      "$value": "oklch(46% 0.12 55)",
       "$extensions": {
         "dev.cawco": {
           "dark": "oklch(84% 0.10 70)"
@@ -1717,7 +1729,13 @@
     },
     "code-comment": {
       "$type": "color",
-      "$value": "{color.ink-subtle}"
+      "$value": "oklch(45% 0.014 74)",
+      "$description": "By day a step under ink-subtle's lightness, which reads 4.3:1 on a diff's tinted row; at night ink-subtle itself.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.ink-subtle}"
+        }
+      }
     },
     "rail": {
       "$type": "gradient",

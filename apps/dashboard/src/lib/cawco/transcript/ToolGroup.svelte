@@ -623,16 +623,14 @@
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-inset);
   }
+  /* Neither line sets the card's width, so the card fits any row it stands
+     in: the name wraps, whole, and breaks inside a word only when the word
+     alone is wider than the row; the place stays one line, cut at its end,
+     and contained, so however long it is it takes the width it is given. */
   .artifact-label {
     display: flex;
     flex-direction: column;
     min-inline-size: 0;
-
-    & > span {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
   }
   .artifact-title {
     display: flex;
@@ -640,8 +638,13 @@
     gap: var(--btn-gap);
     --btn-gap: var(--space-1);
     --btn-icon: 12px;
+    overflow-wrap: anywhere;
   }
   .artifact-path {
+    contain: inline-size;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--ink-muted);
     font: var(--text-meta) var(--font-mono);
   }

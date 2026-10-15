@@ -242,8 +242,9 @@ nonisolated struct ToolDescriptor {
         let removed: Int
     }
 
+    /// Lines as a diff counts them (LineDiff): "a\nb\n" is two, as "a\nb" is.
     private static func lineCount(_ text: String) -> Int {
-        text.isEmpty ? 0 : text.split(separator: "\n", omittingEmptySubsequences: false).count
+        LineDiff.lines(text).count
     }
 
     /// The file changes an edit or write call made, one per replacement; a patch's files and counts.
@@ -263,7 +264,10 @@ nonisolated struct ToolDescriptor {
             func pick(_ keys: [String]) -> String { keys.lazy.compactMap { each[$0] as? String }.first ?? "" }
             let old = pick(["old_string", "old_str", "oldString", "oldText"])
             let new = pick(["new_string", "new_str", "newString", "newText"])
-            return Change(path: path, old: old, new: new, added: lineCount(new), removed: lineCount(old))
+            // Counted as the diff the row opens draws it: the lines the
+            // replacement keeps are neither added nor removed.
+            let counts = LineDiff.counts(old: old, new: new)
+            return Change(path: path, old: old, new: new, added: counts.added, removed: counts.removed)
         }
     }
 

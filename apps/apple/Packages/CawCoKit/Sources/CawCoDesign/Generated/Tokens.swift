@@ -260,8 +260,14 @@ public enum Palette {
     public static let dataOk = Palette.named("data-ok")
     public static let dataWarn = Palette.named("data-warn")
     public static let dataBad = Palette.named("data-bad")
+    /// A diff's added row, over code-bg.
     public static let diffAddBg = Palette.named("diff-add-bg")
+    /// A diff's removed row, over code-bg.
     public static let diffDelBg = Palette.named("diff-del-bg")
+    /// The words an added row changed, over diff-add-bg.
+    public static let diffAddEmphasis = Palette.named("diff-add-emphasis")
+    /// The words a removed row changed, over diff-del-bg.
+    public static let diffDelEmphasis = Palette.named("diff-del-emphasis")
     /// Release-note section labels (ReleaseNotes): New green, Improved cyan, Fixed amber. Each ink sits on its own faint fill at 4.5:1 or more in both themes.
     public static let noteNewInk = Palette.named("note-new-ink")
     public static let noteNewBg = Palette.named("note-new-bg")
@@ -275,12 +281,13 @@ public enum Palette {
     public static let chart3 = Palette.named("chart-3")
     public static let chart4 = Palette.named("chart-4")
     public static let chart5 = Palette.named("chart-5")
-    /// Syntax (code blocks and diffs).
+    /// Syntax (code blocks and diffs). Every syntax token holds 4.5:1 or more on every ground a code surface draws: code-bg, a diff's added and removed rows (diff-add-bg, diff-del-bg) and their word emphasis over them (diff-add-emphasis, diff-del-emphasis), in both themes.
     public static let codeInk = Palette.named("code-ink")
     public static let codeKeyword = Palette.named("code-keyword")
     public static let codeFn = Palette.named("code-fn")
     public static let codeString = Palette.named("code-string")
     public static let codeNumber = Palette.named("code-number")
+    /// By day a step under ink-subtle's lightness, which reads 4.3:1 on a diff's tinted row; at night ink-subtle itself.
     public static let codeComment = Palette.named("code-comment")
     /// The transcript rail: one flat 2px line down a run of tool rows. An image, not a colour: rows paint it as a sized background layer (2px wide), and a colour would fill the whole row. Head and continuing rows paint the same, so no seam shows between them.
     public static let rail = Gradient(stops: [Ink(light: P3(0.3988, 0.3803, 0.3532, 0.4000), dark: P3(0.7298, 0.7141, 0.6870, 0.4000)), Ink(light: P3(0.3988, 0.3803, 0.3532, 0.4000), dark: P3(0.7298, 0.7141, 0.6870, 0.4000))])
