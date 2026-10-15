@@ -4371,9 +4371,10 @@ export const createServer = (
    * Sessions whose turn in flight an interrupt cut: its end is the cut's, so
    * nothing is handed back for it and no rule answers it, on every harness.
    * OpenCode says so itself (`aborted`); a Claude turn cut by an interrupt
-   * ends as a plain turn, and was handed back as a quiet one, whose "still
-   * open" reminder started the turn the interrupt was meant to stop. Only a
-   * turn under way is marked: an idle session's next turn is its own.
+   * ends in an error result, which was handed back as a failed turn and
+   * failed its item. Marked as the interrupt is sent, before that result
+   * arrives. Only a turn under way is marked: an idle session's next turn
+   * is its own.
    */
   const interruptedTurns = new Set<string>();
 

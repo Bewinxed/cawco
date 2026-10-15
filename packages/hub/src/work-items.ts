@@ -4648,10 +4648,12 @@ export const createWorkItems = ({
       }
       // The plan's completed to-do ids tick their to-dos, off the turn's path.
       syncSoon(item);
-      // The turn an interrupt cut: nothing goes back and nothing nudges it.
-      // A Claude turn cut this way ends as a plain turn, so once it was
-      // answered as a quiet one ("Your work item is still open"), which
-      // started the next turn the interrupt was meant to stop.
+      // The turn an interrupt cut: nothing goes back, nothing fails it and
+      // nothing nudges it. Before this check, a Claude turn cut by
+      // interrupt_delegate (an error result, never OpenCode's `aborted`)
+      // failed its item ("[ede_diagnostic] result_type=user … stop_reason=
+      // tool_use", seen on the host, 2026-10-15), or, ending quietly, got the
+      // "still open" reminder. Here before every such branch.
       if (item.heldAt) {
         quiet.delete(item.id);
         return undefined;
