@@ -22,7 +22,8 @@
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, parse, resolve } from "node:path";
+import { dirname, join, parse, relative, resolve } from "node:path";
+import { openEnumNames, wireBreaks } from "./wire-compat";
 
 const HUB = resolve(import.meta.dir, "..");
 const CORE = resolve(HUB, "../core/src");
@@ -86,7 +87,7 @@ const { Effect, Layer } = await import("effect");
 const TJS = await import("typescript-json-schema");
 const { ts } = TJS;
 const { toOpenAPISchema } = await import("@elysia/openapi");
-const { CAWCO_HUB_PORT } = await import("@cawco/core");
+const { CAWCO_HUB_PORT, WIRE_PROTOCOL } = await import("@cawco/core");
 const { HUB_VERSION } = await import("../src/config");
 const { Db, DbLayer } = await import("../src/db");
 const { HubLifetime, HubLifetimeLayer } = await import("../src/lifetime");
@@ -1285,6 +1286,55 @@ const findNulls = (value: unknown, at: string): void => {
 findNulls(document, "#");
 if (leftNulls.length) {
   throw new Error(`null left in a union:\n${leftNulls.join("\n")}`);
+}
+
+/**
+ * The wire a shipped app reads (wire-compat.ts). The base is where this
+ * change grows from: `git merge-base HEAD origin/main`, or `--base <ref>`.
+ * What would break an app built at the base is refused, named by schema and
+ * property, unless WIRE_PROTOCOL rose since the base; nothing is written then.
+ */
+const git = (...args: string[]): string => {
+  const run = Bun.spawnSync(["git", ...args], { cwd: HUB });
+  if (run.exitCode !== 0) {
+    throw new Error(`git ${args.join(" ")}: ${run.stderr.toString().trim()}`);
+  }
+  return run.stdout.toString();
+};
+const baseFlag = process.argv.indexOf("--base");
+const baseRef =
+  baseFlag >= 0
+    ? process.argv[baseFlag + 1]
+    : git("merge-base", "HEAD", "origin/main").trim();
+if (!baseRef) {
+  throw new Error("--base needs a git ref");
+}
+const repo = git("rev-parse", "--show-toplevel").trim();
+const atBase = (path: string): string =>
+  git("show", `${baseRef}:${relative(repo, path)}`);
+const baseProtocol = Number(
+  /export const WIRE_PROTOCOL = (\d+);/.exec(
+    atBase(join(CORE, "stream.ts"))
+  )?.[1]
+);
+const breaks = wireBreaks(JSON.parse(atBase(OUT)), document, {
+  frames: Object.values(FRAMES).flat(),
+  sent: SENT,
+  openBefore: openEnumNames(
+    atBase(join(dirname(OUT), "openapi-generator-config.yaml"))
+  ),
+});
+if (breaks.length) {
+  if (!(WIRE_PROTOCOL > baseProtocol)) {
+    rmSync(scratch, { recursive: true, force: true });
+    console.error(
+      `The wire would break an app built at ${baseRef.slice(0, 12)} (WIRE_PROTOCOL ${baseProtocol}), at ${breaks.length} place${breaks.length === 1 ? "" : "s"}:\n${breaks.map((line) => `  ${line}`).join("\n")}\nKeep each readable by that app (scripts/wire-compat.ts), or raise WIRE_PROTOCOL in packages/core/src/stream.ts in the same change. Nothing was written.`
+    );
+    process.exit(1);
+  }
+  console.log(
+    `WIRE_PROTOCOL rose from ${baseProtocol} to ${WIRE_PROTOCOL}: ${breaks.length} wire break${breaks.length === 1 ? "" : "s"} since ${baseRef.slice(0, 12)} allowed`
+  );
 }
 
 const outputs: [string, string][] = [
