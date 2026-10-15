@@ -29,6 +29,51 @@
       type="font/woff2"
       crossorigin
     />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://cawco.dev/#organization",
+            "name": "Caw&Co",
+            "url": "https://cawco.dev",
+            "logo": "https://cawco.dev/apple-touch-icon.png",
+            "sameAs": ["https://github.com/Bewinxed/cawco", "https://x.com/cawcodev"]
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://cawco.dev/#software",
+            "name": "Caw&Co",
+            "description": "Caw&Co is a self-hosted control plane for Claude Code, OpenCode and pi. One browser board shows every machine, project and session, and you answer the ones that are waiting.",
+            "url": "https://cawco.dev",
+            "image": "https://cawco.dev/og.png",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "macOS, Linux",
+            "downloadUrl": "https://cawco.dev/install.sh",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "license": "https://github.com/Bewinxed/cawco/blob/main/LICENSE",
+            "featureList": [
+              "See every session at once",
+              "Answer a prompt from your phone",
+              "Write your standing reply once",
+              "Let a session hand work to another",
+              "Set a tool up once",
+              "Queue the next message",
+              "Long transcripts stay light",
+              "Continue in a new session",
+              "Hand off, with a cost check",
+              "Self-hosted",
+              "Three agents, one board",
+              "Your own accounts",
+              "Spend in view"
+            ],
+            "publisher": { "@id": "https://cawco.dev/#organization" }
+          }
+        ]
+      }
+    </script>
     <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.ts"></script>
   </head>
@@ -119,7 +164,7 @@
               </p>
             </div>
             <p class="install-note">
-              It's free and open source, and it runs on macOS and on Linux with systemd.
+              It's free, and it runs on macOS and on Linux with systemd.
               <a href="install.sh">Read the script first</a> or
               <a href="https://github.com/Bewinxed/cawco">browse the source</a>. Adding another
               machine? Use Add machine in your dashboard, not this command.
@@ -870,9 +915,7 @@
           <article class="card card-ink">
             <h3>Caw&amp;Co</h3>
             <p class="price">Free</p>
-            <p>
-              The hub, the daemon and the board are open source. You run them on your own machines.
-            </p>
+            <p>The hub, the daemon and the board are free. You run them on your own machines.</p>
             <div class="cmd">
               <code data-cmd>curl -fsSL https://cawco.dev/install.sh | sh</code>
               <button class="copy" type="button" data-copy>

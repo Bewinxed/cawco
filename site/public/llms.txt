@@ -1,0 +1,39 @@
+# Caw&Co
+
+> Caw&Co is a self-hosted control plane for Claude Code, OpenCode and pi. One browser board shows every machine, project and session, and you answer the ones that are waiting.
+
+Caw&Co puts a small daemon on each of your machines. Each daemon reports to a hub on your own network, a tailnet or a LAN, and the hub is never bound to a public address. One browser tab then shows every session on every machine.
+
+It runs Claude Code, OpenCode and pi side by side. It runs on macOS and on Linux with systemd. You sign in to each agent with your own account; Caw&Co doesn't sell model usage.
+
+Install it on your first machine with:
+
+    curl -fsSL https://cawco.dev/install.sh | sh
+
+To add another machine, use Add machine in the dashboard instead of running this command again.
+
+## What it does
+
+- One board: every session on every machine is a row under its project, and its delegates fold open under it. A workflow chains steps, checks and questions, and its run shows each step the same way.
+- Phone approvals: when an agent stops at a permission prompt, the prompt arrives in Telegram with Allow, Always allow and Deny.
+- Rules: a rule watches what every session says and sends your reply when a phrase or a regular expression matches. With Jev connected it can match by meaning. You can narrow a rule to one machine, project, agent or model.
+- Delegates: a session can hand work to another session on any machine in the fleet, on any agent. A delegate has its own session and its own clone, and it is done when its parent's checks pass.
+- Fleet sync: add a skill, an MCP server or a plugin marketplace once on the hub and every machine gets it. Memory and hooks sync too.
+- Message queue: send a message while the agent works. It waits its turn, and you can take it back until it's read.
+- Continue in a new session: the hub summarises a long conversation with a model you pick and opens a fresh session from it, on any agent or model.
+- Hand off with a cost check: sessions message each other across machines. If the target Claude Code session's prompt cache has expired, the hub refuses the first try and says a fresh delegate is usually cheaper.
+- Spend: see what each agent cost today, against a budget you set.
+
+## Pricing
+
+The hub, the daemon and the board are free. You run them on your own machines.
+
+A native app for iPhone, iPad and Mac will cost $9.99, paid once, with no trial. It is not released yet.
+
+## Links
+
+- [Caw&Co](https://cawco.dev/)
+- [Install script](https://cawco.dev/install.sh)
+- [Source on GitHub](https://github.com/Bewinxed/cawco)
+- [Caw&Co on X](https://x.com/cawcodev)
+- [Privacy policy](https://cawco.dev/privacy)
