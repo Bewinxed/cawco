@@ -2,6 +2,10 @@ import type { InstanceRow, WorkflowListing, WorkflowRun } from "@cawco/core";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
+import {
+  FOLD_BOXES_PREF,
+  parseFoldBoxes,
+} from "#lib/components/ui/fluid-tabs/fold-memory.js";
 import type { LayoutServerLoad } from "./$types";
 
 /**
@@ -167,6 +171,10 @@ export const load: LayoutServerLoad = async ({
       ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(stored)))
       : null;
 
+  // Each folder tab's box as last measured, so its shape is drawn true from
+  // the first paint (fluid-tabs/fold-memory.ts).
+  const foldBoxes = parseFoldBoxes(pref(FOLD_BOXES_PREF));
+
   let workspace = parse(pref(WORKSPACE_KEY));
   if (workspace) {
     workspace.ctx = parseCtx(pref(WORKSPACE_CTX_KEY));
@@ -213,12 +221,12 @@ export const load: LayoutServerLoad = async ({
   // whose name read failed says so in the strip until the fleet names it.
   const names: Record<string, HubRead<string>> = {};
   if (!workspace) {
-    return { railWidth, narrow, workspace, names };
+    return { railWidth, narrow, workspace, names, foldBoxes };
   }
 
   const open = leavesOf(workspace.root).flatMap((leaf) => leaf.tabs);
   if (open.length === 0) {
-    return { railWidth, narrow, workspace, names };
+    return { railWidth, narrow, workspace, names, foldBoxes };
   }
 
   // What the fleet calls these conversations.
@@ -308,5 +316,5 @@ export const load: LayoutServerLoad = async ({
     }
   }
 
-  return { railWidth, narrow, workspace, names };
+  return { railWidth, narrow, workspace, names, foldBoxes };
 };

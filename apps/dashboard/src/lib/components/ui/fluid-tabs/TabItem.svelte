@@ -6,13 +6,22 @@
    * strong weight, so choosing it changes nothing but the weight: the box
    * the indicator was aimed at is the box it lands on.
    *
+   * A folder tab draws its own shape: one SVG path (fold-path.ts), its sheet
+   * and its rim.
+   *
    * `href` makes the item a link — the row keeps a real address for
    * middle-click and copy — with a plain click still choosing in place.
    */
   import type { Component, Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
+  import { HALF } from "#lib/cawco/motion/hang-shape.js";
   import { cn } from "#lib/utils.js";
   import { restRank, useList, useTabs } from "./context.svelte";
+  import { type FoldMeasure, rememberFoldBox } from "./fold-memory";
+  import { type FoldPose, foldPath, restPose, taperStops } from "./fold-path";
+
+  /** How long a box holds still before its measure is kept, ms (a resize settling). */
+  const KEEP_AFTER = 400;
 
   let {
     value,
@@ -23,6 +32,8 @@
     lead,
     trail,
     onclick,
+    flush,
+    hung = false,
     ...rest
   }: Omit<HTMLAttributes<HTMLElement>, "onclick"> & {
     value: string;
@@ -35,10 +46,22 @@
     /** Content after the label: a close control, a count. */
     trail?: Snippet;
     onclick?: (event: MouseEvent) => void;
+    /**
+     * A folder tab's side that stands square at its foot, with no flare: a
+     * card hanging from it there runs straight on down its side (PaneTabs).
+     */
+    flush?: "start" | "end";
+    /**
+     * A hang (a card, a menu) stands drawn out of it as one silhouette with
+     * it (motion/hang-shape): it draws no rim, and its sheet stops at the
+     * one outline's centre (PaneTabs).
+     */
+    hung?: boolean;
   } = $props();
 
   const tabs = useTabs();
   const list = useList();
+  const uid = $props.id();
 
   let node = $state<HTMLElement | undefined>();
   // The root learns the order from the items themselves, in the order they
@@ -68,13 +91,15 @@
         );
   });
   /**
-   * How chosen the tab is, 0 to 1: a folder tab's sheet, its lean, its card's
-   * fill and its title's strong ink all follow it. At rest it is 1 on the
-   * chosen tab and 0 on the rest. Under a gesture (the root's `travel`) the
+   * How chosen the tab is, 0 to 1: a folder tab's sheet, its rim's
+   * strength and its title's strong ink all follow it. At rest it is 1 on
+   * the chosen tab and 0 on the rest; a choice carries it over the choice's
+   * own length and curve (`--pick`, a typed number, so it is one value
+   * interpolated, not several). Under a gesture (the root's `travel`) the
    * chosen tab gives up the fraction the gesture has travelled and the tab
    * it is heading to takes as much, so the choice crosses between the two
    * with the finger and lands with the pane on the same frame; the track's
-   * `data-ride` holds their transitions off while it does.
+   * `data-ride` holds its transition off while it does.
    */
   const pick = $derived.by(() => {
     const { travel } = tabs;
@@ -85,6 +110,112 @@
     const f = Math.min(1, Math.max(0, travel.fraction));
     return at + ((value === travel.toward ? 1 : 0) - at) * f;
   });
+
+  /* ── A folder tab's shape ─────────────────────────────────────────
+     Measured from the tab's own box whenever it resizes, the tokens the
+     outline is drawn to read where it stands (the phone's row rounds them
+     up), and each measure kept (fold-memory.ts) so the server's next render
+     draws the same shape before anything runs. A tab with neither a
+     measure nor a kept one draws no shape until it is measured: never a
+     guess stretched to its box. */
+  const folder = $derived(tabs.variant === "folder");
+  let measured = $state<FoldMeasure | null>(null);
+  /** The measure waiting to be kept, a beat after the box stops changing. */
+  let keep: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const el = node;
+    if (!(el && folder)) {
+      return;
+    }
+    const read = () => {
+      const style = getComputedStyle(el);
+      const px = (name: string) =>
+        Number.parseFloat(style.getPropertyValue(name)) || 0;
+      const now: FoldMeasure = {
+        box: {
+          width: el.offsetWidth,
+          height: el.offsetHeight,
+          flare: px("--flare"),
+          radius: px("--radius"),
+          slopeStart: px("--slope-start"),
+          slopeEnd: px("--slope-end"),
+        },
+        ink: {
+          stroke: px("--rim-w") || 1,
+          taper: px("--tab-rim-taper"),
+          ease: px("--tab-rim-taper-ease") || 1,
+        },
+      };
+      measured = now;
+      clearTimeout(keep);
+      keep = setTimeout(() => rememberFoldBox(value, now), KEEP_AFTER);
+    };
+    const sizes = new ResizeObserver(read);
+    sizes.observe(el);
+    read();
+    return () => {
+      sizes.disconnect();
+      clearTimeout(keep);
+    };
+  });
+  const shape = $derived(measured ?? tabs.boxes[value] ?? null);
+  /**
+   * Which of its sides a tab above it covers, as the track reads them where
+   * they are drawn (TabsList `fold`); until it has, the neighbour above it
+   * at rest, from the order and the value alone. A side the host stands
+   * flush (`flush`) is square too.
+   */
+  const fold = $derived.by((): readonly [boolean, boolean] => {
+    const ranked = node ? list.folds.get(node) : undefined;
+    let start = ranked?.[0];
+    let end = ranked?.[1];
+    if (ranked === undefined) {
+      const at = tabs.order.indexOf(value);
+      const chosen =
+        tabs.value === undefined ? -1 : tabs.order.indexOf(tabs.value);
+      const n = tabs.order.length;
+      const rank = (i: number) => restRank(n, chosen, i);
+      start = at > 0 && rank(at - 1) > rank(at);
+      end = at >= 0 && at < n - 1 && rank(at + 1) > rank(at);
+    }
+    return [
+      Boolean(start) || flush === "start",
+      Boolean(end) || flush === "end",
+    ];
+  });
+  /**
+   * How it stands: the pose a come-forward has it in (TabsList, `list.poses`)
+   * while one moves the stack, else at rest on its folds. A side the host
+   * stands flush is square in either.
+   */
+  const pose = $derived.by((): FoldPose => {
+    const moving = node ? list.poses.get(node) : undefined;
+    if (!moving) {
+      return restPose(fold);
+    }
+    return {
+      ...moving,
+      spread: [
+        flush === "start" ? 0 : moving.spread[0],
+        flush === "end" ? 0 : moving.spread[1],
+      ],
+    };
+  });
+  /**
+   * Its outline; while a hang stands drawn out of it (`hung`), in by half
+   * the hang's stroke all round (motion/hang-shape `HALF`): the sheet stops
+   * where the one outline over tab and hang is centred, so no edge of the
+   * sheet's lies under that stroke's edge, and the tab draws no rim of its
+   * own (the outline is the rim).
+   */
+  const outline = $derived(
+    shape ? foldPath(shape.box, pose, hung ? { inset: HALF } : {}) : ""
+  );
+  const stops = $derived(
+    shape
+      ? taperStops(shape.box, shape.ink.stroke, shape.ink.taper, shape.ink.ease)
+      : []
+  );
   // The list's props land on the hit, not the box; `class` is the box's.
 
   function choose(event: MouseEvent): void {
@@ -107,11 +238,53 @@
 
 <span
   class={cn("ff-tab", selected && "selected", className)}
+  data-flush={flush}
   data-tab-index={index}
   bind:this={node}
   style:--pick={pick}
   style:--z-rest={restAt}
 >
+  {#if folder && shape}
+    <!-- The tab's shape: one path, its sheet filled and its rim stroked
+         inside its edge (clipped to it), the stroke's ink tapering up from
+         each foot's tip (the gradient), drawn to the tab's measured box. -->
+    <svg
+      aria-hidden="true"
+      class="fold"
+      preserveAspectRatio="none"
+      viewBox="0 0 {shape.box.width + 2 * shape.box.flare} {shape.box.height}"
+    >
+      <defs>
+        <path d={outline} id="{uid}-outline" />
+        <clipPath id="{uid}-inside">
+          <use href="#{uid}-outline" />
+        </clipPath>
+        <linearGradient
+          gradientUnits="userSpaceOnUse"
+          id="{uid}-taper"
+          x1="0"
+          x2="0"
+          y1={shape.box.height}
+          y2="0"
+        >
+          {#each stops as stop (stop.offset)}
+            <stop offset={stop.offset} stop-opacity={stop.ink} />
+          {/each}
+        </linearGradient>
+      </defs>
+      <use class="sheet" href="#{uid}-outline" />
+      {#if !hung}
+        <g class="rim">
+          <use
+            class="stroke"
+            clip-path="url(#{uid}-inside)"
+            href="#{uid}-outline"
+            stroke="url(#{uid}-taper)"
+          />
+        </g>
+      {/if}
+    </svg>
+  {/if}
   <svelte:element
     this={href ? "a" : "button"}
     aria-selected={selected}
@@ -131,7 +304,7 @@
     {/if}
     <!-- The name, and over it the same name in the strong ink: a folder tab
          fades the strong one in as it is chosen (transitions.dev, text swap
-         soft), so its ink travels on the compositor. -->
+         soft), so its ink travels with the choice. -->
     <span class="label">
       <span class="text">{label}</span>
       <!-- Its words drawn, not written (`::before`): as a second copy of
@@ -147,13 +320,20 @@
 </span>
 
 <style>
+  /* How chosen a folder tab is (`pick`), typed so a choice interpolates the
+     one number and everything drawn from it follows on its clock. */
+  @property --pick {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+  }
   /* The measured box: the hit and whatever trails it. The overlays are
      aimed at this, so a trailing control sits inside the segment. */
   /* The tab box makes no stacking context of its own: its contents rise
      above the overlays (the sheet is z-index 2, a segmented list's hover
-     ghost 1), while anything the box paints behind them — a folder tab's
-     tint — stays under both. A folder tab's layers take their place in
-     the track's one stack instead, by the tab's rank (below). */
+     ghost 1), while anything the box paints behind them stays under both.
+     A folder tab, or the box a host wraps round it, is one stack of its
+     own instead, at its rank (TabsList). */
   .ff-tab {
     position: relative;
     display: flex;
@@ -241,36 +421,23 @@
       z-index: -1;
     }
   }
-  /* ── Folder tabs in depth ──────────────────────────────────────────
-     Each tab is a card in its own tint standing on the shelf, and over it
-     its own sheet, the page below continued, shown as much as the tab is
-     chosen (`--pick`). Tabs overlap by the flare and make no stacks of
-     their own: card, sheet and contents take the tab's rank in the track's
-     one stack (`--z`, TabsList), four layers a rank.
-
-     Every tab is hinged on its foot, the shelf's line: the chosen one
-     stands upright, every other leans back `--lean` (all one step back),
-     less while a fine pointer is over it (`--lean-lift`). The lean is a
-     rotateX with no perspective about the outline's bottom centre: it
-     lowers the tab's top and moves nothing sideways, so its foot, its sides
-     and its overlaps hold. What is written on the tab stays upright and
-     drops with the card's middle. The sides of the card and the sheet
-     bring their top corners in by `--slope-start` and `--slope-end`.
-
-     A choice is two states trading places where they stand, every part
-     together over `--choose-dur` on `--choose-ease` (TabsList): the lean
-     and the contents' drop (transform, translate), the sheets (the new one
-     fades in where it stands while the old one fades out), the card under
-     them from the receded fill to the sheet's (background-color), and the
-     title's strong ink (opacity). No sheet slides or wipes. */
+  /* ── Folder tabs ───────────────────────────────────────────────────
+     Each tab is a sheet standing on the shelf: one path (fold-path.ts) on
+     a box one flare wider than the tab each side, with rounded shoulders,
+     sides brought in at the top by `--slope-start` and `--slope-end`, and
+     at each foot a curve out into the shelf on the flare, but on a side
+     under its neighbour (TabsList `list.folds`), which runs straight down.
+     It is filled in the receded tint (a host may set it, `--tab-fill`)
+     toward the sheet's own surface (`--sheet`) as the tab is chosen
+     (`--pick`), and a host's rim strokes it inside its edge
+     (`--rim-ink`, `--rim-rest` to `--rim-full` by `--pick`, `--rim-w`
+     wide), the stroke's ink
+     tapering up from each foot's tip (`taperStops`), a glow following it
+     at half its strength, stopped at the shelf's line. The tabs overlap,
+     each its own stack at its rank (TabsList), so the tab in front covers
+     the one behind, rim and all: where two meet, the front's edge is the
+     edge. */
   :global([data-variant="folder"]) .ff-tab {
-    --lean-now: calc(
-      var(--lean) * (1 - var(--pick)) * (1 - var(--lean-lift-now, 0))
-    );
-    /* Where a seam is gliding, this tab's side stands in by this much,
-       card and sheet with it (TabsList, `--cut-start`/`--cut-end`). */
-    --cut-s: calc(var(--seam-tuck) * var(--cut-start, 0));
-    --cut-e: calc(var(--seam-tuck) * var(--cut-end, 0));
     /* The chosen tab's name is its strong ink layer (`.label .strong`): the
        muted one under it stays as it was. */
     &.selected {
@@ -281,178 +448,78 @@
     &:not(:has(.hit:last-child)) {
       padding-inline-end: var(--px-end, var(--px));
     }
-    /* Under the pointer the tab lights its own card in the hover tint (the
-       track's ghost cannot glide between overlapping tabs), and a receded
-       tab comes most of the way up. */
-    @media (hover: hover) {
-      &[data-ghosted]:not(.selected)::before {
-        background: var(--tab-hover, var(--surface-hover));
-      }
-    }
-    @media (hover: hover) and (pointer: fine) {
-      &:not(.selected):hover {
-        --lean-lift-now: var(--lean-lift);
-      }
-    }
-    /* The card: the sheet's outline, on a box one flare wider than the tab
-       each side, on every tab chosen or not (owner: "A curved foot on
-       inactive tabs: their sides curve out at the base like the chosen
-       tab's"). Each side stands straight up from the flare to where the
-       slope begins, its foot curving out into the shelf on the sheet's own
-       flare; a side under its neighbour's card (TabsList `--under-start`,
-       `--under-end`) draws no foot, the curve folded to nothing, straight
-       down to the shelf. Its fill is the receded one (a host may set it,
-       `--tab-fill`) and the sheet's own on the chosen tab, so the overlap
-       between the tab going and the tab coming looks the same from either
-       as they pass. */
-    &::before {
-      /* How far in each foot's tip stands: 0 flared out, the flare folded. */
-      --foot-s: calc(var(--flare) * var(--under-start, 0));
-      --foot-e: calc(var(--flare) * var(--under-end, 0));
-      content: "";
-      position: absolute;
-      inset-block: 0;
-      inset-inline: calc(-1 * var(--flare));
-      z-index: calc(var(--z, var(--z-rest, 1)) * 4);
-      background: color-mix(
-        in oklab,
-        var(--sheet) calc(var(--pick) * 100%),
-        var(--tab-fill, var(--surface-recess-deep))
-      );
-      clip-path: shape(
-        from calc(var(--cut-s) + var(--foot-s)) 100%,
-        arc to calc(var(--cut-s) + var(--flare))
-          calc(100% - var(--flare) + var(--foot-s)) of var(--flare) ccw,
-        line to calc(var(--cut-s) + var(--flare)) calc(100% - var(--flare)),
-        line to calc(var(--cut-s) + var(--flare) + var(--slope-start))
-          var(--radius),
-        arc to
-          calc(var(--cut-s) + var(--flare) + var(--slope-start) + var(--radius))
-          0 of var(--radius) cw,
-        line to
-          calc(
-            100% - var(--cut-e) - var(--flare) - var(--slope-end) -
-              var(--radius)
-          )
-          0,
-        arc to calc(100% - var(--cut-e) - var(--flare) - var(--slope-end))
-          var(--radius) of var(--radius) cw,
-        line to calc(100% - var(--cut-e) - var(--flare))
-          calc(100% - var(--flare)),
-        line to calc(100% - var(--cut-e) - var(--flare))
-          calc(100% - var(--flare) + var(--foot-e)),
-        arc to calc(100% - var(--cut-e) - var(--foot-e)) 100% of var(--flare)
-          ccw,
-        close
-      );
-    }
-    /* The sheet: rounded sloped shoulders and a foot that curves outward
-       into the page, on a box one flare wider than the tab each side. It is
-       part of the tab, so it is wherever the tab is laid out, in the same
-       frame. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset-block: 0;
-      inset-inline: calc(-1 * var(--flare));
-      z-index: calc(var(--z, var(--z-rest, 1)) * 4 + 1);
-      background: var(--sheet);
-      opacity: var(--pick);
-      clip-path: shape(
-        from var(--cut-s) 100%,
-        arc to calc(var(--cut-s) + var(--flare)) calc(100% - var(--flare)) of
-          var(--flare) ccw,
-        line to calc(var(--cut-s) + var(--flare) + var(--slope-start))
-          var(--radius),
-        arc to
-          calc(var(--cut-s) + var(--flare) + var(--slope-start) + var(--radius))
-          0 of var(--radius) cw,
-        line to
-          calc(
-            100% - var(--cut-e) - var(--flare) - var(--slope-end) -
-              var(--radius)
-          )
-          0,
-        arc to calc(100% - var(--cut-e) - var(--flare) - var(--slope-end))
-          var(--radius) of var(--radius) cw,
-        line to calc(100% - var(--cut-e) - var(--flare))
-          calc(100% - var(--flare)),
-        arc to calc(100% - var(--cut-e)) 100% of var(--flare) ccw,
-        close
-      );
-    }
-    /* Card and sheet share a bottom centre, so one lean keeps them one
-       shape. */
-    &::before,
-    &::after {
-      transform-origin: 50% 100%;
-      transform: rotateX(var(--lean-now));
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      &::before {
-        transition:
-          background-color var(--choose-dur) var(--choose-ease),
-          transform var(--choose-dur) var(--choose-ease);
-      }
-      &::after {
-        transition:
-          opacity var(--choose-dur) var(--choose-ease),
-          transform var(--choose-dur) var(--choose-ease);
-      }
-      /* A pointer's lift runs at the control tier, and lets go at the
-         choice's own pace. */
-      @media (hover: hover) and (pointer: fine) {
-        &:not(.selected):hover::before,
-        &:not(.selected):hover::after {
-          transition-duration: var(--dur-control);
-          transition-timing-function: var(--ease-out);
-        }
-      }
-    }
-    /* Under a gesture the sheets are where its fraction puts them, frame by
-       frame; the track's data-ride stays a frame past the gesture, so
-       handing back to the rules above starts no transition. */
-    :global([data-ride]) &::before,
-    :global([data-ride]) &::after {
-      transition: none;
-    }
-    /* Pressed: the tab's own shapes take the tint — the card, and the sheet
-       with its shoulders and flared foot — so it fills the whole tab and its
-       outside curve; the box itself stays clear behind them. */
+    /* The press tints the tab's own shape, its feet too; the box itself
+       stays clear behind it. */
     &:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
       background-color: transparent;
+    }
 
-      &::before,
-      &::after {
-        background: var(--press);
-      }
+    /* A choice carries `--pick` over the choice's own length and curve;
+       under a gesture it is where the fraction puts it. */
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        color var(--dur-ghost) var(--ease-out),
+        --pick var(--choose-dur) var(--choose-ease);
+    }
+    :global([data-ride]) & {
+      transition: none;
     }
   }
-  /* What is written on a folder tab, above its sheet at its rank, upright,
-     dropped with the leaning card's middle. */
-  :global([data-variant="folder"]) .ff-tab > :global(*) {
-    z-index: calc(var(--z, var(--z-rest, 1)) * 4 + 2);
-    translate: 0 calc(var(--item) * 0.5 * (1 - cos(var(--lean-now))));
+  .ff-tab > .fold {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(-1 * var(--flare));
+    z-index: 1;
+    inline-size: calc(100% + 2 * var(--flare));
+    block-size: 100%;
+    overflow: visible;
+    pointer-events: none;
+    /* The rim's glow stops at the shelf's line. */
+    clip-path: inset(-24px -24px 0);
   }
-  /* Its drop travels with the choice. Weightless, so a host's trailing
-     control that has transitions of its own keeps them, and lists
-     `translate` among them (PaneTabs). */
-  @media (prefers-reduced-motion: no-preference) {
-    /* css-scope: zero-specificity on purpose so a host's own transitions win; `.ff-tab` is this kit tab's class, on every fluid tab */
-    :global(:where([data-variant="folder"] .ff-tab > *)) {
-      transition: translate var(--choose-dur) var(--choose-ease);
-    }
-    @media (hover: hover) and (pointer: fine) {
-      :global([data-variant="folder"])
-        .ff-tab:not(.selected):hover
-        > :global(*) {
-        transition-duration: var(--dur-control);
-        transition-timing-function: var(--ease-out);
-      }
+  .fold .sheet {
+    fill: color-mix(
+      in oklab,
+      var(--sheet) calc(var(--pick) * 100%),
+      var(--tab-fill, var(--surface-recess-deep))
+    );
+  }
+  /* Under the pointer an unchosen tab lights its own shape in the hover
+     tint (the track's ghost cannot glide between overlapping tabs). */
+  @media (hover: hover) {
+    .ff-tab:global([data-ghosted]):not(.selected) .fold .sheet {
+      fill: var(--tab-hover, var(--surface-hover));
     }
   }
-  :global([data-ride]) .ff-tab > :global(*) {
-    transition: none;
+  .ff-tab:has(.hit:active:not(:disabled, [aria-disabled="true"])) .fold .sheet {
+    fill: var(--press);
+  }
+  /* A host's rim (PaneTabs: `--rim-ink`, its strength unchosen
+     `--rim-rest` and chosen `--rim-full`) at the strength the tab is
+     chosen at now; none where the host draws none. */
+  .fold .rim {
+    opacity: calc(
+      var(--rim-rest, 0) + (var(--rim-full, 0) - var(--rim-rest, 0)) *
+        var(--pick)
+    );
+    filter: drop-shadow(
+      0 0 6px color-mix(in oklab, var(--rim-ink, transparent) 50%, transparent)
+    );
+
+    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+      filter: none;
+    }
+  }
+  .fold .stroke {
+    fill: none;
+    /* Twice the rim's width, clipped to the shape: the half inside it, at
+       its own width even where a kept shape is stretched to a box that has
+       since moved (its fonts still loading), until it is measured again. */
+    stroke-width: calc(var(--rim-w, 1) * 2px);
+    vector-effect: non-scaling-stroke;
+  }
+  .fold stop {
+    stop-color: var(--rim-ink, transparent);
   }
   /* The chosen folder sheet's flared foot is the tab's too: the area takes
      the sheet's outline, square-shouldered, so the foot reaches past the
@@ -496,7 +563,8 @@
     font-weight: var(--weight-strong);
   }
   /* The strong ink layer is a folder tab's: a segmented one changes colour
-     under its sliding thumb. */
+     under its sliding thumb. It is as strong as the tab is chosen, on the
+     choice's clock (`--pick`). */
   .strong {
     display: none;
   }
@@ -504,13 +572,6 @@
     display: block;
     color: var(--ink-strong);
     opacity: var(--pick);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--choose-dur) var(--choose-ease);
-    }
-    :global([data-ride]) & {
-      transition: none;
-    }
   }
   /* By day the press is the step past the hover ghost, and an unchosen
      tab's muted label goes strong on it (app.css .press-tint). Last, so it

@@ -89,24 +89,43 @@ export const sameNeck = (a: Neck, b: Neck): boolean =>
 
 /**
  * How far a flare's 1px stroke lies along the card's top edge row before it
- * rises off it, px: the stroke is a band between radii f and f + 1 tangent
- * to that row, which it leaves √(2f + 1) px out. None without a flare.
+ * rises off it, px: the stroke is a band between radii f and f + 1 about a
+ * centre f above the foot's tip, tangent to that row, which its outer edge
+ * leaves √(2f + 1) px out. None without a flare.
  */
 const flareTail = (flare: number): number =>
   flare > 0 ? Math.sqrt(2 * flare + 1) : 0;
 
 /**
- * The neck as the card's style (`kit-hang`): its span, its flares, and the
- * run each side over which the top edge fades out under the flare's stroke
- * (`--neck-tail-*`), so the two strokes meet with no break.
+ * The cut across the card's top edge row (`kit-hang::before`, a 1px row from
+ * one foot's tip to the other's), as a `shape()` in its own box: on a flared
+ * side it starts on the flare's stroke's outer edge, the circle of radius
+ * f + 1 from the row's foot at the tip to the row's top √(2f + 1) px in, so
+ * the edge shows under the cut exactly where the stroke crosses the row and
+ * the anchor's curve runs on into the card's edge as one stroke; a side with
+ * no flare starts square.
  */
+function neckCut(neck: Neck): string {
+  const tailStart = flareTail(neck.flareStart);
+  const tailEnd = flareTail(neck.flareEnd);
+  const start =
+    neck.flareStart > 0
+      ? `arc to ${tailStart}px 0 of ${neck.flareStart + 1}px ccw`
+      : "line to 0 0";
+  const end =
+    neck.flareEnd > 0
+      ? `arc to 100% 100% of ${neck.flareEnd + 1}px ccw`
+      : "line to 100% 100%";
+  return `shape(from 0 100%, ${start}, line to calc(100% - ${tailEnd}px) 0, ${end}, close)`;
+}
+
+/** The neck as the card's style (`kit-hang`): its span, its flares, and the cut's shape. */
 const neckProperties = (neck: Neck): [string, string][] => [
   ["--neck-start", `${neck.start}px`],
   ["--neck-end", `${neck.end}px`],
   ["--neck-flare-start", `${neck.flareStart}px`],
   ["--neck-flare-end", `${neck.flareEnd}px`],
-  ["--neck-tail-start", `${flareTail(neck.flareStart)}px`],
-  ["--neck-tail-end", `${flareTail(neck.flareEnd)}px`],
+  ["--neck-cut", neckCut(neck)],
 ];
 
 /**
@@ -127,6 +146,13 @@ export interface Hang {
    * nothing left to play (a finger folded it into its anchor).
    */
   folded?: () => boolean;
+  /**
+   * A card hanging from a folder tab (motion/hang-shape): it grows out of
+   * the tab's foot as one shape with it instead of sliding down from behind
+   * a cut. Called with how far out it is drawn, 0 (the tab alone) to 1,
+   * every frame it moves, and again at rest.
+   */
+  grow?: (p: number) => void;
   /**
    * Read once as the card is placed: true while a finger is drawing it out
    * of its anchor (a tab's pulled menu), which is its open; nothing plays.
@@ -153,7 +179,9 @@ export function hang(options: Hang): Attachment<HTMLElement> {
     if (!wrapper) {
       return;
     }
-    const motion = slideMotion(node, options);
+    const motion = options.grow
+      ? growMotion(node, options, options.grow)
+      : slideMotion(node, options);
     // Untracked: the attachment's own effect runs the first one, and the
     // anchor and neck it reads are not reasons to attach again.
     const sync = () =>
@@ -178,6 +206,186 @@ export function hang(options: Hang): Attachment<HTMLElement> {
       observer.disconnect();
       motion.stop();
     };
+  };
+}
+
+/** The clock a tab's hang grows and folds on: one run on the card, whose time each frame's shape is read at. */
+export const GROW = "hang-grow";
+
+/** Each growing card's drawing: `to` draws it there and holds it (a finger's pull), `again` draws it where it stands (a placement, a resize). */
+const growers = new WeakMap<
+  HTMLElement,
+  { again: () => void; to: (p: number) => void }
+>();
+
+/** Draws a tab's hang `p` of the way out of its tab and holds it there, its own motion stopped: a finger drawing it out (PaneTabs). */
+export function growTo(node: HTMLElement, p: number): void {
+  growers.get(node)?.to(Math.min(1, Math.max(0, p)));
+}
+
+/** Draws a tab's hang again where it stands: its tab or its box moved. */
+export function regrow(node: HTMLElement): void {
+  growers.get(node)?.again();
+}
+
+/**
+ * A tab's hang's open and close (`Hang.grow`): one run on the card
+ * (`hang-grow`), its progress read every frame and drawn as the silhouette
+ * that far out, so a seeked or slowed clock draws the shape where it
+ * stands. Open over --dur-pop and close over --dur-exit on --ease-out (an
+ * entrance and an exit), each from where the last left it (interruptible),
+ * over its share of the length. Shut, the card is drawn at 0: the tab alone.
+ */
+function growMotion(
+  node: HTMLElement,
+  options: Hang,
+  draw: (p: number) => void
+) {
+  let run: Animation | null = null;
+  let placed = false;
+  let frame = 0;
+  /** How far out it is drawn, and the run's ends. */
+  let p = 0;
+  let from = 0;
+  let to = 0;
+  const set = (v: number) => {
+    p = v;
+    draw(v);
+  };
+  const halt = () => {
+    cancelAnimationFrame(frame);
+    run?.cancel();
+    run = null;
+  };
+  growers.set(node, {
+    again: () => draw(p),
+    to: (v) => {
+      halt();
+      set(v);
+    },
+  });
+  const tick = () => {
+    const clock = run;
+    if (!clock) {
+      return;
+    }
+    const timing = clock.effect?.getComputedTiming();
+    const ended =
+      Number(clock.currentTime ?? 0) >= Number(timing?.endTime ?? 0);
+    set(from + (to - from) * (ended ? 1 : (timing?.progress ?? 0)));
+    frame = requestAnimationFrame(tick);
+  };
+  const play = (target: number, ms: number) => {
+    halt();
+    from = p;
+    to = target;
+    const next = node.animate(
+      [{ "--hang-grow": from }, { "--hang-grow": target }],
+      {
+        id: GROW,
+        duration: Math.max(1, ms * Math.abs(target - from)),
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      }
+    );
+    run = next;
+    frame = requestAnimationFrame(tick);
+    return next;
+  };
+  /** Shut and at rest: the tab alone, the card's run let go. */
+  const rest = () => {
+    halt();
+    set(0);
+    delete node.dataset.shown;
+    options.onshown?.(false);
+    node.dispatchEvent(new Event(FOLDED));
+  };
+  const grow = () => {
+    if (!placed || options.quiet?.()) {
+      return;
+    }
+    node.dataset.shown = "";
+    options.onshown?.(true);
+    // A finger drawing it out draws it itself (`growTo`).
+    if (options.held?.()) {
+      halt();
+      node.dispatchEvent(new Event(GROWN));
+      return;
+    }
+    if (!motionOk.current) {
+      halt();
+      set(1);
+      node.dispatchEvent(new Event(GROWN));
+      return;
+    }
+    const growth = play(1, dur("--dur-pop"));
+    growth.finished
+      .then(() => {
+        if (run === growth) {
+          halt();
+          set(1);
+          node.dispatchEvent(new Event(GROWN));
+        }
+      })
+      .catch(() => undefined);
+  };
+  const fold = () => {
+    if (options.quiet?.()) {
+      return;
+    }
+    if (
+      options.folded?.() ||
+      !motionOk.current ||
+      !placed ||
+      node.dataset.shown === undefined
+    ) {
+      rest();
+      return;
+    }
+    const folding = play(0, dur("--dur-exit"));
+    folding.finished
+      .then(() => {
+        if (run === folding) {
+          rest();
+        }
+      })
+      .catch(() => undefined);
+  };
+  let start = 0;
+  const state = new MutationObserver(() => {
+    if (node.dataset.state === "closed") {
+      cancelAnimationFrame(start);
+      fold();
+    } else if (node.dataset.state === "open" && placed) {
+      cancelAnimationFrame(start);
+      start = requestAnimationFrame(grow);
+    }
+  });
+  state.observe(node, { attributes: true, attributeFilter: ["data-state"] });
+  // Drawn shut from the start; untracked, so what the drawing reads (the
+  // card's anchor) is no reason to attach again: the anchor goes as the
+  // card closes, and attaching again then dropped the fold.
+  untrack(() => set(0));
+  return {
+    placed() {
+      const first = !placed;
+      placed = true;
+      if (first) {
+        start = requestAnimationFrame(() => {
+          if (node.dataset.state === "open") {
+            grow();
+          }
+        });
+      } else {
+        draw(p);
+      }
+    },
+    stop() {
+      cancelAnimationFrame(start);
+      state.disconnect();
+      halt();
+      growers.delete(node);
+    },
   };
 }
 

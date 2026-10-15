@@ -6,6 +6,9 @@
  * arrive, leave and move.
  */
 import { getContext, setContext } from "svelte";
+import { SvelteMap } from "svelte/reactivity";
+import type { FoldMeasure } from "./fold-memory";
+import type { FoldPose } from "./fold-path";
 import type { TabRects } from "./rects.svelte";
 
 export type TabsSize = "default" | "compact";
@@ -26,6 +29,9 @@ export class TabsState {
   controlled = $state<string | undefined>(undefined);
   selectedIndex = $state<number | undefined>(undefined);
   size = $state<TabsSize>("default");
+  variant = $state<TabsVariant>("segmented");
+  /** Each folder tab's shape as last measured, by value (fold-memory.ts). */
+  boxes = $state.raw<Readonly<Record<string, FoldMeasure>>>({});
   travel = $state<TabsTravel | null>(null);
   onValueChange: ((value: string) => void) | undefined;
   onSelect: ((index: number) => void) | undefined;
@@ -99,6 +105,17 @@ export class TabsListState {
   /** Where the indicator is drawn — moved on click, ahead of the value. */
   optimisticIndex = $state<number | null>(null);
   focusedIndex = $state<number | null>(null);
+  /**
+   * A folder tab's sides whose foot a tab above it covers where the two are
+   * drawn now (start, end), by its item (TabsList `fold`): those draw no
+   * foot (TabItem).
+   */
+  folds = new SvelteMap<HTMLElement, readonly [boolean, boolean]>();
+  /**
+   * Each folder tab's pose while a come-forward moves the stack (TabsList),
+   * by its item: TabItem draws it in place of its folds' rest. Empty at rest.
+   */
+  poses = new SvelteMap<HTMLElement, FoldPose>();
 
   constructor(rects: TabRects) {
     this.rects = rects;

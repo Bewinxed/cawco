@@ -39,9 +39,15 @@
   import {
     hang,
     type Neck,
+    regrow,
     sameNeck,
     setNeck,
   } from "#lib/cawco/motion/hang.js";
+  import {
+    type HangGeometry,
+    hangAt,
+    hangClip,
+  } from "#lib/cawco/motion/hang-shape.js";
   import type { Morph } from "#lib/cawco/motion/morph.svelte.js";
   import type ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
   import {
@@ -51,6 +57,7 @@
   } from "#lib/components/ui/floating-presence.js";
   import PopoverContent from "#lib/components/ui/popover/popover-content.svelte";
   import { cn } from "#lib/utils.js";
+  import { outlineLayer } from "./hang-outline.js";
 
   type Props = Omit<
     PopoverPrimitive.ContentProps & ContextMenuPrimitive.ContentProps,
@@ -67,6 +74,12 @@
     flared?: boolean;
     /** It hangs from the top bar's glass. */
     glass?: boolean;
+    /**
+     * It hangs from a folder tab (the session card, the tab's menu): one
+     * silhouette with it, grown out of its foot (motion/hang-shape,
+     * hang-outline).
+     */
+    tab?: boolean;
     /** It stands drawn out of its anchor: the anchor draws its foot. */
     joined?: boolean;
     /** The neck where the card stands, on every placement. */
@@ -87,6 +100,7 @@
     as: Content = PopoverContent,
     flared = true,
     glass = false,
+    tab = false,
     joined = $bindable(false),
     ref = $bindable(null),
     onneck,
@@ -198,11 +212,94 @@
     onneck?.(neck);
   }
 
+  /**
+   * The tab a tab's hang hangs from: its anchor, or the last one it had
+   * while it folds back into it (a site lets its anchor go as it closes, the
+   * tab's menu does).
+   */
+  let lastAnchor: HTMLElement | null = null;
+  const tabOf = () => {
+    if (anchor) {
+      lastAnchor = anchor;
+    }
+    return anchor ?? lastAnchor;
+  };
+
+  /**
+   * The silhouette a tab's hang (`tab`) is one shape with its tab in, where
+   * it stands now: the tab's own box and fold measures, the card's box, the
+   * sides it stands flush on (within a pixel of the tab's flank).
+   */
+  function shapeOf(node: HTMLElement): HangGeometry | null {
+    const at = tabOf();
+    if (!at) {
+      return null;
+    }
+    const ff = at.querySelector<HTMLElement>(".ff-tab") ?? at;
+    const t = ff.getBoundingClientRect();
+    const style = getComputedStyle(ff);
+    const px = (name: string) =>
+      Number.parseFloat(style.getPropertyValue(name)) || 0;
+    const c = node.getBoundingClientRect();
+    return {
+      box: {
+        width: t.width,
+        height: t.height,
+        flare: px("--flare"),
+        radius: px("--radius"),
+        slopeStart: px("--slope-start"),
+        slopeEnd: px("--slope-end"),
+      },
+      corner: Number.parseFloat(getComputedStyle(node).borderBottomLeftRadius),
+      flush: {
+        start: Math.abs(c.left - t.left) <= 1,
+        end: Math.abs(c.right - t.right) <= 1,
+      },
+      hang: { left: c.left, right: c.right, height: c.bottom - t.bottom },
+      tab: { left: t.left, right: t.right, top: t.top, bottom: t.bottom },
+    };
+  }
+
   const hung = (node: HTMLElement) => {
+    const layer = tab ? outlineLayer(node) : null;
+    /** A tab's hang drawn `p` of the way out: its surface cut to the silhouette, the outline drawn over both. */
+    const grow = (p: number) => {
+      const shape = layer ? shapeOf(node) : null;
+      if (!(layer && shape)) {
+        return;
+      }
+      const now = hangAt(shape, p);
+      const box = node.getBoundingClientRect();
+      node.style.clipPath = `path("${hangClip(now, { x: box.left, y: box.top })}")`;
+      const ff = tabOf()?.querySelector<HTMLElement>(".ff-tab");
+      layer.draw(
+        now,
+        ff ? getComputedStyle(ff).getPropertyValue("--hang-rim").trim() : ""
+      );
+    };
     const sized = new ResizeObserver(([entry]) => {
       width = entry?.borderBoxSize[0]?.inlineSize ?? node.offsetWidth;
+      if (layer) {
+        regrow(node);
+      }
     });
     sized.observe(node);
+    // A glide to another anchor (`data-morph`, the site's transition of its
+    // wrapper's move) writes no style per frame: the shape follows it frame
+    // by frame for as long as it runs.
+    let gliding = 0;
+    const follow = () => {
+      regrow(node);
+      gliding = node.hasAttribute("data-morph")
+        ? requestAnimationFrame(follow)
+        : 0;
+    };
+    const glide = new MutationObserver(() => {
+      if (layer && !gliding && node.hasAttribute("data-morph")) {
+        gliding = requestAnimationFrame(follow);
+      }
+    });
+    glide.observe(node, { attributes: true, attributeFilter: ["data-morph"] });
     const motion = hang({
       neckAt: (left) => {
         placedAt = left;
@@ -211,14 +308,19 @@
       onneck: (neck) => draw(node, neck),
       onshown: (shown) => {
         joined = shown;
+        layer?.show(shown);
       },
       held: () => held?.() ?? false,
       folded: () => folded?.() ?? false,
       quiet: () => quiet?.() ?? false,
+      grow: layer ? grow : undefined,
     })(node);
     return () => {
       sized.disconnect();
+      glide.disconnect();
+      cancelAnimationFrame(gliding);
       motion?.();
+      layer?.remove();
       placedAt = null;
       drawnNeck = null;
     };
@@ -252,7 +354,12 @@
      back at the dismissal (floating-presence). -->
 <Content
   {...rest}
-  class={cn("kit-pop kit-hang", glass && "glass-card", className)}
+  class={cn(
+    "kit-pop kit-hang",
+    glass && "glass-card",
+    tab && "tab-hang",
+    className
+  )}
   forceMount
   bind:ref
 >

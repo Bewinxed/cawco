@@ -32,6 +32,7 @@ import { Clock } from "../../anim";
 import { diff } from "../../diff";
 import { r2 } from "../../geom";
 import { capture, dx, dy, px, type Rgb } from "../../ink";
+import { jointGeometry, jointInk, jointTurns } from "../../joint";
 import {
   frames,
   type Kit,
@@ -62,8 +63,10 @@ interface Card {
   /** What stands the opener in reach (the phone's sidebar), run before the clock is held. */
   prepare?: (page: Page) => Promise<void>;
   route: string;
-  /** It opens with no slide to catch (a mouse's tab menu, the staged panel): its rest alone is read. */
+  /** It opens with no slide to catch (the staged panel): its rest alone is read. */
   still?: boolean;
+  /** It hangs from a folder tab as one silhouette with it (motion/hang-shape): read as that shape. */
+  tab?: boolean;
 }
 
 const esc = (page: Page) => page.keyboard.press("Escape");
@@ -101,6 +104,7 @@ function cardsAt(touch: boolean): Card[] {
         await page.keyboard.press("ArrowDown");
       },
       close: esc,
+      tab: true,
     },
     {
       name: "tab-menu",
@@ -124,8 +128,7 @@ function cardsAt(touch: boolean): Card[] {
             )
         ),
       close: esc,
-      // A mouse's menu opens beside the pointer, a plain kit menu.
-      still: !touch,
+      tab: true,
     },
     ...(touch
       ? [
@@ -339,6 +342,10 @@ async function readCard(kit: Kit, page: Page, card: Card, where: string) {
   );
   await settle(page, 400);
   await card.prepare?.(page);
+  if (card.tab) {
+    await readTabHang(kit, page, card, name);
+    return;
+  }
   if (!card.still) {
     const clock = await Clock.on(page);
     for (const [phase, act, pcts] of [
@@ -628,6 +635,194 @@ async function behaviour(kit: Kit, page: Page, theme: string) {
   );
 }
 
+/** The outline layer's path and the hang's surface as drawn now: the one shape. */
+const drawnShape = (page: Page, sel: string) =>
+  page.evaluate((s) => {
+    const card = document.querySelector<HTMLElement>(s);
+    const line = document.querySelector<SVGPathElement>(
+      ".hang-outline path.line"
+    );
+    const d = line?.getAttribute("d") ?? "";
+    const box = line?.getBBox();
+    return {
+      d,
+      subpaths: (d.match(/M/g) ?? []).length,
+      closed: d.trim().endsWith("Z"),
+      bottom: box ? box.y + box.height : 0,
+      top: card?.getBoundingClientRect().top ?? 0,
+      clip: card?.style.clipPath ?? "",
+      shown:
+        (line?.closest("svg") as SVGElement | null)?.style.display !== "none",
+    };
+  }, sel);
+
+/**
+ * A hang from a folder tab (owner: "why aren't these the blended/merged menu
+ * that morphs out of the tab?"): it grows out of the tab's foot and folds
+ * back on one clock (`hang-grow`), nothing else running on it; read at every
+ * fraction, the outline is one closed path round tab and hang, its foot
+ * moving one way, the surface cut to it. At rest: the joint (`atJoint`) and
+ * its look against the owner's approved one.
+ */
+async function readTabHang(kit: Kit, page: Page, card: Card, name: string) {
+  const sel = card.card.replace("[data-state='open']", "");
+  const clock = await Clock.on(page);
+  for (const [phase, act, pcts] of [
+    ["open", () => card.open(page), OPEN_PCTS],
+    ["close", () => card.close(page), CLOSE_PCTS],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: the open, then the close
+    await clock.catchRuns(act, ".kit-hang");
+    const runs = await props(page, sel);
+    kit.check(
+      `${name}: only its grow clock runs as it ${phase}s (--hang-grow)`,
+      runs.length > 0 && runs.every((p) => p === "--hang-grow"),
+      runs.join(", ") || "nothing runs"
+    );
+    const read: Awaited<ReturnType<typeof drawnShape>>[] = [];
+    for (const pct of pcts) {
+      // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
+      await clock.seek(pct / 100);
+      await frames(page);
+      read.push(await drawnShape(page, sel));
+    }
+    const way = phase === "open" ? 1 : -1;
+    const feet = read.map((one) => one.bottom);
+    const oneWay = feet.every(
+      (v, k) => k === 0 || (v - (feet[k - 1] as number)) * way >= -0.5
+    );
+    const whole = read.every(
+      (one) =>
+        one.shown &&
+        one.subpaths === 1 &&
+        (one.closed || one.bottom - one.top < 1) &&
+        one.clip.startsWith("path(")
+    );
+    kit.check(
+      `${name}: as it ${phase}s it is one shape at every frame, one closed path round tab and hang, its foot moving one way, its surface cut to it`,
+      whole && oneWay,
+      `foot ${feet.map(r2).join(" → ")}; ${read.map((one) => `${one.subpaths} path${one.closed ? " closed" : " open"}`).join(", ")}`
+    );
+    await clock.release();
+    await settle(page, 250);
+    if (phase === "open") {
+      await atJoint(kit, page, sel, name);
+      const at = await measure(page, card);
+      if (at) {
+        const m = await meeting(page, at);
+        await diff(kit, page, name.replaceAll(" ", "-"), { clip: m.clip });
+      }
+    }
+  }
+  const gone = await page.evaluate(
+    (s) => document.querySelector(`${s}[data-state='open']`) === null,
+    sel
+  );
+  kit.check(`${name}: gone once closed`, gone);
+}
+
+/**
+ * The joint at rest (owner: "the curve of the foot doesn't match the curve
+ * of the tab, and it needs to be wider to fit and connect well"; "the rim
+ * doesn't smoothly connect"): the hang reaches past each foot's tip or
+ * stands flush with the flank; the foot's curve runs into its edge on one
+ * tangent (within 2°); and across the outline, all along the joint, one
+ * stroke as full, as thin and as sharp as on the hang's straight side, with
+ * no second edge within 3px.
+ */
+async function atJoint(kit: Kit, page: Page, sel: string, name: string) {
+  const g = await jointGeometry(page, sel);
+  if (!g) {
+    kit.check(`${name}: hangs from its tab`, false, "no hung tab or outline");
+    return;
+  }
+  const footStart = g.tab.left - g.flare;
+  const footEnd = g.tab.right + g.flare;
+  const wide =
+    (g.flush.start
+      ? Math.abs(g.card.left - g.tab.left) <= 1
+      : g.card.left <= footStart + 0.01) &&
+    (g.flush.end
+      ? Math.abs(g.card.right - g.tab.right) <= 1
+      : g.card.right >= footEnd - 0.01);
+  const turns = jointTurns(g);
+  kit.check(
+    `${name}: it reaches past each foot (or stands flush with the flank), the foot running into its edge on one tangent`,
+    wide && turns.every((t) => t <= 2),
+    `hang ${r2(g.card.left)}–${r2(g.card.right)}, feet ${r2(footStart)}–${r2(footEnd)}, flush ${g.flush.start ? "start " : ""}${g.flush.end ? "end" : ""}; turns ${turns.map((t) => `${r2(t)}°`).join(", ") || "none (flush)"}`
+  );
+  const ink = await jointInk(page, g);
+  const ref = ink.reference;
+  for (const { side, reads } of ink.sides) {
+    const bad = reads.flatMap(({ at, read }) => {
+      const out: string[] = [];
+      if (read.core < 0.85) {
+        out.push(`${at} core ${r2(read.core)}`);
+      }
+      if (!(Math.abs(read.inner - ref.inner) <= 0.35)) {
+        out.push(`${at} inner ${r2(read.inner)} (side ${r2(ref.inner)})`);
+      }
+      if (!(read.fall <= ref.fall + 1)) {
+        out.push(
+          `${at} fall ${r2(read.fall)} (side ${r2(ref.fall)}; ink in from the edge every 0.25px ${read.profile.join(" ")}, the side ${ref.profile.join(" ")})`
+        );
+      }
+      if (read.second > 0.12) {
+        out.push(`${at} second ${r2(read.second)}`);
+      }
+      return out;
+    });
+    const edgeLevels = reads
+      .filter(({ at }) => at.startsWith("edge"))
+      .map(({ read }) => read.level);
+    // A failing side: what paints inside its foot, and its crop, for reading.
+    let painting = "";
+    if (bad.length > 0) {
+      const tip = side === "start" ? footStart : footEnd;
+      const way = side === "start" ? 1 : -1;
+      const x = tip + way * g.flare * 0.4;
+      const y = g.tab.bottom - 1;
+      // biome-ignore lint/performance/noAwaitInLoops: a failing side's read, once
+      painting = await page.evaluate(
+        ([atX, atY]) =>
+          [...document.querySelectorAll<HTMLElement>("body *")]
+            .filter((el) => {
+              const b = el.getBoundingClientRect();
+              const s = getComputedStyle(el);
+              return (
+                b.left <= atX &&
+                b.right >= atX &&
+                b.top <= atY &&
+                b.bottom >= atY &&
+                s.visibility !== "hidden" &&
+                (s.backgroundColor !== "rgba(0, 0, 0, 0)" ||
+                  s.boxShadow !== "none" ||
+                  s.filter !== "none" ||
+                  s.outlineStyle !== "none")
+              );
+            })
+            .map(
+              (el) =>
+                `${el.tagName.toLowerCase()}.${[...el.classList].slice(0, 3).join(".")} bg ${getComputedStyle(el).backgroundColor} shadow ${getComputedStyle(el).boxShadow.slice(0, 40)} filter ${getComputedStyle(el).filter.slice(0, 30)} outline ${getComputedStyle(el).outlineStyle}`
+            )
+            .join(" | "),
+        [x, y] as const
+      );
+      await page.screenshot({
+        path: `${process.env.TMPDIR}/joint-${name.replaceAll(" ", "-")}-${side}.png`,
+        clip: { x: tip - 16, y: g.tab.bottom - 16, width: 32, height: 24 },
+      });
+    }
+    kit.check(
+      `${name}: the ${side} joint is one stroke, as full, thin and sharp as the hang's straight side, no second edge within 3px (side: core ${r2(ref.core)}, inner ${r2(ref.inner)}px, fall ${r2(ref.fall)} device px; joint worst: core ${r2(Math.min(...reads.map(({ read }) => read.core)))}, inner ${r2(Math.max(...reads.map(({ read }) => Math.abs(read.inner - ref.inner))))}px off, fall ${r2(Math.max(...reads.map(({ read }) => read.fall)))}, second ${r2(Math.max(...reads.map(({ read }) => read.second)))}; its level edge ${Math.max(...edgeLevels)} of 255 off the stroke's ink)`,
+      bad.length === 0 && edgeLevels.every((v) => v <= 1),
+      bad.length > 0
+        ? `${bad.slice(0, 6).join("; ")}; under it, the tab's sheet ${g.tabSheet}; painting inside its foot: ${painting}`
+        : undefined
+    );
+  }
+}
+
 const spec: Spec = {
   name: "hang",
   run: async (kit) => {
@@ -653,6 +848,42 @@ const spec: Spec = {
         }
         await frames(page);
         await page.close();
+        // The tab's hangs' joints at 2x and 3x too (1x above).
+        for (const scale of [2, 3]) {
+          // biome-ignore lint/performance/noAwaitInLoops: one scale at a time
+          const scaled = await kit.page(view, { theme, scale });
+          for (const card of cardsAt(view === "phone").filter((c) => c.tab)) {
+            const name = `${card.name} ${where} ${scale}x`;
+            try {
+              // biome-ignore lint/performance/noAwaitInLoops: one card at a time
+              await open(
+                scaled,
+                `${await kit.bench()}${card.route}&theme=${theme}`,
+                ".session-tabs .tab[data-chosen]",
+                120_000
+              );
+              await settle(scaled, 400);
+              await card.open(scaled);
+              await scaled.waitForSelector(card.card, { timeout: 10_000 });
+              await settle(scaled, 600);
+              await atJoint(
+                kit,
+                scaled,
+                card.card.replace("[data-state='open']", ""),
+                name
+              );
+              await card.close(scaled);
+              await settle(scaled, 400);
+            } catch (error) {
+              kit.check(
+                `${name}: reads to its end`,
+                false,
+                String(error).split("\n")[0]
+              );
+            }
+          }
+          await scaled.close();
+        }
       }
     }
   },

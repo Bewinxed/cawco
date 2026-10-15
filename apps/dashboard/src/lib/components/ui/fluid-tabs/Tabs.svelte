@@ -15,6 +15,7 @@
     type TabsTravel,
     type TabsVariant,
   } from "./context.svelte";
+  import type { FoldMeasure } from "./fold-memory";
 
   let {
     value,
@@ -26,6 +27,7 @@
     variant = "segmented",
     travel = null,
     values,
+    boxes,
     children,
     ...rest
   }: Omit<HTMLAttributes<HTMLDivElement>, "onselect"> & {
@@ -37,6 +39,12 @@
      * items. The track's own order replaces it once it has.
      */
     values?: readonly string[];
+    /**
+     * Each folder tab's shape as last measured, by value (fold-memory.ts,
+     * from its cookie): the server draws each tab to it, true from the
+     * first paint.
+     */
+    boxes?: Readonly<Record<string, FoldMeasure>>;
     onValueChange?: (value: string) => void;
     selectedIndex?: number;
     onSelect?: (index: number) => void;
@@ -60,6 +68,8 @@
     state.controlled = value;
     state.selectedIndex = selectedIndex;
     state.size = size;
+    state.variant = variant;
+    state.boxes = boxes ?? {};
     state.travel = travel;
     state.onValueChange = onValueChange;
     state.onSelect = onSelect;

@@ -711,6 +711,17 @@ async function refused(kit: Kit, base: string, ids: string[]) {
   });
   await click(page, PLUS);
   await page.waitForSelector(`${PLUS}[data-refused]`, { timeout: 90_000 });
+  // Its ink is read where it lands, not part-way through its own colour
+  // change (`--dur-control`).
+  await page.evaluate(
+    (sel) =>
+      Promise.all(
+        (document.querySelector(sel)?.getAnimations() ?? []).map((run) =>
+          run.finished.catch(() => undefined)
+        )
+      ),
+    PLUS
+  );
   const shown = await page.evaluate((sel) => {
     const el = document.querySelector(sel) as HTMLElement;
     const described = el.getAttribute("aria-describedby");

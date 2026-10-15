@@ -9,10 +9,12 @@
  *
  * Engine, never pictures:
  * - feet (owner: "A curved foot on inactive tabs: their sides curve out at
- *   the base like the chosen tab's"): every inactive tab's free side's rim
- *   is the chosen tab's flared path on that side, drawn whole, and its card
- *   ends on the chosen card's flared foot; its side under a neighbour folds
- *   both (DESIGN.md, Session tab status rim).
+ *   the base like the chosen tab's"): every tab's path is its box's
+ *   outline, every free foot the chosen tab's own quarter turn, and a side
+ *   is folded exactly where a tab ranked above covers its foot as the two
+ *   are drawn: at rest, under the lift, through a neighbour's slide and the
+ *   release's settle (DESIGN.md, Folder tabs; a switch, the come-forward,
+ *   is folder-tabs.ts's).
  * - follow: every pointermove puts the dragged tab's left edge where the
  *   pointer's travel says, within 1px, clamped to the strip's ends.
  * - no capture: nothing is added to the page during a drag that is an img,
@@ -40,6 +42,8 @@ import { emulateMotion } from "../../motion";
 
 const TITLES = ["Alpha", "Bravo", "Charlie", "Delta"];
 const SLOW = "Keep working slowly";
+/** A path's numbers. */
+const NUMBERS = /-?\d*\.?\d+/g;
 const STRIPS = "[data-strip]";
 const near = (a: number, b: number, px = 1) => Math.abs(a - b) <= px;
 
@@ -257,79 +261,161 @@ const leftovers = (page: Page) =>
 
 /* ── The feet ───────────────────────────────────────────────────────── */
 
-async function feet(kit: Kit, page: Page, ids: string[]) {
-  const read = await page.evaluate((sel) => {
-    const flare = Number.parseFloat(
-      getComputedStyle(
-        document.querySelector(".ff-tabs-list") as Element
-      ).getPropertyValue("--flare")
-    );
-    return {
-      flare,
-      tabs: [...document.querySelectorAll<HTMLElement>(sel)].map((tab) => {
-        const ff = tab.querySelector(".ff-tab") as Element;
+/** Each tab in the strips: its name, rank, box, tokens and its path's outline. */
+const shapes = (page: Page) =>
+  page.evaluate(
+    (sel) =>
+      [...document.querySelectorAll<HTMLElement>(sel)].map((tab) => {
+        const ff = tab.querySelector(".ff-tab") as HTMLElement;
+        const style = getComputedStyle(ff);
+        const svg = ff.querySelector("svg.fold");
         return {
           name: tab.querySelector(".label .text")?.textContent ?? "?",
           chosen: tab.hasAttribute("data-chosen"),
-          card: getComputedStyle(ff, "::before").clipPath,
-          sides: [...tab.querySelectorAll<HTMLElement>(".rim-side")].map(
-            (side) => {
-              const flared = side.querySelector(".rim-flared") as Element;
-              const plain = side.querySelector(".rim-plain") as Element;
-              return {
-                side: side.dataset.side ?? "",
-                u: getComputedStyle(side).getPropertyValue("--u").trim(),
-                path: getComputedStyle(flared).clipPath,
-                flared: Number(getComputedStyle(flared).opacity),
-                plain: Number(getComputedStyle(plain).opacity),
-              };
-            }
-          ),
+          z: Number(getComputedStyle(tab).zIndex),
+          width: ff.offsetWidth,
+          height: ff.offsetHeight,
+          flare: Number.parseFloat(style.getPropertyValue("--flare")),
+          radius: Number.parseFloat(style.getPropertyValue("--radius")),
+          viewBox: svg?.getAttribute("viewBox") ?? "",
+          d: svg?.querySelector("defs path")?.getAttribute("d") ?? "",
         };
       }),
-    };
+    `${STRIPS} .tab`
+  );
+type Shape = Awaited<ReturnType<typeof shapes>>[number];
+
+/**
+ * A tab's path read against the geometry: its view box the tab's box one
+ * flare wider each side, its feet the flare's quarter turn (a cubic, its
+ * handles 0.5523 of `--flare` along each tangent: fold-path.ts) to the
+ * shelf at the box's outer edge, or a fold straight down the tab's edge,
+ * its shoulders at `--radius`. Answers what is wrong.
+ */
+function geometry(s: Shape, fold: readonly [boolean, boolean]): string[] {
+  const out: string[] = [];
+  const { width: w, height: h, flare: f, radius: r } = s;
+  const n = (v: number) => String(Math.round(v * 100) / 100);
+  const [vx, vy, vw, vh] = s.viewBox.split(" ").map(Number);
+  if (!(
+    vx === 0 &&
+    vy === 0 &&
+    near(vw ?? 0, w + 2 * f, 0.5) &&
+    near(vh ?? 0, h, 0.5)
+  )) {
+    out.push(`view box ${s.viewBox}, not 0 0 ${w + 2 * f} ${h}`);
+  }
+  const q = 0.5523 * f;
+  const start = fold[0]
+    ? `M ${n(f)} ${n(h)} C ${n(f)} ${n(h)} ${n(f)} ${n(h - f)} ${n(f)} ${n(h - f)}`
+    : `M 0 ${n(h)} C ${n(q)} ${n(h)} ${n(f)} ${n(h - f + q)} ${n(f)} ${n(h - f)}`;
+  const end = fold[1]
+    ? `C ${n(f + w)} ${n(h - f)} ${n(f + w)} ${n(h)} ${n(f + w)} ${n(h)}`
+    : `C ${n(f + w)} ${n(h - f + q)} ${n(2 * f + w - q)} ${n(h)} ${n(2 * f + w)} ${n(h)}`;
+  if (!s.d.startsWith(start)) {
+    out.push(`start ${s.d.slice(0, 40)}, not ${start}`);
+  }
+  if (!s.d.endsWith(end)) {
+    out.push(`end …${s.d.slice(-40)}, not ${end}`);
+  }
+  const shoulders = s.d.match(/A (\S+) \S+ 0 0 1/g) ?? [];
+  if (
+    shoulders.length !== 2 ||
+    shoulders.some((a) => a !== `A ${n(r)} ${n(r)} 0 0 1`)
+  ) {
+    out.push(`shoulders ${shoulders.join(", ")}, not two of radius ${r}`);
+  }
+  return out;
+}
+
+/**
+ * Every tab's sides as its path draws them, against the rule: a side is
+ * folded exactly where a tab ranked above it covers its foot as the two are
+ * drawn now (that tab's body reaching from the side's edge back over it),
+ * or where the host stands it flush (`data-flush`). Answers what breaks it.
+ */
+const covers = (page: Page) =>
+  page.evaluate((sel) => {
+    const tabs = [...document.querySelectorAll<HTMLElement>(sel)].map((tab) => {
+      const ff = tab.querySelector(".ff-tab") as HTMLElement;
+      const box = ff.getBoundingClientRect();
+      const d = ff.querySelector("svg.fold defs path")?.getAttribute("d") ?? "";
+      // Each foot's tip: on the tab's edge folded, a flare out flared.
+      const nums = (d.match(/-?\d*\.?\d+/g) ?? []).map(Number);
+      const f = Number.parseFloat(
+        getComputedStyle(ff).getPropertyValue("--flare")
+      );
+      return {
+        name: tab.querySelector(".label .text")?.textContent ?? "?",
+        left: box.left,
+        right: box.right,
+        z: Number(getComputedStyle(tab).zIndex),
+        flush: ff.dataset.flush ?? "",
+        start: (nums[0] ?? 0) > f / 2,
+        end: (nums.at(-2) ?? 0) < f + ff.offsetWidth + f / 2,
+      };
+    });
+    return tabs.flatMap((t) => {
+      const over = tabs.filter((u) => u.z > t.z);
+      const start =
+        t.flush === "start" ||
+        over.some((u) => u.left <= t.left + 0.5 && u.right >= t.left - 0.5);
+      const end =
+        t.flush === "end" ||
+        over.some((u) => u.right >= t.right - 0.5 && u.left <= t.right + 0.5);
+      const say = (side: string, folded: boolean, want: boolean) =>
+        folded === want
+          ? []
+          : [
+              `${t.name} ${side} ${folded ? "folded" : "flared"}, ${want ? "covered" : "uncovered"}`,
+            ];
+      return [...say("start", t.start, start), ...say("end", t.end, end)];
+    });
   }, `${STRIPS} .tab`);
+
+async function feet(kit: Kit, page: Page, ids: string[]) {
+  const read = await shapes(page);
   kit.check(
     "feet: the tab's flare is 8px on the desk (--flare, radius-sm)",
-    read.flare === 8,
-    `${read.flare}px`
+    read.every((s) => s.flare === 8),
+    read.map((s) => `${s.flare}px`).join(" ")
   );
-  const chosenTab = read.tabs.find((t) => t.chosen);
-  const chosenEnd = chosenTab?.sides.find((s) => s.side === "end");
-  /** A card's outline from its trailing side down: that side's foot. */
-  const endFoot = (path: string) => {
-    const arc = path.lastIndexOf("arc to");
-    return path.slice(
-      path.lastIndexOf("line to", path.lastIndexOf("line to", arc) - 1)
-    );
-  };
-  /** A card's outline up its leading side: that side's foot. */
-  const startFoot = (path: string) => path.slice(0, path.indexOf("line to"));
-  for (const tab of read.tabs.filter((t) => !t.chosen)) {
-    const [under, free] = tab.sides;
+  // The owner's order: Alpha chosen first, every other tab under the one
+  // before it, its end side free.
+  read.forEach((s, i) => {
+    const fold: [boolean, boolean] = [i > 0, false];
+    const wrong = geometry(s, fold);
     kit.check(
-      `feet: ${tab.name}'s free (end) rim side flares round the chosen tab's own foot, drawn whole`,
-      free?.u === "0" &&
-        free.flared === 1 &&
-        free.plain === 0 &&
-        free.path === chosenEnd?.path,
-      `--u ${free?.u}, flared ${free?.flared}, plain ${free?.plain}; ${free?.path === chosenEnd?.path ? "path = the chosen tab's end side" : `path ${free?.path.slice(0, 260)} against ${chosenEnd?.path.slice(0, 260)}`}`
+      `feet: ${s.name}'s path is its box's outline, ${fold[0] ? "its start folded under its neighbour" : "its start flared"}, its end flared on the flare's own quarter turn`,
+      wrong.length === 0,
+      wrong.join("; ") || s.d
     );
-    kit.check(
-      `feet: ${tab.name}'s card flares at its end foot as the chosen tab's does`,
-      endFoot(tab.card) === endFoot(chosenTab?.card ?? ""),
-      `${endFoot(tab.card)} against ${endFoot(chosenTab?.card ?? "")}`
-    );
-    kit.check(
-      `feet: ${tab.name}'s start side, under its neighbour, draws no foot (rim and card folded)`,
-      under?.u === "1" &&
-        under.path.includes(
-          `arc to ${read.flare}px calc(100% - ${read.flare}px)`
-        ) &&
-        startFoot(tab.card) !== startFoot(chosenTab?.card ?? ""),
-      `--u ${under?.u}; rim ${under?.path.slice(0, 200)}; card ${startFoot(tab.card)} (chosen ${startFoot(chosenTab?.card ?? "")})`
-    );
-  }
+  });
+  const front = read.find((s) => s.chosen);
+  /** A path's end foot: its last cubic, and its points from where it leaves the tab's edge. */
+  const endArc = (d: string) => d.slice(d.lastIndexOf("C"));
+  const turn = (s: Shape) =>
+    (endArc(s.d).match(NUMBERS) ?? [])
+      .map((v, k) =>
+        String(
+          Math.round(
+            (Number(v) - (k % 2 === 0 ? s.flare + s.width : 0)) * 100
+          ) / 100
+        )
+      )
+      .join(" ");
+  kit.check(
+    "feet: every inactive tab's free foot is the chosen tab's curve (the same radius and turn)",
+    read
+      .filter((s) => !s.chosen)
+      .every((s) => front && turn(s) === turn(front)),
+    read.map((s) => `${s.name}: ${endArc(s.d)}`).join("; ")
+  );
+  kit.check(
+    "feet: the stack ranks the chosen tab on top, each tab above those farther from it",
+    read.every((s, i) => i === 0 || (read[i - 1]?.z ?? 0) > s.z),
+    read.map((s) => `${s.name} ${s.z}`).join(", ")
+  );
   kit.note(`feet read on ${ids.length} tabs`);
 }
 
@@ -367,27 +453,24 @@ async function follow(kit: Kit, at: Along) {
     misses.length === 0,
     misses.join("; ") || `${Math.round((at.x - start.x) / 6)} moves, all on`
   );
-  const lifted = await page.evaluate((sel) => {
-    const t = document.querySelector(sel) as HTMLElement;
-    const ff = t.querySelector(".ff-tab") as HTMLElement;
-    const cs = getComputedStyle(t);
-    return {
-      lifted: t.hasAttribute("data-lifted"),
-      z: cs.zIndex,
-      top: getComputedStyle(t.closest(".ff-tabs-list") as Element)
-        .getPropertyValue("--stack-top")
-        .trim(),
-      lean: getComputedStyle(ff).getPropertyValue("--lean-lift-now").trim(),
-      under: `${cs.getPropertyValue("--under-start").trim()}/${cs.getPropertyValue("--under-end").trim()}`,
-    };
-  }, tabSel(bravo));
+  const lifted = await page.evaluate(
+    (sel) => document.querySelector(sel)?.hasAttribute("data-lifted") ?? false,
+    tabSel(bravo)
+  );
+  const now = await shapes(page);
+  const held = now[1] as Shape;
+  const top = Math.max(...now.filter((s) => s !== held).map((s) => s.z));
+  const heldWrong = geometry(held, [false, false]);
   kit.check(
-    "lift: the dragged tab stands over the strip's stack, upright, in front of both neighbours",
-    lifted.lifted &&
-      lifted.z === lifted.top &&
-      lifted.lean === "1" &&
-      lifted.under === "0/0",
-    JSON.stringify(lifted)
+    "lift: the dragged tab stands over every tab, in front of both neighbours (both its feet flared)",
+    lifted && held.z > top && heldWrong.length === 0,
+    `lifted ${lifted}, rank ${held.z} over ${top}; ${heldWrong.join("; ") || "both feet flared"}`
+  );
+  const uncovered = await covers(page);
+  kit.check(
+    "lift: carried off Alpha, every side is folded exactly where a tab above covers it (Alpha's end, left bare, on its foot)",
+    uncovered.length === 0,
+    uncovered.join("; ") || "every side as drawn"
   );
   const others = await Promise.all(
     [at.ids[0], at.ids[2], at.ids[3]].map((id) =>
@@ -456,10 +539,19 @@ async function neighbour(kit: Kit, at: Along) {
   );
   const slot = rest.bravo.left;
   const lefts: number[] = [];
-  for (const f of [0, 0.5, 1]) {
+  const bare: string[] = [];
+  for (const f of [0, 0.25, 0.5, 0.75, 1]) {
     await clock.seek(f);
-    lefts.push((await boxOf(page, tabSel(charlie))).left);
+    if (f === 0 || f === 0.5 || f === 1) {
+      lefts.push((await boxOf(page, tabSel(charlie))).left);
+    }
+    bare.push(...(await covers(page)).map((w) => `${f * 100}%: ${w}`));
   }
+  kit.check(
+    "neighbour: as Charlie slides under the lifted tab, every side is folded exactly where a tab above covers it, at 0/25/50/75/100%",
+    bare.length === 0,
+    bare.join("; ") || "every side as drawn"
+  );
   const [l0, l50, l100] = lefts as [number, number, number];
   kit.check(
     `neighbour: Charlie slides into Bravo's slot, ${rest.charlie.left.toFixed(1)} → ${slot.toFixed(1)}, at 0/50/100%`,
@@ -513,11 +605,18 @@ async function letGo(kit: Kit, at: Along) {
   );
   const panel = await panelSlide(page);
   const settled: number[] = [];
+  const bare: string[] = [];
   for (const f of [0, 0.5, 1]) {
     await clock.seek(f, "tab-slide");
     settled.push((await boxOf(page, tabSel(bravo))).left);
+    bare.push(...(await covers(page)).map((w) => `${f * 100}%: ${w}`));
   }
   await clock.release();
+  kit.check(
+    "release: as Bravo and Charlie settle, every side is folded exactly where a tab above covers it, at 0/50/100%",
+    bare.length === 0,
+    bare.join("; ") || "every side as drawn"
+  );
   await settle(page);
   const after = await strips(page);
   const kept = await stored(page);
