@@ -1,5 +1,6 @@
 """Mac-side TestFlight workflow. Uses the existing local asc.py credential store."""
 import datetime
+import fcntl
 import json
 import os
 import pathlib
@@ -217,8 +218,15 @@ def ship(app, mode, notes, platform, commit):
     """mode is "archive" (archive only) or "upload-archive" (upload the kept
     archive): testflight.sh records the archive's build number between the two."""
     ROOT.mkdir(parents=True, exist_ok=True)
-    lock = ROOT / ".upload-lock"
-    lock.mkdir()  # Concurrent uploads must not reuse the same build number or archive.
+    # Concurrent uploads must not reuse the same build number or archive. The kernel
+    # holds the lock for this process and lets it go when the process ends, however it
+    # ends, so a killed upload never leaves one behind.
+    lock = (ROOT / ".upload.lock").open("w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close()
+        raise RuntimeError("Another TestFlight archive or upload is running on this Mac") from None
     try:
         used = [b["attributes"]["version"] for b in builds(app)] if app else []
         number = next_number(used)
@@ -266,7 +274,7 @@ def ship(app, mode, notes, platform, commit):
         build = await_build(app, number, platform)
         finish(app, build, notes, platform, commit)
     finally:
-        lock.rmdir()
+        lock.close()
 
 
 USAGE = "usage: testflight.py [--mac] --archive | --upload-archive --notes <file> --commit <sha> | --status | --attach <build> --notes <file> --commit <sha> | --set-notes <build> <file> --commit <sha> | --expire <build> | --dry-run"
