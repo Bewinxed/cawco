@@ -11,6 +11,7 @@
    * id.
    */
   import type { RecordCard } from "@cawco/core/decisions";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import type { StageKind } from "#lib/cawco/project-tasks.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -60,7 +61,9 @@
   {#if card.still}
     <img alt={chosen[0]?.label ?? ""} class="still" src={card.still} />
   {/if}
-  <div class="body">
+  <!-- A task filed onto the card arrives as rows do (motion/rows): its row
+       is uncovered, each chip pops in, as the hub files it. -->
+  <div class="body" {@attach reflow()}>
     <h3 class="question">{card.question}</h3>
     {#if chosen.length > 0}
       {#each chosen as option (option.id)}
@@ -96,11 +99,12 @@
       </p>
     {/if}
     {#if card.tasks.length > 0}
-      <p class="tasks">
+      <p class="tasks" data-flip>
         {#each card.tasks as id (id)}
           {@const task = taskOf(id)}
           <Badge
             class="task"
+            data-flip="pop"
             href={hrefOf(id)}
             onclick={(event: MouseEvent) => {
               if (event.metaKey || event.ctrlKey || event.shiftKey) {
