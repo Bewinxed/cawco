@@ -42,8 +42,8 @@
   import { kindGlyph, kindNoun, rowOf, waitingRow } from "./find-rows";
   import {
     type FinderState,
-    GRACE_MS,
     type GoTo,
+    GRACE_MS,
     type MachineAct,
     type Opening,
     type Spoken,
@@ -352,7 +352,11 @@
     const said: Section = { key: "said", lead: [], units: [] };
     if (saidShown) {
       said.lead.push(
-        { t: "head", key: "head:said", label: `Where “${finder.saidFor}” was said` },
+        {
+          t: "head",
+          key: "head:said",
+          label: `Where “${finder.saidFor}” was said`,
+        },
         { t: "chips", key: "chips" }
       );
       if (finder.missing.length > 0) {
@@ -398,7 +402,8 @@
   });
   const peekable = $derived(
     finder.active?.type === "row" ||
-      (finder.active?.type === "goto" && finder.active.result.kind === "machine")
+      (finder.active?.type === "goto" &&
+        finder.active.result.kind === "machine")
   );
 
   /** The peek's said line: asked, missing, or what came back. */
@@ -427,7 +432,9 @@
       return `${nameRows.length} found by name. Searching ${machineCount ? machines(machineCount) : "machines"}.`;
     }
     if (finder.typed) {
-      const gone = finder.missing.length ? ` ${missingNames} didn't answer.` : "";
+      const gone = finder.missing.length
+        ? ` ${missingNames} didn't answer.`
+        : "";
       return `${nameRows.length + saidRows.length + finder.goTo.length} found.${gone}`;
     }
     return "";
@@ -469,7 +476,12 @@
 {/snippet}
 
 {#snippet whoChips()}
-  <div class={["chips", { phone }]} data-flip role="toolbar" aria-label="Who said it">
+  <div
+    class={["chips", { phone }]}
+    data-flip
+    role="toolbar"
+    aria-label="Who said it"
+  >
     {#each WHO as who (who.value)}
       <button
         class="chip"

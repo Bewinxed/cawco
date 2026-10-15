@@ -450,17 +450,22 @@ async function phoneHeights(kit: Kit, phone: Page) {
         (s.querySelector(".title")?.getBoundingClientRect().height ?? 0) / 20
       ),
       metaLines: Math.round(
-        (s.querySelector(".meta")?.getBoundingClientRect().height ?? 0) / 20
+        (s.querySelector(".meta")?.getBoundingClientRect().height ?? 0) / 16
       ),
+      reasonLines: s.querySelector(".reason") ? 1 : 0,
       h: s.getBoundingClientRect().height,
     }))
   );
   kit.check(
-    "phone 390×844: a row is 56px, and 20px more for each line its title or meta wraps onto (16px titles, 13px meta, whole titles)",
+    "phone 390×844: a row is 56px and 72px when its meta wraps (the wireframe's figures): 10px above and below, 20px title lines (16px, whole), 16px meta lines (13px)",
     titles.length > 0 &&
       titles.every(
-        (t) => Math.abs(t.h - (16 + 20 * (t.lines + t.metaLines))) < 0.5
-      ),
+        (t) =>
+          Math.abs(
+            t.h - (20 + 20 * t.lines + 16 * (t.metaLines + t.reasonLines))
+          ) < 0.5
+      ) &&
+      titles.some((t) => t.lines === 1 && t.metaLines === 1 && t.h === 56),
     JSON.stringify(titles)
   );
   kit.check(

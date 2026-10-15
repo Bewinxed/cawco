@@ -288,8 +288,7 @@ export class FinderState {
     const { names } = this;
     const sameSort =
       names.state === "ok" && (names.for === "") === (this.asked === "");
-    const inFlight =
-      this.namesPending !== null && !this.namesPending.late;
+    const inFlight = this.namesPending !== null && !this.namesPending.late;
     const answer =
       names.state === "ok" && (sameSort || inFlight) ? names.value : null;
     if (!answer) {

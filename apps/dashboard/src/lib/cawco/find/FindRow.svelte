@@ -246,11 +246,16 @@
     padding-inline-end: 0.25em;
   }
 
-  /* A phone: 16px titles that wrap whole, 13px meta, a ⌄ at the end. */
-  .phone {
+  /* A phone: 16px titles that wrap whole on 20px lines, 13px meta on 16px
+     lines, 10px above and below: 56px, 72px when the meta line wraps (the
+     wireframe's figures), and 20px more per line a title wraps onto. A ⌄
+     at the end. */
+  .row.phone {
     --line-1: 20px;
-    --line-meta: 20px;
+    --line-meta: 16px;
+    --line-reason: 16px;
     min-block-size: 56px;
+    padding-block: 10px;
 
     & .title {
       font: var(--type-body);
