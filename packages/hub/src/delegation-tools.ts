@@ -145,19 +145,6 @@ export const MCP_SERVER_NAME = "cawco";
  * structured payload onto the `tool_result` content block it can match.
  */
 
-/**
- * `delegate`'s `type` line: every fleet-configured preset, name and
- * description, so the calling model can route by what a type is FOR rather
- * than by a model string. Built once from `deps.delegateTypes` — the caller
- * fetched it once for this session — and never rebuilt, because the tool
- * description feeds the prompt cache and a description that could change
- * mid-session would invalidate it on every delegate call.
- */
-const delegateTypeLine = (types: HandoffDeps["delegateTypes"]): string =>
-  types?.length
-    ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description} Harness: ${type.harness}; model: ${type.model}; effort: ${type.effort ?? "harness default"}${type.skills?.length ? `; skills: ${type.skills.join(", ")}` : ""}${type.denyTools?.length ? `; denied tools: ${type.denyTools.join(", ")}` : ""}${type.canDelegate ? "; may delegate by default" : "; leaf by default"})`).join("; ")}.`
-    : "";
-
 /** The tools themselves, separated from the server so they can be exercised directly. */
 /** A tool's answer: the hub's JSON, as text. */
 const json = (answer: unknown) => ({
@@ -572,8 +559,7 @@ export function handoffTools(deps: HandoffDeps) {
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
         "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, with a boundary every shell command of the delegate runs inside. It writes only its clone, its own scratch folder and the workspaces' own cache (package caches, DerivedData, SwiftPM); host caches are read-only. Credential stores, SSH keys and key agents stay unreadable and service-manager control denied: it reaches another machine only by a check's `machine` or a delegate there. On Linux it sees only its own processes; on macOS it can see other processes but cannot signal them. The workspace is cut on this session's machine unless `machine` names another one of the fleet. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there: a new item, under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
         "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold workspace session is refused once with the cost considerations, and a repeat of the call is delivered.\n\n" +
-        "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own." +
-        delegateTypeLine(deps.delegateTypes),
+        "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own.",
       {
         prompt: z
           .string()
@@ -585,10 +571,9 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe(
-            "A named delegate type — see the types listed above. Sets harness/model/effort/skills " +
+            "A named delegate type, from list_delegate_types (the live catalog the call uses). Sets harness/model/effort/skills " +
               "for you; an explicit harness/model/skills below still overrides what the type says. " +
-              "Default: Jev's pick when the hub has Jev, else 'medium'; with a harness other than medium's and no type, `model` is required. " +
-              "The list above is from this session's start; list_delegate_types reads the live catalog, which the call uses."
+              "Default: Jev's pick when the hub has Jev, else 'medium'; with a harness other than medium's and no type, `model` is required."
           ),
         harness: z
           .enum(["claude", "opencode", "pi"])
@@ -1241,7 +1226,8 @@ export const ALWAYS_LOAD: ReadonlySet<string> = new Set([
  */
 const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
   { prefixes: ["admin_"], what: "fleet configuration" },
-  { prefixes: ["task_", "todo_write"], what: "project tasks and to-dos" },
+  { prefixes: ["task_"], what: "project tasks" },
+  { prefixes: ["todo_write"], what: "your plan, and your task's to-dos" },
   {
     prefixes: [
       "routine_",
@@ -1266,11 +1252,37 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
 ];
 
 /**
- * One paragraph: which of `names` (the session's own listing) load upfront
- * on Claude, and the rest by group prefix, each group only when the session
- * has one of its tools, then the ungrouped ones by name.
+ * What a session can be listed over its life: its role and whether it may
+ * delegate are fixed at its start, its project is not (`project_from_session`
+ * makes one). `names` is the union across both; `inProject` and
+ * `outsideProject` the ones listed only in a project or only outside one.
+ * Claude Code reads a server's instructions once and its tool list again on
+ * every `list_changed`, so the instructions name both sides.
  */
-const loadingLine = (names: readonly string[]): string => {
+export interface Listable {
+  inProject: ReadonlySet<string>;
+  names: readonly string[];
+  outsideProject: ReadonlySet<string>;
+}
+
+/** Where a name, or a group of them, is listed, when only on one side. */
+const sideOf = (members: readonly string[], listable: Listable): string => {
+  if (members.every((name) => listable.inProject.has(name))) {
+    return " (in a project)";
+  }
+  return members.every((name) => listable.outsideProject.has(name))
+    ? " (outside a project)"
+    : "";
+};
+
+/**
+ * One paragraph: which tools load upfront on Claude, and the rest by group
+ * prefix, each group only when the session can have one of its tools, then
+ * the ungrouped ones by name; a group or name listed on one side of a
+ * project only says which.
+ */
+const loadingLine = (listable: Listable): string => {
+  const { names } = listable;
   const upfront = names.filter((name) => ALWAYS_LOAD.has(name));
   const deferred = names.filter((name) => !ALWAYS_LOAD.has(name));
   const grouped = new Set<string>();
@@ -1286,22 +1298,22 @@ const loadingLine = (names: readonly string[]): string => {
     );
     return present.length > 0
       ? [
-          `${present.map((prefix) => (prefix.endsWith("_") ? `${prefix}*` : prefix)).join(", ")}: ${what}`,
+          `${present.map((prefix) => (prefix.endsWith("_") ? `${prefix}*` : prefix)).join(", ")}: ${what}${sideOf(members, listable)}`,
         ]
       : [];
   });
-  const rest = deferred.filter((name) => !grouped.has(name));
+  const rest = deferred
+    .filter((name) => !grouped.has(name))
+    .map((name) => `${name}${sideOf([name], listable)}`);
   return `On Claude, ${upfront.join(", ")} load upfront; every other CawCo tool is deferred: load it with ToolSearch by its name (select:mcp__cawco__<name>) or its group's prefix before saying it is unavailable. ${[...groups, ...(rest.length > 0 ? [`also ${rest.join(", ")}`] : [])].join("; ")}.`;
 };
 
-/**
- * The server's instructions for one session. `names` is what the session is
- * listed, so the groups named are the ones it can use.
- */
+/** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(
   deps: HandoffDeps,
-  names: readonly string[]
+  listable: Listable
 ): string {
+  const { names } = listable;
   const naming =
     "Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.";
   // Sessions said image generation was unavailable on models without it:
@@ -1309,15 +1321,9 @@ export function handoffInstructions(
   const images = names.includes("generate_image")
     ? "\n\ngenerate_image makes images on any model, through the machine's ChatGPT login; never hand image generation to another model."
     : "";
-  const loading = `\n\n${loadingLine(names)}`;
+  const loading = `\n\n${loadingLine(listable)}`;
   if (deps.canDelegate === false) {
     return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use wait_item for a bounded wait on a command you started. Use mcp__cawco__handoff to reach your parent or a session that already owns related work.\n\n${naming}${loading}${images}`;
-  }
-  let catalog = deps.delegateTypes?.length
-    ? delegateTypeLine(deps.delegateTypes).trim()
-    : "Call mcp__cawco__list_delegate_types to discover the current routes rather than guessing a model.";
-  if (deps.delegateTypesError) {
-    catalog = `${deps.delegateTypesError}. The catalog is unavailable, not empty. A delegate call naming a known type retries the fetch; if no type is known, report the catalog blocker rather than guessing a model.`;
   }
   // The orchestrator's seat, the same on every model: an Opus orchestrator
   // made 387 shell and about 50 browser calls in one day (killing dev
@@ -1325,9 +1331,8 @@ export function handoffInstructions(
   return [
     "This session orchestrates: it plans, briefs, reads reports and decides. Run reads yourself: git status, log or diff, a grep, a file, a log tail, a port check, a curl for a status. Hand substantial execution to a delegate with acceptance checks: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. The brief keeps intent, decisions and acceptance here and asks for evidence and conclusions, not file dumps. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
     `${naming}${loading}${images}`,
-    "Call list_delegate_types for current model/effort mappings. Claude names these tools mcp__cawco__list_delegate_types and mcp__cawco__delegate; OpenCode names them cawco_list_delegate_types and cawco_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.",
+    "Call list_delegate_types for the live catalog of delegate types (model, effort and harness each routes to) rather than guessing a model. Claude names these tools mcp__cawco__list_delegate_types and mcp__cawco__delegate; OpenCode names them cawco_list_delegate_types and cawco_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.",
     "Prefer the configured type and omit model/harness overrides unless the user requested them. Give each delegate a concrete deliverable and bounded file ownership. Keep independent parent work moving; reports arrive automatically. Each delegate runs one work item in a workspace; use mcp__cawco__handoff to guide it while that item runs, and handoff again to follow up after it reports — that continues its own session on its cached transcript. Use start_session only for a separate persistent session.",
-    "The catalog below is a session-start snapshot of configured routes, not confirmation of the model that will serve a request. If delegation fails or no suitable route is available, report the blocker; do not silently move bulk exploration onto the parent model.",
-    catalog,
+    "If delegation fails or no suitable type is available, report the blocker; do not silently move bulk exploration onto this session.",
   ].join("\n\n");
 }

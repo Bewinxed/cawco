@@ -603,13 +603,6 @@ export interface HandoffDeps {
     include: DelegateListInclude
   ) => Promise<DelegateNode[]>;
   /**
-   * The fleet's delegate types, fetched once via {@link fetchDelegateTypes}
-   * before this session's tools were built. Used for descriptions only;
-   * dispatch reads the live catalog. delegateTypesError records a failed fetch.
-   */
-  readonly delegateTypes?: DelegateType[];
-  readonly delegateTypesError?: string;
-  /**
    * Hands a send to the hub's one send path now, and answers what became of
    * it: refused sends throw with the hub's reason.
    */

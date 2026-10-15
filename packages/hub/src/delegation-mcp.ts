@@ -25,6 +25,7 @@ import {
   ALWAYS_LOAD,
   handoffInstructions,
   handoffTools,
+  type Listable,
 } from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
@@ -908,7 +909,32 @@ export function createDelegationMcp(options: {
   // by the next sweep.
   options.lifetime.every(LIST_SWEEP_MS, reconcileLists);
 
-  /** The server's instructions for the session `bound`, from its own listing. */
+  /**
+   * What `bound` can be listed over its life (delegation-tools.ts
+   * `Listable`): its role and leaf-ness are its start's, its project may
+   * come later, so its listing in a project and out of one. Unbound
+   * (OpenCode's shared discovery), the superset, on no side.
+   */
+  const listableOf = (bound: InstanceRow | undefined): Listable => {
+    const namesOf = (row: InstanceRow | undefined) =>
+      toolsFor(row).map((tool) => tool.name);
+    if (!bound) {
+      return {
+        names: namesOf(undefined),
+        inProject: new Set(),
+        outsideProject: new Set(),
+      };
+    }
+    const inside = namesOf({ ...bound, projectId: bound.projectId ?? "-" });
+    const outside = namesOf({ ...bound, projectId: null });
+    return {
+      names: [...new Set([...inside, ...outside])],
+      inProject: new Set(inside.filter((name) => !outside.includes(name))),
+      outsideProject: new Set(outside.filter((name) => !inside.includes(name))),
+    };
+  };
+
+  /** The server's instructions for the session `bound`. */
   const instructionsFor = (
     bound: InstanceRow | undefined,
     canDelegate: boolean | undefined,
@@ -929,7 +955,7 @@ export function createDelegationMcp(options: {
         emit: () => undefined,
         spawn: () => Promise.reject(new Error("Instructions start nothing")),
       },
-      toolsFor(bound).map((tool) => tool.name)
+      listableOf(bound)
     );
 
   /** Whether a POST's body is (or, batched, holds) an `initialize`. */

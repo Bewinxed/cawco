@@ -25342,10 +25342,23 @@ export const createServer = (
               // field's absence, never an empty string. Its permission mode is
               // the one rule's (`settleMode`): explicit bypass when omitted for
               // a harness with modes, and none for one that has none.
-              const { model: named, ...rest } = message.payload as SpawnPayload;
+              // Whether it may delegate is never the client's to say: only
+              // `delegate` makes a leaf, and a leaf stays one whatever brings
+              // it back, so its row's word goes to its machine (as `restore`
+              // sends it). A relaunch without it gave an OpenCode or pi leaf
+              // its spawning tools back while its row stayed a leaf.
+              const {
+                model: named,
+                canDelegate: _asked,
+                ...rest
+              } = message.payload as SpawnPayload;
+              const [known] = message.instanceId
+                ? db.getInstancesByIds([message.instanceId])
+                : [];
               const spawning: SpawnPayload = {
                 ...rest,
                 ...(named ? { model: named } : {}),
+                ...(known?.canDelegate === false ? { canDelegate: false } : {}),
               };
               // pi's `default` is first named by what pi picks in the
               // session's directory, which its machine answers; every other
