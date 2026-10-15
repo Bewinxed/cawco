@@ -1701,6 +1701,17 @@ ws_preview_enter() {
 ws_tree() { as_user "$joinerc" ps -e -o pid=,ppid= | awk -v root="$1" '{ parent[$1] = $2 } END { tree[root] = 1; do { grew = 0; for (p in parent) if (!(p in tree) && (parent[p] in tree)) { tree[p] = 1; grew = 1 } } while (grew); for (p in tree) print p }'; }
 # A POST to the hub, answering its body and a last line `HTTP <status>`, so a refusal shows the hub's words.
 ws_post() { as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' "http://127.0.0.1:3456$1" -X POST -H 'content-type: application/json' -d "$2"; }
+# The delegate's tool call that holds its work item open, a line of a message its stub runs as the session does
+# (proof-harnesses.ts toolCalls): a declared wait, which the hub's turn-end rule honours in place of the quiet-turn
+# reminders (work-items.ts waitingTurn), as a real delegate holds an item open on a command it started. Each message the
+# session takes after the wait ended (a busy turn clears a wait at rest, work-items.ts turnState) declares it again.
+WS_WAIT_LINE='cawco tool wait_item {"minutes":60,"reason":"the stage 2 proof holds this item open across an update"}'
+# Its standard input as one JSON string.
+json_string() { bun -e 'process.stdout.write(JSON.stringify(await Bun.stdin.text()))'; }
+# The delegate's work item as the hub has it: its state, and whether it holds a declared wait.
+ws_item() { hub_api "/api/work-items/$(cat "$rigdir/ws-item")"; }
+ws_item_says() { ws_item | json 'd => `${d.state}, ${d.waitUntil ? `waiting until ${d.waitUntil}: ${d.waitReason}` : "no wait"}${d.error ? `, ${d.error}` : ""}`'; }
+ws_item_live() { [[ "$(ws_item | json 'd => `${d.state} ${d.waitUntil ? "waiting" : "-"}`')" == "running waiting" ]]; }
 # Every credential a command must not read: a planted key, and the machine's CawCo account credential.
 ws_secrets() { printf '%s\n' /home/cawco/.ssh/id_ed25519 "/home/cawco/.cawco/accounts/$(cat "$rigdir/account-id")/claude/.credentials.json"; }
 ws_cannot_read() {
@@ -1758,7 +1769,8 @@ workspace_opens() {
   # The session that delegates, on the joined machine.
   start_session "$jid" wsparent-1 > /dev/null
   wait_until 60 'session_running wsparent-1'
-  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"wsparent-1\",\"title\":\"Prove the workspace boundary\",\"prompt\":\"The stage 2 proof's workspace.\",\"harness\":\"claude\",\"model\":\"stub\",\"cwd\":\"$WS_REPO\",\"machineId\":\"$jid\",\"lands\":\"none\",\"checks\":[{\"name\":\"Run true\",\"command\":\"true\"}]}")
+  # Its prompt names the wait the delegate declares in its first turn, which holds its item open (WS_WAIT_LINE).
+  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"wsparent-1\",\"title\":\"Prove the workspace boundary\",\"prompt\":$(printf '%s\n%s' "The stage 2 proof's workspace." "$WS_WAIT_LINE" | json_string),\"harness\":\"claude\",\"model\":\"stub\",\"cwd\":\"$WS_REPO\",\"machineId\":\"$jid\",\"lands\":\"none\",\"checks\":[{\"name\":\"Run true\",\"command\":\"true\"}]}")
   echo "the hub answered the delegation: $answer"
   [[ "$answer" == *"HTTP 200" ]]
   body=$(sed '$d' <<< "$answer")
@@ -1777,6 +1789,9 @@ workspace_opens() {
   as_user "$joinerc" cat "$(ws_state)/boundaries/$gen/srt.json" | json 'd => `srt settings: ${d.filesystem.denyRead.length} read denies, ${d.filesystem.allowWrite.length} writable paths`'
   [[ "$(child_pids "$joinerc" "boundary-$id-$gen")" =~ ^[0-9]+$ ]]
   wait_until 60 'session_running "$(cat "$rigdir/ws-delegate")"'
+  # Its first turn declared its wait: the item is live, held open as a delegate holds one on a command it started.
+  wait_until 30 ws_item_live || { echo "ASSERTION FAILED: the work item is $(ws_item_says)"; echo "its session said: $(transcript_of "$(cat "$rigdir/ws-delegate")")"; return 1; }
+  echo "the work item: $(ws_item_says)"
   # A command through the executor runs in the clone, as the workspace, in the sandbox's own pid namespace.
   [[ "$(ws_exec 'cat README.md')" == proof ]]
   [[ "$(ws_exec 'printf %s "$CAWCO_WORKSPACE"')" == "$id" ]]
@@ -1790,7 +1805,7 @@ workspace_opens() {
 }
 workspace_across_update() {
   need_hub
-  local id gen old_inner old_ns job listener new new_inner answer
+  local id gen old_inner old_ns job listener new new_inner answer token
   id=$(cat "$rigdir/ws-id")
   gen=$(ws_gen)
   read -r _ old_inner _ <<< "$(ws_place "$gen")"
@@ -1811,6 +1826,9 @@ workspace_across_update() {
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
   echo "the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
   wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
+  # The delegate's work item is live going into the update.
+  ws_item_live || { echo "ASSERTION FAILED: before the update the work item is $(ws_item_says)"; return 1; }
+  echo "before the update the work item is $(ws_item_says)"
   # The new build reaches the hub's machine, then the joined machine, which installs it with the workspace open.
   use_feed next
   learn
@@ -1842,6 +1860,17 @@ workspace_across_update() {
   [[ "$(ns_of "$new_inner")" != "$old_ns" ]]
   [[ "$(ws_exec 'cat README.md')" == proof ]]
   ws_cannot_read
+  # The update failed nothing: both machines are on the new build, and the delegate's work item is still running, its
+  # session attached and answering. A message reaches it and is answered, and its turn declares its wait again.
+  ws_item_live || { echo "ASSERTION FAILED: after the update the work item is $(ws_item_says)"; return 1; }
+  echo "after the update the work item is $(ws_item_says)"
+  session_running "$(cat "$rigdir/ws-delegate")" || { echo "ASSERTION FAILED: after the update the delegate's session is $(hub_api /api/instances | json "d => d.find(r => r.id === '$(cat "$rigdir/ws-delegate")')?.status")"; return 1; }
+  token="ws-after-update-$RANDOM$RANDOM"
+  send_message "$jid" "$(cat "$rigdir/ws-delegate")" "$(printf '%s\n%s' "$token" "$WS_WAIT_LINE")"
+  wait_until 60 '[[ "$(transcript_of "$(cat "$rigdir/ws-delegate")")" == *"proof answered: '"$token"'"*"wait_item: Prove the workspace boundary is waiting until"* ]]' || { echo "ASSERTION FAILED: the delegate did not answer after the update: $(transcript_of "$(cat "$rigdir/ws-delegate")" | tail -c 2000)"; return 1; }
+  echo "the delegate answered $token after the update"
+  ws_item_live || { echo "ASSERTION FAILED: after its answer the work item is $(ws_item_says)"; return 1; }
+  echo "after its answer the work item is $(ws_item_says)"
   # The older boundary runs on while the job does.
   as_user "$joinerc" test -e "$(ws_state)/retiring-$gen.json"
   [[ "$(child_pids "$joinerc" "boundary-$id-$gen")" =~ ^[0-9]+$ ]]
@@ -1917,12 +1946,19 @@ workspace_archive_ends_all() {
   tree=$(ws_tree "$inner")
   grep -qx "$listener" <<< "$tree" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $inner"; return 1; }
   echo "the sandbox's tree before the archive: $(tr '\n' ' ' <<< "$tree")"
-  # A workspace with a live work item refuses its archive. The proof's item is over well before this: its stub session
-  # (proof-harnesses.ts) answers every message and ends the turn without finish_item, each quiet turn draws the hub's
-  # reminder, and the third fails the item (work-items.ts QUIET_TURNS), within seconds of its launch. So nothing here
-  # finishes it (a finish now is refused, "is failed; finish_item finishes live work only"): the archive waits for it.
-  wait_until 60 '[[ "$(hub_api "/api/work-items/$(cat "$rigdir/ws-item")" | json "d => [\"starting\", \"running\"].includes(d.state) ? \"live\" : \"ended\"")" == ended ]]' || { echo "the work item is still live: $(hub_api "/api/work-items/$(cat "$rigdir/ws-item")")"; return 1; }
-  echo "the work item before the archive: $(hub_api "/api/work-items/$(cat "$rigdir/ws-item")" | json 'd => `${d.state}: ${d.error}`')"
+  # The delegate's work item is live (its declared wait holds it open), and a workspace with a live work item refuses
+  # its archive before it ends anything (work-items.ts archive: "has a live work item: … Stop it before archiving the
+  # workspace.", 409). The item ends as a leaf ends one it cannot do, finish_item with `blocked`; then the archive runs.
+  ws_item_live || { echo "ASSERTION FAILED: before the archive the work item is $(ws_item_says)"; return 1; }
+  answer=$(ws_post "/api/workspaces/$id/archive" '{"discard":true}')
+  echo "the hub answered the archive with the item live: $answer"
+  [[ "$answer" == *"has a live work item"*"Stop it before archiving the workspace."*"HTTP 409" ]]
+  as_user "$joinerc" kill -0 "$inner"
+  answer=$(ws_post /api/work-items/finish "{\"instanceId\":\"$(cat "$rigdir/ws-delegate")\",\"headline\":\"The stage 2 proof ends its workspace.\",\"summary\":\"Ended by the proof before it archives the workspace.\",\"blocked\":{\"command\":\"prove-stage2.sh workspace_archive_ends_all\",\"error\":\"the proof archives this workspace\"}}")
+  echo "the hub answered the finish: $answer"
+  [[ "$answer" == *"HTTP 200" ]]
+  wait_until 60 '[[ "$(ws_item | json "d => [\"starting\", \"running\"].includes(d.state) ? \"live\" : \"ended\"")" == ended ]]' || { echo "the work item is still $(ws_item_says)"; return 1; }
+  echo "the work item before the archive: $(ws_item_says)"
   answer=$(ws_post "/api/workspaces/$id/archive" '{"discard":true}')
   echo "the hub answered the archive: $answer"
   [[ "$answer" == *"HTTP 200" ]]

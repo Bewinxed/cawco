@@ -3105,9 +3105,55 @@ export const createWorkItems = ({
             ? { state: "failed", error: turn.error, result: turn.text }
             : { state: "done", result: turn.text }
         );
+    if (failed && !busy) {
+      console.log(`[work-items] ${item.id}: its turn failed: ${turn.error}`);
+    }
     return heldForGroup(ended)
       ? undefined
       : { body: `${turn.text}${reportLine(ended)}`, failed };
+  };
+
+  /**
+   * A live item's turn that failed with `error`: the item fails with it,
+   * unless its session is busy again, and its parent hears it either way.
+   */
+  const failedTurn = (
+    item: WorkItemRow,
+    error: string,
+    busy: boolean
+  ): { body: string; failed: boolean } => {
+    quiet.delete(item.id);
+    if (busy) {
+      return { body: `${error}${reportLine(item)}`, failed: true };
+    }
+    const ended = finish(item, { state: "failed", error });
+    console.log(`[work-items] ${item.id}: its turn failed: ${error}`);
+    return { body: `${error}${reportLine(ended)}`, failed: true };
+  };
+
+  /**
+   * A live item's turn that ended quietly, with nothing queued for its
+   * session: the "still open" message, and the {@link QUIET_TURNS}th in a
+   * row fails it, its parent told.
+   */
+  const quietTurn = (
+    row: InstanceRow,
+    item: WorkItemRow,
+    checks: WorkItemCheck[]
+  ): { body: string; failed: boolean } | undefined => {
+    const turns = (quiet.get(item.id) ?? 0) + 1;
+    if (turns >= QUIET_TURNS) {
+      quiet.delete(item.id);
+      const failed = finish(item, { state: "failed", error: QUIET_ERROR });
+      console.log(`[work-items] ${item.id}: ${QUIET_ERROR}`);
+      return { body: `${QUIET_ERROR}${reportLine(failed)}`, failed: true };
+    }
+    quiet.set(item.id, turns);
+    tell(
+      row,
+      `Your work item is still open. Its checks: ${checkNames(checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error. Use wait_item for a bounded wait on a command you started.`
+    );
+    return undefined;
   };
 
   /** A word from the hub about an item, to the item's session. */
@@ -4470,27 +4516,9 @@ export const createWorkItems = ({
         return undefined;
       }
       if (turn.error !== undefined) {
-        quiet.delete(item.id);
-        const ended = busy
-          ? item
-          : finish(item, { state: "failed", error: turn.error });
-        return { body: `${turn.error}${reportLine(ended)}`, failed: true };
+        return failedTurn(item, turn.error, busy);
       }
-      if (busy) {
-        return undefined;
-      }
-      const turns = (quiet.get(item.id) ?? 0) + 1;
-      if (turns >= QUIET_TURNS) {
-        quiet.delete(item.id);
-        const failed = finish(item, { state: "failed", error: QUIET_ERROR });
-        return { body: `${QUIET_ERROR}${reportLine(failed)}`, failed: true };
-      }
-      quiet.set(item.id, turns);
-      tell(
-        row,
-        `Your work item is still open. Its checks: ${checkNames(item.checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error. Use wait_item for a bounded wait on a command you started.`
-      );
-      return undefined;
+      return busy ? undefined : quietTurn(row, item, item.checks);
     },
 
     /**
