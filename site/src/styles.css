@@ -1950,25 +1950,8 @@ mark {
   max-width: 46ch;
 }
 
-/* Apple's badge, as supplied: 40px high, with a quarter of that kept clear all round. */
-.store {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 8px;
-  margin-left: -10px;
-}
-
-.store-badge {
-  width: auto;
-  height: 40px;
-  margin: 10px;
-  /* The app isn't out: the badge is shown muted and links nowhere. */
-  opacity: 0.4;
-}
-
 .soon {
+  margin-top: 8px;
   font-weight: 900;
 }
 

@@ -6,8 +6,8 @@ that folder on `cawco.dev/*` (see `wrangler.jsonc`).
 ## What gets served
 
 - `/` is the landing page: `index.html`, one stylesheet, one script, two font
-  files (Nunito for the page, Figtree for the product scenes), the app icon and
-  the App Store badge. Vite builds it from `index.html` and `src/`. Icons, the
+  files (Nunito for the page, Figtree for the product scenes), and the app icon.
+  Vite builds it from `index.html` and `src/`. Icons, the
   machine drawings and Caw are written into `index.html` at build time.
   The files in `assets/` are named after their contents, and `public/_headers`
   lets browsers keep them for a year.
