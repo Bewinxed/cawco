@@ -31,7 +31,9 @@ say so.
 registry of which daemons currently hold a connection — plus relay, sequencing, and fan-out of
 everything daemons and the dashboard exchange; durable history (its database rows are lifecycle
 records — spawn, error, stop — not a live status you can trust the moment they're read);
-pending approval requests; the Telegram bridge; and fleet policy (rules, tool grants, sync,
+pending approval requests; push to the iOS app (content-free alerts sent through Cawrier to
+APNs, sealed per device and opened by the app's notification service extension: `edf4998`,
+`f76c06ec`, `405cd998`, `36f46115`; the app is not released yet); and fleet policy (rules, tool grants, sync,
 deploy). The hub is deliberately not a second copy of process truth. It is the place multiple
 daemons and multiple dashboard tabs converge, and its job is to converge them consistently, not
 to independently decide what's alive.

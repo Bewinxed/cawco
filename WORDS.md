@@ -12,7 +12,7 @@ Companion to DESIGN.md — the same "calm is a budget" discipline, applied to la
 structure register by default, expressive only at the named moments (see §Tone map).
 
 **Reader:** anyone writing or reviewing user-facing copy in this product — page specs, mocks,
-component strings, error messages, empty states, button labels, Telegram messages. If a string is not
+component strings, error messages, empty states, button labels, iOS app push notifications. If a string is not
 governed by a row below, it does not ship.
 
 ---

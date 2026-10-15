@@ -30,15 +30,15 @@ The operator runs a fleet of machines (desktops, laptops, servers) on a Tailscal
 
 The operator's day includes: glancing at the fleet board to see what's running and what's blocked; triaging a blocked session by reading its transcript and approving or denying the permission request; spawning new sessions against projects; checking daily spend against a budget; authoring standing rules that auto-approve or auto-deny future permission patterns; and configuring fleet-wide tools (MCP servers, skills, plugins, hooks).
 
-Away from a desk, the operator uses a Telegram bridge to receive permission prompts and approve them from a phone — this is a first-class channel, not a fallback notification.
+Away from a desk, the operator uses the Caw&Co iOS app to receive permission prompts as content-free pushes from the hub and answer them from a phone, or the mobile web dashboard — this is a first-class channel, not a fallback notification. The app is not released yet.
 
 ## Capabilities and Constraints
 
 **Capabilities:**
 - Fleet board: one view of every machine, project, and running session with live status
 - Session transcript: real-time streaming conversation view with tool calls, subagent branches, and delegate sessions
-- Remote session control: spawn, steer (send messages), interrupt, and stop sessions from the dashboard or Telegram
-- Permission approval: answer permission gates inline or via Telegram
+- Remote session control: spawn, steer (send messages), interrupt, and stop sessions from the dashboard or the iOS app
+- Permission approval: answer permission gates inline or from the iOS app's push
 - Rules: standing instructions the hub enforces on every session; a rule fires on a phrase, pattern or meaning in what a session says or thinks, or at the end of every turn, and answers with a fixed reply or the supervisor's judgement; each can be scoped to an agent, model, project or machine
 - Hooks: lifecycle hooks with English-sentence previews and matchers
 - Fleet config sync: push MCP servers, skills, plugins, memory, and hooks to all machines; hub resolves sources once and ships bytes
@@ -84,7 +84,7 @@ Away from a desk, the operator uses a Telegram bridge to receive permission prom
 
 ## Evidence on Hand
 
-Working product with 9 route surfaces (fleet board, session detail, project detail, tools, rules, rule detail, hooks, hook detail, usage, delegates), functional fleet sync, Telegram bridge, three harness adapters shipping. cawco.dev is built from `site/`: a one-page landing page and the first-machine installer (`install.sh`); there are no external testimonials — the product is installed and used by its own operator.
+Working product with 9 route surfaces (fleet board, session detail, project detail, tools, rules, rule detail, hooks, hook detail, usage, delegates), functional fleet sync, three harness adapters shipping, and APNs pushes from the hub to the iOS app (not released yet). cawco.dev is built from `site/`: a one-page landing page and the first-machine installer (`install.sh`); there are no external testimonials — the product is installed and used by its own operator.
 
 ## Product Principles
 
