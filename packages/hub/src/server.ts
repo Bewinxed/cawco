@@ -15987,6 +15987,10 @@ export const createServer = (
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),
     machineFree: (machineId) => machinePause.free(machineId),
+    // The sweep's wake of work asleep asks the same gate every sender does,
+    // and leaves a session to the send already on its way to it.
+    inputRefusal,
+    awaitsSend: (instanceId) => awaitsSend(instanceId),
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     report: (row, body, failed, notice, headline) => {
       reportToParent(row, body, failed, { notice, headline });

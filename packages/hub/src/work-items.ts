@@ -607,6 +607,12 @@ export interface WorkItemStart {
 
 export interface WorkItemDeps {
   /**
+   * Whether a send to the session is still pending, owed or handed, other
+   * than a keep-alive ping (server.ts `awaitsSend`): that send is its next
+   * turn, so nothing need wake it.
+   */
+  readonly awaitsSend: (instanceId: string) => boolean;
+  /**
    * Before a workspace of `projectId` is cut from `cwd` on `machineId`: the
    * project's place that holds `cwd` made a git repository when it is a
    * plain folder (place-repo.ts `beforeCut`). Throws, in the machine's
@@ -644,6 +650,14 @@ export interface WorkItemDeps {
    * no process on its machine.
    */
   readonly end: (instanceId: string, waitMs?: number) => Promise<void>;
+  /**
+   * THE gate on input to a session (server.ts `inputRefusal`): why a message
+   * from `origin` may not reach it now, or nothing when it may.
+   */
+  readonly inputRefusal: (
+    instanceId: string,
+    origin: NeutralOrigin
+  ) => { reason: string } | undefined;
   /** The agent's live turn state, including a long tool call with no output. */
   readonly inTurn: (row: InstanceRow) => boolean;
   /**
@@ -776,8 +790,20 @@ const SESSION_GONE = "its session is gone";
 const SESSION_FAILED_UNSAID =
   "Its session failed, and its machine sent no words for why.";
 
-/** How long an agent leaves a session at rest before it sleeps it (agent session.ts `IDLE_SLEEP_MS`). */
-const IDLE_SLEEP_MS = 30 * 60_000;
+/**
+ * Wakes in a row the sweep gives one item's session with no turn of it ending
+ * between them; found asleep again after the last, the item fails. Two (our
+ * call): one wake answers a process lost once, a second a loss that raced the
+ * first wake, and a third sleep with no turn ended is something that keeps
+ * stopping the session, which a wake would only feed.
+ */
+const SLEEP_WAKES = 2;
+
+/** What the sweep's wake tells a session asleep on open work. */
+const STILL_OPEN = "Your work item is still open: continue it.";
+
+/** Whose word the sweep's wake is: the hub's about an item, as the quiet-turn word is. */
+const WAKE_ORIGIN: NeutralOrigin = { kind: "system", name: "work-item" };
 
 /**
  * How long archiving waits on a running session's machine to confirm its
@@ -1393,6 +1419,7 @@ const unpushed = (
 const TRAY_HOLD_MS = 6000;
 
 export const createWorkItems = ({
+  awaitsSend,
   beforeCut,
   call,
   command,
@@ -1405,6 +1432,7 @@ export const createWorkItems = ({
   planSteps,
   publish,
   report,
+  inputRefusal,
   inTurn,
   leadTurn,
   machineFree,
@@ -1421,6 +1449,14 @@ export const createWorkItems = ({
 }: WorkItemDeps) => {
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
   const quiet = new Map<string, number>();
+  /**
+   * Wakes of each item's session by the sweep ({@link wakeAsleep}) with no
+   * turn of it ending between: the item's turn count at the last wake, and
+   * how many. A turn's end ({@link countTurn}) is progress, and starts the
+   * count again. In memory, as the quiet-turn count is: a hub that starts
+   * counts from none.
+   */
+  const woken = new Map<string, { count: number; turns: number }>();
   const waitTimers = new Map<string, HubTimer>();
   /** Waits whose declaring turn ended: the next busy transition resumes them. */
   const waitsAtRest = new Set<string>();
@@ -1483,6 +1519,7 @@ export const createWorkItems = ({
   ): WorkItemRow | undefined => {
     if (change.state && !LIVE.has(change.state)) {
       disarmWait(id);
+      woken.delete(id);
       const before = db.workItem(id);
       const after = published(
         db.updateWorkItem(id, {
@@ -1803,7 +1840,8 @@ export const createWorkItems = ({
 
   /**
    * A live item whose session can't go on — its row in `error`
-   * ({@link followSessions}), or a turn a restart cut that nothing can resume
+   * ({@link followSessions}), asleep where no wake can reach it
+   * ({@link wakeAsleep}), or a turn a restart cut that nothing can resume
    * (server.ts `settleCutItem`): the item fails with `reason`, and whoever
    * hears its reports is told, once — {@link finish} moves only a live item.
    */
@@ -1878,59 +1916,134 @@ export const createWorkItems = ({
   };
 
   /**
-   * A live item whose session has slept past the agent's idle timeout with
-   * no wait and no finish_item: its last turn ended quietly. A quiet turn of
-   * an item with checks reports nothing to its parent ({@link turnEnded}
-   * answers undefined: busy, or the "still open" word goes to the session
-   * alone), so unless a report reached the parent since that turn ended, the
-   * parent is told now, once: the newer report this leaves is the mark. One
-   * whose parent did hear (an item without checks reports every turn) is the
-   * parent's to decide, and stays as it is.
+   * Whether the sweep leaves a live item's session as it is: it has a
+   * process, or something holds the item on purpose or will move it anyway.
+   * An interrupt's hold (`heldAt`, until its parent or the reader writes); a
+   * paused machine under its workspace; a declared wait; checks in flight
+   * (here, or left by a hub before this one); a session that has moved on to
+   * another item; a machine that is not connected (it settles its sessions
+   * when it registers); a send on its way to the session, which is its next
+   * turn (a cut turn's hand-back included).
    */
-  const tellAsleep = (): void => {
-    const open = db
-      .liveWorkItems()
-      .filter(
-        (item) => !(item.waitUntil || item.waitResumeBy || item.checkingSince)
-      );
-    if (open.length === 0) {
+  const leftAsleep = (item: WorkItemRow, row: InstanceRow): boolean =>
+    !(row.status === "sleeping" || GONE.has(row.status)) ||
+    item.heldAt !== null ||
+    pausedWorkspace(item.workspaceId) !== undefined ||
+    !!(item.waitUntil || item.waitResumeBy) ||
+    !!item.checkingSince ||
+    finishing.has(item.id) ||
+    row.workItemId !== item.id ||
+    !online(row.machineId) ||
+    awaitsSend(row.id);
+
+  /**
+   * THE RULE FOR WORK ASLEEP: a live item whose session has no process while
+   * nothing holds it ({@link leftAsleep}) is woken or ended, never left. Its
+   * session asleep, the hub tells it {@link STILL_OPEN} through the one send
+   * path a handoff takes, which starts its process; one that cannot take
+   * that message (the hub's input gate refuses it, it never began a
+   * conversation, its workspace is archived, or the hub's word may not start
+   * a turn in it because it was stopped) fails with why, its parent told. A
+   * session woken {@link SLEEP_WAKES} times in a row with no turn ended and
+   * found asleep again fails too: something keeps stopping it.
+   *
+   * Its process lost without a turn ending is how it gets here: a process
+   * that exits on its own between turns or mid-turn with no turn recorded
+   * open (the agent files it asleep, `#gone`), one a signal killed with no
+   * turn recorded to hand back (server.ts `diedOnSignal`), a heartbeat that
+   * no longer lists it (an OpenCode server restart; db `reconcileHeartbeat`),
+   * a register or hub start that found no process to restore, an interrupted
+   * turn left at rest until the agent slept it, and a spawn whose session
+   * came up and lost its process before its first turn. A row in `error`
+   * or gone is {@link followSessions}'s.
+   */
+  const wakeAsleep = (): void => {
+    const live = db.liveWorkItems();
+    if (live.length === 0) {
       return;
     }
     const rows = new Map(
       db
-        .getInstancesByIds(open.map((item) => item.instanceId))
+        .getInstancesByIds(live.map((item) => item.instanceId))
         .map((row) => [row.id, row])
     );
-    const now = Date.now();
-    for (const item of open) {
+    for (const item of live) {
       const row = rows.get(item.instanceId);
-      if (!(row && row.status === "sleeping" && row.workItemId === item.id)) {
-        continue;
+      if (row && !leftAsleep(item, row)) {
+        wakeOrFail(item, row);
       }
-      const since = Math.max(
-        row.turnEndedAt ? new Date(row.turnEndedAt).getTime() : 0,
-        item.createdAt.getTime()
-      );
-      if (now - since < IDLE_SLEEP_MS) {
-        continue;
-      }
-      const told = db
-        .listDelegateEvents({ instance: row.id })
-        .some(
-          (event) =>
-            event.kind === "report" &&
-            new Date(event.createdAt).getTime() >= since
-        );
-      if (told) {
-        continue;
-      }
-      report(
-        row,
-        `${item.title} has been asleep since ${new Date(since).toISOString()} with its work item open: its last turn ended without finish_item or wait_item, and nothing reached you then. The item stays open. Hand off to it to carry the work on, or stop_delegate to cancel it.${reportLine(item)}`,
-        false,
-        true
-      );
     }
+  };
+
+  /** {@link wakeAsleep} for one item: its session woken, or the item failed with why. */
+  const wakeOrFail = (item: WorkItemRow, row: InstanceRow): void => {
+    const refused = asleepRefusal(item, row);
+    if (refused) {
+      sessionFailed(row, refused);
+      return;
+    }
+    const before = woken.get(item.id);
+    const count = before && before.turns === item.turns ? before.count : 0;
+    if (count >= SLEEP_WAKES) {
+      sessionFailed(
+        row,
+        `Its session went back to sleep after each of the hub's ${counted(count, "wake")}, without ending a turn in between, so the hub stopped waking it.`
+      );
+      return;
+    }
+    const sent = send({
+      verb: "send",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        instanceId: row.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: {
+            role: "user",
+            content: item.checks
+              ? `${STILL_OPEN} Its checks: ${checkNames(item.checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error.`
+              : STILL_OPEN,
+          },
+          parent_tool_use_id: null,
+          origin: WAKE_ORIGIN,
+        },
+      },
+    });
+    if (sent.state === "failed") {
+      sessionFailed(
+        row,
+        `Its session was asleep with its work item open, and the hub's wake did not reach it: ${sent.reason ?? "the send failed"}.`
+      );
+      return;
+    }
+    woken.set(item.id, { count: count + 1, turns: item.turns });
+    console.log(
+      `[work-items] ${item.id}: its session ${row.id} was asleep with the item open; woke it (wake ${count + 1} of ${SLEEP_WAKES})`
+    );
+  };
+
+  /**
+   * Why a live item's session with no process cannot take the sweep's wake,
+   * as the sentence its failure carries; nothing when it can.
+   */
+  const asleepRefusal = (
+    item: WorkItemRow,
+    row: InstanceRow
+  ): string | undefined => {
+    if (GONE.has(row.status)) {
+      return `Its session was ${row.status} with its work item open, and only its parent or the reader may start a stopped session again.`;
+    }
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    if (workspace?.state !== "active") {
+      return `Its session was asleep with its work item open, and its workspace ${item.workspaceId} is ${workspace?.state ?? "gone"}: there is nowhere for it to carry on.`;
+    }
+    if (!row.sessionId) {
+      return "Its session was asleep with its work item open, and it never began a conversation, so there is nothing to wake it into.";
+    }
+    const gate = inputRefusal(row.id, WAKE_ORIGIN);
+    return gate ? gate.reason : undefined;
   };
 
   lifetime.every(BUDGET_SWEEP_MS, () => {
@@ -1940,7 +2053,7 @@ export const createWorkItems = ({
       }
     }
     followSessions();
-    tellAsleep();
+    wakeAsleep();
   });
 
   // --- groups ---------------------------------------------------------------------
