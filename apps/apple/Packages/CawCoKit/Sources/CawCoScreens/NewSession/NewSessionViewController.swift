@@ -226,7 +226,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         let first = continuing?.machineId ?? prefill.machineId ?? seeded?.primaryPlace?.machineId ?? fleet.machines.first { $0.status == "online" }?.machineId ?? ""
         machineIds = first.isEmpty ? [] : [first]
         // A seeded project starts at its primary checkout; without one the form asks.
-        cwd = continuing?.cwd ?? prefill.cwd ?? seeded?.primaryPlace?.path.text ?? ""
+        cwd = continuing?.cwd ?? prefill.cwd ?? seeded?.primaryPlace?.path ?? ""
         prompt = UserDefaults.standard.string(forKey: Self.keptPrompt) ?? ""
         if continuing != nil, let restore {
             repo = restore.repo
@@ -353,7 +353,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private var project: Components.Schemas.GetApiProjects200Payload? {
         fleet.projects.first { project in
-            project.id == projectId || project.places.contains { $0.machineId == machineId && $0.path.text == workdir }
+            project.id == projectId || project.places.contains { $0.machineId == machineId && $0.path == workdir }
         }
     }
 
@@ -376,7 +376,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// With a project chosen, where it is on a machine, or that Start clones it there first (design §1b).
     private func placeHint(_ machineId: String) -> String? {
         guard let project = chosenProject else { return nil }
-        if let place = project.checkout(on: machineId) { return place.path.text }
+        if let place = project.checkout(on: machineId) { return place.path }
         // The clone's size is the project's, whichever machine it goes to.
         guard let estimate = moveRead?.estimate, estimate.needed, moveRead?.key.hasPrefix(project.id) == true else { return "will clone" }
         return "will clone · \(moveSize(estimate.bytes + estimate.lfsBytes))"
@@ -386,7 +386,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         // A project is offered on the machines it has a checkout on, at that checkout.
         let placed = fleet.projects.compactMap { row in machineIds.lazy.compactMap { row.checkout(on: $0) }.first.map { (row, $0) } }
             .enumerated().map { index, pair in
-                NsProject(id: pair.0.id, machineId: pair.1.machineId, name: pair.0.name, path: pair.1.path.text, hue: nsHues[(index + 3) % 5])
+                NsProject(id: pair.0.id, machineId: pair.1.machineId, name: pair.0.name, path: pair.1.path, hue: nsHues[(index + 3) % 5])
             }
         // The chosen project stays chosen on a machine it moves to, where it goes.
         guard let project = chosenProject, let to = moveTo else { return placed }
@@ -1331,7 +1331,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private func createProject(name: String, path: String) async throws {
         let created = try await hub.createProject(name: name, cwd: path, machineId: machineId)
         // The place the hub made (or found) for the folder: the project as it starts here.
-        pickProject(NsProject(id: created.id, machineId: created.place.machineId, name: created.name, path: created.place.path.text, hue: nsHues[0]))
+        pickProject(NsProject(id: created.id, machineId: created.place.machineId, name: created.name, path: created.place.path, hue: nsHues[0]))
     }
 
     // MARK: Start

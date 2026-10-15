@@ -23617,16 +23617,7 @@
                     "$ref": "#/components/schemas/PlaceKind"
                   },
                   "path": {
-                    "anyOf": [
-                      {
-                        "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
-                        "type": "string"
-                      },
-                      {
-                        "type": "string",
-                        "pattern": "^projects/.*$"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/PlacePath"
                   },
                   "isPrimary": {
                     "type": "boolean"
@@ -23693,16 +23684,7 @@
                 "$ref": "#/components/schemas/PlaceKind"
               },
               "path": {
-                "anyOf": [
-                  {
-                    "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
-                    "type": "string"
-                  },
-                  {
-                    "type": "string",
-                    "pattern": "^projects/.*$"
-                  }
-                ]
+                "$ref": "#/components/schemas/PlacePath"
               },
               "isPrimary": {
                 "type": "boolean"
@@ -23838,16 +23820,7 @@
                   "$ref": "#/components/schemas/PlaceKind"
                 },
                 "path": {
-                  "anyOf": [
-                    {
-                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
-                      "type": "string"
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^projects/.*$"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/PlacePath"
                 },
                 "isPrimary": {
                   "type": "boolean"
@@ -24037,16 +24010,7 @@
                   "$ref": "#/components/schemas/PlaceKind"
                 },
                 "path": {
-                  "anyOf": [
-                    {
-                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
-                      "type": "string"
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^projects/.*$"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/PlacePath"
                 },
                 "isPrimary": {
                   "type": "boolean"
@@ -24120,16 +24084,7 @@
                 "$ref": "#/components/schemas/PlaceKind"
               },
               "path": {
-                "anyOf": [
-                  {
-                    "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
-                    "type": "string"
-                  },
-                  {
-                    "type": "string",
-                    "pattern": "^projects/.*$"
-                  }
-                ]
+                "$ref": "#/components/schemas/PlacePath"
               },
               "isPrimary": {
                 "type": "boolean"
@@ -24265,16 +24220,7 @@
                   "$ref": "#/components/schemas/PlaceKind"
                 },
                 "path": {
-                  "anyOf": [
-                    {
-                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
-                      "type": "string"
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^projects/.*$"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/PlacePath"
                 },
                 "isPrimary": {
                   "type": "boolean"
@@ -24436,16 +24382,7 @@
                   "$ref": "#/components/schemas/PlaceKind"
                 },
                 "path": {
-                  "anyOf": [
-                    {
-                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
-                      "type": "string"
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^projects/.*$"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/PlacePath"
                 },
                 "isPrimary": {
                   "type": "boolean"
@@ -38427,6 +38364,10 @@
           "hub",
           "workspace"
         ]
+      },
+      "PlacePath": {
+        "description": "Where a place is: a folder on its machine, or (kind `hub`) the project's\nfolder on the hub. A plain string on the wire, as both sides are; a union\nleft unnamed reaches the API's schema as an anyOf its clients wrap.",
+        "type": "string"
       },
       "RunningSession": {
         "description": "One running session of a project, in tree order (parents first).",

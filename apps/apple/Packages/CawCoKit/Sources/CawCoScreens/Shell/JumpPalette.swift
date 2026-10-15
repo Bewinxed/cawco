@@ -74,7 +74,7 @@ struct JumpIndex {
         let leaf = { (path: String) in path.split(separator: "/").last.map(String.init) ?? path }
         var lists: [[JumpRow]] = [[], [], [], [], []]
         for project in fleet.projects {
-            lists[0].append(JumpRow(id: "project:\(project.id)", kind: .project, label: project.name, detail: project.primaryPlace?.path.text ?? "", target: .project(project.id)))
+            lists[0].append(JumpRow(id: "project:\(project.id)", kind: .project, label: project.name, detail: project.primaryPlace?.path ?? "", target: .project(project.id)))
         }
         let words: [Activity: String] = [.working: "Working", .blocked: "Needs you", .idle: "Idle"]
         // Every thread with a project's Caw (jump-index.ts `threads`): its project, what it is doing, when it last moved.

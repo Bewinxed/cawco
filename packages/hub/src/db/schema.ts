@@ -563,6 +563,14 @@ export type PlaceKind = "checkout" | "workspace" | "hub";
 /** A project's folder on the hub, relative to the hub's data (db `hubPlacePath`). */
 export type HubFolder = `projects/${string}`;
 
+/**
+ * Where a place is: a folder on its machine, or (kind `hub`) the project's
+ * folder on the hub. A plain string on the wire, as both sides are; a union
+ * left unnamed reaches the API's schema as an anyOf its clients wrap.
+ * @TJS-type string
+ */
+export type PlacePath = MachinePath | HubFolder;
+
 /** Where a project's files are, one row per machine and folder. */
 export const projectPlaces = sqliteTable(
   "project_places",
@@ -574,7 +582,7 @@ export const projectPlaces = sqliteTable(
     /** Not a reference: a machine's places go with it in `deleteMachine`. */
     machineId: text("machine_id").notNull(),
     /** Absolute on its machine; the hub's own folder (kind `hub`) is relative to the hub's data. */
-    path: text("path").$type<MachinePath | HubFolder>().notNull(),
+    path: text("path").$type<PlacePath>().notNull(),
     kind: text("kind").$type<PlaceKind>().notNull(),
     /**
      * The project's primary checkout: where it is worked on first, and what a

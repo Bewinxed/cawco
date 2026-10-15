@@ -11,22 +11,6 @@ public import CawCoAPI
 ///   starts none.
 public typealias ProjectPlace = Components.Schemas.GetApiProjects200Payload.PlacesPayloadPayload
 
-/// A place's `path` as the hub's schema names it: a machine's absolute path
-/// (core `MachinePath`) or the hub's `projects/<id>`. One string on the wire;
-/// the union of two string schemas reaches Swift as a pair, read as one.
-public protocol PlacePath {
-    var value1: String? { get }
-    var value2: String? { get }
-}
-
-public extension PlacePath {
-    /// The folder, as the wire carries it.
-    var text: String { value1 ?? value2 ?? "" }
-}
-
-extension Components.Schemas.GetApiProjects200Payload.PlacesPayloadPayload.PathPayload: PlacePath {}
-extension Components.Schemas.PostApiProjects200.PlacePayload.PathPayload: PlacePath {}
-
 /// A project is one identity with many places (PRD §5.1: `places[]` and
 /// `primaryPlaceId`, no machine or folder of its own); projects.ts. Every
 /// screen reads a project's machine and folder through these.
@@ -40,7 +24,7 @@ extension Components.Schemas.GetApiProjects200Payload {
 
     /// The folder the project is known by, its hue and its rail row
     /// (`folderOf`): its primary checkout's path, else its folder on the hub's.
-    public var folder: String { primaryPlace?.path.text ?? "projects/\(id)" }
+    public var folder: String { primaryPlace?.path ?? "projects/\(id)" }
 
     /// Where a session on `machineId` starts in the project (`checkoutOn`):
     /// its checkout there, the primary first.
@@ -110,10 +94,10 @@ public enum ProjectPlaces {
     /// checkout, else its own folder.
     private static func home(of owner: Project, machineId: String, cwd: String) -> (machineId: String, path: String) {
         let folder = trimmed(cwd)
-        var home: (machineId: String, path: String) = owner.primaryPlace.map { (machineId: $0.machineId, path: trimmed($0.path.text)) } ?? (machineId: machineId, path: folder)
+        var home: (machineId: String, path: String) = owner.primaryPlace.map { (machineId: $0.machineId, path: trimmed($0.path)) } ?? (machineId: machineId, path: folder)
         var deepest = -1
         for place in owner.places {
-            let path = trimmed(place.path.text)
+            let path = trimmed(place.path)
             if place.machineId == machineId, inside(folder, path), path.count > deepest {
                 home = (machineId: place.machineId, path: path)
                 deepest = path.count
@@ -127,7 +111,7 @@ public enum ProjectPlaces {
         var oldest: [String: Project] = [:]
         for project in projects {
             for place in project.places where place.machineId == machineId {
-                let path = trimmed(place.path.text)
+                let path = trimmed(place.path)
                 if let previous = oldest[path], !older(project, previous) { continue }
                 oldest[path] = project
             }
