@@ -79,7 +79,8 @@ PROOF_STORE_INSTANCE=images
 # before PROOF_STORE_INSTANCE), goes: it holds no image (those are containers/storage's, beside it) and, the builds'
 # containers each removed as their build ends, no container either, which is checked first.
 proof_store_database() {
-  local db="$PROOF_STORE/libpod/db.sql" run
+  # The instance's static dir is the store itself (podman_instance), so its database is the store's own db.sql.
+  local db="$PROOF_STORE/db.sql" run
   [[ -f $db ]] || return 0
   run=$(podman_instance_run "$PROOF_STORE_INSTANCE")
   bun -e '
