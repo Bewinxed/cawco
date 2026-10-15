@@ -1031,12 +1031,7 @@ export function handoffTools(deps: HandoffDeps) {
       },
       ({ path }) =>
         Promise.resolve({
-          content: [
-            {
-              type: "text" as const,
-              text: `Shown in the transcript: ${path}. If the file is missing or later moves, the user sees that instead.`,
-            },
-          ],
+          content: [{ type: "text" as const, text: actions.showImage(path) }],
         })
     ),
     tool(

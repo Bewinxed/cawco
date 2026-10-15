@@ -528,6 +528,7 @@ import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
 import { applySetupPicks } from "./setup";
+import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
 import {
   type StagesTemplate,
@@ -16020,6 +16021,25 @@ export const createServer = (
     },
   });
   projectSettings = settings;
+  // What show_image and send_to_user may show from other workspaces: its
+  // delegates', at any depth (shown-files.ts).
+  const shownDeps: ShownDeps = {
+    boundaryOf: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      return row ? sessionWorkspace(row)?.id : undefined;
+    },
+    home: (machineId) =>
+      db.listAgents().find((agent) => agent.machineId === machineId)?.home ??
+      undefined,
+    itemsIn: (workspaceId) => db.workItemsIn(workspaceId),
+    ledBy: (instanceId, leadId) => workItems.ledBy(instanceId, leadId),
+    parentOf: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row?.workItemId ? db.workItem(row.workItemId) : undefined;
+      return item?.parentInstanceId ?? undefined;
+    },
+    workspaces: (id8) => db.workspacesNamed(id8),
+  };
   const delegationMcp = createDelegationMcp({
     lifetime,
     tasks,
@@ -16050,6 +16070,13 @@ export const createServer = (
       ? (actor, message, attachments) =>
           telegram.deliver(actor.machineId, actor.id, message, attachments)
       : undefined,
+    shownRefusal: (actor, tool, paths) =>
+      shownRefusal(shownDeps, {
+        instanceId: actor.id,
+        machineId: actor.machineId,
+        paths,
+        tool,
+      }),
     instancesByIds: (ids) => db.listedInstancesByIds(ids),
     runningOf: (harness) => db.runningInstancesOf(harness),
     instanceById: (id) => db.getInstancesByIds([id])[0],

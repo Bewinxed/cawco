@@ -446,7 +446,11 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
  * `generate_image`'s `output_path`, the new PNG. Each is judged against the
  * workspace's own policy, its read set like its write set: the hub reads
  * outside any boundary, so a file the session may not read is not shown,
- * sent or uploaded for it either. Every other argument of a cawco
+ * sent or uploaded for it either. Shown (`show`): a read that may also lie in
+ * another workspace's scratch dir or clone, for the hub to decide
+ * ({@link handedToHub}): a session shows the person its delegates'
+ * screenshots, and only the hub knows its delegates (hub shown-files.ts).
+ * Every other argument of a cawco
  * tool names no file, whatever its name: `artifact_create`'s `path` is a
  * preview's URL path, `artifact_update`'s `patch[].path` a JSON Pointer,
  * `workflow_read`'s `path` a path into a result, `run_workflow`'s
@@ -459,12 +463,72 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
  * probe holds this table to the hub's schemas.
  */
 export const CAWCO_FILE_ARGS: Readonly<
-  Record<string, Readonly<Record<string, Access>>>
+  Record<string, Readonly<Record<string, Access | "show">>>
 > = {
   artifact_create: { dir: "read" },
   generate_image: { output_path: "write", reference_images: "read" },
-  send_to_user: { attachments: "read" },
-  show_image: { path: "read" },
+  send_to_user: { attachments: "show" },
+  show_image: { path: "show" },
+};
+
+/** Where on its machine a workspace keeps its files, named by its id's first 8 characters. */
+export interface WorkspaceArea {
+  readonly id8: string;
+  readonly kind: "clone" | "scratch";
+}
+
+/** Its scratch dir `.cawco/tmp/<id8>` (paths.ts `workspaceScratchDir`) and its clone `.worktrees/<repo>-<id8>` (agent workspace.ts), under home. */
+const AREA =
+  /^(?:\.cawco\/tmp\/([0-9a-f]{8})|\.worktrees\/[^/]+-([0-9a-f]{8}))(?:\/|$)/;
+
+/**
+ * The workspace area `path` lies in, read from the path as written under
+ * `home`; none when it lies in none. The judge and the hub read a shown
+ * path by this one rule.
+ */
+export const workspaceArea = (
+  path: string,
+  home: string
+): WorkspaceArea | undefined => {
+  if (!path.startsWith(`${home}/`)) {
+    return;
+  }
+  const match = AREA.exec(path.slice(home.length + 1));
+  if (!match) {
+    return;
+  }
+  return match[1]
+    ? { kind: "scratch", id8: match[1] }
+    : { kind: "clone", id8: match[2] as string };
+};
+
+/**
+ * Whether a shown path the policy does not read is the hub's to decide: it
+ * is absolute, names no `.` or `..`, lies in a workspace area as written and
+ * at its real path both (so the hub, which reads only the words, judges the
+ * file itself), and nothing but the home dir's deny refuses it (a credential
+ * store stays refused).
+ */
+const handedToHub = (policy: Policy, path: string): boolean => {
+  const written = workspaceArea(path, policy.home);
+  if (
+    !written ||
+    path.split("/").some((part) => part === "." || part === "..")
+  ) {
+    return false;
+  }
+  try {
+    const real = resolveReal(path);
+    const home = resolveReal(policy.home);
+    const actual = workspaceArea(real, home);
+    return (
+      actual?.kind === written.kind &&
+      actual.id8 === written.id8 &&
+      deepest(policy.denyRead, real) === home
+    );
+  } catch {
+    return false;
+  }
 };
 
 /** The cawco tool a harness's tool name is: Claude Code's `mcp__cawco__<tool>`, OpenCode's `cawco_<tool>`. */
@@ -604,6 +668,8 @@ const against = (
 interface Target {
   readonly access: Access;
   readonly path: string;
+  /** A shown path named absolute: the hub decides it when the policy does not read it ({@link handedToHub}). */
+  readonly shown?: boolean;
 }
 
 /** Every path a call names, with the access it asks. */
@@ -624,7 +690,7 @@ const targets = (policy: Policy, call: Call): Target[] => {
     // any other tool, those its arguments' names say, each judged as a
     // write, the strictest case.
     const cawco = cawcoTool(call);
-    const paths: { access: Access; path: string }[] =
+    const paths: { access: Access | "show"; path: string }[] =
       cawco === undefined
         ? argumentPaths(input).map((path) => ({ path, access: "write" }))
         : Object.entries(CAWCO_FILE_ARGS[cawco] ?? {}).flatMap(
@@ -633,7 +699,10 @@ const targets = (policy: Policy, call: Call): Target[] => {
           );
     return paths.flatMap(({ path, access }) =>
       against(path, [...new Set([call.cwd, policy.clone])], policy.home).map(
-        (resolved) => ({ path: resolved, access })
+        (resolved): Target =>
+          access === "show"
+            ? { path: resolved, access: "read", shown: isAbsolute(path) }
+            : { path: resolved, access }
       )
     );
   }
@@ -687,7 +756,7 @@ export const judgeCall = (policy: Policy, call: Call): Verdict => {
   }
   for (const target of named) {
     const verdict = judge(session, target.path, target.access);
-    if (!verdict.ok) {
+    if (!(verdict.ok || (target.shown && handedToHub(session, target.path)))) {
       return refused(
         `cawco: ${call.tool} was refused: ${target.access === "read" ? "reading" : "writing"} ${verdict.reason}`
       );

@@ -19,9 +19,15 @@
  *    `filePath` outside is refused. Each argument the hub only reads
  *    (`show_image` `path`, `send_to_user` `attachments`, `artifact_create`
  *    `dir`, `generate_image` `reference_images`) passes on a dir the policy
- *    reads but does not write, and is refused, as a read, in a sibling
- *    workspace's scratch dir; `generate_image`'s `output_path`, a write,
- *    is refused on that read-only dir.
+ *    reads but does not write; `generate_image`'s `output_path`, a write,
+ *    is refused on that read-only dir; `reference_images` in a delegate's
+ *    scratch dir is refused as a read.
+ * 2b. Shown files, the judge then the hub (shown-files.ts) for a parent in
+ *    a boundary: its delegate's scratch file and its nested delegate's
+ *    clone pass; an unrelated workspace's scratch file or clone, a link
+ *    from a delegate's scratch dir to one, a credential store inside it and
+ *    a `..` climbing out of it are refused for reading; a session outside
+ *    any boundary is left as it was.
  * 3. Controls: the judge as it stood before the cawco table (fdd325e91)
  *    refuses the live call, and the judge before the table carried each
  *    argument's access (c09c4a28f) refuses `show_image` on the read-only
@@ -30,7 +36,7 @@
  *
  *   bun scripts/probe-kit/run.ts mcp-file-args
  */
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -41,6 +47,10 @@ import {
   resolveReal,
   type Verdict,
 } from "../../../packages/core/src/workspace-judge";
+import {
+  type ShownDeps,
+  shownRefusal,
+} from "../../../packages/hub/src/shown-files";
 import type { Kit, Spec } from "../kit";
 
 /**
@@ -190,6 +200,165 @@ const schemaChecks = (kit: Kit, tools: Listed[]): void => {
 
 type Judge = (policy: Policy, call: Call) => Verdict;
 
+/** A screenshot a session took in a dir. */
+const shot = (dir: string) => join(dir, "routines-shots", "s1.png");
+
+/**
+ * The fleet the hub's half answers for: the parent session runs in its own
+ * workspace, delegated an item to `delegate`, which delegated one to
+ * `nested`; `unrelated` is another parent's.
+ */
+const FLEET = {
+  parent: {
+    id: "p0000000-0000-4000-8000-000000000000",
+    ws: "a1a1a1a1-0000-4000-8000-000000000000",
+  },
+  delegate: {
+    id: "d0000000-0000-4000-8000-000000000000",
+    ws: "b2b2b2b2-0000-4000-8000-000000000000",
+    by: "p0000000-0000-4000-8000-000000000000",
+  },
+  nested: {
+    id: "e0000000-0000-4000-8000-000000000000",
+    ws: "c3c3c3c3-0000-4000-8000-000000000000",
+    by: "d0000000-0000-4000-8000-000000000000",
+  },
+  unrelated: {
+    id: "f0000000-0000-4000-8000-000000000000",
+    ws: "704c3333-0000-4000-8000-000000000000",
+    by: "9e000000-0000-4000-8000-000000000000",
+  },
+} as const;
+
+/**
+ * show_image and send_to_user as a parent in a boundary makes them: its
+ * workspace's judge, then, for a call the judge lets through, the hub's
+ * check on the same words (shown-files.ts).
+ */
+const shownChecks = (
+  kit: Kit,
+  at: {
+    areas: Record<
+      "delegateScratch" | "nestedClone" | "unrelatedClone" | "unrelatedScratch",
+      string
+    >;
+    clone: string;
+    home: string;
+    policy: Policy;
+    store: string;
+  }
+): void => {
+  const { areas } = at;
+  const delegated = [FLEET.delegate, FLEET.nested, FLEET.unrelated];
+  const deps: ShownDeps = {
+    boundaryOf: (id) => (id === FLEET.parent.id ? FLEET.parent.ws : undefined),
+    home: (machineId) => (machineId === "m1" ? at.home : undefined),
+    itemsIn: (ws) =>
+      delegated
+        .filter((one) => one.ws === ws)
+        .map((one) => ({ instanceId: one.id, parentInstanceId: one.by })),
+    ledBy: () => false,
+    parentOf: (id) => delegated.find((one) => one.id === id)?.by,
+    workspaces: (id8) =>
+      delegated
+        .filter((one) => one.ws.startsWith(id8))
+        .map((one) => ({
+          id: one.ws,
+          path: join(at.home, ".worktrees", `cockpit-${one.ws.slice(0, 8)}`),
+        })),
+  };
+  const shows = (
+    harness: "claude" | "opencode",
+    tool: "send_to_user" | "show_image",
+    path: string
+  ): Verdict => {
+    const prefix = harness === "claude" ? "mcp__cawco__" : "cawco_";
+    const input =
+      tool === "show_image" ? { path } : { message: "x", attachments: [path] };
+    const judged = judgeCall(at.policy, {
+      harness,
+      tool: `${prefix}${tool}`,
+      input,
+      cwd: at.clone,
+    });
+    if (!judged.ok) {
+      return judged;
+    }
+    const refusal = shownRefusal(deps, {
+      instanceId: FLEET.parent.id,
+      machineId: "m1",
+      paths: [path],
+      tool,
+    });
+    return refusal ? { ok: false, reason: refusal } : { ok: true };
+  };
+  const cases: { allowed: boolean; label: string; path: string }[] = [
+    {
+      label: "its delegate's scratch file",
+      path: shot(areas.delegateScratch),
+      allowed: true,
+    },
+    {
+      label: "a file in its nested delegate's clone",
+      path: join(areas.nestedClone, "shot.png"),
+      allowed: true,
+    },
+    {
+      label: "an unrelated workspace's scratch file",
+      path: shot(areas.unrelatedScratch),
+      allowed: false,
+    },
+    {
+      label: "a file in an unrelated workspace's clone",
+      path: join(areas.unrelatedClone, "shot.png"),
+      allowed: false,
+    },
+    {
+      label:
+        "a link in its delegate's scratch dir to an unrelated workspace's file",
+      path: join(areas.delegateScratch, "borrowed.png"),
+      allowed: false,
+    },
+    {
+      label: "a credential store inside its delegate's scratch dir",
+      path: join(at.store, "token.png"),
+      allowed: false,
+    },
+    {
+      label:
+        "a path that climbs from its delegate's scratch dir into an unrelated one's",
+      path: `${areas.delegateScratch}/../${FLEET.unrelated.ws.slice(0, 8)}/routines-shots/s1.png`,
+      allowed: false,
+    },
+  ];
+  for (const harness of ["claude", "opencode"] as const) {
+    for (const tool of ["show_image", "send_to_user"] as const) {
+      for (const one of cases) {
+        const verdict = shows(harness, tool, one.path);
+        const said =
+          verdict.ok || verdict.reason.includes("was refused: reading ");
+        kit.check(
+          `${harness} ${tool}: a parent showing ${one.label} is ${one.allowed ? "allowed" : "refused for reading"}`,
+          verdict.ok === one.allowed && said,
+          verdict.ok ? "allowed" : verdict.reason
+        );
+      }
+    }
+  }
+  // A session outside any boundary is the hub's to leave alone.
+  const host = shownRefusal(deps, {
+    instanceId: "h0000000-0000-4000-8000-000000000000",
+    machineId: "m1",
+    paths: [shot(areas.unrelatedScratch)],
+    tool: "show_image",
+  });
+  kit.check(
+    "a session outside any boundary shows an unrelated workspace's file as before",
+    host === undefined,
+    host ?? "allowed"
+  );
+};
+
 const LIVE_PATH =
   "/motion/seed-tabs?ids=184477ed-6e6e-4fb1-ad43-f10fd3aae458,9b1c2d3e-0000-4000-8000-000000000000";
 
@@ -200,12 +369,41 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
   const elsewhere = join(home, "elsewhere");
   // A dir the workspace reads but never writes, as it reads a toolchain.
   const readOnly = join(home, "toolchain");
-  // Another workspace's scratch dir, which this one does not read.
-  const sibling = join(home, ".cawco", "tmp", "704c3333");
+  // Other workspaces' areas on the machine, which this one does not read:
+  // its delegate's, that delegate's own delegate's, and an unrelated one's.
+  const areas = {
+    delegateScratch: join(home, ".cawco", "tmp", FLEET.delegate.ws.slice(0, 8)),
+    nestedClone: join(
+      home,
+      ".worktrees",
+      `cockpit-${FLEET.nested.ws.slice(0, 8)}`
+    ),
+    unrelatedScratch: join(
+      home,
+      ".cawco",
+      "tmp",
+      FLEET.unrelated.ws.slice(0, 8)
+    ),
+    unrelatedClone: join(
+      home,
+      ".worktrees",
+      `cockpit-${FLEET.unrelated.ws.slice(0, 8)}`
+    ),
+  };
   await Promise.all(
-    [clone, scratch, elsewhere, readOnly, sibling].map((dir) =>
+    [clone, scratch, elsewhere, readOnly, ...Object.values(areas)].map((dir) =>
       mkdir(dir, { recursive: true })
     )
+  );
+  // A credential store inside the delegate's scratch dir, and a link there
+  // to the unrelated workspace's file.
+  const store = join(areas.delegateScratch, "store");
+  await mkdir(store, { recursive: true });
+  await mkdir(join(areas.unrelatedScratch, "routines-shots"));
+  await writeFile(shot(areas.unrelatedScratch), "x");
+  await symlink(
+    shot(areas.unrelatedScratch),
+    join(areas.delegateScratch, "borrowed.png")
   );
   const real = {
     home: resolveReal(home),
@@ -217,7 +415,7 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
     allowRead: [real.clone, real.scratch, real.readOnly],
     allowWrite: [real.clone, real.scratch],
     clone: real.clone,
-    denyRead: [real.home],
+    denyRead: [real.home, resolveReal(store)],
     denyWrite: [],
     home: real.home,
     scratch: real.scratch,
@@ -227,7 +425,6 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
     { harness: "claude", prefix: "mcp__cawco__" },
     { harness: "opencode", prefix: "cawco_" },
   ] as const;
-  const shot = (dir: string) => join(dir, "routines-shots", "s1.png");
   const cases: {
     allowed: boolean;
     input: Record<string, unknown>;
@@ -343,16 +540,14 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
       says: "writing",
     },
     {
-      label: "an image shown from a sibling workspace's scratch dir",
-      tool: "show_image",
-      input: { path: shot(sibling) },
-      allowed: false,
-      says: "reading",
-    },
-    {
-      label: "an attachment from a sibling workspace's scratch dir",
-      tool: "send_to_user",
-      input: { message: "x", attachments: [shot(sibling)] },
+      label:
+        "a reference image from a delegate's scratch dir (only shown files reach the hub)",
+      tool: "generate_image",
+      input: {
+        prompt: "x",
+        output_path: join(clone, "out.png"),
+        reference_images: [shot(areas.delegateScratch)],
+      },
       allowed: false,
       says: "reading",
     },
@@ -376,6 +571,14 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
       );
     }
   }
+  shownChecks(kit, {
+    policy,
+    clone,
+    home: real.home,
+    areas,
+    store,
+  });
+
   const other = judgeCall(policy, {
     harness: "claude",
     tool: "mcp__chrome-devtools__take_screenshot",

@@ -506,7 +506,7 @@
           {:else}
             <div class="trow rail-line flat">{@render line()}</div>
           {/if}
-          {#if d.expanded === "image" && machine}
+          {#if d.expanded === "image" && machine && !failed}
             {@const input = m.metadata?.toolInput as {
               path: string;
               caption?: string;
@@ -522,7 +522,7 @@
               />
             </div>
           {/if}
-          {#if machine && sentAttachments(m).length}
+          {#if machine && !failed && sentAttachments(m).length}
             <div class="shots" data-gallery>
               {#each sentAttachments(m) as path (path)}
                 <Shot

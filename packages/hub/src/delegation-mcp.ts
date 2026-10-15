@@ -236,6 +236,12 @@ export function createDelegationMcp(options: {
     message: string,
     attachments: string[]
   ) => Promise<string[]>;
+  /** Why `actor` may not show the person one of `paths` (shown-files.ts `shownRefusal`). */
+  shownRefusal?: (
+    actor: InstanceRow,
+    tool: string,
+    paths: readonly string[]
+  ) => string | undefined;
 }) {
   let tools = options.tools ?? handoffTools;
   let admin = adminTools();
@@ -744,6 +750,7 @@ export function createDelegationMcp(options: {
       sendToUser: toUser
         ? (message, attachments) => toUser(actor, message, attachments)
         : undefined,
+      shownRefusal: (tool, paths) => options.shownRefusal?.(actor, tool, paths),
       deliver: (envelope) => options.deliver(envelope, actor),
       emit: (envelope) => emitted.push(envelope),
       spawn: (envelope) => options.spawn(envelope, actor),

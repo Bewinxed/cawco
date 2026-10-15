@@ -621,6 +621,15 @@ export interface HandoffDeps {
     attachments: string[]
   ) => Promise<string[]>;
   /**
+   * Why this session may not show the person one of `paths`: one in another
+   * workspace's scratch dir or clone that is not its delegates'
+   * (shown-files.ts); none when it may show them all.
+   */
+  readonly shownRefusal?: (
+    tool: string,
+    paths: readonly string[]
+  ) => string | undefined;
+  /**
    * Starts a session now and holds until its machine says it is in place
    * (server.ts `spawnSession`); answers the folder it runs in as the hub
    * settled it. A refused or failed start throws the hub's words.
@@ -784,6 +793,8 @@ export interface HandoffActions {
   ) => Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
   readonly setTitle: (title: string) => Promise<string>;
+  /** `show_image`: what the transcript says it shows; throws when the session may not show it (shown-files.ts). */
+  readonly showImage: (path: string) => string;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   startSession(
     cwd: string,
@@ -1082,6 +1093,7 @@ export const handoffActions = ({
   ledBy,
   delegateList,
   sendToUser,
+  shownRefusal,
   fleet,
 }: HandoffDeps): HandoffActions => ({
   async delegateList(include) {
@@ -1755,6 +1767,10 @@ export const handoffActions = ({
         "Not sent: this hub has no Telegram bridge (CAWCO_TELEGRAM_TOKEN is unset)."
       );
     }
+    const refusal = shownRefusal?.("send_to_user", attachments ?? []);
+    if (refusal) {
+      throw new Error(`${refusal} Nothing was sent.`);
+    }
     const problems = await sendToUser(message, attachments ?? []);
     if (problems.length > 0) {
       throw new Error(
@@ -1764,6 +1780,14 @@ export const handoffActions = ({
     return attachments?.length
       ? `Sent to the user's Telegram, with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}.`
       : "Sent to the user's Telegram.";
+  },
+
+  showImage(path) {
+    const refusal = shownRefusal?.("show_image", [path]);
+    if (refusal) {
+      throw new Error(refusal);
+    }
+    return `Shown in the transcript: ${path}. If the file is missing or later moves, the user sees that instead.`;
   },
 
   async setTitle(title) {
