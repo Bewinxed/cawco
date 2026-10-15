@@ -1720,6 +1720,28 @@ ws_preview_enter() {
 }
 # Every process that descends from the sandbox init $1, by each one's parent: the tree boundary.ts inTree judges.
 ws_tree() { as_user "$joinerc" ps -e -o pid=,ppid= | awk -v root="$1" '{ parent[$1] = $2 } END { tree[root] = 1; do { grew = 0; for (p in parent) if (!(p in tree) && (parent[p] in tree)) { tree[p] = 1; grew = 1 } } while (grew); for (p in tree) print p }'; }
+# The process $1 and each of its parents up to the machine's init: pid, parent, start, pid namespace, cgroup and
+# command line (its first 200 characters, on one line), read on the joined machine in one pass.
+ws_ancestry() {
+  as_user "$joinerc" sh -c 'p=$1
+while [ "${p:-0}" -gt 1 ]; do
+  printf "%s ns=%s cgroup=%s: %s\n" "$(ps -o pid=,ppid=,lstart= -p "$p")" "$(readlink "/proc/$p/ns/pid")" "$(tail -n 1 "/proc/$p/cgroup")" "$(tr "\0\n" "  " < "/proc/$p/cmdline" | cut -c1-200)"
+  p=$(ps -o ppid= -p "$p" | tr -d " ")
+done' sh "$1" 2>&1
+}
+# The listener $1 descends from the sandbox init $2 (ws_tree). What decides it is said each time: the tree, read once
+# with its own exit status (a pipeline into `grep -q` folded that status into the verdict under pipefail), and the
+# listener's parents. Rig 5856e71ec and 06ef5d1ac run 6: "the listener 4126 does not descend from the new sandbox's
+# init 4003" with the command before it in 4003's pid namespace, where every orphan is reparented (find_new_reaper).
+ws_descends() {
+  local tree rc=0
+  tree=$(ws_tree "$2") || rc=$?
+  echo "the sandbox $2's tree (read with exit $rc): $(tr '\n' ' ' <<< "$tree")"
+  echo "the listener $1 and its parents:"
+  ws_ancestry "$1"
+  (( rc == 0 )) || { echo "ASSERTION FAILED: the joined machine's process table could not be read (exit $rc)"; return 1; }
+  grep -qx "$1" <<< "$tree" || { echo "ASSERTION FAILED: the listener $1 does not descend from the sandbox's init $2; every listener: $(as_user "$joinerc" pgrep -af "socat TCP-LISTEN:$WS_LISTENER_PORT" | tr '\n' ';')"; return 1; }
+}
 # A POST to the hub, answering its body and a last line `HTTP <status>`, so a refusal shows the hub's words.
 ws_post() { as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' "http://127.0.0.1:3456$1" -X POST -H 'content-type: application/json' -d "$2"; }
 # The delegate's tool call that holds its work item open, a line of a message its stub runs as the session does
@@ -1842,7 +1864,7 @@ workspace_across_update() {
   ws_listener_start gen-old
   wait_until 30 '[[ "$(ws_listener_pid gen-old)" =~ ^[0-9]+$ ]]' || { echo "ASSERTION FAILED: no listener runs after the command that started it ended"; ws_listener_why "$old_inner"; return 1; }
   listener=$(ws_listener_pid gen-old)
-  ws_tree "$old_inner" | grep -qx "$listener" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $old_inner"; return 1; }
+  ws_descends "$listener" "$old_inner" || return 1
   # The delegate shows it: a preview of the port, which the owner reaches through the hub, the joined machine's agent
   # and its bridge into the sandbox's network.
   ws_preview_open
@@ -1951,7 +1973,7 @@ workspace_across_update() {
   ws_listener_start gen-new
   wait_until 30 '[[ "$(ws_listener_pid gen-new)" =~ ^[0-9]+$ ]]' || { echo "ASSERTION FAILED: no second listener runs after the command that started it ended"; ws_listener_why "$new_inner"; return 1; }
   ws_same_sandbox "$new" "$new_inner"
-  ws_tree "$new_inner" | grep -qx "$(ws_listener_pid gen-new)" || { echo "ASSERTION FAILED: the listener $(ws_listener_pid gen-new) does not descend from the new sandbox's init $new_inner"; return 1; }
+  ws_descends "$(ws_listener_pid gen-new)" "$new_inner" || return 1
   answer=$(ws_exec_reach)
   [[ "$answer" == *gen-new* ]] || { echo "ASSERTION FAILED: the next command reached no listener in the new generation: $answer"; ws_listener_why "$new_inner"; return 1; }
   # The same preview now reaches the new generation's listener: in host mode with the same pass, then by port once
@@ -2014,7 +2036,7 @@ workspace_archive_ends_all() {
   [[ -z $left ]] || { echo "ASSERTION FAILED: these processes of the archived workspace's sandbox still run:$left"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
 export WS_LISTENER_PORT
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from
