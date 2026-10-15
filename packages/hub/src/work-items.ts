@@ -1841,9 +1841,8 @@ export const createWorkItems = ({
 
   /**
    * A live item whose session can't go on — its row in `error`
-   * ({@link followSessions}), asleep where no wake can reach it
-   * ({@link wakeAsleep}), or a turn a restart cut that nothing can resume
-   * (server.ts `settleCutItem`): the item fails with `reason`, and whoever
+   * ({@link followSessions}), or asleep where no wake can reach it or nobody
+   * would hear it ({@link wakeAsleep}): the item fails with `reason`, and whoever
    * hears its reports is told, once — {@link finish} moves only a live item.
    */
   const sessionFailed = (row: InstanceRow, reason: string): void => {
@@ -1943,20 +1942,25 @@ export const createWorkItems = ({
    * session asleep, the hub tells it {@link STILL_OPEN} through the one send
    * path a handoff takes, which starts its process; one that cannot take
    * that message (the hub's input gate refuses it, it never began a
-   * conversation, its workspace is archived, or the hub's word may not start
-   * a turn in it because it was stopped) fails with why, its parent told. A
-   * session woken {@link SLEEP_WAKES} times in a row with no turn ended and
-   * found asleep again fails too: something keeps stopping it.
+   * conversation, its workspace is archived, nobody is left to hear its
+   * reports ({@link heard}), or the hub's word may not start a turn in it
+   * because it was stopped) fails with why, its parent told. A session woken
+   * {@link SLEEP_WAKES} times in a row with no turn ended and found asleep
+   * again fails too: something keeps stopping it.
    *
    * Its process lost without a turn ending is how it gets here: a process
    * that exits on its own between turns or mid-turn with no turn recorded
    * open (the agent files it asleep, `#gone`), one a signal killed with no
    * turn recorded to hand back (server.ts `diedOnSignal`), a heartbeat that
    * no longer lists it (an OpenCode server restart; db `reconcileHeartbeat`),
-   * a register or hub start that found no process to restore, an interrupted
-   * turn left at rest until the agent slept it, and a spawn whose session
-   * came up and lost its process before its first turn. A row in `error`
-   * or gone is {@link followSessions}'s.
+   * a register that restored no process for it (a turn a restart cut, its
+   * row older than the restore's horizon or past its cap: the first sweep
+   * once its machine is connected wakes it), an interrupted turn left at
+   * rest until the agent slept it, and a spawn whose session came up and
+   * lost its process before its first turn. A row in `error` or gone is
+   * {@link followSessions}'s. A session the register did restore is handed
+   * its cut turn by the restore itself (server.ts `resumeCutTurn`); it has a
+   * process, or a send on its way, and the sweep leaves it.
    */
   const wakeAsleep = (): void => {
     const live = db.liveWorkItems();
@@ -2043,9 +2047,29 @@ export const createWorkItems = ({
     if (!row.sessionId) {
       return "Its session was asleep with its work item open, and it never began a conversation, so there is nothing to wake it into.";
     }
+    if (!heard(item, row)) {
+      return "Its session was asleep with its work item open, and nobody is left to hear its reports.";
+    }
     const gate = inputRefusal(row.id, WAKE_ORIGIN);
     return gate ? gate.reason : undefined;
   };
+
+  /**
+   * Whether someone will hear how an item ends, so waking its work is worth
+   * it: its routine (which reads its run's end, routines.ts), its project's
+   * Caw while he is off (his thread notes the end, caw.ts `itemEnded`), or a
+   * reportee that can still take a turn: running, starting, or asleep on a
+   * conversation of its own.
+   */
+  const heard = (item: WorkItemRow, row: InstanceRow): boolean =>
+    isRoutineParent(item.parentInstanceId) ||
+    cawOff(item) === item.parentInstanceId ||
+    reportees(row).some(
+      (reportee) =>
+        reportee.status === "running" ||
+        reportee.status === "starting" ||
+        (reportee.status === "sleeping" && reportee.sessionId !== null)
+    );
 
   lifetime.every(BUDGET_SWEEP_MS, () => {
     for (const item of db.liveWorkItems()) {

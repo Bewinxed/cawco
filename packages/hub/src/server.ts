@@ -204,7 +204,6 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
-  interruptLine,
   isEffortLevel,
   joinProviders,
   LIMIT_REACHED,
@@ -394,7 +393,6 @@ import type {
   ProjectRow,
   PublicInstanceRow,
   SentMessageRow,
-  WorkItemRow,
   WorkspaceRow,
 } from "./db";
 import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
@@ -905,51 +903,6 @@ const CLOSING_STOP = /\.$/;
 
 const killedWords = (signal: string, killedAt: Date): string =>
   `Your process was killed (${signal}) at ${utcClock(killedAt)} while your turn was running, and CawCo started it again. ${CARRY_ON_CUT}`;
-
-/** What a delegate's session asleep on a cut turn is told when the hub wakes it to carry on. */
-const unresumedWords = (lastHeard: Date): string =>
-  `A restart cut your turn after ${utcClock(lastHeard)}, and nothing resumed it. ${CARRY_ON_CUT}`;
-
-/**
- * Where a session's last turn stopped when it never finished, by its
- * harness's own transcript: the session's last user or assistant entry is
- * not the assistant entry its model ended a turn with (`turnEnd`: Claude's
- * `end_turn`, opencode's finished `stop`, pi's `stop`) or a failure written
- * in the model's place, nor Claude's own line for a turn its reader stopped,
- * and no failed or stopped turn's result follows it (pi and opencode store
- * those as one). A prompt or a tool result nothing answered, or an answer cut
- * mid-way. Nothing for a transcript whose last turn ended, or holds none.
- *
- * Read for a session from before the hub kept the turn it had open
- * ({@link TURN_UNRECORDED}).
- */
-const cutEntry = (
-  entries: readonly SessionMessage[]
-): { key: string; at: Date } | undefined => {
-  for (let at = entries.length - 1; at >= 0; at -= 1) {
-    const entry = entries[at];
-    if (entry.type === "system") {
-      if ((entry.message as { type?: string } | null)?.type === "result") {
-        return undefined;
-      }
-      continue;
-    }
-    if (entry.type === "assistant" && (entry.turnEnd || entry.error)) {
-      return undefined;
-    }
-    if (
-      entry.type === "user" &&
-      interruptLine(transcriptUserText(entry.message))
-    ) {
-      return undefined;
-    }
-    const written = entry.timestamp ? new Date(entry.timestamp) : undefined;
-    return written && !Number.isNaN(written.getTime())
-      ? { key: `entry:${entry.uuid}`, at: written }
-      : undefined;
-  }
-  return undefined;
-};
 
 /**
  * A uuid `name` alone decides (the version-5 layout, over SHA-256): a send
@@ -17838,131 +17791,6 @@ export const createServer = (
     return true;
   };
 
-  /** Machines whose work items asleep on a cut turn this hub has settled since it started. */
-  const itemsSettledOn = new Set<string>();
-
-  /**
-   * Once a hub start, at each machine's first register: every running work
-   * item whose session on it is asleep (no process, not failed), was not
-   * restored just now, and whose last turn never ended — work a restart cut
-   * that no restore reached (older than the restore's horizon, past its
-   * cap, or from before the hub
-   * kept the turn it cut). Its session is woken to carry on, once, when its
-   * workspace is still there and someone still hears its reports; otherwise
-   * the item fails, and they hear why ({@link settleCutItem}).
-   */
-  const settleCutItems = async (
-    machineId: string,
-    restored: ReadonlySet<string>
-  ): Promise<void> => {
-    if (itemsSettledOn.has(machineId)) {
-      return;
-    }
-    itemsSettledOn.add(machineId);
-    for (const item of db.liveWorkItems()) {
-      const [row] = db.getInstancesByIds([item.instanceId]);
-      if (
-        !row?.sessionId ||
-        row.machineId !== machineId ||
-        restored.has(row.id) ||
-        row.status === "running" ||
-        row.status === "starting" ||
-        // Not asleep: failed, its item failing with it (work-items
-        // `followSessions`). Its conversation may be gone, and a turn
-        // handed back to it would only be refused.
-        row.status === "error" ||
-        db.ownedInstance(row.id, row.machineId)?.endIntent ||
-        item.state !== "running" ||
-        item.checkingSince !== null ||
-        awaitsSend(row.id)
-      ) {
-        continue;
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: one transcript read off the machine at a time, and only for a session from before the hub kept its turn
-      const cut = await stoppedTurnOf(row);
-      if (cut) {
-        settleCutItem(item, row, cut);
-      }
-    }
-  };
-
-  /**
-   * Where a session with no process left its last turn when nothing ended
-   * it: the turn the hub heard open and never heard end
-   * ({@link instances.turnOpenAt}), or, for a session from before the hub
-   * kept that ({@link TURN_UNRECORDED}), its harness's transcript's word
-   * ({@link cutEntry}). Nothing when its turn ended, or when the transcript
-   * could not be read, which is said.
-   */
-  const stoppedTurnOf = async (
-    row: PublicInstanceRow
-  ): Promise<{ key: string; at: Date } | undefined> => {
-    const open = db.ownedInstance(row.id, row.machineId)?.turnOpenAt ?? null;
-    if (open === null) {
-      return undefined;
-    }
-    if (open !== TURN_UNRECORDED) {
-      return { key: `open:${open}`, at: new Date(open) };
-    }
-    const read = await readHistory(row.id).catch(
-      (error: unknown): HistoryFault => ({
-        fault: "failed",
-        message: error instanceof Error ? error.message : String(error),
-      })
-    );
-    if ("fault" in read) {
-      console.warn(
-        `[hub] ${row.id}: whether its last turn ended could not be read: ${read.message}`
-      );
-      return undefined;
-    }
-    const cut = cutEntry(read.entries);
-    // Its transcript says the turn ended: the row says so from now on, and
-    // no later start reads it again.
-    if (!cut) {
-      db.closeTurn(row.id);
-    }
-    return cut;
-  };
-
-  /** One work item asleep on a cut turn: carried on when it can be, else failed ({@link settleCutItems}). */
-  const settleCutItem = (
-    item: WorkItemRow,
-    row: PublicInstanceRow,
-    cut: { key: string; at: Date }
-  ): void => {
-    const [workspace] = db.workspacesNamed(item.workspaceId);
-    const reportees = workItems.reportees(row);
-    const heard = reportees.some(
-      (reportee) =>
-        reportee.status === "running" ||
-        reportee.status === "starting" ||
-        (reportee.status === "sleeping" && reportee.sessionId !== null)
-    );
-    if (workspace?.state === "active" && heard) {
-      const sent = handTurnBack(
-        row,
-        `asleep:${cut.key}`,
-        unresumedWords(cut.at)
-      );
-      console.log(
-        `[hub] ${row.id}: woke its item ${item.id} on the turn a restart cut after ${cut.at.toISOString()}: ${sent.state}${sent.reason ? ` (${sent.reason})` : ""}`
-      );
-      return;
-    }
-    const why =
-      workspace?.state === "active"
-        ? "nobody is left to hear its reports"
-        : `its workspace ${item.workspaceId} is gone`;
-    workItems.sessionFailed(
-      row,
-      `Its session's turn was cut by a restart after ${utcClock(cut.at)} and was not resumed: ${why}.`
-    );
-    console.log(
-      `[hub] ${row.id}: failed its item ${item.id}, cut by a restart: ${why} (reportees: ${reportees.map((one) => `${one.id} ${one.status}`).join(", ") || "none"})`
-    );
-  };
-
   /**
    * A session starting again fresh under its id: its first start never
    * began, so there was no conversation to resume. Kept on its row, said in
@@ -23403,10 +23231,6 @@ export const createServer = (
                 }
               }
               const restoredIds = new Set(revivable.map(({ row }) => row.id));
-              // Every session this register put back to a process, or handed
-              // to the OpenCode server that outlived the agent: none is left
-              // for the settle of work asleep on a cut turn (settleCutItems).
-              const reached = new Set(restoredIds);
               const named = new Set(
                 db
                   .continuationRows()
@@ -23449,7 +23273,6 @@ export const createServer = (
                       row,
                       row.updatedAt.getTime() >= cutoff ? "busy" : "inspect"
                     );
-                    reached.add(row.id);
                     restoreBatch += 1;
                     if (restoreBatch % 8 === 0) {
                       // biome-ignore lint/performance/noAwaitInLoops: history inspection must not monopolize the hub event loop.
@@ -23527,9 +23350,6 @@ export const createServer = (
               for (const id of peekInstances(message.payload)) {
                 resumeCutTurn(id);
               }
-              // The settle reads transcripts off the machine; register must
-              // not stall on it.
-              detach(settleCutItems(message.machineId, reached), "cut items");
               // Reconnect retries overdue stored schedules right after the register ACK.
               detach(keepAliveScheduler.wake(), "keepalive wake");
               workflowRuntime.recover(message.machineId);

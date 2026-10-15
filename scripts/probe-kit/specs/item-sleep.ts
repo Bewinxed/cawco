@@ -4,7 +4,7 @@
  * or ends `failed` with why (hub work-items.ts `wakeAsleep`). On a scratch
  * fleet (real hub, agent and sessiond; Claude Code against the mock model).
  *
- * Four delegates of one parent, each in its own workspace:
+ * Five delegates of one parent, each in its own workspace:
  *
  * - W is in a long Bash when its process is killed through the keeper, its
  *   open turn not on record (as obelisk's OpenCode item f3fca633 had none:
@@ -23,6 +23,14 @@
  * Then the retire sweep, F's item's end set back past its two idle hours,
  * retires F's workspace.
  *
+ * - C is in a long Bash, its open turn on record (`turn_open_at`), when the
+ *   agent and the hub stop; its process is killed through the keeper while
+ *   nothing is there to hear it, and its row set back past the register's
+ *   restore horizon (server.ts `RESTORE_HORIZON_MS`), as a restart's cut
+ *   turn no restore reaches. Both start again: the register files it asleep
+ *   and restores nothing for it, and the sweep (no longer a register-time
+ *   settle of its own) wakes it once; it calls finish_item and ends `done`.
+ *
  *   bun scripts/probe-kit/run.ts item-sleep
  */
 import { readdir, rm } from "node:fs/promises";
@@ -30,7 +38,7 @@ import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-const TAG = /PROBE-SLEEP-([WFAI])/;
+const TAG = /PROBE-SLEEP-([WFAIC])/;
 /** A /proc entry that is a process. */
 const PID = /^\d+$/;
 const FINISH = "mcp__cawco__finish_item";
@@ -44,6 +52,8 @@ const BACKDATE_MS = 3 * 3_600_000;
 /** The hub's sweep period (work-items.ts `BUDGET_SWEEP_MS`), and two of them with room. */
 const SWEEP_MS = 30_000;
 const TWO_SWEEPS_MS = 2 * SWEEP_MS + 10_000;
+/** Past the register's restore horizon (server.ts `RESTORE_HORIZON_MS`, 30 minutes). */
+const PAST_RESTORE_MS = 2 * 3_600_000;
 
 /** The Bash a delegate is in when its process is stopped: named, so /proc finds it. */
 const longRun = (tag: string) => `echo RUNNING-${tag} && sleep 600`;
@@ -137,9 +147,10 @@ interface ItemRow {
 
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
-/** What every phase reads: the fleet, the parent, the four delegates. */
+/** What every phase reads: the fleet, the parent, the five delegates. */
 interface Probe {
   a: Started;
+  c: Started;
   check: Kit["check"];
   f: Started;
   fleet: Fleet;
@@ -212,10 +223,10 @@ const setUp = async (
   return { fleet, home, parent, src };
 };
 
-/** Each delegate in its place: W, F and I in their long Bash, A waiting at rest. */
+/** Each delegate in its place: W, F, I and C in their long Bash, A waiting at rest. */
 const placed = async ({ fleet, a }: Probe): Promise<void> => {
-  for (const tag of ["W", "F", "I"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: three delegates, each found once
+  for (const tag of ["W", "F", "I", "C"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: four delegates, each found once
     await until(
       `${tag}'s long Bash running`,
       () => running(`RUNNING-${tag}`),
@@ -440,11 +451,65 @@ const retireF = async ({ check, fleet, f }: Probe) => {
   );
 };
 
+/**
+ * C: a restart's cut turn that no restore reaches. Its open turn on record,
+ * the agent and the hub stop, its process is killed through the keeper with
+ * nobody to hear it, and its row is set back past the restore horizon; both
+ * start again, and the sweep wakes it once, and it ends done.
+ */
+const restartC = async ({ check, fleet, c }: Probe) => {
+  const [open] = fleet.query<{ t: number | null }>(
+    "SELECT turn_open_at AS t FROM instances WHERE id = ?",
+    c.instanceId
+  );
+  check(
+    "C: its open turn is on record before the restart",
+    open?.t !== null && open?.t !== undefined,
+    `turn_open_at ${open?.t}`
+  );
+  await fleet.stop("agent");
+  await fleet.stop("hub");
+  const pid = await fleet.sessionPid(c.instanceId);
+  check("C: the keeper runs its process", pid !== undefined);
+  if (pid !== undefined) {
+    await fleet.killTree(pid, "SIGKILL");
+  }
+  await until(
+    "C's long Bash gone",
+    () => running("RUNNING-C"),
+    (still) => !still,
+    30_000
+  );
+  fleet.write(
+    "UPDATE instances SET updated_at = ? WHERE id = ?",
+    Date.now() - PAST_RESTORE_MS,
+    c.instanceId
+  );
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.launch("agent");
+  await fleet.agentUp();
+  const cEnd = await ended(fleet, c.workItemId, "C's item ended", 240_000);
+  const hubLog = await fleet.logs("hub");
+  check(
+    "C: after the restart the sweep woke its session once, and the hub's log says so",
+    hubLog.includes(
+      `[work-items] ${c.workItemId}: its session ${c.instanceId} was asleep with the item open; woke it`
+    ) && wakesTo(fleet, c.instanceId) === 1,
+    `${wakesTo(fleet, c.instanceId)} wake(s) sent`
+  );
+  check(
+    "C: woken, it carried on and its item ended done",
+    cEnd.state === "done",
+    `${cEnd.state} ${cEnd.error ?? ""}`
+  );
+};
+
 const spec: Spec = {
   name: "item-sleep",
   run: async (kit: Kit) => {
     const { fleet, home, parent, src } = await setUp(kit);
-    const delegate = (tag: "W" | "F" | "A" | "I") =>
+    const delegate = (tag: "W" | "F" | "A" | "I" | "C") =>
       fleet.api<Started>("/api/work-items", {
         parentInstanceId: parent,
         title: `Sleep probe ${tag}`,
@@ -464,6 +529,7 @@ const spec: Spec = {
       f: await delegate("F"),
       a: await delegate("A"),
       i: await delegate("I"),
+      c: await delegate("C"),
     };
     await placed(probe);
     await interruptI(probe);
@@ -473,6 +539,7 @@ const spec: Spec = {
     await outcomes(probe);
     await holdsStand(probe, asleepAt);
     await retireF(probe);
+    await restartC(probe);
   },
 };
 
