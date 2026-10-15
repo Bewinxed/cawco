@@ -43,10 +43,10 @@ import {
 import type { PreviewsDb } from "./db/previews";
 import {
   enter,
-  holdsPass,
   lockedResponse,
   type PassCookie,
   passCookie,
+  passSession,
 } from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
 
@@ -435,18 +435,31 @@ async function serveSession(
 }
 
 /**
- * Host mode's lock on one request to session `instanceId`'s name
- * (preview-access.ts): the entry's answer, or the locked page for a request
- * with no pass; undefined when the request goes on. The ping goes on with
- * none, so the dashboard learns the origin is reachable.
+ * Host mode's lock on one request to a name of the pattern
+ * (preview-access.ts), `instanceId` the session that holds the name, or
+ * undefined when none does: the answer that stops the request, or undefined
+ * when it goes on to the session.
+ *
+ * A stranger learns nothing of which names are held: without a pass, a name
+ * no session holds answers exactly as a held one does, the locked page, and
+ * an entry there is refused as one with a spent ticket would be. Only a pass
+ * the hub gave on that name, which proves the owner, learns that its
+ * session has gone (the closed page). The ping answers on every name, so the
+ * dashboard learns the origin is reachable and nobody learns more.
  */
 const atTheLock = (
   request: Request,
   lock: PassCookie,
-  instanceId: string
+  instanceId: string | undefined
 ): Response | undefined => {
   const { pathname } = new URL(request.url);
+  if (pathname === PREVIEW_PING_PATH) {
+    return instanceId ? undefined : ping();
+  }
   if (pathname === PREVIEW_ENTER_PATH) {
+    if (!instanceId) {
+      return lockedResponse();
+    }
     const entered = enter(request, lock, instanceId);
     if (entered.refused) {
       previewFailed(
@@ -457,9 +470,19 @@ const atTheLock = (
     }
     return entered.response;
   }
-  return pathname === PREVIEW_PING_PATH || holdsPass(request, lock, instanceId)
-    ? undefined
-    : lockedResponse();
+  const holder = passSession(request, lock);
+  if (instanceId) {
+    return holder === instanceId ? undefined : lockedResponse();
+  }
+  if (!holder) {
+    return lockedResponse();
+  }
+  previewFailed(
+    HOP,
+    holder,
+    `no session's preview at ${request.headers.get("host")}`
+  );
+  return downResponse("closed", 404);
 };
 
 /** The fleet's preview mode could not be taken: why, in one sentence. */
@@ -626,6 +649,11 @@ export function createPreviewListeners(
       error,
       async fetch(request, server) {
         const instanceId = route(request);
+        const stopped = lock && atTheLock(request, lock, instanceId);
+        if (stopped) {
+          return framedBy(stopped);
+        }
+        // Port mode: every listener is one session's, so a route names it.
         if (!instanceId) {
           previewFailed(
             HOP,
@@ -633,10 +661,6 @@ export function createPreviewListeners(
             `no session's preview at ${request.headers.get("host")}`
           );
           return framedBy(downResponse("closed", 404));
-        }
-        const stopped = lock && atTheLock(request, lock, instanceId);
-        if (stopped) {
-          return framedBy(stopped);
         }
         const answer = await serveSession(request, server, instanceId, deps);
         return answer && framedBy(answer);

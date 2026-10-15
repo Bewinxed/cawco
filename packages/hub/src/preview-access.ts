@@ -17,6 +17,10 @@
  *   for {@link PASS_MS}. Every request to the name needs it, WebSocket
  *   upgrades too, but the dashboard's ping and the entry itself. A name
  *   whose port a later session holds refuses the earlier session's pass.
+ * - **Nothing told.** A name no session holds answers a stranger exactly as
+ *   a held one does without a pass (preview.ts `atTheLock`), so the lock
+ *   tells nobody which ports or sessions exist; only a pass the hub gave on
+ *   that name learns its session has gone.
  *
  * The key is derived from the hub's secret key (secret-box.ts), never stored
  * or configured. The cookie is one of the dashboard's names (core
@@ -176,27 +180,30 @@ const setPass = (cookie: PassCookie, instanceId: string): string => {
   return `${cookie.name}=${signed("pass", body)}; Max-Age=${PASS_MS / 1000}; ${cookie.attributes}`;
 };
 
-/** Whether `request` carries a standing pass into session `instanceId`'s origin. */
-export const holdsPass = (
+/**
+ * The session `request`'s standing pass was given for, or null when it
+ * carries none. A pass is host-only, so it stands on the name it was given
+ * on; a name may since have passed to another session, or to none.
+ */
+export const passSession = (
   request: Request,
   cookie: PassCookie,
-  instanceId: string,
   now = Date.now()
-): boolean => {
+): string | null => {
   const header = request.headers.get("cookie");
   if (!header) {
-    return false;
+    return null;
   }
   for (const pair of header.split(";")) {
     const at = pair.indexOf("=");
     if (at > 0 && pair.slice(0, at).trim() === cookie.name) {
       const body = opened<PassBody>("pass", pair.slice(at + 1).trim());
-      if (body && body.s === instanceId && body.e > now) {
-        return true;
+      if (body && body.e > now) {
+        return body.s;
       }
     }
   }
-  return false;
+  return null;
 };
 
 /** `next` as a path on the request's own origin; one that leaves it, or names the entry, is the root. */

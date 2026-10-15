@@ -29,9 +29,8 @@
  *     loads the page from `p-<session>.localhost`, routed by Host.
  * 14b. An `http://p-{port}.localhost` pattern: each session's origin is the
  *     port it keeps; entered with a ticket, both sessions' previews answer
- *     200 with the overlay on their own names and their WebSockets open; an
- *     unheld port's name answers the closed page; a pattern with both
- *     placeholders, neither, or no scheme is refused.
+ *     200 with the overlay on their own names and their WebSockets open; a
+ *     pattern with both placeholders, neither, or no scheme is refused.
  * 14c. The lock (hub preview-access.ts): without a pass a name answers 401
  *     and refuses a WebSocket, its ping stays open, a ticket enters once,
  *     and a replayed, another session's and an expired ticket are refused.
@@ -40,6 +39,10 @@
  *     over http: the hub's address and the pane's own ping.
  * 14f. A pattern stored with no scheme is `http://` after the hub's start,
  *     in its answer and its row, said in one line.
+ * 14g. (Run after 14c.) A name no session holds answers the very 401 a held
+ *     name without a pass answers, its ping answers as a held one's, and an
+ *     entry there is refused; once a session ends, its name answers its
+ *     owner's pass with the closed page and a stranger with the same 401.
  * 15. A page on a third origin that frames the preview's port gets nothing:
  *     the preview names the dashboards in `frame-ancestors`, not it.
  * 16. With that header taken off in the browser, the third origin's frame
@@ -1050,12 +1053,10 @@ const run = async (kit: Kit) => {
   const firstByPort = await enteredAs(firstOrigin14, session, TITLE);
   const otherByPort = await enteredAs(otherOrigin14, other, OTHER);
   const passless = await kit.page("desk");
-  const unheld = await loadOf(
-    passless,
-    `http://p-${unheldPort}.localhost:${firstRangePort}/`
-  );
+  const unheldOrigin = `http://p-${unheldPort}.localhost:${firstRangePort}`;
+  const unheld = await loadOf(passless, `${unheldOrigin}/`);
   kit.check(
-    "14b: a {port} pattern gives each session the origin of the port it keeps; both sessions' previews, entered with a ticket, answer 200 with the overlay on their own names and their WebSockets open; an unheld port's name answers the closed page; a pattern with both placeholders, neither, or no scheme is refused",
+    "14b: a {port} pattern gives each session the origin of the port it keeps; both sessions' previews, entered with a ticket, answer 200 with the overlay on their own names and their WebSockets open; a pattern with both placeholders, neither, or no scheme is refused",
     both.status === 422 &&
       neither.status === 422 &&
       schemeless.status === 422 &&
@@ -1066,10 +1067,8 @@ const run = async (kit: Kit) => {
         `http://p-${portOf(other)}.localhost:${firstRangePort}` &&
       firstOrigin14 !== otherOrigin14 &&
       firstByPort.ok &&
-      otherByPort.ok &&
-      unheld.status === 404 &&
-      unheld.body.includes('<meta name="cawco-preview-down" content="closed">'),
-    `${refusals}; kept ${kept.status} ${keptText.slice(0, 120)}; ${firstByPort.said}; ${otherByPort.said}; p-${unheldPort} ${unheld.status}`
+      otherByPort.ok,
+    `${refusals}; kept ${kept.status} ${keptText.slice(0, 120)}; ${firstByPort.said}; ${otherByPort.said}`
   );
 
   // 14c. The lock: nothing without the hub's pass, but the ping; a ticket
@@ -1095,6 +1094,14 @@ const run = async (kit: Kit) => {
     )
     .catch((error: Error) => error.message);
   const ping = await loadOf(passless, `${firstOrigin14}${PREVIEW_PING_PATH}`);
+  const unheldPing = await loadOf(
+    passless,
+    `${unheldOrigin}${PREVIEW_PING_PATH}`
+  );
+  const unheldEntry = await loadOf(
+    passless,
+    previewEnterUrl(unheldOrigin, await ticketFor(session), "/")
+  );
   const spentTicket = await ticketFor(session);
   const spender = await kit.page("desk");
   const firstSpend = await loadOf(
@@ -1139,6 +1146,46 @@ const run = async (kit: Kit) => {
         refusedLines.some((line) => line.startsWith(word))
       ),
     `no pass ${noPass.status}; its socket ${JSON.stringify(passlessSocket)}; ping ${ping.status}; entered ${firstSpend.status}; replayed ${replayed.status}; another session's ${elsewhere.status}; expired ${expired.status}; the hub said ${JSON.stringify(refusedLines)}`
+  );
+
+  // 14g. The lock tells a stranger nothing of which names are held: a name
+  // no session holds answers as a held one does without a pass, its ping
+  // too, and an entry there is refused. Only the owner's pass on a name
+  // whose session has ended learns that it closed.
+  const viewerOrigin = (await address(viewer)).origin ?? "none";
+  const owner = await kit.page("desk");
+  const viewerEntered = await loadOf(
+    owner,
+    previewEnterUrl(viewerOrigin, await ticketFor(viewer), PREVIEW_PING_PATH)
+  );
+  await fleet.stopSession(viewer);
+  const released = await until(
+    "the viewer's session ending and its port free",
+    () => (portOf(viewer) === undefined ? 1 : null),
+    Boolean,
+    60_000
+  ).catch(() => null);
+  const ownerAfter = await loadOf(owner, `${viewerOrigin}/`);
+  await owner.context().close();
+  const strangerAfter = await kit.page("desk");
+  const endedNoPass = await loadOf(strangerAfter, `${viewerOrigin}/`);
+  await strangerAfter.context().close();
+  kit.check(
+    "14g: a name no session holds answers 401 with the very body a held name without a pass answers, its ping answers 200 as a held one's does, and an entry there is refused; a session's name after it ended answers its owner's pass with the closed page and a stranger with the same 401",
+    turnedAway(unheld) &&
+      unheld.body === noPass.body &&
+      unheldPing.status === 200 &&
+      unheldPing.body === ping.body &&
+      turnedAway(unheldEntry) &&
+      viewerEntered.status === 200 &&
+      !!released &&
+      ownerAfter.status === 404 &&
+      ownerAfter.body.includes(
+        '<meta name="cawco-preview-down" content="closed">'
+      ) &&
+      turnedAway(endedNoPass) &&
+      endedNoPass.body === noPass.body,
+    `unheld ${unheld.status}, same body as no pass: ${unheld.body === noPass.body}; its ping ${unheldPing.status}; its entry ${unheldEntry.status}; the viewer entered ${viewerEntered.status} at ${viewerOrigin}, ended ${released ? "and its port freed" : "but its port is still held"}; then its owner's pass ${ownerAfter.status}, a stranger ${endedNoPass.status}`
   );
 
   // 14d. The panel enters the preview with a ticket on its `{port}` name.
