@@ -1683,7 +1683,12 @@ export interface DbShape {
     change: Partial<
       Pick<
         ProjectRow,
-        "budget" | "dispatch" | "lands" | "maxAttempts" | "reviewLimit"
+        | "budget"
+        | "dispatch"
+        | "lands"
+        | "maxAttempts"
+        | "reviewLimit"
+        | "runsOn"
       >
     >
   ) => void;

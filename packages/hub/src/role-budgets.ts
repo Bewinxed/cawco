@@ -57,12 +57,16 @@ import type { Tasks } from "./tasks";
  * lead 14,978 measured). `artifact_promote` (§5.10, slice 6), the agent's
  * only way to keep an artifact in its project's folder, adds about 197
  * tokens to the same three (worker 23,333, delegate 6,358, lead 15,175
- * measured).
+ * measured). 2026-10-15: `runs_on` on task_create and task_update, and
+ * project_settings' `set_runs_on`: an Apple task named a Mac nowhere, so
+ * task_start placed it on Linux (tsk-7, tsk-15). About 80 tokens for the
+ * worker, 95 for the lead, descriptions cut to a clause (worker 23,830,
+ * lead 15,583 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 23_800,
+  worker: 23_880,
   delegate: 6500,
-  lead: 15_500,
+  lead: 15_630,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -228,6 +232,7 @@ export const measureRoles = (): RoleSize[] => {
       lands: () => Promise.reject(new Error("measuring")),
       note: () => undefined,
       publish: {} as never,
+      runsOn: () => Promise.reject(new Error("measuring")),
     }),
     triageTools: (actor) =>
       createFleetWatch({

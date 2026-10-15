@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `runs_on` text;

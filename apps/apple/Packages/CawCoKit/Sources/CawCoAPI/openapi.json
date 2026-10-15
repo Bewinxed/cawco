@@ -1487,6 +1487,9 @@
                       "none"
                     ]
                   },
+                  "runsOn": {
+                    "type": "string"
+                  },
                   "group": {
                     "type": "string"
                   },
@@ -1848,6 +1851,12 @@
                       "branch",
                       "pr",
                       "none"
+                    ]
+                  },
+                  "runsOn": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "group": {
@@ -5563,6 +5572,12 @@
                   },
                   "reviewLimit": {
                     "type": "integer"
+                  },
+                  "runsOn": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 }
               }
@@ -23186,6 +23201,12 @@
             "lands": {
               "$ref": "#/components/schemas/LandsMode"
             },
+            "runsOn": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "budget": {
               "$ref": "#/components/schemas/WorkBudget"
             },
@@ -23275,6 +23296,7 @@
             "primaryPlaceId",
             "remote",
             "reviewLimit",
+            "runsOn",
             "tracker"
           ]
         }
@@ -23378,6 +23400,12 @@
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
           },
+          "runsOn": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
@@ -23469,6 +23497,7 @@
           "primaryPlaceId",
           "remote",
           "reviewLimit",
+          "runsOn",
           "tracker"
         ]
       },
@@ -23604,6 +23633,12 @@
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
           },
+          "runsOn": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
@@ -23695,6 +23730,7 @@
           "primaryPlaceId",
           "remote",
           "reviewLimit",
+          "runsOn",
           "tracker"
         ]
       },
@@ -23754,6 +23790,12 @@
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
+          },
+          "runsOn": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
@@ -23844,6 +23886,7 @@
           "primaryPlaceId",
           "remote",
           "reviewLimit",
+          "runsOn",
           "tracker"
         ]
       },
@@ -26995,6 +27038,13 @@
               "type": "string"
             }
           },
+          "runsOn": {
+            "description": "Where its attempts run (runs-on.ts), as the file says; null: the project's.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "sections": {
             "description": "The body's other `## ` sections, as written.",
             "type": "array",
@@ -27151,6 +27201,7 @@
           "queuedStart",
           "rank",
           "related",
+          "runsOn",
           "sections",
           "stage",
           "startProblem",
@@ -28884,6 +28935,13 @@
           },
           "reviewLimit": {
             "type": "number"
+          },
+          "runsOn": {
+            "description": "Where an attempt runs when its task says nothing (runs-on.ts); null: any machine with a checkout.",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
@@ -28896,7 +28954,8 @@
           "paused",
           "queued",
           "review",
-          "reviewLimit"
+          "reviewLimit",
+          "runsOn"
         ]
       },
       "LandsMode": {

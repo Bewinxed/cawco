@@ -28,6 +28,12 @@
  *   (`queued_task_starts`) and runs, oldest first and before the frontier,
  *   as a slot frees. A start you or a session ask for is not capped. Only
  *   `runs` runs here.
+ * - **Where it runs** (runs-on.ts). An attempt is cut only on a machine its
+ *   task's `runs_on:` names, else its project's: a machine, or a capability
+ *   such as `apple`, read from the OS each agent reports. With none online
+ *   holding a checkout, the start is refused, saying what it needs, and is
+ *   never placed elsewhere; a retry's old workspace on another machine is
+ *   passed over. Neither set, it starts on any machine with a checkout.
  * - **Landing.** An attempt lands as its task says (`lands:`), else as its
  *   delegate type says, else as the project does: `main`, `branch`, `pr` or
  *   `none` (work-items.ts). Its task's `outputs` are collected into the
@@ -89,6 +95,7 @@ import {
 import { quote, statusCommand } from "./landing";
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
+import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
 import type { Stage } from "./stages";
 import type { TaskComment } from "./task-file";
 import {
@@ -125,6 +132,7 @@ export interface DispatchDeps {
     DbShape,
     | "dropQueuedTaskStart"
     | "getInstancesByIds"
+    | "listAgents"
     | "listProjects"
     | "project"
     | "projectAttempts"
@@ -227,6 +235,8 @@ export interface DispatchView {
   /** Tasks waiting in `you` stages now. */
   review: number;
   reviewLimit: number;
+  /** Where an attempt runs when its task says nothing (runs-on.ts); null: any machine with a checkout. */
+  runsOn: string | null;
 }
 
 /** A change to a project's dispatch settings; what is left out stays. */
@@ -238,6 +248,8 @@ export interface DispatchChange {
   lands?: LandsMode;
   maxAttempts?: number;
   reviewLimit?: number;
+  /** Where an attempt runs when its task says nothing: a machine, or a capability like `apple`; null clears it. */
+  runsOn?: string | null;
 }
 
 /** What a start nobody can take the report of says to do. */
@@ -544,6 +556,7 @@ const columnsOf = ({
   lands,
   maxAttempts,
   reviewLimit,
+  runsOn,
 }: DispatchChange) => ({
   ...(budget === undefined
     ? {}
@@ -552,6 +565,7 @@ const columnsOf = ({
   ...(lands === undefined ? {} : { lands }),
   ...(maxAttempts === undefined ? {} : { maxAttempts }),
   ...(reviewLimit === undefined ? {} : { reviewLimit }),
+  ...(runsOn === undefined ? {} : { runsOn }),
 });
 
 /** A failure to start, as the words a caller reads and the status a route answers. */
@@ -623,16 +637,28 @@ export const createDispatcher = ({
     return row && !parentProblem(row, project.id) ? row : undefined;
   };
 
+  /** The machines `runsOn` names (runs-on.ts), online or not. */
+  const machinesFor = (runsOn: string): MachineFacts[] =>
+    db.listAgents().filter((machine) => fits(runsOn, machine));
+
   /**
    * Where a new workspace is cut: a checkout of the project on a machine that
-   * is online, the starting session's own first, then the primary place.
+   * is online and, when the attempt names where it runs, one of those
+   * machines; the starting session's own first, then the primary place.
    */
   const placeFor = (
     project: ProjectRow,
-    parent: InstanceRow
+    parent: InstanceRow,
+    runsOn: string | null
   ): PlaceRow | undefined => {
+    const allowed = runsOn
+      ? new Set(machinesFor(runsOn).map((machine) => machine.machineId))
+      : undefined;
     const checkouts = project.places.filter(
-      (place) => place.kind === "checkout" && online(place.machineId)
+      (place) =>
+        place.kind === "checkout" &&
+        online(place.machineId) &&
+        (!allowed || allowed.has(place.machineId))
     );
     return (
       checkouts.find(
@@ -642,6 +668,65 @@ export const createDispatcher = ({
       checkouts.find((place) => place.machineId === parent.machineId) ??
       checkouts[0]
     );
+  };
+
+  /**
+   * Why an attempt that runs on `runsOn` has nowhere to start, in one
+   * sentence: no machine it names is known, none of them is online, or none
+   * online holds a checkout of the project. It is never placed elsewhere.
+   */
+  const unplaced = (
+    project: ProjectRow,
+    task: TaskView,
+    runsOn: string
+  ): string => {
+    const needs = `${task.id} runs on ${runsOnWords(runsOn)}`;
+    const fitting = machinesFor(runsOn);
+    if (fitting.length === 0) {
+      return `${needs}, and no machine this hub knows is one, so it starts nowhere else: join one, or change its runs_on.`;
+    }
+    const up = fitting.filter((machine) => online(machine.machineId));
+    const hosts = (machines: MachineFacts[]) =>
+      machines.map((machine) => machine.hostname).join(", ");
+    if (up.length === 0) {
+      return `${needs}, and none is online (${hosts(fitting)} ${fitting.length === 1 ? "is" : "are"} offline), so it starts nowhere else: bring one online.`;
+    }
+    return `${needs}, and no checkout of ${project.name} is on one that is online (${hosts(up)}), so it starts nowhere else: add a checkout place there.`;
+  };
+
+  /**
+   * Where an attempt's work item is cut, as its request says it: a checkout
+   * its task's runs_on names (else its project's), and for a retry the last
+   * workspace, kept only on a machine runs_on names. Refused, and the reason
+   * remembered on the task, when there is nowhere to cut it.
+   */
+  const placementOf = (
+    project: ProjectRow,
+    task: TaskView,
+    parent: InstanceRow,
+    previous: WorkItemRow | undefined
+  ): Pick<WorkItemRequest, "cwd" | "machineId" | "reuse" | "reuseOn"> => {
+    const runsOn = task.runsOn ?? project.runsOn;
+    const place = placeFor(project, parent, runsOn);
+    let message: string | undefined;
+    if (runsOn && !place) {
+      message = unplaced(project, task, runsOn);
+    } else if (!(place || previous)) {
+      message = `No checkout of ${project.name} is on a machine that is online, so there is nowhere to cut ${task.id}'s workspace. Bring one of its machines online, or add a checkout place on one that is.`;
+    }
+    if (message) {
+      note(project.id, task, message);
+      refuse(409, message);
+    }
+    return {
+      ...(place ? { cwd: place.path, machineId: place.machineId } : {}),
+      ...(previous ? { reuse: previous.workspaceId } : {}),
+      ...(previous && runsOn
+        ? {
+            reuseOn: machinesFor(runsOn).map((machine) => machine.machineId),
+          }
+        : {}),
+    };
   };
 
   /** Remembers why a start failed, against the task file as it was read. */
@@ -910,12 +995,7 @@ export const createDispatcher = ({
     active: Stage | undefined,
     { origin, previous }: { origin?: Origin; previous?: WorkItemRow }
   ): Promise<WorkItemStart> => {
-    const place = placeFor(project, parent);
-    if (!(place || previous)) {
-      const message = `No checkout of ${project.name} is on a machine that is online, so there is nowhere to cut ${task.id}'s workspace. Bring one of its machines online, or add a checkout place on one that is.`;
-      note(project.id, task, message);
-      return refuse(409, message);
-    }
+    const placed = placementOf(project, task, parent, previous);
     const type =
       active?.hooks.runs ?? task.type ?? (await chosenType(project, task));
     const lands = landsOf(project, task, type);
@@ -956,8 +1036,7 @@ export const createDispatcher = ({
         checks,
         lands,
         ...taskLimits(task),
-        ...(place ? { cwd: place.path, machineId: place.machineId } : {}),
-        ...(previous ? { reuse: previous.workspaceId } : {}),
+        ...placed,
         ...(origin ? { origin } : {}),
         task: { id: task.id, projectId: project.id },
       });
@@ -1152,6 +1231,7 @@ export const createDispatcher = ({
       leadInstanceId: project.leadInstanceId,
       maxAttempts: project.maxAttempts,
       reviewLimit: project.reviewLimit,
+      runsOn: project.runsOn,
       live,
       review,
       paused,
@@ -1786,7 +1866,16 @@ export const createDispatcher = ({
       if (unbudgeted) {
         refuse(400, unbudgeted);
       }
-      db.setProjectDispatch(projectId, columnsOf(change));
+      // Empty clears it, as null does.
+      let runsOn =
+        change.runsOn?.trim() ||
+        (change.runsOn === undefined ? undefined : null);
+      if (runsOn) {
+        const checked = runsOnValue(runsOn, db.listAgents());
+        runsOn =
+          "value" in checked ? checked.value : refuse(400, checked.problem);
+      }
+      db.setProjectDispatch(projectId, columnsOf({ ...change, runsOn }));
       evaluate(projectId);
       return await viewOf(projectOf(projectId));
     },
@@ -1860,6 +1949,7 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
           lands: t.Optional(LANDS),
           maxAttempts: t.Optional(t.Integer()),
           reviewLimit: t.Optional(t.Integer()),
+          runsOn: t.Optional(t.Nullable(t.String())),
         }),
       },
       async ({ params, body }) => {

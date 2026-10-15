@@ -15,6 +15,7 @@
  * outputs: [post.md]
  * context: [knowledge/brand.md]
  * lands: pr
+ * runs_on: apple
  * group: theme
  * owns: [src/theme/**]
  * budget: {usd: 2, turns: 40, minutes: 30}
@@ -82,6 +83,7 @@ export const TASK_FIELDS = [
   "outputs",
   "context",
   "lands",
+  "runs_on",
   "group",
   "owns",
   "budget",
@@ -135,6 +137,8 @@ export interface TaskFields {
   parent: string | null;
   rank: string | null;
   related: string[];
+  /** Where its attempts run (runs-on.ts): a machine, or a capability like `apple`; null: the project's. */
+  runsOn: string | null;
   stage: string | null;
   type: string | null;
 }
@@ -383,6 +387,7 @@ const FIELD_KEYS = {
   outputs: "outputs",
   context: "context",
   lands: "lands",
+  runs_on: "runsOn",
   group: "group",
   owns: "owns",
   budget: "budget",
@@ -435,6 +440,7 @@ const emptyFields = (): TaskFields => ({
   outputs: [],
   context: [],
   lands: null,
+  runsOn: null,
   group: null,
   owns: [],
   budget: null,
@@ -590,6 +596,8 @@ const readField = (
     fields.budget = readBudget(line, problems);
   } else if (field === "lands") {
     fields.lands = readLands(line, problems);
+  } else if (field === "runs_on") {
+    fields.runsOn = scalarOf(line);
   } else {
     return false;
   }

@@ -510,6 +510,12 @@ export interface WorkItemRequest {
    */
   reuse?: string;
   /**
+   * With `reuse`, the machines its workspace must be on (an attempt's
+   * `runs_on`, dispatch.ts): one on any other machine is passed over as a
+   * gone clone is, its sessions stopped, and the item cut a new workspace.
+   */
+  reuseOn?: string[];
+  /**
    * The toolset its session runs in, over its type's: set by the hub alone
    * (a memory curator run's `curator`, routines.ts), never by a tool call.
    */
@@ -2629,16 +2635,18 @@ export const createWorkItems = ({
    * is still on its machine: its earlier sessions stopped
    * ({@link endEarlierSessions}) and its boundary started again (and the
    * workspace filed as active again, should it have been archived with the
-   * clone left behind). Undefined when the clone is gone or its machine
-   * cannot say, and the retry cuts a new workspace. Refused while an item
+   * clone left behind). Undefined when the clone is gone, its machine
+   * cannot say, or it is on none of the machines `on` names (the request's
+   * `reuseOn`), and the retry cuts a new workspace. Refused while an item
    * there is live.
    */
   const reusable = async (
     id: string,
-    projectId: string | null
+    projectId: string | null,
+    on: string[] | undefined
   ): Promise<WorkspaceRow | undefined> => {
     const [workspace] = db.workspacesNamed(id);
-    if (!workspace) {
+    if (!workspace || (on && !on.includes(workspace.machineId))) {
       return;
     }
     const busy = (): void => {
@@ -2780,13 +2788,13 @@ export const createWorkItems = ({
     projectId: string | null
   ): Promise<WorkItemStart> => {
     if (request.reuse) {
-      const again = await reusable(request.reuse, projectId);
+      const again = await reusable(request.reuse, projectId, request.reuseOn);
       if (again) {
         return spawnIn(again, settingsOf(request, parent), parent, request);
       }
-      // Its clone is gone: the retry runs in a new workspace, and the old
-      // one's sessions are stopped all the same, the stop stored for a
-      // machine that is away.
+      // Its clone is gone, or on a machine the attempt may not run on: the
+      // retry runs in a new workspace, and the old one's sessions are
+      // stopped all the same, the stop stored for a machine that is away.
       for (const row of sessionsUpIn(request.reuse)) {
         end(row.id).catch((error: unknown) =>
           console.warn(

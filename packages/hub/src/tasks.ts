@@ -60,6 +60,7 @@ import {
   writeFolderFiles,
   YOU,
 } from "./project-folder";
+import { type MachineFacts, runsOnValue } from "./runs-on";
 import {
   firstStage,
   type Mover,
@@ -280,6 +281,8 @@ export interface TaskStore {
     projectId: string,
     taskId: string
   ) => string | undefined;
+  /** Every machine the hub has seen: what a `runs_on` may name (runs-on.ts). */
+  readonly machines: () => MachineFacts[];
   readonly project: (
     id: string
   ) =>
@@ -424,6 +427,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   problems: string[];
   rank: string | null;
   related: string[];
+  /** Where its attempts run (runs-on.ts), as the file says; null: the project's. */
+  runsOn: string | null;
   /** The body's other `## ` sections, as written. */
   sections: { heading: string; text: string }[];
   stage: string;
@@ -452,6 +457,8 @@ export interface TaskDraft {
   parent?: string;
   rank?: string;
   related?: string[];
+  /** Where its attempts run: a machine, or a capability like `apple`. */
+  runsOn?: string;
   stage?: string;
   title: string;
   /** Top-level to-dos, one line each. */
@@ -477,6 +484,8 @@ export interface TaskPatch {
   outputs?: string[];
   owns?: string[];
   rank?: string | null;
+  /** Where its attempts run; null: the project's. */
+  runsOn?: string | null;
   title?: string;
   type?: string | null;
 }
@@ -819,6 +828,7 @@ const viewOf = (
   outputs: parsed.fields.outputs,
   context: parsed.fields.context,
   lands: parsed.fields.lands,
+  runsOn: parsed.fields.runsOn,
   group: parsed.fields.group,
   owns: parsed.fields.owns,
   budget: parsed.fields.budget,
@@ -990,6 +1000,10 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
   }
   if (lands !== undefined) {
     set("lands", () => doc.setField("lands", lands));
+  }
+  const { runsOn } = patch;
+  if (runsOn !== undefined) {
+    set("runs_on", () => doc.setField("runs_on", runsOn));
   }
   if (group !== undefined) {
     set("group", () =>
@@ -1202,6 +1216,12 @@ export const createTasks = (store: TaskStore) => {
   const told = <T>(event: TaskEvent, result: T): T => {
     emit(event);
     return result;
+  };
+
+  /** A `runs_on` as written, refused when it names no capability and no machine the hub knows. */
+  const runsOnChecked = (value: string): string => {
+    const checked = runsOnValue(value, store.machines());
+    return "value" in checked ? checked.value : refuse(400, checked.problem);
   };
 
   /** The project's attempts, by task, newest first. */
@@ -2650,6 +2670,7 @@ export const createTasks = (store: TaskStore) => {
           outputs: items("outputs", draft.outputs ?? []),
           context: items("context", draft.context ?? []),
           lands: draft.lands ?? null,
+          runsOn: draft.runsOn ? runsOnChecked(draft.runsOn) : null,
           ...limitsOf(draft),
           rank: draft.rank ? oneLine("rank", draft.rank, 64) : null,
           labels: items("labels", draft.labels ?? []),
@@ -2740,8 +2761,11 @@ export const createTasks = (store: TaskStore) => {
       patch: TaskPatch,
       actor: TaskActor
     ): Promise<TaskView> {
+      const checked = patch.runsOn
+        ? { ...patch, runsOn: runsOnChecked(patch.runsOn) }
+        : patch;
       return change(projectId, ref, actor, (doc) =>
-        applyPatch(doc, patch)
+        applyPatch(doc, checked)
       ).then((task) => told({ kind: "changed", projectId }, task));
     },
 
@@ -3216,6 +3240,7 @@ export const taskRoutes = (tasks: Tasks) =>
           outputs: t.Optional(t.Array(t.String())),
           context: t.Optional(t.Array(t.String())),
           lands: t.Optional(LANDS),
+          runsOn: t.Optional(t.String()),
           group: t.Optional(t.String()),
           owns: t.Optional(t.Array(t.String())),
           budget: t.Optional(BUDGET),
@@ -3252,6 +3277,7 @@ export const taskRoutes = (tasks: Tasks) =>
           type: t.Optional(t.Nullable(t.String())),
           rank: t.Optional(t.Nullable(t.String())),
           lands: t.Optional(t.Nullable(LANDS)),
+          runsOn: t.Optional(t.Nullable(t.String())),
           group: t.Optional(t.Nullable(t.String())),
           owns: t.Optional(t.Array(t.String())),
           budget: t.Optional(t.Nullable(BUDGET)),

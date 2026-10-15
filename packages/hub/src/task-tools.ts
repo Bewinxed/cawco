@@ -22,6 +22,7 @@ import {
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { AttemptStart } from "./dispatch";
+import { appleSuggestion } from "./runs-on";
 import { EDGES, normaliseTaskRef } from "./task-file";
 import {
   type StagesView,
@@ -53,6 +54,8 @@ export interface TaskToolContext {
   duplicates?: (projectId: string, task: TaskView) => Promise<unknown>;
   /** Its role files tasks (roles.ts): it may name any task's to-dos, not only its own work item's. */
   mainline: boolean;
+  /** The project's own `runs_on` (dispatch settings): a task filed under one is not told to set its own. */
+  projectRunsOn?: (projectId: string) => string | null;
   /** Retries a task whose last attempt failed, reporting to `parent` (dispatch.ts); without it task_retry refuses. */
   retryAttempt?: (
     projectId: string,
@@ -147,6 +150,12 @@ const landsParameter = () =>
     .describe(
       "Where passing work goes: main (the default branch), branch (cawco/<task> on origin), pr (that branch and a pull request), none (nothing pushed; outputs are the deliverable). Left out: the project's default."
     );
+const runsOnParameter = () =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .describe("Machine its attempts run on: apple, linux or a hostname.");
 const lines = (what: string) => z.array(z.string()).optional().describe(what);
 /** The project's own fields a task file carries beyond its known ones: task_create's and task_update's one shape. */
 const fieldsParameter = () =>
@@ -366,21 +375,36 @@ export function taskTools(context: TaskToolContext | undefined) {
         outputs: lines("Files it produces that are not commits."),
         context: lines("knowledge/ files for its brief."),
         lands: landsParameter().optional(),
+        runs_on: runsOnParameter().optional(),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),
         budget: budgetParameter().optional(),
         labels: lines("Short labels."),
         fields: fieldsParameter(),
       },
-      async ({ found_in, ...draft }) => {
+      async ({ found_in, runs_on, ...draft }) => {
         const { projectId, tasks, actor } = scope();
         const task = await tasks.create(
           projectId,
-          { ...draft, foundIn: found_in },
+          { ...draft, foundIn: found_in, runsOn: runs_on },
           actor
         );
         const duplicates = await context?.duplicates?.(projectId, task);
-        return ok(duplicates ? { ...task, duplicates } : task);
+        // Suggested, never set: the session decides.
+        const suggest =
+          task.runsOn || context?.projectRunsOn?.(projectId)
+            ? undefined
+            : appleSuggestion([
+                task.title,
+                task.description,
+                task.acceptance,
+                ...task.checks,
+              ]);
+        return ok({
+          ...task,
+          ...(duplicates ? { duplicates } : {}),
+          ...(suggest ? { suggest } : {}),
+        });
       }
     ),
     tool(
@@ -405,13 +429,15 @@ export function taskTools(context: TaskToolContext | undefined) {
           .nullable()
           .optional()
           .describe("Where its attempts land; null: the project's default."),
+        runs_on: runsOnParameter().nullable().optional(),
         group: groupParameter().nullable().optional(),
         owns: ownsParameter().optional(),
         budget: budgetParameter().nullable().optional(),
         labels: lines("Replaces the labels."),
         fields: fieldsParameter(),
       },
-      async ({ id, stage, reason, ...patch }) => {
+      async ({ id, stage, reason, runs_on, ...rest }) => {
+        const patch = { ...rest, runsOn: runs_on };
         const { projectId, tasks, actor } = scope();
         if (reason !== undefined && stage === undefined) {
           throw new Error(
@@ -446,7 +472,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_start",
-      "Start an attempt at a task: a delegate in a new workspace from a checkout of the project on an online machine, briefed from the task file (description, acceptance, open to-dos, checks), reporting to you. The task moves to its active stage and runs that stage's type, else its own. Refused while an attempt is live or it is done.",
+      "Start an attempt at a task: a delegate in a new workspace from a checkout of the project on an online machine its runs_on names, briefed from the task file (description, acceptance, open to-dos, checks), reporting to you. The task moves to its active stage and runs that stage's type, else its own. Refused while an attempt is live or it is done.",
       { id: taskRef() },
       async ({ id }) => {
         const { projectId } = scope();

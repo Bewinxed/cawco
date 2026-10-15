@@ -656,6 +656,8 @@ export type ProjectSettingChange =
     }
   | { github: string; kind: "link_repo" }
   | { kind: "set_lands"; lands: ProjectLands }
+  /** Where its attempts run (hub runs-on.ts): a machine or a capability; null: any machine. */
+  | { kind: "set_runs_on"; runsOn: string | null }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -689,6 +691,10 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return `Link this project to github.com/${change.github}`;
     case "create_repo":
       return `Publish this project to a ${change.private ? "private" : "public"} GitHub repository, ${change.account ? `${change.account}/` : ""}${change.name}`;
+    case "set_runs_on":
+      return change.runsOn
+        ? `Run this project's attempts only on ${change.runsOn}`
+        : "Run this project's attempts on any machine with a checkout";
     default:
       return LANDS_WORDS[change.lands];
   }
@@ -715,9 +721,13 @@ const settingChanges = (input: Record<string, unknown>) =>
     (one): one is ProjectSettingChange =>
       typeof one === "object" &&
       one !== null &&
-      ["grant_connection", "link_repo", "set_lands", "create_repo"].includes(
-        (one as { kind?: unknown }).kind as string
-      )
+      [
+        "grant_connection",
+        "link_repo",
+        "set_lands",
+        "set_runs_on",
+        "create_repo",
+      ].includes((one as { kind?: unknown }).kind as string)
   );
 
 /** A project setting change Caw asked about: each change in plain words, what a publish takes, and why. */

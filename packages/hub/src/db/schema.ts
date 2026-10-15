@@ -372,6 +372,12 @@ export const projects = sqliteTable("projects", {
    */
   lands: text("lands").$type<LandsMode>().notNull().default("main"),
   /**
+   * Where its tasks' attempts run when the task file says nothing
+   * (`runs_on:`, runs-on.ts): a machine, or a capability like `apple`.
+   * Null: any machine with a checkout, as before there was a choice.
+   */
+  runsOn: text("runs_on"),
+  /**
    * The budget every work item of the project runs under, field by field,
    * where neither its delegate call nor its task names one (work-items.ts
    * `overBudget`). Null: no default.

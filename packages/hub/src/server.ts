@@ -15258,6 +15258,7 @@ export const createServer = (
     actionMove: (projectId, taskId, to, actionId) =>
       actionMoves(projectId, taskId, to, actionId),
     project: (id) => db.project(id),
+    machines: () => db.listAgents(),
     projectIds: () => db.listProjects().map((project) => project.id),
     index: db.taskIndex,
     put: db.putTaskIndex,
@@ -15875,6 +15876,7 @@ export const createServer = (
     connections,
     db,
     lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
+    runsOn: (projectId, runsOn) => dispatcher.configure(projectId, { runsOn }),
     publish: createRepoPublish({
       bare: (projectId) => bareRepoPath(GIT_ROOT, projectId),
       call: callMachine,
@@ -15895,6 +15897,7 @@ export const createServer = (
     workItemTask: (id) => db.workItem(id)?.taskId,
     workItemLands: (id) => db.workItem(id)?.lands,
     duplicates: (projectId, task) => jevTasks.filed(projectId, task, "session"),
+    projectRunsOn: (projectId) => db.project(projectId)?.runsOn ?? null,
     startAttempt: (projectId, ref, parent) =>
       dispatcher.startAttempt(projectId, ref, parent),
     retryAttempt: (projectId, ref, parent) =>

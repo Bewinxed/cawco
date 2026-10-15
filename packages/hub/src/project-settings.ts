@@ -19,6 +19,9 @@
  *   repository already, or one another project has, is refused.
  * - `set_lands`: where the project's attempts land when their task says
  *   nothing, as the dispatch settings set it (dispatch.ts `configure`).
+ * - `set_runs_on`: where the project's attempts run when their task says
+ *   nothing (runs-on.ts): a machine or a capability like `apple`, or null
+ *   for any machine; through the same dispatch settings.
  * - `create_repo`: the project's place published to a new GitHub
  *   repository, then linked (repo-publish.ts). It reaches outside, so it is
  *   always asked, `ask` or not.
@@ -39,6 +42,7 @@ import type { Connections } from "./connections";
 import type { DbShape, ProjectRow } from "./db";
 import type { RepoPublish } from "./repo-publish";
 import { roleOf } from "./roles";
+import { runsOnValue } from "./runs-on";
 
 export const PROJECT_SETTINGS = "project_settings";
 
@@ -54,10 +58,17 @@ const refuse = (message: string): never => {
 
 /** What the tool takes: changes, flat, each read by its `kind`. */
 const ASKED_CHANGE = z.object({
-  kind: z.enum(["grant_connection", "link_repo", "set_lands", "create_repo"]),
+  kind: z.enum([
+    "grant_connection",
+    "link_repo",
+    "set_lands",
+    "set_runs_on",
+    "create_repo",
+  ]),
   connection: z.string().optional(),
   github: z.string().optional().describe("owner/name"),
   lands: z.enum(LANDS as [ProjectLands, ...ProjectLands[]]).optional(),
+  runs_on: z.string().nullable().optional(),
   name: z.string().optional(),
   private: z.boolean().optional(),
 });
@@ -88,7 +99,7 @@ export interface ProjectSettingsDeps {
   readonly connections: Pick<Connections, "get" | "update">;
   readonly db: Pick<
     DbShape,
-    "project" | "projectByRemote" | "setProjectRemote"
+    "listAgents" | "project" | "projectByRemote" | "setProjectRemote"
   >;
   /** The project's default landing, through the dispatch settings' own path. */
   readonly lands: (projectId: string, lands: ProjectLands) => Promise<unknown>;
@@ -96,6 +107,11 @@ export interface ProjectSettingsDeps {
   readonly note: (actor: InstanceRow, note: ThreadNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
   readonly publish: Pick<RepoPublish, "publish" | "read">;
+  /** Where the project's attempts run, through the dispatch settings' own path. */
+  readonly runsOn: (
+    projectId: string,
+    runsOn: string | null
+  ) => Promise<unknown>;
 }
 
 export const createProjectSettings = ({
@@ -105,6 +121,7 @@ export const createProjectSettings = ({
   lands,
   note,
   publish,
+  runsOn,
 }: ProjectSettingsDeps) => {
   /** Caw's own project, and nothing else: the caller must be its lead, and `named` (id or name) must be it. */
   const ownProject = (actor: InstanceRow, named?: string): ProjectRow => {
@@ -140,6 +157,25 @@ export const createProjectSettings = ({
     if (other && other.id !== project.id) {
       refuse(`${remote} is the project “${other.name}”'s repository.`);
     }
+  };
+
+  /** Where the project's attempts run, checked against the fleet (runs-on.ts); null or empty: any machine. */
+  const runsOnChange = (
+    project: ProjectRow,
+    asked: string | null | undefined
+  ): ProjectSettingChange => {
+    if (asked === undefined) {
+      refuse("set_runs_on names runs_on: apple, linux, a machine, or null.");
+    }
+    let to: string | null = null;
+    if (asked?.trim()) {
+      const value = runsOnValue(asked, db.listAgents());
+      to = "value" in value ? value.value : refuse(value.problem);
+    }
+    if (project.runsOn === to) {
+      refuse(`This project's attempts run on ${to ?? "any machine"} already.`);
+    }
+    return { kind: "set_runs_on", runsOn: to };
   };
 
   /** One asked change, checked against the project as it stands, as the hub stores it. */
@@ -178,6 +214,8 @@ export const createProjectSettings = ({
       }
       case "create_repo":
         return await publish.read(project, asked);
+      case "set_runs_on":
+        return runsOnChange(project, asked.runs_on);
       default: {
         const to = asked.lands ?? refuse("set_lands names main, branch or pr.");
         if (project.lands === to) {
@@ -231,6 +269,8 @@ export const createProjectSettings = ({
           `Link this project to github.com/${full}`
         );
         continue;
+      } else if (change.kind === "set_runs_on") {
+        await runsOn(project.id, change.runsOn);
       } else {
         await lands(project.id, change.lands);
       }
@@ -341,7 +381,7 @@ export const createProjectSettings = ({
       let text = String(error);
       if (error instanceof z.ZodError) {
         text =
-          "changes is a list of grant_connection, link_repo, set_lands or create_repo, and reason one sentence.";
+          "changes is a list of grant_connection, link_repo, set_lands, set_runs_on or create_repo, and reason one sentence.";
       } else if (error instanceof Error) {
         text = error.message;
       }
