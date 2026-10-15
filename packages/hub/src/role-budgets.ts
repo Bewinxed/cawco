@@ -61,12 +61,16 @@ import type { Tasks } from "./tasks";
  * project_settings' `set_runs_on`: an Apple task named a Mac nowhere, so
  * task_start placed it on Linux (tsk-7, tsk-15). About 80 tokens for the
  * worker, 95 for the lead, descriptions cut to a clause (worker 23,830,
- * lead 15,583 measured).
+ * lead 15,583 measured). project_settings' `set_apple_gate` (apple-gate.ts):
+ * two commits landed with iOS compile errors no Linux check saw, and the
+ * gate that stops that is the person's per project. About 30 tokens for
+ * the lead, its description cut to the kinds that always ask (lead 15,638
+ * measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 23_880,
   delegate: 6500,
-  lead: 15_630,
+  lead: 15_660,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

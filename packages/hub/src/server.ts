@@ -15329,6 +15329,7 @@ export const createServer = (
     // made further down; nothing starts an item before the hub is up.
     leadTurn: (instanceId) => lead?.turnOrigin(instanceId),
     modelRefusal: opencodeModelRefusal,
+    online: (machineId) => Boolean(registry.agent(machineId)),
     // A routine run's turn makes the sessions it starts the run's (memory.ts).
     spawnedUnder: (instanceId, parentId) =>
       memoryWatch.spawned(instanceId, parentId),
@@ -21067,6 +21068,7 @@ export const createServer = (
           body: t.Object({
             name: t.Optional(t.String({ maxLength: 2000 })),
             review: t.Optional(t.Boolean()),
+            appleGate: t.Optional(t.Boolean()),
           }),
         },
         ({ params, body, status }) => {

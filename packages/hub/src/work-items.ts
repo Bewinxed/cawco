@@ -88,6 +88,16 @@ import {
   MachinePathRefused,
 } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import {
+  APPLE_GATE_CHECK,
+  APPLE_GATE_COMMAND,
+  APPLE_GATE_TIMEOUT_SEC,
+  appleGateDiff,
+  appleGateRefusal,
+  appleMachines,
+  appPaths,
+  diffPaths,
+} from "./apple-gate";
 import type {
   DbShape,
   QueuedWorkItemRow,
@@ -638,6 +648,8 @@ export interface WorkItemDeps {
     harness: HarnessKind,
     model: string | undefined
   ) => string | undefined;
+  /** Whether `machineId`'s agent is connected now: the Apple build gate runs only on one that is. */
+  readonly online: (machineId: string) => boolean;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   /**
    * Why an attempt at one of the project's tasks may not start now: its spend
@@ -1369,6 +1381,7 @@ export const createWorkItems = ({
   inTurn,
   leadTurn,
   modelRefusal,
+  online,
   send,
   sessionUrl,
   spawn,
@@ -3921,6 +3934,83 @@ export const createWorkItems = ({
         };
   };
 
+  /** The paths of the workspace's changes against its target that the Swift build reads (apple-gate.ts). */
+  const appTouched = async (workspace: WorkspaceRow): Promise<string[]> => {
+    const diff = await runIn(workspace)(
+      appleGateDiff(quote(`origin/${workspace.base}`)),
+      GIT_TIMEOUT_MS
+    );
+    if (diff.exitCode !== 0) {
+      throw new Error(
+        `the hub could not read the item's changes against origin/${workspace.base} for the Apple build gate: ${failedWith(diff)}`
+      );
+    }
+    return appPaths(diffPaths(diff.stdout));
+  };
+
+  /**
+   * The online Mac the gate runs on: one holding the workspace's check
+   * workspace already, else one with the project's repository, else any.
+   */
+  const gateMac = (workspace: WorkspaceRow, projectId: string) => {
+    const macs = appleMachines(db.listAgents(), online);
+    const held = new Set(
+      db.checkWorkspacesOf(workspace.id).map((each) => each.machineId)
+    );
+    return (
+      macs.find((each) => held.has(each.machineId)) ??
+      macs.find((each) => repositoryOn(projectId, each.machineId)) ??
+      macs[0]
+    );
+  };
+
+  /**
+   * The item's checks with the Apple build gate's added (apple-gate.ts): when
+   * its project has the gate on, it lands somewhere, and its diff against
+   * its target touches what the Swift build reads, one more check compiles
+   * the iOS app on an online Mac, at its last commit, as any check that
+   * names a machine runs ({@link runChecks}). A Mac that holds the item's
+   * check workspace already is picked first (its build is incremental), then
+   * one with a checkout of the project. With no Mac online the item does not
+   * land: `refusal` says why, in one sentence.
+   */
+  const appleGate = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    checks: WorkItemCheck[]
+  ): Promise<{ checks: WorkItemCheck[] } | { refusal: string }> => {
+    const gated =
+      item.lands !== "none" &&
+      item.projectId !== null &&
+      db.project(item.projectId)?.appleGate === true &&
+      !checks.some((check) => check.name === APPLE_GATE_CHECK);
+    if (!(gated && item.projectId)) {
+      return { checks };
+    }
+    const touched = await appTouched(workspace);
+    if (touched.length === 0) {
+      return { checks };
+    }
+    const mac = gateMac(workspace, item.projectId);
+    if (!mac) {
+      const offline = appleMachines(db.listAgents(), () => true).map((each) =>
+        machineLabel(each.hostname)
+      );
+      return { refusal: appleGateRefusal(touched, offline) };
+    }
+    return {
+      checks: [
+        ...checks,
+        {
+          name: APPLE_GATE_CHECK,
+          command: APPLE_GATE_COMMAND,
+          machine: mac.machineId,
+          timeoutSec: APPLE_GATE_TIMEOUT_SEC,
+        },
+      ],
+    };
+  };
+
   /**
    * THE run of a `finish_item`: the item's checks, in order, against the
    * submission stored on its row, to an outcome. The live call and a hub
@@ -3934,7 +4024,7 @@ export const createWorkItems = ({
    */
   const settleChecks = async (
     item: WorkItemRow,
-    checks: WorkItemCheck[],
+    asked: WorkItemCheck[],
     submission: WorkItemSubmission
   ): Promise<{ done: boolean; text: string }> => {
     const [row] = db.getInstancesByIds([item.instanceId]);
@@ -3942,6 +4032,12 @@ export const createWorkItems = ({
     const settled = { checkingSince: null, submission: null };
     finishing.add(item.id);
     try {
+      const gate = await appleGate(workspace, item, asked);
+      if ("refusal" in gate) {
+        update(item.id, settled);
+        return { done: false, text: gate.refusal };
+      }
+      const { checks } = gate;
       const run = await runChecks(workspace, item, checks);
       if (runFailed(run)) {
         update(item.id, settled);

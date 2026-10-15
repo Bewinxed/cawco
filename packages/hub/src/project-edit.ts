@@ -1,7 +1,8 @@
 /**
- * A project's name and its Review before done, changed by the person
- * (`PATCH /api/projects/:id`) or by its Caw (`project_settings` `rename`,
- * `set_review`): one check and one write for both. The change reaches every
+ * A project's name, its Review before done and its Apple build gate
+ * (apple-gate.ts), changed by the person (`PATCH /api/projects/:id`) or by
+ * its Caw (`project_settings` `rename`, `set_review`, `set_apple_gate`): one
+ * check and one write for all three. The change reaches every
  * dashboard and the app at once: `projects.changed` makes each read the
  * projects again, and a review change is a change to the stages the hub
  * applies, so the project's boards read its tasks and stages again too.
@@ -17,6 +18,7 @@ export const PROJECT_NAME_LIMIT = 200;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 export interface ProjectEdit {
+  appleGate?: boolean;
   name?: string;
   review?: boolean;
 }
@@ -56,13 +58,31 @@ export interface ProjectEditsDeps {
   readonly stagesChanged: (projectId: string) => void;
 }
 
+/** What `asked` changes of `project`: each field asked that differs, the name checked. */
+const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
+  const change: ProjectEdit = {};
+  if (asked.name !== undefined) {
+    const name = projectName(asked.name);
+    if (name !== project.name) {
+      change.name = name;
+    }
+  }
+  if (asked.review !== undefined && asked.review !== project.review) {
+    change.review = asked.review;
+  }
+  if (asked.appleGate !== undefined && asked.appleGate !== project.appleGate) {
+    change.appleGate = asked.appleGate;
+  }
+  return change;
+};
+
 export const createProjectEdits = ({
   db,
   projectsChanged,
   stagesChanged,
 }: ProjectEditsDeps) => ({
   /**
-   * Checks and applies a change to a project's name and Review before done;
+   * Checks and applies a change to a project's name, Review before done and Apple build gate;
    * answers the project as it is now. Nothing asked is refused.
    */
   edit(projectId: string, asked: ProjectEdit): ProjectRow {
@@ -73,23 +93,18 @@ export const createProjectEdits = ({
         "This project is no longer recorded. Refresh."
       );
     }
-    if (asked.name === undefined && asked.review === undefined) {
+    if (
+      asked.name === undefined &&
+      asked.review === undefined &&
+      asked.appleGate === undefined
+    ) {
       throw new ProjectEditRefusal(
         400,
-        "Name what changes: the project's name, or whether it reviews before done."
+        "Name what changes: the project's name, whether it reviews before done, or whether its work waits for the iOS build."
       );
     }
-    const change: ProjectEdit = {};
-    if (asked.name !== undefined) {
-      const name = projectName(asked.name);
-      if (name !== project.name) {
-        change.name = name;
-      }
-    }
-    if (asked.review !== undefined && asked.review !== project.review) {
-      change.review = asked.review;
-    }
-    if (change.name === undefined && change.review === undefined) {
+    const change = changeOf(project, asked);
+    if (Object.keys(change).length === 0) {
       return project;
     }
     db.setProjectDetails(projectId, change);

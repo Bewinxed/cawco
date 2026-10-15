@@ -253,6 +253,8 @@ export interface ProjectPlace {
  * primary with `checkoutOf` (projects.ts).
  */
 export interface ProjectRow {
+  /** The Apple build gate: work that changes the iOS app lands only once it compiles on a Mac. */
+  appleGate: boolean;
   /** Its spend cap as it stands, kept by `project.cap` frames; null: none. */
   cap?: ProjectCap | null;
   /** Made with Caw: its Caw is on. */
@@ -5082,14 +5084,14 @@ export async function renameInstance(
 }
 
 /**
- * The person's own edit of a project: its name, or its Review before done
- * (`PATCH /api/projects/:id`). The answer lands in the projects at once; the
- * hub's `projects.changed` brings it to every other dashboard and the app.
- * Throws the refusal, in the hub's words.
+ * The person's own edit of a project: its name, its Review before done, or
+ * its Apple build gate (`PATCH /api/projects/:id`). The answer lands in the
+ * projects at once; the hub's `projects.changed` brings it to every other
+ * dashboard and the app. Throws the refusal, in the hub's words.
  */
 export async function editProject(
   projectId: string,
-  change: { name?: string; review?: boolean }
+  change: { appleGate?: boolean; name?: string; review?: boolean }
 ): Promise<ProjectRow> {
   const response = await fetch(`/api/projects/${projectId}`, {
     method: "PATCH",

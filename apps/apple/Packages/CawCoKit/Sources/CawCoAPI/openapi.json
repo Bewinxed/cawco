@@ -18343,6 +18343,9 @@
                   },
                   "review": {
                     "type": "boolean"
+                  },
+                  "appleGate": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -23591,6 +23594,9 @@
             "review": {
               "type": "boolean"
             },
+            "appleGate": {
+              "type": "boolean"
+            },
             "createdAt": {
               "type": "string",
               "format": "date-time"
@@ -23636,6 +23642,7 @@
             }
           },
           "required": [
+            "appleGate",
             "capUsd",
             "caw",
             "cawHarness",
@@ -23794,6 +23801,9 @@
           "review": {
             "type": "boolean"
           },
+          "appleGate": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -23839,6 +23849,7 @@
           }
         },
         "required": [
+          "appleGate",
           "capUsd",
           "caw",
           "cawHarness",
@@ -23984,6 +23995,9 @@
           "review": {
             "type": "boolean"
           },
+          "appleGate": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -24029,6 +24043,7 @@
           }
         },
         "required": [
+          "appleGate",
           "capUsd",
           "caw",
           "cawHarness",
@@ -24194,6 +24209,9 @@
           "review": {
             "type": "boolean"
           },
+          "appleGate": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -24239,6 +24257,7 @@
           }
         },
         "required": [
+          "appleGate",
           "capUsd",
           "caw",
           "cawHarness",
@@ -24356,6 +24375,9 @@
           "review": {
             "type": "boolean"
           },
+          "appleGate": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -24401,6 +24423,7 @@
           }
         },
         "required": [
+          "appleGate",
           "capUsd",
           "caw",
           "cawHarness",

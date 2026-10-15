@@ -1741,7 +1741,7 @@ export interface DbShape {
   /** The project's name and its Review before done, as project-edit.ts checked them. */
   readonly setProjectDetails: (
     id: string,
-    change: Partial<Pick<ProjectRow, "name" | "review">>
+    change: Partial<Pick<ProjectRow, "appleGate" | "name" | "review">>
   ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
   readonly setProjectDispatch: (

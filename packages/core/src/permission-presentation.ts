@@ -676,6 +676,8 @@ export type ProjectSettingChange =
   | { kind: "rename"; name: string }
   /** Review before done: on, only you move a task to done. */
   | { kind: "set_review"; review: boolean }
+  /** The Apple build gate (hub apple-gate.ts): on, work touching the iOS app lands only once it compiles. */
+  | { appleGate: boolean; kind: "set_apple_gate" }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -719,6 +721,10 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return change.review
         ? "Review every task before done: only you close one"
         : "Stop reviewing before done: the lead and sessions close finished tasks";
+    case "set_apple_gate":
+      return change.appleGate
+        ? "Land work that changes the iOS app only once it compiles on a Mac"
+        : "Land work that changes the iOS app without compiling it on a Mac";
     default:
       return LANDS_WORDS[change.lands];
   }
@@ -753,6 +759,7 @@ const settingChanges = (input: Record<string, unknown>) =>
         "create_repo",
         "rename",
         "set_review",
+        "set_apple_gate",
       ].includes((one as { kind?: unknown }).kind as string)
   );
 

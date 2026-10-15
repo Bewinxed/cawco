@@ -427,6 +427,14 @@ export const projects = sqliteTable("projects", {
    * Off: the lead and sessions close tasks as the project's stages allow.
    */
   review: integer("review", { mode: "boolean" }).notNull().default(false),
+  /**
+   * The Apple build gate (work-items.ts `appleGate`): an item whose diff
+   * touches the app's sources lands only once the iOS build compiles at its
+   * last commit on an apple-capable machine. Off: no item waits on a Mac.
+   */
+  appleGate: integer("apple_gate", { mode: "boolean" })
+    .notNull()
+    .default(false),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
