@@ -41,7 +41,7 @@ import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import type { TranscriptDoc } from "../../../packages/jsonl-parser/src";
 import { TranscriptIndex } from "../../../packages/jsonl-parser/src/fts5";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
+import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const OTHER = "scratch-other";
 const HANDOFF = "mcp__cawco__handoff";
@@ -855,6 +855,82 @@ const checkWaiting = async (
   );
 };
 
+/** The composer's field, Jump's field, Jump's names (not its transcript lines), the composer's `@` rows. */
+const FIELD = "form.cin textarea";
+const JUMP_FIELD = ".jump-field";
+const JUMP_NAMES = () =>
+  [...document.querySelectorAll(".jump-list .jump-name")]
+    .filter((name) => !name.closest(".jump-hit"))
+    .map((name) => name.textContent?.trim() ?? "");
+const AT_ROWS = () =>
+  [
+    ...document.querySelectorAll(
+      "#composer-menu [data-slot='command-item'][data-value]"
+    ),
+  ].map((row) => row.getAttribute("data-value") ?? "");
+
+/**
+ * h: the dashboard names things as the hub ranks them: Jump's first row for
+ * words in any order is the hub's first, and the composer's `@` offers the
+ * hub's handles in its order, never this conversation's own; choosing one
+ * writes the handle a mention reaches.
+ */
+const checkScreens = async ({ kit, fleet, sender, find }: Probe) => {
+  const base = await fleet.dashboard();
+  const page = await kit.page("desk");
+  await open(page, `${base}/session/${sender}`, FIELD);
+  const words = "harness quiet boundary";
+  const hub = await find(
+    `q=${encodeURIComponent(words)}&transcripts=0&kinds=project,thread,machine,conversation`
+  );
+  // Jump opens from its glass, as a person opens it; its field takes the focus.
+  await page.click("[data-share='jump']");
+  await page.waitForSelector(JUMP_FIELD);
+  await page.focus(JUMP_FIELD);
+  await page.keyboard.type(words);
+  const jumped = await until(
+    "Jump's rows for the words",
+    () => page.evaluate(JUMP_NAMES),
+    (names) => names[0] === hub.results[0]?.title,
+    20_000
+  ).catch(() => page.evaluate(JUMP_NAMES));
+  kit.check(
+    "h. Jump's first row for words in any order is the hub's first",
+    jumped[0] === "Boundary quiet harness fix" &&
+      jumped[0] === hub.results[0]?.title,
+    JSON.stringify([hub.results[0]?.title, jumped.slice(0, 3)])
+  );
+  await page.keyboard.press("Escape");
+  const mention = await find(
+    "q=boundary&transcripts=0&kinds=thread,conversation,machine"
+  );
+  const handles = mention.results
+    .filter(
+      (result) =>
+        result.handle !== null &&
+        !(result.kind === "conversation" && result.instanceId === sender)
+    )
+    .map((result) => `@${result.handle}`);
+  await page.focus(FIELD);
+  await page.keyboard.type("@boundary");
+  const offered = await until(
+    "the composer's @ rows",
+    () => page.evaluate(AT_ROWS),
+    (rows) => rows.length > 0 && rows[0] === handles[0],
+    20_000
+  ).catch(() => page.evaluate(AT_ROWS));
+  await page.keyboard.press("Enter");
+  const written = await page.inputValue(FIELD);
+  kit.check(
+    "h. the composer's @ offers the hub's handles in its order, and writes the one chosen",
+    offered.length > 0 &&
+      offered.every((row, i) => row === handles[i]) &&
+      !offered.some((row) => row.endsWith(sender.slice(0, 8))) &&
+      written === `${handles[0]} `,
+    JSON.stringify([handles.slice(0, 3), offered.slice(0, 3), written])
+  );
+};
+
 /** f: a frozen machine is named in the coverage, the answering one too. */
 const checkCoverage = async ({ kit, find, other }: Probe) => {
   process.kill(other.agent.pid, "SIGSTOP");
@@ -1094,6 +1170,7 @@ const run = async (kit: Kit) => {
   await checkCawThread(probe, call);
   await checkStored(probe);
   await checkWaiting(probe, call);
+  await checkScreens(probe);
   await checkCoverage(probe);
   await timeNames(probe, `${probe.rows.length + 2} sessions`);
   await timeTranscripts(probe);
