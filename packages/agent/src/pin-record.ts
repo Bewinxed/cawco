@@ -14,6 +14,7 @@ import {
   versionExecutable,
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
+import { failureSentence } from "@cawco/core/cli-failure";
 import { type PinMove, pinMoveWords, putOnPins } from "./tools";
 
 interface PinRecord {
@@ -90,7 +91,8 @@ const PINS_MS = 5 * 60_000;
  * (a build that will not run): what went on for it put back for `from`, the
  * build that runs instead, and never by the build that will not run, which
  * may not start at all. Answers what it did, in words; throws its one
- * sentence when it did not.
+ * sentence when it did not, and the error's own line when it died of one
+ * (core cli-failure.ts).
  */
 export async function runBinaryPins(
   from: string,
@@ -106,7 +108,7 @@ export async function runBinaryPins(
     child.exited,
   ]);
   if (code !== 0) {
-    const said = err.trim().split("\n").at(-1);
+    const said = failureSentence(err);
     throw new Error(
       said ||
         `${from}'s binary-pins ${child.signalCode ? `was ended after ${PINS_MS / 60_000} minutes` : `exited ${code}`}`

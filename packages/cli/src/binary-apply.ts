@@ -62,6 +62,7 @@ import {
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+import { failureSentence } from "@cawco/core/cli-failure";
 import { timerMs } from "@cawco/core/clock";
 import {
   answers,
@@ -363,7 +364,9 @@ async function writeKeeperUnits(
     units.exited,
   ]);
   if (code !== 0) {
-    throw new Error(`binary-units exited ${code}: ${err.trim() || out.trim()}`);
+    throw new Error(
+      `binary-units exited ${code}: ${failureSentence(err) ?? out.trim()}`
+    );
   }
   if (!(await Bun.file(file).exists())) {
     throw new Error(

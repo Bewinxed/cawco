@@ -538,19 +538,22 @@ const runBinaryApply = async (args: Args): Promise<number> => {
  * on, with the methods this build knows, each recorded as it lands. `cawco
  * binary-pins back <build>`, run from the build that runs instead of <build>:
  * what went on for <build> goes back on for this one (agent pin-record.ts).
- * Says what it did on one line; a failure is one sentence on stderr and exit 1.
+ * Says what it did on one line; a failure is one sentence on stderr and exit 1,
+ * whatever failed: its modules loading as much as the work, so the update
+ * records the error and not a report's last line (core cli-failure.ts reads
+ * what dies before this runs).
  */
 const runBinaryPins = async (args: Args): Promise<number> => {
-  const { pinMoveWords, putOnPins } = await import("@cawco/agent/tools");
-  const { putBackPins, recordPinMove } =
-    await import("@cawco/agent/pin-record");
   const back = args.action === "back" ? args.rest[0] : undefined;
-  if (args.action !== undefined && !back) {
-    throw new UsageError(
-      "binary-pins takes nothing, or back <the build that will not run>"
-    );
-  }
   try {
+    if (args.action !== undefined && !back) {
+      throw new UsageError(
+        "binary-pins takes nothing, or back <the build that will not run>"
+      );
+    }
+    const { pinMoveWords, putOnPins } = await import("@cawco/agent/tools");
+    const { putBackPins, recordPinMove } =
+      await import("@cawco/agent/pin-record");
     const said = back
       ? await putBackPins(back, CLI_VERSION)
       : (
@@ -713,13 +716,19 @@ const run = async (argv: string[]): Promise<number> => {
       // A keeper handover's first step, run by the update helper from the build the
       // keeper goes to: that build's own keeper unit, as this build writes it. Only
       // that unit: the others carry what the installing shell knew (the hub's
-      // address, the dashboard's port), which this process may not.
-      const { binaryLayout } = await import("./binary-install");
-      const { refreshUnits } = await import("./service");
-      await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), (line) =>
-        console.log(`units: ${line}`)
-      );
-      return 0;
+      // address, the dashboard's port), which this process may not. A failure is
+      // one sentence on stderr, as binary-pins says one.
+      try {
+        const { binaryLayout } = await import("./binary-install");
+        const { refreshUnits } = await import("./service");
+        await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), (line) =>
+          console.log(`units: ${line}`)
+        );
+        return 0;
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        return 1;
+      }
     }
     case "binary-pins":
       return runBinaryPins(args);
