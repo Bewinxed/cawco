@@ -18,7 +18,6 @@
  *   an Error whose message is the machine's sentence when the place cannot
  *   be made one (not a folder there, past 500 MB to commit, a `.git` git
  *   cannot read, git failing), or the machine is not connected.
- * - `plan(machineId, path)`: the same reading as a dry run, writing nothing.
  */
 import {
   CONTROL_PLACE_REPO,
@@ -118,7 +117,6 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
   const ensure = async (place: PlaceRef): Promise<PlaceRepo> => {
     const answer = (await call(place.machineId, CONTROL_PLACE_REPO, [
       place.path,
-      false,
     ])) as PlaceRepo;
     if (answer.state === "made") {
       noteMade(place, answer);
@@ -149,10 +147,6 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
         await ensure({ projectId, machineId, path: place.path });
       }
     },
-
-    /** {@link ensure}'s reading as a dry run: what a first commit would take, nothing written. */
-    plan: async (machineId: string, path: string): Promise<PlaceRepo> =>
-      (await call(machineId, CONTROL_PLACE_REPO, [path, true])) as PlaceRepo,
   };
 };
 

@@ -9833,12 +9833,16 @@ export const createServer = (
     }
   };
 
-  /** Shared by session tools and trusted workflow callbacks; never an HTTP door. */
+  /**
+   * Shared by session tools and trusted workflow callbacks; never an HTTP
+   * door. Answers the folder the session runs in, as its row was filed
+   * ({@link settleMode}'s settled cwd, a spin-off's worktree once made).
+   */
   const spawnSession = async (
     machineId: string,
     payload: SpawnPayload,
     fallbackMode?: string
-  ): Promise<void> => {
+  ): Promise<MachinePath> => {
     const listed = (id: string) => db.listedInstancesByIds([id])[0];
     const refusal = enforceRowSessionKey(listed(payload.instanceId), payload);
     if (refusal) {
@@ -9859,6 +9863,13 @@ export const createServer = (
     if (refused) {
       throw new Error(refused.message);
     }
+    const [row] = db.getInstancesByIds([payload.instanceId]);
+    if (!row) {
+      throw new Error(
+        `the session ${payload.instanceId.slice(0, 8)} started, and the hub has no row for it`
+      );
+    }
+    return row.cwd;
   };
 
   /**
@@ -12197,7 +12208,9 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
     rowsChanged: (machineId) => publishInstances(machineId),
     placesChanged,
-    spawn: (machineId, payload) => spawnSession(machineId, payload),
+    spawn: async (machineId, payload) => {
+      await spawnSession(machineId, payload);
+    },
     send: (envelope) => {
       deliverSend(envelope);
     },
@@ -15244,7 +15257,9 @@ export const createServer = (
       }
       sendFrame(agent, envelope);
     },
-    spawn: spawnSession,
+    spawn: async (machineId, payload, fallbackMode) => {
+      await spawnSession(machineId, payload, fallbackMode);
+    },
     halt: (machineId, instanceId) =>
       new Promise<void>((resolve, reject) => {
         endSession(instanceId, "stop", WORKFLOW_STOP);
@@ -15490,7 +15505,9 @@ export const createServer = (
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
-    spawn: (machineId, payload) => spawnSession(machineId, payload),
+    spawn: async (machineId, payload) => {
+      await spawnSession(machineId, payload);
+    },
     // Turning Caw off stops what he started the way a forget stops a
     // project's sessions: each row confirmed as its machine ends it.
     stops: {
@@ -15549,7 +15566,9 @@ export const createServer = (
     send: (envelope) => {
       deliverSend(envelope);
     },
-    spawn: (machineId, payload) => spawnSession(machineId, payload),
+    spawn: async (machineId, payload) => {
+      await spawnSession(machineId, payload);
+    },
     stop: (instanceId) =>
       endSession(instanceId, "stop", {
         kind: "hub",
@@ -16090,6 +16109,23 @@ export const createServer = (
       }
       return Promise.resolve(sessionSend(envelope, requester));
     },
+    // A session's start_session: the caller's own machine unless it named
+    // one, refused to a session that may not delegate, held until in place.
+    spawn: (envelope, actor) => {
+      const [requester] = db.getInstancesByIds([actor.id]);
+      if (!requester) {
+        throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
+      }
+      if (!resolveCanDelegate(requester)) {
+        throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
+      }
+      const { fallbackPermissionMode, ...payload } = envelope.payload;
+      return spawnSession(
+        envelope.machineId || requester.machineId,
+        payload,
+        fallbackPermissionMode
+      );
+    },
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one in-process dispatcher replaces six relay routes, retaining their ordered ownership and settlement checks.
     forward: async (envelope, actor) => {
       // The MCP resolver supplies the caller separately, never from provenance
@@ -16099,18 +16135,6 @@ export const createServer = (
         throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
       }
       const { instanceId } = envelope;
-      const machineId = envelope.machineId || requester.machineId;
-      if (envelope.verb === "spawn") {
-        if (!resolveCanDelegate(requester)) {
-          throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
-        }
-        const { fallbackPermissionMode, ...payload } =
-          envelope.payload as SpawnPayload & {
-            fallbackPermissionMode?: PermissionMode;
-          };
-        await spawnSession(machineId, payload, fallbackPermissionMode);
-        return;
-      }
       if (envelope.verb === "send") {
         sessionSend(envelope as Envelope<SendPayload>, requester);
         return;

@@ -126,6 +126,7 @@ export const measureRoles = (): RoleSize[] => {
     fleet: { instances: () => rows, machines: () => [] },
     formerIds: () => ({}),
     forward: () => Promise.resolve(),
+    spawn: () => Promise.reject(new Error("A budget read starts nothing")),
     deliver: () => Promise.reject(new Error("measuring")),
     credentialActor: () => undefined,
     knownCredential: () => false,

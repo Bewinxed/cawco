@@ -1585,10 +1585,8 @@ export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
  * naming everything left out, and one local commit as CawCo of every file
  * that is safe to keep in history (agent place-repo.ts says what is not).
  * Nothing is pushed and no remote is added. A place already in a git
- * repository is left as it is. Args `[path, dryRun?]`: a dry run reads the
- * place and answers what a commit would take, writing nothing in it.
- * Answers {@link PlaceRepo}. Refused, with the reason, when the place is no
- * folder, when what it would commit passes {@link PLACE_REPO_LIMIT_BYTES},
+ * repository is left as it is. Args `[path]`. Answers {@link PlaceRepo}.
+ * Refused, with the reason, when the place is no folder, when what it would commit passes {@link PLACE_REPO_LIMIT_BYTES},
  * or when git fails. Machine-scoped.
  */
 export const CONTROL_PLACE_REPO = "placeRepo";
@@ -1612,7 +1610,8 @@ export type PlaceRepo =
   | { state: "checkout"; root: string }
   /**
    * `made`: the repository was made and its first commit is `commit`;
-   * `plan`: a dry run, and this is what that commit would take.
+   * `plan`: a dry run (the agent's own, scripts/place-repo-plan.ts), and
+   * this is what that commit would take.
    */
   | {
       state: "made" | "plan";

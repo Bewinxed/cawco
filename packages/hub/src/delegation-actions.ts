@@ -32,6 +32,7 @@ import {
   QUESTION_DISMISSED,
   relaunchOf,
 } from "@cawco/core";
+import type { MachinePath } from "@cawco/core/machine-path";
 import type {
   WorkBudget,
   WorkItemCheck,
@@ -619,6 +620,16 @@ export interface HandoffDeps {
     message: string,
     attachments: string[]
   ) => Promise<string[]>;
+  /**
+   * Starts a session now and holds until its machine says it is in place
+   * (server.ts `spawnSession`); answers the folder it runs in as the hub
+   * settled it. A refused or failed start throws the hub's words.
+   */
+  readonly spawn: (
+    envelope: Envelope<
+      SpawnPayload & { fallbackPermissionMode?: PermissionMode }
+    >
+  ) => Promise<MachinePath>;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
   /** Delegate role: finish_item is available even before an item has checks. */
@@ -1065,6 +1076,7 @@ export const handoffActions = ({
   cwd,
   deliver,
   emit,
+  spawn,
   authorization,
   projectId,
   ledBy,
@@ -1449,7 +1461,14 @@ export const handoffActions = ({
         // tool's error rather than a "Started" for a session that never was.
         requestId: crypto.randomUUID(),
       };
-    emit({ verb: "spawn", machineId, instanceId: id, payload });
+    // Held until the session is in place; answers the folder it runs in, as
+    // the hub settled it (`~` resolved, normalised), not the words typed.
+    const settled = await spawn({
+      verb: "spawn",
+      machineId,
+      instanceId: id,
+      payload,
+    });
     // The marker prefix survives SDK storage (which strips `origin`) so that
     // the transcript builder (`sentRow`, @cawco/core) can still detect the
     // opening prompt as a peer message and render it as `user.peer` instead of
@@ -1476,7 +1495,7 @@ export const handoffActions = ({
       id,
       title,
       text:
-        `Started "${title}" (${leafOf(workdir)})${spinOff ? " as a spin-off" : ""}${on} in ${workdir}, ` +
+        `Started "${title}" (${leafOf(settled)})${spinOff ? " as a spin-off" : ""}${on} in ${settled}, ` +
         `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
         `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
         "It is in the sidebar now, under this session, and the user can open its transcript. " +

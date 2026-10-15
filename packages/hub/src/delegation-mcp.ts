@@ -8,6 +8,7 @@ import {
   type SendPayload,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import type { MachinePath } from "@cawco/core/machine-path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -19,7 +20,7 @@ import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
 import type { Caw } from "./caw";
 import type { Connections } from "./connections";
-import type { Fleet, SendDelivery } from "./delegation-actions";
+import type { Fleet, HandoffDeps, SendDelivery } from "./delegation-actions";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
@@ -137,6 +138,11 @@ export function createDelegationMcp(options: {
   /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
   ledBy?: (instanceId: string, leadId: string) => boolean;
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
+  /** A session's start_session, held until the session is in place; answers its settled folder (delegation-actions `spawn`). */
+  spawn: (
+    envelope: Parameters<HandoffDeps["spawn"]>[0],
+    actor: InstanceRow
+  ) => Promise<MachinePath>;
   /**
    * Hands a session's send to the hub's one send path now, and answers what
    * became of it (`handoff` words its reply from this); a refused send throws.
@@ -251,6 +257,8 @@ export function createDelegationMcp(options: {
             emit: () => {
               throw new Error("Discovery cannot execute tools");
             },
+            spawn: () =>
+              Promise.reject(new Error("Discovery cannot execute tools")),
           });
           const all = [...definitions, ...admin];
           if (new Set(all.map((tool) => tool.name)).size !== all.length) {
@@ -308,6 +316,8 @@ export function createDelegationMcp(options: {
         emit: () => {
           throw new Error("Discovery cannot execute tools");
         },
+        spawn: () =>
+          Promise.reject(new Error("Discovery cannot execute tools")),
       }),
       ...admin,
       ...(options.tasks ? taskTools(undefined) : []),
@@ -515,6 +525,8 @@ export function createDelegationMcp(options: {
         emit: () => {
           throw new Error("Reading the catalog emits nothing");
         },
+        spawn: () =>
+          Promise.reject(new Error("Reading the catalog starts nothing")),
       }).find((tool) => tool.name === name);
       if (!entry) {
         throw new Error(`Unknown tool ${name}`);
@@ -734,6 +746,7 @@ export function createDelegationMcp(options: {
         : undefined,
       deliver: (envelope) => options.deliver(envelope, actor),
       emit: (envelope) => emitted.push(envelope),
+      spawn: (envelope) => options.spawn(envelope, actor),
     }).find((tool) => tool.name === name);
     if (!entry) {
       throw new Error(`Tool ${name} is unavailable to this session`);
@@ -867,6 +880,7 @@ export function createDelegationMcp(options: {
             throw new Error("Instructions send nothing");
           },
           emit: () => undefined,
+          spawn: () => Promise.reject(new Error("Instructions start nothing")),
         }),
       }
     );

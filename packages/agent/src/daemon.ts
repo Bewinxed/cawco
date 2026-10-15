@@ -2392,10 +2392,8 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
           : createWorkspace(cwd, id, projectId, account)
     );
     // A place's first commit writes its folder: none starts behind a raised fence.
-    supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path, dryRun) =>
-      fenced()
-        ? Promise.reject(new Error(AGENT_RESTARTING))
-        : placeRepo(path, dryRun)
+    supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path) =>
+      fenced() ? Promise.reject(new Error(AGENT_RESTARTING)) : placeRepo(path)
     );
     // A place published to GitHub goes through the hub's remote first.
     supervisor.registerDaemonFunction(
