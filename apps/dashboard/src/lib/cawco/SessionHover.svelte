@@ -19,12 +19,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { STOPPING_LABEL } from "./activity";
-  import {
-    cawco,
-    isFailed,
-    readThread,
-    readTranscript,
-  } from "./client.svelte";
+  import { cawco, isFailed, readThread, readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
