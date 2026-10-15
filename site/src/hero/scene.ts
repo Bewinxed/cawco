@@ -180,6 +180,8 @@ export function sceneOne(stage: HTMLElement): gsap.core.Timeline {
       { opacity: 1, y: 0, scale: 1, ...UI_IN },
       at,
     );
+    // Its shadow comes up on the floor with it.
+    timeline.fromTo(one(drift, '.card-shadow'), { opacity: 0 }, { opacity: 1, ...UI_IN }, at);
     timeline.fromTo(
       drift,
       { '--t': 0 },

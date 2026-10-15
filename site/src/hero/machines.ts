@@ -96,7 +96,7 @@ function sharedDefs(): string {
     // Vents: horizontal slots, and a perforated sheet.
     '<pattern id="m-slots" patternUnits="userSpaceOnUse" width="200" height="4.4"><rect class="rcf" x="0" y="1.4" width="200" height="1.7" rx=".85"/></pattern>',
     '<pattern id="m-perf" patternUnits="userSpaceOnUse" width="4.2" height="7.27"><circle class="rcf" cx="2.1" cy="1.8" r="1.05"/><circle class="rcf" cx="0" cy="5.44" r="1.05"/><circle class="rcf" cx="4.2" cy="5.44" r="1.05"/></pattern>',
-    // The lit screen's pool of light, and desk-box's lamp glow (both drawn at night only).
+    // The lit screen's pool of light (night only), and desk-box's lamp glow.
     '<radialGradient id="m-pool"><stop offset="0" style="stop-color:var(--pool)"/><stop offset=".55" style="stop-color:var(--pool);stop-opacity:.55"/><stop offset="1" style="stop-color:var(--pool);stop-opacity:0"/></radialGradient>',
     '<radialGradient id="m-glow"><stop offset="0" style="stop-color:var(--glow)"/><stop offset=".35" style="stop-color:var(--glow);stop-opacity:.35"/><stop offset="1" style="stop-color:var(--glow);stop-opacity:0"/></radialGradient>',
   ].join('');
@@ -144,8 +144,8 @@ export function deskBox(): string {
     '<rect class="t F" x="81" y="31" width="9" height="2.6" rx="1.3"/>',
     '<circle class="rc F" cx="52.5" cy="58" r="7.4"/><circle class="t F" cx="52.5" cy="58" r="4.8"/>',
     '<path class="F" d="M52.5 54.6V57.4M50.3 55.9A2.6 2.6 0 1 0 54.7 55.9"/>',
-    `<circle class="rc F" cx="${n(lamp[0] + w / 2)}" cy="58" r="4.2"/>`,
-    `<use href="#m-led" class="lamp" transform="translate(${n(lamp[0] + w / 2)} 58) scale(2.9)"/>`,
+    `<circle class="rc F" cx="${n(lamp[0] + w / 2)}" cy="58" r="4.6"/>`,
+    `<use href="#m-led" class="lamp" transform="translate(${n(lamp[0] + w / 2)} 58) scale(3.3)"/>`,
     '<g class="fine"><rect class="rc F" x="19" y="73" width="13" height="5" rx=".7"/><rect class="rc F" x="36" y="73" width="13" height="5" rx=".7"/><rect class="rc F" x="56" y="74.2" width="8.6" height="2.7" rx="1.3"/><circle class="rc F" cx="76" cy="75.5" r="1.8"/></g>',
     '<rect class="F" x="14" y="98" width="77" height="100" rx="2"/>',
     '<rect class="fine" fill="url(#m-slots)" x="17" y="101" width="71" height="94"/>',

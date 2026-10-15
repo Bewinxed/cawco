@@ -56,7 +56,7 @@
   initial-value: transparent;
 }
 
-@property --m-lit {
+@property --lamp {
   syntax: '<color>';
   inherits: true;
   initial-value: transparent;
@@ -82,27 +82,39 @@
 
 /*
  * The stage: scene 1 on isometric paper. Every machine is drawn at k px per millimetre, one scale
- * for the page (`--kpx`: 0.9 at 1200 and up, 0.62 at 768, 0.42 at 390, straight between), and is
- * placed by its floor origin. The laptop's origin sits on a node of the lattice, and desk-box
- * stands a whole lattice step away from it, so both register with the paper.
+ * for the page (`--kpx`: 0.8 from 1200 up, 0.62 at 768, 0.42 at 390, straight between), and is
+ * placed by its floor origin. The laptop's origin sits on a node of the lattice and desk-box
+ * stands a whole lattice vector from it, so both register with the paper.
+ *
+ * Wide (1000 and up), left to right: the laptop, desk-box a lattice step clear of its lid, and
+ * desk-box's sessions as a column of cards beside it. Narrow: desk-box and its cards above the
+ * laptop. At 1440 × 900 everything but the laptop's base is above the fold.
  */
 .hero-stage {
   --kpx: clamp(0.42px, 0.42px + (100vw - 390px) * 0.000529, 0.62px);
-  /*
-   * The laptop's floor origin, and desk-box's: 427 by -92.4 units away on screen, snapped to the
-   * nearest lattice vector on an even row (a whole 24px across, a whole 41.6px down), so both
-   * machines stand on nodes of the paper at every k.
-   */
-  --lap-x: calc(50cqw - 96px);
-  --lap-y: 400px;
-  --box-dx: round(calc(427 * var(--kpx)), 24px);
-  --box-dy: round(calc(-92.4 * var(--kpx)), 41.6px);
-  /* Desk-box's front corner on the floor: its cards stand off it. */
-  --corner-x: calc(var(--lap-x) + var(--box-dx) - 38 * var(--kpx));
-  --corner-y: calc(var(--lap-y) + var(--box-dy) + 76 * var(--kpx));
   /* The size the cards are read at: the feature scenes' (`.scene`) reading size. */
   --reading: clamp(10.5px, 10.5px + (100vw - 390px) * 0.0037, 13.5px);
   --dusk: 0;
+
+  /* Wide: the laptop's lid 6px under the stage's top, the group centred on the stage. */
+  --lap-y: calc(6px + 385 * var(--kpx));
+  --lap-x: calc(50cqw - 219 * var(--kpx) - 6px - 10.75 * var(--reading));
+  --box-want-x: calc(var(--lap-x) + 465 * var(--kpx));
+  --box-want-y: calc(var(--lap-y) - 78 * var(--kpx));
+  /*
+   * Desk-box stands where the plan wants it, snapped to the nearest lattice vector: a whole row
+   * (20.8px) down, and across a whole 24px on an even row or 24px and a half on an odd one.
+   */
+  --box-dy: round(calc(var(--box-want-y) - var(--lap-y)), 20.8px);
+  --box-odd: calc(mod(var(--box-dy), 41.6px) * 0.576923);
+  --box-dx: calc(
+    round(calc(var(--box-want-x) - var(--lap-x) - var(--box-odd)), 24px) + var(--box-odd)
+  );
+  --box-x: calc(var(--lap-x) + var(--box-dx));
+  --box-y: calc(var(--lap-y) + var(--box-dy));
+  /* The cards' column: beside desk-box's right side, from just under its top. */
+  --col-x: calc(var(--box-x) + 132 * var(--kpx) + 12px);
+  --col-y: calc(var(--box-y) - 305.5 * var(--kpx) + 22px);
 
   /*
    * The machines' tones: top, side A (facing the light's side), side B, recess, the edge and the
@@ -136,32 +148,44 @@
     color-mix(in oklab, var(--crow-ink) 2%, var(--paper)),
     color-mix(in oklab, var(--brand-paper) 2%, var(--paper))
   );
-  --m-lit: light-dark(var(--crow-ink), var(--brand-paper));
+  /* Desk-box's status lamp is a state: the product's online colour (color.presence-online). */
+  --lamp: light-dark(oklch(62.7% 0.17 149), oklch(74% 0.17 149));
+  --glow: color-mix(in oklab, var(--lamp) 50%, transparent);
   /* What the laptop's screen shows, in the app's tokens: its rows, a mark, its ink. */
   --scr-row: var(--app-line);
   --scr-mark: var(--mark-2);
   --scr-ink: var(--app-ink);
+  /* The machines' shadows on the floor: cast by the key light, and the contact under each foot. */
   --m-shadow: light-dark(
-    color-mix(in oklab, var(--crow-ink) 10%, transparent),
-    oklch(0% 0 0 / 0.4)
+    color-mix(in oklab, var(--crow-ink) 14%, transparent),
+    oklch(0% 0 0 / 0.5)
   );
-  --pool: color-mix(in oklab, var(--brand-paper) 7%, transparent);
-  --glow: color-mix(in oklab, var(--brand-paper) 55%, transparent);
-  /* The UI cards' drop: ink 12% by day, black 45% at night; fainter for a card held higher. */
-  --card-shadow: light-dark(
-    color-mix(in oklab, var(--crow-ink) 12%, transparent),
+  --m-contact: light-dark(
+    color-mix(in oklab, var(--crow-ink) 24%, transparent),
+    oklch(0% 0 0 / 0.62)
+  );
+  /* The lit screen's light on the deck and the floor, and its bloom (night only). */
+  --pool: color-mix(in oklab, var(--brand-paper) 18%, transparent);
+  /*
+   * The cards' shadows on the floor, fainter the higher a card is held: ink by day, black at
+   * night (45% for a working card), and the card's paper 7% top highlight at night.
+   */
+  --floor-0: light-dark(color-mix(in oklab, var(--crow-ink) 26%, transparent), oklch(0% 0 0 / 0.6));
+  --floor-1: light-dark(
+    color-mix(in oklab, var(--crow-ink) 18%, transparent),
     oklch(0% 0 0 / 0.45)
   );
-  --card-shadow-faint: light-dark(
-    color-mix(in oklab, var(--crow-ink) 8%, transparent),
-    oklch(0% 0 0 / 0.32)
+  --floor-2: light-dark(
+    color-mix(in oklab, var(--crow-ink) 13%, transparent),
+    oklch(0% 0 0 / 0.36)
   );
+  --card-edge: light-dark(color-mix(in oklab, var(--crow-ink) 18%, var(--paper)), var(--app-line));
   --card-rim: light-dark(transparent, color-mix(in oklab, var(--brand-paper) 7%, transparent));
 
   grid-area: stage;
   position: relative;
-  height: clamp(380px, 380px + (100vw - 390px) * 0.2716, 600px);
-  margin-top: clamp(24px, 3vw, 40px);
+  height: calc(var(--lap-y) + 150 * var(--kpx) + 24px);
+  margin-top: clamp(12px, 1.1vw, 16px);
   container-type: size;
   text-align: left;
 }
@@ -210,8 +234,8 @@
 }
 
 .m-desk {
-  --ax: calc(var(--lap-x) + var(--box-dx));
-  --ay: calc(var(--lap-y) + var(--box-dy));
+  --ax: var(--box-x);
+  --ay: var(--box-y);
 }
 
 .machine :is(path, rect, circle, ellipse) {
@@ -254,18 +278,18 @@
   fill: var(--m-fine);
 }
 
-/* The status lamp is the one lit part: ink by day, the paper's light at night. */
+/* The status lamp is lit: desk-box is online. Its glow shows in both schemes. */
 .machine .lamp {
-  fill: var(--m-lit);
+  fill: var(--lamp);
 }
 
 .machine .sh {
   fill: var(--m-shadow);
-  filter: blur(5px);
+  filter: blur(4px);
 }
 
 .machine .ct {
-  fill: var(--m-shadow);
+  fill: var(--m-contact);
   filter: blur(2px);
 }
 
@@ -279,29 +303,47 @@
   fill: color-mix(in oklab, var(--app-raised) var(--on), var(--m-off));
 }
 
-/* Light that only shows at night: the lit screen's pool, desk-box's lamp glow. */
-.machine :is(.pool, .glow) {
+/* The lit screen's pool on the deck and the floor, and its bloom: night only. */
+.machine .pool {
   display: none;
 }
 
-:root[data-theme='dark'] .machine :is(.pool, .glow) {
+:root[data-theme='dark'] .machine .pool {
   display: inline;
 }
 
+:root[data-theme='dark'] .machine .scr {
+  filter: drop-shadow(
+    0 0 7px color-mix(in oklab, var(--brand-paper) calc(var(--on) * 0.4), transparent)
+  );
+}
+
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .machine :is(.pool, .glow) {
+  :root:not([data-theme='light']) .machine .pool {
     display: inline;
+  }
+
+  :root:not([data-theme='light']) .machine .scr {
+    filter: drop-shadow(
+      0 0 7px color-mix(in oklab, var(--brand-paper) calc(var(--on) * 0.4), transparent)
+    );
   }
 }
 
 /*
- * The UI cards: flat to the viewer, in the app's tokens and type. They belong to desk-box and
- * drift along the floor's y axis (down and to the left at 30°) at their own speed, in floor
- * units per second times k, as scene.ts runs `--t` from 0.
+ * Desk-box's sessions: flat UI cards, a column beside it stacked in depth, the farthest back on
+ * top. Each hovers at its state's height over its spot on the floor, and its shadow lies on the
+ * paper under it, cast by the machines' key light: offset down and to the right by the height
+ * (0.4543, 0.3637 px per mm at k 1, 51.3° of shear), as long as the card is tall times the
+ * light's slope. Height is state: working (h1) 36mm, needs you (h2) 76mm, done (h0) on the floor.
  */
 .hero-cards {
   position: absolute;
-  inset: 0;
+  left: min(var(--col-x), calc(100cqw + var(--gutter) - 8px - 24em - 82.6 * var(--kpx)));
+  top: var(--col-y);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
   font-size: var(--reading);
   font-weight: 500;
@@ -310,45 +352,62 @@
 }
 
 /*
- * A card never passes the window's right edge: its place, or as far right as its width allows.
- * Its height (`--rise`, from the card's state below) rides on this same translate: scene.ts
- * transforms the card itself for its arrival, and gsap folds a transformed element's own
- * `translate` into its transform, so a rise set on the card would be lost.
+ * A card and its floor shadow drift together along the floor's y axis, back and up (30° up and
+ * to the right), at their own speed in floor units per second times k, as scene.ts runs `--t`.
+ * Below each card the column leaves its shadow's floor clear: the card's height, the shadow's
+ * offset and length, and room for the card behind to drift past.
  */
 .drift {
-  --edge: calc(100cqw + var(--gutter) - 8px);
-  --rise: 0px;
-  position: absolute;
-  left: min(var(--cx), calc(var(--edge) - var(--w)));
-  top: var(--cy);
-  translate: calc(var(--t, 0) * var(--v) * -0.866 * var(--kpx))
-    calc(var(--t, 0) * var(--v) * 0.5 * var(--kpx) - var(--rise));
+  --hb: 0;
+  --soft: 2px;
+  --floor: var(--floor-0);
+  position: relative;
+  margin-bottom: calc(var(--hb) * 1.3965 * var(--kpx) + 0.9em + 15px);
+  translate: calc(var(--t, 0) * var(--v) * 0.866 * var(--kpx))
+    calc(var(--t, 0) * var(--v) * -0.5 * var(--kpx));
+}
+
+.drift:has(> [data-height='1']) {
+  --hb: 36;
+  --soft: 5px;
+  --floor: var(--floor-1);
 }
 
 .drift:has(> [data-height='2']) {
-  --rise: 10px;
+  --hb: 76;
+  --soft: 10px;
+  --floor: var(--floor-2);
 }
 
-/* The cards stand off desk-box's front corner, the farthest back slowest (10, 14, 18 px/s at k 0.9). */
+/*
+ * Back to front: card 3 (needs you) at the back, card 1, card 2 at the front, the nearest
+ * fastest: 10, 14 and 18 px/s at the desktop's k (0.8).
+ */
 .drift:nth-child(1) {
-  --cx: calc(var(--corner-x) + 22px);
-  --cy: calc(var(--corner-y) + 13px);
-  --v: 11.1;
-  --w: 19em;
+  --v: 17.5;
 }
 
 .drift:nth-child(2) {
-  --cx: calc(var(--corner-x) + 74px);
-  --cy: calc(var(--corner-y) + 73px);
-  --v: 15.6;
-  --w: 21.7em;
+  --v: 22.5;
 }
 
 .drift:nth-child(3) {
-  --cx: calc(var(--corner-x) + 2px);
-  --cy: calc(var(--corner-y) + 131px);
-  --v: 20;
-  --w: 24em;
+  --v: 12.5;
+  order: -1;
+}
+
+.card-shadow {
+  position: absolute;
+  left: calc(var(--hb) * 0.4543 * var(--kpx));
+  top: calc(100% + var(--hb) * 1.3965 * var(--kpx));
+  width: 100%;
+  height: 35.2%;
+  border-radius: 0.7em;
+  background: var(--floor);
+  filter: blur(var(--soft));
+  opacity: 0;
+  transform: skewX(51.3deg);
+  transform-origin: 0 0;
 }
 
 .session-card {
@@ -356,29 +415,13 @@
   align-items: center;
   gap: 0.6em;
   padding: 0.6em 0.85em;
-  border: 1px solid var(--app-line);
+  border: 1px solid var(--card-edge);
   border-radius: 0.9em;
   background: var(--app-raised);
   color: var(--app-ink);
   white-space: nowrap;
-  box-shadow:
-    var(--lift),
-    inset 0 1px 0 var(--card-rim);
+  box-shadow: inset 0 1px 0 var(--card-rim);
   opacity: 0;
-}
-
-/* Height is state: working rides at h1, a card that needs you is held at h2, a done one rests. */
-.session-card[data-height='0'] {
-  --lift: 0 1px 2px var(--card-shadow);
-}
-
-.session-card[data-height='1'] {
-  --lift: 10px 8px 14px var(--card-shadow);
-}
-
-/* Held 10px higher (`.drift`'s `--rise`), its shadow further off and fainter. */
-.session-card[data-height='2'] {
-  --lift: 18px 14px 22px var(--card-shadow-faint);
 }
 
 .session-card .card-title {
@@ -528,50 +571,36 @@
 
 @media (min-width: 768px) {
   .hero-stage {
-    --kpx: clamp(0.62px, 0.62px + (100vw - 768px) * 0.000648, 0.9px);
+    --kpx: clamp(0.62px, 0.62px + (100vw - 768px) * 0.000417, 0.8px);
   }
 }
 
 /*
- * Between a phone and a desktop the floor keeps the desktop's plan, drawn smaller, and the cards
- * have no room to desk-box's right, so they stand under its front corner.
+ * Narrow: desk-box stands at the left, its cards' column beside it, and the laptop below both,
+ * its lid clear of the column's last shadow. The column's height is its three cards (2.55em and
+ * their border each), their shadows (0.9em) and gaps (15px), and the h2 and two h1 heights.
  */
-@media (max-width: 1199px) {
+@media (max-width: 999px) {
   .hero-stage {
-    --lap-x: calc(50cqw - 72px);
-    --lap-y: calc(36px + 405 * var(--kpx));
-  }
+    --lap-x: calc(50cqw - 32 * var(--kpx));
+    --col-height: calc(10.35 * var(--reading) + 206.7 * var(--kpx) + 51px);
+    --lap-y: calc(22px + var(--col-height) + 12px + 385 * var(--kpx));
+    --box-want-x: calc(132 * var(--kpx) + 6px);
+    --box-want-y: calc(8px + 305.5 * var(--kpx));
+    --col-x: calc(var(--box-x) + 132 * var(--kpx) + 10px);
+    --col-y: calc(var(--box-y) - 305.5 * var(--kpx) + 14px);
 
-  .drift:nth-child(1) {
-    --cx: calc(var(--corner-x) - 65px);
-    --cy: calc(var(--corner-y) + 33px);
-  }
-
-  .drift:nth-child(2) {
-    --cx: calc(var(--corner-x) - 45px);
-    --cy: calc(var(--corner-y) + 74px);
-  }
-
-  .drift:nth-child(3) {
-    --cx: calc(var(--corner-x) - 76px);
-    --cy: calc(var(--corner-y) + 126px);
+    height: calc(var(--lap-y) + 134 * var(--kpx) + 20px);
   }
 }
 
-/*
- * A phone: the stage comes before the subhead and the install (styles.css orders the hero), so
- * the fold shows it. Desk-box stands a lattice step nearer, the cards line up under both machines,
- * and parts under 0.75px at this scale step out.
- */
+/* A phone: the stage comes before the subhead and the install (styles.css orders the hero). */
 @media (max-width: 599px) {
   .hero-stage {
-    --lap-x: calc(50cqw - 30px);
-    --lap-y: 200px;
-    --box-dx: 144px;
-    --box-dy: -41.6px;
     margin-top: 18px;
   }
 
+  /* Parts under 0.75px at this scale step out. */
   .machine .fine {
     display: none;
   }
@@ -587,21 +616,6 @@
 
   .demo-pause {
     padding: 0 8px;
-  }
-
-  .drift:nth-child(1) {
-    --cx: calc(var(--corner-x) - 148px);
-    --cy: calc(var(--corner-y) + 69px);
-  }
-
-  .drift:nth-child(2) {
-    --cx: calc(var(--corner-x) - 128px);
-    --cy: calc(var(--corner-y) + 105px);
-  }
-
-  .drift:nth-child(3) {
-    --cx: calc(var(--corner-x) - 157px);
-    --cy: calc(var(--corner-y) + 150px);
   }
 }
 

@@ -408,7 +408,7 @@ code {
   display: grid;
   grid-template-areas: 'eyebrow' 'title' 'lede' 'install' 'stage' 'beats';
   justify-items: center;
-  padding-block: clamp(20px, 3vw, 40px) clamp(40px, 6vw, 72px);
+  padding-block: clamp(16px, 1.7vw, 24px) clamp(40px, 6vw, 72px);
   overflow-x: clip;
   text-align: center;
 }
@@ -431,14 +431,25 @@ code {
   white-space: nowrap;
 }
 
+/*
+ * At -0.04em Nunito's 1000 fuses c into l ("close" read "dose"). At this tracking every pair of
+ * the headline keeps its own ink, measured on the rendered glyphs at 40px and at 65px
+ * (scripts/probe-kit/specs/site-hero.ts); f's hook reaches past its advance, so "ft" takes a
+ * kern of its own (`.kern`).
+ */
 h1 {
   grid-area: title;
-  margin-top: clamp(10px, 1.4vw, 18px);
-  font-size: clamp(2.5rem, 1rem + 4.2vw, 4.75rem);
+  margin-top: clamp(8px, 1vw, 14px);
+  font-size: clamp(2.5rem, 1rem + 3.4vw, 4.25rem);
   font-weight: 1000;
   line-height: 0.98;
-  letter-spacing: -0.04em;
+  letter-spacing: calc(0.5px + 0.01em);
   text-wrap: balance;
+}
+
+/* The space after a glyph whose ink reaches into the next one ("ft"). */
+.kern {
+  letter-spacing: calc(1px + 0.05em);
 }
 
 .stem {
@@ -462,9 +473,9 @@ h1 {
 .lede {
   grid-area: lede;
   max-width: 66ch;
-  margin-top: clamp(16px, 2vw, 22px);
+  margin-top: clamp(10px, 1vw, 14px);
   color: var(--soft-on-paper);
-  font-size: clamp(1.06rem, 0.98rem + 0.45vw, 1.35rem);
+  font-size: clamp(1.06rem, 0.98rem + 0.3vw, 1.25rem);
   font-weight: 550;
   text-wrap: pretty;
 }
@@ -472,18 +483,21 @@ h1 {
 .install {
   grid-area: install;
   max-width: 620px;
-  margin-top: clamp(20px, 2.6vw, 30px);
+  margin-top: clamp(14px, 1.3vw, 20px);
   scroll-margin-top: 24px;
   text-align: left;
 }
 
-/* The label and the channel switch share a line; where they cannot, the switch drops to its own, trailing. */
+/*
+ * The label and the channel switch share a line; where they cannot, the switch drops to its own,
+ * trailing, a clear row under the label.
+ */
 .install-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0 12px;
+  gap: 10px 12px;
   margin-bottom: 8px;
 }
 
@@ -598,14 +612,10 @@ h1 {
 
 .install-note {
   max-width: 620px;
-  margin-top: 12px;
+  margin-top: 8px;
   color: var(--soft-on-paper);
   font-size: 0.95rem;
   text-wrap: balance;
-}
-
-.install-more {
-  margin-top: 2px;
 }
 
 /* Features */
@@ -714,16 +724,19 @@ h1 {
 }
 
 /*
- * A segmented switch (the release channel, the colour scheme) is the page's tabs on paper: the
- * chosen tab is ink, the others are ink text. Its tabs are as tall as a label's line, so the row
- * adds no height; the pseudo-element keeps the touch target.
+ * A segmented switch (the release channel, the colour scheme) is the page's tabs on a track: the
+ * chosen tab is ink, the others are ink text. The track's corner is a control's (12px) and the
+ * tabs' are concentric inside its 4px inset (8px), so nothing is pill-shaped; the
+ * pseudo-element keeps the touch target.
  */
 .tabs.segmented {
   position: relative;
   grid-area: auto;
   flex-direction: row;
   gap: 2px;
-  margin-block: -4px;
+  padding: 4px;
+  border-radius: var(--radius-control);
+  background: color-mix(in oklab, var(--ink) 6%, var(--paper));
 }
 
 .install-head .segmented {
@@ -741,7 +754,7 @@ h1 {
   min-height: 0;
   height: 30px;
   padding: 0 12px;
-  border-radius: var(--radius-control);
+  border-radius: calc(var(--radius-control) - 4px);
   color: var(--soft-on-paper);
   font-size: 0.88rem;
   font-weight: 900;
@@ -768,10 +781,13 @@ h1 {
   padding: 0 8px;
 }
 
-/* One bar for the group: it slides under the chosen tab. tabs.ts sets its width and transform. */
+/*
+ * One bar for the group: it slides under the chosen tab, 5px above the tab's foot (the track's
+ * 4px inset below it). tabs.ts sets its width and transform.
+ */
 .tab-slider {
   position: absolute;
-  bottom: 5px;
+  bottom: 9px;
   left: 0;
   height: 2px;
   border-radius: 2px;
