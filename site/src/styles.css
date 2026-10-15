@@ -341,7 +341,9 @@ h1 {
   align-items: center;
   gap: 10px;
   max-width: 620px;
-  padding: 8px 8px 8px 18px;
+  /* How far the Copy button sits in from the bar's edge: its corner is the bar's less this. */
+  --cmd-inset: 8px;
+  padding: var(--cmd-inset) var(--cmd-inset) var(--cmd-inset) 18px;
   border-radius: var(--radius-control);
   background: var(--ink);
   color: var(--paper);
@@ -362,7 +364,8 @@ h1 {
   min-height: 44px;
   padding: 0 16px;
   border: 0;
-  border-radius: var(--radius-control);
+  /* Concentric with the bar; never below DESIGN.md's 2px hair (`rounded.hair`). */
+  border-radius: max(2px, var(--radius-control) - var(--cmd-inset));
   background: var(--vermilion);
   color: var(--ink);
   font: inherit;
@@ -1835,6 +1838,11 @@ mark {
   gap: var(--facts-gap);
 }
 
+/* Three facts take three columns, so the row has no empty cell. */
+.facts-group-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .facts-subhead {
   margin-top: clamp(4px, 1vw, 12px);
   margin-bottom: calc(var(--facts-gap) * -0.5);
@@ -2111,6 +2119,10 @@ mark {
     column-gap: 18px;
   }
 
+  .facts-group-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .fact .icon {
     font-size: 1.8rem;
   }
@@ -2140,7 +2152,8 @@ mark {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
-    padding: 16px 14px 14px;
+    --cmd-inset: 14px;
+    padding: 16px var(--cmd-inset) var(--cmd-inset);
   }
 
   .cmd-alert {
