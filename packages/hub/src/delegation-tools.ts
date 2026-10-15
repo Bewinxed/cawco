@@ -7,6 +7,7 @@ import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   artifactCreate,
+  artifactDelete,
   artifactPromote,
   artifactRead,
   artifactShow,
@@ -1124,6 +1125,13 @@ export function handoffTools(deps: HandoffDeps) {
         idempotentHint: false,
         openWorldHint: false,
       }
+    ),
+    tool(
+      artifactDelete.name,
+      artifactDelete.description,
+      artifactDelete.input,
+      async ({ id }) =>
+        json(await actions.artifactCall("DELETE", `/${encodeURIComponent(id)}`))
     ),
     tool(
       commentRead.name,

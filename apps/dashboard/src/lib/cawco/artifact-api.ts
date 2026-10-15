@@ -36,6 +36,17 @@ export async function showArtifact(
 }
 
 /**
+ * Removes one of a session's artifacts; a panel that showed it follows its
+ * frame to the next newest, or closes.
+ */
+export async function removeArtifact(
+  instanceId: string,
+  id: string
+): Promise<void> {
+  await ok(await fetch(artifactsPath(instanceId, id), { method: "DELETE" }));
+}
+
+/**
  * This tab's word to the hub that its pane has artifact `id` on screen at the
  * open frame's `revision`, or why it could not load it: the agent's
  * artifact_create and artifact_show answer from it.

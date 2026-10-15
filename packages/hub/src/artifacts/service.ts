@@ -1,15 +1,16 @@
 /**
- * Artifacts (Projects spec §5.10): what the five tools and the panel do to
+ * Artifacts (Projects spec §5.10): what the six tools and the panel do to
  * them. A session makes an artifact with `artifact_create`, changes it with
  * `artifact_update`, reads it with `artifact_read`, brings it to the front
- * of its panel with `artifact_show` and, in a project, keeps it in the
- * project's folder with `artifact_promote`; the person's picks, notes and values
+ * of its panel with `artifact_show`, in a project keeps it in the
+ * project's folder with `artifact_promote`, and removes one it superseded
+ * with `artifact_delete`; the person's picks, notes and values
  * live in the artifact's doc (docs.ts). They are never the person's words in
  * the session: when the person sends, the session hears that the artifact
  * has new responses ({@link ArtifactServiceDeps.signal}) and reads them
  * itself with `artifact_read` and `comment_read`.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentRow,
@@ -421,7 +422,14 @@ export const legacyName = (place: string): string =>
     .replaceAll(/^-+|-+$/g, "")
     .slice(0, 63) || "preview";
 
+/** What `artifact_delete` and the panel's Remove answer: what the session's panel shows now, or null for nothing. */
+export interface Removed {
+  showing: { id: string; kind: ArtifactKind; name: string } | null;
+}
+
 export interface ArtifactServiceDeps {
+  /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
+  close: (instanceId: string) => Promise<void>;
   db: ArtifactsDb;
   /**
    * Whether `workspaceId` holds a work item of the session's delegates: one it
@@ -541,6 +549,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       404,
       `No artifact of this session holds pin ${pinId}. comment_read lists its pins with their ids.`
     );
+  };
+
+  /**
+   * The one way an artifact goes: its live doc let go and every socket on it
+   * ended, its row taken out (its log, and so its pins and comments, and a
+   * panel's shown row with it: schema.ts's cascades), and its files (a
+   * page's HTML, a picture). A promoted copy in the project's folder is the
+   * project's and stays.
+   */
+  const discard = (row: ArtifactRow) => {
+    docs.drop(row.id);
+    db.remove(row.id);
+    rmSync(join(deps.root, row.id), { recursive: true, force: true });
   };
 
   const writePage = (id: string, html: string) => {
@@ -1221,7 +1242,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!(shown.started || before) && input.kind === "preview") {
         // A preview nothing could start shows nothing: it is not kept. One
         // whose server did not answer stays in the panel, its failure on it.
-        db.remove(row.id);
+        discard(row);
         throw new ArtifactRefusal(503, shown.why);
       }
       return {
@@ -1428,6 +1449,36 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         throw new ArtifactRefusal(503, shown.why);
       }
       return openedOf(shown);
+    },
+
+    /**
+     * Removes one of the session's artifacts (`artifact_delete`, the panel's
+     * Remove). When its panel showed it, the panel shows the session's next
+     * newest artifact (a draft canvas still in the composer is not one), or
+     * nothing; every view hears it on the frames it already follows.
+     */
+    remove: async (instanceId: string, id: string): Promise<Removed> => {
+      const instance = sessionOf(instanceId);
+      const row = own(instance, id);
+      const wasShown = deps.showing(instance.id) === row.id;
+      discard(row);
+      if (!wasShown) {
+        const shown = deps.showing(instance.id);
+        const now = shown === undefined ? undefined : db.get(shown);
+        return {
+          showing: now ? { id: now.id, kind: now.kind, name: now.name } : null,
+        };
+      }
+      const next = db
+        .ofInstance(instance.id)
+        .find(
+          (other) => docs.doc(other.id).getMap("meta").get("draft") !== true
+        );
+      if (next && (await deps.open(next)).ok) {
+        return { showing: { id: next.id, kind: next.kind, name: next.name } };
+      }
+      await deps.close(instance.id);
+      return { showing: null };
     },
 
     /**

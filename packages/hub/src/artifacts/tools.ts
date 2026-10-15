@@ -23,6 +23,7 @@ export const ARTIFACT_TOOLS = [
   "artifact_read",
   "artifact_show",
   "artifact_promote",
+  "artifact_delete",
   "comment_read",
   "comment_reply",
   "comment_resolve",
@@ -31,7 +32,7 @@ export const ARTIFACT_TOOLS = [
 const id = z
   .string()
   .regex(/^[0-9a-f-]{36}$/)
-  .describe("The artifact's id, from artifact_create.");
+  .describe("Its id, from artifact_create.");
 
 /** An Excalidraw element skeleton: its type, an id you choose, and Excalidraw's own fields. */
 const skeleton = z.looseObject({
@@ -59,12 +60,11 @@ const mermaid = z
 export const artifactCreate = {
   name: "artifact_create",
   description:
-    "Make an artifact and open it in your panel beside the transcript. A page is HTML you wrote: `html`, or `dir` " +
+    "Make an artifact and open it in your panel. A page is `html`, or `dir` " +
     "holding a decision page's page.html (decision-page skill); in a project, neither builds decisions/<name>/page.html " +
     "from its folder. A preview is your dev server (`port`) or a folder (`dir`). A canvas is a drawing from `elements` " +
-    "or `mermaid`, or empty for the person. The same kind and name again replaces it in place and keeps the person's " +
-    "picks. Answers its id and `opened`: true once a dashboard showing your session has it on screen (up to 10 s), " +
-    "else false with `why`.",
+    "or `mermaid`, or empty for the person. The same kind and name again replaces it in place, picks kept. " +
+    "Answers its id and `opened`: true once a dashboard shows it (within 10 s), else false with `why`.",
   input: {
     kind: z.enum(["page", "preview", "canvas"]),
     name: z
@@ -108,8 +108,8 @@ export const artifactCreate = {
 export const artifactUpdate = {
   name: "artifact_update",
   description:
-    "Change one of your artifacts in place. `html` replaces a page: every open view morphs to it without a reload, and " +
-    "picks, typed fields, focus and scroll stay. `patch` is a " +
+    "Change one of your artifacts in place. `html` replaces a page without a reload; picks, fields, focus and " +
+    "scroll stay. `patch` is a " +
     'JSON Patch (RFC 6902) over its state, keyed by choice id or field name, like [{"op":"replace","path":"/hero/options","value":["b"]}]; ' +
     "all of it applies or none. Answers the state after the change. A canvas takes `elements` (added, or replacing " +
     'the one of the id given), `delete` (ids) or `mermaid` (added below); it answers its outline and "<id> changed ' +
@@ -144,7 +144,7 @@ export const artifactRead = {
   description:
     "Read the person's picks, notes and values on one of your artifacts, each with the page hash it was made on. " +
     "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. " +
-    "When the person sends, you hear that the artifact has new responses, with the `since` to read from. A canvas answers " +
+    "When the person sends, you are told the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture.",
   input: {
@@ -157,17 +157,25 @@ export const artifactRead = {
 export const artifactShow = {
   name: "artifact_show",
   description:
-    "Bring one of your artifacts to the front of your panel when the person should look at it again. Answers `opened`: " +
-    "true once a dashboard showing your session has it on screen (up to 10 s), else false with `why`.",
+    "Bring one of your artifacts to the front of your panel for the person to look at again. Answers " +
+    "`opened` as artifact_create does.",
   input: { id },
 };
 
 export const artifactPromote = {
   name: "artifact_promote",
   description:
-    "Keep one of your artifacts with your project when a page, canvas or preview is worth keeping: commits it to " +
-    "artifacts/<name>/ in the project's folder, which outlives this session and reaches every checkout. Again " +
-    "later commits it as it stands then. Answers `commit` and `path`; outside a project it is refused.",
+    "Keep an artifact worth keeping with your project: commits it to artifacts/<name>/ in the project's folder, " +
+    "which outlives this session. Again later commits it as it stands then. Answers `commit` and `path`; refused " +
+    "outside a project.",
+  input: { id },
+};
+
+export const artifactDelete = {
+  name: "artifact_delete",
+  description:
+    "Remove an artifact of yours a newer one superseded, once that one is up. Its picks and pins go too; a " +
+    "promoted copy stays. Answers `showing`: what your panel shows now, or null.",
   input: { id },
 };
 
@@ -179,8 +187,8 @@ const pin = z
 export const commentRead = {
   name: "comment_read",
   description:
-    "Read the person's pins on your artifacts: each numbered, what it stands on (selector, source file:line, text, " +
-    "ink box), its thread, and the page address they sent from. No artifact: all of yours.",
+    "Read the person's pins on your artifacts: each numbered, its anchor (selector, file:line, text, ink box), " +
+    "its thread, and the page address they sent from. No artifact: all of yours.",
   input: {
     artifact: id.optional(),
     filter: z.enum(["open", "resolved", "all"]).default("open"),
@@ -195,8 +203,8 @@ export const commentRead = {
 export const commentReply = {
   name: "comment_reply",
   description:
-    "Answer a pin in its thread, where the person reads it on the page. After a change, name the files you changed; " +
-    "after a question, ask it here and leave the pin open.",
+    "Answer a pin in its thread on the page. After a change, name the files you changed; ask a question here " +
+    "and leave the pin open.",
   input: {
     pin,
     text: z.string().min(1).max(COMMENT_LIMITS.text),

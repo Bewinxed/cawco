@@ -666,7 +666,7 @@ export interface HandoffActions {
    * under its `/artifacts`: the hub's JSON answer, or its refusal thrown.
    */
   readonly artifactCall: (
-    method: "GET" | "POST" | "PATCH",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     body?: unknown
   ) => Promise<unknown>;

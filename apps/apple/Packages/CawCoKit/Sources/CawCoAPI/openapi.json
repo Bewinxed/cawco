@@ -4149,6 +4149,39 @@
             }
           }
         }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiInstancesByIdArtifactsByArtifact",
+        "responses": {
+          "200": {
+            "description": "deleteApiInstancesByIdArtifactsByArtifact 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Removed"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/instances/{id}/artifacts/comments": {
@@ -28868,6 +28901,31 @@
           "seq",
           "state"
         ]
+      },
+      "Removed": {
+        "description": "What `artifact_delete` and the panel's Remove answer: what the session's panel shows now, or null for nothing.",
+        "type": "object",
+        "properties": {
+          "showing": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ArtifactKind"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "name"
+            ]
+          }
+        }
       },
       "CommentRead": {
         "description": "What `comment_read` answers: each of the session's artifacts with pins\nthat match, the page's address the person last sent from, and the time to\npass as the next `since`. A pin on ink carries the ink's box in the page.",

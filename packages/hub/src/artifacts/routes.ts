@@ -1,6 +1,6 @@
 /**
  * The artifact routes (Projects spec §5.10), on the session that made the
- * artifact: the panel's list and its Show, what the five tools call, and the
+ * artifact: the panel's list, its Show and Remove, what the six tools call, and the
  * lookup an artifact's own tab opens with. A session reaches only its own
  * artifacts; any other id is 404. The person's Send is on the preview
  * listener, beside the doc's socket (sync.ts `artifactSend`).
@@ -182,6 +182,14 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
+    // Removes the artifact; the panel that showed it shows the next newest, or nothing (artifact_delete, the panel's Remove).
+    .delete("/api/instances/:id/artifacts/:artifact", async ({ params }) => {
+      try {
+        return await artifacts.remove(params.id, params.artifact);
+      } catch (error) {
+        return refused(error);
+      }
+    })
     // The person's pins on the session's artifacts, with their threads (comment_read).
     .get(
       "/api/instances/:id/artifacts/comments",

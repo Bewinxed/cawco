@@ -9061,6 +9061,16 @@ export const createServer = (
   // listener; the person's Send tells the session to read it (artifacts/).
   const artifactDocs = createArtifactDocs({ db: db.artifacts });
   const artifacts: Artifacts = createArtifacts({
+    // The panel closes at once; a preview's machine that can't stop its
+    // listener now drops it when it next registers (reconcilePreviews).
+    close: async (instanceId) => {
+      const closed = await closePreview(instanceId);
+      if (!closed.ok) {
+        console.warn(
+          `[artifacts] ${instanceId}: its preview's listener was not stopped: ${closed.error}`
+        );
+      }
+    },
     db: db.artifacts,
     docs: artifactDocs,
     root: ARTIFACTS_ROOT,

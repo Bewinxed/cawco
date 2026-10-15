@@ -55,6 +55,8 @@ export type ChangeOrigin = { client: ArtifactClient } | "agent" | "hub";
 
 /** A joined client: the hub sends it every update another made. */
 export interface ArtifactClient {
+  /** Ends its socket: the artifact was removed ({@link ArtifactDocs.drop}). */
+  close: () => void;
   /** A canvas's host page, which can convert the agent's writes (the socket's `screen` query). */
   screen: boolean;
   send: (update: Uint8Array) => void;
@@ -69,6 +71,8 @@ interface Loaded {
 export interface ArtifactDocs {
   /** The artifact's doc, loaded from its log when it is not in memory. */
   doc: (id: string) => Doc;
+  /** The artifact was removed: every joined client's socket is ended and its doc let go. */
+  drop: (id: string) => void;
   /** Starts sending `client` every update another makes. */
   join: (id: string, client: ArtifactClient) => Doc;
   leave: (id: string, client: ArtifactClient) => void;
@@ -210,6 +214,20 @@ export const createArtifactDocs = (deps: { db: ArtifactsDb }): ArtifactDocs => {
 
   return {
     doc: (id) => load(id).doc,
+    drop: (id) => {
+      const entry = loaded.get(id);
+      if (!entry) {
+        return;
+      }
+      loaded.delete(id);
+      clearTimeout(entry.idle);
+      const clients = [...entry.clients];
+      entry.clients.clear();
+      for (const client of clients) {
+        client.close();
+      }
+      entry.doc.destroy();
+    },
     join: (id, client) => {
       const entry = load(id);
       entry.clients.add(client);

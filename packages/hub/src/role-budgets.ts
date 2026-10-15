@@ -65,7 +65,9 @@ import type { Tasks } from "./tasks";
  * two commits landed with iOS compile errors no Linux check saw, and the
  * gate that stops that is the person's per project. About 30 tokens for
  * the lead, its description cut to the kinds that always ask (lead 15,638
- * measured).
+ * measured). `artifact_delete` (a superseded artifact leaves the panel) fits
+ * the same budgets: the artifact and comment tools' words were cut to pay
+ * for it (worker 23,877, delegate 6,440, lead 15,641 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 23_880,
