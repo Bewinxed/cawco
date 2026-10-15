@@ -103,11 +103,9 @@ const resultOf = (body: string): { error: boolean; text: string } => {
         : JSON.stringify(last.content);
     return { error: !said.includes(NAMED), text: said };
   }
-  const block = (
-    Array.isArray(last?.content) ? last.content : []
-  ).find((part: { type?: string }) => part.type === "tool_result") as
-    | { is_error?: boolean; content?: unknown }
-    | undefined;
+  const block = (Array.isArray(last?.content) ? last.content : []).find(
+    (part: { type?: string }) => part.type === "tool_result"
+  ) as { is_error?: boolean; content?: unknown } | undefined;
   const content = block?.content;
   const parts = Array.isArray(content) ? content : [];
   const said =
@@ -117,13 +115,44 @@ const resultOf = (body: string): { error: boolean; text: string } => {
   return { error: block?.is_error === true || !block, text: said };
 };
 
+/** Why a workspace boundary cannot start here (bwrap inside another sandbox); nothing when it can. */
+const nestingRefused = async (): Promise<string | undefined> => {
+  const nested =
+    await Bun.$`bwrap --unshare-user --unshare-net --die-with-parent --ro-bind / / --dev /dev --proc /proc true`
+      .quiet()
+      .nothrow();
+  return nested.exitCode === 0
+    ? undefined
+    : nested.stderr.toString().trim() || `bwrap exited ${nested.exitCode}`;
+};
+
+/** What a session's case fell short of, or nothing when its set_title was offered, answered and applied. */
+const shortfall = (
+  probe: Probe | undefined,
+  titled: boolean
+): string | undefined => {
+  if (!probe) {
+    return "its session never sent a request";
+  }
+  if (probe.offered && probe.result && !probe.result.error && titled) {
+    return;
+  }
+  const result = probe.result
+    ? `${probe.result.error ? "error" : "ok"} "${probe.result.text.slice(0, 160)}"`
+    : "none";
+  const loaded = probe.loaded ? `, loaded ${probe.loaded}` : "";
+  return `offered ${probe.offered ?? "never asked"}, result ${result}, row titled ${titled}${loaded}`;
+};
+
 const newTag = () => crypto.randomUUID().replaceAll("-", "").slice(0, 8);
 
 /**
  * Whose request this is: its own tag is the first marker it was sent; its
  * case, the last marker with that tag (a later message moves it on).
  */
-const markedBy = (request: Seen): { own: string; phase: string } | undefined => {
+const markedBy = (
+  request: Seen
+): { own: string; phase: string } | undefined => {
   const marks = [...request.all.matchAll(MARK)];
   const own = marks[0]?.[1];
   const phase = marks.filter((mark) => mark[1] === own).at(-1)?.[2];
@@ -267,23 +296,9 @@ const spec: Spec = {
         )
       );
       const failed = keys.flatMap((key) => {
-        const probe = probes.get(key);
         const [own, phase] = key.split("-");
-        const titled = titles.has(titleOf(own, phase));
-        if (probe?.offered && probe.result && !probe.result.error && titled) {
-          return [];
-        }
-        return [
-          `${key}: ${
-            probe
-              ? `offered ${probe.offered ?? "never asked"}, result ${
-                  probe.result
-                    ? `${probe.result.error ? "error" : "ok"} "${probe.result.text.slice(0, 160)}"`
-                    : "none"
-                }, row titled ${titled}${probe.loaded ? `, loaded ${probe.loaded}` : ""}`
-              : "its session never sent a request"
-          }`,
-        ];
+        const why = shortfall(probes.get(key), titles.has(titleOf(own, phase)));
+        return why ? [`${key}: ${why}`] : [];
       });
       if (
         !kit.check(
@@ -306,7 +321,10 @@ const spec: Spec = {
         .query<{ title: string; status: string; error: string | null }>(
           "SELECT title, status, last_error AS error FROM instances WHERE title LIKE 'MCP%'"
         )
-        .map((row) => `${row.title}: ${row.status}${row.error ? ` — ${row.error}` : ""}`);
+        .map(
+          (row) =>
+            `${row.title}: ${row.status}${row.error ? ` — ${row.error}` : ""}`
+        );
       await mkdir(kit.out, { recursive: true });
       await writeFile(
         join(kit.out, "evidence.txt"),
@@ -350,10 +368,28 @@ const spec: Spec = {
         )
       )
     );
+    const viaStart = childrenA.filter((_, i) => i % 2 === 0);
+    const viaDelegate = childrenA.filter((_, i) => i % 2 === 1);
     await settle(
-      "A: ten sessions started at once and the ten children they start (five start_session, five delegate) each call set_title, answered by the hub",
-      [...tagsA, ...childrenA].map((one) => `${one}-A`)
+      "A: ten sessions started at once and the five children they start with start_session each call set_title, answered by the hub",
+      [...tagsA, ...viaStart].map((one) => `${one}-A`)
     );
+    // A delegate runs in its workspace's boundary, which cannot start inside
+    // another one (spec boundary-quiet's own check).
+    const refused = await nestingRefused();
+    if (refused === undefined) {
+      await settle(
+        "A: the five children they start with delegate each call set_title, answered by the hub",
+        viaDelegate.map((one) => `${one}-A`)
+      );
+    } else {
+      kit.check(
+        "A: a workspace boundary can start here, for the five delegates (run this spec on the host, not inside a workspace)",
+        false,
+        refused
+      );
+      failedCases.push("A: delegates need a boundary");
+    }
 
     // B. The hub restarted between the launch's credential and its slot.
     const keysB: string[] = [];
