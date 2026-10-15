@@ -1249,7 +1249,7 @@ async function unlinkMarketplace(
     join(source, ".claude-plugin", "marketplace.json"),
     JSON.stringify({ name: MARKET, owner: { name: "Probe" }, plugins: [] })
   );
-  await fleet.api("/api/fleet/marketplaces", { source });
+  await fleet.api("/api/fleet/marketplace-links", { source });
   await until(
     "the machine tracking the marketplace",
     () =>

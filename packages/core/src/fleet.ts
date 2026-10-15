@@ -750,6 +750,32 @@ export interface MarketplacePluginInfo {
 }
 
 /**
+ * A marketplace source as the hub read it: what its `marketplace.json` calls
+ * it and what it offers, or why it could not be read. The hub reads it after
+ * the request that asked has answered (`fetching`), and the read that lands
+ * is a `fleet.fetch` frame.
+ */
+export interface MarketplaceRead {
+  error?: string;
+  fetching?: boolean;
+  /** What it calls itself: the only name it can be linked under. */
+  name?: string;
+  plugins?: MarketplacePluginInfo[];
+  source: string;
+}
+
+/**
+ * A link of the marketplace at `source`, asked for: under way (`fetching`),
+ * linked (`marketplace`, the row), or refused (`error`).
+ */
+export interface MarketplaceLink {
+  error?: string;
+  fetching?: boolean;
+  marketplace?: FleetMarketplace;
+  source: string;
+}
+
+/**
  * One MCP server a machine really has, wherever it came from. What
  * {@link INSPECT_CONFIG} reports — the fleet's own rows included, so a reader
  * sees one list rather than two halves of one.

@@ -43,6 +43,8 @@ import type {
   LaunchGrant,
   MachineHookScript,
   MachineMemorySet,
+  MarketplaceLink,
+  MarketplaceRead,
   ModelInfo,
   MoveEnded,
   MoveProgressFrame,
@@ -403,6 +405,7 @@ import {
   fleetChoicesRoutes,
   setFleetChoices,
 } from "./fleet-choices";
+import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
@@ -465,9 +468,8 @@ import {
 import { createPlans, planRoutes } from "./plans";
 import {
   isHubDirectory,
-  marketplaceCatalog,
-  marketplaceName,
   pluginMarketplace,
+  readMarketplace,
   resolveMarketplacePlugins,
 } from "./plugins";
 import {
@@ -13552,16 +13554,14 @@ export const createServer = (
   const pluginRow = (row: FleetPlugin): FleetPlugin =>
     fetches.has(`plugin:${row.id}`) ? { ...row, fetching: true } : row;
 
-  const announceFetch = (
-    row: ({ skill: FleetSkillMeta } | { plugin: FleetPlugin }) & {
-      removed?: true;
-    }
-  ): void =>
+  const announceFetch = (news: FetchNews): void => {
     registry.broadcast({
       verb: "frames",
       machineId: "hub",
-      payload: { kind: "fleet.fetch", ...row },
+      payload: { kind: "fleet.fetch", ...news },
     });
+    heardFetch(news);
+  };
 
   const REMOVED_WHILE_FETCHING = "Removed while it was being fetched.";
 
@@ -13675,6 +13675,90 @@ export const createServer = (
     return carried;
   };
 
+  /** Marketplace sources being read at the hub, by source. */
+  const marketplaceReads = new Map<string, Promise<MarketplaceRead>>();
+
+  /**
+   * Reads a marketplace source at the hub — what it calls itself and what it
+   * offers — announced as it starts and as it lands, as {@link fetchSkill}
+   * is. A second read of a source joins the one under way. Never rejects: a
+   * read that failed carries its sentence.
+   */
+  const readMarketplaceSource = (source: string): Promise<MarketplaceRead> => {
+    const running = marketplaceReads.get(source);
+    if (running !== undefined) {
+      return running;
+    }
+    const work = readMarketplace(source)
+      .then(
+        ({ name, plugins }): MarketplaceRead => ({ source, name, plugins }),
+        (error: unknown): MarketplaceRead => ({
+          source,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      )
+      .then((read) => {
+        marketplaceReads.delete(source);
+        announceFetch({ marketplace: read });
+        return read;
+      });
+    marketplaceReads.set(source, work);
+    announceFetch({ marketplace: { source, fetching: true } });
+    return work;
+  };
+
+  /** Marketplace links under way, by source. */
+  const marketplaceLinks = new Set<string>();
+
+  /** What a landed read of `source` comes to as a link: the row it linked, or why not. */
+  const linkRead = (read: MarketplaceRead): MarketplaceLink => {
+    const { source, name } = read;
+    if (!name) {
+      return { source, error: read.error ?? `${source} could not be read` };
+    }
+    const existing = db
+      .fleetConfig()
+      .marketplaces.find((row) => row.name === name);
+    if (existing && existing.source !== source) {
+      return {
+        source,
+        error: `A marketplace called ${name} is already linked, from ${existing.source}. A machine holds one marketplace per name.`,
+      };
+    }
+    const marketplace = db.putMarketplace({ name, source });
+    fanOutFleet();
+    return { source, marketplace };
+  };
+
+  /**
+   * Links the marketplace at `source` under the name its manifest gives,
+   * once it has been read; the link's outcome is a `fleet.fetch` frame. A
+   * second link of a source joins the one under way.
+   */
+  const linkMarketplace = (source: string): MarketplaceLink => {
+    if (!marketplaceLinks.has(source)) {
+      marketplaceLinks.add(source);
+      announceFetch({ link: { source, fetching: true } });
+      detach(
+        readMarketplaceSource(source).then((read) => {
+          let link: MarketplaceLink;
+          try {
+            link = linkRead(read);
+          } catch (error) {
+            link = {
+              source,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+          marketplaceLinks.delete(source);
+          announceFetch({ link });
+        }),
+        "marketplace link"
+      );
+    }
+    return { source, fetching: true };
+  };
+
   // Every row the hub holds no bytes for, plugin or skill: never fetched, or
   // fetched and failed, or staged by a fetch a restart cut short. Done once at
   // boot rather than on every sync: a resolved row is bytes the fleet already
@@ -13711,13 +13795,12 @@ export const createServer = (
   const nameMarketplacesByManifest = async (): Promise<void> => {
     let moved = false;
     for (const { name, source } of db.fleetConfig().marketplaces) {
-      let own: string;
-      try {
-        // biome-ignore lint/performance/noAwaitInLoops: one marketplace fetched at a time, as a resolve does it
-        own = await marketplaceName(source);
-      } catch (error) {
+      // biome-ignore lint/performance/noAwaitInLoops: one marketplace fetched at a time, as a resolve does it
+      const read = await readMarketplaceSource(source);
+      const own = read.name;
+      if (!own) {
         console.warn(
-          `[hub] marketplace ${name}: could not read its name from ${source}: ${error instanceof Error ? error.message : String(error)}`
+          `[hub] marketplace ${name}: could not read its name from ${source}: ${read.error}`
         );
         continue;
       }
@@ -20056,76 +20139,29 @@ export const createServer = (
       .get("/api/fleet-watch/notices", (): { notices: FleetWatchNotice[] } => ({
         notices: db.watchNotices(),
       }))
-      // What a source's marketplace calls itself, for the link form to show
-      // before anything is linked.
+      // A marketplace source read: what it calls itself, for the link form to
+      // show before anything is linked, and what it offers, which is what
+      // Browse lists for a linked one — read by the hub from the source, the
+      // same fetch its installs resolve from, so no machine's copy is asked (a
+      // directory on the hub is a copy no other machine has). Answers at once,
+      // `fetching`; the read is a `fleet.fetch` frame (`readMarketplaceSource`).
       .get(
-        "/api/fleet/marketplace-name",
+        "/api/fleet/marketplace-read",
         { query: t.Object({ source: t.String({ minLength: 1 }) }) },
-        async ({ query, status }) => {
-          try {
-            return { name: await marketplaceName(query.source) };
-          } catch (error) {
-            return status(
-              400,
-              error instanceof Error ? error.message : String(error)
-            );
-          }
+        ({ query }): MarketplaceRead => {
+          const source = query.source.trim();
+          detach(readMarketplaceSource(source), "marketplace read");
+          return { source, fetching: true };
         }
       )
       // Linked under the name its own manifest gives, the one name Claude
-      // Code knows it by (plugins.ts `marketplaceName`), never a typed one.
+      // Code knows it by (plugins.ts `readMarketplace`), never a typed one.
+      // Answers at once, `fetching`; the link's outcome — the row, or why
+      // not — is a `fleet.fetch` frame (`linkMarketplace`).
       .post(
-        "/api/fleet/marketplaces",
+        "/api/fleet/marketplace-links",
         { body: t.Object({ source: t.String({ minLength: 1 }) }) },
-        async ({ body, status }) => {
-          const source = body.source.trim();
-          let name: string;
-          try {
-            name = await marketplaceName(source);
-          } catch (error) {
-            return status(
-              400,
-              error instanceof Error ? error.message : String(error)
-            );
-          }
-          const existing = db
-            .fleetConfig()
-            .marketplaces.find((row) => row.name === name);
-          if (existing && existing.source !== source) {
-            return status(
-              409,
-              `A marketplace called ${name} is already linked, from ${existing.source}. A machine holds one marketplace per name.`
-            );
-          }
-          const marketplace = db.putMarketplace({ name, source });
-          fanOutFleet();
-          return marketplace;
-        }
-      )
-      // Browse: what a linked marketplace offers, read by the hub from the
-      // row's source, the same fetch its installs resolve from. No machine's
-      // copy is asked: a directory on the hub is a copy no other machine has.
-      .get(
-        "/api/fleet/marketplaces/:name/plugins",
-        async ({ params, status }) => {
-          const row = db
-            .fleetConfig()
-            .marketplaces.find(({ name }) => name === params.name);
-          if (!row) {
-            return status(
-              404,
-              `No marketplace called ${params.name} is linked.`
-            );
-          }
-          try {
-            return await marketplaceCatalog(row.source);
-          } catch (error) {
-            return status(
-              400,
-              error instanceof Error ? error.message : String(error)
-            );
-          }
-        }
+        ({ body }): MarketplaceLink => linkMarketplace(body.source.trim())
       )
       .delete("/api/fleet/marketplaces/:name", ({ params }) => {
         db.deleteMarketplace(params.name);

@@ -34,6 +34,7 @@ import { join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
+import type { FleetFetchFrame } from "../packages/core/src/frames";
 import { socketPathProblem } from "../packages/core/src/paths";
 import { ensureDeps } from "./lib/deps";
 import { openLockFile, tryLock, unlock } from "./lib/flock";
@@ -1374,6 +1375,51 @@ async function standUp(
   };
   const post = async (message: object) =>
     (await dashboard()).send(JSON.stringify(message));
+  /**
+   * A fetch the hub runs after its request has answered (a skill, a plugin,
+   * a marketplace read or link): asked with `ask`, resolved with what `pick`
+   * reads off the `fleet.fetch` frame that lands it. The socket listens
+   * before the request goes, as the landing frame may beat the answer.
+   */
+  const fetched = async <T extends { fetching?: boolean }>(
+    pick: (frame: FleetFetchFrame) => T | undefined,
+    ask: () => Promise<unknown>,
+    ms = 300_000
+  ): Promise<T> => {
+    const ws = await dashboard();
+    return await new Promise<T>((land, reject) => {
+      const done = () => {
+        clearTimeout(timer);
+        ws.removeEventListener("message", heard);
+      };
+      const timer = setTimeout(() => {
+        done();
+        reject(new Error(`no fleet.fetch frame landed in ${ms / 1000}s`));
+      }, ms);
+      const heard = (event: MessageEvent) => {
+        const message = JSON.parse(String(event.data)) as {
+          payload?: { kind?: string };
+          verb?: string;
+        };
+        if (
+          message.verb !== "frames" ||
+          message.payload?.kind !== "fleet.fetch"
+        ) {
+          return;
+        }
+        const row = pick(message.payload as FleetFetchFrame);
+        if (row && !row.fetching) {
+          done();
+          land(row);
+        }
+      };
+      ws.addEventListener("message", heard);
+      ask().catch((error: unknown) => {
+        done();
+        reject(error);
+      });
+    });
+  };
   const query = <T>(sql: string, ...params: (string | number)[]): T[] => {
     const db = new Database(dbPath, { readonly: true });
     try {
@@ -1789,6 +1835,7 @@ async function standUp(
     heldProcs,
     api,
     post,
+    fetched,
     query,
     write,
     hubUp,

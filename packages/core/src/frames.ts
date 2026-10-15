@@ -1,5 +1,11 @@
 /** Named frame shapes keep schema and generated-client names independent of union order. */
-import type { FleetMcpServer, FleetPlugin, FleetSkillMeta } from "./fleet";
+import type {
+  FleetMcpServer,
+  FleetPlugin,
+  FleetSkillMeta,
+  MarketplaceLink,
+  MarketplaceRead,
+} from "./fleet";
 import type {
   HarnessKind,
   NeutralMessage,
@@ -530,15 +536,19 @@ export interface ProjectsChangedFrame {
 }
 
 /**
- * Hub-originated: a skill or plugin fetch at the hub began (`fetching`) or
- * landed (files, or the sentence it failed with). Carries the row whole, as
- * `/api/fleet` reads it. A fetch runs after the request that asked for it
- * has answered, so this is how every dashboard learns what came of it.
- * Exactly one of `skill` and `plugin` is set.
+ * Hub-originated: a download at the hub began (`fetching`) or landed. A fetch
+ * runs after the request that asked for it has answered, so this is how
+ * every dashboard learns what came of it. Exactly one of the four is set:
+ * - `skill`, `plugin`: a fetch of a fleet row's files, the row whole as
+ *   `/api/fleet` reads it (files, or the sentence it failed with);
+ * - `marketplace`: a read of a marketplace source (its name and offers);
+ * - `link`: a link of a marketplace source, linked or refused.
  */
 export interface FleetFetchFrame {
   instanceId?: undefined;
   kind: "fleet.fetch";
+  link?: MarketplaceLink;
+  marketplace?: MarketplaceRead;
   plugin?: FleetPlugin;
   /** The row was removed while it was fetched; its `error` says so. */
   removed?: boolean;

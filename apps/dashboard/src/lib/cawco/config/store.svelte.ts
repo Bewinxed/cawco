@@ -135,11 +135,20 @@ export class ConfigStore {
 
   /**
    * A `fleet.fetch` frame into the rows: a fetch began or landed, here or
-   * in another tab. A row removed meanwhile leaves the list.
+   * in another tab. A row removed meanwhile leaves the list; a marketplace
+   * a link landed joins its list.
    */
   heardFetch(frame: FleetFetchFrame): void {
     const fleet = this.fleet.value;
-    const { skill, plugin, removed } = frame;
+    const { skill, plugin, removed, link } = frame;
+    if (link?.marketplace && fleet) {
+      const linked = link.marketplace;
+      upsert(
+        fleet.config.marketplaces,
+        linked,
+        (row) => row.name === linked.name
+      );
+    }
     if (skill) {
       if (!skill.fetching) {
         this.#landed.add(`skill:${skill.name}`);

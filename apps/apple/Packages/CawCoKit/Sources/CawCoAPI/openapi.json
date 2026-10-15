@@ -16175,7 +16175,7 @@
         }
       }
     },
-    "/api/fleet/marketplace-name": {
+    "/api/fleet/marketplace-read": {
       "get": {
         "parameters": [
           {
@@ -16188,30 +16188,20 @@
             }
           }
         ],
-        "operationId": "getApiFleetMarketplaceName",
+        "operationId": "getApiFleetMarketplaceRead",
         "responses": {
           "200": {
-            "description": "getApiFleetMarketplaceName 200",
+            "description": "getApiFleetMarketplaceRead 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiFleetMarketplaceName200"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "getApiFleetMarketplaceName 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/MarketplaceRead"
                 }
               }
             }
           },
           "422": {
-            "description": "getApiFleetMarketplaceName 422",
+            "description": "getApiFleetMarketplaceRead 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16223,7 +16213,7 @@
         }
       }
     },
-    "/api/fleet/marketplaces": {
+    "/api/fleet/marketplace-links": {
       "post": {
         "requestBody": {
           "required": true,
@@ -16244,91 +16234,24 @@
             }
           }
         },
-        "operationId": "postApiFleetMarketplaces",
+        "operationId": "postApiFleetMarketplaceLinks",
         "responses": {
           "200": {
-            "description": "postApiFleetMarketplaces 200",
+            "description": "postApiFleetMarketplaceLinks 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FleetMarketplace"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "postApiFleetMarketplaces 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiFleetMarketplaces 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/MarketplaceLink"
                 }
               }
             }
           },
           "422": {
-            "description": "postApiFleetMarketplaces 422",
+            "description": "postApiFleetMarketplaceLinks 422",
             "content": {
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/fleet/marketplaces/{name}/plugins": {
-      "get": {
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "getApiFleetMarketplacesByNamePlugins",
-        "responses": {
-          "200": {
-            "description": "getApiFleetMarketplacesByNamePlugins 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/getApiFleetMarketplacesByNamePlugins200"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "getApiFleetMarketplacesByNamePlugins 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "getApiFleetMarketplacesByNamePlugins 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
                 }
               }
             }
@@ -23008,23 +22931,6 @@
         "required": [
           "notices"
         ]
-      },
-      "getApiFleetMarketplaceName200": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ]
-      },
-      "getApiFleetMarketplacesByNamePlugins200": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/MarketplacePluginInfo"
-        }
       },
       "deleteApiFleetMarketplacesByName200": {
         "type": "object",
@@ -37873,6 +37779,34 @@
           "title"
         ]
       },
+      "MarketplaceRead": {
+        "description": "A marketplace source as the hub read it: what its `marketplace.json` calls\nit and what it offers, or why it could not be read. The hub reads it after\nthe request that asked has answered (`fetching`), and the read that lands\nis a `fleet.fetch` frame.",
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "fetching": {
+            "type": "boolean"
+          },
+          "name": {
+            "description": "What it calls itself: the only name it can be linked under.",
+            "type": "string"
+          },
+          "plugins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketplacePluginInfo"
+            }
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
       "MarketplacePluginInfo": {
         "description": "One installable plugin, as a linked marketplace's `marketplace.json` lists it.",
         "type": "object",
@@ -37892,6 +37826,28 @@
         },
         "required": [
           "name"
+        ]
+      },
+      "MarketplaceLink": {
+        "description": "A link of the marketplace at `source`, asked for: under way (`fetching`),\nlinked (`marketplace`, the row), or refused (`error`).",
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "fetching": {
+            "type": "boolean"
+          },
+          "marketplace": {
+            "$ref": "#/components/schemas/FleetMarketplace",
+            "description": "One linked plugin marketplace. `source` is whatever\n`claude plugin marketplace add` accepts — `owner/repo`, a git URL, a\nmarketplace.json URL — passed through verbatim."
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
         ]
       },
       "SkillVersion": {
@@ -43530,7 +43486,7 @@
         ]
       },
       "FleetFetchFrame": {
-        "description": "Hub-originated: a skill or plugin fetch at the hub began (`fetching`) or\nlanded (files, or the sentence it failed with). Carries the row whole, as\n`/api/fleet` reads it. A fetch runs after the request that asked for it\nhas answered, so this is how every dashboard learns what came of it.\nExactly one of `skill` and `plugin` is set.",
+        "description": "Hub-originated: a download at the hub began (`fetching`) or landed. A fetch\nruns after the request that asked for it has answered, so this is how\nevery dashboard learns what came of it. Exactly one of the four is set:\n- `skill`, `plugin`: a fetch of a fleet row's files, the row whole as\n  `/api/fleet` reads it (files, or the sentence it failed with);\n- `marketplace`: a read of a marketplace source (its name and offers);\n- `link`: a link of a marketplace source, linked or refused.",
         "type": "object",
         "properties": {
           "kind": {
@@ -43538,6 +43494,14 @@
             "enum": [
               "fleet.fetch"
             ]
+          },
+          "link": {
+            "$ref": "#/components/schemas/MarketplaceLink",
+            "description": "A link of the marketplace at `source`, asked for: under way (`fetching`),\nlinked (`marketplace`, the row), or refused (`error`)."
+          },
+          "marketplace": {
+            "$ref": "#/components/schemas/MarketplaceRead",
+            "description": "A marketplace source as the hub read it: what its `marketplace.json` calls\nit and what it offers, or why it could not be read. The hub reads it after\nthe request that asked has answered (`fetching`), and the read that lands\nis a `fleet.fetch` frame."
           },
           "plugin": {
             "$ref": "#/components/schemas/FleetPlugin",

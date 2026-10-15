@@ -7,11 +7,17 @@
  * validation, fan-out and persistence the dashboard uses. The tools are
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
+import type { FleetPlugin, FleetSkillMeta, MarketplaceLink } from "@cawco/core";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { z } from "zod";
 import { hubHttpUrl } from "./delegation-actions";
+import { landedFetch } from "./fleet-fetches";
 
-/** API timeout for admin calls — generous for skill installs that fetch from GitHub. */
+/**
+ * API timeout for one admin call. A fetch from GitHub is not waited on in
+ * the request: its route answers at once and the tool waits on the hub's own
+ * announcement of the outcome (fleet-fetches.ts).
+ */
 const TIMEOUT_MS = 30_000;
 
 /** One MCP tool: its zod input as JSON Schema, and a handler that parses its input first. */
@@ -96,7 +102,19 @@ const marketplaceAction = async (
     throw new Error("source is required to link a marketplace");
   }
   // Linked under the name its own marketplace.json gives; the row says it.
-  return await api("POST", "/api/fleet/marketplaces", { source });
+  // The route answers before the source is read; the link lands after.
+  const wanted = source.trim();
+  const link = await landedFetch<MarketplaceLink>(
+    (news) => (news.link?.source === wanted ? news.link : undefined),
+    async () =>
+      (await api("POST", "/api/fleet/marketplace-links", {
+        source: wanted,
+      })) as MarketplaceLink
+  );
+  if (!link.marketplace) {
+    throw new Error(`could not link ${wanted}: ${link.error}`);
+  }
+  return link.marketplace;
 };
 
 const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
@@ -416,12 +434,22 @@ export function adminTools() {
         if (!source) {
           throw new Error("source is required to install a skill");
         }
+        // The route answers before the source is fetched; the row as the
+        // fetch landed it (files, the sentence it failed with, or `choices`).
         return ok(
-          await api("PUT", `/api/fleet/skills/${encodeURIComponent(name)}`, {
-            source,
-            enabled: true,
-            ...(projectId === undefined ? {} : { projectId }),
-          })
+          await landedFetch<FleetSkillMeta>(
+            (news) => (news.skill?.name === name ? news.skill : undefined),
+            async () =>
+              (await api(
+                "PUT",
+                `/api/fleet/skills/${encodeURIComponent(name)}`,
+                {
+                  source,
+                  enabled: true,
+                  ...(projectId === undefined ? {} : { projectId }),
+                }
+              )) as FleetSkillMeta
+          )
         );
       },
       " Install fetches the source (github:owner/repo, npm:package, a URL, or skills:slug) once at the hub and distributes the files to every machine."
@@ -485,13 +513,23 @@ export function adminTools() {
         if (action === "remove") {
           return ok(await api("DELETE", path));
         }
+        // Each route answers before the bytes are fetched; the row as the
+        // fetch landed it. Install is enable on a row that did not exist yet:
+        // the route stores the id either way and resolves its bytes before the
+        // fan-out, so the two differ only in what the caller already believes.
+        const landed = (ask: () => Promise<unknown>) =>
+          landedFetch<FleetPlugin>(
+            (news) => (news.plugin?.id === id ? news.plugin : undefined),
+            async () => (await ask()) as FleetPlugin
+          );
         if (action === "refresh") {
-          return ok(await api("POST", `${path}/refresh`));
+          return ok(await landed(() => api("POST", `${path}/refresh`)));
         }
-        // install is enable on a row that did not exist yet: the route stores the
-        // id either way and resolves its bytes before the fan-out, so the two
-        // differ only in what the caller already believes about the plugin.
-        return ok(await api("PUT", path, { enabled: action !== "disable" }));
+        return ok(
+          await landed(() =>
+            api("PUT", path, { enabled: action !== "disable" })
+          )
+        );
       },
       " Order matters: 'link' the marketplace first, then 'install' a plugin from it by its `plugin@marketplace` id, with the name link answered; 'refresh' re-fetches one whose upstream moved. The hub resolves the bytes once and distributes them."
     ),

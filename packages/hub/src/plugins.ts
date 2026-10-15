@@ -289,47 +289,44 @@ const pluginRoot = async (
 };
 
 /**
- * What a marketplace calls itself: the `name` of its own `marketplace.json`.
- * That is the one name the fleet knows it by, because it is the only one
- * Claude Code addresses it by — "Marketplace identifier … users see it when
- * installing plugins (for example, `/plugin install my-tool@your-marketplace`).
- * Each user can register only one marketplace per name"
+ * A marketplace read from its source, one download: what it calls itself and
+ * what it offers.
+ *
+ * The name is the `name` of its own `marketplace.json`. That is the one name
+ * the fleet knows it by, because it is the only one Claude Code addresses it
+ * by — "Marketplace identifier … users see it when installing plugins (for
+ * example, `/plugin install my-tool@your-marketplace`). Each user can
+ * register only one marketplace per name"
  * (https://code.claude.com/docs/en/plugin-marketplaces). The CLI registers it
  * under that name, clones it into a folder of that name, and installs its
  * plugins as `plugin@name`, so a row under any other name is one no machine
- * can find. Fetched the way its plugins are ({@link resolveMarketplacePlugins}).
+ * can find.
+ *
+ * The plugins are what Browse lists. Fetched the way every install is
+ * resolved ({@link resolveMarketplacePlugins}), so the list is what an
+ * install gets, whichever machine has a copy — a marketplace that is a
+ * directory on the hub has none anywhere else.
  */
-export const marketplaceName = (source: string): Promise<string> =>
+export const readMarketplace = (
+  source: string
+): Promise<{ name: string; plugins: MarketplacePluginInfo[] }> =>
   withMarketplace(source, ({ manifest }) => {
     const name = typeof manifest.name === "string" ? manifest.name.trim() : "";
     if (!name) {
       throw new Error(`${source}'s marketplace.json has no name`);
     }
-    return Promise.resolve(name);
-  });
-
-/**
- * What a linked marketplace offers, read by the hub from its source: what
- * Browse lists. The same fetch every install is resolved from
- * ({@link resolveMarketplacePlugins}), so the list is what an install gets,
- * whichever machine has a copy — a marketplace that is a directory on the
- * hub has none anywhere else.
- */
-export const marketplaceCatalog = (
-  source: string
-): Promise<MarketplacePluginInfo[]> =>
-  withMarketplace(source, ({ manifest }) =>
-    Promise.resolve(
-      (manifest.plugins ?? []).map(
-        ({ name, description, version, category }) => ({
-          name,
+    return Promise.resolve({
+      name,
+      plugins: (manifest.plugins ?? []).map(
+        ({ name: plugin, description, version, category }) => ({
+          name: plugin,
           description,
           version,
           category,
         })
-      )
-    )
-  );
+      ),
+    });
+  });
 
 /** One resolved plugin, or the sentence saying why it is not. */
 export type ResolvedPlugin =

@@ -32,6 +32,10 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
+import type {
+  MarketplaceLink,
+  MarketplaceRead,
+} from "../packages/core/src/fleet";
 import { ensureDeps } from "./lib/deps";
 
 // The dependencies first (lib/deps.ts): the fleet loads after them.
@@ -117,12 +121,33 @@ const pluginList = (): {
   installPath: string;
 }[] => JSON.parse(cli(["plugin", "list", "--json"]));
 
+/**
+ * A marketplace source read by the hub, as the dashboard asks it: the route
+ * answers at once and the read lands as a `fleet.fetch` frame.
+ */
+const readSource = (source: string) =>
+  fleet.fetched<MarketplaceRead>(
+    (frame) =>
+      frame.marketplace?.source === source ? frame.marketplace : undefined,
+    () =>
+      send(
+        "GET",
+        `/api/fleet/marketplace-read?${new URLSearchParams({ source })}`
+      )
+  );
+
+/** A link, as the dashboard asks it: the row lands as a `fleet.fetch` frame. */
+const link = async (source: string) =>
+  (
+    await fleet.fetched<MarketplaceLink>(
+      (frame) => (frame.link?.source === source ? frame.link : undefined),
+      () => send("POST", "/api/fleet/marketplace-links", { source })
+    )
+  ).marketplace ?? { name: "" };
+
 /** Browse, as the dashboard asks it: the hub reads the row's source. */
-const browse = async (name: string) =>
-  (await send(
-    "GET",
-    `/api/fleet/marketplaces/${encodeURIComponent(name)}/plugins`
-  )) as { name: string }[];
+const browse = async (source: string) =>
+  (await readSource(source)).plugins ?? [];
 
 const install = (id: string) =>
   send("PUT", `/api/fleet/plugins/${encodeURIComponent(id)}`, {
@@ -241,30 +266,21 @@ try {
   check("the rename is logged", Boolean(line), line ?? "");
 
   // ── 2. Linking reads the manifest's name ─────────────────────────────
-  const read = (await send(
-    "GET",
-    `/api/fleet/marketplace-name?${new URLSearchParams({ source: "jakubkrehel/skills" })}`
-  )) as { name: string };
+  const read = await readSource("jakubkrehel/skills");
   check(
     "the name read answers the manifest's name",
     read.name === "interfaces",
-    JSON.stringify(read)
+    JSON.stringify({ name: read.name, error: read.error })
   );
-  const linked = (await send("POST", "/api/fleet/marketplaces", {
-    source: "jakubkrehel/skills",
-  })) as { name: string };
+  const linked = await link("jakubkrehel/skills");
   check(
     "the link lands under the manifest's name",
     linked.name === "interfaces",
     JSON.stringify(linked)
   );
   await writeLocalMarket();
-  const local = (await send("POST", "/api/fleet/marketplaces", {
-    source: localMarket,
-  })) as { name: string };
-  const byUrl = (await send("POST", "/api/fleet/marketplaces", {
-    source: urlSource,
-  })) as { name: string };
+  const local = await link(localMarket);
+  const byUrl = await link(urlSource);
   check(
     "a hub directory and a marketplace.json URL link under their names",
     local.name === "probe-local" && byUrl.name === "probe-url",
@@ -273,9 +289,15 @@ try {
 
   // ── 3. Browse (answered by the hub) and installs, before any sync ────
   const listings: Partial<Record<string, string[]>> = {};
-  for (const name of ["skills", "interfaces", "probe-local", "probe-url"]) {
+  const sources: Record<string, string> = {
+    skills: "humanlayer/skills",
+    interfaces: "jakubkrehel/skills",
+    "probe-local": localMarket,
+    "probe-url": urlSource,
+  };
+  for (const [name, source] of Object.entries(sources)) {
     // biome-ignore lint/performance/noAwaitInLoops: one Browse at a time, as the dashboard does
-    listings[name] = (await browse(name)).map((one) => one.name);
+    listings[name] = (await browse(source)).map((one) => one.name);
     check(
       `Browse lists ${name}'s plugins`,
       (listings[name]?.length ?? 0) > 0,

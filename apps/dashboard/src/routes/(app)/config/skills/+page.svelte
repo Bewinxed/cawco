@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    type FleetMarketplace,
     type FleetPlugin,
     type FleetSkillMeta,
     type MarketplacePluginInfo,
@@ -288,7 +289,8 @@
     });
   }
 
-  async function browse(name: string) {
+  async function browse(row: FleetMarketplace) {
+    const { name } = row;
     if (browsing === name) {
       browsing = null;
       return;
@@ -300,7 +302,7 @@
     reading[name] = true;
     delete unread[name];
     try {
-      listings[name] = await marketplaceCatalog(name);
+      listings[name] = await marketplaceCatalog(row);
     } catch (err) {
       unread[name] = message(err);
     } finally {
@@ -424,7 +426,15 @@
     <RowFault again={refetchAll} reason={refetchProblem} />
     <LinkMarketplacePopover
       down={hubDown()}
-      onsaved={(row) => fleet?.config.marketplaces.push(row)}
+      onsaved={(row) => {
+        if (fleet) {
+          upsert(
+            fleet.config.marketplaces,
+            row,
+            (other) => other.name === row.name
+          );
+        }
+      }}
       taken={marketplaces.map((row) => row.name)}
     />
   {/snippet}
@@ -566,7 +576,7 @@
             {/snippet}
             {#snippet trailing()}
               <Button
-                onclick={() => browse(row.name)}
+                onclick={() => browse(row)}
                 size="sm"
                 title={`Read from ${row.source}`}
                 variant="ghost"

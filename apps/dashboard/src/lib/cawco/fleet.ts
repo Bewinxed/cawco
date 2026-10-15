@@ -21,7 +21,9 @@ import {
   type FsEntry,
   type MachineHookScript,
   type MachineMemorySet,
+  type MarketplaceLink,
   type MarketplacePluginInfo,
+  type MarketplaceRead,
   type McpHttpServerConfig,
   type McpSSEServerConfig,
   parseAgentFrontMatter,
@@ -511,26 +513,57 @@ export const mcpSignInIntent = (
  * `marketplace.json`, read by the hub. The only name it can be linked under,
  * since it is the one Claude Code registers it and installs its plugins by.
  */
-export const readMarketplaceName = async (source: string): Promise<string> =>
-  (
-    await send<{ name: string }>(
-      `/api/fleet/marketplace-name?${new URLSearchParams({ source })}`,
-      {},
-      `read ${source}`
-    )
-  ).name;
-
-/** Links the marketplace at `source`, under the name its manifest gives. */
-export const linkMarketplace = (source: string): Promise<FleetMarketplace> =>
-  send<FleetMarketplace>(
-    "/api/fleet/marketplaces",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source }),
-    },
-    `link ${source}`
+export const readMarketplaceName = async (wanted: string): Promise<string> => {
+  const source = wanted.trim();
+  const read = await untilFetched(
+    `read ${source}`,
+    (frame) =>
+      frame.marketplace?.source === source ? frame.marketplace : undefined,
+    () =>
+      send<MarketplaceRead>(
+        `/api/fleet/marketplace-read?${new URLSearchParams({ source })}`,
+        {},
+        `read ${source}`
+      )
   );
+  if (!read.name) {
+    throw new Error(
+      `Could not read ${source} — ${(read.error ?? "it said nothing").replace(TRAILING_STOPS, "")}.`
+    );
+  }
+  return read.name;
+};
+
+/**
+ * Links the marketplace at `source`, under the name its manifest gives; comes
+ * back with the row once the hub has read the source and linked it. A link
+ * the hub refused throws its sentence.
+ */
+export const linkMarketplace = async (
+  wanted: string
+): Promise<FleetMarketplace> => {
+  const source = wanted.trim();
+  const link = await untilFetched(
+    `link ${source}`,
+    (frame) => (frame.link?.source === source ? frame.link : undefined),
+    () =>
+      send<MarketplaceLink>(
+        "/api/fleet/marketplace-links",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source }),
+        },
+        `link ${source}`
+      )
+  );
+  if (!link.marketplace) {
+    throw new Error(
+      `Could not link ${source} — ${(link.error ?? "it said nothing").replace(TRAILING_STOPS, "")}.`
+    );
+  }
+  return link.marketplace;
+};
 
 export const removeMarketplace = (name: string): Promise<void> =>
   erase(
@@ -1093,12 +1126,26 @@ export const syncFleet = (machineId?: string): Promise<unknown> =>
  * What a linked marketplace offers, read by the hub from its source: the
  * same fetch its installs resolve from, so the list is what an install gets,
  * and no machine has to hold a copy (a directory on the hub has none elsewhere).
+ * Comes back once the hub's read of the row's source has landed.
  */
-export const marketplaceCatalog = (
-  name: string
-): Promise<MarketplacePluginInfo[]> =>
-  send<MarketplacePluginInfo[]>(
-    `/api/fleet/marketplaces/${encodeURIComponent(name)}/plugins`,
-    {},
-    `read ${name}`
+export const marketplaceCatalog = async (
+  row: FleetMarketplace
+): Promise<MarketplacePluginInfo[]> => {
+  const read = await untilFetched(
+    `read ${row.name}`,
+    (frame) =>
+      frame.marketplace?.source === row.source ? frame.marketplace : undefined,
+    () =>
+      send<MarketplaceRead>(
+        `/api/fleet/marketplace-read?${new URLSearchParams({ source: row.source })}`,
+        {},
+        `read ${row.name}`
+      )
   );
+  if (read.error) {
+    throw new Error(
+      `Could not read ${row.name} — ${read.error.replace(TRAILING_STOPS, "")}.`
+    );
+  }
+  return read.plugins ?? [];
+};

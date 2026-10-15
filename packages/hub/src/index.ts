@@ -26,10 +26,11 @@ const main = Effect.gen(function* () {
   const lifetime = yield* HubLifetime;
   const telegram =
     createTelegramBridge({ registry, db, pending, lifetime }) ?? undefined;
-  // `idleTimeout` past Bun's 10s default: linking or browsing a marketplace
-  // downloads it inside the request, and the socket is silent that whole
-  // time. A skill or plugin fetch is not one of these: its request answers
-  // with the row marked `fetching` and the outcome is a `fleet.fetch` frame.
+  // `idleTimeout` past Bun's 10s default: a request that waits on a machine
+  // (an adopt reads its skill with a 10s timeout of its own) is silent that
+  // whole time. No download from the internet is one of these: a skill,
+  // plugin or marketplace fetch answers its request with `fetching` at once,
+  // and what came of it is a `fleet.fetch` frame.
   // Before `listen`: every dashboard's first frame names this commit (see
   // `HubServices.build`), and two git calls are not worth a socket without it.
   const build = yield* Effect.promise(buildInfo);
