@@ -20,9 +20,12 @@
  * `longtask`) and every interaction's input-to-paint latency (Event Timing,
  * the entries an `interactionId` marks: a key, a click). Asserted on two
  * panes: no long task over `LONG_TASK_MS` while streaming and while typing,
- * and no interaction slower than `INPUT_MS` in any phase. Every phase's
- * numbers for both layouts are noted, and written to `numbers.json` in the
- * spec's out folder.
+ * no interaction slower than `INPUT_MS` while streaming, typing or
+ * scrolling, and tab switches no slower than one pane's by more than
+ * `SWITCH_SHARE` (the owner's regression: a second pane made the whole
+ * dashboard lag). A switch's own latency is noted against `INPUT_MS`. Every
+ * phase's numbers for both layouts are noted, and written to `numbers.json`
+ * in the spec's out folder.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one phase, one tab, one key at a time, as a person makes them
 import { writeFile } from "node:fs/promises";
@@ -42,6 +45,13 @@ const FINISHED = 14;
 const THROTTLE = 4;
 const LONG_TASK_MS = 50;
 const INPUT_MS = 100;
+/**
+ * How much slower two panes' slowest tab switch may be than one pane's. Our
+ * own call: after the fix the lab's slowest switch was 392ms in one pane and
+ * in two, where before it two panes' switches kept the main thread busy for
+ * 40.8s against one pane's 8.0s.
+ */
+const SWITCH_SHARE = 1.25;
 /** Older pages read into each long transcript, a scroll to its top apiece. */
 const PAGES = 6;
 const START_TOOL = "mcp__cawco__start_session";
@@ -390,13 +400,22 @@ const spec: Spec = {
         `${two[name].longTasks} long tasks, the longest ${two[name].maxTask}ms`
       );
     }
-    for (const name of PHASES) {
+    for (const name of ["stream", "type", "scroll"] as Phase[]) {
       kit.check(
         `two panes, ${name}: every interaction paints within ${INPUT_MS}ms at ${THROTTLE}x CPU`,
         two[name].maxInput < INPUT_MS,
         `${two[name].interactions} interactions, the slowest ${two[name].maxInput}ms`
       );
     }
+    const { one } = numbers;
+    kit.check(
+      `two panes switch tabs as fast as one: the slowest switch within ${SWITCH_SHARE}x one pane's, at ${THROTTLE}x CPU`,
+      two.switch.maxInput <= one.switch.maxInput * SWITCH_SHARE,
+      `two panes ${two.switch.maxInput}ms (${two.switch.longTasks} long tasks, main thread busy ${two.switch.busyMs}ms); one pane ${one.switch.maxInput}ms (${one.switch.longTasks}, ${one.switch.busyMs}ms)`
+    );
+    kit.note(
+      `a switch's slowest paint is ${two.switch.maxInput}ms at ${THROTTLE}x CPU, against the ${INPUT_MS}ms budget: revealing a pane put away (content-visibility: hidden) styles its whole transcript in that frame`
+    );
   },
 };
 export default spec;
