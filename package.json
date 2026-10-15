@@ -48,6 +48,8 @@
     "pixelmatch": "^8.0.0",
     "playwright-core": "^1.63.0",
     "pngjs": "^7.0.0",
+    "prettier": "3.9.10",
+    "prettier-plugin-svelte": "4.1.1",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "ultracite": "7.12.2"
   },
