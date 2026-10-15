@@ -773,6 +773,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         failureOf = of
         failure.label.text = message
         failure.isHidden = false
+        #if DEBUG
+        // Where the band stands once it is laid out, over the well and the page it covers.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, PreviewProbe.on else { return }
+            view.layoutIfNeeded()
+            let box = { (part: UIView) -> String in
+                let frame = part.convert(part.bounds, to: nil)
+                return "\(Double(frame.minX)),\(Double(frame.minY)),\(Double(frame.width)),\(Double(frame.height))"
+            }
+            PreviewProbe.say("preview geometry band=\(box(failure)) web=\(box(web)) well=\(box(well)) shown=\(!failure.isHidden)")
+        }
+        #endif
     }
 
     private func clearFailure() {

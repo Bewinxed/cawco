@@ -1097,7 +1097,30 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             ordered.append(card)
         }
         composerBinding.prompts = ordered
+        #if DEBUG
+        approveForProbe(standing.first)
+        #endif
     }
+
+    #if DEBUG
+    /// `-approve-asks`: the permission standing on the composer is approved
+    /// as its Approve approves it (`answer`), a moment after it stands, for a
+    /// simulator pass (probe-kit spec `ios-chat-opens`).
+    private static let approvesAsks = ProcessInfo.processInfo.arguments.contains("-approve-asks")
+    private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "Probe")
+    /// The asks already approved here.
+    private var approved: Set<String> = []
+
+    private func approveForProbe(_ ask: ParkedAsk?) {
+        guard Self.approvesAsks, let ask, !ask.isQuestion, !approved.contains(ask.requestId) else { return }
+        approved.insert(ask.requestId)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, madeAsks.contains(where: { $0.requestId == ask.requestId }) else { return }
+            Self.probeLog.notice("probe approve \(ask.requestId, privacy: .public)")
+            answer(ask, .allow, [:])
+        }
+    }
+    #endif
 
     /// Where the standing ask is among the ones answered here and still waiting.
     private var askRun = AskRun()

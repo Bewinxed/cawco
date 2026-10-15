@@ -251,6 +251,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             hub?.sessions.read(id, because: .retry)
         }
         paneState.onReturn = { [weak self] in self?.onReturnToFleet() }
+        // The frame keeps to the foreground (`away`).
+        NotificationCenter.default.addObserver(self, selector: #selector(sceneLeft(_:)), name: UIScene.didEnterBackgroundNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(sceneReturned(_:)), name: UIScene.willEnterForegroundNotification, object: nil)
         #if DEBUG
         if Pace.probing { Pace.afterCommit.append { [weak self] in self?.probeBlanks() } }
         #endif
@@ -508,6 +511,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             let target = DisplayTarget(self)
             proxy = target
             let link = CADisplayLink(target: target, selector: #selector(DisplayTarget.tick(_:)))
+            // A scene restored in the background builds its screens there: the frame waits for it to come forward.
+            away = window?.windowScene?.activationState == .background
+            link.isPaused = away
             link.add(to: .main, forMode: .common)
             self.link = link
             lastTick = 0
@@ -1255,6 +1261,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     // MARK: The frame
 
     fileprivate func frame(_ link: CADisplayLink) {
+        #if DEBUG
+        if window?.windowScene?.activationState == .background { ranAway += 1 }
+        #endif
         let now = CACurrentMediaTime()
         let dt = lastTick == 0 ? link.targetTimestamp - link.timestamp : min(0.1, now - lastTick)
         lastTick = now
@@ -1331,6 +1340,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             collection.layoutIfNeeded()
             commit(fresh: false)
             committed = true
+            #if DEBUG
+            if Self.feedOne { break }
+            #endif
         }
         restoreIfReady()
         stepReveals(now)
@@ -1427,13 +1439,45 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         Self.watchSleepers()
     }
 
-    /// The frame runs again from the next display frame.
+    /// The frame runs again from the next display frame; in the background,
+    /// once its scene comes forward (`away`).
     private func wake() {
         lastBusy = CACurrentMediaTime()
-        guard let link, link.isPaused else { return }
+        guard !away, let link, link.isPaused else { return }
         link.isPaused = false
         slept = nil
         Self.sleepers.remove(self)
+    }
+
+    /// The window's scene is in the background. Nothing the frame lays out
+    /// there is seen, and the system is laying the app out itself to take
+    /// its snapshots (both appearances, other sizes) while the frame would
+    /// lay out and commit rows under them on every display frame: TestFlight
+    /// 20261015.3 was killed in the frame's first-screen layout on its way
+    /// to the background (8BADF00D, "scene-update watchdog transgression",
+    /// 10 s of wall time at 17% CPU), and on its way out. So the frame does
+    /// not run there: its link holds paused, nothing wakes it, and what
+    /// changed meanwhile is drawn in its first frame in the foreground.
+    private var away = false
+
+    @objc private func sceneLeft(_ note: Notification) {
+        guard let scene = note.object as? UIScene, scene === window?.windowScene else { return }
+        away = true
+        link?.isPaused = true
+        #if DEBUG
+        ranAway = 0
+        Self.probeLog.notice("transcript went to the background")
+        #endif
+    }
+
+    @objc private func sceneReturned(_ note: Notification) {
+        guard let scene = note.object as? UIScene, scene === window?.windowScene, away else { return }
+        away = false
+        #if DEBUG
+        let ran = ranAway
+        Self.probeLog.notice("transcript came forward: \(ran) frame(s) ran in the background")
+        #endif
+        wake()
     }
 
     /// Ends every turn of the main thread by waking each sleeping pane whose
@@ -1664,6 +1708,28 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // Quiet, the settled rows are the ones held: only the tail is indexed again.
         let next = quiet ? before.with(tail: section.tail)
             : RowIndex(settled: section.settled, tail: section.tail, anchor: before.originId, skip: Self.olderId)
+        // Reconfigured are the rows the list holds before this update and
+        // after it that draw differently now. The update can hold rows the
+        // list did not and leave out rows it did: a first screen is a window
+        // of the rows built (`firstScreen`), and the window moves under the
+        // rows it held (more rows arriving in a frame than it grows by), is
+        // emptied while a restored place is read back to (`restoring`), or
+        // goes over to the tail when the place is let go, so a held row can
+        // leave it in the frame its drawing changed (a streamed reply's row,
+        // a delegate's pulse, a group folding). UIKit refuses to reconfigure
+        // a row the snapshot it is applied with does not hold (TestFlight
+        // 20261015.3's crash, `_validateReloadUpdateThrowingIfNeeded` under
+        // `reconfigureItems`); a row the update takes out is drawn anew when
+        // it joins again, from the print kept for it.
+        #if DEBUG
+        let outside = changed.filter { !next.holds($0) }
+        if !outside.isEmpty {
+            // Whole: the update is the whole snapshot, which reconfigures what is left in `changed`.
+            let whole = !(next.sectionIdentifiers == before.sectionIdentifiers && before.sectionIdentifiers.count == collection.numberOfSections && next.count > 0)
+            Self.probeLog.notice("transcript update leaves \(outside.count) redrawn row(s) out of the list (\(whole ? "whole" : "by section", privacy: .public)): \(outside.prefix(3).joined(separator: ","), privacy: .public)")
+        }
+        #endif
+        changed.removeAll { !next.holds($0) }
         // The sections this update changes, where it leaves the others as
         // they are: those from the first row that changed (the tail's first,
         // quiet; a streamed block, an answer landing at the foot) to the last.
@@ -1741,7 +1807,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             // read: the one prepared before the first page landed is empty,
             // and drawing it is not landing. (A history read moves only with
             // a page, never with what the live stream brings.)
-            if !landed, fed == nil || rowCount == 0, transcript?.loading == false, prepared != nil, !historyBehind { landed = true }
+            if !landed, fed == nil || rowCount == 0, transcript?.loading == false, prepared != nil, !historyBehind {
+                landed = true
+                #if DEBUG
+                let box = convert(bounds, to: nil)
+                let count = rows.count
+                Self.probeLog.notice("transcript landed rows=\(count) frame=\(Double(box.minX)),\(Double(box.minY)),\(Double(box.width)),\(Double(box.height))")
+                #endif
+            }
             #if DEBUG
             if landed { probeGlyphs() }
             #endif
@@ -2411,6 +2484,18 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
     /// The dock's own word on what it told the reader, for a simulator pass to read (probe-ios-catchup.ts).
     private static let dockLog = Logger(subsystem: "dev.cawco.app", category: "Transcript")
+
+    #if DEBUG
+    /// The list's word on its updates and its first screen, for a simulator
+    /// pass to read (probe-kit spec `ios-chat-opens`).
+    private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "Probe")
+    /// `-transcript-feed-one`: a first screen takes one row a frame, as on a
+    /// phone whose rows cost a frame each, so it fills over many frames while
+    /// the session changes under it.
+    private static let feedOne = ProcessInfo.processInfo.arguments.contains("-transcript-feed-one")
+    /// Frames that ran while the window's scene was in the background, since it last went there.
+    private var ranAway = 0
+    #endif
 
     private func updateDock() {
         let rowsDrawn = rowCount > 0
