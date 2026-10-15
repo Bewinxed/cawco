@@ -94,14 +94,22 @@ if (!ownStart) {
 const me: Holder = { pid: process.pid, started: ownStart };
 /** The lock generation this run holds, once it holds one. */
 let mine: string | undefined;
-/** Records what this holder is building now, in the lock it holds. */
-async function writeHolder(): Promise<void> {
-  if (!mine) {
-    return;
-  }
-  const temp = join(mine, `holder.json.${process.pid}`);
-  await writeFile(temp, JSON.stringify(me));
-  await rename(temp, join(mine, "holder.json"));
+/** The holder record's last write: steps run at once, so writes wait in line on one temp file. */
+let holderWritten: Promise<void> = Promise.resolve();
+/** Records what this holder is building now, in the lock it holds; each write records `me` as it is when its turn comes. */
+function writeHolder(): Promise<void> {
+  const write = holderWritten
+    .catch(() => undefined)
+    .then(async () => {
+      if (!mine) {
+        return;
+      }
+      const temp = join(mine, `holder.json.${process.pid}`);
+      await writeFile(temp, JSON.stringify(me));
+      await rename(temp, join(mine, "holder.json"));
+    });
+  holderWritten = write;
+  return write;
 }
 async function groupMembers(group: number): Promise<number[]> {
   const ps = Bun.spawn(["ps", "-eo", "pid=,pgid="], {
@@ -436,6 +444,7 @@ const release = async (): Promise<void> => {
   if (!mine) {
     return;
   }
+  await holderWritten.catch(() => undefined);
   await rename(join(mine, "holder.json"), join(mine, "released.json")).catch(
     () => undefined
   );
