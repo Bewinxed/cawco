@@ -27,7 +27,10 @@
  *      frame too (the rest came with the main thread free: the render side,
  *      or the Mac's load) and the Mac's load as the pass began: a pass under
  *      a load average of 20 is a gate pass, and the detail says which are.
- *      A note says where the main thread's scrolling time went.
+ *      Before each pass the probe waits (up to 10 minutes) for the Mac's
+ *      1-minute load to fall under 20, so its own build, simulator, fleet
+ *      and seeding have settled; the detail says how long it waited and
+ *      from what load. A note says where the main thread's scrolling time went.
  *    - Every row stood at an exact height (RowLayout, worked out before any
  *      view, PieceHeight) is its view's: each is measured as its view lays
  *      out while the list rests (RowStore `verify`); none may differ by more
@@ -385,6 +388,41 @@ async function hostLoad(): Promise<{ average: number; said: string }> {
   return { average, said: `host load ${average} on ${cores ?? "?"} cores` };
 }
 
+/** A pass the Mac was quiet enough for (load average under this) is a gate pass. */
+const GATE_LOAD = 20;
+/** The longest a pass waits for the Mac to settle under `GATE_LOAD`. */
+const QUIET_WAIT_MS = 10 * 60_000;
+/** How often the load is read while waiting: the 1-minute average moves slowly. */
+const QUIET_POLL_MS = 15_000;
+
+/**
+ * The host's load once it is under `GATE_LOAD`, or as it stands when
+ * `QUIET_WAIT_MS` runs out. The probe's own build, simulator boot, fleet and
+ * seeding raise the 1-minute average for minutes after they finish; a pass
+ * read straight after them would judge that, not the app's scrolling.
+ */
+async function quietHost(
+  pass: number
+): Promise<{ average: number; said: string }> {
+  const began = Date.now();
+  const first = await hostLoad();
+  let host = first;
+  while (!(host.average < GATE_LOAD) && Date.now() - began < QUIET_WAIT_MS) {
+    // biome-ignore lint/performance/noAwaitInLoops: a poll, in order
+    await Bun.sleep(QUIET_POLL_MS);
+    host = await hostLoad();
+  }
+  const waited = ((Date.now() - began) / 1000).toFixed(0);
+  const settled = host.average < GATE_LOAD;
+  console.log(
+    `  pass ${pass}: started at ${first.said}; waited ${waited}s, ${settled ? "now" : "still, at the 10-minute bound,"} ${host.said}`
+  );
+  return {
+    average: host.average,
+    said: `${host.said} (waited ${waited}s from ${first.average})`,
+  };
+}
+
 interface Pass {
   flings: number;
   /** The host's load as the pass began. */
@@ -401,11 +439,11 @@ interface Pass {
 async function flingToTop(
   udid: string,
   heard: Heard[],
-  line: { from: number; to: number; x: number }
+  line: { from: number; to: number; x: number },
+  host: { average: number; said: string }
 ): Promise<Pass> {
   const start = heard.length;
   const before = await tally(heard, 0);
-  const host = await hostLoad();
   const began = Date.now();
   let flings = 0;
   let rows: number | undefined;
@@ -591,9 +629,6 @@ async function readProfiles(kit: Kit, udid: string): Promise<void> {
   }
 }
 
-/** A pass the Mac was quiet enough for (load average under this) is a gate pass. */
-const GATE_LOAD = 20;
-
 function judge(kit: Kit, passes: Pass[]): void {
   for (const [i, p] of passes.entries()) {
     const t = p.totals;
@@ -670,7 +705,7 @@ async function run(kit: Kit): Promise<void> {
     const passes: Pass[] = [];
     for (let pass = 1; pass <= PASSES; pass += 1) {
       // biome-ignore lint/performance/noAwaitInLoops: each pass starts at the foot the last one jumped back to
-      passes.push(await flingToTop(udid, heard, line));
+      passes.push(await flingToTop(udid, heard, line, await quietHost(pass)));
       await sh(`${AXE} tap --label "Jump to latest" --udid ${udid}`).catch(
         () => undefined
       );
