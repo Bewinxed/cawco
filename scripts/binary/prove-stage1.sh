@@ -59,26 +59,32 @@ cat >> "$out/images/stage1-clean.Containerfile" <<'EOF'
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 EOF
 # The real-init image (intentionally not the pristine no-tools proof), with the dashboard's held socket and its
-# service. The service starts a second after the socket is asked, so the proof's connection is held by the socket
+# service. No system service takes a kernel keyring of its own (KeyringMode=inherit for every service): a rootless
+# container's root is the host user, whose kernel.keys.maxkeys every machine's services share (prove-stage2.sh's
+# machine image says why). The service starts a second after the socket is asked, so the proof's connection is held by the socket
 # while the dashboard comes up (proof-stack.ts: "dashboard websocket is held open").
 printf 'FROM %s\n' "$BASE_LOCAL" > "$out/images/stage1-systemd.Containerfile"
 cat >> "$out/images/stage1-systemd.Containerfile" <<'EOF'
 RUN apt-get update && apt-get install -y --no-install-recommends systemd systemd-sysv dbus ca-certificates git && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /etc/systemd/system/service.d && printf '[Service]\nKeyringMode=inherit\n' > /etc/systemd/system/service.d/proof-keyring.conf
 RUN printf '%s\n' '[Unit]' 'Description=CawCo binary proof held socket' '[Socket]' 'ListenStream=127.0.0.1:43458' 'FileDescriptorName=dashboard' '[Install]' 'WantedBy=sockets.target' > /etc/systemd/system/cawco-binary-dashboard.socket \
- && printf '%s\n' '[Unit]' 'Description=CawCo binary proof dashboard' 'Requires=cawco-binary-dashboard.socket' 'After=cawco-binary-dashboard.socket' '[Service]' 'ExecStartPre=/bin/sleep 1' 'ExecStart=/cawco dashboard' 'Environment=HOME=/output/systemd-binary HOST=127.0.0.1 CAWCO_HUB_PORT=43456 CAWCO_HUB_URL=http://127.0.0.1:43456 CAWCO_MCP_PORT=43459 CAWCO_SESSIOND_ENDPOINT=/output/sessiond.sock CAWCO_DB_PATH=/output/systemd-binary/hub.db' 'TimeoutStopSec=10' > /etc/systemd/system/cawco-binary-dashboard.service
+ && printf '%s\n' '[Unit]' 'Description=CawCo binary proof dashboard' 'Requires=cawco-binary-dashboard.socket' 'After=cawco-binary-dashboard.socket' '[Service]' 'ExecStartPre=/bin/sleep 1' 'ExecStart=/cawco dashboard' 'Environment=HOME=/output/systemd-binary HOST=127.0.0.1 CAWCO_HUB_PORT=43456 CAWCO_HUB_URL=http://127.0.0.1:43456 CAWCO_MCP_PORT=43459 CAWCO_SESSIOND_ENDPOINT=/output/systemd-binary/sessiond.sock CAWCO_DB_PATH=/output/systemd-binary/hub.db' 'TimeoutStopSec=10' > /etc/systemd/system/cawco-binary-dashboard.service
 EOF
 run_step "the images, from the proof cache's store" "$out/images.log" proof_images "$out/images" stage1-clean stage1-systemd
 clean_image=$(sed -n 's/^stage1-clean=//p' "$out/images.log")
 systemd_image=$(sed -n 's/^stage1-systemd=//p' "$out/images.log")
 P=$(podman_instance "stage1-$$" "$out/storage" "$PROOF_STORE")
 
-envs=(--env HOME=/output/clean-binary --env HOST=127.0.0.1 --env CAWCO_HUB_PORT=43456 --env CAWCO_HUB_URL=http://127.0.0.1:43456 --env CAWCO_MCP_PORT=43459 --env CAWCO_SESSIOND_ENDPOINT=/output/sessiond.sock --env CAWCO_DB_PATH=/output/clean-binary/hub.db)
+envs=(--env HOME=/output/clean-binary --env HOST=127.0.0.1 --env CAWCO_HUB_PORT=43456 --env CAWCO_HUB_URL=http://127.0.0.1:43456 --env CAWCO_MCP_PORT=43459 --env CAWCO_SESSIOND_ENDPOINT=/output/clean-binary/sessiond.sock --env CAWCO_DB_PATH=/output/clean-binary/hub.db)
 mounts=(--mount "type=bind,src=$out,dst=/output,rw" --mount "type=bind,src=$bin,dst=/cawco,ro")
-# The two proofs share nothing (each its own HOME and database under /output, neither on a network): at once.
+# The two proofs share nothing, so they run at once: each has its own HOME, database and session keeper endpoint under
+# /output (the agent keeps its hub's epoch beside that endpoint, daemon.ts `hub-epoch-<host>`), and neither is on a
+# network. Run A of 2026-10-15 had both keepers on /output/sessiond.sock: the clean proof's stack stopped the keeper
+# the systemd proof's agent then found, and "Child did not survive agent restart".
 clean_started=$SECONDS
 $P run --name "$prefix-clean" --network none --read-only --tmpfs /tmp "${mounts[@]}" "${envs[@]}" "$clean_image" bash -c 'mkdir -p "$HOME"; /cawco proof-isolation && /cawco capabilities > /output/capabilities-absent.json && /cawco proof-signing && /cawco proof-relay && /cawco proof-stack' > "$out/clean-proof.log" 2>&1 &
 clean=$!
-run_step "boot the systemd container" "$out/systemd-id.txt" $P run -d --name "$prefix-systemd" --systemd=always --network none "${mounts[@]}" "${envs[@]}" --env HOME=/output/systemd-binary --env CAWCO_DB_PATH=/output/systemd-binary/hub.db --env CAWCO_PROOF_SYSTEMD=1 "$systemd_image" /sbin/init
+run_step "boot the systemd container" "$out/systemd-id.txt" $P run -d --name "$prefix-systemd" --systemd=always --network none "${mounts[@]}" "${envs[@]}" --env HOME=/output/systemd-binary --env CAWCO_DB_PATH=/output/systemd-binary/hub.db --env CAWCO_SESSIOND_ENDPOINT=/output/systemd-binary/sessiond.sock --env CAWCO_PROOF_SYSTEMD=1 "$systemd_image" /sbin/init
 step="inspect the systemd container"
 step_log=""
 $P inspect "$prefix-systemd" > "$out/systemd-config.json"

@@ -729,6 +729,17 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
       return session(() => {
         liveAt = now();
       }).pipe(
+        // A throw while a connection is set up or runs (a defect: a system
+        // call refused, a bug) ends that connection, never the loop: it is
+        // said with what threw, and the series reconnects as from any
+        // failure. Retried only as failures are, a defect ended the loop and
+        // left the agent running with no hub link and nothing more said (run
+        // A, 2026-10-15, after an EMFILE from a file watch).
+        Effect.catchDefect((defect) =>
+          Effect.fail({
+            reason: `the hub connection threw: ${defect instanceof Error ? (defect.stack ?? defect.message) : String(defect)}`,
+          } as E)
+        ),
         Effect.tapError((error) => {
           const at = now();
           if (
@@ -1278,12 +1289,25 @@ const attach = (
       }, 1000);
     };
     const piFiles = new Set(["settings.json", "models.json", "auth.json"]);
+    // A watch the system refuses (EMFILE: the user's inotify instances are
+    // all held) does not start, and says so: pi's report is still read again
+    // on its own schedule (PI_AUTH_CHECK_INTERVAL_MS, below). Thrown here, it
+    // ended this connection before it could carry a heartbeat (run A,
+    // 2026-10-15: "EMFILE: too many open files, watch '…/.pi/agent'").
     const piWatch = existsSync(getAgentDir())
-      ? watch(getAgentDir(), (_event, file) => {
-          if (file && piFiles.has(file)) {
-            reportPiSoon();
+      ? (() => {
+          try {
+            return watch(getAgentDir(), (_event, file) => {
+              if (file && piFiles.has(file)) {
+                reportPiSoon();
+              }
+            });
+          } catch (error) {
+            console.warn(
+              `[pi] ${getAgentDir()} is not watched (${error instanceof Error ? error.message : String(error)}): pi's report is read again every ${PI_AUTH_CHECK_INTERVAL_MS / 1000} s`
+            );
           }
-        })
+        })()
       : undefined;
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {

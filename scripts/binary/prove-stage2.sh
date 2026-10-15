@@ -33,6 +33,23 @@ PROOF_TIME_SCALE=6
 # ---------------------------------------------------------------- which rigs run
 # A rig is a function rig_<name> below; its checks are its `check "<name>" …` lines.
 RIGS=(install spare legacy hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry workspace runaway memory capped)
+# How many systemd machines each rig boots (its `machines` refuses any other count): what it holds of the host user's
+# inotify instances while it runs.
+declare -A RIG_MACHINES=([install]=2 [spare]=1 [legacy]=2 [hubself]=1 [rollback]=1 [migration]=1 [swapkill]=1
+  [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [workspace]=2 [runaway]=1 [memory]=1
+  [capped]=2)
+# THE HOST USER'S INOTIFY INSTANCES are every rig's to share. The kernel charges an instance to its user in each user
+# namespace up to the initial one, and every rootless container's namespace is the host user's, so all machines of
+# every rig, and the host user's own processes, draw on one fs.inotify.max_user_instances (384 on obelisk). Run A of
+# 2026-10-15 ran out: the agent's watch failed with "EMFILE: too many open files, watch '/home/cawco/.pi/agent'". Each
+# machine holds its instances for its whole life, so the orchestrator starts a rig only while the machines running and
+# its own fit. INOTIFY_PER_MACHINE is a machine's budget: CawCo's own processes held 5 measured on a scratch fleet
+# (hub 0, sessiond 4, agent 1), systemd, journald, logind, dbus and the user's manager more; 32 is our call until the
+# boot lines (`boot`: "inotify N") measure it. INOTIFY_RESERVE is room for the host user's processes that start while
+# the proof runs. Raising the host's limit (`sudo sysctl -w fs.inotify.max_user_instances=8192`, kept in
+# /etc/sysctl.d) lets every rig run at once.
+INOTIFY_PER_MACHINE=32
+INOTIFY_RESERVE=64
 rig_checks() {
   awk -v rig="rig_$1()" '$1 == rig { inside = 1; next } inside && /^}/ { inside = 0 } inside && /^  check "/ { split($0, q, "\""); print q[2] }' "$self"
 }
@@ -118,6 +135,12 @@ EOF
   # limit of 8,192. So each machine holds 65,536 tasks (`boot`), and these drop-ins give each unit of the user's 49,152,
   # with no lower limit on the user's slice or manager. The user's service manager runs every unit and job (hub,
   # dashboard, agent, keepers, update helpers) with the proof's pace for the update's timed steps.
+  # No system service takes a kernel keyring of its own (KeyringMode=inherit for every service, a top-level `service.d`
+  # drop-in: systemd.unit(5), "a top-level drop-in with type.d/ … allows altering or adding to the settings of all
+  # corresponding unit files"). systemd.exec(5): KeyringMode "Defaults to private for services of the system service
+  # manager", and private allocates "a new session keyring" with "the unique invocation ID … added as a protected key".
+  # A rootless container's root is the host user, so every service of every machine took keys from that one user's
+  # kernel.keys.maxkeys (200): run A of 2026-10-15 booted three machines, and the rest never got user@1000.service's bus.
   cat > "$out/images/machine.Containerfile" <<EOF
 FROM $BASE_LOCAL
 ENV DEBIAN_FRONTEND=noninteractive
@@ -133,7 +156,8 @@ RUN apt-get update \\
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb \\
  && usermod -l cawco -d /home/cawco -m ubuntu && groupmod -n cawco ubuntu \\
  && echo 'cawco ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cawco \\
- && mkdir -p /etc/systemd/system/user@.service.d /etc/systemd/system/user-.slice.d /etc/systemd/user.conf.d \\
+ && mkdir -p /etc/systemd/system/user@.service.d /etc/systemd/system/user-.slice.d /etc/systemd/user.conf.d /etc/systemd/system/service.d \\
+ && printf '[Service]\\nKeyringMode=inherit\\n' > /etc/systemd/system/service.d/proof-keyring.conf \\
  && printf '[Service]\\nTasksMax=infinity\\n' > /etc/systemd/system/user@.service.d/proof-tasks.conf \\
  && printf '[Slice]\\nTasksMax=infinity\\n' > /etc/systemd/system/user-.slice.d/proof-tasks.conf \\
  && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE\\n' > /etc/systemd/user.conf.d/proof.conf
@@ -181,20 +205,39 @@ EOF
   # ---------------------------------------------------------------- the rigs, at once
   export out bins here self schema HOST_IMAGE MACHINE_IMAGE
   cap=${PROOF_RIGS:-${#SELECTED_RIGS[@]}}
-  declare -A RIG_PID=() RIG_INDEX=()
+  # The machines the host user's inotify instances leave room for (see INOTIFY_PER_MACHINE): its limit, less what its
+  # own processes hold now and the reserve. Too little for one rig of two machines, and nothing would run: said, with
+  # the limit to raise.
+  inotify_max=$(cat /proc/sys/fs/inotify/max_user_instances)
+  inotify_held=$(find /proc/[0-9]*/fd -lname 'anon_inode:inotify' 2> /dev/null | wc -l)
+  room=$(( (inotify_max - inotify_held - INOTIFY_RESERVE) / INOTIFY_PER_MACHINE ))
+  (( room >= 2 )) || { echo "the host user holds $inotify_held of its $inotify_max inotify instances (fs.inotify.max_user_instances), room for $room machine(s) at $INOTIFY_PER_MACHINE each beside a reserve of $INOTIFY_RESERVE; a rig needs up to 2: raise it (sudo sysctl -w fs.inotify.max_user_instances=8192)" >&2; exit 2; }
+  echo "setup: the host user holds $inotify_held of its $inotify_max inotify instances: rigs run while their machines fit in $room ($INOTIFY_PER_MACHINE each), at most $cap at once"
+  declare -A RIG_INDEX=() LIVE=() STATUS=()
   index=0
   for rig in "${RIGS[@]}"; do RIG_INDEX[$rig]=$index; index=$((index + 1)); done
+  live=0
+  # One rig ended: its machines' room is free again, and its exit status is kept.
+  reap() {
+    local ended rc=0
+    wait -n -p ended || rc=$?
+    [[ -n ${ended:-} ]] || return 0
+    STATUS[$ended]=$rc
+    live=$((live - LIVE[$ended]))
+    unset "LIVE[$ended]"
+  }
   RIGS_STARTED=$SECONDS
   for rig in "${SELECTED_RIGS[@]}"; do
-    while (( $(jobs -rp | wc -l) >= cap )); do wait -n; done
+    while (( ${#LIVE[@]} >= cap || live + RIG_MACHINES[$rig] > room )); do reap; done
     mkdir -p "$out/rigs/$rig"
     RIG=$rig RIG_NUMBER=${RIG_INDEX[$rig]} bash "$self" "$out" "$bins" > "$out/rigs/$rig/rig.out" 2>&1 &
-    RIG_PID[$rig]=$!
+    LIVE[$!]=${RIG_MACHINES[$rig]}
+    live=$((live + RIG_MACHINES[$rig]))
+    echo "rig $rig: started at $((SECONDS - RIGS_STARTED))s, $live of $room machines running"
   done
+  while (( ${#LIVE[@]} > 0 )); do reap; done
   status=0
-  for rig in "${SELECTED_RIGS[@]}"; do
-    wait "${RIG_PID[$rig]}" || status=1
-  done
+  for rc in "${STATUS[@]}"; do (( rc == 0 )) || status=1; done
   # Every rig's checks, in the rig's order: its verdict lines, and for a check its rig never reached, why.
   for rig in "${SELECTED_RIGS[@]}"; do
     dir="$out/rigs/$rig"
@@ -330,7 +373,7 @@ fi
 
 rigdir="$out/rigs/$RIG"
 mkdir -p "$rigdir/logs" "$rigdir/release"
-export rigdir
+export rigdir RIG_MACHINE_COUNT=${RIG_MACHINES[$RIG]}
 RIG_STARTED=$SECONDS
 # This rig's own podman instance, reading images from the proof cache's store.
 P=$(podman_instance "$RIG-$$" "$rigdir/storage" "$PROOF_STORE")
@@ -376,7 +419,16 @@ setup() {
   fi
   echo "setup: $what ($((SECONDS - t0))s)"
 }
-setup_done() { echo $((SECONDS - RIG_STARTED)) > "$rigdir/setup-seconds"; }
+# The rig's setup is done: its seconds kept, and each machine's inotify instances with CawCo running on it said
+# (INOTIFY_PER_MACHINE is sized from these and the boot lines').
+setup_done() {
+  local c
+  echo $((SECONDS - RIG_STARTED)) > "$rigdir/setup-seconds"
+  for c in "$hubc" "$joinerc" "$freshc"; do
+    $P container exists "$c" 2> /dev/null || continue
+    echo "inotify ${c##*-}: $(inotify_on "$c") with the rig set up"
+  done
+}
 
 # One check: runs the function in its own shell (so set -e applies inside it) under a time limit (third argument,
 # seconds, default 600), keeps its output in a log, prints one line and writes it to the rig's verdicts. A check
@@ -684,16 +736,26 @@ export -f diagnose as_user need_hub hub_api api_on json jsonl machine_id build_v
 # boot CONTAINER IP HOSTNAME [linger|nolinger] [EXTRA PODMAN RUN OPTION...]
 # Each machine holds 65,536 tasks (see the machine image above), and is a real systemd machine.
 boot() {
-  local c=$1 ip=$2 name=$3 linger=${4:-linger}
+  local c=$1 ip=$2 name=$3 linger=${4:-linger} t0=$SECONDS created up
   shift $(( $# < 4 ? $# : 4 ))
   $P run -d --name "$c" --hostname "$name" --systemd=always --pids-limit=65536 --network "$net" --ip "$ip" \
     --mount "type=bind,src=$out/shared,dst=/shared,ro" "$@" "$MACHINE_IMAGE" /sbin/init > /dev/null
+  created=$((SECONDS - t0))
   wait_until 90 "[[ \$($P exec $c systemctl is-system-running 2>/dev/null) =~ ^(running|degraded)\$ ]]"
-  [[ $linger == nolinger ]] && return 0
+  up=$((SECONDS - t0))
+  # Each machine's boot in its parts, for the rig's log: the container made and started (its root file system laid
+  # down), systemd running in it, and its user's bus; and the inotify instances it holds (INOTIFY_PER_MACHINE).
+  if [[ $linger == nolinger ]]; then
+    echo "boot $name: container ${created}s, systemd running at ${up}s, inotify $(inotify_on "$c"), load $(cut -d' ' -f1-3 /proc/loadavg)"
+    return 0
+  fi
   $P exec "$c" loginctl enable-linger cawco
   wait_until 60 "$P exec $c test -S /run/user/1000/bus"
+  echo "boot $name: container ${created}s, systemd running at ${up}s, user bus at $((SECONDS - t0))s, inotify $(inotify_on "$c"), load $(cut -d' ' -f1-3 /proc/loadavg)"
 }
-export -f boot
+# The inotify instances every process of a machine holds, read as its root, who reads every process's descriptors.
+inotify_on() { $P exec "$1" sh -c "find /proc/[0-9]*/fd -lname 'anon_inode:inotify' 2> /dev/null | wc -l"; }
+export -f boot inotify_on
 # The network, the release host serving this rig's release folder, and the machines it names (hub, joiner, fresh),
 # booted at once. The joined machine opens a delegate workspace in the workspace rig, whose srt boundary is a bwrap
 # sandbox with its own pid namespace and a fresh /proc. The kernel refuses that /proc mount in a user namespace while
@@ -704,6 +766,8 @@ export -f boot
 # network with no route out.
 machines() {
   local role pids=() rc=0 pid
+  # The orchestrator started this rig for the machines RIG_MACHINES names: what it holds of the inotify room.
+  (( $# == RIG_MACHINE_COUNT )) || { echo "rig $RIG boots $# machine(s), and RIG_MACHINES names $RIG_MACHINE_COUNT: correct RIG_MACHINES"; return 1; }
   $P network create --internal --subnet "$subnet.0/24" "$net" > /dev/null || return 1
   $P run -d --name "$releasec" --network "$net" --ip "$release_ip" \
     --mount "type=bind,src=$rigdir/release,dst=/srv/release,ro" "$HOST_IMAGE" \
