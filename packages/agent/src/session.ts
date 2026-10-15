@@ -480,8 +480,7 @@ const ghAvailable = async (): Promise<boolean> =>
  * there does (`safe-git.ts`): its config and hooks are the workspace's to
  * write, and `git status` runs what they name (an fsmonitor, a filter).
  */
-const gitChanges = async (cwd: string, since: string): Promise<GitChanges> => {
-  const dir = expandHome(cwd);
+const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
   const workspace = await workspaceHolding(dir);
   const git = async (args: string) =>
     workspace
@@ -543,8 +542,6 @@ const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 const SCP_LIKE_RE = /^[^/]+@[^:]+:/;
 /** A reason's own full stop, dropped where a sentence carries on after it. */
 const FINAL_STOP = /\.$/;
-/** Trailing slashes, but never the one that alone makes the path `/`. */
-const TRAILING_SLASHES_RE = /(?!^)\/+$/;
 
 /** A reference git can clone on its own, without `gh` resolving it first. */
 const isRepoUrl = (repo: string): boolean =>
@@ -2194,9 +2191,8 @@ export class SessionSupervisor {
    */
   async #workdir(payload: SpawnPayload): Promise<string | undefined> {
     const { bootstrap, reattachOnly, workspace } = payload;
-    const workdir = bootstrap
-      ? await this.#clone(bootstrap)
-      : expandHome(payload.cwd);
+    // Every folder a spawn names is a MachinePath: the hub settled it.
+    const workdir = bootstrap ? await this.#clone(bootstrap) : payload.cwd;
     // A workspace's directory is its clone: one that is gone was removed
     // after its work landed, and an empty folder made in its place would be
     // a session resumed into nothing.
@@ -2465,7 +2461,7 @@ export class SessionSupervisor {
       this.#resumable.set(instanceId, {
         adapter,
         sessionKey: payload.resume.sessionKey,
-        cwd: expandHome(cwd),
+        cwd,
       });
     }
     try {
@@ -2529,10 +2525,7 @@ export class SessionSupervisor {
       if (cut) {
         workdir = cut.dir;
       } else if (scratch?.worktree) {
-        workdir = await this.#addWorktree(
-          instanceId,
-          expandHome(scratch.baseCwd ?? cwd)
-        );
+        workdir = await this.#addWorktree(instanceId, scratch.baseCwd ?? cwd);
       }
 
       // Each spawn says for itself whether this is a spin-off, so a relaunch
@@ -3425,7 +3418,7 @@ export class SessionSupervisor {
     ingested: Record<string, IngestMark> | undefined,
     stopped?: AbortSignal
   ): Promise<void> {
-    if (!(await isDirectory(expandHome(row.cwd)))) {
+    if (!(await isDirectory(row.cwd))) {
       this.#recoveryUnavailable(
         { ...row, reattachOnly: true },
         "The recovery directory is no longer available."
@@ -3449,7 +3442,7 @@ export class SessionSupervisor {
     // A held CLI in a workspace is attached only once that workspace's hook
     // is in this build's form, which the agent writes as it starts; others'
     // are not waited for.
-    const workspace = await workspaceHolding(expandHome(row.cwd));
+    const workspace = await workspaceHolding(row.cwd);
     if (workspace) {
       await custodyProbe(hookArmed(workspace.id), stopped);
     }
@@ -4199,8 +4192,9 @@ export class SessionSupervisor {
     repo,
     baseDir,
   }: NonNullable<SpawnPayload["bootstrap"]>): Promise<string> {
-    const parent = expandHome(baseDir).replace(TRAILING_SLASHES_RE, "");
-    const target = `${parent}/${repoLeaf(repo)}`;
+    // A MachinePath from the hub: absolute, no trailing slash.
+    const parent = baseDir;
+    const target = `${parent === "/" ? "" : parent}/${repoLeaf(repo)}`;
 
     if (await isDirectory(target)) {
       const origin = await hostGit(target, ["remote", "get-url", "origin"]);

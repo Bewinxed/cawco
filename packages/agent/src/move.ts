@@ -848,10 +848,9 @@ const inspectPlain = async (
 
 /**
  * A folder as a move reads it: on the source what would move, on the target
- * what is there. `~/…` is under this machine's home.
+ * what is there. `path` is absolute: the hub sends only a MachinePath.
  */
-export const moveInspect = async (asked: string): Promise<MoveInspection> => {
-  const path = asked.startsWith("~/") ? join(homedir(), asked.slice(2)) : asked;
+export const moveInspect = async (path: string): Promise<MoveInspection> => {
   const info = await stat(path).catch(() => undefined);
   const base = {
     path,
@@ -967,9 +966,8 @@ export const moveInspect = async (asked: string): Promise<MoveInspection> => {
  * against the remote without it.
  */
 export const moveRemoteCredential = async (
-  asked: string
+  path: string
 ): Promise<MoveRemoteAuth> => {
-  const path = asked.startsWith("~/") ? join(homedir(), asked.slice(2)) : asked;
   const remote = await maybe(path, ["remote", "get-url", "origin"]);
   const basic = remote ? remoteWithoutCredential(remote).basic : undefined;
   if (!basic) {

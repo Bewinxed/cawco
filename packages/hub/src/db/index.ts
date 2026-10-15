@@ -50,6 +50,11 @@ import {
   resolveRates,
 } from "@cawco/core";
 import { hashFiles } from "@cawco/core/file-hash";
+import {
+  type MachinePath,
+  MachinePathRefused,
+  machinePath,
+} from "@cawco/core/machine-path";
 import { ownIdentity } from "@cawco/core/process-identity";
 import { materializeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
@@ -81,7 +86,6 @@ import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
-import { placePath } from "../projects";
 import type { StagesTemplate } from "../stages";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
@@ -113,6 +117,7 @@ import {
   fleetSkillHistory,
   fleetWatchNotices,
   fleetWatchSettings,
+  type HubFolder,
   instanceAliases,
   instances,
   jevSettings,
@@ -128,7 +133,6 @@ import {
   notificationCleared,
   notificationSent,
   openrouterConnection,
-  type PlaceKind,
   type PriorConversation,
   parkedAsks,
   plugins,
@@ -197,13 +201,20 @@ const MIGRATIONS_DIR = standalone
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];
 export type InstanceRole = NonNullable<(typeof instances.$inferSelect)["role"]>;
 /**
+ * A session's stored row, its `cwd` named as {@link MachinePath}, which the
+ * API's schema reads as the string it is on the wire.
+ */
+type StoredInstanceRow = Omit<typeof instances.$inferSelect, "cwd"> & {
+  cwd: MachinePath;
+};
+/**
  * A session's row as the hub's readers take it: no hub-private column, and
  * no `tooling`. That is the session's MCP servers and tools, 17 KB of JSON a
  * row on average and 36 KB at most (2026-10-09), parsed on every read and
  * read by one route alone ({@link DbShape.instanceTooling}).
  */
 export type PublicInstanceRow = Omit<
-  typeof instances.$inferSelect,
+  StoredInstanceRow,
   | "tooling"
   | "endIntent"
   | "endConfirmedAt"
@@ -239,7 +250,7 @@ export type MovedHere = NonNullable<
 >;
 export type BoardInstanceRow = PublicInstanceRow;
 /** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
-export type OwnedInstanceRow = Omit<typeof instances.$inferSelect, "tooling">;
+export type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
 /**
  * A project as every client reads it: its row, whose `machineId` and `cwd`
@@ -275,7 +286,11 @@ export type WorkflowNoticeRow = typeof workflowNotices.$inferSelect;
 export type WorkItemRow = typeof workItems.$inferSelect;
 export type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
 export type QueuedWorkItemRow = typeof queuedWorkItems.$inferSelect;
-export type WorkspaceRow = typeof workspaces.$inferSelect;
+/** Its paths named as {@link MachinePath}, which the API's schema reads as the string it is on the wire. */
+export type WorkspaceRow = Omit<
+  typeof workspaces.$inferSelect,
+  "path" | "repoRoot"
+> & { path: MachinePath; repoRoot: MachinePath };
 export type SessionIdentityRow = typeof sessionIdentities.$inferSelect;
 
 /**
@@ -430,12 +445,21 @@ export interface DbShape {
    * and folder is answered as it is, with `added` false. A project's first
    * checkout becomes its primary.
    */
-  readonly addPlace: (place: {
-    projectId: string;
-    machineId: string;
-    path: string;
-    kind: PlaceKind;
-  }) => { place: PlaceRow; added: boolean };
+  readonly addPlace: (
+    place:
+      | {
+          projectId: string;
+          machineId: string;
+          path: MachinePath;
+          kind: "checkout" | "workspace";
+        }
+      | {
+          projectId: string;
+          machineId: string;
+          path: HubFolder;
+          kind: "hub";
+        }
+  ) => { place: PlaceRow; added: boolean };
   /**
    * Adds a message to a thread, which moves it to the top of its project's
    * list. `createdAt` is when it was said, for words written in after the
@@ -549,7 +573,7 @@ export interface DbShape {
   readonly createProject: (project: {
     id: string;
     name: string;
-    checkout?: { machineId: string; path: string };
+    checkout?: { machineId: string; path: MachinePath };
     remote: string | null;
     /** Made with Caw: its Caw starts on. */
     caw?: boolean;
@@ -758,7 +782,7 @@ export interface DbShape {
   readonly holdMovingInstance: (instance: {
     id: string;
     machineId: string;
-    cwd: string;
+    cwd: MachinePath;
     projectId: string;
     harness?: string;
     model?: string;
@@ -811,7 +835,7 @@ export interface DbShape {
    */
   readonly launchDirOf: (
     id: string
-  ) => { cwd: string } | { unknown: true } | undefined;
+  ) => { cwd: MachinePath } | { unknown: true } | undefined;
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
   /** Caw's shell and edit calls (lead-gate.ts): kept, read back and changed as each one's outcome is known. */
   readonly leadCalls: {
@@ -937,7 +961,7 @@ export interface DbShape {
   readonly liveInstancesOn: (machineId: string) => PublicInstanceRow[];
   /** Where each live top-level mainline session works, and no more of it. */
   readonly liveMainlineFolders: () => {
-    cwd: string;
+    cwd: MachinePath;
     id: string;
     machineId: string;
   }[];
@@ -945,6 +969,17 @@ export interface DbShape {
   readonly liveWorkItems: () => WorkItemRow[];
   /** The work items a session delegated that are still `starting`/`running`. */
   readonly liveWorkItemsOf: (parentInstanceId: string) => WorkItemRow[];
+  /**
+   * `raw` as a path on `machineId` ({@link machinePath}), against the home
+   * that machine's daemon reported. Every path a person or a session names
+   * for a machine comes through here before anything stores or runs in it.
+   * A path it will not make answers its {@link MachinePathRefused}, the
+   * sentence the caller refuses with.
+   */
+  readonly machinePathOn: (
+    machineId: string,
+    raw: string
+  ) => MachinePath | MachinePathRefused;
   readonly markAgentOffline: (machineId: string) => void;
   /**
    * Every row back to `offline`, for the one moment it is unconditionally true:
@@ -1056,7 +1091,7 @@ export interface DbShape {
   readonly noteInstanceSession: (
     id: string,
     sessionId: string,
-    cwd?: string,
+    cwd?: MachinePath,
     harness?: string,
     tooling?: SessionTooling
   ) => void;
@@ -1107,7 +1142,7 @@ export interface DbShape {
     addressProtocol?: boolean;
     id: string;
     machineId: string;
-    cwd: string;
+    cwd: MachinePath;
     sessionId?: string;
     harness?: string;
     projectId?: string;
@@ -1220,11 +1255,6 @@ export interface DbShape {
       projectId?: string;
     }
   ) => PublicInstanceRow | undefined;
-  /**
-   * A folder on `machineId` as a place stores it ({@link resolvePlacePath}),
-   * against the home that machine reported. Throws {@link PlacePathRefused}.
-   */
-  readonly placePathOn: (machineId: string, path: string) => string;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
   readonly previews: PreviewsDb;
   /** A project with its places, or undefined for an id the hub does not hold. */
@@ -1242,7 +1272,7 @@ export interface DbShape {
   readonly projectRepository: (
     projectId: string,
     machineId: string
-  ) => string | undefined;
+  ) => MachinePath | undefined;
   /**
    * A project's spend since `todayStart` and `monthStart`, all of it and its
    * Caw's; each attempt at a task with its session's spend (oldest first);
@@ -1547,12 +1577,14 @@ export interface DbShape {
   readonly recordProjectRepository: (repository: {
     projectId: string;
     machineId: string;
-    path: string;
+    path: MachinePath;
   }) => void;
   /** Files a send's record as the hub accepted it: pending, or failed at once. */
+  /** A scratch session's worktree as its machine made it; `dir` is where it now launches. */
   readonly recordScratchWorktree: (
     id: string,
-    worktree: import("@cawco/core").ScratchWorktree
+    worktree: import("@cawco/core").ScratchWorktree,
+    dir: MachinePath
   ) => void;
   readonly recordSend: (
     send: typeof sentMessages.$inferInsert
@@ -1568,7 +1600,10 @@ export interface DbShape {
     placeId: string
   ) => "removed" | "primary" | "missing";
   /** A workspace's place, gone with the workspace when it is archived. */
-  readonly removeWorkspacePlaces: (machineId: string, clone: string) => void;
+  readonly removeWorkspacePlaces: (
+    machineId: string,
+    clone: MachinePath
+  ) => void;
   /**
    * A marketplace row moved to the name its manifest gives, with every plugin
    * id after its `@`. Where the new name or id is already a row, that row
@@ -1576,12 +1611,14 @@ export interface DbShape {
    */
   readonly renameMarketplace: (from: string, to: string) => [string, string][];
   /**
-   * Places on `machineId` filed under `~` before every place was absolute,
-   * resolved against the home it reported: one that lands on a place the
-   * project already has there is folded into it. Answers the projects
-   * whose places changed. Nothing while the machine's home is unknown.
+   * Paths on `machineId` stored under `~` before every path on a machine was
+   * a {@link MachinePath} (a restored database, rows from older hubs):
+   * places, session directories, workspaces and repositories, resolved
+   * against the home it reported. A place that lands on one the project
+   * already has there is folded into it. Answers the projects whose places
+   * changed. Nothing while the machine's home is unknown.
    */
-  readonly resolveHomePlaces: (machineId: string) => string[];
+  readonly resolveHomePaths: (machineId: string) => string[];
   readonly restoreRemovedSessions: (
     machineId: string,
     held: string[],
@@ -1751,7 +1788,7 @@ export interface DbShape {
     resumableAt?: Record<string, number>
   ) => SettledInstance[];
   /** Files a row's launch directory as read: `cwd` when its conversation named one, else unknown. */
-  readonly settleLaunchDir: (id: string, cwd?: string) => void;
+  readonly settleLaunchDir: (id: string, cwd?: MachinePath) => void;
   /**
    * A held row's status as its move's stage says (`moving`, or `error` with
    * why), while no spawn has taken it on. True when it changed.
@@ -2170,44 +2207,8 @@ export const checkoutOf = (project: ProjectRow): PlaceRow | undefined =>
   project.places.find((place) => place.isPrimary);
 
 /** The project's folder on the hub, the place every project has from the start. */
-export const hubPlacePath = (projectId: string): string =>
+export const hubPlacePath = (projectId: string): HubFolder =>
   `projects/${projectId}`;
-
-/** A place path the hub will not store, in the words its caller answers with. */
-export class PlacePathRefused extends Error {}
-
-/** `~` or `~/…`: a folder under its machine's home. */
-const UNDER_HOME = /^~(?=\/|$)/;
-const TRAILING_SLASHES = /\/+$/;
-
-/**
- * A machine's folder as a place stores it: absolute, `~` resolved against
- * the home its daemon reported (`agents.home`). A path still not absolute,
- * or under `~` on a machine whose home the hub does not know, is refused.
- * The hub's own folder (kind `hub`) is not a machine's and is not this.
- */
-export const resolvePlacePath = (
-  asked: string,
-  home: string | null | undefined,
-  machine: string
-): string => {
-  const path = asked.trim();
-  let resolved = path;
-  if (UNDER_HOME.test(path)) {
-    if (!home) {
-      throw new PlacePathRefused(
-        `${path} is under ~ on ${machine}, whose daemon has not said where its home folder is. Name the folder by its absolute path, or update cawco on ${machine}.`
-      );
-    }
-    resolved = `${home.replace(TRAILING_SLASHES, "")}${path.slice(1)}`;
-  }
-  if (!resolved.startsWith("/")) {
-    throw new PlacePathRefused(
-      `A place is a folder's absolute path on its machine, and ${path || "an empty path"} is not one. Pass a path that starts with /, or ~/ for the machine's home.`
-    );
-  }
-  return placePath(resolved);
-};
 
 /** Each project with its places: the primary first, then oldest first. */
 const withPlaces = (
@@ -2463,6 +2464,116 @@ const make = async (path: string): Promise<DbShape> => {
         )[0]
       : undefined;
   };
+
+  /** `~` or `~/…` in a column: what only a row from before every path on a machine was a {@link MachinePath} holds. */
+  const underHome = (column: AnySQLiteColumn) =>
+    or(eq(column, "~"), like(column, "~/%"));
+
+  /** {@link DbShape.resolveHomePaths} for `machineId`'s session directories, workspaces and repositories. */
+  const resolveHomeDirs = (
+    tx: Tx,
+    machineId: string,
+    resolve: (raw: string) => MachinePath
+  ): void => {
+    for (const row of tx
+      .select({ id: instances.id, cwd: instances.cwd })
+      .from(instances)
+      .where(and(eq(instances.machineId, machineId), underHome(instances.cwd)))
+      .all()) {
+      tx.update(instances)
+        .set({ cwd: resolve(row.cwd) })
+        .where(eq(instances.id, row.id))
+        .run();
+    }
+    for (const row of tx
+      .select()
+      .from(workspaces)
+      .where(
+        and(
+          eq(workspaces.machineId, machineId),
+          or(underHome(workspaces.path), underHome(workspaces.repoRoot))
+        )
+      )
+      .all()) {
+      tx.update(workspaces)
+        .set({ path: resolve(row.path), repoRoot: resolve(row.repoRoot) })
+        .where(eq(workspaces.id, row.id))
+        .run();
+    }
+    for (const row of tx
+      .select()
+      .from(projectRepositories)
+      .where(
+        and(
+          eq(projectRepositories.machineId, machineId),
+          underHome(projectRepositories.path)
+        )
+      )
+      .all()) {
+      tx.update(projectRepositories)
+        .set({ path: resolve(row.path) })
+        .where(
+          and(
+            eq(projectRepositories.projectId, row.projectId),
+            eq(projectRepositories.machineId, machineId)
+          )
+        )
+        .run();
+    }
+  };
+
+  /**
+   * {@link DbShape.resolveHomePaths} for `machineId`'s places: one that lands
+   * on a folder its project already has there is folded into it, primary if
+   * either was. Answers the projects whose places changed.
+   */
+  const resolveHomePlaces = (
+    tx: Tx,
+    machineId: string,
+    resolve: (raw: string) => MachinePath
+  ): string[] => {
+    const changed = new Set<string>();
+    for (const place of tx
+      .select()
+      .from(projectPlaces)
+      .where(
+        and(
+          eq(projectPlaces.machineId, machineId),
+          underHome(projectPlaces.path)
+        )
+      )
+      .all()) {
+      const resolved = resolve(place.path);
+      const standing = tx
+        .select()
+        .from(projectPlaces)
+        .where(
+          and(
+            eq(projectPlaces.projectId, place.projectId),
+            eq(projectPlaces.machineId, machineId),
+            eq(projectPlaces.path, resolved)
+          )
+        )
+        .get();
+      if (standing) {
+        tx.delete(projectPlaces).where(eq(projectPlaces.id, place.id)).run();
+        if (place.isPrimary && !standing.isPrimary) {
+          tx.update(projectPlaces)
+            .set({ isPrimary: true })
+            .where(eq(projectPlaces.id, standing.id))
+            .run();
+        }
+      } else {
+        tx.update(projectPlaces)
+          .set({ path: resolved })
+          .where(eq(projectPlaces.id, place.id))
+          .run();
+      }
+      changed.add(place.projectId);
+    }
+    return [...changed];
+  };
+
   /**
    * Deletes session rows and everything keyed to them, inside the caller's
    * transaction — the one way a session leaves the hub, whether its machine
@@ -3046,19 +3157,23 @@ const make = async (path: string): Promise<DbShape> => {
     return moved;
   };
 
-  /** {@link CawcoDb.placePathOn}: the one gate every place a machine has goes through. */
-  const placePathOn = (machineId: string, folder: string): string => {
-    const agent = db
-      .select({ home: agents.home, hostname: agents.hostname })
-      .from(agents)
-      .where(eq(agents.machineId, machineId))
-      .get();
-    return resolvePlacePath(folder, agent?.home, agent?.hostname ?? machineId);
-  };
-
-  return {
+  const store: DbShape = {
     close: () => db.$client.close(),
-    placePathOn,
+    machinePathOn: (machineId, raw) => {
+      const agent = db
+        .select({ home: agents.home, hostname: agents.hostname })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get();
+      try {
+        return machinePath(agent?.home, raw, agent?.hostname ?? machineId);
+      } catch (error) {
+        if (error instanceof MachinePathRefused) {
+          return error;
+        }
+        throw error;
+      }
+    },
     dateStoredSessions,
     // A confirmed end whose process its machine turns out to hold: owed again,
     // and stopping again until the machine confirms it.
@@ -3143,9 +3258,9 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
-    recordScratchWorktree: (id, scratchWorktree) => {
+    recordScratchWorktree: (id, scratchWorktree, dir) => {
       db.update(instances)
-        .set({ scratchWorktree, cwd: scratchWorktree.dir })
+        .set({ scratchWorktree, cwd: dir })
         .where(eq(instances.id, id))
         .run();
     },
@@ -3672,60 +3787,20 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
     },
-    resolveHomePlaces: (machineId) => {
-      const home = db
-        .select({ home: agents.home })
+    resolveHomePaths: (machineId) => {
+      const agent = db
+        .select({ home: agents.home, hostname: agents.hostname })
         .from(agents)
         .where(eq(agents.machineId, machineId))
-        .get()?.home;
-      if (!home) {
+        .get();
+      const home = agent?.home;
+      if (!(agent && home)) {
         return [];
       }
+      const resolve = (raw: string) => machinePath(home, raw, agent.hostname);
       return db.transaction((tx) => {
-        const changed = new Set<string>();
-        for (const place of tx
-          .select()
-          .from(projectPlaces)
-          .where(
-            and(
-              eq(projectPlaces.machineId, machineId),
-              or(eq(projectPlaces.path, "~"), like(projectPlaces.path, "~/%"))
-            )
-          )
-          .all()) {
-          const resolved = resolvePlacePath(place.path, home, machineId);
-          const standing = tx
-            .select()
-            .from(projectPlaces)
-            .where(
-              and(
-                eq(projectPlaces.projectId, place.projectId),
-                eq(projectPlaces.machineId, machineId),
-                eq(projectPlaces.path, resolved)
-              )
-            )
-            .get();
-          if (standing) {
-            // The same folder twice: the one already absolute stays, primary
-            // if either was.
-            tx.delete(projectPlaces)
-              .where(eq(projectPlaces.id, place.id))
-              .run();
-            if (place.isPrimary && !standing.isPrimary) {
-              tx.update(projectPlaces)
-                .set({ isPrimary: true })
-                .where(eq(projectPlaces.id, standing.id))
-                .run();
-            }
-          } else {
-            tx.update(projectPlaces)
-              .set({ path: resolved })
-              .where(eq(projectPlaces.id, place.id))
-              .run();
-          }
-          changed.add(place.projectId);
-        }
-        return [...changed];
+        resolveHomeDirs(tx, machineId, resolve);
+        return resolveHomePlaces(tx, machineId, resolve);
       });
     },
     setAgentAuth: (machineId, auth) =>
@@ -6415,10 +6490,8 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .run();
     },
-    createProject: ({ id, name, checkout, remote, caw = false, template }) => {
-      const checkoutPath =
-        checkout && placePathOn(checkout.machineId, checkout.path);
-      return db.transaction((tx) => {
+    createProject: ({ id, name, checkout, remote, caw = false, template }) =>
+      db.transaction((tx) => {
         tx.insert(projects)
           .values({ id, name, remote, caw, template: template ?? null })
           .run();
@@ -6431,13 +6504,13 @@ const make = async (path: string): Promise<DbShape> => {
             kind: "hub",
           })
           .run();
-        if (checkout && checkoutPath) {
+        if (checkout) {
           tx.insert(projectPlaces)
             .values({
               id: crypto.randomUUID(),
               projectId: id,
               machineId: checkout.machineId,
-              path: checkoutPath,
+              path: checkout.path,
               kind: "checkout",
               isPrimary: true,
             })
@@ -6448,14 +6521,8 @@ const make = async (path: string): Promise<DbShape> => {
           throw new Error(`project ${id} was not filed`);
         }
         return created;
-      });
-    },
-    addPlace: (asked) => {
-      // Every place a machine has is absolute; the hub's own folder is not a machine's.
-      const place =
-        asked.kind === "hub"
-          ? asked
-          : { ...asked, path: placePathOn(asked.machineId, asked.path) };
+      }),
+    addPlace: (place) => {
       const added = db.transaction((tx) => {
         // The first checkout a project gains is its primary.
         const primary =
@@ -8056,6 +8123,13 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
     },
   };
+  // A database from before every path on a machine was a MachinePath (an
+  // older hub's, a restored backup): its `~` rows take each machine's stored
+  // home now; a machine with none yet has them resolved at its register.
+  for (const { machineId } of store.listAgents()) {
+    store.resolveHomePaths(machineId);
+  }
+  return store;
 };
 
 /**

@@ -24,6 +24,7 @@
     "lint": "ultracite check",
     "lint:changed": "git diff --name-only --diff-filter=ACMR \"$(git merge-base HEAD origin/main)\" | xargs -r biome check --no-errors-on-unmatched",
     "lint:fix": "ultracite fix",
+    "machine-paths:check": "bun scripts/machine-paths-check.ts",
     "typecheck": "bun scripts/typecheck.ts",
     "typecheck:coverage": "bun scripts/typecheck-coverage.ts",
     "words": "bun scripts/words-swift.ts",

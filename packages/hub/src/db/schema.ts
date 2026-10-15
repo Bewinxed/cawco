@@ -57,6 +57,7 @@ import type {
   WorkflowStepStatus,
 } from "@cawco/core";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
+import type { MachinePath } from "@cawco/core/machine-path";
 import type {
   AuthorizationServerMetadata,
   OAuthClientInformationFull,
@@ -556,6 +557,9 @@ export const projectTasks = sqliteTable(
  */
 export type PlaceKind = "checkout" | "workspace" | "hub";
 
+/** A project's folder on the hub, relative to the hub's data (db `hubPlacePath`). */
+export type HubFolder = `projects/${string}`;
+
 /** Where a project's files are, one row per machine and folder. */
 export const projectPlaces = sqliteTable(
   "project_places",
@@ -566,7 +570,8 @@ export const projectPlaces = sqliteTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     /** Not a reference: a machine's places go with it in `deleteMachine`. */
     machineId: text("machine_id").notNull(),
-    path: text("path").notNull(),
+    /** Absolute on its machine; the hub's own folder (kind `hub`) is relative to the hub's data. */
+    path: text("path").$type<MachinePath | HubFolder>().notNull(),
     kind: text("kind").$type<PlaceKind>().notNull(),
     /**
      * The project's primary checkout: where it is worked on first, and what a
@@ -604,7 +609,7 @@ export const projectRepositories = sqliteTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     /** Not a reference: a machine's repositories go with it in `deleteMachine`. */
     machineId: text("machine_id").notNull(),
-    path: text("path").notNull(),
+    path: text("path").$type<MachinePath>().notNull(),
     recordedAt: timestamp("recorded_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -783,7 +788,7 @@ export const instances = sqliteTable("instances", {
    * wandered into and deleted cannot stop it resuming, and its name in every
    * listing (the folder's leaf) does not drift.
    */
-  cwd: text("cwd").notNull(),
+  cwd: text("cwd").$type<MachinePath>().notNull(),
   /**
    * Whether `cwd` is the launch directory. `known` on every row spawned since
    * `cwd` was pinned. `unread` on a row from before, whose launch directory is
@@ -989,9 +994,9 @@ export const workspaces = sqliteTable("workspaces", {
   id: text("id").primaryKey(),
   machineId: text("machine_id").notNull(),
   /** The repository the clone was cut from. */
-  repoRoot: text("repo_root").notNull(),
+  repoRoot: text("repo_root").$type<MachinePath>().notNull(),
   /** The clone's root, where every work item of the workspace runs. */
-  path: text("path").notNull(),
+  path: text("path").$type<MachinePath>().notNull(),
   branch: text("branch").notNull(),
   /**
    * The repository's default branch the clone was cut from, which its work

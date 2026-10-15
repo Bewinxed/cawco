@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./runtime": "./src/runtime.ts",
+    "./machine-path": "./src/machine-path.ts",
     "./capabilities": "./src/capabilities.ts",
     "./release-manifest": "./src/release-manifest.ts",
     "./release-key": "./src/release-key.ts",

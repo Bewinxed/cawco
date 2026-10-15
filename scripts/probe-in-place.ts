@@ -55,6 +55,7 @@ import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { machinePath } from "../packages/core/src/machine-path";
 
 const root = resolve(import.meta.dir, "..");
 const hold = process.argv.includes("--hold");
@@ -516,8 +517,8 @@ if (role === "sessiond") {
             db.createWorkspace({
               id: workspaceId,
               machineId: machine,
-              repoRoot: scratch,
-              path: join(scratch, workspaceId),
+              repoRoot: machinePath(undefined, scratch, machine),
+              path: machinePath(undefined, join(scratch, workspaceId), machine),
               branch: "private",
               base: "main",
               createdByInstanceId: parent,

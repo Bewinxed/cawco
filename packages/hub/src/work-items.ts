@@ -82,6 +82,11 @@ import {
   withLandingLine,
   withWorkspaceLine,
 } from "@cawco/core";
+import {
+  isMachinePath,
+  type MachinePath,
+  MachinePathRefused,
+} from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type {
   DbShape,
@@ -205,8 +210,12 @@ export const isLive = (state: WorkItemRow["state"]): boolean => LIVE.has(state);
 /** A request the hub turns down, with the status and the words the caller reads. */
 export class WorkItemRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409;
-  constructor(status: 400 | 403 | 404 | 409, message: string) {
-    super(message);
+  constructor(
+    status: 400 | 403 | 404 | 409,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
     this.status = status;
   }
 }
@@ -1738,7 +1747,6 @@ export const createWorkItems = ({
       parentInstanceId: item.parentInstanceId,
       workItemId: item.id,
       title: item.title,
-      cwd: workspace?.path ?? "",
       launchDir: "unknown",
       harness: item.harness,
     } as InstanceRow;
@@ -2336,6 +2344,28 @@ export const createWorkItems = ({
   };
 
   /**
+   * The folder a delegate names (`cwd`), or its parent's, as a path on the
+   * machine its workspace is cut on (db `machinePathOn`): refused with that
+   * gate's sentence, a 400, before anything is cut.
+   */
+  const cwdOn = (machineId: string, raw: string): MachinePath => {
+    const path = db.machinePathOn(machineId, raw);
+    if (path instanceof MachinePathRefused) {
+      throw new WorkItemRefusal(400, path.message, { cause: path });
+    }
+    return path;
+  };
+
+  /** A path the machine reported about a clone it cut: absolute, or its refusal thrown. */
+  const cutPath = (machineId: string, raw: string): MachinePath => {
+    const path = db.machinePathOn(machineId, raw);
+    if (path instanceof MachinePathRefused) {
+      throw path;
+    }
+    return path;
+  };
+
+  /**
    * A new workspace: the project's place made a git repository first when it
    * is a plain folder ({@link WorkItemDeps.beforeCut}), then its machine cuts
    * the clone and starts its boundary, and the hub files it. A place that
@@ -2347,7 +2377,7 @@ export const createWorkItems = ({
    */
   const openWorkspace = async (
     createdBy: string,
-    cwd: string,
+    cwd: MachinePath,
     machineId: string,
     projectId: string | null,
     { account, checksFor }: { account?: string; checksFor?: string } = {}
@@ -2369,8 +2399,9 @@ export const createWorkItems = ({
       return db.createWorkspace({
         id,
         machineId,
-        repoRoot: checkout.repoRoot,
-        path: checkout.path,
+        // Absolute as the machine cut them; the gate says so or refuses.
+        repoRoot: cutPath(machineId, checkout.repoRoot),
+        path: cutPath(machineId, checkout.path),
         branch: checkout.branch,
         base: checkout.base,
         boundaryPid: checkout.boundaryPid,
@@ -2824,7 +2855,7 @@ export const createWorkItems = ({
       );
       const workspace = await openWorkspace(
         parent.id,
-        request.cwd ?? parent.cwd,
+        cwdOn(machineId, request.cwd ?? parent.cwd),
         machineId,
         projectId,
         { account: placement.launchesOn }
@@ -3257,12 +3288,16 @@ export const createWorkItems = ({
   const repositoryOn = (
     projectId: string,
     machineId: string
-  ): string | undefined =>
-    db
+  ): MachinePath | undefined => {
+    const checkout = db
       .project(projectId)
       ?.places.find(
         (place) => place.machineId === machineId && place.kind === "checkout"
-      )?.path ?? db.projectRepository(projectId, machineId);
+      )?.path;
+    return checkout && isMachinePath(checkout)
+      ? checkout
+      : db.projectRepository(projectId, machineId);
+  };
 
   /**
    * The workspace that runs `workspace`'s checks on `machineId`: the one cut

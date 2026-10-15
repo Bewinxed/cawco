@@ -29,6 +29,7 @@ import type {
   ThreadNote,
   ThreadSummary,
 } from "@cawco/core";
+import type { MachinePath } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
@@ -36,7 +37,7 @@ import { tool } from "./admin-tools";
 import type { DbShape, ProjectOfferRow, ProjectRow } from "./db";
 import { leafOf, sessionLabel } from "./labels";
 import { FolderRefusal, refused } from "./project-folder";
-import { normaliseRemote, placePath } from "./projects";
+import { normaliseRemote } from "./projects";
 import type { TaskActor, Tasks } from "./tasks";
 
 /** Open plan items at a turn's end that make a plan worth a project. */
@@ -146,9 +147,9 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
 
   const remoteOf = (
     machineId: string,
-    cwd: string
+    cwd: MachinePath
   ): Promise<string | null | undefined> => {
-    const key = `${machineId}:${placePath(cwd)}`;
+    const key = `${machineId}:${cwd}`;
     const known = remotes.get(key);
     if (known !== undefined) {
       return known;
@@ -160,7 +161,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     const reading = deps
       .run(
         machineId,
-        placePath(cwd),
+        cwd,
         `${SAFE_GIT_SHELL}git remote get-url origin`,
         READ_MS
       )
@@ -231,7 +232,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
   const sharedRepository = async (
     row: InstanceShape
   ): Promise<string | undefined> => {
-    const cwd = placePath(row.cwd);
+    const { cwd } = row;
     if (
       db
         .listProjects()
@@ -381,7 +382,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         );
       }
       const { project, joined } = await deps.createProject({
-        name: leafOf(placePath(row.cwd)),
+        name: leafOf(row.cwd),
         checkout: { machineId: row.machineId, cwd: row.cwd },
         caw: true,
       });

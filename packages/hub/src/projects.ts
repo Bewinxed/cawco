@@ -64,10 +64,6 @@ export const normaliseRemote = (url: string): string | null => {
   return host && repo ? `${host.toLowerCase()}/${repo}` : null;
 };
 
-/** A folder as a place stores it: no trailing slash, except the root's own. */
-export const placePath = (path: string): string =>
-  path.trim().replace(TRAILING_SLASHES, "") || "/";
-
 /** A remote read is local git; past this the machine is not going to answer it. */
 const REMOTE_READ_MS = 10_000;
 

@@ -222,7 +222,8 @@ export const createWorkspace = async (
   projectId?: unknown,
   account?: unknown
 ): Promise<WorkspaceCheckout> => {
-  const dir = expandHome(String(cwd));
+  // A MachinePath from the hub (work-items `openWorkspace`): absolute.
+  const dir = String(cwd);
   const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
   const plain = gitUntil(deadline);
   const repoRoot = await plain(dir, "rev-parse", "--show-toplevel").catch(

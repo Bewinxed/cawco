@@ -13099,6 +13099,16 @@
               }
             }
           },
+          "400": {
+            "description": "getApiProjectsByIdMoveEstimate 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "getApiProjectsByIdMoveEstimate 404",
             "content": {
@@ -13313,6 +13323,16 @@
               }
             }
           },
+          "400": {
+            "description": "postApiProjectsByIdMoves 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "postApiProjectsByIdMoves 404",
             "content": {
@@ -13392,6 +13412,16 @@
               }
             }
           },
+          "400": {
+            "description": "deleteApiMovesById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "deleteApiMovesById 404",
             "content": {
@@ -13445,6 +13475,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MoveJob"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiMovesByIdRetry 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -21662,7 +21702,7 @@
                 ]
               },
               "cwd": {
-                "type": "string"
+                "$ref": "#/components/schemas/MachinePath"
               },
               "launchDir": {
                 "$ref": "#/components/schemas/InstanceRowLaunchDir"
@@ -21899,7 +21939,7 @@
                   ]
                 },
                 "cwd": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/MachinePath"
                 },
                 "launchDir": {
                   "$ref": "#/components/schemas/InstanceRowLaunchDir"
@@ -23342,7 +23382,16 @@
                     "$ref": "#/components/schemas/PlaceKind"
                   },
                   "path": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                        "type": "string"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^projects/.*$"
+                      }
+                    ]
                   },
                   "isPrimary": {
                     "type": "boolean"
@@ -23409,7 +23458,16 @@
                 "$ref": "#/components/schemas/PlaceKind"
               },
               "path": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                    "type": "string"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^projects/.*$"
+                  }
+                ]
               },
               "isPrimary": {
                 "type": "boolean"
@@ -23545,7 +23603,16 @@
                   "$ref": "#/components/schemas/PlaceKind"
                 },
                 "path": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
                 },
                 "isPrimary": {
                   "type": "boolean"
@@ -23735,7 +23802,16 @@
                   "$ref": "#/components/schemas/PlaceKind"
                 },
                 "path": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
                 },
                 "isPrimary": {
                   "type": "boolean"
@@ -23809,7 +23885,16 @@
                 "$ref": "#/components/schemas/PlaceKind"
               },
               "path": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                    "type": "string"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^projects/.*$"
+                  }
+                ]
               },
               "isPrimary": {
                 "type": "boolean"
@@ -23945,7 +24030,16 @@
                   "$ref": "#/components/schemas/PlaceKind"
                 },
                 "path": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
                 },
                 "isPrimary": {
                   "type": "boolean"
@@ -24107,7 +24201,16 @@
                   "$ref": "#/components/schemas/PlaceKind"
                 },
                 "path": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^projects/.*$"
+                    }
+                  ]
                 },
                 "isPrimary": {
                   "type": "boolean"
@@ -24180,12 +24283,6 @@
             "type": "string",
             "format": "date-time"
           },
-          "path": {
-            "type": "string"
-          },
-          "repoRoot": {
-            "type": "string"
-          },
           "base": {
             "type": "string"
           },
@@ -24218,6 +24315,12 @@
               "null",
               "string"
             ]
+          },
+          "path": {
+            "$ref": "#/components/schemas/MachinePath"
+          },
+          "repoRoot": {
+            "$ref": "#/components/schemas/MachinePath"
           }
         },
         "required": [
@@ -34489,6 +34592,10 @@
           "start",
           "started"
         ]
+      },
+      "MachinePath": {
+        "description": "An absolute, normalised path on one machine (see the module). On the wire\nit is a plain string: the brand is the compiler's alone.",
+        "type": "string"
       },
       "KeepAlive": {
         "type": "object",

@@ -54,6 +54,11 @@ import {
   type SpawnPayload,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import {
+  type MachinePath,
+  MachinePathRefused,
+  machinePath,
+} from "@cawco/core/machine-path";
 import { checkoutOf, type DbShape, type MoveRow, type ProjectRow } from "./db";
 import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
@@ -117,7 +122,7 @@ export interface MoveState {
   targetHome: string;
   targetInstanceId: string;
   targetMachineId: string;
-  targetPath: string;
+  targetPath: MachinePath;
 }
 
 export interface MovesDeps {
@@ -174,9 +179,13 @@ export interface MovesDeps {
 
 /** A refusal a route answers with its status. */
 export class MoveRefused extends Error {
-  readonly status: 404 | 409;
-  constructor(status: 404 | 409, message: string) {
-    super(message);
+  readonly status: 400 | 404 | 409;
+  constructor(
+    status: 400 | 404 | 409,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
     this.status = status;
   }
 }
@@ -686,12 +695,16 @@ export const createMoves = (deps: MovesDeps) => {
     if (refused || !sourcePlace) {
       return refusedPlan(project, asked ?? "", refused ?? "");
     }
+    const targetPath = db.machinePathOn(
+      targetMachineId,
+      asked ?? `~/${posix.basename(sourcePlace.path)}`
+    );
+    if (targetPath instanceof MachinePathRefused) {
+      throw new MoveRefused(400, targetPath.message, { cause: targetPath });
+    }
     const [sourceInspection, targetInspection] = await Promise.all([
       inspect(sourcePlace.machineId, sourcePlace.path),
-      inspect(
-        targetMachineId,
-        asked ?? `~/${posix.basename(sourcePlace.path)}`
-      ),
+      inspect(targetMachineId, targetPath),
     ]);
     const source = {
       machineId: sourcePlace.machineId,
@@ -942,7 +955,12 @@ export const createMoves = (deps: MovesDeps) => {
       sourcePath: s.path,
       sourceHome: s.home,
       targetMachineId,
-      targetPath: t.path,
+      // The folder the target's daemon resolved and inspected, absolute.
+      targetPath: machinePath(
+        t.home,
+        t.path,
+        deps.machineName(targetMachineId)
+      ),
       targetHome: t.home,
       bigFiles: s.bigFiles,
       gitInit: !s.isGit,

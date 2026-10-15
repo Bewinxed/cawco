@@ -283,6 +283,7 @@ import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
+import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
@@ -380,13 +381,7 @@ import type {
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
-import {
-  checkoutOf,
-  hashHookMaterial,
-  listedAt,
-  PlacePathRefused,
-  TURN_UNRECORDED,
-} from "./db";
+import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { PriorConversation } from "./db/schema";
 import { buildDecisionPage, type PageSources } from "./decision-page";
@@ -2417,6 +2412,42 @@ export const createServer = (
   // a `sqlite3` session at 3am. A column nobody has to remember to distrust is
   // worth one write at startup.
   db.markAllAgentsOffline();
+
+  /**
+   * `raw` as a path on `machineId` (db `machinePathOn`, core `machinePath`):
+   * how every path a person, a client or a session names for a machine
+   * enters the hub. Its refusal, a sentence, is thrown as the caller's own
+   * error from `refuse`: a 400 at a route, a tool's error at a tool.
+   */
+  const askedMachinePath = (
+    machineId: string,
+    raw: string,
+    refuse: (message: string, cause: Error) => Error
+  ): MachinePath => {
+    const path = db.machinePathOn(machineId, raw);
+    if (path instanceof MachinePathRefused) {
+      throw refuse(path.message, path);
+    }
+    return path;
+  };
+
+  /**
+   * A path a machine's daemon reported about itself (a session's launch
+   * directory, a clone it cut), as a {@link MachinePath}. A daemon reports
+   * absolute paths; one that is not is said in the log and stored as
+   * nothing known, never as the string it sent.
+   */
+  const reportedMachinePath = (
+    machineId: string,
+    raw: string
+  ): MachinePath | undefined => {
+    const path = db.machinePathOn(machineId, raw);
+    if (path instanceof MachinePathRefused) {
+      console.warn(`[hub] ${machineId} reported ${path.message}`);
+      return undefined;
+    }
+    return path;
+  };
 
   /**
    * A SEND NO PROCESS TOOK WAITS FOR THE SESSION'S NEXT PROCESS, NOT A TIMER.
@@ -5584,6 +5615,42 @@ export const createServer = (
     };
   };
 
+  /** A spawn as it leaves the hub ({@link settleMode}): every folder it names a path on its machine. */
+  type SettledSpawn = SpawnPayload & {
+    cwd: MachinePath;
+    bootstrap?: { repo: string; baseDir: MachinePath };
+    scratch?: { worktree?: boolean; baseCwd?: MachinePath };
+  };
+
+  /** Each folder a spawn names, as a path on `machineId`; throws the gate's refusal. */
+  const spawnPaths = (
+    machineId: string,
+    { cwd, bootstrap, scratch }: SpawnPayload
+  ): Pick<SettledSpawn, "cwd" | "bootstrap" | "scratch"> => {
+    const on = (raw: string): MachinePath => {
+      const path = db.machinePathOn(machineId, raw);
+      if (path instanceof MachinePathRefused) {
+        throw path;
+      }
+      return path;
+    };
+    const { baseCwd, ...spinOff } = scratch ?? {};
+    return {
+      cwd: on(cwd),
+      ...(bootstrap
+        ? { bootstrap: { ...bootstrap, baseDir: on(bootstrap.baseDir) } }
+        : {}),
+      ...(scratch
+        ? {
+            scratch: {
+              ...spinOff,
+              ...(baseCwd ? { baseCwd: on(baseCwd) } : {}),
+            },
+          }
+        : {}),
+    };
+  };
+
   /** The permission modes a machine's harness reported, or undefined when it has not reported that harness. */
   const harnessModes = (
     machineId: string,
@@ -5600,17 +5667,35 @@ export const createServer = (
    * own mode, the row's last) — else explicit `bypassPermissions`, never the
    * machine's default. A harness that reports none (pi) records
    * none: a fallback is dropped, and a mode asked of it is refused. A machine
-   * that has not reported the harness is taken at its word.
+   * that has not reported the harness is taken at its word. Its directory is
+   * settled here too, for the same every spawn: `cwd` as a path on the
+   * machine (core `machinePath`), or the refusal saying why it is none.
    */
   const settleMode = (
     machineId: string,
     payload: SpawnPayload,
     fallback?: string | null
   ):
-    | { payload: SpawnPayload; permissionMode: string | null }
+    | { payload: SettledSpawn; permissionMode: string | null }
     | { refusal: string } => {
     const harness = payload.harness ?? "claude";
-    const { permissionMode: asked, ...rest } = payload;
+    let paths: Pick<SettledSpawn, "cwd" | "bootstrap" | "scratch">;
+    try {
+      paths = spawnPaths(machineId, payload);
+    } catch (error) {
+      if (error instanceof MachinePathRefused) {
+        return { refusal: `${error.message} Nothing was started.` };
+      }
+      throw error;
+    }
+    const {
+      permissionMode: asked,
+      cwd: _cwd,
+      bootstrap: _bootstrap,
+      scratch: _scratch,
+      ...spawn
+    } = payload;
+    const rest = { ...spawn, ...paths };
     if (harnessModes(machineId, harness)?.length === 0) {
       return asked
         ? {
@@ -5803,7 +5888,8 @@ export const createServer = (
       id: instanceId,
       addressProtocol: addressProtocolMachines.has(machineId),
       machineId,
-      cwd: revive.cwd,
+      // Its own launch directory (revivePayloadOf): a revive never moves it.
+      cwd: row.cwd,
       sessionId: row.sessionId ?? undefined,
       harness: row.harness ?? undefined,
       kind: row.kind ?? undefined,
@@ -7409,7 +7495,10 @@ export const createServer = (
             return;
           }
           const info = answer.result as { cwd?: string } | null | undefined;
-          db.settleLaunchDir(row.id, info?.cwd || undefined);
+          db.settleLaunchDir(
+            row.id,
+            info?.cwd ? reportedMachinePath(machineId, info.cwd) : undefined
+          );
         })
       );
     }
@@ -8626,26 +8715,6 @@ export const createServer = (
   };
 
   /**
-   * A folder on a machine as a place stores it (db `placePathOn`): absolute,
-   * `~` resolved against the machine's home. Its refusal is thrown as the
-   * caller's own, from `refuse`.
-   */
-  const askedPlacePath = (
-    machineId: string,
-    folder: string,
-    refuse: (message: string, cause: Error) => Error
-  ): string => {
-    try {
-      return db.placePathOn(machineId, folder);
-    } catch (error) {
-      if (error instanceof PlacePathRefused) {
-        throw refuse(error.message, error);
-      }
-      throw error;
-    }
-  };
-
-  /**
    * Why a place was not added: the route's status and its sentence, which a
    * setup page's send answers as it answers any refusal of its own.
    */
@@ -8684,7 +8753,7 @@ export const createServer = (
     if (!db.listAgents().some((row) => row.machineId === machineId)) {
       throw new PlaceRefusal(404, "No machine with that id on this hub.");
     }
-    const path = askedPlacePath(
+    const path = askedMachinePath(
       machineId,
       asked,
       (message, cause) => new PlaceRefusal(400, message, { cause })
@@ -9630,7 +9699,7 @@ export const createServer = (
     asked: SpawnPayload,
     fallbackMode?: string | null
   ):
-    | { payload: SpawnPayload; permissionMode: string | null }
+    | { payload: SettledSpawn; permissionMode: string | null }
     | { refusal: string } => {
     const inFlight = inFlightRefusal(asked.instanceId);
     if (inFlight) {
@@ -11865,7 +11934,7 @@ export const createServer = (
       id: row.id,
       addressProtocol: addressProtocolMachines.has(row.machineId),
       machineId: row.machineId,
-      cwd: row.cwd,
+      cwd: payload.cwd,
       sessionId: row.sessionId ?? undefined,
       harness: row.harness ?? undefined,
       projectId: row.projectId ?? undefined,
@@ -14912,7 +14981,7 @@ export const createServer = (
   }> => {
     const checkout = asked.checkout && {
       machineId: asked.checkout.machineId,
-      path: askedPlacePath(
+      path: askedMachinePath(
         asked.checkout.machineId,
         asked.checkout.cwd,
         (message, cause) => new FolderRefusal(400, message, { cause })
@@ -22029,7 +22098,7 @@ export const createServer = (
               });
               // Places filed under `~` before every place was absolute take
               // the home this register reported.
-              for (const projectId of db.resolveHomePlaces(message.machineId)) {
+              for (const projectId of db.resolveHomePaths(message.machineId)) {
                 placesChanged(message.machineId, projectId);
               }
               db.noteAgentAddressContract(
@@ -22724,8 +22793,12 @@ export const createServer = (
                   FramePayload,
                   { kind: "scratch_worktree" }
                 >;
-                if (row && frame.processGeneration === processGeneration(row)) {
-                  db.recordScratchWorktree(row.id, frame.worktree);
+                const dir =
+                  row &&
+                  frame.processGeneration === processGeneration(row) &&
+                  reportedMachinePath(message.machineId, frame.worktree.dir);
+                if (row && dir) {
+                  db.recordScratchWorktree(row.id, frame.worktree, dir);
                 }
                 break;
               }
@@ -23152,7 +23225,9 @@ export const createServer = (
                   db.noteInstanceSession(
                     message.instanceId,
                     named.sessionId,
-                    named.cwd,
+                    named.cwd
+                      ? reportedMachinePath(message.machineId, named.cwd)
+                      : undefined,
                     peek(message.payload, "harness"),
                     named.tooling
                   );

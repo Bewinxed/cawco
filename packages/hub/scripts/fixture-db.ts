@@ -21,7 +21,12 @@ import { Database } from "bun:sqlite";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { machinePath } from "@cawco/core/machine-path";
 import { hubInProcess } from "./hub-in-process";
+
+/** A fixture folder on a fixture machine, made as every machine path is. */
+const fixturePath = (raw: string) => machinePath("/home/dev", raw, "fixture");
+
 import { newestNightly } from "./shipped";
 
 const HUB = resolve(import.meta.dir, "..");
@@ -74,7 +79,10 @@ function seedProjects(db: HubDb): string[] {
     db.createProject({
       id: projectId,
       name: `Project ${p + 1}`,
-      checkout: { machineId, path: `/home/dev/src/project-${p + 1}` },
+      checkout: {
+        machineId,
+        path: fixturePath(`/home/dev/src/project-${p + 1}`),
+      },
       remote:
         p % 3 === 0 ? null : `https://example.invalid/dev/project-${p + 1}.git`,
     });
@@ -94,7 +102,7 @@ function seedSessions(db: HubDb, projects: string[]): Seeded[] {
     db.openInstance({
       id: instanceId,
       machineId,
-      cwd: `/home/dev/src/${projectId}`,
+      cwd: fixturePath(`/home/dev/src/${projectId}`),
       sessionId: crypto.randomUUID(),
       harness: pick(HARNESSES),
       projectId,
@@ -180,8 +188,8 @@ function seedWorkspaces(db: HubDb, sessions: Seeded[]): void {
     const workspace = db.createWorkspace({
       id: id("ws", w),
       machineId: parent.machineId,
-      repoRoot: `/home/dev/src/${parent.projectId}`,
-      path: `/home/dev/.worktrees/${parent.projectId}-${w}`,
+      repoRoot: fixturePath(`/home/dev/src/${parent.projectId}`),
+      path: fixturePath(`/home/dev/.worktrees/${parent.projectId}-${w}`),
       branch: `ws/${w}`,
       createdByInstanceId: parent.id,
     });

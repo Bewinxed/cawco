@@ -88,6 +88,7 @@ const checks: Check[] = [
   project("scripts/probe-kit/tsconfig.json"),
   project("tsconfig.json"),
   script(".", "claude-paths:check"),
+  script(".", "machine-paths:check"),
   script("packages/hub", "roles:check"),
   script("packages/core", "openui:check"),
   script("packages/core", "tools:check"),
