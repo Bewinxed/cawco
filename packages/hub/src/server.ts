@@ -143,6 +143,10 @@ import {
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
+  CONTROL_HOST_CHECKOUT,
+  CONTROL_HOST_CHECKOUT_REMOVE,
+  CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_WRITE,
   CONTROL_INTERRUPT,
   CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
@@ -987,6 +991,10 @@ const strategyChoice = t.Object({
 const UNROUTED_REPLY_LIMIT = 4096;
 /** Machine controls only the hub sends: a dashboard's control naming one is refused at the relay. */
 const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
+  CONTROL_HOST_CHECKOUT,
+  CONTROL_HOST_CHECKOUT_REMOVE,
+  CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_WRITE,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
@@ -1105,6 +1113,7 @@ const checksSchema = t.Array(
     name: t.String(),
     command: t.String(),
     expect: t.Optional(t.String()),
+    host: t.Optional(t.Boolean()),
     machine: t.Optional(t.String()),
     timeoutSec: t.Optional(t.Number()),
   }),
@@ -16088,6 +16097,10 @@ export const createServer = (
       method === CONTROL_WORKSPACE_LANDED ||
       method === CONTROL_WORKSPACE_BUNDLE ||
       method === CONTROL_WORKSPACE_AT ||
+      method === CONTROL_HOST_CHECKOUT ||
+      method === CONTROL_HOST_CHECKOUT_REMOVE ||
+      method === CONTROL_INPUTS_READ ||
+      method === CONTROL_INPUTS_WRITE ||
       method === CONTROL_PLACE_REPO ||
       method === CONTROL_PLACE_PUSH
         ? WORKSPACE_CREATE_TIMEOUT_MS
@@ -16174,6 +16187,7 @@ export const createServer = (
     inputRefusal,
     awaitsSend: (instanceId) => awaitsSend(instanceId),
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
+    leadPlace: leadPlaceRef,
     report: (row, body, failed, notice, headline) => {
       reportToParent(row, body, failed, { notice, headline });
       // An item that ends while its session is at rest (checks a restarted
@@ -22046,6 +22060,7 @@ export const createServer = (
             workspace: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
             checks: checksSchema,
+            inputs: t.Optional(t.Array(t.String())),
             lands: t.Optional(LANDS),
             outputs: t.Optional(t.Array(t.String())),
             group: t.Optional(t.String()),
@@ -22262,6 +22277,47 @@ export const createServer = (
             return status(
               error instanceof WorkItemRefusal ? error.status : 502,
               message
+            );
+          }
+        }
+      )
+      // A `handoff`'s inputs: copied into its target item's `$TMPDIR/inputs/`
+      // before the handoff goes, by the item's parent or its project's lead.
+      .post(
+        "/api/work-items/inputs",
+        {
+          ...hidden,
+          body: t.Object({
+            from: t.String({ minLength: 1 }),
+            instanceId: t.String({ minLength: 1 }),
+            inputs: t.Array(t.String(), { minItems: 1 }),
+          }),
+        },
+        async ({ body, request, status, server }) => {
+          server?.timeout(request, 0);
+          const authorization = request.headers.get("authorization");
+          const identity = identities.resolve(authorization);
+          if (authorization !== null && !identity) {
+            return status(401, "Invalid session credential");
+          }
+          if (identity && identity.instanceId !== body.from) {
+            return status(
+              403,
+              "Session credential does not belong to the inputs' sender"
+            );
+          }
+          try {
+            return {
+              inputs: await workItems.handInputs(
+                body.instanceId,
+                body.from,
+                body.inputs
+              ),
+            };
+          } catch (error) {
+            return status(
+              error instanceof WorkItemRefusal ? error.status : 502,
+              error instanceof Error ? error.message : String(error)
             );
           }
         }

@@ -55,9 +55,7 @@ const checksParameter = () =>
         name: z.string().describe("2 to 6 plain words."),
         command: z
           .string()
-          .describe(
-            "A shell command, run with the item's worktree as its working directory."
-          ),
+          .describe("A shell command, run at the repository's root."),
         expect: z
           .string()
           .optional()
@@ -68,7 +66,13 @@ const checksParameter = () =>
           .string()
           .optional()
           .describe(
-            "Run it on this machine (hostname or machineId) at the item's last commit, like an Xcode build on the Mac. Workspaces never ssh."
+            "Run it on this machine (hostname or machineId) at the item's last commit, like an Xcode build on the Mac."
+          ),
+        host: z
+          .boolean()
+          .optional()
+          .describe(
+            "Run it unsandboxed on a fresh checkout of the last commit: a probe whose scratch fleet delegates, podman. Only you set it."
           ),
         timeoutSec: z
           .number()
@@ -434,12 +438,18 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "The brief. Include the finding, the paths involved, and the ask."
           ),
+        inputs: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "For your delegate: files on your machine, by absolute path, copied to its $TMPDIR/inputs/ first."
+          ),
       },
-      async ({ target, message }) => ({
+      async ({ target, message, inputs }) => ({
         content: [
           {
             type: "text" as const,
-            text: await actions.handoff(target, message),
+            text: await actions.handoff(target, message, inputs),
           },
         ],
       })
@@ -558,7 +568,7 @@ export function handoffTools(deps: HandoffDeps) {
         "Do NOT delegate: a single command or file read whose exact output you need; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
         "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
-        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, with a boundary every shell command of the delegate runs inside. It writes only its clone, its own scratch folder and the workspaces' own cache (package caches, DerivedData, SwiftPM); host caches are read-only. Credential stores, SSH keys and key agents stay unreadable and service-manager control denied: it reaches another machine only by a check's `machine` or a delegate there. On Linux it sees only its own processes; on macOS it can see other processes but cannot signal them. The workspace is cut on this session's machine unless `machine` names another one of the fleet. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there: a new item, under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
+        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, every shell command of the delegate inside its boundary. It writes only its clone, its scratch folder and the workspaces' own cache (host caches are read-only), reads no credential store, SSH key or key agent, has no service manager, and reaches another machine only by a check's `machine` or a delegate there; it signals only its own processes, and on Linux sees only them. The workspace is cut on this session's machine unless `machine` names another. Without `workspace` the item gets a new one; with it, the item is the follow-up there: under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
         "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold workspace session is refused once with the cost considerations, and a repeat of the call is delivered.\n\n" +
         "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own.",
       {
@@ -595,18 +605,16 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe(
-            "The repository a new workspace is cut from, on branch ws/<id> from the repository's " +
-              "default branch, fetched from its remote as the workspace is cut. " +
-              "With `machine`, this is an absolute path on that machine, and required when that machine is not this session's. " +
-              "Defaults to this session's directory; unused with `workspace`."
+            "The repository a new workspace is cut from, on branch ws/<id> off its default branch as fetched then. " +
+              "With `machine`, an absolute path there, required when not this session's machine. " +
+              "Default: this session's directory; unused with `workspace`."
           ),
         machine: z
           .string()
           .optional()
           .describe(
-            'The machine the work item runs on: its hostname as the fleet shows it (e.g. "Omars-MacBook-Pro", ' +
-              '"obelisk-of-light"; list_sessions ends with the machines online now) or its machineId. ' +
-              "Omit to run it on this session's machine. An unknown or offline machine is refused."
+            "The machine the work item runs on: its hostname as the fleet shows it (list_sessions ends with those online) or machineId; " +
+              "this session's when omitted. An unknown or offline machine is refused."
           ),
         skills: z
           .array(z.string())
@@ -618,19 +626,17 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe(
-            "A workspace id from an earlier delegate's result or report. The new work item is its " +
-              "follow-up: the brief goes to the session that workspace's last item ran, as its next message " +
-              "on its cached transcript. Refused while an item there is still running, and with type, " +
-              "model, harness, skills, fork or machine, which are that session's own; delegate without workspace for a different model or machine."
+            "A workspace id from an earlier delegate's result or report: the item is its follow-up, the brief " +
+              "going to that workspace's last session on its cached transcript. Refused while an item there runs, " +
+              "and with type, model, harness, skills, fork or machine, which are that session's own."
           ),
         fork: z
           .boolean()
           .optional()
           .describe(
-            "Start the delegate as a fork of this conversation: every turn so far, then the brief. It runs " +
-              "on this session's harness and model (an explicit different harness/model is refused, since " +
-              "the prompt cache would not carry over); `type` still sets effort, skills and denied tools. " +
-              "Always a new workspace, so not with `workspace`: a follow-up continues its own session instead."
+            "Start the delegate as a fork of this conversation: every turn so far, then the brief, on this " +
+              "session's harness and model so the prompt cache carries over (another is refused); `type` still " +
+              "sets effort, skills and denied tools. Always a new workspace, never with `workspace`."
           ),
         can_delegate: z
           .boolean()
@@ -640,8 +646,14 @@ export function handoffTools(deps: HandoffDeps) {
               'unless its type is marked "may delegate by default"; a value here wins. Set true only for an orchestrator that must fan out.'
           ),
         checks: checksParameter().describe(
-          "The item's acceptance checks. The hub runs each command in the item's worktree, inside its workspace boundary exactly as the delegate's own shell commands run (same sandbox, same $TMPDIR), when the delegate calls finish_item; the item is done only when every command exits 0 and its stdout contains `expect` where one is given. Write the checks a reviewer would run: build, lint, type-check, a grep that proves a removal, one script run for a live assertion. The delegate runs nothing beyond these to prove the work."
+          "The item's acceptance checks. When the delegate calls finish_item, the hub runs each in the item's worktree, inside its boundary as the delegate's own commands run (same $TMPDIR), but a `host` one; the item is done only when every command exits 0 and its stdout contains `expect` where given. Write what a reviewer would run: build, lint, type-check, a grep proving a removal, one script for a live assertion; a probe that delegates is a `host` check."
         ),
+        inputs: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Files on this machine its sandbox can't read (a log excerpt), by absolute path: copied to its $TMPDIR/inputs/ before its first turn. No secrets; 64 MiB in all."
+          ),
         lands: z
           .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
           .optional()
@@ -676,6 +688,7 @@ export function handoffTools(deps: HandoffDeps) {
         fork,
         can_delegate,
         checks,
+        inputs,
         machine,
         lands,
         outputs,
@@ -695,6 +708,7 @@ export function handoffTools(deps: HandoffDeps) {
           type,
           canDelegate: can_delegate,
           checks,
+          inputs,
           machine,
           lands,
           outputs,
@@ -858,7 +872,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "set_item_checks",
-      "Replace the whole list of acceptance checks on one of YOUR delegates' running work items; the delegate is told, and finish_item runs the new list from then on. Use it when a check was written for a design that was then changed, instead of stopping the delegate.",
+      "Replace the whole list of acceptance checks on one of YOUR delegates' running work items; the delegate is told, and finish_item runs the new list. Use it when a check was written for a design that then changed, instead of stopping the delegate.",
       {
         target: z
           .string()

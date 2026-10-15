@@ -345,7 +345,17 @@ const checkName = (command: string): string => {
   return words.length < 2 ? `Run ${words[0] ?? "check"}` : words.join(" ");
 };
 
-/** The task's checks as a work item's, or the default check when it names none. */
+/**
+ * A task check that runs on the host (work-items.ts `runChecks`): its
+ * command opens with `host:`, as `host: bun scripts/probe-kit/run.ts x`.
+ */
+const HOST_CHECK = /^host:\s*/;
+
+/**
+ * The task's checks as a work item's, or the default check when it names
+ * none. The task file is its writers' (the person, its project's lead), never
+ * an attempt's, so a `host:` check there is its parent's declaration.
+ */
 const checksOf = (
   commands: string[],
   lands: LandsMode,
@@ -353,7 +363,14 @@ const checksOf = (
 ): WorkItemCheck[] =>
   commands.length === 0
     ? [defaultCheck(lands, outputs)]
-    : commands.map((command) => ({ name: checkName(command), command }));
+    : commands.map((written) => {
+        const command = written.replace(HOST_CHECK, "");
+        return {
+          name: checkName(command),
+          command,
+          ...(command === written ? {} : { host: true }),
+        };
+      });
 
 /** What of a task an attempt's work item carries as it is: outputs, group, owned files, budget. */
 const taskLimits = (

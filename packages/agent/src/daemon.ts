@@ -30,6 +30,10 @@ import {
   CONTROL_CANCEL_COMMAND,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
+  CONTROL_HOST_CHECKOUT,
+  CONTROL_HOST_CHECKOUT_REMOVE,
+  CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_WRITE,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
   CONTROL_LEND_ACCOUNT,
   CONTROL_MOVE_CANCEL,
@@ -95,7 +99,13 @@ import { harness, harnesses } from "./harnesses";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
+import {
+  abandonHostCheckouts,
+  hostCheckout,
+  removeHostCheckout,
+} from "./host-check";
 import { serveHubCredential } from "./hub-git";
+import { readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -2236,9 +2246,19 @@ const attach = (
 
     // A command the hub ran over this connection answers nobody once it ends,
     // and the hub runs its checks again from the first when it is back: the
-    // commands go with the connection. Sessions are not commands and stay.
+    // commands go with the connection, and the host checks' checkouts they
+    // ran in. Sessions are not commands and stay.
     return yield* closed(socket, url).pipe(
-      Effect.tapError(() => Effect.sync(abandonCommands))
+      Effect.tapError(() =>
+        Effect.sync(() => {
+          abandonCommands();
+          abandonHostCheckouts().catch((error: unknown) =>
+            console.warn(
+              `[host-check] checkouts of the ended connection's runs were not removed: ${String(error)}`
+            )
+          );
+        })
+      )
     );
   });
 
@@ -2519,6 +2539,24 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
           ? Promise.reject(new Error(AGENT_RESTARTING))
           : workspaceAt(ref, base, at, from)
     );
+    // A check its parent marked host: a fresh checkout outside every
+    // boundary, for one check run. Those of runs no hub follows any more (a
+    // stopped agent's) go now; a lost connection takes its runs' with it.
+    yield* Effect.promise(abandonHostCheckouts);
+    supervisor.registerDaemonFunction(
+      CONTROL_HOST_CHECKOUT,
+      (source, head, run) =>
+        fenced()
+          ? Promise.reject(new Error(AGENT_RESTARTING))
+          : hostCheckout(source, head, run)
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_HOST_CHECKOUT_REMOVE,
+      removeHostCheckout
+    );
+    // A delegate's inputs: read here for a parent here, written here into a workspace here.
+    supervisor.registerDaemonFunction(CONTROL_INPUTS_READ, readInputs);
+    supervisor.registerDaemonFunction(CONTROL_INPUTS_WRITE, writeInputs);
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_MIGRATE,
       convertWorktrees

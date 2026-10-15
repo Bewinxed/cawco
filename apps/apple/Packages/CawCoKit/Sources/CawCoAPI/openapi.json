@@ -21896,6 +21896,12 @@
           "description": {
             "type": "string"
           },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInput"
+            }
+          },
           "slug": {
             "type": "string"
           },
@@ -21904,12 +21910,6 @@
           },
           "program": {
             "type": "string"
-          },
-          "inputs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowInput"
-            }
           }
         },
         "required": [
@@ -21968,6 +21968,12 @@
           "description": {
             "type": "string"
           },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInput"
+            }
+          },
           "slug": {
             "type": "string"
           },
@@ -21976,12 +21982,6 @@
           },
           "program": {
             "type": "string"
-          },
-          "inputs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowInput"
-            }
           }
         },
         "required": [
@@ -22026,6 +22026,12 @@
           "description": {
             "type": "string"
           },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInput"
+            }
+          },
           "slug": {
             "type": "string"
           },
@@ -22034,12 +22040,6 @@
           },
           "program": {
             "type": "string"
-          },
-          "inputs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowInput"
-            }
           }
         },
         "required": [
@@ -22282,6 +22282,9 @@
             "type": "string",
             "format": "date-time"
           },
+          "inputs": {
+            "type": "object"
+          },
           "startedAt": {
             "type": "string",
             "format": "date-time"
@@ -22303,9 +22306,6 @@
           },
           "program": {
             "type": "string"
-          },
-          "inputs": {
-            "type": "object"
           },
           "workflowId": {
             "type": "string"
@@ -22449,6 +22449,9 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "inputs": {
+                "type": "object"
+              },
               "startedAt": {
                 "type": "string",
                 "format": "date-time"
@@ -22470,9 +22473,6 @@
               },
               "program": {
                 "type": "string"
-              },
-              "inputs": {
-                "type": "object"
               },
               "workflowId": {
                 "type": "string"
@@ -33947,19 +33947,19 @@
           "description": {
             "type": "string"
           },
-          "slug": {
-            "type": "string"
-          },
-          "graph": {
-            "description": "The editor's model. Null for a program written by hand or by an agent.",
-            "$ref": "#/components/schemas/WorkflowGraph"
-          },
           "inputs": {
             "description": "The program's `inputs` export, as the launch dialog and stubs need it.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
+          },
+          "slug": {
+            "type": "string"
+          },
+          "graph": {
+            "description": "The editor's model. Null for a program written by hand or by an agent.",
+            "$ref": "#/components/schemas/WorkflowGraph"
           }
         },
         "required": [
@@ -33978,6 +33978,38 @@
         "enum": [
           "code",
           "editor"
+        ]
+      },
+      "WorkflowInput": {
+        "type": "object",
+        "properties": {
+          "default": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "type": {
+            "$ref": "#/components/schemas/WorkflowInputType"
+          }
+        },
+        "required": [
+          "label",
+          "name",
+          "required",
+          "type"
         ]
       },
       "WorkflowGraph": {
@@ -34585,38 +34617,6 @@
               "type"
             ]
           }
-        ]
-      },
-      "WorkflowInput": {
-        "type": "object",
-        "properties": {
-          "default": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "required": {
-            "type": "boolean"
-          },
-          "type": {
-            "$ref": "#/components/schemas/WorkflowInputType"
-          }
-        },
-        "required": [
-          "label",
-          "name",
-          "required",
-          "type"
         ]
       },
       "WorkflowSchema": {

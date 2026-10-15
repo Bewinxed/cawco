@@ -375,7 +375,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           .string()
           .optional()
           .describe("The task whose work turned this one up."),
-        checks: lines("Shell commands that must pass, like bun test."),
+        checks: lines(
+          "Shell commands that must pass, like bun test; `host: <command>` runs one unsandboxed."
+        ),
         outputs: lines("Files it produces that are not commits."),
         context: lines("knowledge/ files for its brief."),
         lands: landsParameter().optional(),

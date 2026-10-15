@@ -88,6 +88,11 @@ import type { Tasks } from "./tasks";
  * required `reason` on every `admin_*_write` (the owner approved writes he
  * could not explain), about 300 more for the worker (worker 24,575,
  * delegate 6,573, lead 15,799 measured). Raised deliberately.
+ * 2026-10-16: a check's `host` (work-items.ts `runChecks`) and the
+ * `inputs` of delegate and handoff, so a probe whose scratch fleet delegates
+ * runs outside the sandbox and a delegate gets the files its boundary cannot
+ * read. They fit the same budgets: delegate's own words and its `cwd`,
+ * `machine`, `workspace` and `fork` were cut to pay for them (MEASURED).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 24_590,

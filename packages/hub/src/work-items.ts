@@ -40,6 +40,8 @@ import type {
   EndedBy,
   Envelope,
   HarnessKind,
+  InputFile,
+  InputsRead,
   InstanceRow,
   LandsMode,
   NeutralOrigin,
@@ -60,6 +62,10 @@ import type {
 } from "@cawco/core";
 import {
   byPerson,
+  CONTROL_HOST_CHECKOUT,
+  CONTROL_HOST_CHECKOUT_REMOVE,
+  CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_WRITE,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
@@ -78,6 +84,7 @@ import {
   namesAmong,
   sizeWords,
   type WorkspaceLanding,
+  withInputsLine,
   withLandingLine,
   withWorkspaceLine,
 } from "@cawco/core";
@@ -520,6 +527,12 @@ export interface WorkItemRequest {
   /** Its group under its parent: one combined report once every item of it has ended. */
   group?: string;
   harness?: HarnessKind;
+  /**
+   * Files on its parent's machine, by absolute path, copied into its
+   * workspace's `$TMPDIR/inputs/` before the brief that names them
+   * (agent inputs.ts): what its boundary cannot read where it lies.
+   */
+  inputs?: string[];
   /** Where its commits go once its checks pass; `main` when left out. */
   lands?: LandsMode;
   /** The machine a new workspace is cut on; the parent's by default. */
@@ -666,6 +679,12 @@ export interface WorkItemDeps {
    * written. Called in the same step; whoever listens defers its own work.
    */
   readonly itemEnded?: (item: WorkItemRow) => void;
+  /**
+   * The boundary of a project's Caw, his place's (caw.ts `leadPlaceRef`);
+   * none for any other session. With a work item's workspace, what tells
+   * whether a session runs inside a boundary at all.
+   */
+  readonly leadPlace: (row: InstanceRow) => WorkspaceRef | undefined;
   /**
    * The origin of the turn a project's Caw is in (caw.ts `turnOrigin`), when
    * `instanceId` is a project's lead; undefined for any other session.
@@ -1455,6 +1474,7 @@ export const createWorkItems = ({
   report,
   inputRefusal,
   inTurn,
+  leadPlace,
   leadTurn,
   machineFree,
   machinePaused,
@@ -1588,6 +1608,36 @@ export const createWorkItems = ({
     isRoutineParent(item.parentInstanceId)
       ? undefined
       : projectLead(item.projectId, item.instanceId);
+
+  /**
+   * The boundary a session runs inside: its work item's workspace, else its
+   * Caw place's ({@link WorkItemDeps.leadPlace}); none for a session the
+   * person started (server.ts `sessionWorkspace`, every spawn's).
+   */
+  const boundOf = (row: InstanceRow): WorkspaceRef | undefined => {
+    const item = itemOf(row);
+    const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
+    return workspace ? refOf(workspace) : leadPlace(row);
+  };
+
+  /**
+   * Refuses host checks declared by a session that runs inside a boundary:
+   * its delegate's commits would run outside the boundary it is kept in, as
+   * though it had run them there itself. Only a session outside every
+   * boundary (one the person started) declares one; a routine's runs never
+   * do. Nothing when `checks` has none, or `declaredBy` may.
+   */
+  const hostDeclared = (checks: WorkItemCheck[], declaredBy: string): void => {
+    const host = checks.find((check) => check.host);
+    const [row] = host ? db.getInstancesByIds([declaredBy]) : [];
+    const bound = row ? boundOf(row) : undefined;
+    if (host && bound) {
+      throw new WorkItemRefusal(
+        403,
+        `check "${host.name}" is marked host, and only a session outside every boundary declares one: you run inside ${row?.role === "lead" ? "your place's" : `workspace ${bound.id}'s`} boundary, and a host check would run your delegate's commits outside it. Leave host out, or ask the session that started you to declare it.`
+      );
+    }
+  };
 
   /** The pause of the machine a workspace is on, in words; undefined when it is not paused. */
   const pausedWorkspace = (workspaceId: string): string | undefined => {
@@ -2748,7 +2798,8 @@ export const createWorkItems = ({
     previous: WorkItemRow,
     session: InstanceRow,
     parent: Parent,
-    request: WorkItemRequest
+    request: WorkItemRequest,
+    inputs: InputFile[]
   ): WorkItemStart => {
     const item = db.createWorkItem({
       // A queued follow-up's item takes the id its chip stood under.
@@ -2775,7 +2826,10 @@ export const createWorkItems = ({
       parentInstanceId: parent.id,
     });
     published(item);
-    const brief = `${handoffMarker(sessionLabel(parent).name, parent.id)}${request.prompt}`;
+    const brief = withInputsLine(
+      `${handoffMarker(sessionLabel(parent).name, parent.id)}${request.prompt}`,
+      inputs
+    );
     // The session read how its last item landed; this one is told when it
     // lands otherwise or hands in outputs.
     const told =
@@ -2799,7 +2853,7 @@ export const createWorkItems = ({
         `Continued ${label} as work item ${item.id} in workspace ${workspace.id} (${placeOf(workspace)}): ` +
         "the brief is its next message, in the same session and its cached transcript. " +
         "Its report arrives when the hub has run its acceptance checks. Guide it, or continue it after it " +
-        `reports, with handoff("${session.id}", ...).${extrasLine(item)}`,
+        `reports, with handoff("${session.id}", ...).${extrasLine(item)}${inputsSaid(inputs)}`,
     };
   };
 
@@ -2812,7 +2866,8 @@ export const createWorkItems = ({
   const followUp = (
     needle: string,
     request: WorkItemRequest,
-    parent: Parent
+    parent: Parent,
+    inputs: InputFile[]
   ): WorkItemStart | WorkspaceRow => {
     if (
       request.type ||
@@ -2832,7 +2887,7 @@ export const createWorkItems = ({
       ? db.getInstancesByIds([previous.instanceId])
       : [];
     return previous && session?.sessionId
-      ? continueIn(workspace, previous, session, parent, request)
+      ? continueIn(workspace, previous, session, parent, request, inputs)
       : workspace;
   };
 
@@ -2987,6 +3042,7 @@ export const createWorkItems = ({
       throw new WorkItemRefusal(400, problem);
     }
     request.checks = machinesOf(request.checks);
+    hostDeclared(request.checks, parent.id);
     // An attempt spends the project's money: none starts past its cap.
     const capped = request.task ? pauses(request.task.projectId) : undefined;
     if (capped) {
@@ -3003,18 +3059,57 @@ export const createWorkItems = ({
   };
 
   /**
+   * The inputs `paths` names, read on `reader`'s machine (agent inputs.ts):
+   * none for none. Refused, in the machine's words, when one may not leave
+   * it; one outside `reader`'s own clone and scratch dir may not, when it
+   * runs inside a boundary ({@link boundOf}).
+   */
+  const readInputs = async (
+    paths: string[] | undefined,
+    reader: Pick<Parent, "id" | "machineId">
+  ): Promise<InputFile[]> => {
+    if (!paths?.length) {
+      return [];
+    }
+    const [row] = db.getInstancesByIds([reader.id]);
+    const read = (await call(reader.machineId, CONTROL_INPUTS_READ, [
+      paths,
+      (row && boundOf(row)) ?? null,
+    ])) as InputsRead;
+    if ("refused" in read) {
+      throw new WorkItemRefusal(400, `inputs: ${read.refused}.`);
+    }
+    return read.files;
+  };
+
+  /** `inputs` written into `workspace`'s `$TMPDIR/inputs/` on its machine, before a brief names them. */
+  const handIn = async (
+    workspace: WorkspaceRow,
+    inputs: InputFile[]
+  ): Promise<void> => {
+    if (inputs.length > 0) {
+      await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
+        refOf(workspace),
+        inputs,
+      ]);
+    }
+  };
+
+  /**
    * Files and spawns an item. Refused with {@link OwnsOverlap} while a live
    * item owns files it owns too; the files it owns are held from that check
-   * until its item is filed, so two starts never both pass it.
+   * until its item is filed, so two starts never both pass it. Its inputs are
+   * read first: one that may not go refuses the start before anything is cut.
    */
   const start = async (
     asked: WorkItemRequest,
     given?: Parent
   ): Promise<WorkItemStart> => {
     const { request, parent, projectId } = admitted(asked, given);
+    const inputs = await readInputs(request.inputs, parent);
     const release = claimOwns(request, parent, projectId);
     try {
-      return await startAdmitted(request, parent, projectId);
+      return await startAdmitted(request, parent, projectId, inputs);
     } finally {
       release();
     }
@@ -3039,12 +3134,20 @@ export const createWorkItems = ({
   const startAdmitted = async (
     request: WorkItemRequest,
     parent: Parent,
-    projectId: string | null
+    projectId: string | null,
+    inputs: InputFile[]
   ): Promise<WorkItemStart> => {
     if (request.reuse) {
       const again = await reusable(request.reuse, projectId, request.reuseOn);
       if (again) {
-        return spawnIn(again, settingsOf(request, parent), parent, request);
+        await handIn(again, inputs);
+        return spawnIn(
+          again,
+          settingsOf(request, parent),
+          parent,
+          request,
+          inputs
+        );
       }
       // Its clone is gone, or on a machine the attempt may not run on: the
       // retry runs in a new workspace, and the old one's sessions are
@@ -3094,21 +3197,39 @@ export const createWorkItems = ({
         });
         placesChanged(machineId, parent.projectId);
       }
-      return spawnIn(workspace, settings, parent, request, {
+      // In its scratch dir before its session starts.
+      await handIn(workspace, inputs);
+      return spawnIn(workspace, settings, parent, request, inputs, {
         instanceId,
         placement,
       });
     }
-    notPaused(namedWorkspace(request.workspace).machineId);
-    // Awaited before the claim, which files the item in the same step as
-    // its one-writer check.
-    await boundaryUp(request.workspace);
-    const followed = followUp(request.workspace, request, parent);
+    return await startFollowUp(request.workspace, request, parent, inputs);
+  };
+
+  /**
+   * The follow-up in the workspace `needle` names. Its boundary is up and its
+   * inputs are written before the claim, which files the item in the same
+   * step as its one-writer check; the inputs land only in a workspace the
+   * claim would take, and the claim is made again as the item is filed.
+   */
+  const startFollowUp = async (
+    needle: string,
+    request: WorkItemRequest,
+    parent: Parent,
+    inputs: InputFile[]
+  ): Promise<WorkItemStart> => {
+    notPaused(namedWorkspace(needle).machineId);
+    await boundaryUp(needle);
+    if (inputs.length > 0) {
+      await handIn(claim(needle).workspace, inputs);
+    }
+    const followed = followUp(needle, request, parent, inputs);
     // A workspace whose last session never started has nothing to continue:
     // a session starts there the way every new delegate's does.
     return "item" in followed
       ? followed
-      : spawnIn(followed, settingsOf(request, parent), parent, request);
+      : spawnIn(followed, settingsOf(request, parent), parent, request, inputs);
   };
 
   /**
@@ -3151,6 +3272,12 @@ export const createWorkItems = ({
     };
   };
 
+  /** What the caller's start text adds for inputs copied in: their names. */
+  const inputsSaid = (inputs: InputFile[]): string =>
+    inputs.length > 0
+      ? ` Copied ${counted(inputs.length, "input")} into its $TMPDIR/inputs/: ${inputs.map((input) => input.name).join(", ")}.`
+      : "";
+
   /** What the caller's start text adds for a group, owned files and a budget. */
   const extrasLine = (item: WorkItemRow): string =>
     [
@@ -3183,6 +3310,7 @@ export const createWorkItems = ({
     settings: Settings,
     parent: Parent,
     request: WorkItemRequest,
+    inputs: InputFile[],
     ahead?: { instanceId: string; placement: ItemPlacement }
   ): WorkItemStart => {
     notPaused(workspace.machineId);
@@ -3231,7 +3359,10 @@ export const createWorkItems = ({
           workspace.machineId,
           parent,
           withWorkspaceLine(
-            `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
+            withInputsLine(
+              `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
+              inputs
+            ),
             workspace.repoRoot,
             workspace.base,
             landingOf(item)
@@ -3263,7 +3394,8 @@ export const createWorkItems = ({
         (canDelegate
           ? " It may spawn delegates of its own."
           : " It is a leaf: it cannot delegate further.") +
-        extrasLine(item),
+        extrasLine(item) +
+        inputsSaid(inputs),
     };
   };
 
@@ -3607,6 +3739,20 @@ export const createWorkItems = ({
     return opened;
   };
 
+  /** The workspace's last commit, read inside its boundary. */
+  const headOf = async (workspace: WorkspaceRow): Promise<string> => {
+    const read = await runIn(workspace)(
+      "git rev-parse --verify 'HEAD^{commit}'",
+      GIT_TIMEOUT_MS
+    );
+    if (read.exitCode !== 0) {
+      throw new Error(
+        `the workspace's last commit could not be read: ${failedWith(read)}`
+      );
+    }
+    return read.stdout.trim();
+  };
+
   /**
    * Runs `checks` in order. A check runs in the workspace's worktree, on its
    * machine, inside its boundary: it reads what its delegate wrote, at the
@@ -3615,6 +3761,14 @@ export const createWorkItems = ({
    * ({@link checkWorkspace}), inside that one's boundary, at the workspace's
    * last commit: the commits past its base go over as a git bundle, once per
    * run and machine. Uncommitted work stays where it is.
+   *
+   * A check its parent marked `host` runs outside every boundary, as the
+   * agent's user, on the workspace's machine or the one it names: in a fresh
+   * checkout of the workspace's last commit (agent host-check.ts), cloned
+   * from the clone that holds it there (the workspace, or its check
+   * workspace), its dependencies installed, once per run and machine. What
+   * no sandbox may do runs there: user namespaces, podman, a probe whose
+   * scratch fleet cuts workspaces. Each such checkout goes when the run ends.
    */
   const runChecks = async (
     workspace: WorkspaceRow,
@@ -3657,24 +3811,26 @@ export const createWorkItems = ({
     /** The installs this run made, each a line of the check log ahead of the checks. */
     const installs: InstallOutcome[] = [];
     /**
-     * Installs `at`'s dependencies on `machineId`, inside its boundary, when
-     * its lockfile moved since they were installed ({@link depsScript}).
+     * Installs the dependencies of the checkout at `path` on `machineId`,
+     * inside `bound`'s boundary (none for a host check's checkout), when its
+     * lockfile moved since they were installed ({@link depsScript}).
      * Answers whether the checkout can be checked: false once its install
      * failed. An install that ran is logged in {@link installs}, with `where`.
      * One a pause cancels throws {@link PausedRun}: it runs again with its check.
      */
     const install = async (
       machineId: string,
-      at: WorkspaceRow,
+      path: string,
+      bound: WorkspaceRef | undefined,
       where?: string
     ): Promise<boolean> => {
       const started = Date.now();
       const complete = await command(
         machineId,
-        at.path,
+        path,
         `${SAFE_GIT_SHELL}${depsScript()}`,
         CHECK_TIMEOUT_SEC * 1000,
-        refOf(at),
+        bound,
         asCheck
       );
       if (complete.cancelled) {
@@ -3698,39 +3854,144 @@ export const createWorkItems = ({
       });
       return complete.exitCode === 0;
     };
+    /** A memo per machine: the first call for a machine runs `make`, every later one shares it. */
+    const once = <T>(
+      memo: Map<string, Promise<T>>,
+      machineId: string,
+      make: () => Promise<T>
+    ): Promise<T> => {
+      const known = memo.get(machineId);
+      if (known !== undefined) {
+        return known;
+      }
+      const made = make();
+      memo.set(machineId, made);
+      return made;
+    };
     const placed = new Map<
       string,
       Promise<{ at: WorkspaceRow; head: string }>
     >();
-    /** The check workspace on `machineId`, at the workspace's commit. */
+    /** The check workspace on `machineId`, at the workspace's commit; its dependencies not yet installed. */
+    const atCommit = (
+      machineId: string
+    ): Promise<{ at: WorkspaceRow; head: string }> =>
+      once(placed, machineId, async () => {
+        const at = await checkWorkspace(workspace, item, machineId);
+        commit ??= call(workspace.machineId, CONTROL_WORKSPACE_BUNDLE, [
+          refOf(workspace),
+          workspace.base,
+        ]) as Promise<WorkspaceCommit>;
+        const made = await commit;
+        await call(machineId, CONTROL_WORKSPACE_AT, [
+          refOf(at),
+          workspace.base,
+          made,
+          workspace.id,
+        ]);
+        return { at, head: made.head };
+      });
+    /** The failure a checkout whose install failed throws, for its check's line. */
+    const INSTALL_FAILED =
+      "its dependency install failed there; the dependencies line above the checks has the installer's output";
+    const installed = new Map<
+      string,
+      Promise<{ at: WorkspaceRow; head: string }>
+    >();
+    /** The check workspace on `machineId`, at the workspace's commit, its dependencies installed. */
     const elsewhere = (
       machineId: string
-    ): Promise<{ at: WorkspaceRow; head: string }> => {
-      const ready =
-        placed.get(machineId) ??
-        (async () => {
-          const at = await checkWorkspace(workspace, item, machineId);
-          commit ??= call(workspace.machineId, CONTROL_WORKSPACE_BUNDLE, [
-            refOf(workspace),
-            workspace.base,
-          ]) as Promise<WorkspaceCommit>;
-          const made = await commit;
-          await call(machineId, CONTROL_WORKSPACE_AT, [
-            refOf(at),
-            workspace.base,
-            made,
-            workspace.id,
-          ]);
-          const where = `on ${machineName(machineId)} at ${made.head.slice(0, 9)}`;
-          if (!(await install(machineId, at, where))) {
-            throw new Error(
-              "its dependency install failed there; the dependencies line above the checks has the installer's output"
-            );
-          }
-          return { at, head: made.head };
-        })();
-      placed.set(machineId, ready);
-      return ready;
+    ): Promise<{ at: WorkspaceRow; head: string }> =>
+      once(installed, machineId, async () => {
+        const ready = await atCommit(machineId);
+        const where = `on ${machineName(machineId)} at ${ready.head.slice(0, 9)}`;
+        if (
+          !(await install(machineId, ready.at.path, refOf(ready.at), where))
+        ) {
+          throw new Error(INSTALL_FAILED);
+        }
+        return ready;
+      });
+    /** The host checkouts this run made, each removed when the run ends. */
+    const checkouts: { machineId: string; run: string }[] = [];
+    const cloned = new Map<string, Promise<{ path: string; where: string }>>();
+    /**
+     * The host checkout on `machineId`, at the workspace's last commit,
+     * outside every boundary: cloned from the workspace's own clone on its
+     * machine, else from its check workspace there, put at the commit first
+     * ({@link atCommit}).
+     */
+    const hostCheckout = (
+      machineId: string
+    ): Promise<{ path: string; where: string }> =>
+      once(cloned, machineId, async () => {
+        const { source, head } =
+          machineId === workspace.machineId
+            ? { source: refOf(workspace), head: await headOf(workspace) }
+            : await atCommit(machineId).then((ready) => ({
+                source: refOf(ready.at),
+                head: ready.head,
+              }));
+        const run = crypto.randomUUID();
+        checkouts.push({ machineId, run });
+        const path = (await call(machineId, CONTROL_HOST_CHECKOUT, [
+          source,
+          head,
+          run,
+        ])) as string;
+        return {
+          path,
+          where: `on the host, ${machineName(machineId)} at ${head.slice(0, 9)}`,
+        };
+      });
+    const hosted = new Map<string, Promise<{ path: string; where: string }>>();
+    /** {@link hostCheckout}, its dependencies installed outside every boundary. */
+    const onHost = (
+      machineId: string
+    ): Promise<{ path: string; where: string }> =>
+      once(hosted, machineId, async () => {
+        const ready = await hostCheckout(machineId);
+        if (!(await install(machineId, ready.path, undefined, ready.where))) {
+          throw new Error(INSTALL_FAILED);
+        }
+        return ready;
+      });
+    /**
+     * One check on the host; a machine that cannot run it fails the check in
+     * its words. Undefined when a pause cancelled it, to run again.
+     */
+    const runOnHost = async (
+      machineId: string,
+      check: WorkItemCheck,
+      limit: number
+    ): Promise<Ran | undefined> => {
+      const on = `on the host, ${machineName(machineId)}`;
+      try {
+        const { path, where } = await onHost(machineId);
+        const complete = await command(
+          machineId,
+          path,
+          check.command,
+          limit,
+          undefined,
+          asCheck
+        );
+        return complete.cancelled ? undefined : { where, complete };
+      } catch (error) {
+        if (error instanceof PausedRun) {
+          // Its install was cut: the next run there installs again, in the same checkout.
+          hosted.delete(machineId);
+          return;
+        }
+        return {
+          where: on,
+          complete: {
+            exitCode: 1,
+            stdout: "",
+            stderr: `The hub could not run this check ${on}: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        };
+      }
     };
     /**
      * One check on another machine; a machine that cannot run it fails the
@@ -3758,7 +4019,7 @@ export const createWorkItems = ({
       } catch (error) {
         if (error instanceof PausedRun) {
           // Its install was cut: the next run there starts the install again.
-          placed.delete(machineId);
+          installed.delete(machineId);
           return;
         }
         return {
@@ -3777,7 +4038,11 @@ export const createWorkItems = ({
         // biome-ignore lint/performance/noAwaitInLoops: an install a pause cut runs again once it is over
         await unpaused(workspace.machineId);
         try {
-          return await install(workspace.machineId, workspace);
+          return await install(
+            workspace.machineId,
+            workspace.path,
+            refOf(workspace)
+          );
         } catch (error) {
           if (!(error instanceof PausedRun)) {
             throw error;
@@ -3798,12 +4063,19 @@ export const createWorkItems = ({
         ? (gateMac(workspace, item.projectId)?.machineId ?? named)
         : named;
     };
-    /** One run of a check where `machineId` is; undefined when a pause cancelled it. */
+    /**
+     * One run of a check where `machineId` is: on the host there when it is
+     * marked so, else in the workspace or its check workspace there.
+     * Undefined when a pause cancelled it.
+     */
     const runCheck = async (
       machineId: string,
       check: WorkItemCheck,
       limit: number
     ): Promise<Ran | undefined> => {
+      if (check.host) {
+        return await runOnHost(machineId, check, limit);
+      }
       if (machineId !== workspace.machineId) {
         return await runElsewhere(machineId, check, limit);
       }
@@ -3818,44 +4090,65 @@ export const createWorkItems = ({
       return complete.cancelled ? undefined : { complete, where: undefined };
     };
     const local = checks.some(
-      (check) => !check.machine || check.machine === workspace.machineId
+      (check) =>
+        !(
+          check.host ||
+          (check.machine && check.machine !== workspace.machineId)
+        )
     );
-    // A failed install is the run's one line: no check can pass without it.
-    if (local && !(await installHere())) {
-      return { installs, outcomes: [] };
-    }
-    const outcomes: CheckOutcome[] = [];
-    for (const check of checks) {
-      const limit = (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000;
-      let started = 0;
-      // A check a pause cancels is no outcome and no attempt: it waits the
-      // pause out (or moves, the Apple gate), then runs again from the start.
-      let ran: Ran | undefined;
-      while (!ran) {
-        const machineId = machineFor(check);
-        // biome-ignore lint/performance/noAwaitInLoops: checks run in order, each once its machine runs work
-        await unpaused(machineId);
-        started = Date.now();
-        // A check that ends while waiting (killed, past the most a wait may
-        // last, or a machine that could not run it) leaves no wait behind it.
-        ran = await runCheck(machineId, check, limit).finally(() =>
-          queued(null)
-        );
+    try {
+      // A failed install is the run's one line: no check can pass without it.
+      if (local && !(await installHere())) {
+        return { installs, outcomes: [] };
       }
-      const { complete, where } = ran;
-      const result = checkTails(complete);
-      outcomes.push({
-        check,
-        result,
-        where,
-        exitCode: result.exitCode,
-        durationMs: Date.now() - started,
-        passed:
-          result.exitCode === 0 &&
-          (check.expect === undefined || result.stdout.includes(check.expect)),
-      });
+      const outcomes: CheckOutcome[] = [];
+      for (const check of checks) {
+        const limit = (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000;
+        let started = 0;
+        // A check a pause cancels is no outcome and no attempt: it waits the
+        // pause out (or moves, the Apple gate), then runs again from the start.
+        let ran: Ran | undefined;
+        while (!ran) {
+          const machineId = machineFor(check);
+          // biome-ignore lint/performance/noAwaitInLoops: checks run in order, each once its machine runs work
+          await unpaused(machineId);
+          started = Date.now();
+          // A check that ends while waiting (killed, past the most a wait may
+          // last, or a machine that could not run it) leaves no wait behind it.
+          ran = await runCheck(machineId, check, limit).finally(() =>
+            queued(null)
+          );
+        }
+        const { complete, where } = ran;
+        const result = checkTails(complete);
+        outcomes.push({
+          check,
+          result,
+          where,
+          exitCode: result.exitCode,
+          durationMs: Date.now() - started,
+          passed:
+            result.exitCode === 0 &&
+            (check.expect === undefined ||
+              result.stdout.includes(check.expect)),
+        });
+      }
+      return { installs, outcomes };
+    } finally {
+      // Every host checkout goes with its run, whatever its checks came to;
+      // one its machine could not remove goes with that machine's next
+      // connection or start (agent host-check.ts `abandonHostCheckouts`).
+      await Promise.all(
+        checkouts.map(({ machineId, run }) =>
+          call(machineId, CONTROL_HOST_CHECKOUT_REMOVE, [run]).catch(
+            (error: unknown) =>
+              console.warn(
+                `[work-items] ${item.id}: host checkout ${run} on ${machineName(machineId)} was not removed: ${error instanceof Error ? error.message : String(error)}`
+              )
+          )
+        )
+      );
     }
-    return { installs, outcomes };
   };
 
   /**
@@ -5053,12 +5346,56 @@ export const createWorkItems = ({
       if (unchecked) {
         throw new WorkItemRefusal(400, unchecked);
       }
+      hostDeclared(checks, from);
       update(item.id, { checks: machinesOf(checks) });
       tell(
         row,
         `Your work item's checks were replaced by your parent. Its checks: ${checkNames(checks)}.`
       );
       return `Replaced the checks of ${item.title} (${item.id}): ${checkNames(checks)}. Its session was told.`;
+    },
+
+    /**
+     * A handoff's inputs: `paths` on `from`'s machine copied into the
+     * `$TMPDIR/inputs/` of the workspace `instanceId`'s item runs in, before
+     * the handoff that names them goes. Only the session that delegated the
+     * item, or its project's lead, hands it inputs; refused, too, for an
+     * archived workspace and an input that may not go ({@link readInputs}).
+     * Answers each input's name and where it was read.
+     */
+    async handInputs(
+      instanceId: string,
+      from: string,
+      paths: string[]
+    ): Promise<{ from: string; name: string }[]> {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (!(row && item)) {
+        throw new WorkItemRefusal(
+          404,
+          `${instanceId} runs no work item, so it has no $TMPDIR/inputs/ to hand inputs into. Hand off without inputs.`
+        );
+      }
+      if (!(item.parentInstanceId === from || leadFor(item)?.id === from)) {
+        throw new WorkItemRefusal(
+          403,
+          "Only the session that delegated an item, or its project's lead, hands it inputs."
+        );
+      }
+      const [workspace] = db.workspacesNamed(item.workspaceId);
+      if (workspace?.state !== "active") {
+        throw new WorkItemRefusal(
+          409,
+          `${item.title} (${item.id}) is in workspace ${item.workspaceId}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`
+        );
+      }
+      const [caller] = db.getInstancesByIds([from]);
+      if (!caller) {
+        throw new WorkItemRefusal(404, `unknown session ${from}`);
+      }
+      const inputs = await readInputs(paths, caller);
+      await handIn(workspace, inputs);
+      return inputs.map(({ name, from: read }) => ({ name, from: read }));
     },
 
     /** {@link sessionFailed}: a restart cut its turn and nothing can resume it. */

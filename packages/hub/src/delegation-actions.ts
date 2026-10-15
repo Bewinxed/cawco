@@ -34,6 +34,7 @@ import {
   pauseClock,
   QUESTION_DISMISSED,
   relaunchOf,
+  withInputsLine,
 } from "@cawco/core";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type {
@@ -747,6 +748,8 @@ export interface HandoffActions {
       fork?: boolean;
       /** The item's acceptance checks, run by the hub at finish_item. */
       checks: WorkItemCheck[];
+      /** Files on this session's machine copied into its `$TMPDIR/inputs/` before its brief. */
+      inputs?: string[];
       /** Where its commits go once its checks pass; `main` by default. */
       lands?: LandsMode;
       /** Files in its workspace the hub copies into the project's folder. */
@@ -777,8 +780,13 @@ export interface HandoffActions {
   readonly generateImage: (
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
+  /**
+   * Sends `message` to another session; `inputs`, files on this session's
+   * machine, are copied first into the `$TMPDIR/inputs/` of the target's
+   * work item, one this session delegated or leads.
+   */
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  handoff(target: string, message: string): Promise<string>;
+  handoff(target: string, message: string, inputs?: string[]): Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   interruptDelegate(target: string): string;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
@@ -923,6 +931,36 @@ function resolveDelegate(
     }
     throw error;
   }
+}
+
+/**
+ * A handoff's inputs, through the hub (work-items.ts `handInputs`): read on
+ * `from`'s machine, copied into the `$TMPDIR/inputs/` of `target`'s work
+ * item. Answers each one's name and where it was read; the hub's refusal is
+ * thrown in its words.
+ */
+async function handInputs(
+  authorization: string | undefined,
+  from: string,
+  target: string,
+  inputs: string[]
+): Promise<{ from: string; name: string }[]> {
+  const response = await fetch(`${hubHttpUrl()}/api/work-items/inputs`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(authorization ? { Authorization: authorization } : {}),
+    },
+    body: JSON.stringify({ from, instanceId: target, inputs }),
+    // Up to 64 MiB read on one machine and written on another.
+    timeout: false,
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (
+    (await response.json()) as { inputs: { from: string; name: string }[] }
+  ).inputs;
 }
 
 async function saveWorkflowProgram(
@@ -1469,7 +1507,11 @@ export const handoffActions = ({
     return `${listed}\n\n${where}`;
   },
 
-  async handoff(target: string, message: string): Promise<string> {
+  async handoff(
+    target: string,
+    message: string,
+    inputs?: string[]
+  ): Promise<string> {
     const { peers, asleep, own, hosts } = roster(fleet, instanceId);
     // A session named by a former id is reached by its id now.
     const followed = formerOf(formerIds(), target);
@@ -1486,7 +1528,14 @@ export const handoffActions = ({
     const whose =
       peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
     const from = senderName(own, cwd);
-    const body = `${handoffMarker(from, instanceId)}${message}`;
+    // In its $TMPDIR before the message that names them reaches it.
+    const landed = inputs?.length
+      ? await handInputs(authorization, instanceId, peer.row.id, inputs)
+      : [];
+    const body = withInputsLine(
+      `${handoffMarker(from, instanceId)}${message}`,
+      landed
+    );
     const payload: SendPayload = {
       instanceId: peer.row.id,
       message: {

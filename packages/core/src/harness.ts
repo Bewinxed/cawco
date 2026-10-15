@@ -1915,6 +1915,73 @@ export interface WorkspaceCommit {
 export const CONTROL_WORKSPACE_AT = "workspaceAt";
 
 /**
+ * A host check's checkout (a check its parent marked `host`, hub
+ * work-items.ts `runChecks`): a fresh clone of `source`, a clone on this
+ * machine that holds `head` (the item's workspace, or its check workspace
+ * here), at `~/.cawco/host-checks/<run>`, outside every boundary, with
+ * `head` checked out detached. Refused before anything is written when the
+ * disk it is on has less free than a heavy run needs
+ * ({@link HOST_CHECK_MIN_FREE_ENV}, {@link HOST_CHECK_MIN_FREE_GB} unless
+ * set). Args `[source: WorkspaceRef, head, run]`; answers the checkout's
+ * path. Machine-scoped.
+ */
+export const CONTROL_HOST_CHECKOUT = "hostCheckout";
+
+/** A host check's checkout removed with all it holds. Args `[run]`. Machine-scoped. */
+export const CONTROL_HOST_CHECKOUT_REMOVE = "hostCheckoutRemove";
+
+/** The variable naming the free space, in GB, a heavy run needs to start (scripts/lib/disk-room.sh). */
+export const HOST_CHECK_MIN_FREE_ENV = "CAWCO_MIN_FREE_GB";
+
+/** {@link HOST_CHECK_MIN_FREE_ENV} when it is not set, as disk-room.sh has it. */
+export const HOST_CHECK_MIN_FREE_GB = 10;
+
+/**
+ * A delegate's inputs read on its parent's machine: each an absolute path
+ * to a file, refused in words when one may not leave it
+ * (workspace-policy.ts `inputDenial`), lies outside the parent's own clone
+ * and scratch dir when the parent runs in a workspace (`bound`), or the
+ * whole passes {@link INPUTS_LIMIT_BYTES}. Args `[paths, bound?:
+ * WorkspaceRef]`; answers {@link InputsRead}. Machine-scoped.
+ */
+export const CONTROL_INPUTS_READ = "inputsRead";
+
+/**
+ * A delegate's inputs written into its workspace's scratch dir, under
+ * {@link INPUTS_DIR}, each replacing one of its name. Args
+ * `[WorkspaceRef, InputFile[]]`. Machine-scoped.
+ */
+export const CONTROL_INPUTS_WRITE = "inputsWrite";
+
+/** The folder in a workspace's scratch dir (its `$TMPDIR`) a delegate's inputs land in. */
+export const INPUTS_DIR = "inputs";
+
+/**
+ * The most one delegation's inputs come to, together. A long session's
+ * transcript, the largest input the fleet hands on, runs to tens of MB
+ * (wire.ts); this holds one with room. Each input crosses the wire twice as
+ * base64 (4/3 its size, ~86 MiB here), far inside the wire's 512 MiB and the
+ * 256 MiB a workspace's commits may bundle. Past it, data goes in git or
+ * a check with `machine`, not a brief. Our call.
+ */
+export const INPUTS_LIMIT_BYTES = 64 * 1024 * 1024;
+
+/** One input as it crosses the wire: its name in `inputs/`, where it was read, its bytes. */
+export interface InputFile {
+  /** Base64 of its bytes. */
+  content: string;
+  /** The absolute path it was read from on the parent's machine. */
+  from: string;
+  /** Its permission bits. */
+  mode: number;
+  /** Its file name, as it lands in `$TMPDIR/inputs/`. */
+  name: string;
+}
+
+/** What {@link CONTROL_INPUTS_READ} answers: the files, or why they may not go. */
+export type InputsRead = { files: InputFile[] } | { refused: string };
+
+/**
  * At an agent's start, its machine's active workspaces: each one still a git
  * worktree from before workspaces were clones becomes a shared clone in
  * place — same path, branch, HEAD, index and working files — and the

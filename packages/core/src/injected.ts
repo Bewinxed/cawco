@@ -134,8 +134,24 @@ export const withWorkspaceLine = (
 ): string =>
   afterMarker(
     text,
-    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. ${hubLandLine(base, landing)} Your shell commands run inside this workspace's boundary: they can write only this clone, $TMPDIR (the workspace's own scratch dir: temp files go there, not /tmp) and the workspaces' own package cache (bun, npm, uv and XDG_CACHE_HOME point there; the host's caches are read-only); they read nothing in the home dir outside this clone, the toolchains and the user's git config, and none of the credentials CawCo, the harnesses and the machine's tools keep; they see and signal only this workspace's processes; they cannot reach the service manager; any public host is reachable, none of the owner's machines is, and \`cawco tools\` and \`cawco tool\` reach the hub's tools.`
+    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. ${hubLandLine(base, landing)} Your shell commands run inside this workspace's boundary: they can write only this clone, $TMPDIR (the workspace's own scratch dir: temp files go there, not /tmp) and the workspaces' own package cache (bun, npm, uv and XDG_CACHE_HOME point there; the host's caches are read-only); they read nothing in the home dir outside this clone, the toolchains and the user's git config, and none of the credentials CawCo, the harnesses and the machine's tools keep; they see and signal only this workspace's processes; they cannot reach the service manager; any public host is reachable, none of the owner's machines is, and \`cawco tools\` and \`cawco tool\` reach the hub's tools. Nothing in here makes namespaces (podman, a probe whose scratch fleet delegates): such a probe runs only as a check your parent marked \`host\`, outside the boundary on a fresh checkout of your last commit, and you cannot add one.`
   );
+
+/**
+ * `text` with the line that names a delegate's inputs right after any
+ * hand-off marker: where they are, `$TMPDIR/inputs/` in its workspace, and
+ * where each was read on its parent's machine. `text` as it is without any.
+ */
+export const withInputsLine = (
+  text: string,
+  inputs: readonly { from: string; name: string }[]
+): string =>
+  inputs.length === 0
+    ? text
+    : afterMarker(
+        text,
+        `Your parent's inputs are in $TMPDIR/inputs/: ${inputs.map(({ name, from }) => `${name} (from ${from})`).join(", ")}.`
+      );
 
 /**
  * A hand-off read back into who sent it and what it says. `from` names the

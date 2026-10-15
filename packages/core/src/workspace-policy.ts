@@ -33,7 +33,14 @@
 import { execFile } from "node:child_process";
 import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import {
+  basename,
+  delimiter,
+  dirname,
+  isAbsolute,
+  join,
+  resolve,
+} from "node:path";
 import { binaryRoot } from "./binary-installation";
 import type { WorkspaceRef } from "./harness";
 import {
@@ -44,6 +51,7 @@ import {
   darwinUserDirs,
   hostToolCaches,
   hubProjectsDir,
+  isSecretFileName,
   projectClaudeDir,
   TREE_STORE_DIR,
   USER_LAYER_DIRS,
@@ -653,6 +661,38 @@ const LINUX_HOST_PRIVATE = [
   "/usr/bin/journalctl",
   "/usr/bin/coredumpctl",
 ];
+
+/**
+ * Why a file may not leave its machine as a delegate's input (a `delegate`
+ * or `handoff`'s `inputs`, copied into the delegate's `$TMPDIR/inputs/`),
+ * or nothing when it may: what every boundary hides from every workspace,
+ * whoever asks. A credential store ({@link credentialStores}: logins, key
+ * folders, the hub's own secrets), a file named as a secret
+ * ({@link isSecretFileName}), and on Linux the host's runtime dirs and logs
+ * ({@link LINUX_HOST_PRIVATE}). Judged on the path as named and on its real
+ * path, so a link leads neither into one nor out of one.
+ */
+export const inputDenial = (
+  named: string,
+  real: string
+): string | undefined => {
+  const paths = [resolveDenied(named), real];
+  const inside = (roots: readonly string[]): string | undefined =>
+    roots
+      .map(resolveDenied)
+      .find((root) => paths.some((path) => within(path, root)));
+  const store = inside(credentialStores());
+  if (store) {
+    return `${named} is in ${store}, a credential store no workspace reads`;
+  }
+  if (paths.some((path) => isSecretFileName(basename(path)))) {
+    return `${named} is named as a secret file (.env and its kind), which no workspace reads outside its own clone`;
+  }
+  const host = process.platform === "darwin" ? "" : inside(LINUX_HOST_PRIVATE);
+  return host
+    ? `${named} is in ${host}, the host's sockets and logs, which no workspace reads; copy the lines the delegate needs into a file of your own and name that`
+    : undefined;
+};
 
 /** An account id as the hub mints it: one path component, never `.` or `..`. */
 const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;

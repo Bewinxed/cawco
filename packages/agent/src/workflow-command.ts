@@ -106,7 +106,7 @@ export function cancelCommand(runId: unknown): boolean {
 }
 
 /** Whether `value` names a delegation workspace: an id and an absolute clone path. */
-const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
+export const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
   typeof value === "object" &&
   value !== null &&
   typeof (value as WorkspaceRef).id === "string" &&

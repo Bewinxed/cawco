@@ -45,6 +45,11 @@
  * - **Edges** in the front matter name tasks by number, as the spec writes
  *   them (`after: [138]`); `tsk-138` and `#138` read the same. Everything
  *   else (the API, the tools) says `tsk-138`.
+ * - **Checks** are shell commands an attempt's `finish_item` runs in its
+ *   workspace. One written `host: <command>` runs outside every boundary,
+ *   on a fresh checkout of the attempt's last commit (work-items.ts
+ *   `runChecks`): a probe whose scratch fleet delegates, podman. Only an
+ *   attempt whose parent runs outside every boundary may have one.
  * - **Title** is the body's first line when it is a `# ` heading; a file
  *   without one is titled by its slug.
  * - **To-dos** are checkbox lines under `## To-dos`, nested by indentation.

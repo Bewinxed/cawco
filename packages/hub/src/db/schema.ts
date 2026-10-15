@@ -1106,6 +1106,14 @@ export interface WorkItemCheck {
   command: string;
   expect?: string;
   /**
+   * Run outside every boundary, as the agent's user, in a fresh checkout of
+   * the item's last commit with its dependencies installed, on its
+   * workspace's machine or `machine` (work-items.ts `runChecks`): what no
+   * sandbox may do, a scratch fleet's own boundaries, podman. Only the
+   * item's parent declares one; its session never sets checks.
+   */
+  host?: boolean;
+  /**
    * The machine it runs on, by machineId, when not the workspace's own: the
    * hub runs it in that workspace's check workspace there, at the item's
    * last commit (work-items.ts `runChecks`).
