@@ -195,12 +195,7 @@ final class PieceView: UIView, Recycled, FitsWidth, FrameRow {
         if blocks.map(Self.kind(of:)) != kinds {
             blocks.forEach { $0.removeFromSuperview() }
             blocks = piece.blocks.map(blockView)
-            for view in blocks {
-                // Placed by frame: a rule's own height constraint goes, its frame says it.
-                if Self.kind(of: view) == 4 { NSLayoutConstraint.deactivate(view.constraints) }
-                view.translatesAutoresizingMaskIntoConstraints = true
-                addSubview(view)
-            }
+            for view in blocks { addSubview(framedBlock(view)) }
             bringSubviewToFront(float)
         }
         gaps = piece.blocks.indices.map { i in i == 0 ? 0 : MarkdownRender.gap(after: piece.blocks[i - 1], before: piece.blocks[i]) }
@@ -224,31 +219,10 @@ final class PieceView: UIView, Recycled, FitsWidth, FrameRow {
         setNeedsLayout()
     }
 
-    /// A block's height `width` wide, as its view measures it.
-    private func height(of view: UIView, width: CGFloat) -> CGFloat {
-        switch view {
-        case let text as ProseView:
-            text.fitWidth = width
-            return text.intrinsicContentSize.height
-        case let quote as QuoteBlock:
-            quote.text.fitWidth = max(0, width - QuoteBlock.inset)
-            return quote.intrinsicContentSize.height
-        case let well as CodeWell:
-            return well.intrinsicContentSize.height
-        case let table as TableBlock:
-            table.fitWidth = width
-            return table.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
-                                                 verticalFittingPriority: .fittingSizeLevel).height
-        default:
-            // A rule.
-            return 1
-        }
-    }
-
     func height(for width: CGFloat) -> CGFloat {
         guard width > 0 else { return 0 }
         var height = who.isHidden ? 0 : who.intrinsicContentSize.height + Space.space2
-        for (i, view) in blocks.enumerated() { height += gaps[i] + self.height(of: view, width: width) }
+        for (i, view) in blocks.enumerated() { height += gaps[i] + blockHeight(view, width: width) }
         return height
     }
 
@@ -271,7 +245,7 @@ final class PieceView: UIView, Recycled, FitsWidth, FrameRow {
         }
         for (i, view) in blocks.enumerated() {
             y += gaps[i]
-            let height = height(of: view, width: width)
+            let height = blockHeight(view, width: width)
             view.frame = CGRect(x: 0, y: y, width: width, height: height)
             y += height
         }
@@ -321,7 +295,7 @@ final class PieceView: UIView, Recycled, FitsWidth, FrameRow {
 /// tap (composer-recall); a touch screen says so in its note. While its
 /// words are in the composer the bubble folds down to its tag ("Queued ·
 /// editing it below") on an empty well, and unfolds when they come back.
-final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDelegate {
+final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecognizerDelegate {
     private let env: RowEnv
     private let who = WhoView()
     private let well = WellSurface()
@@ -329,39 +303,46 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
     private let body = MessageBody()
     private let float = FloatNote()
     private let chips = FlowView()
+    /// The failed send's line and its button: in the row only for a failed send.
     private let failure = UIStackView()
     private let takenTag = ChipLabel(insets: UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7), radius: Radius.radiusPill)
-    private let tagRow = UIStackView()
     private var taken = false
     private let reason = WrapLabel(wrap: .pretty) // MessageRow `p.reason`
     private let retry = UIButton(type: .system)
-    private var wellTop: NSLayoutConstraint!
-    private var inner: [NSLayoutConstraint] = []
     private var block: Block?
     private var retried: String?
+    /// The room above the words in the well: a hair less under a seam.
+    private var wellTop = Space.space2 + 1
     /// The width the row stands at in the list (ProseView `fitWidth`); its
     /// words stand in the well, its padding either side of them.
-    var fitWidth: CGFloat? { didSet { body.fitWidth = fitWidth.map { $0 - 2 * Space.space2 } } }
+    var fitWidth: CGFloat? {
+        didSet {
+            guard fitWidth != oldValue else { return }
+            body.fitWidth = fitWidth.map { $0 - 2 * Space.space2 }
+            setNeedsLayout()
+        }
+    }
 
+    /// The width layout gave it, where nobody said one beforehand.
+    private var laidWidth: CGFloat?
+
+    /// Laid out by frame (FrameRow, `layoutSubviews`): the speaker line, a
+    /// space-2 under it the well, and in the well, its padding in from each
+    /// side, a column a space-2 apart of the taken tag, the words, the
+    /// attachments and a failed send's line, the clock floated into the
+    /// words' first line. A sent message's row, made as the turn starts, asks
+    /// nothing of the layout engine.
     init(env: RowEnv) {
         self.env = env
         super.init(frame: .zero)
-        let column = UIStackView(arrangedSubviews: [who, well])
-        column.axis = .vertical
-        column.spacing = Space.space2
-        pin(column)
-        well.translatesAutoresizingMaskIntoConstraints = false
-        words.translatesAutoresizingMaskIntoConstraints = false
-        well.addSubview(words)
+        for (view, parent) in [(who, self), (well, self), (words, well), (takenTag, words), (body, words), (chips, words), (float, words)] as [(UIView, UIView)] {
+            view.translatesAutoresizingMaskIntoConstraints = true
+            parent.addSubview(view)
+        }
+        failure.translatesAutoresizingMaskIntoConstraints = true
         takenTag.backgroundColor = Palette.statusAttnBg
-        tagRow.addArrangedSubview(takenTag)
-        tagRow.addArrangedSubview(UIView())
-        tagRow.isHidden = true
-        let content = UIStackView(arrangedSubviews: [tagRow, body, chips, failure])
-        content.axis = .vertical
-        content.spacing = Space.space2
-        words.pin(content)
-        words.addSubview(float)
+        takenTag.attributedText = Styled.string("Queued · editing it below", TypeScale.typeMeta, color: Palette.statusAttnInk, weight: .medium)
+        takenTag.isHidden = true
         failure.axis = .vertical
         failure.alignment = .leading
         failure.spacing = Space.space2
@@ -373,19 +354,8 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         retry.backgroundColor = Palette.surfaceRaised
         retry.contentEdgeInsets = UIEdgeInsets(top: Space.space1, left: Space.space2, bottom: Space.space1, right: Space.space2)
         // The well's start edge is the reader's mark's (--well-x); words at the seam inset.
-        let pad = Space.space2
-        wellTop = words.topAnchor.constraint(equalTo: well.topAnchor, constant: Space.space2 + 1)
-        NSLayoutConstraint.activate([
-            words.leadingAnchor.constraint(equalTo: well.leadingAnchor, constant: pad),
-            words.trailingAnchor.constraint(equalTo: well.trailingAnchor, constant: -pad),
-            wellTop,
-            words.bottomAnchor.constraint(equalTo: well.bottomAnchor, constant: -(Space.space2 + 1)),
-            float.trailingAnchor.constraint(equalTo: words.trailingAnchor),
-            float.topAnchor.constraint(equalTo: words.topAnchor),
-            float.heightAnchor.constraint(equalToConstant: TypeScale.textBody * TypeScale.leadingBody),
-        ])
         well.inset = Size.wellX
-        well.pad = pad
+        well.pad = Space.space2
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: UserTurnView, _: UITraitCollection) in
             view.retry.layer.borderColor = Palette.wellEdge.resolvedColor(with: view.traitCollection).cgColor
         }
@@ -396,6 +366,68 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
+
+    /// The column in the well, shown parts only, with each one's height `width` wide.
+    private func column(_ width: CGFloat) -> [(view: UIView, height: CGFloat)] {
+        var parts: [(UIView, CGFloat)] = []
+        if !takenTag.isHidden { parts.append((takenTag, takenTag.intrinsicContentSize.height)) }
+        if !body.isHidden { parts.append((body, body.height(for: width))) }
+        if !chips.isHidden {
+            parts.append((chips, chips.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
+                                                               verticalFittingPriority: .fittingSizeLevel).height))
+        }
+        if failure.superview === words, !failure.isHidden {
+            parts.append((failure, failure.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
+                                                                   verticalFittingPriority: .fittingSizeLevel).height))
+        }
+        return parts
+    }
+
+    /// The column's height: its parts', a space-2 apart.
+    private static func stacked(_ parts: [(view: UIView, height: CGFloat)]) -> CGFloat {
+        parts.reduce(0) { $0 + $1.height } + Space.space2 * Double(max(0, parts.count - 1))
+    }
+
+    func height(for width: CGFloat) -> CGFloat {
+        guard width > 0 else { return 0 }
+        let head = who.isHidden ? 0 : who.intrinsicContentSize.height + Space.space2
+        return head + wellTop + Self.stacked(column(width - 2 * Space.space2)) + Space.space2 + 1
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: height(for: fitWidth ?? laidWidth ?? 0))
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = bounds.width
+        if fitWidth == nil, laidWidth.map({ abs($0 - width) > 0.5 }) ?? true {
+            laidWidth = width
+            invalidateIntrinsicContentSize()
+        }
+        var y: CGFloat = 0
+        if !who.isHidden {
+            let line = who.intrinsicContentSize.height
+            who.frame = CGRect(x: 0, y: 0, width: width, height: line)
+            y = line + Space.space2
+        }
+        let inner = max(0, width - 2 * Space.space2)
+        let parts = column(inner)
+        let content = Self.stacked(parts)
+        well.frame = CGRect(x: 0, y: y, width: width, height: wellTop + content + Space.space2 + 1)
+        words.frame = CGRect(x: Space.space2, y: wellTop, width: inner, height: content)
+        var top: CGFloat = 0
+        for (view, height) in parts {
+            // The tag stands at its own width, at the start (`.row-user.taken`).
+            let wide = view === takenTag ? min(inner, takenTag.intrinsicContentSize.width) : inner
+            view.frame = CGRect(x: 0, y: top, width: wide, height: height)
+            top += height + Space.space2
+        }
+        if !float.isHidden {
+            let side = float.intrinsicContentSize.width
+            float.frame = CGRect(x: inner - side, y: 0, width: side, height: TypeScale.textBody * TypeScale.leadingBody)
+        }
+    }
 
     func configure(_ item: Item) {
         guard case let .user(turn) = item.kind else { return }
@@ -424,7 +456,7 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         who.configure(.init(name: "You", clock: clock, note: note, you: true))
         well.grouped = turn.grouped
         well.runsOn = turn.runsOn
-        wellTop.constant = turn.grouped ? Space.space2 : Space.space2 + 1
+        wellTop = turn.grouped ? Space.space2 : Space.space2 + 1
         let floated = turn.grouped ? [note, clock].compactMap(\.self).joined(separator: " ") : nil
         float.set(floated?.isEmpty == false ? floated : nil)
         body.floatSize = float.isHidden ? .zero : FloatNote.size(floated ?? "")
@@ -433,8 +465,15 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         who.alpha = presence
         words.alpha = presence
         configureChips(block)
-        takenTag.attributedText = Styled.string("Queued · editing it below", TypeScale.typeMeta, color: Palette.statusAttnInk, weight: .medium)
         fold(taken)
+        // The failure's line and its button stand in the row, and are drawn,
+        // only for a failed send: setting them for every message laid their
+        // text out for nothing, and their stack's constraints went with every row.
+        if failed, failure.superview == nil { words.addSubview(failure) } else if !failed { failure.removeFromSuperview() }
+        failure.isHidden = !failed
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+        guard failed else { return }
         if sending {
             showSendingAgain()
         } else {
@@ -444,15 +483,22 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         }
         retry.setAttributedTitle(Styled.string(sending ? "Sending again…" : "Send again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = !sending
-        failure.isHidden = !failed
-        retry.isHidden = !failed || env.hub.map { $0.state != .connected || $0.fleet.byId[env.sessionId]?.isListed != true } ?? true
+        retry.isHidden = env.hub.map { $0.state != .connected || $0.fleet.byId[env.sessionId]?.isListed != true } ?? true
         retry.layer.borderColor = Palette.wellEdge.resolvedColor(with: traitCollection).cgColor
+    }
+
+    /// Forgets the message it stood for: a retry under way is its own, not the next one's.
+    func recycle() {
+        retrying?.cancel()
+        retrying = nil
+        retried = nil
+        block = nil
     }
 
     /// Folded down to its tag while its words are in the composer
     /// (`.row-user.taken`): an empty well on the control edge, nothing below it moving.
     private func fold(_ folded: Bool) {
-        tagRow.isHidden = !folded
+        takenTag.isHidden = !folded
         body.isHidden = folded
         if folded {
             chips.isHidden = true

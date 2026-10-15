@@ -843,21 +843,60 @@ func blockView(_ block: MarkdownBlock) -> UIView {
     }
 }
 
+/// A block's view (`blockView`) made ready to be placed by frame in a column
+/// (PieceView, MessageBody): a rule's own height constraint goes, its frame says it.
+@MainActor
+func framedBlock(_ view: UIView) -> UIView {
+    if !(view is ProseView || view is CodeWell || view is TableBlock || view is QuoteBlock) {
+        NSLayoutConstraint.deactivate(view.constraints)
+    }
+    view.translatesAutoresizingMaskIntoConstraints = true
+    return view
+}
+
+/// A block's height `width` wide, as its view (`blockView`) lays itself out there.
+@MainActor
+func blockHeight(_ view: UIView, width: CGFloat) -> CGFloat {
+    switch view {
+    case let text as ProseView:
+        text.fitWidth = width
+        return text.intrinsicContentSize.height
+    case let quote as QuoteBlock:
+        quote.text.fitWidth = max(0, width - QuoteBlock.inset)
+        return quote.intrinsicContentSize.height
+    case let well as CodeWell:
+        return well.intrinsicContentSize.height
+    case let table as TableBlock:
+        table.fitWidth = width
+        return table.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
+                                             verticalFittingPriority: .fittingSizeLevel).height
+    default:
+        // A rule.
+        return 1
+    }
+}
+
 /// A whole message's words (MessageBody.svelte) as a column of its blocks,
 /// for the rows that draw a message in one piece: the reader's well, a note's
 /// body, a report.
+///
+/// Its blocks are laid out by frame, the blocks' gap apart (`layoutSubviews`),
+/// with no constraint among them; to a layout of constraints around it, its
+/// height at its width is its intrinsic size (`height(for:)`), at the width
+/// its row said (`fitWidth`) or else the one layout gave it.
 final class MessageBody: UIView {
-    private let stack = UIStackView()
     private var source: String?
     private var style = ProseStyle.body
     /// Kept clear at the first line's end (a grouped turn's floated clock).
     var floatSize: CGSize = .zero { didSet { (views.first as? ProseView)?.floatSize = floatSize } }
+    /// The room above each block: none above the first, the blocks' own gap above the rest.
+    private var gaps: [Double] = []
+    /// The width layout gave it, where nobody said one beforehand.
+    private var laidWidth: CGFloat?
 
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        stack.axis = .vertical
-        pin(stack)
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (body: MessageBody, _: UITraitCollection) in
             let source = body.source; body.source = nil
             if let source { body.configure(source, style: body.style) }
@@ -887,9 +926,31 @@ final class MessageBody: UIView {
         redrawForViewport()
     }
 
+    /// Its height `width` wide: its blocks' and the gaps between them.
+    func height(for width: CGFloat) -> CGFloat {
+        guard width > 0 else { return 0 }
+        return zip(views, gaps).reduce(0) { $0 + $1.1 + blockHeight($1.0, width: width) }
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: height(for: fitWidth ?? laidWidth ?? 0))
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         redrawForViewport()
+        let width = bounds.width
+        if fitWidth == nil, laidWidth.map({ abs($0 - width) > 0.5 }) ?? true {
+            laidWidth = width
+            invalidateIntrinsicContentSize()
+        }
+        var y: CGFloat = 0
+        for (view, gap) in zip(views, gaps) {
+            y += gap
+            let height = blockHeight(view, width: width)
+            view.frame = CGRect(x: 0, y: y, width: width, height: height)
+            y += height
+        }
     }
 
     /// The words, as blocks. Where the blocks already drawn are the same kinds,
@@ -914,14 +975,12 @@ final class MessageBody: UIView {
             }
         }
         // The block views are this view's own list, one per block, and this
-        // pass reads only its own copy of it: never the stack's
-        // `arrangedSubviews`, which a pass re-entered from a layout or trait
-        // change shrank under the loop counting blocks (TestFlight
-        // 20261007.6, MessageBody.configure: index 1 beyond bounds [0 .. 0]).
-        let drawn: [UIView]
+        // pass reads only its own copy of it, never the view's subviews: a
+        // pass re-entered from a layout or trait change once shrank the list
+        // it was counting under it (TestFlight 20261007.6,
+        // MessageBody.configure: index 1 beyond bounds [0 .. 0]).
         if same {
-            drawn = views
-            for (view, block) in zip(drawn, blocks) {
+            for (view, block) in zip(views, blocks) {
                 switch block.kind {
                 case let .text(text): (view as? ProseView)?.show(text, fading: fading)
                 case let .code(language, text): (view as? CodeWell)?.configure(language: language, text: text)
@@ -930,26 +989,27 @@ final class MessageBody: UIView {
             }
         } else {
             let old = views
-            drawn = blocks.map(blockView)
-            views = drawn
+            views = blocks.map(blockView)
             for view in old { view.removeFromSuperview() }
-            for view in drawn { stack.addArrangedSubview(view) }
+            for view in views { addSubview(framedBlock(view)) }
         }
-        for i in blocks.indices.dropFirst() {
-            stack.setCustomSpacing(MarkdownRender.gap(after: blocks[i - 1], before: blocks[i]), after: drawn[i - 1])
-        }
+        gaps = blocks.indices.map { i in i == 0 ? 0 : MarkdownRender.gap(after: blocks[i - 1], before: blocks[i]) }
         (views.first as? ProseView)?.floatSize = floatSize
-        for case let text as ProseView in views { text.fitWidth = fitWidth }
+        for case let text as ProseView in views { text.fitWidth = fitWidth ?? laidWidth }
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 
-    /// The block views, in order: what the stack arranges.
+    /// The block views, in order.
     private var views: [UIView] = []
 
     /// The width the words stand at, where their row knows it (ProseView `fitWidth`).
     var fitWidth: CGFloat? {
         didSet {
             guard fitWidth != oldValue else { return }
-            for case let text as ProseView in views { text.fitWidth = fitWidth }
+            for case let text as ProseView in views { text.fitWidth = fitWidth ?? laidWidth }
+            invalidateIntrinsicContentSize()
+            setNeedsLayout()
         }
     }
 

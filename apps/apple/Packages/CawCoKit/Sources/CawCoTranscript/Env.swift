@@ -173,7 +173,14 @@ final class RowStore {
             let widthChanged = !Self.same(entry.width, width)
             if entry.print != item.print || widthChanged {
                 if widthChanged { (view as? FitsWidth)?.fitWidth = width }
-                if entry.print != item.print { view.configure(item); Pace.row() }
+                if entry.print != item.print {
+                    #if DEBUG
+                    let start = CACurrentMediaTime()
+                    defer { Pace.rowSet(String(describing: V.self), made: 0, configured: CACurrentMediaTime() - start) }
+                    #endif
+                    view.configure(item)
+                    Pace.row()
+                }
                 entry.print = item.print
                 entry.width = width
                 entry.height = nil
@@ -183,6 +190,11 @@ final class RowStore {
             return view
         }
         let view: V
+        #if DEBUG
+        let start = CACurrentMediaTime()
+        var madeAt = start
+        defer { Pace.rowSet(String(describing: V.self), made: madeAt - start, configured: CACurrentMediaTime() - madeAt) }
+        #endif
         if let kept = spare[ObjectIdentifier(V.self)]?.popLast() as? V {
             (kept as? any Recycled)?.recycle()
             // It stands for its new item from nothing, as a new view does:
@@ -194,19 +206,43 @@ final class RowStore {
             Pace.madeRow(spare: true)
             #endif
         } else {
-            view = V(env: env)
-            // A frame row stands by its frame; any other, by the constraints its cell pins it with.
-            if !(view is any FrameRow) { view.translatesAutoresizingMaskIntoConstraints = false }
+            view = make(V.self)
             #if DEBUG
             Pace.madeRow(spare: false)
             #endif
         }
+        #if DEBUG
+        madeAt = CACurrentMediaTime()
+        #endif
         (view as? FitsWidth)?.fitWidth = width
         view.configure(item)
         Pace.row()
         entries[item.id] = Entry(view: view, print: item.print, width: width, height: nil, used: clock)
         trim()
         return view
+    }
+
+    /// A new row view of `type`.
+    private func make<V: RowContent>(_: V.Type) -> V {
+        let view = V(env: env)
+        // A frame row stands by its frame; any other, by the constraints its cell pins it with.
+        if !(view is any FrameRow) { view.translatesAutoresizingMaskIntoConstraints = false }
+        return view
+    }
+
+    /// Makes one row view ahead, of the first of `types` with no spare, on
+    /// what a frame has to spare: the next row of that kind a live turn
+    /// brings (a sent message, a reasoning block, a reply's first piece, a
+    /// call) is then set up for its item rather than made in the commit that
+    /// shows it, 2 to 3 ms of a turn's start. Returns whether it made one.
+    @discardableResult
+    func ready(_ types: [any Recycled.Type]) -> Bool {
+        func made<V: Recycled>(_ type: V.Type) -> UIView & RowContent { make(type) }
+        for type in types where spare[ObjectIdentifier(type)]?.isEmpty ?? true {
+            spare[ObjectIdentifier(type), default: []].append(made(type))
+            return true
+        }
+        return false
     }
 
     /// Builds `item`'s row off the screen, as `type`, at `width`: its text set
@@ -349,6 +385,11 @@ final class RowStore {
         entries[id]?.width = width
     }
 
+    /// The cell standing the row for `id`, on the screen or prepared to come on it.
+    func cell(holding id: String) -> ItemCell? {
+        entries[id]?.view.superview?.superview as? ItemCell
+    }
+
     /// The row for `id` changed where it stands (a picture, a body opened):
     /// its height is measured again.
     func forget(_ id: String) { entries[id]?.height = nil }
@@ -440,6 +481,14 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
     /// A row was stood here since the cell was last measured: a height the
     /// store holds for it, at this print and this width, is its height.
     private var stood = false
+    /// The row changed where it stands since it was last measured (`forget`,
+    /// a measured redraw). Until then a frame row (FrameRow), whose height is
+    /// only its content's at its width, keeps the height it stands at however
+    /// often the list asks: every update asked each cell on the screen again,
+    /// and each was measured again, a turn's start and end 12 ms of the main
+    /// thread. A row of constraints is measured on any ask but the first
+    /// after it is stood (`stood`): a kept height let one skip a measure it needed.
+    private var unsure = false
 
     /// Stands `item`'s row here, taking it from wherever it stood before.
     func host(_ item: Item, store: RowStore, width: CGFloat?) {
@@ -468,6 +517,7 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
         place(item.top)
         shown = (item.id, item.print)
         stood = true
+        unsure = false
     }
 
     /// The row stands `margin` under the cell's top.
@@ -503,11 +553,13 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
         // A row at an exact height takes its new one from the layout (its
         // section worked out again, TranscriptView `redrawInPlace`): nothing is measured.
         stood = !measured
+        unsure = measured
         if measured { invalidateIntrinsicContentSize() }
     }
 
     func forget() {
         stood = false
+        unsure = true
         if let shown { store?.forget(shown.id) }
     }
 
@@ -529,13 +581,14 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
     /// `laidWidth`), then the measure. Measured in one, a text whose width
     /// only layout knows was measured before it had one.
     override func preferredLayoutAttributesFitting(_ attributes: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
-        let fresh = stood
+        let first = stood
+        let fresh = first || (row is any FrameRow && !unsure)
         stood = false
         let width = attributes.size.width
         // A row whose exact height the layout gave (RowLayout) stands at it: nothing is measured.
         if fresh, ((superview as? UICollectionView)?.collectionViewLayout as? RowLayout)?.isExact(attributes.indexPath) == true {
             #if DEBUG
-            if let shown, let row { store?.verifyLater(shown.id, print: shown.print, kind: String(describing: Content.self), view: row,
+            if first, let shown, let row { store?.verifyLater(shown.id, print: shown.print, kind: String(describing: Content.self), view: row,
                                                        height: attributes.size.height - margin, width: width) }
             #endif
             return attributes
@@ -549,6 +602,7 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
             return Pace.time(.measure) {
                 let height = row.height(for: width)
                 if let shown { store?.measured(shown.id, height: height, width: width) }
+                unsure = false
                 attributes.size.height = margin + height
                 return attributes
             }

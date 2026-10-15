@@ -270,6 +270,12 @@ extension Pace {
         if spare { fromSpare += 1 } else { madeNew += 1 }
     }
 
+    /// A row view took 2 ms or more to make or to set for its item (RowStore `row`): said, by kind.
+    static func rowSet(_ kind: String, made: Double, configured: Double) {
+        guard probing, made + configured >= 0.002 else { return }
+        log.notice("probe row \(kind, privacy: .public): made \(made * 1000, format: .fixed(precision: 1)) ms, set \(configured * 1000, format: .fixed(precision: 1)) ms")
+    }
+
     /// A row stood at its exact height was measured as its view lays out
     /// (RowStore `verify`): a difference over half a point is a drift.
     static func heightChecked(_ kind: String, id: String, exact: Double, real: Double) {

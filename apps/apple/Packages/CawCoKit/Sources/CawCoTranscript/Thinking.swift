@@ -205,8 +205,17 @@ final class ThinkingIndicator: UIView {
 /// face or "Reasoning" with the CPU mark, folded to the end of its last
 /// thought, opening into its steps — one per block of the text, each on a
 /// dot with a hairline down to the next.
-final class ThinkingView: RailRow, RowContent, Disclosing {
+final class ThinkingView: RailRow, Recycled, Disclosing {
     var disclosed: Bool { reveal.isOpen }
+
+    /// Forgets the block it stood for, so the next is drawn as new: no
+    /// live-to-settled crossfade on a row that only came on the screen.
+    func recycle() {
+        key = ""
+        text = ""
+        isLive = false
+        open = false
+    }
 
     private let header = UIView()
     private let live = ThinkingIndicator()

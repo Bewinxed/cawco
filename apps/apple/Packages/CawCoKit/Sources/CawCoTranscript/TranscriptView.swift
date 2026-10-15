@@ -1560,8 +1560,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if section.settled == before.settled, section.tail == before.tail {
             guard !changed.isEmpty else { return }
             // The same rows, some drawn anew (the streamed reply, mostly): each
-            // on screen is configured where it stands and sizes itself, and the
-            // list takes no update. One off the screen is reconfigured below.
+            // is configured where it stands (one off the screen in the cell
+            // prepared to show it, or when it is next stood), and the list
+            // takes no update. One the list does not hold is reconfigured below.
             let unseen = redrawInPlace(changed)
             drewThisFrame = true
             if unseen.isEmpty {
@@ -1578,10 +1579,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let snapshotAt = CACurrentMediaTime()
         var madeAt = snapshotAt
         let layoutBefore = Pace.turnTime(.layout)
+        let rowsBuilt = { Pace.turnTime(.build) + Pace.turnTime(.frameBuild) }
+        let rowsMeasured = { Pace.turnTime(.measure) + Pace.turnTime(.frameMeasure) }
+        let builtBefore = rowsBuilt(), measuredBefore = rowsMeasured()
         defer {
             let end = CACurrentMediaTime()
             if Pace.probing, end - began >= 0.008 {
-                Self.dockLog.notice("probe commit \((end - began) * 1000, format: .fixed(precision: 1)) ms: build \((builtAt - began) * 1000, format: .fixed(precision: 1)), rows looked at \((snapshotAt - builtAt) * 1000, format: .fixed(precision: 1)), snapshot made \((madeAt - snapshotAt) * 1000, format: .fixed(precision: 1)), applied \((end - madeAt) * 1000, format: .fixed(precision: 1)) (the layout preparing \((Pace.turnTime(.layout) - layoutBefore) * 1000, format: .fixed(precision: 1)) of it); \(built.count) items, \(quiet ? "quiet" : "whole", privacy: .public), \(scope.map { "\($0.count) section(s)" } ?? "every section", privacy: .public), \(changed.count) reconfigured")
+                Self.dockLog.notice("probe commit \((end - began) * 1000, format: .fixed(precision: 1)) ms: build \((builtAt - began) * 1000, format: .fixed(precision: 1)), rows looked at \((snapshotAt - builtAt) * 1000, format: .fixed(precision: 1)), snapshot made \((madeAt - snapshotAt) * 1000, format: .fixed(precision: 1)), applied \((end - madeAt) * 1000, format: .fixed(precision: 1)) (the layout preparing \((Pace.turnTime(.layout) - layoutBefore) * 1000, format: .fixed(precision: 1)), rows built \((rowsBuilt() - builtBefore) * 1000, format: .fixed(precision: 1)), rows measured \((rowsMeasured() - measuredBefore) * 1000, format: .fixed(precision: 1)) of it);\(built.count) items, \(quiet ? "quiet" : "whole", privacy: .public), \(scope.map { "\($0.count) section(s)" } ?? "every section", privacy: .public), \(changed.count) reconfigured")
             }
         }
         #endif
@@ -1593,9 +1597,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // those take the update and are laid out again; the whole snapshot's
         // apply diffed and updated every row the list held. Not when a
         // section joins or goes (an older page read in front, which lands in
-        // sections of its own), nor when a row off the screen changed (only
-        // the whole update reconfigures it); its rows on screen are drawn
-        // anew where they stand.
+        // sections of its own), nor when a changed row is not in the list
+        // (only the whole update reconfigures it); its rows are drawn anew
+        // where they stand (`redrawInPlace`).
         if next.sectionIdentifiers == before.sectionIdentifiers, before.sectionIdentifiers.count == collection.numberOfSections {
             let common = min(before.settled.count, next.settled.count)
             let first = (0 ..< common).first { before.settled[$0] != next.settled[$0] } ?? common
@@ -1738,8 +1742,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         var unseen: [String] = []
         var resized = Set<Int>()
         for id in ids {
-            if let index = rows.path(of: id), let item = items[id],
-               let cell = collection.cellForItem(at: index) as? ItemCell {
+            guard let index = rows.path(of: id), let item = items[id] else {
+                unseen.append(id)
+                continue
+            }
+            if let cell = collection.cellForItem(at: index) as? ItemCell {
                 // A row whose body is moving is sized by the body's steps, not the list's own resizing.
                 if moving.contains(where: { Self.cell(of: $0) === cell }) {
                     quietly { cell.redraw(item, measured: true) }
@@ -1749,7 +1756,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                     if exact { resized.insert(index.section) }
                 }
             } else {
-                unseen.append(id)
+                // Off the screen: drawn anew in the cell prepared to show it
+                // when one holds it, else by the store when a cell next stands
+                // it (its print changed); its height asked again either way.
+                // Reconfiguring it took the whole list's update, every row
+                // diffed, for one row nobody sees.
+                measuredRows[id] = nil
+                store.cell(holding: id)?.redraw(item, measured: true)
+                resized.insert(index.section)
             }
         }
         if !resized.isEmpty {
@@ -1891,8 +1905,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             // A one-line tool call built and measured here gives every such row its height.
             learnToolLine(item, height: height, width: width)
         }
+        // What the frame has left makes a row view the next live turn will want (RowStore `ready`).
+        if until - CACurrentMediaTime() > Self.readyCost { store.ready(Self.liveKinds) }
         return false
     }
+
+    /// The row views a live turn brings, kept one ahead of it each (RowStore `ready`).
+    private static let liveKinds: [any Recycled.Type] = [UserTurnView.self, ThinkingView.self, PieceView.self, ToolLineView.self]
+    /// The most a row view takes to make, which a frame must have left to make one ahead.
+    private static let readyCost = 0.003
 
     // MARK: A queued message in the composer
 
