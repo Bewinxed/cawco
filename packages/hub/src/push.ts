@@ -393,6 +393,22 @@ const pushOf = (
     : { lead: null, notification: burstOf(id, items) };
 };
 
+/** The hub's log line for a burst's send: what went, under which id, led by and replacing what. */
+const sentLine = (
+  notification: Notification,
+  ids: readonly string[],
+  lead: string | null,
+  replacing: readonly string[]
+): string => {
+  const what =
+    ids.length === 1
+      ? "sent"
+      : `${ids.length} in one (${ids.join(", ")})${lead ? `, led by ${lead}` : ""}`;
+  const instead =
+    replacing.length > 0 ? `, replacing ${replacing.join(", ")}` : "";
+  return `[notify] push ${notification.collapseId}: ${what}${instead}${notification.quiet ? ", quietly" : ""}`;
+};
+
 /** Cawrier refuses a payload over APNs' 4096 bytes (apps/cawrier `MAX_PAYLOAD_BYTES`). */
 const MAX_PAYLOAD_BYTES = 4096;
 /** AES-GCM's IV and tag around the ciphertext: CryptoKit's `SealedBox.combined`. */
@@ -850,9 +866,7 @@ export const createPush = ({
     burst.showing = notification.collapseId;
     burst.shown = items;
     burst.lead = lead;
-    console.log(
-      `[notify] push ${notification.collapseId}: ${items.length === 1 ? "sent" : `${items.length} in one (${ids.join(", ")})${lead ? `, led by ${lead}` : ""}`}${replacing.length > 0 ? `, replacing ${replacing.join(", ")}` : ""}${quiet ? ", quietly" : ""}`
-    );
+    console.log(sentLine(notification, ids, lead, replacing));
     replace(notification, replacing);
   };
 
