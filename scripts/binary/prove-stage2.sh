@@ -1387,8 +1387,8 @@ hub_installs_first() {
   learn
   wait_until 120 '[[ "$(field $jid availableVersion)" == $NEXT ]]'
 }
-# How many helpers started applying build $2 on machine $1, as its apply.log says.
-apply_starts() { as_user "$1" sh -c 'grep -c "start $1 keeperOnly=false" /home/cawco/.local/share/cawco/binary/apply.log || true' sh "$2"; }
+# How many helpers started applying build $2 on machine $1, as its apply.log says: 0 before any helper wrote one.
+apply_starts() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/binary/apply.log 2> /dev/null | grep -c "start $1 keeperOnly=false" || true' sh "$2"; }
 # A workflow whose one step is a long command, `sleep $1`, on the machine it runs on: work in flight an agent's drain
 # waits on. Each is its own workflow, so each command is its own piece of work.
 hold_workflow() { printf '{"name":"hold-the-joined-drain-%s","program":"import { z } from \\"zod\\"; export const inputs = z.object({}); export default async function (w: Workflow<typeof inputs>) { await w.exec(\\"sleep %s\\"); return {}; }"}' "$1" "$1"; }
