@@ -45,7 +45,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type MainTask, SCROLLER, traceMain } from "../frames";
+import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
 import { type Kit, open, type Spec } from "../kit";
 
 /** Calls in each long session. */
@@ -358,6 +358,34 @@ const census = (page: Page): Promise<string> =>
       )
       .join(" | ")
   );
+
+/**
+ * The script in each press's longest task (the one a switch is held to),
+ * by self time across the presses, the most first.
+ */
+function scriptOf(sampled: MainThread, presses: number[]): string {
+  const spent = new Map<string, number>();
+  for (const at of presses) {
+    const longestTask = sampled.tasks
+      .filter((task) => task.at >= at && task.at < at + SETTLE_MS * 1000)
+      .reduce<MainTask | null>(
+        (most, task) => (most && most.cpu >= task.cpu ? most : task),
+        null
+      );
+    if (!longestTask) {
+      continue;
+    }
+    for (const [fn, ms] of sampled.selfTime(longestTask.at, longestTask.end)) {
+      spent.set(fn, (spent.get(fn) ?? 0) + ms);
+    }
+  }
+  return [...spent]
+    .filter(([fn]) => fn !== "(idle)")
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 24)
+    .map(([fn, ms]) => `${fn} ${ms.toFixed(1)}ms`)
+    .join("; ");
+}
 
 async function measure(
   kit: Kit,
@@ -678,31 +706,8 @@ async function measure(
       presses.push(at);
     }
   }
-  const switchScript = new Map<string, number>();
-  // Each switch's longest task alone: the one the switch is held to.
-  for (const at of presses) {
-    const longestTask = sampled.tasks
-      .filter((task) => task.at >= at && task.at < at + SETTLE_MS * 1000)
-      .reduce<MainTask | null>(
-        (most, task) => (most && most.cpu >= task.cpu ? most : task),
-        null
-      );
-    if (!longestTask) {
-      continue;
-    }
-    for (const [fn, ms] of sampled.selfTime(longestTask.at, longestTask.end)) {
-      switchScript.set(fn, (switchScript.get(fn) ?? 0) + ms);
-    }
-  }
   kit.note(
-    `${mode} pane(s), point: the script in its ${presses.length} switches' longest tasks, by self time, all told: ${[
-      ...switchScript,
-    ]
-      .filter(([fn]) => fn !== "(idle)")
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 24)
-      .map(([fn, ms]) => `${fn} ${ms.toFixed(1)}ms`)
-      .join("; ")}`
+    `${mode} pane(s), point: the script in its ${presses.length} switches' longest tasks, by self time, all told: ${scriptOf(sampled, presses)}`
   );
   const seen = await page.evaluate(
     () => (window as unknown as { __cost: Cost }).__cost
