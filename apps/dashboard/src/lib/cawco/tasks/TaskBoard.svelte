@@ -71,6 +71,27 @@
   const archivedIds = $derived(new Set(dimmed.map((task) => task.id)));
   /** PREVIEW (T5 b): the archive rail, open as a column of its own. */
   let railOpen = $state(false);
+  const railed = $derived(archivedAs === "rail" && archived.length > 0);
+  let scroller = $state<HTMLElement | null>(null);
+  /**
+   * PREVIEW (T5 a): archived tasks stand in their own stages' columns, most
+   * often the last ones (done, dropped), which a board wider than its place
+   * keeps past its trailing edge. Shown, the board brings the first of them
+   * into view, so turning them on is never a change off-screen.
+   */
+  let dimmedSeen = 0;
+  $effect(() => {
+    const count = dimmed.length;
+    const node = scroller;
+    if (count > 0 && dimmedSeen === 0 && node) {
+      requestAnimationFrame(() => {
+        node
+          .querySelector("[data-archived]")
+          ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      });
+    }
+    dimmedSeen = count;
+  });
   const byStage = $derived.by(() => {
     const columns = new Map<string, TaskSummary[]>();
     for (const task of [...tasks, ...dimmed]) {
@@ -119,22 +140,23 @@
   <NewTaskForm {oncreate} stage={newIn ?? ""} bind:open={adding} />
 {/snippet}
 
-<div
-  class="board kit-edge-fade"
-  style:--stage-count={stages.length + (stray.length > 0 ? 1 : 0)}
->
-  {#each stages as stage (stage.name)}
-    {@render column(
-      stage.name,
-      stageLabel(stage.name),
-      stage.kind,
-      byStage.get(stage.name) ?? []
-    )}
-  {/each}
-  {#if stray.length > 0}
-    {@render column("", "Other stages", null, stray)}
-  {/if}
-  {#if archivedAs === "rail" && archived.length > 0}
+<!-- PREVIEW (T5 b): the archive stands beside the scrolling columns, not
+     after the last of them, so it is in view however wide the board runs. -->
+<div class="board-wrap" data-railed={railed ? "" : undefined}>
+  <div bind:this={scroller} class="board kit-edge-fade">
+    {#each stages as stage (stage.name)}
+      {@render column(
+        stage.name,
+        stageLabel(stage.name),
+        stage.kind,
+        byStage.get(stage.name) ?? []
+      )}
+    {/each}
+    {#if stray.length > 0}
+      {@render column("", "Other stages", null, stray)}
+    {/if}
+  </div>
+  {#if railed}
     {#if railOpen}
       <div class="rail-open">
         <TaskColumn
@@ -175,11 +197,19 @@
 </div>
 
 <style>
+  .board-wrap {
+    display: flex;
+    gap: var(--space-3);
+    block-size: 100%;
+    min-block-size: 0;
+  }
   .board {
     display: grid;
+    flex: 1 1 auto;
     grid-auto-flow: column;
     grid-auto-columns: minmax(15rem, 22rem);
     gap: var(--space-3);
+    min-inline-size: 0;
     block-size: 100%;
     min-block-size: 0;
     overflow-x: auto;
@@ -187,12 +217,13 @@
     padding-block-end: var(--space-3);
     overscroll-behavior-x: contain;
   }
-  /* PREVIEW (T5 b): the archive folded to a narrow rail after the last
-     column; open, it is a column like the others, quieter. */
-  .board:has(> .archive-rail) {
-    grid-template-columns:
-      repeat(var(--stage-count), minmax(15rem, 22rem))
-      auto;
+  /* PREVIEW (T5 b): the archive folded to a narrow rail at the board's
+     trailing edge; open, it is a column like the others, quieter. Both
+     stand on the board's floor (its scroll room under the columns). */
+  .archive-rail,
+  .rail-open {
+    flex: none;
+    margin-block-end: var(--space-3);
   }
   .archive-rail {
     display: flex;
@@ -224,6 +255,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+    inline-size: min(22rem, 80%);
     min-block-size: 0;
   }
   .rail-close {
@@ -242,14 +274,7 @@
       grid-auto-columns: calc(100% - var(--space-8));
       scroll-snap-type: x mandatory;
     }
-    .board:has(> .archive-rail) {
-      grid-template-columns:
-        repeat(var(--stage-count), calc(100% - var(--space-8)))
-        auto;
-    }
-    .board > :global(.column),
-    .board > .archive-rail,
-    .board > .rail-open {
+    .board > :global(.column) {
       scroll-snap-align: start;
     }
   }

@@ -2589,15 +2589,20 @@
       "$value": "44px",
       "$description": "A routines-page row's pitch: the whole row is its own 44px opener on every pointer."
     },
-    "c-fact-w": {
+    "c-routine-time-w": {
       "$type": "dimension",
-      "$value": "7rem",
-      "$description": "A routines-page row's trailing fact column (\"Tomorrow 09:00\", \"Failed 2d ago\"), fixed so a fact that changes as you watch (\"Running…\") never moves the title."
+      "$value": "9rem",
+      "$description": "The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and \"23h ago\", or \"Tomorrow 13:30\", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say."
     },
-    "c-fact-w-compact": {
+    "c-routines-w": {
       "$type": "dimension",
-      "$value": "6rem",
-      "$description": "The same fact column on a card under 400px (a phone): it still holds \"Tomorrow 09:00\" in meta, and gives the title the rest."
+      "$value": "1120px",
+      "$description": "The widest the routines ledger runs: a few rows of name, schedule and two times read as one line each, never across a 2560px screen (Hex's and Cursor's bounded schedule tables)."
+    },
+    "c-routines-rail-w": {
+      "$type": "dimension",
+      "$value": "340px",
+      "$description": "The routines page's right rail, beside the ledger once its place is 1280px wide or more: Event sources over Approved actions (Databricks' job panel, Attio's run history)."
     },
     "c-tray-chip": {
       "$type": "dimension",

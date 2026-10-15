@@ -591,10 +591,12 @@ public enum Size {
     public static let cRowLead: Double = 28
     /// A routines-page row's pitch: the whole row is its own 44px opener on every pointer.
     public static let cRowH: Double = 44
-    /// A routines-page row's trailing fact column ("Tomorrow 09:00", "Failed 2d ago"), fixed so a fact that changes as you watch ("Running…") never moves the title.
-    public static let cFactW: Double = 112
-    /// The same fact column on a card under 400px (a phone): it still holds "Tomorrow 09:00" in meta, and gives the title the rest.
-    public static let cFactWCompact: Double = 96
+    /// The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and "23h ago", or "Tomorrow 13:30", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say.
+    public static let cRoutineTimeW: Double = 144
+    /// The widest the routines ledger runs: a few rows of name, schedule and two times read as one line each, never across a 2560px screen (Hex's and Cursor's bounded schedule tables).
+    public static let cRoutinesW: Double = 1120
+    /// The routines page's right rail, beside the ledger once its place is 1280px wide or more: Event sources over Approved actions (Databricks' job panel, Attio's run history).
+    public static let cRoutinesRailW: Double = 340
     /// The delegate tray's row: a chip, and the step down to the pill.
     public static let cTrayChip: Double = 28
     /// `cTrayChip` under a coarse pointer (touch).

@@ -8,7 +8,6 @@
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import PreviewSwitches from "#lib/cawco/routines/PreviewSwitches.svelte";
-  import { picks } from "#lib/cawco/routines/preview.svelte.js";
   import ViewRoutines from "#lib/cawco/views/ViewRoutines.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronLeft } from "#lib/icons.js";
@@ -54,18 +53,15 @@
     </header>
     <div class="body">
       {#if lead.view}
-        {#key picks.layout}
-          <ViewRoutines
-            {canTalk}
-            cawProblem={lead.view.problem ?? null}
-            layout={picks.layout}
-            project={{
-              id: data.project.id,
-              name: data.project.name,
-              template: data.template,
-            }}
-          />
-        {/key}
+        <ViewRoutines
+          {canTalk}
+          cawProblem={lead.view.problem ?? null}
+          project={{
+            id: data.project.id,
+            name: data.project.name,
+            template: data.template,
+          }}
+        />
       {/if}
     </div>
   </div>

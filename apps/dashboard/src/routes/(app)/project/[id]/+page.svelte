@@ -169,6 +169,19 @@
   /** PREVIEW (T5): the archived tasks, and whether the strip's Archived shows them in place. */
   let archived = $state<TaskSummary[]>([]);
   let showArchived = $state(false);
+  /**
+   * PREVIEW (T5): a pick on the switch shows on the board. Picking Dimmed in
+   * place turns the strip's Archived on (off, nothing on the board would
+   * change); picking the rail turns it off, as the rail holds them.
+   */
+  let archivedAsSeen: string | null = null;
+  $effect(() => {
+    const as = picks.archived;
+    if (archivedAsSeen !== null && as !== archivedAsSeen) {
+      showArchived = as === "dim";
+    }
+    archivedAsSeen = as;
+  });
   async function readArchived() {
     const id = projectId;
     try {
@@ -911,20 +924,16 @@
     {/if}
   {:else if value === "routines" && project}
     <!-- PREVIEW (S1 a): the routines, the strip's fourth tab. -->
-    {#key picks.layout}
-      <ViewRoutines
-        {canTalk}
-        cawProblem={lead.view?.problem ?? null}
-        layout={picks.layout}
-        project={{
-          id: project.id,
-          name: project.name,
-          // A template standing in for a missing stages.md is not the project's.
-          template:
-            stages?.source === "file" ? (stages.template ?? null) : null,
-        }}
-      />
-    {/key}
+    <ViewRoutines
+      {canTalk}
+      cawProblem={lead.view?.problem ?? null}
+      project={{
+        id: project.id,
+        name: project.name,
+        // A template standing in for a missing stages.md is not the project's.
+        template: stages?.source === "file" ? (stages.template ?? null) : null,
+      }}
+    />
   {:else if !list}
     <div class="state">
       <EmptyState

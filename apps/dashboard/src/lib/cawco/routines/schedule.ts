@@ -1,11 +1,12 @@
 /**
  * A routine's schedule and its runs' times, in words.
  *
- * - `scheduleOf`: its cron as a person says it ("Weekdays 09:00", "Every day
- *   23:30", "Mondays 10:00"), in its own zone, and that zone as a place name
- *   when it is not the reader's (the chip beside the words).
+ * - `scheduleOf`: its cron as a person says it ("Daily at 13:30", "Weekdays
+ *   at 09:00", "Mondays at 10:00"), in its own zone, and that zone as a place
+ *   name when it is not the reader's.
  * - `whenOf`: a time in the reader's zone, near now said near ("Today 09:00",
  *   "Yesterday 23:30", "Mon 09:00"), further off with its date.
+ * - `exactOf`: the same time whole, for a hover ("Thu 15 Oct 2026, 13:30").
  */
 
 const DAY_NAMES = [
@@ -33,7 +34,7 @@ const NUMBER = /^\d+$/;
 /** The days a cron's day-of-week field names, as words; null when it names none we say. */
 function daysOf(field: string): string | null {
   if (field === "*") {
-    return "Every day";
+    return "Daily";
   }
   if (field === "1-5") {
     return "Weekdays";
@@ -77,7 +78,7 @@ export function scheduleOf(cron: string, zone: string): ScheduleWords {
     const days = daysOf(dow);
     if (days) {
       return {
-        words: `${days} ${two(Number(hour))}:${two(Number(minute))}`,
+        words: `${days} at ${two(Number(hour))}:${two(Number(minute))}`,
         raw: false,
         zone: away,
       };
@@ -92,7 +93,7 @@ export function scheduleOf(cron: string, zone: string): ScheduleWords {
     dow === "*"
   ) {
     return {
-      words: `Every hour at :${two(Number(minute))}`,
+      words: `Hourly at :${two(Number(minute))}`,
       raw: false,
       zone: away,
     };
@@ -115,6 +116,15 @@ const DATE = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
   month: "short",
 });
+const EXACT = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
 const dayOf = (at: number) => new Date(at).setHours(0, 0, 0, 0);
 
 /** "Today 09:00", "Tomorrow 09:00", "Yesterday 23:30", "Mon 09:00", "3 Oct 09:00", in the reader's zone. */
@@ -135,3 +145,6 @@ export function whenOf(at: number): string {
   }
   return `${DATE.format(at)} ${time}`;
 }
+
+/** A time whole, in the reader's zone, for a hover. */
+export const exactOf = (at: number): string => EXACT.format(at);

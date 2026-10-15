@@ -1,19 +1,24 @@
 <script lang="ts">
   /**
    * A project's routines: what runs on its own, what fires it, and the
-   * actions its runs asked you to approve. Three parts:
+   * actions its runs asked you to approve.
    *
-   * - Routines: a calm list, a row a routine (its state glyph, its name, one
-   *   fact: when it runs next, or why it won't), the row opening its detail
-   *   in place (RoutineDetail; The Open Page Rule), its actions in its ⋯.
-   * - Event sources: the routes that send events to a routine, the services
-   *   read for them, and the relay.
-   * - Approved actions: what its runs proposed and what came of it. Approving
-   *   stays in Needs you; here is the history.
+   * - Routines: a ledger, one shape for every row (the comparable products'
+   *   schedule tables: Hex, Snowflake, Cursor). Its state glyph (on, paused,
+   *   on an event, turning itself off); its name over its schedule in words;
+   *   Last run, a status glyph and how long ago; Next run, when; its ⋯. Last
+   *   and Next are fixed columns, so every row's times start on one edge and
+   *   a failure changes a glyph and its colour, never where anything stands.
+   *   Enabled rows first, soonest next run first; a paused row keeps its row.
+   *   The row opens its detail in place (RoutineDetail; The Open Page Rule).
+   *   On a narrow ledger Last and Next fold into the schedule's line, in the
+   *   same order.
+   * - Event sources and Approved actions, the two quiet parts: a rail beside
+   *   the ledger once the page is 1280px wide or more, stacked under it in
+   *   the same order below that.
    *
-   * The page holds them one of three ways (the preview's S5): tiles across
-   * the top that are its tabs (`strip`), a bento of the three (`bento`), or
-   * a tab row over one (`tabs`).
+   * The ledger stops at --c-routines-w: a few rows never stretch across a
+   * wide screen.
    *
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
    * starters for the project's kind of work over the field to Caw, whose
@@ -34,25 +39,24 @@
     routinesPageOf,
   } from "#lib/cawco/routines/preview-data.js";
   import RoutineDetail from "#lib/cawco/routines/RoutineDetail.svelte";
-  import { whenOf } from "#lib/cawco/routines/schedule.js";
+  import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Table from "#lib/components/ui/table/index.js";
   import {
     IconClock,
     IconError,
     IconHook,
     IconHourglass,
-    IconLinkRound,
+    IconMinusCircle,
     IconNeedsYou,
     IconPause,
     IconPauseCircle,
@@ -60,20 +64,16 @@
     IconPlay,
     IconSuccess,
     IconTrash,
-    IconWorking,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
 
   let {
     project,
-    layout,
     canTalk,
     cawProblem = null,
   }: {
     /** The project: its id, its name, and the template its starters are written for. */
     project: { id: string; name: string; template: string | null };
-    /** PREVIEW (S5): how the page holds its three parts. */
-    layout: "strip" | "bento" | "tabs";
     /** Caw can start: the empty page's field and New routine reach him. */
     canTalk: boolean;
     /** Why Caw can't start, said on the empty page instead. */
@@ -93,7 +93,6 @@
 
   // --- a routine's row ----------------------------------------------------------
 
-  type StateKind = "on" | "paused" | "failing" | "expiring" | "running";
   /** The one routine open: opening another folds it. */
   let open = $state<string | null>(null);
   let deleting = $state<string | null>(null);
@@ -103,56 +102,122 @@
   const going = (routine: Routine) =>
     routine.runs[0]?.state === "starting" ||
     routine.runs[0]?.state === "running";
-  const failing = (routine: Routine) => routine.runs[0]?.outcome === "failed";
-  function stateOf(routine: Routine): StateKind {
-    if (going(routine)) {
-      return "running";
-    }
+
+  /**
+   * Enabled first (Zapier's on-above-off), then the soonest next run; a
+   * routine an event fires has no next run, so it follows the scheduled ones.
+   */
+  const sorted = $derived(
+    routines.toSorted(
+      (a, b) =>
+        Number(b.enabled) - Number(a.enabled) ||
+        Number(a.trigger !== null) - Number(b.trigger !== null) ||
+        a.nextSlot - b.nextSlot
+    )
+  );
+
+  /** The lead glyph: whether it runs, and how; never how its last run went. */
+  type Lead = "on" | "event" | "paused" | "expiring";
+  function leadOf(routine: Routine): Lead {
     if (!routine.enabled) {
       return "paused";
     }
-    if (failing(routine)) {
-      return "failing";
+    if (routine.expiresAt !== null && !routine.keep) {
+      return "expiring";
     }
-    return routine.expiresAt !== null && !routine.keep ? "expiring" : "on";
+    return routine.trigger ? "event" : "on";
   }
-  const GLYPH = {
-    on: IconSuccess,
-    paused: IconPauseCircle,
-    failing: IconError,
-    expiring: IconHourglass,
-    running: IconWorking,
+  const LEAD = {
+    on: { glyph: IconClock, said: "On, on a schedule" },
+    event: { glyph: IconHook, said: "On, when an event comes" },
+    paused: { glyph: IconPauseCircle, said: "Paused" },
+    expiring: { glyph: IconHourglass, said: "On, turning itself off" },
   } as const;
   const DAY = 86_400_000;
 
-  /** The row's one fact, and what its glyph says read out. */
-  function factOf(routine: Routine): { fact: string; said: string } {
-    const kind = stateOf(routine);
-    if (kind === "running") {
-      return { fact: "Running…", said: "Running" };
+  /** The schedule's line: its words, its zone when it isn't yours, and when it turns itself off. */
+  function scheduleLine(routine: Routine): {
+    words: string;
+    off: string | null;
+  } {
+    const off =
+      leadOf(routine) === "expiring" && routine.expiresAt !== null
+        ? (() => {
+            const days = Math.max(
+              1,
+              Math.round((routine.expiresAt - Date.now()) / DAY)
+            );
+            return `Off in ${days} ${days === 1 ? "day" : "days"}`;
+          })()
+        : null;
+    if (routine.trigger) {
+      return { words: `When ${routine.trigger}`, off };
     }
-    if (kind === "paused") {
-      return { fact: "Paused", said: "Paused" };
+    const schedule = scheduleOf(routine.cron, routine.timeZone);
+    return {
+      words: schedule.zone
+        ? `${schedule.words} ${schedule.zone} time`
+        : schedule.words,
+      off,
+    };
+  }
+
+  /** Last run's status: one glyph vocabulary for the ledger and Approved actions. */
+  type Status = "done" | "failed" | "running" | "neutral" | "waiting";
+  const STATUS_GLYPH = {
+    done: IconSuccess,
+    failed: IconError,
+    neutral: IconMinusCircle,
+    waiting: IconNeedsYou,
+  } as const;
+
+  /** The Last run cell: its status, the time it says, the whole of it for a hover. */
+  function lastOf(routine: Routine): {
+    status: Status;
+    text: string;
+    title: string;
+  } {
+    const [run] = routine.runs;
+    if (!run) {
+      return { status: "neutral", text: "Never", title: "It has not run yet" };
     }
-    if (kind === "failing") {
-      const when = since(routine.runs[0]?.startedAt ?? Date.now());
-      return { fact: `Failed ${when}`, said: `Its last run failed ${when}` };
-    }
-    if (kind === "expiring" && routine.expiresAt !== null) {
-      const days = Math.max(
-        1,
-        Math.round((routine.expiresAt - Date.now()) / DAY)
-      );
+    const at = exactOf(run.startedAt);
+    if (going(routine)) {
       return {
-        fact: `Off in ${days} ${days === 1 ? "day" : "days"}`,
-        said: `Turns itself off in ${days} days unless you keep it`,
+        status: "running",
+        text: "Running",
+        title: `Running since ${at}`,
       };
     }
-    if (routine.trigger) {
-      return { fact: "On event", said: `Runs when ${routine.trigger}` };
+    const ago = since(run.endedAt ?? run.startedAt);
+    if (run.state === "skipped") {
+      return { status: "neutral", text: ago, title: `Skipped · ${at}` };
     }
-    const next = whenOf(routine.nextSlot);
-    return { fact: next, said: `Next run ${next}` };
+    if (run.state === "queued") {
+      return { status: "neutral", text: "Queued", title: `Queued · ${at}` };
+    }
+    if (run.outcome === "failed") {
+      return { status: "failed", text: ago, title: `Failed · ${at}` };
+    }
+    if (run.outcome === "cancelled") {
+      return { status: "neutral", text: ago, title: `Stopped · ${at}` };
+    }
+    return {
+      status: "done",
+      text: ago,
+      title: `${run.outcome === "silent" ? "Nothing to report" : "Delivered"} · ${at}`,
+    };
+  }
+
+  /** The Next run cell. */
+  function nextOf(routine: Routine): { text: string; title: string | null } {
+    if (!routine.enabled) {
+      return { text: "Paused", title: null };
+    }
+    if (routine.trigger) {
+      return { text: "On event", title: `When ${routine.trigger}` };
+    }
+    return { text: whenOf(routine.nextSlot), title: exactOf(routine.nextSlot) };
   }
 
   async function pause(routine: Routine) {
@@ -234,435 +299,378 @@
   let asking = $state(false);
   const starters = $derived(routineStartersOf(project.template));
 
-  // --- the parts ---------------------------------------------------------------------
+  // --- the quiet parts -------------------------------------------------------------
 
-  type Part = "routines" | "sources" | "actions";
-  let chosen = $state<Part>("routines");
-  const sourceCount = $derived(
-    page.routes.length +
-      page.polls.length +
-      (page.relay.state === "off" ? 0 : 1)
-  );
-  const waiting = $derived(actions.filter((action) => !action.decided).length);
-  const failingCount = $derived(
-    routines.filter((routine) => routine.enabled && failing(routine)).length
-  );
-  /** The soonest next run of a scheduled routine that is on. */
-  const soonest = $derived(
-    routines
-      .filter((routine) => routine.enabled && !routine.trigger)
-      .map((routine) => routine.nextSlot)
-      .sort((a, b) => a - b)[0] ?? null
-  );
-  const PARTS: { id: Part; title: string; glyph: typeof IconClock }[] = [
-    { id: "routines", title: "Routines", glyph: IconClock },
-    { id: "sources", title: "Event sources", glyph: IconHook },
-    { id: "actions", title: "Approved actions", glyph: IconSuccess },
-  ];
-  const countOf = (part: Part): number =>
-    ({
-      routines: routines.length,
-      sources: sourceCount,
-      actions: actions.length,
-    })[part];
+  const sourceCount = $derived(page.routes.length + page.polls.length);
 
-  function actionFact(action: ApprovedAction): {
+  /** An approved action's status and time, in the ledger's vocabulary. */
+  function actionOf(action: ApprovedAction): {
+    status: Status;
     text: string;
-    tone: "fail" | "attn" | "quiet";
+    title: string;
   } {
     if (!action.decided) {
-      return { text: "Waiting on you", tone: "attn" };
+      return { status: "waiting", text: "Waiting", title: "Waiting on you" };
     }
-    if (action.outcome?.kind === "failed") {
-      return { text: `Failed ${since(action.outcome.at)}`, tone: "fail" };
+    if (action.outcome) {
+      const { at, kind } = action.outcome;
+      return {
+        status: kind === "failed" ? "failed" : "done",
+        text: since(at),
+        title: `${kind === "failed" ? "Failed" : "Ran"} · ${exactOf(at)}`,
+      };
     }
-    if (action.outcome?.kind === "ran") {
-      return { text: `Ran ${since(action.outcome.at)}`, tone: "quiet" };
-    }
-    return {
-      text: `${action.decided.kind === "denied" ? "Denied" : "Approved"} ${since(action.decided.at)}`,
-      tone: "quiet",
-    };
+    const { at } = action.decided;
+    return action.decided.kind === "denied"
+      ? { status: "neutral", text: since(at), title: `Denied · ${exactOf(at)}` }
+      : { status: "done", text: since(at), title: `Approved · ${exactOf(at)}` };
   }
 </script>
 
-<!-- A routine's row: the state glyph, the name, one fact, the ⋯. -->
-{#snippet routineRow(routine: Routine)}
-  {@const kind = stateOf(routine)}
-  {@const fact = factOf(routine)}
-  {@const Glyph = GLYPH[kind]}
-  <li
-    class="item"
-    data-open={open === routine.id ? "" : undefined}
-    data-routine={routine.id}
-  >
-    <Collapsible.Root
-      bind:open={
-        () => open === routine.id,
-        (next) => {
-          if (next) {
-            open = routine.id;
-          } else if (open === routine.id) {
-            open = null;
-          }
-        }
-      }
-    >
-      <div class="row">
-        <Collapsible.Trigger class="opener press-tint">
-          <span class="lead"
-            ><span
-              aria-label={fact.said}
-              class="state"
-              data-state={kind}
-              role="img"><Glyph /></span
-            ></span
-          >
-          <span class="title">{routine.name}</span>
-          <span class="fact num" data-state={kind}>{fact.fact}</span>
-        </Collapsible.Trigger>
-        <span class="row-menu"
-          ><RowMenu actions={menuOf(routine)} label={routine.name} /></span
-        >
-      </div>
-      {#if deleting === routine.id}
-        <fieldset aria-label="Delete {routine.name}" class="row-ask">
-          <span
-            >Delete {routine.name}? It stops now; its past runs stay in the
-            project's history.</span
-          >
-          <Button
-            label="Delete routine"
-            onclick={() => remove(routine)}
-            pending={deletePending}
-            pendingLabel="Deleting…"
-            size="xs"
-            variant="destructive"
-          />
-          <Button
-            onclick={() => {
-              deleting = null;
-            }}
-            size="xs"
-            variant="ghost">Cancel</Button
-          >
-        </fieldset>
-      {/if}
-      <Collapsible.Content fade reveal>
-        <RoutineDetail {routine} />
-      </Collapsible.Content>
-    </Collapsible.Root>
-  </li>
+<!-- A status glyph and its words, the same in every time cell: the glyph's
+     shape and hue say how it went, the words when. -->
+{#snippet status(state: Status, text: string, title: string | null)}
+  <span class="time num" data-status={state} title={title ?? undefined}>
+    {#if state === "running"}
+      <Spinner aria-hidden="true" class="status-glyph" role="presentation" />
+    {:else}
+      {@const Glyph = STATUS_GLYPH[state]}
+      <Glyph aria-hidden="true" class="status-glyph" />
+    {/if}
+    {#if (state === "done" || state === "failed") && title}
+      <!-- The glyph's shape and hue, said: "Failed, 3d ago". -->
+      <span class="sr-only">{title.split(" · ")[0]},</span>
+    {/if}
+    <span class="time-words">{text}</span>
+  </span>
 {/snippet}
 
-{#snippet routinesBody()}
-  {#if empty}
-    <div class="starters">
-      {#if canTalk}
-        <EmptyState
-          icon={IconClock}
-          line="Caw runs work for {project.name} on a schedule, or when something happens. Say what, and when."
-          title="No routines yet"
-        >
-          {#snippet action()}
-            <CawStarters
-              label="Ask Caw for a routine"
-              onsend={ask}
-              placeholder="Every weekday at 09:00, triage…"
-              {starters}
+{#snippet routineRows(routine: Routine)}
+  {@const lead = LEAD[leadOf(routine)]}
+  {@const line = scheduleLine(routine)}
+  {@const last = lastOf(routine)}
+  {@const next = nextOf(routine)}
+  <Collapsible.Root
+    bind:open={
+      () => open === routine.id,
+      (next) => {
+        if (next) {
+          open = routine.id;
+        } else if (open === routine.id) {
+          open = null;
+        }
+      }
+    }
+  >
+    {#snippet child({ props })}
+      <Table.Body
+        {...props}
+        class="routine"
+        data-enabled={routine.enabled ? "" : undefined}
+        data-routine={routine.id}
+      >
+        <Table.Row class="row">
+          <Table.Cell class="col-state">
+            <span
+              aria-label={lead.said}
+              class="lead"
+              data-lead={leadOf(routine)}
+              role="img"><lead.glyph /></span
+            >
+          </Table.Cell>
+          <Table.Cell class="col-name">
+            <Collapsible.Trigger class="opener focus-inset">
+              <span class="name">{routine.name}</span>
+            </Collapsible.Trigger>
+            <span class="sub" title={line.words}>
+              <span class="sub-words">{line.words}</span>
+              {#if line.off}
+                <span class="sub-off">· {line.off}</span>
+              {/if}
+              <!-- On a narrow ledger, Last and Next in the same order. -->
+              <span class="folded">
+                · Last {@render status(last.status, last.text, last.title)}
+                · Next
+                <span class="num" title={next.title ?? undefined}
+                  >{next.text}</span
+                >
+              </span>
+            </span>
+          </Table.Cell>
+          <Table.Cell class="col-last" data-cell="last">
+            {@render status(last.status, last.text, last.title)}
+          </Table.Cell>
+          <Table.Cell class="col-next" data-cell="next">
+            <span
+              class="time num"
+              data-paused={routine.enabled ? undefined : ""}
+              title={next.title ?? undefined}>{next.text}</span
+            >
+          </Table.Cell>
+          <Table.Cell class="col-menu">
+            <span class="row-menu"
+              ><RowMenu actions={menuOf(routine)} label={routine.name} /></span
+            >
+          </Table.Cell>
+        </Table.Row>
+        {#if deleting === routine.id}
+          <tr class="ask-row">
+            <td colspan="5">
+              <fieldset aria-label="Delete {routine.name}" class="row-ask">
+                <span
+                  >Delete {routine.name}? It stops now; its past runs stay in
+                  the project's history.</span
+                >
+                <Button
+                  label="Delete routine"
+                  onclick={() => remove(routine)}
+                  pending={deletePending}
+                  pendingLabel="Deleting…"
+                  size="xs"
+                  variant="destructive"
+                />
+                <Button
+                  onclick={() => {
+                    deleting = null;
+                  }}
+                  size="xs"
+                  variant="ghost">Cancel</Button
+                >
+              </fieldset>
+            </td>
+          </tr>
+        {/if}
+        <tr class="detail-row">
+          <td colspan="5">
+            <Collapsible.Content fade reveal>
+              <RoutineDetail {routine} />
+            </Collapsible.Content>
+          </td>
+        </tr>
+      </Table.Body>
+    {/snippet}
+  </Collapsible.Root>
+{/snippet}
+
+<div class="routines-place">
+  <div class="routines-view" data-empty={empty ? "" : undefined}>
+    <section aria-labelledby="routines-title" class="part main">
+      {#if empty}
+        <h2 class="sr-only" id="routines-title">Routines</h2>
+        <div class="starters">
+          {#if canTalk}
+            <EmptyState
+              icon={IconClock}
+              line="Caw runs work for {project.name} on a schedule, or when something happens. Say what, and when."
+              title="No routines yet"
+            >
+              {#snippet action()}
+                <CawStarters
+                  label="Ask Caw for a routine"
+                  onsend={ask}
+                  placeholder="Every weekday at 09:00, triage…"
+                  {starters}
+                />
+              {/snippet}
+            </EmptyState>
+          {:else}
+            <EmptyState
+              icon={IconClock}
+              line="Caw makes routines, and he can't start: {cawProblem ??
+                'his machine is away'}."
+              title="No routines yet"
             />
-          {/snippet}
-        </EmptyState>
+          {/if}
+        </div>
       {:else}
-        <EmptyState
-          icon={IconClock}
-          line="Caw makes routines, and he can't start: {cawProblem ??
-            'his machine is away'}."
-          title="No routines yet"
-        />
-      {/if}
-    </div>
-  {:else}
-    <div class="card routines-card">
-      {#if asking}
-        <!-- New routine: the field stands where the routine will land. -->
-        <div class="ask-first">
+        <div class="part-head">
+          <h2 class="part-title" id="routines-title">
+            Routines <span class="count num">{routines.length}</span>
+          </h2>
+          {#if canTalk}
+            <Button
+              aria-expanded={asking}
+              onclick={() => {
+                asking = !asking;
+              }}
+              size="sm"
+              variant="outline">New routine</Button
+            >
+          {/if}
+        </div>
+        {#if asking}
+          <!-- New routine: the field stands over the ledger it will land in. -->
           <CawField
             autofocus
             label="Ask Caw for a routine"
             onsend={ask}
             placeholder="Every weekday at 09:00, triage…"
           />
+        {/if}
+        <div class="ledger">
+          <Table.Root
+            aria-labelledby="routines-title"
+            class="routines table-fixed"
+            ghostRows="tr.row"
+          >
+            <Table.Header>
+              <Table.Row class="band border-0">
+                <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+                <Table.Head class="col-state" scope="col"
+                  ><span class="sr-only">State</span></Table.Head
+                >
+                <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+                <Table.Head class="col-name" scope="col">Routine</Table.Head>
+                <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+                <Table.Head class="col-last" scope="col">Last run</Table.Head>
+                <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+                <Table.Head class="col-next" scope="col">Next run</Table.Head>
+                <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+                <Table.Head class="col-menu" scope="col"
+                  ><span class="sr-only">Actions</span></Table.Head
+                >
+              </Table.Row>
+            </Table.Header>
+            {#each sorted as routine (routine.id)}
+              {@render routineRows(routine)}
+            {/each}
+          </Table.Root>
         </div>
       {/if}
-      <ul aria-label="Routines" class="list rows">
-        {#each routines as routine (routine.id)}
-          {@render routineRow(routine)}
-        {/each}
-      </ul>
-    </div>
-  {/if}
-{/snippet}
+    </section>
 
-{#snippet sourcesBody()}
-  {#if empty}
-    <p class="purpose">
-      Caw connects the events that start {project.name}'s routines.
-    </p>
-  {:else}
-    <div class="card">
-      <ul aria-label="Event sources" class="list rows">
-        {#each page.routes as route (route.id)}
-          <li class="item">
-            <div class="row">
-              <span class="opener whole">
-                <span class="lead"
+    <aside aria-label="Event sources and approved actions" class="side">
+      <section aria-labelledby="sources-title" class="part">
+        <div class="part-head">
+          <h2 class="part-title" id="sources-title">
+            Event sources
+            {#if sourceCount > 0}
+              <span class="count num">{sourceCount}</span>
+            {/if}
+          </h2>
+          <Badge
+            title={page.relay.state === "live"
+              ? "The relay is passing events to this hub"
+              : "The relay is off: only events read by polling arrive"}
+            variant={page.relay.state === "live" ? "live" : "default"}
+            >Relay {page.relay.state === "live" ? "live" : "off"}</Badge
+          >
+        </div>
+        {#if sourceCount === 0}
+          <p class="purpose">
+            Caw connects the events that start {project.name}'s routines.
+          </p>
+        {:else}
+          <ul aria-labelledby="sources-title" class="quiet-list">
+            {#each page.routes as route (route.id)}
+              <li class="quiet-row">
+                <span class="quiet-lead"
                   ><ProviderLogo provider={route.source} /></span
                 >
-                <span class="title two"
-                  ><span class="clip">{route.routine}</span><span
-                    class="sub code clip"
+                <span class="quiet-text">
+                  <span class="quiet-name">{route.routine}</span>
+                  <span class="quiet-sub code"
                     >{route.kinds.join(", ")}{route.filter
                       ? ` · ${route.filter}`
                       : ""}</span
-                  ></span
-                >
-              </span>
-            </div>
-          </li>
-        {/each}
-        {#each page.polls as poll (poll.id)}
-          <li class="item">
-            <div class="row">
-              <span class="opener">
-                <span class="lead"
+                  >
+                </span>
+              </li>
+            {/each}
+            {#each page.polls as poll (poll.id)}
+              <li class="quiet-row">
+                <span class="quiet-lead"
                   ><ProviderLogo provider={poll.service} /></span
                 >
-                <span class="title">{poll.what}</span>
+                <span class="quiet-text">
+                  <span class="quiet-name">{poll.what}</span>
+                  <span class="quiet-sub">Read {poll.every}</span>
+                </span>
                 {#if poll.last.ok}
-                  <span class="fact num">{poll.every}</span>
+                  {@render status(
+                    "done",
+                    since(poll.last.at),
+                    `Read · ${exactOf(poll.last.at)}`
+                  )}
                 {:else}
-                  <span class="fact num" data-tone="fail"
-                    >Failed {since(poll.last.at)}</span
-                  >
+                  {@render status(
+                    "failed",
+                    since(poll.last.at),
+                    `Failed: ${poll.last.error} · ${exactOf(poll.last.at)}`
+                  )}
                 {/if}
-              </span>
-            </div>
-          </li>
-        {/each}
-        <li class="item">
-          <div class="row">
-            <span class="opener">
-              <span class="lead quiet"><IconLinkRound /></span>
-              <span class="title">Relay</span>
-              <span class="fact">
-                {#if page.relay.state === "live"}
-                  <span aria-hidden="true" class="live-dot"></span>Live
-                {:else}
-                  Off
-                {/if}
-              </span>
-            </span>
-          </div>
-        </li>
-      </ul>
-    </div>
-  {/if}
-{/snippet}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
 
-{#snippet actionsBody()}
-  {#if actions.length === 0}
-    <p class="purpose">
-      Caw asks you before a routine posts, emails or closes anything for
-      {project.name}.
-    </p>
-  {:else}
-    <div class="card">
-      <ul aria-label="Approved actions" class="list rows">
-        {#each actions as action (action.id)}
-          {@const fact = actionFact(action)}
-          <li class="item">
-            <div class="row">
-              <span class="opener">
-                <span class="lead"
+      <section aria-labelledby="actions-title" class="part">
+        <div class="part-head">
+          <h2 class="part-title" id="actions-title">
+            Approved actions
+            {#if actions.length > 0}
+              <span class="count num">{actions.length}</span>
+            {/if}
+          </h2>
+        </div>
+        {#if actions.length === 0}
+          <p class="purpose">
+            Caw asks you before a routine posts, emails or closes anything for
+            {project.name}.
+          </p>
+        {:else}
+          <ul aria-labelledby="actions-title" class="quiet-list">
+            {#each actions as action (action.id)}
+              {@const said = actionOf(action)}
+              <li class="quiet-row">
+                <span class="quiet-lead"
                   ><ProviderLogo provider={action.service} /></span
                 >
-                <span class="title">{action.what}</span>
-                <span class="fact num" data-tone={fact.tone}>
-                  {#if fact.tone === "attn"}
-                    <IconNeedsYou aria-hidden="true" class="fact-glyph" />
-                  {/if}
-                  {fact.text}
+                <span class="quiet-text">
+                  <span class="quiet-name">{action.what}</span>
+                  <span class="quiet-sub">From {action.routine}</span>
                 </span>
-              </span>
-            </div>
-          </li>
-        {/each}
-      </ul>
-    </div>
-  {/if}
-{/snippet}
-
-{#snippet body(part: Part)}
-  {#if part === "routines"}
-    {@render routinesBody()}
-  {:else if part === "sources"}
-    {@render sourcesBody()}
-  {:else}
-    {@render actionsBody()}
-  {/if}
-{/snippet}
-
-<!-- A part's head: its title and count where nothing else names it (the
-     bento's; tiles and tabs already do), and what acts on it. The empty
-     Routines part has none: its empty state's title says it. -->
-{#snippet head(part: Part, titled: boolean)}
-  {@const meta = PARTS.find((each) => each.id === part)}
-  {@const acts = part === "routines" && !empty && canTalk}
-  {#if (titled && !(part === "routines" && empty)) || acts}
-    <div class="part-head">
-      {#if titled}
-        <h2 class="part-title" id="part-title-{part}">
-          {meta?.title}
-          {#if !empty}
-            <span class="count num">{countOf(part)}</span>
-          {/if}
-        </h2>
-      {/if}
-      {#if acts}
-        <Button
-          aria-expanded={asking}
-          class="new-routine"
-          onclick={() => {
-            asking = !asking;
-          }}
-          size="sm"
-          variant="outline">New routine</Button
-        >
-      {/if}
-    </div>
-  {/if}
-{/snippet}
-
-<!-- An overview tile: the part's glyph, title, count and where it stands. -->
-{#snippet tile(part: Part)}
-  {@const meta = PARTS.find((each) => each.id === part)}
-  {@const Glyph = meta?.glyph ?? IconClock}
-  <button
-    aria-controls="part-{part}"
-    aria-selected={chosen === part}
-    class="tile press-tint"
-    onclick={() => {
-      chosen = part;
-    }}
-    role="tab"
-    type="button"
-  >
-    <span class="tile-top">
-      <Glyph aria-hidden="true" class="tile-glyph" />
-      <span class="tile-title">{meta?.title}</span>
-      {#if !empty}
-        <span class="tile-count num">{countOf(part)}</span>
-      {/if}
-    </span>
-    <span class="tile-line">
-      {#if part === "routines"}
-        {#if empty}
-          None yet
-        {:else if failingCount > 0}
-          <span data-tone="fail">{failingCount} failing</span>
-        {:else if soonest !== null}
-          Next {whenOf(soonest)}
-        {:else}
-          All paused
+                {@render status(said.status, said.text, said.title)}
+              </li>
+            {/each}
+          </ul>
         {/if}
-      {:else if part === "sources"}
-        {empty
-          ? "None yet"
-          : `Relay ${page.relay.state === "live" ? "live" : "off"}`}
-      {:else if waiting > 0}
-        <span data-tone="attn">{waiting} waiting on you</span>
-      {:else}
-        {actions.length === 0 ? "None yet" : "Nothing waiting"}
-      {/if}
-    </span>
-  </button>
-{/snippet}
-
-<div class="routines-view" data-layout={layout}>
-  {#if layout === "bento"}
-    <div class="bento">
-      {#each PARTS as part (part.id)}
-        <section aria-label={part.title} class="part" data-part={part.id}>
-          {@render head(part.id, true)}
-          {@render body(part.id)}
-        </section>
-      {/each}
-    </div>
-  {:else if layout === "strip"}
-    <div aria-label="Routines page" class="tiles" role="tablist">
-      {#each PARTS as part (part.id)}
-        {@render tile(part.id)}
-      {/each}
-    </div>
-    <section class="part" id="part-{chosen}" role="tabpanel">
-      {@render head(chosen, false)}
-      {@render body(chosen)}
-    </section>
-  {:else}
-    <Tabs
-      onValueChange={(next) => {
-        chosen = next as Part;
-      }}
-      value={chosen}
-    >
-      <TabsList aria-label="Routines page" scrollable>
-        {#each PARTS as part (part.id)}
-          <TabItem label={part.title} value={part.id}>
-            {#snippet trail()}
-              {#if !empty}
-                <span class="tab-count num">{countOf(part.id)}</span>
-              {/if}
-            {/snippet}
-          </TabItem>
-        {/each}
-      </TabsList>
-    </Tabs>
-    <section class="part" role="tabpanel">
-      {@render head(chosen, false)}
-      {@render body(chosen)}
-    </section>
-  {/if}
+      </section>
+    </aside>
+  </div>
 </div>
 
 <style>
-  .routines-view {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    container-type: inline-size;
+  /* The page's place, measured: the rail stands beside the ledger once it is
+     1280px wide or more (container queries take no custom properties, so the
+     width is written here; the tracks are tokens). */
+  .routines-place {
+    container: routines-place / inline-size;
   }
-
-  /* S5 bento: Routines across the top, the two quiet parts side by side
-     under it; one column on a narrow page. */
-  .bento {
+  .routines-view {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, var(--c-routines-w));
     gap: var(--space-group);
     align-items: start;
   }
-  @container (min-width: 46rem) {
-    .bento {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .bento > [data-part="routines"] {
-      grid-column: 1 / -1;
+  @container routines-place (min-width: 80rem) {
+    .routines-view {
+      grid-template-columns:
+        minmax(0, var(--c-routines-w))
+        var(--c-routines-rail-w);
     }
   }
   .part {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    min-inline-size: 0;
+  }
+  .side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-group);
     min-inline-size: 0;
   }
   .part-head {
@@ -672,9 +680,6 @@
     gap: var(--space-3);
     min-block-size: var(--c-btn-h-sm);
   }
-  .part-head :global(.new-routine) {
-    margin-inline-start: auto;
-  }
   .part-title {
     display: flex;
     align-items: baseline;
@@ -683,279 +688,191 @@
     font: var(--type-label);
     color: var(--ink-strong);
   }
-  .count,
-  .tab-count {
+  .count {
     font: var(--type-meta);
     color: var(--ink-subtle);
   }
-  .tab-count {
-    margin-inline-start: var(--space-1);
-  }
 
-  /* S5 strip: three tiles across that are the page's tabs. */
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-2);
-  }
-  @container (max-width: 34rem) {
-    .tiles {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .tile {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    padding: var(--space-3);
-    border: 0;
+  /* The ledger: the task table's (TaskTable) card, band and rows. */
+  .ledger {
+    container: routines-ledger / inline-size;
+    overflow: hidden;
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    text-align: start;
-    cursor: pointer;
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
   }
-  .tile[aria-selected="true"] {
-    background: var(--selected-bg);
-    box-shadow: none;
-    color: var(--selected-ink);
+  .ledger :global(table.routines) {
+    border-collapse: separate;
+    border-spacing: 0;
   }
-  .tile-top {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
+  .ledger :global(tr.band) {
+    background: var(--surface-band);
   }
-  .tile :global(.tile-glyph) {
-    flex: none;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
+  .ledger :global(tr.band th) {
+    block-size: var(--c-toolbar-ctl);
+    padding-inline: var(--space-3);
+    font: var(--type-label);
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
     color: var(--ink-muted);
   }
-  .tile[aria-selected="true"] :global(.tile-glyph) {
-    color: var(--selected-icon);
+  .ledger :global(tr.row) {
+    position: relative;
+    border-block-end: 0;
   }
-  .tile-title {
-    font: var(--type-label);
-  }
-  .tile-count {
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  .tile-line {
+  .ledger :global(tr.row td) {
+    block-size: var(--c-btn-h-lg);
+    padding-block: var(--space-2);
+    padding-inline: var(--space-3);
     font: var(--type-meta);
     color: var(--ink-muted);
+    vertical-align: middle;
   }
-  .tile-line [data-tone="fail"] {
-    color: var(--status-fail-ink);
-  }
-  .tile-line [data-tone="attn"] {
-    color: var(--status-attn-ink);
-  }
-
-  /* A part's body: one raised card, its rows on hairlines. */
-  .card {
-    display: flex;
-    flex-direction: column;
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    container: routines-card / inline-size;
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* One set of tracks for every row of a list, shared through subgrid: the
-     lead, the title, the fact (fixed, so "Running…" never moves the title),
-     the ⋯. */
-  .rows {
-    display: grid;
-    grid-template-columns:
-      calc(var(--c-row-lead) + var(--space-3))
-      minmax(0, 1fr)
-      minmax(0, max-content)
-      auto;
-    font: var(--type-label);
-  }
-  .routines-card .rows {
-    grid-template-columns:
-      calc(var(--c-row-lead) + var(--space-3))
-      minmax(0, 1fr)
-      var(--c-fact-w-compact)
-      auto;
-  }
-  @container routines-card (min-width: 400px) {
-    .routines-card .rows {
-      grid-template-columns:
-        calc(var(--c-row-lead) + var(--space-3))
-        minmax(0, 1fr)
-        var(--c-fact-w)
-        auto;
-    }
-  }
-  .rows > .item,
-  .rows > .item > :global([data-slot="collapsible"]) {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: subgrid;
-  }
-  .rows > .item > :global(*),
-  .rows > .item > :global([data-slot="collapsible"] > *) {
-    grid-column: 1 / -1;
-  }
-  .item + .item {
+  /* A hairline between routines, not between a row and its open detail. */
+  .ledger :global(tbody.routine + tbody.routine tr.row td) {
     border-block-start: 1px solid var(--border-hairline);
   }
-  .row {
-    display: grid;
-    grid-template-columns: subgrid;
-    align-items: center;
-    min-block-size: var(--c-row-h);
+  .ledger :global(.col-state) {
+    inline-size: calc(var(--c-row-lead) + var(--space-3));
+    padding-inline-end: 0;
   }
-  .row :global(.opener) {
-    display: grid;
-    grid-column: 1 / 4;
-    grid-template-columns: subgrid;
-    align-items: center;
-    min-inline-size: 0;
-    min-block-size: var(--c-row-h);
-    padding: 0;
-    border: 0;
-    background: none;
-    color: inherit;
-    font: var(--type-label);
-    text-align: start;
+  .ledger :global(.col-last),
+  .ledger :global(.col-next) {
+    inline-size: var(--c-routine-time-w);
   }
-  .row :global(button.opener) {
-    cursor: pointer;
+  .ledger :global(.col-menu) {
+    inline-size: calc(var(--c-btn-h-sm) + var(--space-3) * 2);
+    text-align: end;
   }
-  .row .opener.whole {
-    grid-column: 1 / -1;
+  .ledger :global(tr.band th.col-state) {
+    padding-inline-end: 0;
   }
+
   .lead {
     display: grid;
-    justify-self: start;
     place-items: center;
     inline-size: var(--c-row-lead);
+    color: var(--ink-muted);
   }
   .lead :global(svg) {
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
   }
-  .lead.quiet {
-    color: var(--ink-muted);
-  }
-  /* A state glyph: shape first, hue only where you are needed. */
-  .state {
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-  }
-  .state[data-state="paused"] {
+  .lead[data-lead="paused"] {
     color: var(--ink-subtle);
   }
-  .state[data-state="failing"] {
-    color: var(--status-fail-glyph);
-  }
-  .state[data-state="expiring"] {
+  .lead[data-lead="expiring"] {
     color: var(--status-attn-glyph);
   }
-  .state[data-state="running"] {
-    color: var(--status-live-glyph);
+
+  /* The name opens the routine; its box reaches every cell, so the whole
+     row is the opener, its ⋯ above it. */
+  .ledger :global(.opener) {
+    display: block;
+    max-inline-size: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
   }
-  .title {
-    min-inline-size: 0;
-    padding-inline-end: var(--space-2);
+  .ledger :global(.opener::after) {
+    position: absolute;
+    inset: 0;
+    content: "";
+  }
+  .name {
+    display: block;
     overflow: hidden;
+    font: var(--type-label);
     color: var(--ink-row);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .title.two {
-    display: flex;
-    flex-direction: column;
-    padding-block: var(--space-1);
+  .ledger :global(tbody.routine[data-state="open"] .name) {
+    color: var(--ink-strong);
   }
-  .opener.whole .title {
-    grid-column: 2 / -1;
-  }
-  .clip {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .sub {
-    font: var(--type-meta);
+  .ledger :global(tbody.routine:not([data-enabled]) .name) {
     color: var(--ink-muted);
   }
-  .code {
-    font: var(--type-code);
-    font-variant-ligatures: none;
+  .sub {
+    display: block;
+    overflow: hidden;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .fact {
+  .sub-off {
+    color: var(--status-attn-ink);
+  }
+  .folded {
+    display: none;
+  }
+  .row-menu {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+  }
+
+  /* A time cell: the status glyph, then the words, on one baseline, in
+     tabular figures, starting on the column's edge in every row. */
+  .time {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
     gap: var(--space-1);
+    max-inline-size: 100%;
     font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
     white-space: nowrap;
   }
-  .fact[data-state="failing"],
-  .fact[data-tone="fail"] {
-    color: var(--status-fail-ink);
+  .time-words {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .fact[data-state="expiring"],
-  .fact[data-tone="attn"] {
-    color: var(--status-attn-ink);
-  }
-  .fact :global(.fact-glyph) {
+  .time :global(.status-glyph) {
     flex: none;
     inline-size: var(--icon-sm);
     block-size: var(--icon-sm);
+  }
+  .time[data-status="done"] :global(.status-glyph) {
+    color: var(--status-done-glyph);
+  }
+  .time[data-status="failed"] :global(.status-glyph) {
+    color: var(--status-fail-glyph);
+  }
+  .time[data-status="failed"] {
+    color: var(--status-fail-ink);
+  }
+  .time[data-status="running"] {
+    color: var(--status-live-ink);
+  }
+  .time[data-status="running"] :global(.status-glyph) {
+    color: var(--status-live-glyph);
+  }
+  .time[data-status="waiting"] {
+    color: var(--status-attn-ink);
+  }
+  .time[data-status="waiting"] :global(.status-glyph) {
     color: var(--status-attn-glyph);
   }
-  .live-dot {
-    inline-size: 6px;
-    block-size: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--status-live-glyph);
+  .time[data-status="neutral"] :global(.status-glyph) {
+    color: var(--ink-subtle);
   }
-  .row-menu {
-    display: flex;
-    grid-column: 4;
-    justify-content: flex-end;
-    padding-inline-start: var(--space-2);
+  .time[data-paused] {
+    color: var(--ink-subtle);
   }
 
-  /* An open routine: its row and detail in a well, its title in strong ink. */
-  .item[data-open] {
-    margin-inline: calc(var(--space-2) * -1);
-    padding-inline: var(--space-2);
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-sm);
+  /* An open routine: its row and detail in the well. */
+  .ledger :global(tbody.routine[data-state="open"] td) {
     background: var(--surface-well);
-    transition: background-color var(--dur-control) var(--ease-out);
   }
-  .item[data-open] .title {
-    color: var(--ink-strong);
-  }
-  .item[data-open] + .item {
-    border-block-start-color: transparent;
-  }
-
-  .ask-first {
-    padding-block: var(--space-2);
-    border-block-end: 1px solid var(--border-hairline);
+  .ledger :global(tr.detail-row td),
+  .ledger :global(tr.ask-row td) {
+    padding: 0;
   }
   .row-ask {
     display: flex;
@@ -964,10 +881,80 @@
     gap: var(--space-1) var(--space-2);
     min-inline-size: 0;
     margin: 0;
-    padding: 0 var(--space-2) var(--space-2);
+    padding: 0 var(--space-3) var(--space-2);
     border: 0;
     font: var(--type-meta);
     color: var(--ink-strong);
+  }
+
+  /* A narrow ledger: Last and Next fold into the schedule's line, in the
+     same order, and the name takes the width. */
+  @container routines-ledger (width < 34rem) {
+    .ledger :global(.col-last),
+    .ledger :global(.col-next) {
+      display: none;
+    }
+    .folded {
+      display: inline;
+    }
+    .folded .time {
+      display: inline-flex;
+      vertical-align: bottom;
+    }
+  }
+
+  /* The quiet parts: short rows on hairlines in one raised card each. */
+  .quiet-list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+    list-style: none;
+  }
+  .quiet-row {
+    display: grid;
+    grid-template-columns: var(--c-row-lead) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3);
+    min-block-size: var(--c-row-h);
+    padding-block: var(--space-1);
+  }
+  .quiet-row + .quiet-row {
+    border-block-start: 1px solid var(--border-hairline);
+  }
+  .quiet-lead {
+    display: grid;
+    place-items: center;
+  }
+  .quiet-lead :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
+  .quiet-text {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+  .quiet-name {
+    overflow: hidden;
+    font: var(--type-label);
+    color: var(--ink-row);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .quiet-sub {
+    overflow: hidden;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .code {
+    font: var(--type-code);
+    font-variant-ligatures: none;
   }
   .purpose {
     max-inline-size: 72ch;

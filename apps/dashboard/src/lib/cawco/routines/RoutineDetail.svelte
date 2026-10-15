@@ -106,13 +106,14 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    padding: 0 var(--space-2) var(--space-3);
+    padding: 0 var(--space-3) var(--space-3);
   }
-  /* On a card 400px wide or more, on the row's title column, at 72ch. */
-  @container routines-card (min-width: 400px) {
+  /* On a ledger 400px wide or more, on the row's name column (the state
+     column, then the name cell's own inset), at 72ch. */
+  @container routines-ledger (min-width: 400px) {
     .detail {
-      padding-inline-start: calc(var(--c-row-lead) + var(--space-3));
-      max-inline-size: calc(72ch + var(--c-row-lead) + var(--space-3));
+      padding-inline-start: calc(var(--c-row-lead) + var(--space-3) * 2);
+      max-inline-size: calc(72ch + var(--c-row-lead) + var(--space-3) * 2);
     }
   }
   .instruction {
@@ -214,7 +215,7 @@
     }
   }
   /* A phone: when over the result, the result the whole width. */
-  @container routines-card (max-width: 399px) {
+  @container routines-ledger (max-width: 399px) {
     .run {
       grid-template-columns: minmax(0, 1fr);
       gap: 2px;

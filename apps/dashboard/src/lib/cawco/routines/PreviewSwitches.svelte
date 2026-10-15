@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * PREVIEW ONLY: the three choices still open, a small fixed control outside
+   * PREVIEW ONLY: the two choices still open, a small fixed control outside
    * the product UI. Each is one segmented control with a line saying what it
    * changes, defaulting to the recommended option. A change takes you to
    * where it shows: S1 to Routines where it now lives, T5 to the board.
@@ -34,19 +34,9 @@
       ],
     },
     {
-      key: "layout",
-      label: "S5 How the page holds its parts",
-      says: "Routines, Event sources and Approved actions: a bento of the three, tiles across the top that are its tabs, or a tab row over one.",
-      options: [
-        { value: "bento", label: "Bento" },
-        { value: "strip", label: "Tiles" },
-        { value: "tabs", label: "Tabs" },
-      ],
-    },
-    {
       key: "archived",
       label: "T5 Archived tasks",
-      says: "Dimmed in their columns while the strip's Archived is on, or folded into an Archive rail after the last column.",
+      says: "Dimmed in their columns while the strip's Archived is on, or folded into an Archive rail at the board's edge.",
       options: [
         { value: "dim", label: "Dimmed in place" },
         { value: "rail", label: "Archive rail" },
@@ -60,12 +50,8 @@
     const base = `/project/${projectId}`;
     if (key === "place") {
       goto(next === "page" ? `${base}/routines` : `${base}?view=routines`);
-    } else if (key === "archived") {
-      goto(base);
-    } else if (picks.place === "tab") {
-      goto(`${base}?view=routines`);
     } else {
-      goto(`${base}/routines`);
+      goto(base);
     }
   }
 </script>
