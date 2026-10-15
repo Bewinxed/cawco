@@ -124,7 +124,7 @@
     </Field>
     {#if mode === "host"}
       <Field
-        hint={"Use one of {session} or {port}. {session} stands for the session's id, e.g. p-{session}.example.com, and needs a wildcard name. {port} stands for the preview port the session keeps, e.g. p-{port}.example.com, so one name per port of the range serves every session. The hub checks one name resolves before it keeps the pattern."}
+        hint={"Start with the scheme the names are served on, https:// or http://: previews open on it whichever way you reach the hub. Then use one of {session} or {port}. {session} stands for the session's id, e.g. https://p-{session}.example.com, and needs a wildcard name. {port} stands for the preview port the session keeps, e.g. https://p-{port}.example.com, so one name per port of the range serves every session. The hub checks one name resolves before it keeps the pattern."}
         id="preview-pattern"
         label="Host pattern"
         problem={refused}
@@ -133,7 +133,7 @@
           autocomplete="off"
           class="w-full max-w-sm"
           id="preview-pattern"
-          placeholder={"p-{session}.example.com"}
+          placeholder={"https://p-{port}.example.com"}
           spellcheck={false}
           bind:value={pattern}
         />
@@ -161,11 +161,8 @@
               on the hub's machine.
             </li>
             <li>
-              In Zero Trust › Access, add those names to the application that
-              guards the dashboard, so one sign-in covers both.
-            </li>
-            <li>
-              Set the pattern to <code>p-{"{port}"}.example.com</code> and save.
+              Set the pattern to <code>https://p-{"{port}"}.example.com</code>
+              and save.
             </li>
           {:else}
             <li>
@@ -181,22 +178,27 @@
               on the hub's machine.
             </li>
             <li>
-              In Zero Trust › Access, add <code>*.example.com</code> to the
-              application that guards the dashboard, so one sign-in covers both.
-            </li>
-            <li>
-              Set the pattern to <code>p-{"{session}"}.example.com</code> and
-              save. Keep {"{session}"} in the first label: Cloudflare's free
+              Set the pattern to
+              <code>https://p-{"{session}"}.example.com</code>
+              and save. Keep {"{session}"} in the first label: Cloudflare's free
               certificate covers one level of subdomain, not
               <code>*.previews.example.com</code>.
             </li>
           {/if}
         </ol>
         <p class="note">
+          Leave these names out of Cloudflare Access, or any sign-in in front of
+          them. The hub locks them itself: a name opens only for the dashboard
+          and the app, which ask the hub for a pass, and answers anyone else
+          with 401.
+        </p>
+        <p class="note">
           Without Cloudflare: point the pattern's names ({byPort
             ? "one per port"
             : "a wildcard"}) at the hub, or at a proxy that sends them to port
-          {firstPort}, then save.
+          {firstPort}, then save. Over plain http, a dashboard frame keeps the
+          pass only on localhost names or when the dashboard is on the same
+          site, so serve the names over https.
         </p>
       </div>
     {/if}

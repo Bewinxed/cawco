@@ -38,15 +38,16 @@ export interface CacheInvalidatedFrame {
 export interface PreviewFrame {
   /** The artifact the session's panel shows (Projects spec §5.10). */
   artifact: { id: string; kind: ArtifactKind; name: string };
-  host?: string;
   instanceId: string;
   kind: "preview";
   /**
    * Where the preview is its own origin, never the dashboard's: the session's
    * preview listener's port on the host the client reached the hub by (port
-   * mode), or its own host name (host mode, `name[:port]`, from the fleet's
-   * pattern). Exactly one is set ({@link PreviewAddress}).
+   * mode), or its whole origin (host mode, `scheme://name[:port]` from the
+   * fleet's pattern, whose scheme is how those names are served, not how the
+   * client reached the hub). Exactly one is set ({@link PreviewAddress}).
    */
+  origin?: string;
   port?: number;
   /** Identifies one successful open, including a rebuild of the same source. */
   revision: string;
@@ -54,20 +55,20 @@ export interface PreviewFrame {
   state: "open" | "closed";
 }
 
-/** A session's preview origin, as the hub reports it: a port on the hub's host, or a host name of its own. */
-export type PreviewAddress = { port: number } | { host: string };
+/** A session's preview origin, as the hub reports it: a port on the hub's host, or a whole origin of its own (host mode). */
+export type PreviewAddress = { port: number } | { origin: string };
 
 /**
  * The origin a client loads a session's previews from: in port mode the
- * host it reached the hub or dashboard by (`at`), on the preview's port; in
- * host mode the preview's own host, on `at`'s scheme.
+ * host and scheme it reached the hub or dashboard by (`at`), on the
+ * preview's port; in host mode the origin the hub named, as given.
  */
 export const previewOrigin = (
-  address: { host?: string; port?: number },
+  address: { origin?: string; port?: number },
   at: { hostname: string; protocol: string }
 ): string | null => {
-  if (address.host) {
-    return `${at.protocol}//${address.host}`;
+  if (address.origin) {
+    return address.origin;
   }
   if (address.port) {
     const host = at.hostname.includes(":") ? `[${at.hostname}]` : at.hostname;
@@ -80,25 +81,33 @@ export const previewOrigin = (
 export const PREVIEW_PING_PATH = "/__cawco/ping";
 
 /**
- * Host mode's sign-in gate (hub preview-gate.ts): a frame opens a preview at
- * `<GATE>?next=<path>`, which goes on to that path when the proxy in front
- * of the names (Cloudflare Access) lets the frame through, and otherwise
- * offers a sign-in in a window of its own, whose page at
- * {@link PREVIEW_GATE_DONE_PATH} closes itself. The gate is the one path
- * the proxy leaves public; the done page stays behind it.
+ * Host mode's way in (hub preview-access.ts). Every request to a host-mode
+ * preview name needs the hub's cookie for that name's session, but for
+ * {@link PREVIEW_PING_PATH} and this path. A client the hub already trusts
+ * (the dashboard through its relay, the app with its credential) asks the
+ * hub for a ticket (`POST /api/instances/:id/preview-ticket`, a
+ * {@link PreviewTicket}) and opens `<origin>/__cawco/enter?ticket=…&next=<path>`
+ * ({@link previewEnterUrl}): the hub checks the ticket, sets the cookie and
+ * sends the client on to the path.
  */
-export const PREVIEW_GATE_PATH = "/__cawco/gate";
-export const PREVIEW_GATE_DONE_PATH = "/__cawco/gate-done";
+export const PREVIEW_ENTER_PATH = "/__cawco/enter";
 
-/** Where a frame opens `place` (a path on the preview's origin): through the gate in host mode, straight there in port mode. */
-export const previewEntry = (
-  address: { host?: string } | PreviewAddress,
+/** What a host-mode preview name answers without its cookie: the page says so to its parent as this, so a frame asks for a new ticket. */
+export const PREVIEW_LOCKED_MESSAGE = "cawco:locked";
+
+/** A ticket into one session's host-mode preview origin: single-use, and spent by `expiresAt` (ms epoch). */
+export interface PreviewTicket {
+  expiresAt: number;
+  ticket: string;
+}
+
+/** Where a client opens `place` (a path on the preview's `origin`) with `ticket`. */
+export const previewEnterUrl = (
   origin: string,
+  ticket: string,
   place: string
 ): string =>
-  "host" in address && address.host
-    ? `${origin}${PREVIEW_GATE_PATH}?next=${encodeURIComponent(place)}`
-    : `${origin}${place}`;
+  `${origin}${PREVIEW_ENTER_PATH}?ticket=${encodeURIComponent(ticket)}&next=${encodeURIComponent(place)}`;
 
 /**
  * The dashboard's own cookies, by name: every one it sets is `cawco-…`,
@@ -112,9 +121,10 @@ export const DASHBOARD_COOKIE = /^(?:__Host-)?cawco-/;
 /**
  * How previews are reached, fleet-wide (Settings › Previews, Caw's
  * `admin_previews_write`): `port`, one port per session from the hub's range,
- * which needs no setup; or `host`, a host name per session from `pattern`
- * (`{session}` stands for the session's id, or `{port}` for the preview port
- * it keeps, so one name per port of the range serves every session), for a
+ * which needs no setup; or `host`, an origin per session from `pattern`
+ * (its scheme, then a host name where `{session}` stands for the session's
+ * id, or `{port}` for the preview port it keeps, so one name per port of the
+ * range serves every session), for a
  * fleet behind DNS or a proxy that routes them to the hub's first preview
  * port.
  */

@@ -501,8 +501,55 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintSend()
         cover.alpha = 1
         coverLine.isHidden = false
-        // The origin names the session: nothing else rides with the load.
-        web.load(URLRequest(url: hub.previewStart(frame) ?? origin))
+        byHost = frame.origin != nil
+        reentered = false
+        enter(hub.previewStart(frame) ?? origin)
+    }
+
+    /// Host mode: the preview's origin is locked to the hub's pass, which
+    /// this web view's own store holds only once it has entered.
+    private var byHost = false
+    /// The page the current show opens at.
+    private var start: URL?
+    /// The entry being asked for, replaced by the next.
+    private var entering: Task<Void, Never>?
+    /// The page turned its pass away (401) and the preview entered again; a second refusal in a row before the page says it is ready stands.
+    private var reentered = false
+    /// The navigation cancelled to enter again: WebKit's word that it was interrupted is not a failure.
+    private var reentering = false
+
+    /// Loads `place` on the preview's origin: straight (port mode), or
+    /// through the entry with a new ticket (host mode, `previewLoad`). The
+    /// origin names the session: nothing else rides with the load.
+    private func enter(_ place: URL) {
+        start = place
+        entering?.cancel()
+        entering = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let url = try await hub.previewLoad(place, in: instanceId, byHost: byHost)
+                guard !Task.isCancelled else { return }
+                web.load(URLRequest(url: url))
+            } catch {
+                guard !Task.isCancelled else { return }
+                failed("The hub didn't give this preview a pass: \(error.localizedDescription)", of: nil)
+                loaded(revision)
+            }
+        }
+    }
+
+    /// Host mode: the origin turned the page's pass away (401: it lapsed,
+    /// hub preview-access.ts), so the preview enters again where it was, once
+    /// in a row. Every other answer is the page's own.
+    func webView(_: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void) {
+        let status = (navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0
+        guard byHost, navigationResponse.isForMainFrame, status == 401, !reentered,
+              let at = navigationResponse.response.url ?? start else { return decisionHandler(.allow) }
+        reentered = true
+        reentering = true
+        decisionHandler(.cancel)
+        enter(at)
     }
 
     private var theme: String { traitCollection.userInterfaceStyle == .dark ? "dark" : "light" }
@@ -557,13 +604,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
+        guard !enteredAgain(error) else { return }
         failed(error.localizedDescription, of: nil)
         loaded(revision)
     }
 
     func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: any Error) {
+        guard !enteredAgain(error) else { return }
         failed(error.localizedDescription, of: nil)
         loaded(revision)
+    }
+
+    /// Whether `error` is the interruption of the load the preview cancelled to enter again.
+    private func enteredAgain(_ error: any Error) -> Bool {
+        guard reentering, HubConnection.interruptedByPolicy(error) else { return false }
+        reentering = false
+        return true
     }
 
     /// What the page posted to its host: the overlay's messages (wire.ts
@@ -639,6 +695,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The overlay answered the hello: the page is on screen and joined.
     private func ready() {
         connected = true
+        // In: a later lapse of its pass may enter again.
+        reentered = false
         commentButton.isEnabled = true
         paintSend()
         // The page's mode as the person left it, and the open card's pin tracked again.

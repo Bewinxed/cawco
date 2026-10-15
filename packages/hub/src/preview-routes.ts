@@ -15,6 +15,7 @@ import {
   type PreviewListeners,
   PreviewRefusal,
 } from "./preview";
+import { mintTicket } from "./preview-access";
 
 export const previewRoutes = (deps: {
   /** Whether the hub knows session `id`. */
@@ -40,7 +41,8 @@ export const previewRoutes = (deps: {
         {
           body: t.Object({
             mode: t.Union([t.Literal("port"), t.Literal("host")]),
-            pattern: t.Optional(t.String({ maxLength: 253 })),
+            // A host name's 253, its scheme and a port.
+            pattern: t.Optional(t.String({ maxLength: 270 })),
           }),
         },
         async ({ body }) => {
@@ -63,6 +65,22 @@ export const previewRoutes = (deps: {
         } catch (error) {
           return refused(error);
         }
+      })
+      // A ticket into a session's host-mode preview origin (preview-access.ts),
+      // for the dashboard's pane and the app's web views: only a client this
+      // API already trusts gets one (core browser-gate.ts refuses a page of
+      // any other origin, a preview's above all).
+      .post("/api/instances/:id/preview-ticket", ({ params }) => {
+        if (!deps.hasInstance(params.id)) {
+          return new Response("No such session.", { status: 404 });
+        }
+        if (deps.listeners.settings().mode !== "host") {
+          return new Response(
+            "Previews are reached by port on this hub, so they take no ticket.",
+            { status: 409 }
+          );
+        }
+        return mintTicket(params.id);
       })
       // The person's Send N from the pane, as the page's own send would.
       .post(

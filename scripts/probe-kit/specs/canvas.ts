@@ -266,13 +266,14 @@ const runSpec = async (kit: Kit) => {
   // 7. Every request any page made, by host: the dashboard's, or the
   // session's preview origin, where its canvases stand (an origin of its
   // own, which the hub names: core frames.ts `previewOrigin`).
-  const address = await on.fleet.api<{ host?: string; port?: number }>(
+  const address = await on.fleet.api<{ origin?: string; port?: number }>(
     `/api/instances/${on.session}/preview-address`,
     {}
   );
   const base = new URL(await on.fleet.dashboard());
   const previewHost =
-    address.host ?? (address.port ? `${base.hostname}:${address.port}` : null);
+    (address.origin ? new URL(address.origin).host : null) ??
+    (address.port ? `${base.hostname}:${address.port}` : null);
   const elsewhere = on.offOrigin.filter(
     (url) => new URL(url).host !== previewHost
   );

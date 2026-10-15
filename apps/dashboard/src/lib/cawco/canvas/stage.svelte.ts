@@ -18,7 +18,12 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
-import { type PreviewAddress, previewEntry, previewOrigin } from "@cawco/core";
+import {
+  type PreviewAddress,
+  type PreviewTicket,
+  previewEnterUrl,
+  previewOrigin,
+} from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
@@ -71,11 +76,14 @@ const boxOf = (el: Element): Box => {
   return { left: r.left, top: r.top, width: r.width, height: r.height };
 };
 
-/** Each session's preview origin and address, as the hub last named them (`Stage.#reach`). */
-const sessionOrigins = new Map<
-  string,
-  { address: PreviewAddress; origin: string }
->();
+/** Each session's preview origin, as the hub last named it (`Stage.#reach`). */
+const sessionOrigins = new Map<string, { origin: string }>();
+/**
+ * Each canvas's iframe address and the origin it was made for: a stage made
+ * anew for the same canvas keeps it, so its iframe never reloads, and its
+ * host-mode ticket (spent once) is not asked for again.
+ */
+const canvasEntries = new Map<string, { origin: string; src: string }>();
 
 export class Stage {
   readonly id: string;
@@ -226,13 +234,20 @@ export class Stage {
     // for the same canvas (its holder let go and took it again) keeps its
     // iframe, never reloaded for a moment with no address.
     const named = sessionOrigins.get(instanceId);
-    this.#address = named?.address ?? null;
     this.origin = named?.origin ?? null;
+    const held = canvasEntries.get(id);
+    this.entry = held && held.origin === this.origin ? held.src : null;
     this.#reach();
   }
 
-  /** What the hub named: a port, or a host name (host mode, where the frame opens through the gate). */
-  #address: PreviewAddress | null = null;
+  /**
+   * The iframe's address: the canvas's page on its origin (port mode), or
+   * host mode's entry with a ticket of its own (hub preview-access.ts),
+   * which sets the origin's pass and goes on to the page. Null until known.
+   */
+  entry = $state<string | null>(null);
+  /** Entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
+  #turnedAway = 0;
 
   /**
    * Its session's preview origin, never the dashboard's: the hub names it
@@ -257,21 +272,70 @@ export class Stage {
     const address = (await answer.json()) as PreviewAddress;
     const origin = previewOrigin(address, location);
     if (origin) {
-      sessionOrigins.set(this.instanceId, { address, origin });
+      sessionOrigins.set(this.instanceId, { origin });
     }
-    this.#address = address;
     // Asked again each time: the fleet's preview mode may have moved it.
     if (origin !== this.origin) {
       this.origin = origin;
     }
+    if (
+      origin &&
+      !(this.entry && canvasEntries.get(this.id)?.origin === origin)
+    ) {
+      await this.#enter(origin, "origin" in address);
+    }
     this.changed();
   }
 
-  /** The host page's address: the canvas by id, at its session's preview origin (through the gate in host mode). */
+  /** The canvas's page on `origin`: straight (port mode), or with a new ticket (host mode). */
+  async #enter(origin: string, byHost: boolean): Promise<void> {
+    const at = `/__cawco/canvas/${this.id}/`;
+    if (!byHost) {
+      this.#entered(origin, `${origin}${at}`);
+      return;
+    }
+    const answer = await fetch(
+      `/api/instances/${encodeURIComponent(this.instanceId)}/preview-ticket`,
+      { method: "POST" }
+    ).catch(() => null);
+    if (!answer?.ok) {
+      this.unreached =
+        (await answer?.text().catch(() => "")) ||
+        "The hub didn't give this canvas a pass.";
+      return;
+    }
+    const { ticket } = (await answer.json()) as PreviewTicket;
+    this.#entered(origin, previewEnterUrl(origin, ticket, at));
+  }
+
+  #entered(origin: string, src: string): void {
+    canvasEntries.set(this.id, { origin, src });
+    this.unreached = null;
+    this.entry = src;
+  }
+
+  /** The page turned the canvas's pass away (`cawco:locked`): it lapsed, so the canvas enters again, once in a row. */
+  async turnedAway(): Promise<void> {
+    this.#turnedAway += 1;
+    if (this.#turnedAway > 1 || !this.origin) {
+      this.unreached =
+        "This canvas turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then open the canvas again.";
+      this.entry = null;
+      this.changed();
+      return;
+    }
+    await this.#enter(this.origin, true);
+    this.changed();
+  }
+
+  /** The page said it is ready: a later lapse may enter again. */
+  admitted(): void {
+    this.#turnedAway = 0;
+  }
+
+  /** The host page's address, or "" until it is known. */
   get src(): string {
-    return this.origin && this.#address
-      ? previewEntry(this.#address, this.origin, `/__cawco/canvas/${this.id}/`)
-      : "";
+    return this.entry ?? "";
   }
 
   /** To the page, on its own origin alone. */

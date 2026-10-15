@@ -1,10 +1,12 @@
 <script lang="ts">
   import {
     machineLabel,
+    PREVIEW_LOCKED_MESSAGE,
     PREVIEW_PING_PATH,
     type PreviewDown,
     type PreviewSettings,
-    previewEntry,
+    type PreviewTicket,
+    previewEnterUrl,
     previewOrigin,
     type ShownFailure,
   } from "@cawco/core";
@@ -150,10 +152,8 @@
       } | null;
       return kept?.revision === preview?.revision &&
         typeof kept?.at === "string" &&
-        paneOrigin &&
-        preview &&
         kept.at.startsWith("/")
-        ? previewEntry(preview, paneOrigin, kept.at)
+        ? kept.at
         : null;
     } catch {
       return null;
@@ -170,29 +170,37 @@
       JSON.stringify({ revision: preview.revision, at: place })
     );
   }
+  /** Where a show starts: the page the agent named (`path`), else the root. */
+  const startAt = $derived(
+    (source && "path" in source ? source.path : undefined) ?? "/"
+  );
   /**
-   * Where a show starts: the page the agent named (`path`), else the root.
-   * In host mode the frame opens it through the origin's sign-in gate (core
-   * `previewEntry`), which goes on to it at once once the proxy in front of
-   * the names lets the frame through.
+   * The place the frame opens, a path on the preview's origin: the start
+   * page, or where the reader was in this show; read once per show, so their
+   * going on inside it never reloads the frame.
    */
-  const startAt = $derived.by(() => {
-    if (!(paneOrigin && preview)) {
-      return "";
-    }
-    const path = source && "path" in source ? source.path : undefined;
-    return previewEntry(preview, paneOrigin, path ?? "/");
-  });
-  /**
-   * The frame opens at the start page, or where the reader was in this show;
-   * read once per show, so their going on inside it never reloads the frame.
-   */
-  const url = $derived.by(() => {
+  const framePlace = $derived.by(() => {
     if (!(preview?.revision && paneOrigin)) {
       return startAt;
     }
     return untrack(keptAt) ?? startAt;
   });
+  /**
+   * Host mode: every name is locked to the hub's pass (hub
+   * preview-access.ts), so each frame load enters with a ticket of its own,
+   * asked for here, and the frame's address is the entry, which sets the
+   * pass and goes on to the place. Port mode: the place, straight.
+   */
+  const byHost = $derived(!!preview?.origin);
+  /**
+   * Each frame's entry in host mode, by frame key, and the origin and place
+   * it was asked for: a frame standing over its replacement keeps its own.
+   */
+  let entries = $state<Record<string, { for: string; src: string }>>({});
+  /** How many entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
+  let refusedEntries = 0;
+  const TURNED_AWAY =
+    "This preview turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then try again.";
   /**
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
    * which answers any page with no credentials): probed once per origin,
@@ -264,6 +272,71 @@
     loaded = true;
     standing = key;
   }
+  /*
+   * Host mode: the current frame's ticket, asked for once its origin answered
+   * the probe, again for each new frame (a reload, a new show) and whenever
+   * the origin or the place it opens changes. A ticket the hub won't give is
+   * the failure band, with Try again.
+   */
+  $effect(() => {
+    const key = frameKey;
+    const origin = paneOrigin;
+    const at = framePlace;
+    if (!(byHost && origin && reached?.origin === origin && reached.ok)) {
+      return;
+    }
+    const wanted = `${origin}${at}`;
+    if (untrack(() => entries[key]?.for) === wanted) {
+      return;
+    }
+    let live = true;
+    fetch(`/api/instances/${encodeURIComponent(instanceId)}/preview-ticket`, {
+      method: "POST",
+    })
+      .then(async (answer) => {
+        if (!answer.ok) {
+          throw new Error((await answer.text()) || `HTTP ${answer.status}`);
+        }
+        return (await answer.json()) as PreviewTicket;
+      })
+      .then(({ ticket }) => {
+        if (!live) {
+          return;
+        }
+        const kept = Object.fromEntries(
+          Object.entries(untrack(() => entries)).filter(([held]) =>
+            untrack(() => frames).includes(held)
+          )
+        );
+        entries = {
+          ...kept,
+          [key]: { for: wanted, src: previewEnterUrl(origin, ticket, at) },
+        };
+      })
+      .catch((error: unknown) => {
+        if (live) {
+          failure = {
+            message: `The hub didn't give this preview a pass: ${error instanceof Error ? error.message : String(error)}`,
+            again: "reload",
+          };
+        }
+      });
+    return () => {
+      live = false;
+    };
+  });
+  /** The page turned the frame's pass away (`cawco:locked`): it lapsed, so the frame enters again, once in a row. */
+  function turnedAway() {
+    if (!byHost) {
+      return;
+    }
+    refusedEntries += 1;
+    if (refusedEntries > 1) {
+      failure = { message: TURNED_AWAY, again: "reload" };
+      return;
+    }
+    reload += 1;
+  }
   /**
    * Try again after a frame failure: reload the frame. Pending until the
    * reloaded page answers with a capture, which either clears the failure or
@@ -272,6 +345,7 @@
   let retrying = $state(false);
   function retry() {
     retrying = true;
+    refusedEntries = 0;
     reload += 1;
   }
   const frameError = (message: string | null) =>
@@ -862,6 +936,10 @@
       heardDown(event.data);
       return;
     }
+    if (event.data?.type === PREVIEW_LOCKED_MESSAGE) {
+      turnedAway();
+      return;
+    }
     const ask = previewPickPlace(event.data);
     if (ask !== null) {
       // A second ask replaces one still open: the page asked again.
@@ -888,6 +966,7 @@
         }
         if (message.type === "cawco:ready") {
           connected = true;
+          refusedEntries = 0;
           comment(commenting, placing);
           if (openPin) {
             post({ type: "cawco:track-pin", id: openPin });
@@ -1306,8 +1385,10 @@
       </EmptyState>
     </div>
   {:else}
-    <!-- The frame loads once its origin answered the probe; the cover stands meanwhile. -->
-    {#each reached?.origin === paneOrigin ? frames : [] as key (key)}
+    <!-- The frame loads once its origin answered the probe (and, in host mode, its entry is in hand); the cover stands meanwhile. -->
+    {#each reached?.origin === paneOrigin
+      ? frames.filter((held) => !byHost || entries[held])
+      : [] as key (key)}
       {@const current = key === frameKey}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
       <iframe
@@ -1332,7 +1413,7 @@
             announce();
           }
         }}
-        src={url}
+        src={byHost ? entries[key]?.src : `${paneOrigin}${framePlace}`}
         title="Preview"
         class:ready={!current || loaded}
         {@attach (node) => {

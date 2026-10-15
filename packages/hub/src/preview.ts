@@ -4,8 +4,7 @@ import {
   type ArtifactKind,
   CAWCO_ENV,
   DASHBOARD_COOKIE,
-  PREVIEW_GATE_DONE_PATH,
-  PREVIEW_GATE_PATH,
+  PREVIEW_ENTER_PATH,
   PREVIEW_PING_PATH,
   type PreviewAddress,
   type PreviewDown,
@@ -42,7 +41,13 @@ import {
   PREVIEW_PORTS_TEXT,
 } from "./config";
 import type { PreviewsDb } from "./db/previews";
-import { gateDoneResponse, gateResponse } from "./preview-gate";
+import {
+  enter,
+  holdsPass,
+  lockedResponse,
+  type PassCookie,
+  passCookie,
+} from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
 
 /**
@@ -429,6 +434,34 @@ async function serveSession(
   return relay(request, server, instanceId, reached.upstream, deps);
 }
 
+/**
+ * Host mode's lock on one request to session `instanceId`'s name
+ * (preview-access.ts): the entry's answer, or the locked page for a request
+ * with no pass; undefined when the request goes on. The ping goes on with
+ * none, so the dashboard learns the origin is reachable.
+ */
+const atTheLock = (
+  request: Request,
+  lock: PassCookie,
+  instanceId: string
+): Response | undefined => {
+  const { pathname } = new URL(request.url);
+  if (pathname === PREVIEW_ENTER_PATH) {
+    const entered = enter(request, lock, instanceId);
+    if (entered.refused) {
+      previewFailed(
+        HOP,
+        instanceId,
+        `a ticket was refused: ${entered.refused}`
+      );
+    }
+    return entered.response;
+  }
+  return pathname === PREVIEW_PING_PATH || holdsPass(request, lock, instanceId)
+    ? undefined
+    : lockedResponse();
+};
+
 /** The fleet's preview mode could not be taken: why, in one sentence. */
 export class PreviewRefusal extends Error {
   readonly status: 409 | 422 | 503;
@@ -443,24 +476,29 @@ export class PreviewRefusal extends Error {
 }
 
 /**
- * Exactly one placeholder, `{session}` or `{port}`, and a host name around
- * it, with a port after it or not. The characters around it hold no brace,
- * so a second placeholder never fits.
+ * The scheme the names are served on (`http` or `https`: how the proxy in
+ * front of them serves them, never how a client reached the hub), then
+ * exactly one placeholder, `{session}` or `{port}`, in a host name, with a
+ * port after it or not. The characters around the placeholder hold no
+ * brace, so a second one never fits.
  */
 const PATTERN_SHAPE =
-  /^([a-z0-9.-]*)\{(session|port)\}([a-z0-9.-]*(?::\d{1,5})?)$/;
+  /^(https?):\/\/([a-z0-9.-]*)\{(session|port)\}([a-z0-9.-]*(?::\d{1,5})?)$/;
 const PATTERN_REFUSAL =
-  "A host pattern is a host name with one of {session} or {port} in it, like p-{session}.example.com or p-{port}.example.com, and a port after it or not.";
+  "A host pattern is http:// or https:// and a host name with one of {session} or {port} in it, like https://p-{session}.example.com or https://p-{port}.example.com, and a port after it or not.";
+/** A pattern stored before patterns carried their scheme. */
+const SCHEMELESS = /^(?!https?:\/\/)/;
 
 /**
- * Host mode's names, parsed once: what stands for a session in them, its id
- * (`{session}`) or the preview port it keeps (`{port}`), and the text before
- * and after it.
+ * Host mode's names, parsed once: the scheme they are served on, what
+ * stands for a session in them, its id (`{session}`) or the preview port it
+ * keeps (`{port}`), and the host text before and after it.
  */
 interface HostPattern {
   after: string;
   before: string;
   key: "session" | "port";
+  scheme: "http" | "https";
   /** A Host header's name for one session: the placeholder's value at group 1. */
   shape: RegExp;
 }
@@ -476,8 +514,9 @@ const parsePattern = (pattern: string): HostPattern => {
   if (!parts) {
     throw new PreviewRefusal(422, PATTERN_REFUSAL);
   }
-  const [, before, key, after] = parts as [
+  const [, scheme, before, key, after] = parts as [
     string,
+    HostPattern["scheme"],
     string,
     HostPattern["key"],
     string,
@@ -485,6 +524,7 @@ const parsePattern = (pattern: string): HostPattern => {
   // The Host header names the port only when it is not the scheme's own.
   const withoutPort = after.replace(PORT_SUFFIX, "");
   return {
+    scheme,
     before,
     key,
     after,
@@ -495,9 +535,13 @@ const parsePattern = (pattern: string): HostPattern => {
   };
 };
 
-/** The host name `pattern` gives a session whose placeholder value is `value`. */
+/** The host name `pattern` gives a session whose placeholder value is `value` (`name[:port]`). */
 const hostFor = (pattern: HostPattern, value: string | number): string =>
   `${pattern.before}${value}${pattern.after}`;
+
+/** The whole origin `pattern` gives that session: its scheme, then its host. */
+const originFor = (pattern: HostPattern, value: string | number): string =>
+  `${pattern.scheme}://${hostFor(pattern, value)}`;
 
 const PORT_SUFFIX = /:\d+$/;
 const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
@@ -565,14 +609,15 @@ export function createPreviewListeners(
     return downResponse("machine");
   };
   /**
-   * A listener on `port`, each request's session from `route`. `gated`
-   * (host mode): a held name also answers the sign-in gate and its done page
-   * (preview-gate.ts), for names behind a proxy that signs the person in.
+   * A listener on `port`, each request's session from `route`. `lock` (host
+   * mode, preview-access.ts): a request to a session's name needs that
+   * session's pass, WebSocket upgrades too, but the dashboard's ping and the
+   * entry that spends a ticket for one.
    */
   const listen = (
     port: number,
     route: (request: Request) => string | undefined,
-    gated = false
+    lock?: PassCookie
   ): Server<ListenerSocket> =>
     Bun.serve<ListenerSocket>({
       hostname,
@@ -589,14 +634,9 @@ export function createPreviewListeners(
           );
           return framedBy(downResponse("closed", 404));
         }
-        if (gated) {
-          const { pathname } = new URL(request.url);
-          if (pathname === PREVIEW_GATE_PATH) {
-            return framedBy(gateResponse(request));
-          }
-          if (pathname === PREVIEW_GATE_DONE_PATH) {
-            return framedBy(gateDoneResponse());
-          }
+        const stopped = lock && atTheLock(request, lock, instanceId);
+        if (stopped) {
+          return framedBy(stopped);
         }
         const answer = await serveSession(request, server, instanceId, deps);
         return answer && framedBy(answer);
@@ -604,6 +644,22 @@ export function createPreviewListeners(
     });
 
   let settings = db.settings();
+  // A pattern stored before patterns carried their scheme took the client's
+  // scheme each time; it becomes http:// here, saved and said once, so the
+  // stored pattern is always whole. An operator whose names are served over
+  // HTTPS sets https:// in Settings › Previews.
+  if (
+    settings.mode === "host" &&
+    settings.pattern &&
+    SCHEMELESS.test(settings.pattern)
+  ) {
+    const was = settings.pattern;
+    settings = { mode: "host", pattern: `http://${was}` };
+    db.setSettings(settings);
+    console.warn(
+      `[preview] ${HOP}: the host pattern ${was} now names its scheme, ${settings.pattern}; set https:// in Settings › Previews if those names are served over HTTPS.`
+    );
+  }
   /** Port mode's listeners, by session. */
   const sessions = new Map<string, Server<ListenerSocket>>();
   /** Host mode's one listener. */
@@ -727,7 +783,10 @@ export function createPreviewListeners(
       byHost = listen(
         PREVIEW_PORTS.first,
         (request) => sessionOfHost(pattern, request.headers.get("host")),
-        true
+        passCookie(
+          pattern.scheme,
+          hostFor(pattern, "x").replace(PORT_SUFFIX, "")
+        )
       );
       return null;
     } catch (thrown) {
@@ -772,14 +831,15 @@ export function createPreviewListeners(
 
     /**
      * Session `instanceId`'s preview origin: its listener started (port
-     * mode) when it has none; in host mode its name, by its id or by the
-     * port it keeps, taken now when it has none.
+     * mode) when it has none; in host mode its whole origin, on the
+     * pattern's scheme, named by its id or by the port it keeps (taken now
+     * when it has none).
      */
     address(instanceId: string): PreviewAddress {
       if (settings.mode === "host") {
         const pattern = parsePattern(settings.pattern ?? "");
         return {
-          host: hostFor(
+          origin: originFor(
             pattern,
             pattern.key === "port"
               ? portFor(instanceId, () => true)
@@ -810,9 +870,9 @@ export function createPreviewListeners(
 
     /**
      * The fleet's mode, from the person's Settings or Caw's approved write.
-     * Host mode takes a pattern with one of `{session}` or `{port}` in a
-     * host name whose generated name resolves; a refusal says why and
-     * changes nothing.
+     * Host mode takes a pattern of a scheme (`http://` or `https://`) and a
+     * host name with one of `{session}` or `{port}` in it, whose generated
+     * name resolves; a refusal says why and changes nothing.
      */
     async set(next: {
       mode: "port" | "host";

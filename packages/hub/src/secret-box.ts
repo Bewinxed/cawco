@@ -9,7 +9,12 @@
  * key does not open reads as no secret, so its feature asks for it again.
  * Values kept before sealing are sealed in place at start (db/seal-at-rest.ts).
  */
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  hkdfSync,
+  randomBytes,
+} from "node:crypto";
 import { existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { writeStateFileSync } from "@cawco/core/state-file";
@@ -22,6 +27,12 @@ const TAG_BYTES = 16;
 const PREFIX = "v1:";
 
 export interface SecretBox {
+  /**
+   * A 32-byte key for one use, named by `label`, derived from the hub's key
+   * (HKDF-SHA256): never stored, the same on every start while the key file
+   * is, and no use's key tells anything of another's or of the hub's own.
+   */
+  readonly derive: (label: string) => Buffer;
   /** The plain text `sealed` was made from; throws when it was not sealed under this key. */
   readonly open: (sealed: string) => string;
   /** `plain`, sealed under the hub's key: what a row stores. */
@@ -78,6 +89,8 @@ export const makeSecretBox = (
   }
   const key = loadKey(path);
   return {
+    derive: (label) =>
+      Buffer.from(hkdfSync("sha256", key, Buffer.alloc(0), label, KEY_BYTES)),
     seal: (plain) => {
       const iv = randomBytes(IV_BYTES);
       const cipher = createCipheriv("aes-256-gcm", key, iv);

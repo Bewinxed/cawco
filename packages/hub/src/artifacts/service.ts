@@ -206,7 +206,6 @@ export interface ArtifactRead {
 }
 
 export interface Created {
-  host?: string;
   id: string;
   kind: ArtifactKind;
   name: string;
@@ -214,13 +213,14 @@ export interface Created {
   note?: string;
   /** Whether a view the person is looking at has it on screen ({@link Opened}). */
   opened: boolean;
-  /** A canvas's outline once drawn (core `canvasOutline`). */
-  outline?: string;
   /**
    * A draft canvas's: its session's preview origin (core `PreviewAddress`),
    * where a client loads the canvas at `/__cawco/canvas/<id>/`: a port on
-   * the hub's host, or a host name of its own.
+   * the hub's host, or (host mode) a whole origin of its own.
    */
+  origin?: string;
+  /** A canvas's outline once drawn (core `canvasOutline`). */
+  outline?: string;
   port?: number;
   /** Its live document on the hub's preview listener. */
   route: string;
@@ -276,11 +276,11 @@ export interface CommentRead {
 /** A canvas's export: the `.excalidraw` file, its outline and its latest picture. */
 export interface CanvasExport {
   file: ReturnType<typeof excalidrawFile>;
-  host?: string;
+  /** Its session's preview origin, where the canvas's page stands (`Created.port` / `origin`). */
+  origin?: string;
   outline: string;
   /** Base64 PNG; null until a screen has drawn one. */
   png: string | null;
-  /** Its session's preview origin, where the canvas's page stands (`Created.port` / `host`). */
   port?: number;
 }
 

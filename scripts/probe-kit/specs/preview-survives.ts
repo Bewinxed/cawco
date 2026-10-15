@@ -24,17 +24,22 @@
  * 13. An origin the tab cannot reach: the pane says "Previews need ports
  *     <range> reachable on <host>, or switch previews to a hostname pattern",
  *     with the way to the setting.
- * 14. Host mode set through Settings › Previews with `p-{session}.localhost`:
- *     the panel loads the page from `p-<session>.localhost`, routed by Host.
- * 14b. A `p-{port}.localhost` pattern: each session's name is the port it
- *     keeps, both sessions' previews answer 200 with the overlay on their
- *     own names, an unheld port's name answers the closed page, and a
- *     pattern with both placeholders or neither is refused.
- * 14c. Host mode's sign-in gate: signed in (its done page answers 200) it
- *     goes straight on to `next`; behind a stand-in 302 for the proxy it
- *     shows "Sign in to show this preview"; the window that opens closes
- *     itself and the gate goes on to the page.
- * 14d. The panel frames the preview through the gate, on its port name.
+ * 14. Host mode set through Settings › Previews with
+ *     `http://p-{session}.localhost`: the panel enters with a ticket and
+ *     loads the page from `p-<session>.localhost`, routed by Host.
+ * 14b. An `http://p-{port}.localhost` pattern: each session's origin is the
+ *     port it keeps; entered with a ticket, both sessions' previews answer
+ *     200 with the overlay on their own names and their WebSockets open; an
+ *     unheld port's name answers the closed page; a pattern with both
+ *     placeholders, neither, or no scheme is refused.
+ * 14c. The lock (hub preview-access.ts): without a pass a name answers 401
+ *     and refuses a WebSocket, its ping stays open, a ticket enters once,
+ *     and a replayed, another session's and an expired ticket are refused.
+ * 14d. The panel enters with a ticket on the port name.
+ * 14e. An `https://` pattern gives `https://` origins to a dashboard reached
+ *     over http: the hub's address and the pane's own ping.
+ * 14f. A pattern stored with no scheme is `http://` after the hub's start,
+ *     in its answer and its row, said in one line.
  * 15. A page on a third origin that frames the preview's port gets nothing:
  *     the preview names the dashboards in `frame-ancestors`, not it.
  * 16. With that header taken off in the browser, the third origin's frame
@@ -104,9 +109,9 @@
 import type { Frame, Page } from "playwright-core";
 import { INSPECT_CONFIG } from "../../../packages/core/src/fleet";
 import {
-  PREVIEW_GATE_DONE_PATH,
-  PREVIEW_GATE_PATH,
   PREVIEW_PING_PATH,
+  type PreviewTicket,
+  previewEnterUrl,
 } from "../../../packages/core/src/frames";
 import { OVERLAY_PATH } from "../../../packages/core/src/preview-proxy";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -129,6 +134,8 @@ const BOUND_MS = 30_000;
 /** A machine this spec plays itself, over raw agent sockets (check 18). */
 const PROBE_MACHINE = "probe-superseded";
 const HTTP = /^http/;
+/** The hub's journal words for a ticket its preview listener refused (preview.ts), before the refusal's word. */
+const TICKET_REFUSED = "a ticket was refused: ";
 
 /** A page whose script opens a WebSocket back to its own origin, as an HMR client does, and keeps what its server said. */
 const pageOf = (title: string) =>
@@ -487,7 +494,7 @@ const run = async (kit: Kit) => {
       await fetch(`${fleet.base}/api/instances/${sid}/preview-address`, {
         method: "POST",
       })
-    ).json()) as { host?: string; port?: number };
+    ).json()) as { origin?: string; port?: number };
 
   const session = await fleet.spawn("claude", "Survives", fleet.repo);
   const madeFirst = await create(session, {
@@ -574,7 +581,10 @@ const run = async (kit: Kit) => {
         "sec-fetch-site": "same-site",
         "sec-fetch-mode": "cors",
       },
-      body: JSON.stringify({ mode: "host", pattern: "p-{session}.localhost" }),
+      body: JSON.stringify({
+        mode: "host",
+        pattern: "http://p-{session}.localhost",
+      }),
     });
     kit.check(
       "10: a POST from the preview's origin is refused by the hub (its line, settings unchanged) and by the dashboard's /api",
@@ -933,7 +943,7 @@ const run = async (kit: Kit) => {
   await blocked.context().close();
 
   // 14. Host mode through Settings › Previews, routed by Host.
-  const pattern = `p-{session}.localhost:${range.ports.split("–")[0]}`;
+  const pattern = `http://p-{session}.localhost:${range.ports.split("–")[0]}`;
   const settings = await kit.page("desk");
   await open(settings, `${base}/config/previews`, "#preview-mode");
   await settings.selectOption("#preview-mode", "host");
@@ -954,10 +964,10 @@ const run = async (kit: Kit) => {
   await tab.reload({ waitUntil: "domcontentloaded" });
   const byHost = await paneFrame(tab, TITLE);
   kit.check(
-    "14: host mode set in Settings with p-{session}.localhost loads the page from the session's own host",
+    "14: host mode set in Settings with http://p-{session}.localhost loads the page from the session's own host, entered with a ticket",
     !!saved &&
       !!byHost.frame &&
-      new URL(byHost.frame.url()).host ===
+      new URL(byHost.frame.url()).origin ===
         pattern.replace("{session}", session),
     `${JSON.stringify(saved)}; ${byHost.last}`
   );
@@ -976,14 +986,27 @@ const run = async (kit: Kit) => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode: "host", pattern: next }),
     });
-  const both = await putPattern("p-{session}-{port}.localhost");
-  const neither = await putPattern("previews.localhost");
-  const refusals = `both ${both.status} ${await both.text()}; neither ${neither.status} ${await neither.text()}`;
-  const portPattern = `p-{port}.localhost:${firstRangePort}`;
+  const both = await putPattern("http://p-{session}-{port}.localhost");
+  const neither = await putPattern("http://previews.localhost");
+  const schemeless = await putPattern("p-{port}.localhost");
+  const refusals = `both ${both.status} ${await both.text()}; neither ${neither.status}; no scheme ${schemeless.status}`;
+  const portPattern = `http://p-{port}.localhost:${firstRangePort}`;
   const kept = await putPattern(portPattern);
   const keptText = await kept.text();
-  const hostOf = async (sid: string) => (await address(sid)).host ?? "none";
-  const [firstHost, otherHost] = [await hostOf(session), await hostOf(other)];
+  const originOf = async (sid: string) => (await address(sid)).origin ?? "none";
+  const [firstOrigin14, otherOrigin14] = [
+    await originOf(session),
+    await originOf(other),
+  ];
+  /** A ticket into `sid`'s preview origin, from the hub's API as the dashboard's relay and the app reach it. */
+  const ticketFor = async (sid: string): Promise<string> =>
+    (
+      (await (
+        await fetch(`${fleet.base}/api/instances/${sid}/preview-ticket`, {
+          method: "POST",
+        })
+      ).json()) as PreviewTicket
+    ).ticket;
   const heldPorts = new Set(
     fleet
       .query<{ port: number }>("SELECT port FROM preview_ports")
@@ -996,44 +1019,52 @@ const run = async (kit: Kit) => {
     }
     return port;
   })();
-  const loader = await kit.page("desk");
-  /** 1 once the loader shows the first session's page; null before. */
-  const onPage = () =>
-    loader.title().then(
-      (title) => (title === TITLE ? 1 : null),
-      () => null
-    );
-  /** One load of `url` in the browser (which takes every `.localhost` name to loopback): its status and body. */
-  const loadOf = async (url: string) => {
-    const response = await loader.goto(url, { waitUntil: "domcontentloaded" });
+  /** One load of `url` in `page` (the browser takes every `.localhost` name to loopback): its status and body. */
+  const loadOf = async (page: Page, url: string) => {
+    const response = await page.goto(url, { waitUntil: "domcontentloaded" });
     return {
       status: response?.status() ?? 0,
       body: (await response?.text().catch(() => "")) ?? "",
     };
   };
-  const answersAs = async (host: string, title: string) => {
-    const { status, body } = await loadOf(`http://${host}/`);
+  /** What `sid`'s origin answers in a browser that enters it with a ticket: 200 with the overlay and the page, and the page's own WebSocket. */
+  const enteredAs = async (origin: string, sid: string, title: string) => {
+    const page = await kit.page("desk");
+    const { status, body } = await loadOf(
+      page,
+      previewEnterUrl(origin, await ticketFor(sid), "/")
+    );
+    const said = await page
+      .evaluate(() => (window as unknown as { __said: Promise<string> }).__said)
+      .catch((error: Error) => error.message);
+    await page.context().close();
     return {
       ok:
         status === 200 &&
         body.includes(`src="${OVERLAY_PATH}"`) &&
-        body.includes(`<title>${title}</title>`),
-      said: `${host} ${status}${body.includes(OVERLAY_PATH) ? " with the overlay" : ""}`,
+        body.includes(`<title>${title}</title>`) &&
+        said === title,
+      said: `${origin} ${status}${body.includes(OVERLAY_PATH) ? " with the overlay" : ""}, its socket heard ${JSON.stringify(said)}`,
     };
   };
-  const firstByPort = await answersAs(firstHost, TITLE);
-  const otherByPort = await answersAs(otherHost, OTHER);
+  const firstByPort = await enteredAs(firstOrigin14, session, TITLE);
+  const otherByPort = await enteredAs(otherOrigin14, other, OTHER);
+  const passless = await kit.page("desk");
   const unheld = await loadOf(
+    passless,
     `http://p-${unheldPort}.localhost:${firstRangePort}/`
   );
   kit.check(
-    "14b: a {port} pattern gives each session the name of the port it keeps; both sessions' previews answer 200 with the overlay on their own names, an unheld port's name answers the closed page, and a pattern with both placeholders or neither is refused",
+    "14b: a {port} pattern gives each session the origin of the port it keeps; both sessions' previews, entered with a ticket, answer 200 with the overlay on their own names and their WebSockets open; an unheld port's name answers the closed page; a pattern with both placeholders, neither, or no scheme is refused",
     both.status === 422 &&
       neither.status === 422 &&
+      schemeless.status === 422 &&
       kept.ok &&
-      firstHost === `p-${portOf(session)}.localhost:${firstRangePort}` &&
-      otherHost === `p-${portOf(other)}.localhost:${firstRangePort}` &&
-      firstHost !== otherHost &&
+      firstOrigin14 ===
+        `http://p-${portOf(session)}.localhost:${firstRangePort}` &&
+      otherOrigin14 ===
+        `http://p-${portOf(other)}.localhost:${firstRangePort}` &&
+      firstOrigin14 !== otherOrigin14 &&
       firstByPort.ok &&
       otherByPort.ok &&
       unheld.status === 404 &&
@@ -1041,72 +1072,153 @@ const run = async (kit: Kit) => {
     `${refusals}; kept ${kept.status} ${keptText.slice(0, 120)}; ${firstByPort.said}; ${otherByPort.said}; p-${unheldPort} ${unheld.status}`
   );
 
-  // 14c. The sign-in gate, host mode's frame entry.
-  const gateOf = (host: string) =>
-    `http://${host}${PREVIEW_GATE_PATH}?next=${encodeURIComponent("/")}`;
-  // Signed in (the done page answers 200): straight on to `next`.
-  await loader.goto(gateOf(firstHost), { waitUntil: "domcontentloaded" });
-  const through = await until(
-    "the gate going on to the page",
-    onPage,
-    Boolean,
-    15_000
-  ).catch(() => null);
-  const throughAt = new URL(loader.url()).pathname;
-  // Signed out: a stand-in for the proxy answers the done page with its redirect.
-  await loader.route(`**${PREVIEW_GATE_DONE_PATH}`, (route) =>
-    route.fulfill({
-      status: 302,
-      headers: { location: "https://team.cloudflareaccess.com/login" },
-    })
+  // 14c. The lock: nothing without the hub's pass, but the ping; a ticket
+  // opens the door once, for its own session, within its minute.
+  const noPass = await loadOf(passless, `${firstOrigin14}/`);
+  const passlessSocket = await passless
+    .evaluate(
+      () =>
+        new Promise<string>((done) => {
+          const ws = new WebSocket(
+            `ws${location.origin.slice("http".length)}/hmr`
+          );
+          const timer = setTimeout(() => done("nothing in 5 s"), 5000);
+          ws.onmessage = (event) => {
+            clearTimeout(timer);
+            done(String(event.data));
+          };
+          ws.onerror = () => {
+            clearTimeout(timer);
+            done("error");
+          };
+        })
+    )
+    .catch((error: Error) => error.message);
+  const ping = await loadOf(passless, `${firstOrigin14}${PREVIEW_PING_PATH}`);
+  const spentTicket = await ticketFor(session);
+  const spender = await kit.page("desk");
+  const firstSpend = await loadOf(
+    spender,
+    previewEnterUrl(firstOrigin14, spentTicket, "/")
   );
-  await loader.goto(gateOf(firstHost), { waitUntil: "domcontentloaded" });
-  const button = loader.getByRole("button", {
-    name: "Sign in to show this preview",
-  });
-  const offered = await button
-    .waitFor({ state: "visible", timeout: 15_000 })
-    .then(() => true)
-    .catch(() => false);
-  const stayed = new URL(loader.url()).pathname;
-  // The proxy lets the window through now: the done page closes itself, and the gate goes on.
-  await loader.unroute(`**${PREVIEW_GATE_DONE_PATH}`);
-  const opened = loader.waitForEvent("popup", { timeout: 15_000 });
-  await button.click();
-  const popup = await opened.catch(() => null);
-  const closedItself = popup
-    ? await popup
-        .waitForEvent("close", { timeout: 15_000 })
-        .then(() => true)
-        .catch(() => false)
-    : false;
-  const signedOn = await until(
-    "the gate going on after the sign-in",
-    onPage,
-    Boolean,
-    15_000
-  ).catch(() => null);
+  await spender.context().close();
+  const replayed = await loadOf(
+    passless,
+    previewEnterUrl(firstOrigin14, spentTicket, "/")
+  );
+  const elsewhere = await loadOf(
+    passless,
+    previewEnterUrl(firstOrigin14, await ticketFor(other), "/")
+  );
+  const lapsing = await ticketFor(session);
+  // A ticket stands a minute (hub preview-access.ts TICKET_MS).
+  await Bun.sleep(61_000);
+  const expired = await loadOf(
+    passless,
+    previewEnterUrl(firstOrigin14, lapsing, "/")
+  );
+  await passless.context().close();
+  const refusedLines = (await fleet.logs("hub"))
+    .split("\n")
+    .filter((line) => line.includes(TICKET_REFUSED))
+    .map((line) =>
+      line.slice(line.indexOf(TICKET_REFUSED) + TICKET_REFUSED.length)
+    );
+  const turnedAway = (said: { status: number; body: string }) =>
+    said.status === 401 && said.body.includes("cawco-preview-locked");
   kit.check(
-    "14c: the gate goes straight on to the page when signed in; behind a stand-in 302 it shows the Sign in button; its window's done page closes itself and the gate then loads the page",
-    !!through &&
-      throughAt === "/" &&
-      offered &&
-      stayed === PREVIEW_GATE_PATH &&
-      !!popup &&
-      closedItself &&
-      !!signedOn,
-    `signed in: ${through ? "went on" : "stayed"} at ${throughAt}; signed out: button ${offered ? "shown" : "not shown"} at ${stayed}; window ${popup ? popup.url() : "not opened"} ${closedItself ? "closed itself" : "stayed open"}; then ${signedOn ? "the page" : await loader.title().catch(() => "?")}`
+    "14c: without the hub's pass a preview name answers 401 and refuses a WebSocket, its ping stays open, a ticket from the API enters once (200), and a replayed ticket, another session's ticket and an expired ticket are each refused",
+    turnedAway(noPass) &&
+      passlessSocket !== TITLE &&
+      ping.status === 200 &&
+      firstSpend.status === 200 &&
+      turnedAway(replayed) &&
+      turnedAway(elsewhere) &&
+      turnedAway(expired) &&
+      ["spent", "elsewhere", "expired"].every((word) =>
+        refusedLines.some((line) => line.startsWith(word))
+      ),
+    `no pass ${noPass.status}; its socket ${JSON.stringify(passlessSocket)}; ping ${ping.status}; entered ${firstSpend.status}; replayed ${replayed.status}; another session's ${elsewhere.status}; expired ${expired.status}; the hub said ${JSON.stringify(refusedLines)}`
   );
-  await loader.context().close();
 
-  // 14d. The panel frames the preview through the gate on its `{port}` name.
+  // 14d. The panel enters the preview with a ticket on its `{port}` name.
   await tab.reload({ waitUntil: "domcontentloaded" });
   const byPortPane = await paneFrame(tab, TITLE);
   kit.check(
-    "14d: with a {port} pattern the panel loads the page from the session's port name, through the gate",
-    !!byPortPane.frame && new URL(byPortPane.frame.url()).host === firstHost,
+    "14d: with a {port} pattern the panel loads the page from the session's port origin, entered with a ticket",
+    !!byPortPane.frame &&
+      new URL(byPortPane.frame.url()).origin === firstOrigin14,
     byPortPane.last
   );
+
+  // 14e. The names' scheme is the pattern's, never the client's: an https
+  // pattern gives https origins to a dashboard reached over http.
+  const httpsKept = await putPattern(
+    `https://p-{port}.localhost:${firstRangePort}`
+  );
+  const httpsOrigin = (await address(session)).origin ?? "none";
+  const paneRequests: string[] = [];
+  const noteRequest = (request: { url: () => string }) => {
+    paneRequests.push(request.url());
+  };
+  tab.on("request", noteRequest);
+  await tab.reload({ waitUntil: "domcontentloaded" });
+  const pinged = await until(
+    "the pane's ping to the https origin",
+    () =>
+      paneRequests.find((url) =>
+        url.startsWith(`${httpsOrigin}${PREVIEW_PING_PATH}`)
+      ),
+    Boolean,
+    30_000
+  ).catch(() => null);
+  tab.off("request", noteRequest);
+  kit.check(
+    "14e: an https pattern gives an https origin to a client that reached the hub over http, in the hub's address and in the web pane's own derivation",
+    httpsKept.ok &&
+      new URL(base).protocol === "http:" &&
+      httpsOrigin ===
+        `https://p-${portOf(session)}.localhost:${firstRangePort}` &&
+      !!pinged,
+    `kept ${httpsKept.status}; the dashboard on ${new URL(base).protocol}; address ${httpsOrigin}; the pane asked ${
+      pinged ??
+      `none of ${paneRequests
+        .filter((url) => url.includes(".localhost"))
+        .slice(0, 4)
+        .join(", ")}`
+    }`
+  );
+
+  // 14f. A pattern stored before patterns named their scheme takes http://
+  // at the hub's start, saved and said in one line.
+  await fleet.stop("hub");
+  const stored = `p-{port}.localhost:${firstRangePort}`;
+  fleet.write(
+    "UPDATE preview_settings SET mode = 'host', pattern = ? WHERE id = 'preview'",
+    stored
+  );
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const migrated = (await (
+    await fetch(`${fleet.base}/api/preview-settings`)
+  ).json()) as { mode: string; pattern?: string };
+  const migratedRow = fleet.query<{ pattern: string }>(
+    "SELECT pattern FROM preview_settings WHERE id = 'preview'"
+  )[0]?.pattern;
+  const migrationLine = (await fleet.logs("hub"))
+    .split("\n")
+    .find((line) =>
+      line.includes(`the host pattern ${stored} now names its scheme`)
+    );
+  kit.check(
+    "14f: a host pattern stored with no scheme is http:// after the hub's start, in its answer and its row, said in one line",
+    migrated.mode === "host" &&
+      migrated.pattern === `http://${stored}` &&
+      migratedRow === `http://${stored}` &&
+      !!migrationLine,
+    `${JSON.stringify(migrated)}; row ${migratedRow}; log: ${migrationLine ?? "none"}`
+  );
+  await fleet.agentUp();
   await fetch(`${fleet.base}/api/preview-settings`, {
     method: "PUT",
     headers: { "content-type": "application/json" },

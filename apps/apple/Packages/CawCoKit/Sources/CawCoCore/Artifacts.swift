@@ -8,8 +8,11 @@ import OpenAPIRuntime
 public struct CanvasPage: Sendable, Equatable {
     public let id: String
     public let name: String
-    /// Its session's preview origin: a port of the hub's host, or a host name of its own.
+    /// Its session's preview origin: a port of the hub's host, or (host mode) a whole origin of its own.
     public let origin: URL
+    /// Host mode: its origin is locked to the hub's pass, so a web view
+    /// enters it with a ticket (`HubConnection.previewLoad`).
+    public let byHost: Bool
 
     /// The canvas's own page, `/__cawco/canvas/<id>/`: one closing slash,
     /// which the directory hint writes (a path ending in one gets a second,
@@ -40,9 +43,9 @@ public struct CanvasExport: Sendable {
 
 public extension HubConnection {
     /// The session's preview origin the hub named for a canvas (`previewOrigin`'s rule).
-    private func listener(port: Double?, host: String?) throws -> URL {
+    private func listener(port: Double?, origin named: String?) throws -> URL {
         guard address != nil else { throw TaskRefusal(message: "No hub is connected.") }
-        guard let origin = previewOrigin(port: port, host: host) else {
+        guard let origin = previewOrigin(port: port, origin: named) else {
             throw TaskRefusal(message: "The hub didn't say where its canvases stand. Update the hub, then try again.")
         }
         return origin
@@ -58,7 +61,7 @@ public extension HubConnection {
         ))
         guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
         let made = try answer.body.json
-        return CanvasPage(id: made.id, name: made.name, origin: try listener(port: made.port, host: made.host))
+        return CanvasPage(id: made.id, name: made.name, origin: try listener(port: made.port, origin: made.origin), byHost: made.origin != nil)
     }
 
     /// A canvas's export (`GET /api/artifacts/:id/export`). Read raw rather
@@ -87,7 +90,8 @@ public extension HubConnection {
         let drawn = elements.count { ($0["isDeleted"] as? Bool) != true }
         let text = String(decoding: try JSONSerialization.data(withJSONObject: file), as: UTF8.self)
         let png = (body["png"] as? String).flatMap { Data(base64Encoded: $0) }
-        let page = CanvasPage(id: id, name: name, origin: try listener(port: body["port"] as? Double, host: body["host"] as? String))
+        let named = body["origin"] as? String
+        let page = CanvasPage(id: id, name: name, origin: try listener(port: body["port"] as? Double, origin: named), byHost: named != nil)
         return CanvasExport(file: text, drawn: drawn, outline: outline, png: png, page: page)
     }
 

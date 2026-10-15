@@ -12,6 +12,7 @@
    * Dock, Undock, Done and Remove, which go to whoever holds the slot it
    * stands in.
    */
+  import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
   import { theme } from "#lib/theme.svelte.js";
@@ -38,7 +39,12 @@
     switch (type) {
       case "cawco:ready":
         stage.connected = true;
+        stage.admitted();
         stage.changed();
+        break;
+      // Host mode: the canvas's pass lapsed, and it enters again.
+      case PREVIEW_LOCKED_MESSAGE:
+        stage.turnedAway();
         break;
       case "cawco:pictured":
         stage.pictured?.();

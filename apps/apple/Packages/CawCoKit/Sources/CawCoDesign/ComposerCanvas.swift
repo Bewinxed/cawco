@@ -214,9 +214,19 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     private var readyWaiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     private var pictureWaiter: (id: UUID, continuation: CheckedContinuation<Void, any Error>)?
 
-    init(page: CanvasPage, instanceId: String) {
+    /// What the web view loads to show a page of the canvas's origin (`HubConnection.previewLoad`): the page itself, or host mode's entry with a ticket of its own.
+    private let entry: @MainActor (URL) async throws -> URL
+    /// The entry being asked for, replaced by the next.
+    private var entering: Task<Void, Never>?
+    /// Host mode: the page turned its pass away (401) and the canvas entered again; a second refusal in a row before the page says it is ready fails the load.
+    private var reentered = false
+    /// The navigation cancelled to enter again: WebKit's word that it was interrupted is not a failure.
+    private var reentering = false
+
+    init(page: CanvasPage, instanceId: String, entry: @escaping @MainActor (URL) async throws -> URL) {
         self.page = page
         self.instanceId = instanceId
+        self.entry = entry
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -278,16 +288,35 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         hasSynced = false
         lostSince = nil
         drawn = nil
-        // Its session's own preview origin names the session: nothing else rides with the load.
-        let url = page.url
-        #if DEBUG
-        CanvasDebug.log.notice("canvas page loads \(url.absoluteString, privacy: .public)")
-        #endif
-        web.load(URLRequest(url: url))
+        reentered = false
+        enter()
+    }
+
+    /// Asks for the page's address (host mode: a new ticket) and loads it.
+    /// Its session's own preview origin names the session: nothing else rides
+    /// with the load.
+    private func enter() {
+        entering?.cancel()
+        entering = Task { [weak self] in
+            guard let self else { return }
+            let url: URL
+            do {
+                url = try await entry(page.url)
+            } catch {
+                if !Task.isCancelled { fail("its pass didn't come from the hub: \(error.localizedDescription)") }
+                return
+            }
+            guard !Task.isCancelled else { return }
+            #if DEBUG
+            CanvasDebug.log.notice("canvas page loads \(url.absoluteString, privacy: .public)")
+            #endif
+            web.load(URLRequest(url: url))
+        }
     }
 
     /// Lets go of the page: its waiters hear it, its handler goes.
     func close() {
+        entering?.cancel()
         web.stopLoading()
         web.configuration.userContentController.removeScriptMessageHandler(forName: "cawco")
         let gone = CanvasRefusal(message: "the canvas closed")
@@ -343,6 +372,15 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         CanvasDebug.log.notice("canvas page answered \(status) for \(navigationResponse.response.url?.absoluteString ?? "?", privacy: .public)")
         #endif
         guard navigationResponse.isForMainFrame, status != 200 else { return decisionHandler(.allow) }
+        if status == 401, page.byHost, !reentered {
+            // Host mode: the origin turned the page's pass away (it lapsed,
+            // hub preview-access.ts); the canvas enters again, once in a row.
+            reentered = true
+            reentering = true
+            decisionHandler(.cancel)
+            enter()
+            return
+        }
         // The cancel ends the navigation with WebKit's own "interrupted": this sentence stands.
         answerRefused = true
         decisionHandler(.cancel)
@@ -382,6 +420,10 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     }
 
     private func failed(_ error: any Error) {
+        if reentering, HubConnection.interruptedByPolicy(error) {
+            reentering = false
+            return
+        }
         guard !answerRefused else { return }
         fail(error.localizedDescription)
     }
@@ -442,6 +484,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
             if first { tellPlace() }
         case "cawco:ready":
             connected = true
+            // In: a later lapse of its pass may enter again.
+            reentered = false
             let waiters = readyWaiters.values
             readyWaiters = [:]
             for waiter in waiters { waiter.resume() }
@@ -1113,7 +1157,10 @@ final class CanvasRoom: NSObject {
         }
         web?.close()
         web?.web.removeFromSuperview()
-        let made = CanvasWeb(page: page, instanceId: instanceId)
+        let made = CanvasWeb(page: page, instanceId: instanceId) { [weak self] place in
+            guard let hub = self?.host?.hub else { throw CanvasRefusal(message: "no hub is connected") }
+            return try await hub.previewLoad(place, in: instanceId, byHost: page.byHost)
+        }
         made.onDone = { [weak self] in self?.composer.foldCanvas() }
         made.onDock = { [weak self] in self?.composer.dockCanvas() }
         made.onUndock = { [weak self] in self?.composer.undockCanvas() }

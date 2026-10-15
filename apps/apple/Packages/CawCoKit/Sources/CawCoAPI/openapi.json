@@ -51,7 +51,7 @@
                     ]
                   },
                   "pattern": {
-                    "maxLength": 253,
+                    "maxLength": 270,
                     "type": "string"
                   }
                 },
@@ -107,6 +107,33 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdPreviewAddress200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/preview-ticket": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstancesByIdPreviewTicket",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdPreviewTicket 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewTicket"
                 }
               }
             }
@@ -19835,12 +19862,12 @@
           {
             "type": "object",
             "properties": {
-              "host": {
+              "origin": {
                 "type": "string"
               }
             },
             "required": [
-              "host"
+              "origin"
             ]
           }
         ]
@@ -26140,6 +26167,22 @@
           "state"
         ]
       },
+      "PreviewTicket": {
+        "description": "A ticket into one session's host-mode preview origin: single-use, and spent by `expiresAt` (ms epoch).",
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "number"
+          },
+          "ticket": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expiresAt",
+          "ticket"
+        ]
+      },
       "DelegateType": {
         "description": "One named preset. `name` is the key a `delegate` call's `type` asks for.",
         "type": "object",
@@ -27646,9 +27689,6 @@
       "Created": {
         "type": "object",
         "properties": {
-          "host": {
-            "type": "string"
-          },
           "id": {
             "type": "string"
           },
@@ -27666,12 +27706,15 @@
             "description": "Whether a view the person is looking at has it on screen ({@link Opened}).",
             "type": "boolean"
           },
+          "origin": {
+            "description": "A draft canvas's: its session's preview origin (core `PreviewAddress`),\nwhere a client loads the canvas at `/__cawco/canvas/<id>/`: a port on\nthe hub's host, or (host mode) a whole origin of its own.",
+            "type": "string"
+          },
           "outline": {
             "description": "A canvas's outline once drawn (core `canvasOutline`).",
             "type": "string"
           },
           "port": {
-            "description": "A draft canvas's: its session's preview origin (core `PreviewAddress`),\nwhere a client loads the canvas at `/__cawco/canvas/<id>/`: a port on\nthe hub's host, or a host name of its own.",
             "type": "number"
           },
           "route": {
@@ -28374,7 +28417,8 @@
               "version"
             ]
           },
-          "host": {
+          "origin": {
+            "description": "Its session's preview origin, where the canvas's page stands (`Created.port` / `origin`).",
             "type": "string"
           },
           "outline": {
@@ -28388,7 +28432,6 @@
             ]
           },
           "port": {
-            "description": "Its session's preview origin, where the canvas's page stands (`Created.port` / `host`).",
             "type": "number"
           }
         },
@@ -39009,9 +39052,6 @@
               "name"
             ]
           },
-          "host": {
-            "type": "string"
-          },
           "instanceId": {
             "type": "string"
           },
@@ -39021,8 +39061,11 @@
               "preview"
             ]
           },
+          "origin": {
+            "description": "Where the preview is its own origin, never the dashboard's: the session's\npreview listener's port on the host the client reached the hub by (port\nmode), or its whole origin (host mode, `scheme://name[:port]` from the\nfleet's pattern, whose scheme is how those names are served, not how the\nclient reached the hub). Exactly one is set ({@link PreviewAddress}).",
+            "type": "string"
+          },
           "port": {
-            "description": "Where the preview is its own origin, never the dashboard's: the session's\npreview listener's port on the host the client reached the hub by (port\nmode), or its own host name (host mode, `name[:port]`, from the fleet's\npattern). Exactly one is set ({@link PreviewAddress}).",
             "type": "number"
           },
           "revision": {

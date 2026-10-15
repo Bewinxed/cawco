@@ -116,27 +116,68 @@ public extension HubConnection {
 
     /// Where the app loads a session's preview: its own origin, never the
     /// dashboard's (core `previewOrigin`). Port mode: the session's preview
-    /// port on the hub's host. Host mode: the session's own host name, on
-    /// the hub's scheme. The listener knows the session by that origin.
+    /// port on the hub's host, on the hub's scheme. Host mode: the whole
+    /// origin the hub named (`scheme://name[:port]`), as given: its scheme is
+    /// how those names are served, never how the app reached the hub. The
+    /// listener knows the session by that origin.
     func previewOrigin(_ frame: PreviewFrame) -> URL? {
-        previewOrigin(port: frame.port, host: frame.host)
+        previewOrigin(port: frame.port, origin: frame.origin)
     }
 
-    /// A preview origin from what the hub named: a port, or a host (`name[:port]`).
-    func previewOrigin(port: Double?, host: String?) -> URL? {
-        guard let address, var parts = URLComponents(url: address, resolvingAgainstBaseURL: false) else { return nil }
+    /// A preview origin from what the hub named: a port, or a whole origin.
+    func previewOrigin(port: Double?, origin: String?) -> URL? {
+        if let origin {
+            guard var parts = URLComponents(string: origin), parts.scheme != nil, parts.host != nil else { return nil }
+            parts.path = "/"
+            parts.query = nil
+            parts.fragment = nil
+            return parts.url
+        }
+        guard let address, var parts = URLComponents(url: address, resolvingAgainstBaseURL: false), let port else { return nil }
         parts.path = "/"
         parts.query = nil
         parts.fragment = nil
-        if let host {
-            let named = host.split(separator: ":", maxSplits: 1)
-            parts.host = String(named[0])
-            parts.port = named.count > 1 ? Int(named[1]) : nil
-            return parts.url
-        }
-        guard let port else { return nil }
         parts.port = Int(port)
         return parts.url
+    }
+
+    /// What a web view loads to show `place`, a page on session `instanceId`'s
+    /// preview origin. Port mode: `place` itself. Host mode: every preview
+    /// name is locked to the hub's pass (hub preview-access.ts), and each web
+    /// view keeps its own cookies, so each load asks the hub for a ticket
+    /// (single-use, 60 s) and opens the origin's entry, which sets the pass
+    /// and sends the view on to `place`.
+    func previewLoad(_ place: URL, in instanceId: String, byHost: Bool) async throws -> URL {
+        guard byHost else { return place }
+        guard let client else { throw TaskRefusal(message: "No hub is connected.") }
+        let output = try await client.postApiInstancesByIdPreviewTicket(path: .init(id: instanceId))
+        guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+        let ticket = try answer.body.json.ticket
+        guard var parts = URLComponents(url: place, resolvingAgainstBaseURL: false) else {
+            throw TaskRefusal(message: "The preview's address can't be read.")
+        }
+        let path = parts.percentEncodedPath.isEmpty ? "/" : parts.percentEncodedPath
+        let next = parts.percentEncodedQuery.map { "\(path)?\($0)" } ?? path
+        // Each value whole: `queryItems` leaves `&`, `=` and `+` as they are,
+        // which would cut `next`'s own query apart. The hub decodes it once.
+        var whole = CharacterSet.urlQueryAllowed
+        whole.remove(charactersIn: "&=+#")
+        guard let ticketValue = ticket.addingPercentEncoding(withAllowedCharacters: whole),
+              let nextValue = next.addingPercentEncoding(withAllowedCharacters: whole) else {
+            throw TaskRefusal(message: "The preview's address can't be read.")
+        }
+        parts.path = "/__cawco/enter"
+        parts.percentEncodedQuery = "ticket=\(ticketValue)&next=\(nextValue)"
+        parts.fragment = nil
+        guard let entry = parts.url else { throw TaskRefusal(message: "The preview's address can't be read.") }
+        return entry
+    }
+
+    /// WebKit's word for a navigation the app cancelled by its own policy
+    /// ("Frame load interrupted"): a load the app replaced, not a failure.
+    nonisolated static func interruptedByPolicy(_ error: any Error) -> Bool {
+        let error = error as NSError
+        return error.domain == "WebKitErrorDomain" && error.code == 102
     }
 
     /// The page a preview opens at: the one its `artifact_create` named

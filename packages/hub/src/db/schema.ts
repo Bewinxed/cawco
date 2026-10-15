@@ -2512,7 +2512,7 @@ export const previewSettings = sqliteTable("preview_settings", {
   /** Always `'preview'`. */
   id: text("id").primaryKey(),
   mode: text("mode").$type<"port" | "host">().notNull().default("port"),
-  /** Host mode's names, `{session}` standing for the session's id or `{port}` for its kept preview port; null in port mode. */
+  /** Host mode's origins: `http://` or `https://`, then a host name with `{session}` standing for the session's id or `{port}` for its kept preview port; null in port mode. */
   pattern: text("pattern"),
 });
 
