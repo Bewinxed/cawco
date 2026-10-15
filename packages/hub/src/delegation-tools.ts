@@ -1244,10 +1244,9 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
     what: "artifacts you show and the person's pins on them",
   },
   { prefixes: ["memory_"], what: "project memory" },
-  {
-    prefixes: ["thread_", "view_", "folder_"],
-    what: "the project's threads, views and folder",
-  },
+  { prefixes: ["thread_"], what: "your threads with the person" },
+  { prefixes: ["view_"], what: "the project's views" },
+  { prefixes: ["folder_"], what: "the project's folder on the hub" },
   { prefixes: ["conn__"], what: "connections granted to this session" },
 ];
 
