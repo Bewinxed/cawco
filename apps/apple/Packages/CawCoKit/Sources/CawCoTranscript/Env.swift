@@ -176,7 +176,7 @@ final class RowStore {
                 if entry.print != item.print {
                     #if DEBUG
                     let start = CACurrentMediaTime()
-                    defer { Pace.rowSet(String(describing: V.self), made: 0, configured: CACurrentMediaTime() - start) }
+                    defer { Pace.rowSet(V.self, made: 0, configured: CACurrentMediaTime() - start) }
                     #endif
                     view.configure(item)
                     Pace.row()
@@ -193,9 +193,10 @@ final class RowStore {
         #if DEBUG
         let start = CACurrentMediaTime()
         var madeAt = start
-        defer { Pace.rowSet(String(describing: V.self), made: madeAt - start, configured: CACurrentMediaTime() - madeAt) }
+        defer { Pace.rowSet(V.self, made: madeAt - start, configured: CACurrentMediaTime() - madeAt) }
         #endif
         if let kept = spare[ObjectIdentifier(V.self)]?.popLast() as? V {
+            refill()
             (kept as? any Recycled)?.recycle()
             // It stands for its new item from nothing, as a new view does:
             // left at the last item's height, its first layout there laid its
@@ -217,8 +218,10 @@ final class RowStore {
         (view as? FitsWidth)?.fitWidth = width
         view.configure(item)
         Pace.row()
+        // The row this key stood for before, of another kind, is let go of, not torn down here.
+        if let old = entries[item.id] { letGo(old.view) }
         entries[item.id] = Entry(view: view, print: item.print, width: width, height: nil, used: clock)
-        trim()
+        trimLater()
         return view
     }
 
@@ -230,19 +233,48 @@ final class RowStore {
         return view
     }
 
-    /// Makes one row view ahead, of the first of `types` with no spare, on
-    /// what a frame has to spare: the next row of that kind a live turn
+    /// The row view kinds kept one spare of always: the ones a live turn
     /// brings (a sent message, a reasoning block, a reply's first piece, a
-    /// call) is then set up for its item rather than made in the commit that
-    /// shows it, 2 to 3 ms of a turn's start. Returns whether it made one.
-    @discardableResult
-    func ready(_ types: [any Recycled.Type]) -> Bool {
-        func made<V: Recycled>(_ type: V.Type) -> UIView & RowContent { make(type) }
-        for type in types where spare[ObjectIdentifier(type)]?.isEmpty ?? true {
-            spare[ObjectIdentifier(type), default: []].append(made(type))
-            return true
+    /// call), so the commit that shows the first of them sets one up for its
+    /// item rather than making it (2 to 3.5 ms of a turn's start). One taken
+    /// is made again in a turn of the main thread of its own (`refill`).
+    var reserve: [any Recycled.Type] = [] {
+        didSet { refill() }
+    }
+
+    /// A refill is waiting for its turn.
+    private var refilling = false
+
+    /// Makes the reserve's missing spares, one view a turn of the main
+    /// thread: the run loop's default mode, never a scroll's (tracking)
+    /// nor a commit's own turn. A frame's spare time, which a busy main
+    /// thread never had, decided nothing (a reasoning row made in its commit).
+    private func refill() {
+        guard !refilling, reserve.contains(where: { spare[ObjectIdentifier($0)]?.isEmpty ?? true }) else { return }
+        refilling = true
+        RunLoop.main.perform(inModes: [.default]) { [weak self] in
+            MainActor.assumeIsolated { self?.refillOne() }
         }
-        return false
+    }
+
+    /// Makes one of the reserve's missing spares, and asks for the next.
+    private func refillOne() {
+        refilling = false
+        func made<V: Recycled>(_ type: V.Type) -> UIView & RowContent { make(type) }
+        if let type = reserve.first(where: { spare[ObjectIdentifier($0)]?.isEmpty ?? true }) {
+            let view = made(type)
+            // The first cast of a row type to a protocol looks the conformance
+            // up across the whole binary, milliseconds: done here, for the
+            // casts its row goes through (RowStore `row`, HostCell), not in
+            // the commit that stands the first of its kind (a turn's first
+            // reasoning row, 3 ms of its commit).
+            _ = view as? FitsWidth
+            _ = view as? any Recycled
+            _ = view as? any FrameRow
+            _ = view as? any Disclosing
+            spare[ObjectIdentifier(type), default: []].append(view)
+        }
+        refill()
     }
 
     /// Builds `item`'s row off the screen, as `type`, at `width`: its text set
@@ -422,24 +454,57 @@ final class RowStore {
 
     /// The rows of `ids` are let go of (their items are gone), but one on the screen.
     func drop(_ ids: Set<String>) {
-        for id in ids where entries[id]?.view.window == nil { entries[id] = nil }
+        for id in ids {
+            guard let entry = entries[id], entry.view.window == nil else { continue }
+            entries[id] = nil
+            letGo(entry.view)
+        }
     }
 
     /// Only the rows of `ids` are kept.
     func keep(_ ids: some Collection<String>) {
         let wanted = Set(ids)
-        entries = entries.filter { wanted.contains($0.key) || $0.value.view.window != nil }
+        for (id, entry) in entries where !wanted.contains(id) && entry.view.window == nil {
+            entries[id] = nil
+            letGo(entry.view)
+        }
     }
 
     /// Every row is drawn anew (a theme, a type size or a column change): the
     /// ones off the screen are let go; the ones on it are set again the next
     /// time their cell asks.
     func clear() {
+        dying += spare.values.flatMap(\.self)
         spare = [:]
-        entries = entries.filter { $0.value.view.window != nil }
+        // The live kinds' spares are made again for the new look.
+        refill()
+        for (id, entry) in entries where entry.view.window == nil {
+            entries[id] = nil
+            dying.append(entry.view)
+        }
+        releaseLater()
         for id in entries.keys {
             entries[id]?.print = ""
             entries[id]?.height = nil
+        }
+    }
+
+    /// A trim is waiting for its turn.
+    private var trimming = false
+
+    /// Lets go of rows past `limit` in a turn of the main thread of its own
+    /// (any mode: a scroll's too, so a fling never holds every row it
+    /// passed): letting a batch go released the views past the spares, and
+    /// that, inside whichever row's build crossed the limit, was 3 ms of a
+    /// live turn's commit.
+    private func trimLater() {
+        guard !trimming, entries.count > Self.limit + Self.slack else { return }
+        trimming = true
+        RunLoop.main.perform(inModes: [.common]) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.trimming = false
+                self?.trim()
+            }
         }
     }
 
@@ -451,7 +516,34 @@ final class RowStore {
         guard off.count > Self.limit else { return }
         for (id, entry) in off.sorted(by: { $0.value.used < $1.value.used }).prefix(off.count - Self.limit) {
             entries[id] = nil
-            keepSpare(entry.view)
+            letGo(entry.view)
+        }
+    }
+
+    /// Row views let go of that no spare takes, released in a turn of the
+    /// main thread of their own (`releaseLater`).
+    private var dying: [UIView] = []
+    private var releasing = false
+
+    /// A row view let go of: a spare for the next item of its kind, else
+    /// released later. Released where it was let go, a row view's tree came
+    /// down inside the commit that let it go: a live row's key standing for
+    /// another kind (the working indicator giving way to the reply) was 3.5
+    /// ms of a turn's commit.
+    private func letGo(_ view: UIView & RowContent) {
+        if keepSpare(view) { return }
+        dying.append(view)
+        releaseLater()
+    }
+
+    private func releaseLater() {
+        guard !releasing, !dying.isEmpty else { return }
+        releasing = true
+        RunLoop.main.perform(inModes: [.common]) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.releasing = false
+                self?.dying.removeAll()
+            }
         }
     }
 
@@ -459,12 +551,13 @@ final class RowStore {
     /// no cell: a cell off the screen still holding its row may be one the
     /// list prepared to show next, which shows what it holds without being
     /// asked for its row again. A cell given another item lets its row go
-    /// (HostCell `host`), so most rows let go of are in none.
-    private func keepSpare(_ view: UIView & RowContent) {
-        guard view is any Recycled, view.superview == nil else { return }
+    /// (HostCell `host`), so most rows let go of are in none. Whether it kept it.
+    private func keepSpare(_ view: UIView & RowContent) -> Bool {
+        guard view is any Recycled, view.superview == nil else { return false }
         let type = ObjectIdentifier(Swift.type(of: view))
-        guard spare[type, default: []].count < Self.spares else { return }
+        guard spare[type, default: []].count < Self.spares else { return false }
         spare[type, default: []].append(view)
+        return true
     }
 }
 

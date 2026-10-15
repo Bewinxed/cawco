@@ -49,7 +49,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private let env = RowEnv()
     /// Every row's view, kept laid out for its item (RowStore).
-    private lazy var store = RowStore(env: env)
+    private lazy var store: RowStore = {
+        let store = RowStore(env: env)
+        store.reserve = Self.liveKinds
+        return store
+    }()
     private var items: [String: Item] = [:]
     private var prints: [String: String] = [:]
     private var order: [String] = []
@@ -1568,12 +1572,28 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
         }
         known.formUnion(quiet ? section.tail : looked.map(\.id))
-        if section.settled == before.settled, section.tail == before.tail {
+        // The same rows in the same places: a streamed frame's, or an answer
+        // landing, whose rows keep the live row's key (`rekey`) and so stand
+        // where they stood, now settled (RowIndex: the tail is cut with the
+        // settled rows). Landing then costs what a streamed block does.
+        // Where the rows part from the ones held (quiet: the settled rows are those).
+        let parted: Int
+        if quiet {
+            let common = min(before.tail.count, section.tail.count)
+            parted = before.settled.count + ((0 ..< common).first { before.tail[$0] != section.tail[$0] } ?? common)
+        } else {
+            parted = before.firstDifference(settled: section.settled, tail: section.tail)
+        }
+        let sameRows = before.count == section.settled.count + section.tail.count && parted == before.count
+        if sameRows {
+            if section.settled.count != before.settled.count {
+                rows = RowIndex(settled: section.settled, tail: section.tail, anchor: before.originId, skip: Self.olderId)
+            }
             guard !changed.isEmpty else { return }
-            // The same rows, some drawn anew (the streamed reply, mostly): each
-            // is configured where it stands (one off the screen in the cell
-            // prepared to show it, or when it is next stood), and the list
-            // takes no update. One the list does not hold is reconfigured below.
+            // Some drawn anew (the streamed reply, mostly): each is configured
+            // where it stands (one off the screen in the cell prepared to show
+            // it, or when it is next stood), and the list takes no update. One
+            // the list does not hold is reconfigured below.
             let unseen = redrawInPlace(changed)
             drewThisFrame = true
             if unseen.isEmpty {
@@ -1595,7 +1615,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let builtBefore = rowsBuilt(), measuredBefore = rowsMeasured()
         defer {
             let end = CACurrentMediaTime()
-            if Pace.probing, end - began >= 0.008 {
+            // Said from 4 ms, so a commit near the gate's 8 is read before and after a change to it.
+            if Pace.probing, end - began >= 0.004 {
                 Self.dockLog.notice("probe commit \((end - began) * 1000, format: .fixed(precision: 1)) ms: build \((builtAt - began) * 1000, format: .fixed(precision: 1)), rows looked at \((snapshotAt - builtAt) * 1000, format: .fixed(precision: 1)), snapshot made \((madeAt - snapshotAt) * 1000, format: .fixed(precision: 1)), applied \((end - madeAt) * 1000, format: .fixed(precision: 1)) (the layout preparing \((Pace.turnTime(.layout) - layoutBefore) * 1000, format: .fixed(precision: 1)), rows built \((rowsBuilt() - builtBefore) * 1000, format: .fixed(precision: 1)), rows measured \((rowsMeasured() - measuredBefore) * 1000, format: .fixed(precision: 1)) of it);\(built.count) items, \(quiet ? "quiet" : "whole", privacy: .public), \(scope.map { "\($0.count) section(s)" } ?? "every section", privacy: .public), \(changed.count) reconfigured")
             }
         }
@@ -1605,32 +1626,24 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let next = quiet ? before.with(tail: section.tail)
             : RowIndex(settled: section.settled, tail: section.tail, anchor: before.originId, skip: Self.olderId)
         // The sections this update changes, where it leaves the others as
-        // they are: the tail's, and the settled sections from the first row
-        // that changed (a streamed block, an answer landing at the foot). Only
-        // those take the update and are laid out again; the whole snapshot's
-        // apply diffed and updated every row the list held. Not when a
-        // section joins or goes (an older page read in front, which lands in
-        // sections of its own), nor when a changed row is not in the list
-        // (only the whole update reconfigures it); its rows are drawn anew
-        // where they stand (`redrawInPlace`).
-        if next.sectionIdentifiers == before.sectionIdentifiers, before.sectionIdentifiers.count == collection.numberOfSections {
-            var settledScope: [Int] = []
-            if !quiet, before.settled != next.settled {
-                let common = min(before.settled.count, next.settled.count)
-                let first = (0 ..< common).first { before.settled[$0] != next.settled[$0] } ?? common
-                let from = next.settled.isEmpty ? 0 : next.settledPath(min(first, next.settled.count - 1)).section
-                settledScope = Array(from ..< next.settledSections)
-            }
+        // they are: those from the first row that changed (the tail's first,
+        // quiet; a streamed block, an answer landing at the foot) to the last.
+        // Only those take the update and are laid out again; the whole
+        // snapshot's apply diffed and updated every row the list held. Not
+        // when a section joins or goes (an older page read in front, which
+        // lands in sections of its own), nor when a changed row is not in the
+        // list (only the whole update reconfigures it); its rows are drawn
+        // anew where they stand (`redrawInPlace`).
+        if next.sectionIdentifiers == before.sectionIdentifiers, before.sectionIdentifiers.count == collection.numberOfSections, next.count > 0 {
             changed = redrawInPlace(changed)
-            if changed.isEmpty { scope = [next.tailIndex] + settledScope }
+            if changed.isEmpty { scope = Array(next.section(ofRow: min(parted, next.count - 1)) ..< next.sections) }
         }
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
         if scope == nil {
             snapshot.appendSections(next.sectionIdentifiers)
-            for index in 0 ..< next.settledSections {
-                snapshot.appendItems(Array(next.settled(inSection: index)), toSection: next.identifier(ofSection: index))
+            for index in 0 ..< next.sections {
+                snapshot.appendItems(next.rows(inSection: index), toSection: next.identifier(ofSection: index))
             }
-            snapshot.appendItems(next.tail, toSection: RowIndex.tailSection)
             snapshot.reconfigureItems(changed)
         }
         #if DEBUG
@@ -1717,12 +1730,24 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 return frame.minY + anchor.into
             }
             if let scope {
-                // The tail's first: a landed answer's rows leave it before they
-                // join the settled section they move to under the same ids.
                 layout.changing = Set(scope)
+                let parts = scope.map { next.rows(inSection: $0) }
+                // A row that changes section (rows before it come or go across
+                // a cut) leaves its old one first: a section's update may not
+                // bring in a row another section still holds.
+                let moving = Set(parts.enumerated().flatMap { i, ids in
+                    ids.filter { id in before.path(of: id).map { $0.section != scope[i] } ?? false }
+                })
+                if !moving.isEmpty {
+                    for (i, index) in scope.enumerated() {
+                        var part = NSDiffableDataSourceSectionSnapshot<String>()
+                        part.append(parts[i].filter { !moving.contains($0) })
+                        dataSource.apply(part, to: next.identifier(ofSection: index), animatingDifferences: false)
+                    }
+                }
                 for (i, index) in scope.enumerated() {
                     var part = NSDiffableDataSourceSectionSnapshot<String>()
-                    part.append(index == next.tailIndex ? next.tail : Array(next.settled(inSection: index)))
+                    part.append(parts[i])
                     dataSource.apply(part, to: next.identifier(ofSection: index), animatingDifferences: false,
                                      completion: i == scope.count - 1 ? settle : nil)
                 }
@@ -1924,15 +1949,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             // A one-line tool call built and measured here gives every such row its height.
             learnToolLine(item, height: height, width: width)
         }
-        // What the frame has left makes a row view the next live turn will want (RowStore `ready`).
-        if until - CACurrentMediaTime() > Self.readyCost { store.ready(Self.liveKinds) }
         return false
     }
 
-    /// The row views a live turn brings, kept one ahead of it each (RowStore `ready`).
+    /// The row views a live turn brings, kept one spare of each (RowStore `reserve`).
     private static let liveKinds: [any Recycled.Type] = [UserTurnView.self, ThinkingView.self, PieceView.self, ToolLineView.self]
-    /// The most a row view takes to make, which a frame must have left to make one ahead.
-    private static let readyCost = 0.003
 
     // MARK: A queued message in the composer
 
@@ -2193,7 +2214,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if let pendingPosition { return pendingPosition }
         guard !following else { return TranscriptPosition(following: true, anchor: nil, offset: 0) }
         let shown = collection.indexPathsForVisibleItems.filter { rows.settledRow(at: $0) != nil }.sorted()
-        let candidates = shown.isEmpty ? (rows.settled.isEmpty ? [] : [rows.settledPath(rows.settled.count - 1)]) : shown
+        let candidates = shown.isEmpty ? (rows.settled.isEmpty ? [] : [rows.path(ofRow: rows.settled.count - 1)]) : shown
         for index in candidates {
             guard let id = rows.id(at: index), let anchor = lasting(id),
                   let frame = collection.layoutAttributesForItem(at: index)?.frame else { continue }

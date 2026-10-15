@@ -1,37 +1,43 @@
 import CawCoDesign
 import UIKit
 
-/// Where each row of the transcript list stands: the settled rows in
-/// sections of `chunk`, oldest first, then the tail's section (the live row,
-/// the call in flight, the sends waiting). Every place that turns a row into
-/// an index path, or back, asks this; none works the sections out itself.
+/// Where each row of the transcript list stands: every row, the settled ones
+/// then the tail's (the live row, the call in flight, the sends waiting), in
+/// one run cut into sections of `chunk`. Every place that turns a row into an
+/// index path, or back, asks this; none works the sections out itself.
 ///
-/// The settled rows are cut into sections so that an update touches only the
+/// The rows are cut into sections so that an update touches only the
 /// sections it changes. The cuts are counted from one row, the `origin` (the
 /// first the list held, kept for as long as it holds it), not from the first
 /// row: a streamed block lands in the newest section, and an older page read
 /// in front lands in sections of its own before the origin's, every section
 /// the list held standing as it was. Counted from the first row, a page read
 /// in front moved every row into another section (30 ms to apply).
+///
+/// The tail is cut with the settled rows, not kept in a section of its own:
+/// an answer that lands keeps its rows (the live row's key, `rekey`) where
+/// they stood, so landing it moves no row, and the list draws its rows anew
+/// where they stand, as it does a streamed block. In a section of its own the
+/// tail's rows left it for the settled section's, every cell made again.
 struct RowIndex {
-    /// Settled rows a section holds.
+    /// Rows a section holds.
     static let chunk = 128
-    /// The tail section's identifier in the list's snapshot (a settled
-    /// section's is its number counted from the origin's, 0, and below it).
-    static let tailSection = Int.min
 
     let settled: [String]
     private(set) var tail: [String]
     /// The origin row: its id and its settled index.
     let originId: String?
     private let origin: Int
-    /// The numbers of the first and last settled sections.
-    private let first: Int
-    private let last: Int
     /// Each settled row's settled index.
     private let settledPlaces: [String: Int]
     /// Each tail row's tail index.
     private var tailPlaces: [String: Int]
+
+    /// Every row's count, settled and tail.
+    var count: Int { settled.count + tail.count }
+    /// The numbers of the first and last sections.
+    private var first: Int { Self.number(0, origin) }
+    private var last: Int { Self.number(max(0, count - 1), origin) }
 
     /// `anchor`: the origin the list counted from (RowIndex `originId`),
     /// kept while the rows hold it; else the first row other than `skip` (the
@@ -48,8 +54,6 @@ struct RowIndex {
         let origin = held ?? settled.firstIndex { $0 != skip } ?? 0
         self.origin = origin
         originId = settled.indices.contains(origin) ? settled[origin] : nil
-        first = Self.number(0, origin)
-        last = Self.number(max(0, settled.count - 1), origin)
     }
 
     private static func places(of tail: [String]) -> [String: Int] {
@@ -68,56 +72,71 @@ struct RowIndex {
         return next
     }
 
-    /// The section a settled row at `row` stands in, counted from the origin's (0).
+    /// The section the row at `row` stands in, counted from the origin's (0).
     private static func number(_ row: Int, _ origin: Int) -> Int {
         let along = row - origin
         return along >= 0 ? along / chunk : -((-along + chunk - 1) / chunk)
     }
 
-    /// Sections the settled rows take.
-    var settledSections: Int { settled.isEmpty ? 0 : last - first + 1 }
-    /// The tail section's index: after every settled one.
-    var tailIndex: Int { settledSections }
+    /// Sections the rows take.
+    var sections: Int { count == 0 ? 0 : last - first + 1 }
     /// The snapshot's section identifiers, in order.
-    var sectionIdentifiers: [Int] { (settled.isEmpty ? [] : Array(first ... last)) + [Self.tailSection] }
+    var sectionIdentifiers: [Int] { count == 0 ? [] : Array(first ... last) }
     /// The snapshot's identifier of the section at `index`.
-    func identifier(ofSection index: Int) -> Int { index == tailIndex ? Self.tailSection : first + index }
+    func identifier(ofSection index: Int) -> Int { first + index }
 
-    /// The settled rows the section at `index` holds, as settled indices.
+    /// The rows the section at `index` holds, as row indices.
     private func span(_ index: Int) -> Range<Int> {
         let number = first + index
         let start = max(0, origin + number * Self.chunk)
-        return start ..< min(settled.count, origin + (number + 1) * Self.chunk)
+        return start ..< min(count, origin + (number + 1) * Self.chunk)
     }
 
-    /// The settled rows of section `section`.
-    func settled(inSection section: Int) -> ArraySlice<String> { settled[span(section)] }
+    /// The row at `row`, settled or tail.
+    func id(ofRow row: Int) -> String { row < settled.count ? settled[row] : tail[row - settled.count] }
 
-    /// The index path of the settled row at `row`.
-    func settledPath(_ row: Int) -> IndexPath {
+    /// The rows of section `section`.
+    func rows(inSection section: Int) -> [String] { span(section).map(id(ofRow:)) }
+
+    /// The index path of the row at `row`.
+    func path(ofRow row: Int) -> IndexPath {
         let index = Self.number(row, origin) - first
         return IndexPath(item: row - span(index).lowerBound, section: index)
     }
 
+    /// The section of the row at `row`.
+    func section(ofRow row: Int) -> Int { Self.number(row, origin) - first }
+
     /// The index path of the row `id`, when the list holds it.
     func path(of id: String) -> IndexPath? {
-        if let place = settledPlaces[id] { return settledPath(place) }
-        return tailPlaces[id].map { IndexPath(item: $0, section: tailIndex) }
+        if let place = settledPlaces[id] { return path(ofRow: place) }
+        return tailPlaces[id].map { path(ofRow: settled.count + $0) }
     }
 
     /// The row at `path`, when there is one.
-    func id(at path: IndexPath) -> String? {
-        if path.section == tailIndex { return tail.indices.contains(path.item) ? tail[path.item] : nil }
-        guard let row = settledRow(at: path) else { return nil }
-        return settled[row]
-    }
+    func id(at path: IndexPath) -> String? { row(at: path).map(id(ofRow:)) }
 
-    /// The settled index of the row at `path`; nil for the tail's rows.
-    func settledRow(at path: IndexPath) -> Int? {
-        guard path.section >= 0, path.section < settledSections else { return nil }
+    /// The row index at `path`, settled or tail.
+    func row(at path: IndexPath) -> Int? {
+        guard path.section >= 0, path.section < sections else { return nil }
         let span = span(path.section)
         let row = span.lowerBound + path.item
         return span.contains(row) ? row : nil
+    }
+
+    /// The settled index of the row at `path`; nil for the tail's rows.
+    func settledRow(at path: IndexPath) -> Int? { row(at: path).flatMap { $0 < settled.count ? $0 : nil } }
+
+    /// The first row where `settled` then `tail` part from these rows, read
+    /// in place: their common count when none does. A long session's rows
+    /// copied into one list on each side to compare were 2 ms of a commit.
+    func firstDifference(settled: [String], tail: [String]) -> Int {
+        let common = min(count, settled.count + tail.count)
+        for row in 0 ..< common {
+            let other = row < settled.count ? settled[row] : tail[row - settled.count]
+            if other != id(ofRow: row) { return row }
+        }
+        return common
     }
 
     /// Whether the list holds the row `id`.

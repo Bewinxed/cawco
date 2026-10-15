@@ -276,13 +276,20 @@ extension Pace {
         log.notice("probe tail built \(pieces * 1000, format: .fixed(precision: 1)) ms, measured \(measured * 1000, format: .fixed(precision: 1)) ms: \(count) pieces, \(characters) characters")
     }
 
-    /// A row view took 2 ms or more to make or to set for its item (RowStore `row`): said, by kind.
-    static func rowSet(_ kind: String, made: Double, configured: Double) {
+    /// A row view made or set for its item (RowStore `row`), totalled by
+    /// kind; one of 2 ms or more is said. Kept by the type, its name read
+    /// only once said, in a turn of its own: a type's name, read the first
+    /// time, is demangled, and that was 2.6 ms of the commit that stood a
+    /// turn's first reasoning row (the probe's own cost, in the measure).
+    static func rowSet(_ kind: Any.Type, made: Double, configured: Double) {
         guard probing else { return }
-        setKinds[kind, default: (0, 0)].rows += 1
-        setKinds[kind, default: (0, 0)].time += made + configured
+        let key = ObjectIdentifier(kind)
+        setKinds[key, default: (kind, 0, 0)].rows += 1
+        setKinds[key, default: (kind, 0, 0)].time += made + configured
         guard made + configured >= 0.002 else { return }
-        log.notice("probe row \(kind, privacy: .public): made \(made * 1000, format: .fixed(precision: 1)) ms, set \(configured * 1000, format: .fixed(precision: 1)) ms")
+        DispatchQueue.main.async {
+            log.notice("probe row \(String(describing: kind), privacy: .public): made \(made * 1000, format: .fixed(precision: 1)) ms, set \(configured * 1000, format: .fixed(precision: 1)) ms")
+        }
     }
 
     /// A row stood at its exact height was measured as its view lays out
@@ -315,14 +322,14 @@ extension Pace {
             return "\(kind) \(w.rows) rows (\(w.fresh) new) \(ms) ms"
         }.joined(separator: "; ")
         log.notice("probe warmed kinds (set up/laid out/measured/laid out again): \(said, privacy: .public); row views from spares \(fromSpare), made new \(madeNew)")
-        let set = setKinds.sorted { $0.key < $1.key }.map { kind, s in
+        let set = setKinds.values.map { (String(describing: $0.kind), $0) }.sorted { $0.0 < $1.0 }.map { kind, s in
             "\(kind) \(s.rows) rows \(String(format: "%.0f", s.time * 1000)) ms (\(String(format: "%.2f", s.time * 1000 / Double(max(1, s.rows)))) ms a row)"
         }.joined(separator: "; ")
         log.notice("probe rows set (made and set for an item, every row): \(set, privacy: .public)")
     }
 
     /// Every row view made or set for an item (RowStore `row`), by kind: how many, and the time in all.
-    private static var setKinds: [String: (rows: Int, time: Double)] = [:]
+    private static var setKinds: [ObjectIdentifier: (kind: Any.Type, rows: Int, time: Double)] = [:]
 
     /// The end of one turn of the main thread, after Core Animation's commit.
     fileprivate static func measure(_ now: Double, held: Double) {

@@ -35,7 +35,8 @@
  * 2. A turn streams a long reply into the foot: the main thread's own CPU
  *    time over the wall time the tail was busy. Under 50% (mostly idle).
  *    And every commit of its rows takes under 8 ms (the app says one of
- *    8 ms or more, `probe commit`, with what it took).
+ *    4 ms or more, `probe commit`, with what it took; the whole ones, an
+ *    answer landing among them, are noted).
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-scroll-up
@@ -747,11 +748,16 @@ async function run(kit: Kit): Promise<void> {
       busy < STREAM_CPU,
       `main thread CPU ${(busy * 100).toFixed(1)}% (${d.streamCPU.toFixed(0)} ms of ${d.streamWall.toFixed(0)} ms), awake ${(awake * 100).toFixed(1)}%; ${d.blankFrames} blank frame(s)`
     );
-    // The app says a commit only when it took 8 ms or more (TranscriptView `probe commit`).
-    const slow = heard
+    const said = heard
       .slice(streamFrom)
       .map((h) => COMMIT.exec(h.line))
       .filter((m) => m !== null);
+    // The app says every commit of 4 ms or more; the gate is 8.
+    const slow = said.filter((m) => Number(m[1]) >= COMMIT_MS);
+    const landing = said.filter((m) => m.input.includes("whole"));
+    kit.note(
+      `streaming commits of 4 ms or more: ${said.length}; the whole ones (a block or an answer landing): ${landing.map((m) => `${m[1]} ms`).join(", ") || "none"}`
+    );
     kit.check(
       `while a turn streams, each commit of its rows takes under ${COMMIT_MS} ms`,
       slow.length === 0,
