@@ -516,8 +516,15 @@ try {
   });
   const { udid } = sim;
   console.log(`  simulator ${udid}`);
+  // A fresh install: the app's data container goes with an installed copy,
+  // so no mode an earlier run left (`cawco-preview-mode:<session>` in its
+  // UserDefaults, PreviewController.swift) is read back at launch, and the
+  // pane rests in Interact as section 6 checks.
   await sh(`xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
 xcrun simctl ui ${udid} appearance light
+if xcrun simctl get_app_container ${udid} dev.cawco.app >/dev/null 2>&1; then
+  xcrun simctl uninstall ${udid} dev.cawco.app
+fi
 xcrun simctl install ${udid} "${app}"`);
   stream = Bun.spawn(
     [

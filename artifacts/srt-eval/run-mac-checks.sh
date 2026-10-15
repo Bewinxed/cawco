@@ -134,6 +134,8 @@ fi
 rm -f "$scratch/fill.out"
 trustd_kr=$(r "/usr/bin/python3 -c '$MACH_PROBE' com.apple.trustd.agent" 2>/dev/null)
 [ "$trustd_kr" = 0 ] && works "mach-lookup com.apple.trustd.agent (TLS)" PASS || works "mach-lookup com.apple.trustd.agent (TLS)" "FAIL (kr $trustd_kr)"
+# xcodebuild opens one to launch a UI test runner (Maestro's driver).
+r "/usr/bin/python3 -I -c 'import pty; pty.openpty()'" >/dev/null 2>&1 && works "a pseudo-terminal opens (/dev/ptmx)" PASS || works "a pseudo-terminal opens (/dev/ptmx)" FAIL
 # A dry run sends nothing, but asks the remote for push access with the login.
 push_url=${PUSH_URL:-$(git -C "$clone" remote get-url origin)}
 case "$push_url" in

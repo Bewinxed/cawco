@@ -237,6 +237,11 @@ export const seatbeltProfile = (
     "(allow file-write*",
     ...policy.allowWrite.map((path) => `  (subpath ${sbString(path)})`),
     '  (literal "/dev/null") (literal "/dev/zero") (literal "/dev/dtracehelper")',
+    // The pseudo-terminal multiplexer, which openpty() opens read-write: its
+    // pairs are `/dev/ttys…`, allowed above. Refused, xcodebuild cannot launch
+    // a UI test runner (Maestro's driver) on a simulator: "Pseudo Terminal
+    // Setup Error … Errno: 1 … Operation not permitted".
+    '  (literal "/dev/ptmx")',
     '  (regex #"^/dev/tty") (regex #"^/dev/fd/"))',
     ...policy.denyWrite.map(
       (path) => `(deny file-write* (subpath ${sbString(path)}))`
