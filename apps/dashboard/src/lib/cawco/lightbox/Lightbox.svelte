@@ -348,6 +348,7 @@
 
   /* ── PhotoSwipe, in house tokens. Its root is appended to <body>, so these
      rules are global; `.cawco-pswp` is the `mainClass` it carries. */
+  /* css-scope .cawco-pswp: ScreenEdges reads the open lightbox for the screen's edge colour */
   :global {
     .cawco-pswp {
       --pswp-bg: var(--scrim);

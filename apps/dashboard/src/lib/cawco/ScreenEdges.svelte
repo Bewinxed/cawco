@@ -75,6 +75,7 @@
 <div aria-hidden="true" class="edge-bottom"></div>
 
 <style>
+  /* css-scope: the screen's edges are the document's own, set on its root */
   :global(:root) {
     --edge-top-under: var(--surface-raised);
     --edge-bottom-under: var(--surface-recess);
@@ -89,6 +90,7 @@
     --edge-show-fade: var(--dur-exit);
     background: var(--edge-top-background);
   }
+  /* css-scope: the body's background is the bottom edge */
   :global(body) {
     background: var(--edge-bottom-background);
   }
@@ -96,11 +98,13 @@
   /* The session's tabs at the top: the phone's tab row under the floating
      bar, or the wide bar hosting them on their shelf. Under the narrow
      query the bar draws itself raised even while hosting (Shell). */
+  /* css-scope: reads the Shell's bar from the root to colour the top edge */
   :global(:root:has(.top.floating)),
   :global(:root:has(.top.hosting)) {
     --edge-top-under: var(--surface-shelf);
   }
   @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
+    /* css-scope: reads the Shell's bar from the root to colour the top edge */
     :global(:root:has(.top.hosting)) {
       --edge-top-under: var(--surface-raised);
     }
@@ -108,6 +112,7 @@
 
   /* An open scrim, the kit's (`.kit-scrim`, portalled into the body) or
      the lightbox's (PhotoSwipe's root, its bg the scrim at full opacity). */
+  /* css-scope: reads an open scrim from the root to colour both edges */
   :global(:root:has(> body > .kit-scrim[data-state="open"])),
   :global(:root:has(> body > .cawco-pswp.pswp--open)) {
     --edge-top-background: color-mix(
@@ -123,12 +128,14 @@
     --edge-top-fade: var(--dur-panel);
     --edge-bottom-fade: var(--dur-panel);
   }
+  /* css-scope: times the edges to a closing scrim's fade */
   :global(:root:has(> body > .kit-scrim[data-state="closed"])) {
     --edge-top-fade: var(--dur-exit);
     --edge-bottom-fade: var(--dur-exit);
   }
   /* A bottom sheet on the screen's foot is the bottom edge, at once, for as
      long as it is there: opening and closing it covers the foot. */
+  /* css-scope: reads a kit bottom sheet from the root to colour the foot */
   :global(
     :root:has(
       > body
@@ -139,6 +146,7 @@
     --edge-bottom-fade: 1ms;
   }
   /* A side sheet: the strips step aside at once (see above). */
+  /* css-scope: reads a kit side sheet from the root to set both edges */
   :global(
     :root:has(
       > body
@@ -154,6 +162,7 @@
     --edge-show-fade: 0s;
   }
   /* The phone's sidebar fills its sheet with its own ground (Shell). */
+  /* css-scope: reads the Shell's sidebar sheet from the root */
   :global(
     :root:has(
       > body > [data-slot="sheet-content"].rail-sheet[data-state="open"]

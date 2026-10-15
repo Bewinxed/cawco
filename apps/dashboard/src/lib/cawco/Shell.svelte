@@ -1249,6 +1249,7 @@
   /* In the sheet the close button sits in the brand row's corner (16px in,
      30px wide, and 7px of touch area around it): the brand row, the wordmark
      and Start session both, stops short of it, so no area lies under it. */
+  /* css-scope .rail-sheet: ScreenEdges reads the open sidebar sheet for the screen's edge colour */
   :global(.rail-sheet .brand-row) {
     margin-inline-end: 46px;
   }
