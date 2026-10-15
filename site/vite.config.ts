@@ -112,7 +112,8 @@ function pageMarkup(): Plugin {
           .replace(/<i data-icon="([^"]+)"><\/i>/g, (_, name: string) => icon(name))
           .replace(/<i data-mark="([^"]+)"><\/i>/g, (_, name: string) => mark(name))
           .replace(/<i data-device="([^"]+)"><\/i>/g, (_, name: string) => device(name))
-          .replace(/<i data-caw="([^"]+)"([^>]*)><\/i>/g, (_, name: string, rest: string) => {
+          // The formatter breaks a Caw's attributes onto lines of their own, so any space leads them.
+          .replace(/<i\s+data-caw="([^"]+)"([^>]*)><\/i>/g, (_, name: string, rest: string) => {
             const made = clips.get(name) ?? clip(name);
             clips.set(name, made);
             return made.svg.replace('__REST__', rest);
