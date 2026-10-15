@@ -88,19 +88,24 @@
 
   /** The mock hub: it answers after a beat. */
   const hub = (ms = 450) => new Promise((done) => setTimeout(done, ms));
+  /** How long a preview Run now goes before it ends silent. */
+  const PREVIEW_RUN_MS = 8000;
 
   // --- a routine's row ----------------------------------------------------------
 
   type StateKind = "on" | "paused" | "failing" | "expiring" | "running";
   /** The one routine open: opening another folds it. */
   let open = $state<string | null>(null);
-  let running = $state<string | null>(null);
   let deleting = $state<string | null>(null);
   let deletePending = $state(false);
 
+  /** Its newest run is going now: starting, or running (the hub's run state). */
+  const going = (routine: Routine) =>
+    routine.runs[0]?.state === "starting" ||
+    routine.runs[0]?.state === "running";
   const failing = (routine: Routine) => routine.runs[0]?.outcome === "failed";
   function stateOf(routine: Routine): StateKind {
-    if (running === routine.id) {
+    if (going(routine)) {
       return "running";
     }
     if (!routine.enabled) {
@@ -158,26 +163,32 @@
     await hub();
     routine.keep = true;
   }
+  /** Run now: the run stands at the top of its runs while it goes, as the hub keeps it. */
   async function runNow(routine: Routine) {
-    running = routine.id;
-    await hub(2400);
     const at = Date.now();
     routine.runs = [
       {
         id: `now-${at}`,
         slot: `now:${new Date(at).toISOString()}`,
         attempt: 1,
-        state: "ended",
-        outcome: "silent",
+        state: "running",
+        outcome: null,
         output: null,
         reason: null,
         startedAt: at,
-        endedAt: at,
+        endedAt: null,
         workItemId: null,
       },
       ...routine.runs,
     ];
-    running = null;
+    await hub(PREVIEW_RUN_MS);
+    const [now, ...before] = routine.runs;
+    if (now) {
+      routine.runs = [
+        { ...now, state: "ended", outcome: "silent", endedAt: Date.now() },
+        ...before,
+      ];
+    }
   }
   async function remove(routine: Routine) {
     deletePending = true;
@@ -191,7 +202,7 @@
       {
         label: "Run now",
         icon: IconPlay,
-        disabled: running === routine.id,
+        disabled: going(routine),
         onselect: () => runNow(routine),
       },
       {
