@@ -1758,7 +1758,7 @@
     },
     "scrim": {
       "$type": "color",
-      "$value": "oklch(from {color.background} l c h / 0.72)",
+      "$value": "oklch(from {color.background} l c h / {effect.scrim-mix})",
       "$description": "What a dialog's backdrop paints: the page itself, translucent."
     },
     "image-outline": {
@@ -2896,6 +2896,11 @@
     }
   },
   "effect": {
+    "scrim-mix": {
+      "$type": "number",
+      "$value": "72%",
+      "$description": "How much of the page's own background the scrim lays over what is under it: its alpha. The screen's edges under an open scrim (ScreenEdges) mix the same share of background into the edge colour, so the strip Safari extends is the scrim's colour over that edge."
+    },
     "ghost-presence": {
       "$type": "number",
       "$value": "0.7",

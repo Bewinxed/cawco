@@ -346,8 +346,9 @@
     --safe-bottom: 0px;
   }
 
+  /* The body's background is the screen's bottom edge (cawco/ScreenEdges). */
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
     font: var(--type-body);
   }
 

@@ -2038,10 +2038,7 @@
       min-block-size: var(--c-top-bar-h);
       padding-block-start: 0;
       padding-inline: calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))
-        calc(
-          var(--c-bar-phone-gap) + var(--c-bar-caw-glass-phone) +
-            env(safe-area-inset-right, 0px)
-        );
+        calc(var(--c-bar-phone-gap) + var(--c-bar-caw-glass-phone));
     }
   }
 

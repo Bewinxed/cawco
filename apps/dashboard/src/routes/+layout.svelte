@@ -13,6 +13,7 @@
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { trackDevicePixel } from "#lib/cawco/device-pixel.js";
+  import ScreenEdges from "#lib/cawco/ScreenEdges.svelte";
   import { trackVisibleViewport } from "#lib/cawco/visible-viewport.svelte.js";
 
   let { children }: { children: Snippet } = $props();
@@ -29,4 +30,8 @@
   onMount(trackVisibleViewport);
 </script>
 
+<!-- The screen's edges, in the page's own top and bottom colours, before
+     anything a route draws: straight in the body, so no transformed box
+     ever holds them. -->
+<ScreenEdges />
 {@render children()}

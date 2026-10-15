@@ -74,6 +74,8 @@ const NAME = /^[a-z]+$/i;
 const REF = /^\{([^}]+)\}$/;
 const VIEWPORT_TERM = /^(-?\d*\.?\d+)(?:vi|vw)$/;
 const REFS = /\{([^}]+)\}/g;
+/** A value that is one reference and nothing else. */
+const WHOLE_REF = /^\{([^}]+)\}$/;
 const MIX_SPACE = /^in\s+([a-z0-9-]+)$/;
 const KEBAB = /-([a-z0-9])/g;
 const SWIFT_ID = /^[a-z][A-Za-z0-9]*$/;
@@ -357,7 +359,11 @@ class Tokens {
       h: Number(h ?? 0),
       alpha: Number(base.alpha),
     };
-    const read = (tok: string, full: number): number => {
+    const read = (authoredTok: string, full: number): number => {
+      // A channel that is a token (the scrim's alpha, effect.scrim-mix)
+      // reads as that token's own value.
+      const ref = WHOLE_REF.exec(authoredTok);
+      const tok = ref ? authored(this.lookup(ref[1], where)) : authoredTok;
       if (tok in channels) {
         return channels[tok];
       }

@@ -1157,6 +1157,7 @@
         class="content"
         data-safe-bottom
         id="main-content"
+        class:floating
         class:safe={!onSession}
       >
         <!-- The page is keyed on its route, so a navigation swaps one page for
@@ -1233,11 +1234,16 @@
     overflow: hidden;
   }
 
+  /* The rail holds the screen's leading edge, so it keeps a landscape
+     notch's inset clear inside its own width, in the sidebar's ground: its
+     outer edge stays where a drag puts it (`startDrag`). */
   .rail {
     position: relative;
     width: var(--sidebar-width);
     flex: 0 0 var(--sidebar-width);
     min-width: 0;
+    padding-inline-start: env(safe-area-inset-left, 0px);
+    background: var(--sidebar);
     border-right: 1px solid var(--border-hairline);
   }
   /* In the sheet the close button sits in the brand row's corner (16px in,
@@ -1282,7 +1288,7 @@
        stands over the page's (the reference comp's 21px). The left inset is
        the crumb's own (below), so the slot starts at the bar's edge whether
        it holds the crumb or the tabs, and nothing in it moves as they swap. */
-    padding: 0 var(--space-6) 0 0;
+    padding: 0 calc(var(--space-6) + env(safe-area-inset-right, 0px)) 0 0;
     background: var(--surface-raised);
     border-bottom: 1px solid var(--seam);
   }
@@ -1654,10 +1660,12 @@
      (PaneTabs), so the two read as one row and the bar draws nothing of its
      own; only its two controls take a touch. */
   @media (max-width: 899px) {
-    /* Caw's glass ends on the screen's trailing edge (inside a landscape
-       notch's inset), so the row has no trailing pad of its own. */
+    /* Caw's glass ends on the screen's trailing edge, and the toggle starts
+       from its leading one, each inside a landscape notch's inset, so the
+       row has no pad of its own. */
     .top {
-      padding-inline: 0 env(safe-area-inset-right, 0px);
+      padding-inline: env(safe-area-inset-left, 0px)
+        env(safe-area-inset-right, 0px);
     }
     /* The toggle is a bare glyph (owner, variant B): its leading edge
        c-bar-phone-edge from the screen's, its centre on the tabs' centre
@@ -1823,6 +1831,22 @@
        the length of its travel; wide content scrolls in its own box. */
     overflow-x: hidden;
     overflow-y: auto;
+    /* Clear of a landscape notch's inset on the trailing side; the rail
+       holds the leading one where it stands. Page grounds are the shell's
+       own (surface-recess), so the inset beside them is the same ground. */
+    padding-inline-end: env(safe-area-inset-right, 0px);
+  }
+  @media (max-width: 899px) {
+    .content {
+      padding-inline-start: env(safe-area-inset-left, 0px);
+    }
+    /* Under the floating bar the session's tab row is the screen's top
+       row: the insets beside it are its shelf, the rest the shell's ground
+       the transcript stands on. */
+    .content.floating {
+      background: linear-gradient(var(--surface-shelf), var(--surface-shelf))
+        top / 100% var(--c-top-bar-h) no-repeat;
+    }
   }
   /* One grid cell, a page's height: an outgoing and an incoming page stand
      in it together while they overlap, and a page taller than the screen

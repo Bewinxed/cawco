@@ -702,6 +702,8 @@ public enum Size {
 }
 
 public enum Effect {
+    /// How much of the page's own background the scrim lays over what is under it: its alpha. The screen's edges under an open scrim (ScreenEdges) mix the same share of background into the edge colour, so the strip Safari extends is the scrim's colour over that edge.
+    public static let scrimMix: Double = 0.72
     /// A message not yet said in the conversation (sending, queued).
     public static let ghostPresence: Double = 0.7
     public static let materialSaturate: Double = 1.6
