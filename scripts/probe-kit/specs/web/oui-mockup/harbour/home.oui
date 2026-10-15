@@ -1,0 +1,7 @@
+root = Stack([phone], false, "large")
+phone = Device("phone", [screen], "Harbour")
+screen = Stack([mark, title, price, buy], false, "medium", "start", "start", "large")
+mark = Image("wave", 48, "contain")
+title = Text("Fresh catch", "title")
+price = PriceTag("$12.00", "sale", [Text("per kilo, landed this morning", "meta")])
+buy = Button("Add to basket", "primary")

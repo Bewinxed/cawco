@@ -1,0 +1,5 @@
+root = Stack([card], false, "large", "start")
+card = Card([title, email, go], "Sign in")
+title = Text("Welcome back", "title")
+email = Input("Email", "", "you@example.com")
+go = Button("Continue", "primary")

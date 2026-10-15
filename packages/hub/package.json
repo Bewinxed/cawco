@@ -22,7 +22,7 @@
     "@cawco/core": "workspace:*",
     "@effect/sql-sqlite-bun": "4.0.0",
     "@modelcontextprotocol/sdk": "1.32.0",
-    "@openuidev/lang-core": "1.0.0",
+    "@openuidev/lang-core": "1.0.1",
     "ajv": "^8.20.0",
     "bonjour-service": "^1.4.4",
     "cronstrue": "3.32.0",

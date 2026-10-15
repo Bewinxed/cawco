@@ -56,7 +56,7 @@
         "@fontsource/fredoka": "^5.3.0",
         "@lezer/highlight": "^1.2.5",
         "@milkdown/crepe": "^7.22.2",
-        "@openuidev/lang-core": "1.0.0",
+        "@openuidev/lang-core": "1.0.1",
         "@pierre/diffs": "1.5.1",
         "@rive-app/canvas": "2.44.0",
         "@tanstack/svelte-table": "9.2.6",
@@ -173,7 +173,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@dagrejs/dagre": "^3.1.1",
-        "@openuidev/lang-core": "1.0.0",
+        "@openuidev/lang-core": "1.0.1",
         "@typescript/native": "npm:typescript@~7.0.2",
         "typescript": "npm:@typescript/typescript6@^6.0.2",
         "yaml": "^2.9.1",
@@ -192,7 +192,7 @@
         "@cawco/core": "workspace:*",
         "@effect/sql-sqlite-bun": "4.0.0",
         "@modelcontextprotocol/sdk": "1.32.0",
-        "@openuidev/lang-core": "1.0.0",
+        "@openuidev/lang-core": "1.0.1",
         "ajv": "^8.20.0",
         "bonjour-service": "^1.4.4",
         "cronstrue": "3.32.0",
@@ -816,7 +816,7 @@
 
     "@opencode/schema": ["@opencode/schema@2.0.29", "", { "dependencies": { "@standard-schema/spec": "1.1.0", "effect": "4.0.1" } }, "sha512-2qSyUGaeItugP3QujZrBhg2f4a4wdL9ab0m0fObHM+hlZ659YmWGzBRNI9qWR7At8AI9gnDCmgnnrQrx5/aprg=="],
 
-    "@openuidev/lang-core": ["@openuidev/lang-core@1.0.0", "", { "dependencies": { "ci-info": "^4.4.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.0.0", "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-f5uC/p9agSMEwAqhWGSgT++cJ35mK0jjfCatNAPE47IKpInClywcFSQ9goaXE+ctvFIcjZP+hNm+TLe5vq10Gw=="],
+    "@openuidev/lang-core": ["@openuidev/lang-core@1.0.1", "", { "dependencies": { "ci-info": "^4.4.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.0.0", "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-4vBa7FRM6C4v4aCvBAmAtTgFWiEQiNTazG9h4Xy9fC6P/p6+9kZu4RdTyLToBEvdxrYn/gDy/PakEH8PU3lUcw=="],
 
     "@oxc-parser/binding-android-arm-eabi": ["@oxc-parser/binding-android-arm-eabi@0.114.0", "", { "os": "android", "cpu": "arm" }, "sha512-O64coa+5VuqhwQV5t7PcgiY1ubGy35QZSMi+GrXewCRbi7MMzQcuyfv2xg1FV7Kj7SR47+gg/eC9xrOph2Pbcg=="],
 

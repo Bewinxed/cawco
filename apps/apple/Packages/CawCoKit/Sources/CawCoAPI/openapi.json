@@ -11274,6 +11274,394 @@
         }
       }
     },
+    "/api/projects/{id}/mockups/library": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdMockupsLibrary",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdMockupsLibrary 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMockups"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdMockupsLibrary 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdMockupsLibrary 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdMockupsLibrary 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdMockupsLibrary 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdMockupsLibrary 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdMockupsLibrary 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdMockupsLibrary 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdMockupsLibrary 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdMockupsLibrary 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/mockups/check": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdMockupsCheck",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdMockupsCheck 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdMockupsCheck200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdMockupsCheck 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdMockupsCheck 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdMockupsCheck 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdMockupsCheck 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdMockupsCheck 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdMockupsCheck 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdMockupsCheck 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdMockupsCheck 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdMockupsCheck 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/mockups/file": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdMockupsFile",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdMockupsFile 200",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdMockupsFile 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdMockupsFile 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdMockupsFile 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdMockupsFile 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdMockupsFile 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdMockupsFile 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdMockupsFile 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdMockupsFile 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdMockupsFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/notices/seen": {
       "post": {
         "requestBody": {
@@ -20911,6 +21299,24 @@
         },
         "required": [
           "rows"
+        ]
+      },
+      "postApiProjectsByIdMockupsCheck200": {
+        "type": "object",
+        "properties": {
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "components",
+          "source"
         ]
       },
       "postApiNoticesSeen200": {
@@ -32342,6 +32748,208 @@
           "receivedAt",
           "routedTo",
           "source"
+        ]
+      },
+      "ProjectMockups": {
+        "description": "A project's mockup library, as the hub answers it and the dashboard draws a mockup with it.",
+        "type": "object",
+        "properties": {
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "alt": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "alt",
+                "file",
+                "name"
+              ]
+            }
+          },
+          "css": {
+            "description": "The project's CSS, read for a shadow root; empty with no design, or CawCo's own.",
+            "type": "string"
+          },
+          "design": {
+            "$ref": "#/components/schemas/MockupDesign"
+          },
+          "fonts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MockupFont"
+            }
+          },
+          "hash": {
+            "description": "The design's content hash: the library changes only when it does.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "What an agent reads to write a mockup for this project.",
+            "type": "string"
+          },
+          "roles": {
+            "type": "object",
+            "properties": {
+              "canvas": {
+                "type": "string"
+              },
+              "line": {
+                "type": "string"
+              },
+              "surface": {
+                "type": "string"
+              },
+              "sunken": {
+                "type": "string"
+              },
+              "ink": {
+                "type": "string"
+              },
+              "muted": {
+                "type": "string"
+              },
+              "accent": {
+                "type": "string"
+              },
+              "onAccent": {
+                "type": "string"
+              },
+              "positive": {
+                "type": "string"
+              },
+              "caution": {
+                "type": "string"
+              },
+              "critical": {
+                "type": "string"
+              },
+              "fontBody": {
+                "type": "string"
+              },
+              "fontDisplay": {
+                "type": "string"
+              },
+              "textSize": {
+                "type": "string"
+              },
+              "space": {
+                "type": "string"
+              },
+              "radius": {
+                "type": "string"
+              },
+              "radiusSmall": {
+                "type": "string"
+              },
+              "shadow": {
+                "type": "string"
+              }
+            }
+          },
+          "templates": {
+            "type": "object",
+            "description": "Each specimen's template, checked, by component name."
+          }
+        },
+        "required": [
+          "assets",
+          "css",
+          "design",
+          "fonts",
+          "hash",
+          "prompt",
+          "roles",
+          "templates"
+        ]
+      },
+      "MockupDesign": {
+        "description": "What a project's mockup library is made from.",
+        "type": "object",
+        "properties": {
+          "assets": {
+            "description": "Asset names, for `Image`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "specimens": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MockupSpecimen"
+            }
+          },
+          "system": {
+            "const": "cawco",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assets",
+          "specimens"
+        ]
+      },
+      "MockupSpecimen": {
+        "description": "A specimen as its library component is made: its props, and whether its template takes children.",
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "props": {
+            "type": "object"
+          },
+          "slot": {
+            "description": "Its template has a `<slot>`: it takes `children`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "description",
+          "name",
+          "props",
+          "slot"
+        ]
+      },
+      "MockupFont": {
+        "description": "A font of the project's design: its own name, the file, and the descriptors its",
+        "type": "object",
+        "properties": {
+          "descriptors": {
+            "type": "object",
+            "description": "Its other descriptors, as"
+          },
+          "family": {
+            "description": "The family's name in a mockup: the project's, made its own (`mk-<hash>-<name>`).",
+            "type": "string"
+          },
+          "file": {
+            "description": "The file in the project's folder, `design/…`.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The project's own name for it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "descriptors",
+          "family",
+          "file",
+          "name"
         ]
       },
       "JoinInfo": {

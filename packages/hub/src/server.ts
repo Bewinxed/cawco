@@ -443,6 +443,7 @@ import {
   storeFile,
 } from "./media";
 import { createMemory, createTurnWatch, memoryRoutes } from "./memory";
+import { mockupRoutes } from "./mockups";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
 import {
@@ -18336,6 +18337,7 @@ export const createServer = (
       .use(caps.routes())
       .use(sessionLimitRoutes(db))
       .use(viewRoutes(views))
+      .use(mockupRoutes((id) => db.project(id) !== undefined))
       .use(noticesSeen.routes)
       .use(
         joinRoutes({

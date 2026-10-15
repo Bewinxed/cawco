@@ -672,6 +672,35 @@ export const readFolderFile = async (
   return { path: rel, content, size: bytes.byteLength };
 };
 
+/**
+ * One file's bytes, whole, text or not, up to `limit`: what a mockup draws
+ * from a project's design (a font, an image). Refused like a read: a path
+ * out of the folder, a link out of it, a folder, or too large.
+ */
+export const readFolderBytes = async (
+  projectId: string,
+  rawPath: string,
+  limit: number
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; path: string }> => {
+  const rel = folderPath(rawPath);
+  if (!rel) {
+    throw new FolderRefusal(400, "Name a file to read.");
+  }
+  const root = await forReading(projectId);
+  const real = await readable(root, rel);
+  const info = await stat(real).catch(notFound(rel));
+  if (info.isDirectory()) {
+    throw new FolderRefusal(409, `${rel} is a folder, not a file.`);
+  }
+  if (info.size > limit) {
+    throw new FolderRefusal(
+      413,
+      `${rel} is ${size(info.size)}; a design file is ${size(limit)} at most.`
+    );
+  }
+  return { path: rel, bytes: new Uint8Array(await readFile(real)) };
+};
+
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
 /** Files as a commit held them, by commit and path: a commit never changes, so neither does its reading. */
 const readAt = new Map<string, string | undefined>();
