@@ -52,8 +52,13 @@ import {
 } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
-import { RELAY_BODY_MAX } from "../packages/hub/src/relay";
-import { MACHINE, type Reply, scratchFleet, until } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+import type { Reply } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): what needs them loads after.
+await ensureDeps();
+const { RELAY_BODY_MAX } = await import("../packages/hub/src/relay");
+const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const TOKEN = `ghp_probe_${crypto.randomUUID().replaceAll("-", "")}`;

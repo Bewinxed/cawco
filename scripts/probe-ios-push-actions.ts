@@ -83,8 +83,12 @@ import { join, resolve } from "node:path";
 import type { DbShape, WorkItemRow } from "../packages/hub/src/db";
 import type { RegistryShape } from "../packages/hub/src/registry";
 import { macSideApp, macSideStale } from "./lib/apple-app";
+import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
-import { MACHINE, scratchFleet, until } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const root = resolve(import.meta.dir, "..");

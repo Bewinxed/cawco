@@ -22,15 +22,13 @@
  * Prints `restore probe: <harness> continued once; no repeat after hub
  * restart` per harness that passed, and exits 0 only if every one did.
  */
-import {
-  delay,
-  HARNESSES,
-  type Harness,
-  MODEL,
-  type Seen,
-  scratchFleet,
-  until,
-} from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+import type { Harness, Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { delay, HARNESSES, MODEL, scratchFleet, until } =
+  await import("./scratch-fleet");
 
 const HAND_BACK =
   /CawCo restarted this session's process|A restart cut your turn/;

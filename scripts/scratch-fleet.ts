@@ -34,8 +34,8 @@ import { join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
-import { DEPS_INSTALLING, depsScript } from "../packages/core/src/move";
 import { socketPathProblem } from "../packages/core/src/paths";
+import { ensureDeps } from "./lib/deps";
 import { openLockFile, tryLock, unlock } from "./lib/flock";
 import { type HeavyPhases, heavyPhases } from "./lib/heavy-run";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
@@ -849,21 +849,11 @@ async function standUp(
   const sandbox = await dirs.own(
     join(scratch, `${options.name}-${crypto.randomUUID().slice(0, 8)}`)
   );
-  // The checkout's dependencies as its lockfile names them, by the rule a
-  // work item's checks use (move.ts `depsScript`): a hub that imports a
-  // package a rebase added, run on the dependencies from before it, dies at
-  // start ("Cannot find package 'yjs'").
-  const deps = await Bun.$`sh -c ${depsScript()}`.cwd(root).nothrow().quiet();
-  if (deps.exitCode !== 0) {
-    throw new Error(
-      `the checkout's dependencies did not install (exit ${deps.exitCode}): ${deps.stdout.toString().trim().split("\n").slice(-20).join("\n")}`
-    );
-  }
-  if (deps.stdout.toString().startsWith(DEPS_INSTALLING)) {
-    console.log(
-      `… ${deps.stdout.toString().split("\n")[0]?.slice(DEPS_INSTALLING.length)}`
-    );
-  }
+  // The checkout's dependencies as its lockfile names them (lib/deps.ts): a
+  // hub that imports a package a rebase added, run on the dependencies from
+  // before it, dies at start ("Cannot find package 'yjs'"). The entry that
+  // loaded this module awaited it before importing it; this is that same run.
+  await ensureDeps();
   // The services' HOME and the agent's XDG_RUNTIME_DIR, apart from the
   // sandbox, two hex under the shortest root (`fleetRoots`). Mode 700, as a
   // runtime dir is. The agent keeps a workspace's sockets out of its HOME

@@ -34,8 +34,13 @@ import { Database } from "bun:sqlite";
 import { randomBytes } from "node:crypto";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { makeSecretBox } from "../packages/hub/src/secret-box";
-import { type Reply, scratchFleet } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+import type { Reply } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): what needs them loads after.
+await ensureDeps();
+const { makeSecretBox } = await import("../packages/hub/src/secret-box");
+const { scratchFleet } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const results: Record<string, string> = {};

@@ -25,14 +25,13 @@
  */
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { chromium } from "playwright-core";
-import {
-  MACHINE,
-  type Reply,
-  type Seen,
-  scratchFleet,
-  until,
-} from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+import type { Reply, Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): what needs them loads after.
+await ensureDeps();
+const { chromium } = await import("playwright-core");
+const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const root = resolve(import.meta.dir, "..");

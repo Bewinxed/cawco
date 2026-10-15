@@ -33,14 +33,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { simulatorApp, staleApp } from "./lib/apple-app";
+import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
-import {
-  MACHINE,
-  type Reply,
-  type Seen,
-  scratchFleet,
-  until,
-} from "./scratch-fleet";
+import type { Reply, Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const args = process.argv.slice(2);
 const keep = args.includes("--keep");

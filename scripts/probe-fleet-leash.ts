@@ -23,8 +23,12 @@ import {
   commandLine,
   processLineage,
 } from "../packages/core/src/process-identity";
-import { scratchFleet } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
 import { treeOf } from "./scratch-fleet-leash";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { scratchFleet } = await import("./scratch-fleet");
 
 const WITHIN_MS = 10_000;
 const ENTRIES = [

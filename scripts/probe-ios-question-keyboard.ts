@@ -49,8 +49,8 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
-import { scratchFleet, until } from "./scratch-fleet";
 
 const argv = process.argv.slice(2);
 const keep = argv.includes("--keep");
@@ -76,6 +76,9 @@ if (process.env.CAWCO_WORKSPACE) {
   );
   process.exit(2);
 }
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { scratchFleet, until } = await import("./scratch-fleet");
 const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 const onMac = process.platform === "darwin";

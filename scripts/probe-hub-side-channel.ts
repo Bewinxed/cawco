@@ -20,7 +20,11 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { freePortRange, PREVIEW_PORTS } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { freePortRange, PREVIEW_PORTS } = await import("./scratch-fleet");
 
 /** A dummy in Telegram's token shape. Never a real credential. */
 const TOKEN = "123456:PROBE-NOT-A-TOKEN";

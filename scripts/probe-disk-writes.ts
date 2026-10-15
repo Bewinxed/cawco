@@ -36,7 +36,11 @@ import { appendFile, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
 import { TranscriptIndex } from "../packages/jsonl-parser/src/fts5";
-import { delay, scratchFleet, until } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { delay, scratchFleet, until } = await import("./scratch-fleet");
 
 const arg = (name: string): string | undefined => {
   const at = process.argv.indexOf(name);

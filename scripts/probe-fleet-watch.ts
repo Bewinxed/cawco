@@ -24,14 +24,12 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  delay,
-  MACHINE,
-  type Reply,
-  type Seen,
-  scratchFleet,
-  until,
-} from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+import type { Reply, Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { delay, MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const TRIAGE = "You are fleet watch's triage";

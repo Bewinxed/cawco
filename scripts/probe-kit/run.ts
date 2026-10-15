@@ -26,8 +26,13 @@
  */
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { sweepDeadFleets } from "../scratch-fleet";
-import { Run, type Spec } from "./kit";
+import { ensureDeps } from "../lib/deps";
+import type { Spec } from "./kit";
+
+// The dependencies first (lib/deps.ts): the kit and the fleet load after them.
+await ensureDeps();
+const { sweepDeadFleets } = await import("../scratch-fleet");
+const { Run } = await import("./kit");
 
 const args = process.argv.slice(2);
 const [kind, ...rest] = args;

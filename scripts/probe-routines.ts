@@ -31,16 +31,16 @@
 import { Database } from "bun:sqlite";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ensureDeps } from "./lib/deps";
+import type { Reply, Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): what needs them loads after.
+await ensureDeps();
 // The hub's own drizzle, which db/routines.ts runs on: not hoisted to the root.
-import { drizzle } from "../packages/hub/node_modules/drizzle-orm/bun-sqlite";
-import { routinesDb } from "../packages/hub/src/db/routines";
-import {
-  MACHINE,
-  type Reply,
-  type Seen,
-  scratchFleet,
-  until,
-} from "./scratch-fleet";
+const { drizzle } =
+  await import("../packages/hub/node_modules/drizzle-orm/bun-sqlite");
+const { routinesDb } = await import("../packages/hub/src/db/routines");
+const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const TAG = /PROBE-ROUTINE-(\w+)/;

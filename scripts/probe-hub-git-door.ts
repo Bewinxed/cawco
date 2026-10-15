@@ -40,7 +40,11 @@ import {
   SAFE_GIT_SHELL,
   safeGitArgv,
 } from "../packages/core/src/safe-git";
-import { MACHINE, scratchFleet } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { MACHINE, scratchFleet } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const root = resolve(import.meta.dir, "..");

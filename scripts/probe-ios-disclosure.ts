@@ -46,8 +46,12 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { macSideApp, macSideStale, sshOnly } from "./lib/apple-app";
+import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
-import { scratchFleet, until } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { scratchFleet, until } = await import("./scratch-fleet");
 
 sshOnly("probe-ios-disclosure.ts");
 const argv = process.argv.slice(2);

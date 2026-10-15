@@ -48,15 +48,14 @@
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { macSideApp, macSideStale, sshOnly } from "./lib/apple-app";
+import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
-import {
-  ACCOUNT,
-  MACHINE,
-  type Seen,
-  scratchFleet,
-  until,
-  untilGone,
-} from "./scratch-fleet";
+import type { Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { ACCOUNT, MACHINE, scratchFleet, until, untilGone } =
+  await import("./scratch-fleet");
 
 sshOnly("probe-ios-caw-panel.ts");
 const keep = process.argv.includes("--keep");

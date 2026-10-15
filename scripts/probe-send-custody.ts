@@ -72,17 +72,16 @@ import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Socket, SocketHandler } from "bun";
-import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { processStart } from "../packages/core/src/process-identity";
-import {
-  ACCOUNT,
-  HARNESSES,
-  type Harness,
-  MACHINE,
-  MODEL,
-  scratchFleet,
-  until,
-} from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+import type { Harness } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): what needs them loads after.
+await ensureDeps();
+const { SessiondClient } =
+  await import("../packages/agent/src/sessiond-client");
+const { ACCOUNT, HARNESSES, MACHINE, MODEL, scratchFleet, until } =
+  await import("./scratch-fleet");
 
 type Case =
   | "sleep"

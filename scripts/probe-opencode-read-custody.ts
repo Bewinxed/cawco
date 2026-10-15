@@ -18,7 +18,11 @@
  *
  *   bun scripts/probe-opencode-read-custody.ts
  */
-import { MACHINE, scratchFleet, until } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const SLOW = "READ-CUSTODY-SLOW";
 

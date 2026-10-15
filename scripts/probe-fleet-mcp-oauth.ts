@@ -32,9 +32,14 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { idle, resolveClaudeExecutable } from "../packages/agent/src/auth";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
-import { scratchFleet, until } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+
+// The dependencies first (lib/deps.ts): what needs them loads after.
+await ensureDeps();
+const { idle, resolveClaudeExecutable } =
+  await import("../packages/agent/src/auth");
+const { scratchFleet, until } = await import("./scratch-fleet");
 
 /** The Agent SDK the agent itself runs Claude Code through: its dependency, not the root's. */
 const { query } = (await import(

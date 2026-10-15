@@ -32,8 +32,13 @@
  */
 import { resolve } from "node:path";
 import { simulatorApp, staleApp } from "./lib/apple-app";
+import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
-import { type Reply, type Seen, scratchFleet, until } from "./scratch-fleet";
+import type { Reply, Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const build = !process.argv.includes("--no-build");

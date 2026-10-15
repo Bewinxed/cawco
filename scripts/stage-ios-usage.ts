@@ -25,7 +25,16 @@
  * Ctrl-C stops the hub by its PID and deletes the sandbox.
  */
 import { Database } from "bun:sqlite";
+import type { RingAccount } from "../apps/dashboard/src/lib/cawco/usage/rings";
 import {
+  type StagedData,
+  stagedData,
+} from "../apps/dashboard/src/routes/(app)/motion/usage-relay/stage-data";
+import { ensureDeps } from "./lib/deps";
+
+// The dependencies first (lib/deps.ts): what needs them loads after.
+await ensureDeps();
+const {
   caption,
   cellTime,
   claudeRings,
@@ -35,17 +44,12 @@ import {
   openCodeRing,
   orgGroups,
   plain,
-  type RingAccount,
   shownNames,
   stopFigure,
   stopOf,
   weekLeft,
-} from "../apps/dashboard/src/lib/cawco/usage/rings";
-import {
-  type StagedData,
-  stagedData,
-} from "../apps/dashboard/src/routes/(app)/motion/usage-relay/stage-data";
-import { scratchFleet } from "./scratch-fleet";
+} = await import("../apps/dashboard/src/lib/cawco/usage/rings");
+const { scratchFleet } = await import("./scratch-fleet");
 
 const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(`--${name}`);

@@ -46,14 +46,13 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { sessionToolName } from "../packages/hub/src/connections";
-import {
-  MODEL,
-  type Reply,
-  type Seen,
-  scratchFleet,
-  until,
-} from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+import type { Reply, Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): what needs them loads after.
+await ensureDeps();
+const { sessionToolName } = await import("../packages/hub/src/connections");
+const { MODEL, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 /** `start_session` instead of `delegate`: for a run inside a workspace, where no boundary can start. */

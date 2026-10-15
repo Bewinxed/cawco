@@ -29,7 +29,11 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { scratchFleet, until } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { scratchFleet, until } = await import("./scratch-fleet");
 
 const OAUTH = "probe-oauth";
 const SLOW = "probe-slow";

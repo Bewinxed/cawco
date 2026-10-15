@@ -32,7 +32,11 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
-import { MACHINE, scratchFleet, until } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 /** The scratch agent's own user layer, `$HOME/.claude`. */
 const userLayer = (home: string, ...parts: string[]) =>

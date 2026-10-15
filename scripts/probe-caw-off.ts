@@ -39,15 +39,13 @@
  */
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  delay,
-  MACHINE,
-  type Reply,
-  type Seen,
-  scratchFleet,
-  until,
-  untilGone,
-} from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+import type { Reply, Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { delay, MACHINE, scratchFleet, until, untilGone } =
+  await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const LOGGED = /\[caw\]|\[dispatch\]|work-items|routines|error/i;

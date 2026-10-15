@@ -19,7 +19,11 @@
 import { appendFile, chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
-import { delay, MACHINE, scratchFleet, until } from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+
+// The dependencies first (lib/deps.ts): the fleet loads after them.
+await ensureDeps();
+const { delay, MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const WORD = "zephyrine";

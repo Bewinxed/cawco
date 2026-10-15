@@ -49,17 +49,17 @@ import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { drizzle } from "../packages/hub/node_modules/drizzle-orm/bun-sqlite";
-import { ingressDb } from "../packages/hub/src/db/ingress";
-import { normalizeGitHub } from "../packages/hub/src/github";
-import { storedPayload } from "../packages/hub/src/ingress";
-import {
-  MACHINE,
-  type Reply,
-  type Seen,
-  scratchFleet,
-  until,
-} from "./scratch-fleet";
+import { ensureDeps } from "./lib/deps";
+import type { Reply, Seen } from "./scratch-fleet";
+
+// The dependencies first (lib/deps.ts): what needs them loads after.
+await ensureDeps();
+const { drizzle } =
+  await import("../packages/hub/node_modules/drizzle-orm/bun-sqlite");
+const { ingressDb } = await import("../packages/hub/src/db/ingress");
+const { normalizeGitHub } = await import("../packages/hub/src/github");
+const { storedPayload } = await import("../packages/hub/src/ingress");
+const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 /** A lead routine instead of a delegate one: for a run inside a workspace, where no boundary can start. */
