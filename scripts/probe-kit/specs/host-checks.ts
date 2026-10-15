@@ -242,7 +242,9 @@ const handsOn = async (
     "the handoff reached the leaf",
     () =>
       fleet.seen.find((one) =>
-        one.all.includes(`Your parent's inputs are in $TMPDIR/inputs/: ${HANDED}`)
+        one.all.includes(
+          `Your parent's inputs are in $TMPDIR/inputs/: ${HANDED}`
+        )
       ),
     Boolean,
     120_000
@@ -298,10 +300,7 @@ const spec: Spec = {
       Boolean,
       180_000
     ).catch(() => undefined);
-    check(
-      "the leaf reads the input from $TMPDIR/inputs/",
-      read !== undefined
-    );
+    check("the leaf reads the input from $TMPDIR/inputs/", read !== undefined);
 
     const answer = await finishAnswer(fleet);
     const host = lineOf(answer, ON_HOST);

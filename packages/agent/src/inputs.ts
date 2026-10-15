@@ -80,9 +80,9 @@ export const readInputs = async (
   paths: unknown,
   bound: unknown
 ): Promise<InputsRead> => {
-  if (
-    !(Array.isArray(paths) && paths.every((one) => typeof one === "string"))
-  ) {
+  if (!(
+    Array.isArray(paths) && paths.every((one) => typeof one === "string")
+  )) {
     throw new Error("inputs must be a list of absolute paths");
   }
   if (paths.length > INPUTS_COUNT_LIMIT) {
@@ -142,7 +142,10 @@ export const readInputs = async (
  * real path is checked before each file, and each file is written to a new
  * name and renamed over the old one (state-file.ts).
  */
-export const writeInputs = async (ref: unknown, files: unknown): Promise<void> => {
+export const writeInputs = async (
+  ref: unknown,
+  files: unknown
+): Promise<void> => {
   if (!isWorkspaceRef(ref)) {
     throw new Error("inputs are written into a workspace: { id, path }");
   }
