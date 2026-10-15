@@ -22,6 +22,9 @@
  * 5. A pen stroke no pin stands on: one more delivery, the ink over its
  *    element with its box, and the page with the ink as its picture.
  * 6. Still no Send control in the pane.
+ * 8. A pin the session reads with comment_read before the quiet period ends
+ *    is not delivered to it (it is stamped heard as read); the person's
+ *    later reply on it still delivers, with only the new words.
  * 7. A writer that has ended: a session of a project with Caw makes a page,
  *    and its conversation is gone (the hub's own record, `last_error`, as
  *    the harness sets it when a resume finds nothing). A pin on its page
@@ -67,6 +70,7 @@ const PARAS = [
   { id: "b", line: 12, text: "Bravo paragraph, the second to pin." },
   { id: "c", line: 13, text: "Charlie paragraph, the third to pin." },
   { id: "d", line: 14, text: "Delta paragraph, where a stroke goes." },
+  { id: "e", line: 15, text: "Echo paragraph, read before it goes." },
 ] as const;
 const WORDS = ["Make this bold.", "Tighten this line.", "Drop this one."];
 
@@ -87,6 +91,10 @@ const WRITER_HTML = `<!doctype html><html><body style="margin:0;font:18px/1.6 sy
   <p id="w" data-insp-path="src/Writer.svelte:7:3" style="width:70%">The writer's paragraph, pinned after it ended.</p>
 </main></body></html>`;
 const REPLY_TOOL = "mcp__cawco__comment_reply";
+const READ_TOOL = "mcp__cawco__comment_read";
+/** Step 8's pin, read before the quiet period ends, and the person's later word on it. */
+const FIRST_WORDS = "Read this before it goes.";
+const LATER_WORDS = "And one more word after you read it.";
 /** The delivery routed to Caw: the writer's page, a pin's id, and that it comes to him. */
 const ROUTED =
   /The person commented on the page "ended-writer"[\s\S]*?- Pin: ([0-9a-f-]{36})[\s\S]*?so these come to you/;
@@ -316,11 +324,20 @@ const pinWith = async (
   await comment.focus();
   await on.page.keyboard.press("c");
   await pageInComment(frame);
+  // The element in the pane's view, where the person taps it.
+  await frame.locator(selector).scrollIntoViewIfNeeded();
   await settle(on.page, 300);
   const b = await screenBox(on, frame, selector);
   await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
   const card = on.page.locator(`.pin-card[data-pin-card="${number}"]`);
-  await card.waitFor({ timeout: 5000 });
+  await card.waitFor({ timeout: 5000 }).catch(async (error: unknown) => {
+    const pins = Object.values((await docOf(frame)).pins).map(
+      (pin) => pin.number
+    );
+    throw new Error(
+      `pin ${number}'s card never opened (the doc holds pins ${pins.join(", ")}; tapped ${selector} at ${JSON.stringify(b)}): ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
   await card.getByRole("textbox").fill(words);
   await card.getByRole("button", { name: "Reply" }).click();
   await until(
@@ -331,6 +348,64 @@ const pinWith = async (
   );
   await on.page.keyboard.press("Escape");
   await on.page.keyboard.press("Escape");
+};
+
+/**
+ * 8. Read before it goes: a pin the session reads with comment_read inside
+ * the quiet period is not delivered to it; the person's later reply is.
+ */
+const readFirstChecks = async (
+  on: On,
+  frame: Frame,
+  artifact: string,
+  callIn: (to: string, tool: string, input: object) => Promise<string>
+) => {
+  const { kit, page, session } = on;
+  const before = heard.length;
+  await pinWith(on, frame, "#e", 4, FIRST_WORDS);
+  const keptAt = Date.now();
+  const read = await callIn(session, READ_TOOL, { artifact });
+  const readIn = Date.now() - keptAt;
+  await Bun.sleep(
+    Math.max(0, keptAt + QUIET_MS + REACH_MS + 4000 - Date.now())
+  );
+  const pin4 = numbered((await docOf(frame)).pins, 4);
+  const early = deliveries(before).filter((one) => one.last.includes("## 4."));
+  kit.check(
+    "8: a pin the session reads with comment_read before the quiet period ends is not delivered to it, and is stamped heard",
+    readIn < QUIET_MS &&
+      read.includes(FIRST_WORDS) &&
+      early.length === 0 &&
+      !!pin4?.heard &&
+      !!pin4.sentAt,
+    `read ${readIn} ms after the pin's words; deliveries of pin 4 ${early.length}; pin ${JSON.stringify(pin4 && { sentAt: pin4.sentAt, heard: pin4.heard })}; read ${read.slice(0, 200)}`
+  );
+  const later = heard.length;
+  await openRow(page, 4);
+  const card = page.locator('.pin-card[data-pin-card="4"]');
+  await card.getByRole("textbox").fill(LATER_WORDS);
+  await card.getByRole("button", { name: "Reply" }).click();
+  await until(
+    "the later reply in pin 4's thread",
+    () => docOf(frame),
+    (now) => (numbered(now.pins, 4)?.thread.length ?? 0) === 2,
+    5000
+  );
+  await page.keyboard.press("Escape");
+  await shutList(page);
+  const next = await nextDelivery(
+    "the later reply's delivery",
+    later,
+    QUIET_MS + REACH_MS + 5000
+  );
+  const words = next?.last ?? "";
+  kit.check(
+    "8: the person's later reply on that pin still delivers, with only the new words",
+    words.includes("## 4. comment on #e") &&
+      words.includes(`- I wrote: ${JSON.stringify(LATER_WORDS)}`) &&
+      !words.includes(`- I wrote: ${JSON.stringify(FIRST_WORDS)}`),
+    words.slice(0, 500) || "no delivery"
+  );
 };
 
 /** 7. A writer that has ended: its page's pin goes to the project's Caw, whose reply lands in the pin's thread. */
@@ -742,6 +817,9 @@ const run = async (kit: Kit) => {
       !words4.includes("## 2."),
     words4.slice(0, 400)
   );
+
+  // 8, before the stroke: a pin read before the quiet period ends.
+  await readFirstChecks(on, frame, id, callIn);
 
   // 5. A pen stroke no pin stands on.
   const before5 = heard.length;

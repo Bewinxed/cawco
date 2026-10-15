@@ -482,6 +482,8 @@ export interface ArtifactServiceDeps {
     delivery: MarksDelivery
   ) => Promise<MarksOutcome>;
   docs: ArtifactDocs;
+  /** Whether a session has ended: it takes no input now, so its marks go to its project's Caw. */
+  ended: (instance: InstanceRow) => boolean;
   instance: (id: string) => InstanceRow | undefined;
   /**
    * The projects session `instance` leads (their Caw): an ended writer's
@@ -605,6 +607,48 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           )
       ),
   ];
+
+  /** Artifact `id`, when the session answers its pins ({@link answerable}); refused when not. */
+  const readable = (instance: InstanceRow, id: string): ArtifactRow => {
+    const row = answerable(instance).find((one) => one.id === id);
+    if (!row) {
+      throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+    }
+    return row;
+  };
+
+  /**
+   * Whether the session is the one the artifact's marks go to: its writer,
+   * or its project's lead once the writer has ended. What it reads of them
+   * counts as heard.
+   */
+  const takes = (instance: InstanceRow, row: ArtifactRow): boolean => {
+    if (row.instanceId === instance.id) {
+      return true;
+    }
+    const writer = deps.instance(row.instanceId);
+    return !!writer && deps.ended(writer);
+  };
+
+  /**
+   * The pins a `comment_read` answered, stamped heard as they were read
+   * (core `pinHeard`): what the person writes after it still goes out.
+   */
+  const readHeard = (id: string, answered: Pin[], at: string) => {
+    const owed = answered.filter(pinUnsent);
+    if (owed.length === 0) {
+      return;
+    }
+    docs.transact(id, "hub", (live) => {
+      const pins = live.getMap("pins");
+      for (const pin of owed) {
+        const now = pins.get(pin.id) as Pin | undefined;
+        if (now) {
+          pins.set(pin.id, pinHeard(now, pin, at));
+        }
+      }
+    });
+  };
 
   /** Pin `pinId` on an artifact the session answers ({@link answerable}), and that artifact; refused when none holds it. */
   const pinOf = (
@@ -1790,7 +1834,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const rows =
         query.artifact === undefined
           ? db.ofInstance(instance.id)
-          : [own(instance, query.artifact)];
+          : [readable(instance, query.artifact)];
+      const readAt = new Date().toISOString();
       const newest = (pin: Pin) =>
         [pin.resolvedAt, pin.movedAt, ...pin.thread.map((entry) => entry.at)]
           .filter((at): at is string => !!at)
@@ -1810,19 +1855,30 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
               : (query.filter === "resolved") === !!pin.resolvedAt
           )
           .filter((pin) => !query.since || newest(pin) > query.since)
-          .sort((a, b) => a.number - b.number)
-          .map((pin) => {
-            const inkBox = pin.ink ? groups[pin.ink]?.page : undefined;
-            return inkBox ? { ...pin, inkBox } : pin;
-          });
+          .sort((a, b) => a.number - b.number);
+        if (takes(instance, row)) {
+          readHeard(row.id, pins, readAt);
+        }
+        const answered = pins.map((pin) => {
+          const inkBox = pin.ink ? groups[pin.ink]?.page : undefined;
+          return inkBox ? { ...pin, inkBox } : pin;
+        });
         const address =
           (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
           routeOf(row.id);
-        return pins.length > 0
-          ? [{ id: row.id, kind: row.kind, name: row.name, address, pins }]
+        return answered.length > 0
+          ? [
+              {
+                id: row.id,
+                kind: row.kind,
+                name: row.name,
+                address,
+                pins: answered,
+              },
+            ]
           : [];
       });
-      return { artifacts, at: new Date().toISOString() };
+      return { artifacts, at: readAt };
     },
 
     /** The agent answers a pin: an entry in its thread, by the agent, shown at once wherever the artifact is open. */
@@ -1846,10 +1902,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         at: new Date().toISOString(),
         ...(files && files.length > 0 ? { files } : {}),
       };
+      // An answer means everything before it was heard (core `pinHeard`).
+      const before = pinHeard(pin, pin, entry.at);
       docs.transact(row.id, "hub", (doc) =>
         doc
           .getMap("pins")
-          .set(pin.id, { ...pin, thread: [...pin.thread, entry] })
+          .set(pin.id, { ...before, thread: [...before.thread, entry] })
       );
       return { pin: pin.id, number: pin.number, entry };
     },

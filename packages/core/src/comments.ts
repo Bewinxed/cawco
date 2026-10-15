@@ -278,10 +278,26 @@ export const pinSaid = (pin: Pin): string =>
     ])
   );
 
+/**
+ * The person's entries in a pin's thread the session has not heard: unsent,
+ * and after the agent's last reply there, since an answer means what came
+ * before it was heard (a pin read and answered before deliveries stamped it).
+ */
+export const unheardEntries = (pin: Pin): ThreadEntry[] => {
+  const answered = pin.thread.findLastIndex((entry) => entry.by === "agent");
+  return pin.thread.filter(
+    (entry, i) => i > answered && entry.by === "person" && !entry.sentAt
+  );
+};
+
+/** Whether the session has heard of a pin at all: delivered or read, or answered in its thread. */
+export const pinKnown = (pin: Pin): boolean =>
+  !!pin.sentAt || pin.thread.some((entry) => entry.by === "agent");
+
 /** Whether a pin has something the session has not heard: itself, a person's entry since, or a change to what they said. */
 export const pinUnsent = (pin: Pin): boolean =>
-  !pin.sentAt ||
-  pin.thread.some((entry) => entry.by === "person" && !entry.sentAt) ||
+  !pinKnown(pin) ||
+  unheardEntries(pin).length > 0 ||
   (pin.heard !== undefined && pin.heard !== pinSaid(pin));
 
 /**
@@ -565,10 +581,7 @@ export function pinDelivery(
   pin: Pin,
   context: Parameters<typeof pinSection>[1]
 ): string {
-  const said = pin.thread.some(
-    (entry) => entry.by === "person" && !entry.sentAt
-  );
-  if (pin.sentAt && !said) {
+  if (pinKnown(pin) && unheardEntries(pin).length === 0) {
     return `## ${pin.number}. ${pin.resolvedAt ? "Resolved" : "Reopened"} by the person (pin ${pin.id})`;
   }
   return [
@@ -634,10 +647,7 @@ export function pinSection(
   if (pin.movedAt) {
     lines.push("- Its element is gone from the page since a revision.");
   }
-  const said = pin.thread.filter(
-    (entry) => entry.by === "person" && !entry.sentAt
-  );
-  for (const entry of said) {
+  for (const entry of unheardEntries(pin)) {
     lines.push(`- I wrote: ${JSON.stringify(entry.text)}`);
   }
   if (pin.kind === "comment" && pin.thread.length === 0) {

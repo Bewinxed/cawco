@@ -9296,6 +9296,8 @@ export const createServer = (
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
     instance: (id) => db.getInstancesByIds([id])[0],
+    ended: (instance) =>
+      !!inputRefusal(instance.id, { kind: "system", name: ARTIFACT_ORIGIN }),
     // Caw answers the pins of his project's sessions whose writer ended.
     ledProjects: (instance) =>
       db
