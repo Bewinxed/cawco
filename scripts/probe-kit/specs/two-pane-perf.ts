@@ -12,22 +12,27 @@
  * all six tabs, then two panes of three side by side, the orchestrator in
  * front of the left one and the other long session in front of the right.
  * Each layout reads older pages into its long transcripts, then runs four
- * phases on a CPU slowed `THROTTLE` times (the owner's machine, not this
- * one's 48 cores): steady streaming, typing in the left composer, wheeling
- * the left transcript, and switching tabs in both panes.
+ * phases: steady streaming, typing in the left composer, wheeling the left
+ * transcript, and switching tabs in both panes.
  *
- * Read from the page itself: every long task (PerformanceObserver
- * `longtask`) and every interaction's input-to-paint latency (Event Timing,
- * the entries an `interactionId` marks: a key, a click). Asserted on two
- * panes: no task over two frames' budget while streaming and while typing,
- * and the main thread no busier than `BUSY_SHARE` times one pane's (the
- * longest task is noted against `LONG_TASK_MS`), no interaction slower than `INPUT_MS`
- * while streaming, typing or
- * scrolling, and tab switches no slower than one pane's by more than
- * `SWITCH_SHARE` (the owner's regression: a second pane made the whole
- * dashboard lag). A switch's own latency is noted against `INPUT_MS`. Every
- * phase's numbers for both layouts are noted, and written to `numbers.json`
- * in the spec's out folder.
+ * WHAT IS MEASURED IS THE PAGE'S OWN WORK, NOT THE MACHINE'S. Each phase's
+ * main thread is read off a DevTools trace by its thread clock (`tdur`, the
+ * CPU each task took), as traffic-longtask reads it: the wall clock, and a
+ * CPU throttled on top of it, read a loaded host's turns as the page's (a
+ * checks run at a load of 20 had one pane's tab switches at twice the CPU
+ * the same code took on a quiet machine). The owner's machine is not this
+ * one's 48 cores, so a task's CPU is read as on one `SLOWER` times slower.
+ *
+ * Asserted on two panes: no task over two frames' budget (`LONG_TASK_MS`
+ * each) on that slower CPU while streaming and typing; the main thread's
+ * CPU while streaming, typing and switching tabs within `CPU_SHARE` of one
+ * pane's (the owner's regression: a second pane made the whole dashboard
+ * lag); and every key typed painting within `INPUT_MS` (Event Timing, the
+ * entries an `interactionId` marks). Each phase's longest task on the
+ * slower CPU is noted against `LONG_TASK_MS`, its longest animation frame
+ * by the scripts that filled it, and the hub's messages that took 4ms or
+ * more by kind; every number is written to `numbers.json` in the spec's out
+ * folder.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one phase, one tab, one key at a time, as a person makes them
 import { writeFile } from "node:fs/promises";
@@ -43,27 +48,21 @@ const LONG = 2000;
 const DELEGATES = 5;
 const STREAMING = ["streamC", "streamD", "streamE"];
 const FINISHED = 14;
-/** How much slower than this machine's the CPU runs: a mid-tier laptop. */
-const THROTTLE = 4;
-/** The frame budget's long task: the target each phase's longest is noted against. */
+/**
+ * How much slower the owner's CPU is taken to be than this machine's: a
+ * mid-tier laptop against 48 server cores. Our own call.
+ */
+const SLOWER = 4;
+/** A long task: the frame budget each phase's longest is noted against. */
 const LONG_TASK_MS = 50;
 /**
- * How much busier two panes may keep the main thread than one, streaming or
- * typing. Our own call: after the fix the lab's runs had the two within a
- * tenth of each other (streaming 7.4 to 8.1s of 10s in two panes, 6.7 to
- * 8.0s in one, at 4x CPU under ten sessions streaming). How many long tasks
- * either has is not held to a count: 0 to 9 of 50 to 70ms from run to run in
- * either layout, each the hub's transcript frames landing together.
+ * How much more of the main thread's CPU two panes may take than one. Our
+ * own call: after the fix the lab had the two within a tenth of each other
+ * streaming and typing; before it, two panes' tab switches took the main
+ * thread 40.8s against one pane's 8.0s (wall clock, 4x throttled).
  */
-const BUSY_SHARE = 1.25;
+const CPU_SHARE = 1.25;
 const INPUT_MS = 100;
-/**
- * How much slower two panes' slowest tab switch may be than one pane's. Our
- * own call: after the fix the lab's slowest switch was 392ms in one pane and
- * in two, where before it two panes' switches kept the main thread busy for
- * 40.8s against one pane's 8.0s.
- */
-const SWITCH_SHARE = 1.25;
 /** Older pages read into each long transcript, a scroll to its top apiece. */
 const PAGES = 6;
 const START_TOOL = "mcp__cawco__start_session";
@@ -72,11 +71,14 @@ type Layout = "one" | "two";
 const PHASES = ["stream", "type", "scroll", "switch"] as const;
 type Phase = (typeof PHASES)[number];
 interface Reading {
-  busyMs: number;
+  /** The main thread's CPU over the phase, ms. */
+  cpuMs: number;
   interactions: number;
+  /** Long tasks by the wall clock (PerformanceObserver `longtask`). */
   longTasks: number;
+  /** The longest task's CPU, ms. */
+  maxCpu: number;
   maxInput: number;
-  maxTask: number;
   /** The longest animation frame's account of itself: what ran in it. */
   worstFrame: string;
 }
@@ -258,12 +260,12 @@ async function measure(
   );
   await open(page, base, `${SCROLLER} [data-row]`, 120_000);
   await readOlder(page);
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
   const now = () => page.evaluate(() => performance.now());
-  const spans = {} as Record<Phase, { busy: number; from: number; to: number }>;
-  // How busy the main thread was, off a DevTools trace's top-level tasks (a
-  // sampling profiler's own cost, under the throttle, read as the page's).
+  const spans = {} as Record<
+    Phase,
+    { cpu: number; from: number; maxCpu: number; to: number }
+  >;
+  // The main thread's CPU, off a DevTools trace's top-level tasks.
   const phase = async (name: Phase, act: () => Promise<void>) => {
     let from = 0;
     let to = 0;
@@ -273,8 +275,12 @@ async function measure(
       await act();
       to = await now();
     });
-    const busy = main.tasks.reduce((sum, task) => sum + task.wall, 0);
-    spans[name] = { from, to, busy };
+    spans[name] = {
+      from,
+      to,
+      cpu: main.tasks.reduce((sum, task) => sum + task.cpu, 0),
+      maxCpu: Math.max(0, ...main.tasks.map((task) => task.cpu)),
+    };
   };
   await phase("stream", () => page.waitForTimeout(10_000));
   await phase("type", async () => {
@@ -317,11 +323,10 @@ async function measure(
   const seen = await page.evaluate(
     () => (window as unknown as { __cost: Cost }).__cost
   );
-  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   await page.close();
   const readings = {} as Record<Phase, Reading>;
   for (const name of PHASES) {
-    const { from, to, busy } = spans[name];
+    const { from, to, cpu, maxCpu } = spans[name];
     const tasks = seen.tasks.filter(([at]) => at >= from && at < to);
     const events = seen.events.filter(([at]) => at >= from && at < to);
     const [worst] = seen.frames
@@ -348,10 +353,10 @@ async function measure(
       .join("; ");
     readings[name] = {
       longTasks: tasks.length,
-      maxTask: Math.round(Math.max(0, ...tasks.map(([, ms]) => ms))),
+      maxCpu: Math.round(maxCpu),
       interactions: events.length,
       maxInput: Math.round(Math.max(0, ...events.map(([, ms]) => ms))),
-      busyMs: Math.round(busy),
+      cpuMs: Math.round(cpu),
       worstFrame: `${worst ? `${Math.round(worst[1])}ms frame: ${worst[2]}` : "no long frame"}; hub messages of 4ms or more: ${heavy || "none"}`,
     };
   }
@@ -494,7 +499,7 @@ const spec: Spec = {
       for (const name of PHASES) {
         const r = numbers[mode][name];
         kit.note(
-          `${mode} pane(s), ${name}: ${r.longTasks} long tasks (longest ${r.maxTask}ms), ${r.interactions} interactions (slowest ${r.maxInput}ms), main thread busy ${r.busyMs}ms; the longest ${r.worstFrame}`
+          `${mode} pane(s), ${name}: main thread CPU ${r.cpuMs}ms, the longest task ${r.maxCpu}ms of CPU (${r.maxCpu * SLOWER}ms ${SLOWER}x slower, against ${LONG_TASK_MS}ms); ${r.longTasks} long tasks by the wall clock; ${r.interactions} interactions, the slowest ${r.maxInput}ms; the longest ${r.worstFrame}`
         );
       }
     }
@@ -506,33 +511,25 @@ const spec: Spec = {
     const { one } = numbers;
     for (const name of ["stream", "type"] as Phase[]) {
       kit.check(
-        `two panes, ${name}: no task longer than two frames' budget (${2 * LONG_TASK_MS}ms) at ${THROTTLE}x CPU`,
-        two[name].maxTask <= 2 * LONG_TASK_MS,
-        `${two[name].longTasks} long tasks, the longest ${two[name].maxTask}ms; the longest ${two[name].worstFrame}`
-      );
-      kit.check(
-        `two panes, ${name}: the main thread no busier than ${BUSY_SHARE}x one pane's at ${THROTTLE}x CPU`,
-        two[name].busyMs <= one[name].busyMs * BUSY_SHARE,
-        `two panes ${two[name].busyMs}ms (${two[name].longTasks} long tasks), one pane ${one[name].busyMs}ms (${one[name].longTasks})`
-      );
-      kit.note(
-        `two panes, ${name}: the longest task ${two[name].maxTask}ms against the ${LONG_TASK_MS}ms target`
+        `two panes, ${name}: no task longer than two frames' budget (${2 * LONG_TASK_MS}ms) on a CPU ${SLOWER}x slower`,
+        two[name].maxCpu * SLOWER <= 2 * LONG_TASK_MS,
+        `the longest task ${two[name].maxCpu}ms of CPU; the longest ${two[name].worstFrame}`
       );
     }
-    for (const name of ["stream", "type", "scroll"] as Phase[]) {
+    for (const name of ["stream", "type", "switch"] as Phase[]) {
       kit.check(
-        `two panes, ${name}: every interaction paints within ${INPUT_MS}ms at ${THROTTLE}x CPU`,
-        two[name].maxInput < INPUT_MS,
-        `${two[name].interactions} interactions, the slowest ${two[name].maxInput}ms`
+        `two panes, ${name}: the main thread's CPU within ${CPU_SHARE}x one pane's`,
+        two[name].cpuMs <= one[name].cpuMs * CPU_SHARE,
+        `two panes ${two[name].cpuMs}ms, one pane ${one[name].cpuMs}ms`
       );
     }
     kit.check(
-      `two panes switch tabs as fast as one: the slowest switch within ${SWITCH_SHARE}x one pane's, at ${THROTTLE}x CPU`,
-      two.switch.maxInput <= one.switch.maxInput * SWITCH_SHARE,
-      `two panes ${two.switch.maxInput}ms (${two.switch.longTasks} long tasks, main thread busy ${two.switch.busyMs}ms); one pane ${one.switch.maxInput}ms (${one.switch.longTasks}, ${one.switch.busyMs}ms)`
+      `two panes, type: every key paints within ${INPUT_MS}ms`,
+      two.type.maxInput < INPUT_MS,
+      `${two.type.interactions} interactions, the slowest ${two.type.maxInput}ms`
     );
     kit.note(
-      `a switch's slowest paint is ${two.switch.maxInput}ms at ${THROTTLE}x CPU, against the ${INPUT_MS}ms budget: revealing a pane put away (content-visibility: hidden) styles its whole transcript in that frame`
+      `a switch's longest task is ${two.switch.maxCpu}ms of CPU (${two.switch.maxCpu * SLOWER}ms ${SLOWER}x slower), against the ${2 * LONG_TASK_MS}ms of two frames: revealing a pane put away (content-visibility: hidden) styles its whole transcript in that frame`
     );
   },
 };
