@@ -1729,18 +1729,21 @@ while [ "${p:-0}" -gt 1 ]; do
   p=$(ps -o ppid= -p "$p" | tr -d " ")
 done' sh "$1" 2>&1
 }
-# The listener $1 descends from the sandbox init $2 (ws_tree). What decides it is said each time: the tree, read once
-# with its own exit status (a pipeline into `grep -q` folded that status into the verdict under pipefail), and the
-# listener's parents. Rig 5856e71ec and 06ef5d1ac run 6: "the listener 4126 does not descend from the new sandbox's
-# init 4003" with the command before it in 4003's pid namespace, where every orphan is reparented (find_new_reaper).
+# The listener $1 descends from the sandbox init $2 (ws_tree). The tree is read whole into a variable, with its own
+# exit status, before anything else runs: nothing reads it from a pipe. `ws_tree | grep -qx "$(ws_listener_pid …)"`
+# did, and the substitution ran in the pipe's reading end, so its as_user, a `podman exec -i`, took that pipe as its
+# stdin and read from it at once (podman #24370: "As soon as podman exec is launched it spawns a goroutine that reads
+# data from stdin"), leaving grep part of the tree or none, at times: rig ee79a01ea's "the listener 3971 does not
+# descend from the new sandbox's init 3560", and 06ef5d1ac run 6's "the listener 4126 does not descend from the new
+# sandbox's init 4003", each with the listener in that sandbox. A listener outside the tree is said with its parents.
 ws_descends() {
   local tree rc=0
   tree=$(ws_tree "$2") || rc=$?
-  echo "the sandbox $2's tree (read with exit $rc): $(tr '\n' ' ' <<< "$tree")"
-  echo "the listener $1 and its parents:"
-  ws_ancestry "$1"
   (( rc == 0 )) || { echo "ASSERTION FAILED: the joined machine's process table could not be read (exit $rc)"; return 1; }
-  grep -qx "$1" <<< "$tree" || { echo "ASSERTION FAILED: the listener $1 does not descend from the sandbox's init $2; every listener: $(as_user "$joinerc" pgrep -af "socat TCP-LISTEN:$WS_LISTENER_PORT" | tr '\n' ';')"; return 1; }
+  grep -qx "$1" <<< "$tree" && return 0
+  echo "ASSERTION FAILED: the listener $1 does not descend from the sandbox's init $2, whose tree is $(tr '\n' ' ' <<< "$tree"); the listener and its parents:"
+  ws_ancestry "$1"
+  return 1
 }
 # A POST to the hub, answering its body and a last line `HTTP <status>`, so a refusal shows the hub's words.
 ws_post() { as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' "http://127.0.0.1:3456$1" -X POST -H 'content-type: application/json' -d "$2"; }
