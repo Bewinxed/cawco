@@ -19,11 +19,6 @@ class BarGlass {
   /** The glass's card stands drawn out of the glass: the glass draws its join. */
   joined = $state(false);
   /**
-   * The card is opening and shutting once, unseen, as the page loads
-   * (GlassCard's rehearsal): joined, but the glass draws no join for it.
-   */
-  rehearsing = $state(false);
-  /**
    * The card standing was opened, or swapped to, from the keyboard (Jump by
    * ⌘K): it and the glass's join and Caw's arcs come and go at once. Kept
    * until the next card opens, so its close is as instant as its open.

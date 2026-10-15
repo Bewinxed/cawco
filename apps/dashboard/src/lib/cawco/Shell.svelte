@@ -1076,9 +1076,7 @@
             class="tools"
             data-bar-group
             data-instant={barGlass.instant ? "" : undefined}
-            data-joined={barGlass.joined && !barGlass.rehearsing
-              ? ""
-              : undefined}
+            data-joined={barGlass.joined ? "" : undefined}
           >
             <!-- The glass as one shape with the card hanging from it while
                  one does (bar-glass: Caw's panel, the machines, Jump). -->

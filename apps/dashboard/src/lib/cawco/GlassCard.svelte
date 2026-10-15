@@ -317,22 +317,28 @@
    * The card opens and shuts once, unseen, just after the page has loaded:
    * its whole open, placed, drawn down out of the glass with the join armed
    * (`hang`, the box's morph), and folded back, while it is hidden and
-   * inert, the focus stays where it is, and the glass draws no join for it
-   * (bar-glass `rehearsing`). A first press found all of that cold: a
+   * inert, the focus stays where it is, and the card keeps its join to
+   * itself (`rehearsalJoined`, which arms the morph as `barGlass.joined`
+   * does): the glass draws none, and a card another page hangs from the
+   * glass (the caw-notices bench) keeps the join it set. A first press found all of that cold: a
    * popover's first open (its first placement, its layers' first run) cost
    * a first press 30–45 ms frames, and with the card only placed ahead of
    * it, the first press's frame still took 21–28 ms of WebKit's main thread
    * against 13–15 for every later one (probe-kit webkit-caw); rehearsed
-   * whole, 15. A real open while it lasts ends it there: the card shows and
-   * the glass joins it as it opens.
+   * whole, 15. A real open while it lasts ends it there: the card shows,
+   * and the join it stands in is the glass's.
    */
   let rehearsing = $state(false);
   let rehearsalOpen = $state(false);
+  let rehearsalJoined = false;
   let rehearsed = false;
   const endRehearsal = () => {
+    if (rehearsalJoined) {
+      barGlass.joined = true;
+    }
+    rehearsalJoined = false;
     rehearsing = false;
     rehearsalOpen = false;
-    barGlass.rehearsing = false;
   };
   $effect(() => {
     const node = content;
@@ -353,7 +359,6 @@
         node.addEventListener(GROWN, grown, { once: true });
         node.addEventListener(FOLDED, endRehearsal, { once: true });
         rehearsing = true;
-        barGlass.rehearsing = true;
         rehearsalOpen = true;
       });
     });
@@ -410,7 +415,8 @@
       width: true,
       // At once from the keyboard, and while it is not drawn out of the
       // glass (a face changed behind the cut).
-      still: () => barGlass.instant || !(barGlass.joined || folding),
+      still: () =>
+        barGlass.instant || !(barGlass.joined || rehearsalJoined || folding),
     }}
     onCloseAutoFocus={(event) => {
       event.preventDefault();
@@ -485,7 +491,11 @@
     bind:joined={
       () => barGlass.joined,
       (joined) => {
-        barGlass.joined = joined;
+        if (rehearsing) {
+          rehearsalJoined = joined;
+        } else {
+          barGlass.joined = joined;
+        }
       }
     }
     bind:ref={content}
