@@ -1627,9 +1627,10 @@ ws_listener_start() {
 # The newest listener on the port: the one just started.
 ws_listener_pid() { as_user "$joinerc" pgrep -n -f "socat TCP-LISTEN:$WS_LISTENER_PORT"; }
 # A listener is read only the way the owner reaches it: through the hub's preview of its port (ws_preview_says,
-# ws_preview_by_host), the agent's bridge joining the sandbox's network. The rig never joins that network itself: from
-# a shell in the machine's container the kernel refuses it (nightly ee52c2d6f: "nsenter: reassociate to namespace
-# 'ns/net' failed: Operation not permitted").
+# ws_preview_by_host), the agent's bridge joining the sandbox's network. The rig never joins that network itself.
+# (Nightly ee52c2d6f's `nsenter --target <init> --user --net` from a shell here, "reassociate to namespace 'ns/net'
+# failed: Operation not permitted", was Ubuntu 24.04's nsenter entering the init's user namespace, not the one that
+# owns its network, before the network: preview-bridge.ts's JOIN.)
 #
 # Why a preview gave no listener's answer, read from outside without joining anything: the listeners running, the TCP
 # ports listened on in the network of the sandbox whose init is $1 (its /proc/<pid>/net/tcp, state 0A), and what the

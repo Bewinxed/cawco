@@ -3,14 +3,10 @@
  * workspace runs in its boundary's own network (`boundary.ts`), so a dev
  * server a session there starts listens on the boundary's loopback, which the
  * host's does not reach. The agent bridges it: a socat joined to the
- * boundary's user and network namespaces, by `nsenter --target <its sandbox's
- * init> --user --net --preserve-credentials`, listens on a unix socket in the
- * agent's own runtime dir (a path, so in no network) and connects each
- * connection to 127.0.0.1:<port> in there. The agent runs as the user whose
- * process made that user namespace, so it may join it; joining the parent
- * user namespace is refused (obelisk, 2026-10-13: `nsenter: reassociate to
- * namespaces failed: Operation not permitted` for `--user-parent`, the page
- * for `--user --net`).
+ * boundary's network, and to the user namespace that owns that network
+ * ({@link JOIN}), listens on a unix socket in the agent's own runtime dir (a
+ * path, so in no network) and connects each connection to 127.0.0.1:<port>
+ * in there.
  *
  * Each request chooses its network: the newest generation of the workspace
  * whose sandbox runs and listens on the port, else the current one's
@@ -43,6 +39,36 @@ export class WorkspaceDown extends Error {
 
 /** Where the agent's tools are found: the system's dirs alone. */
 const SYSTEM_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
+
+/**
+ * How a bridge joins a sandbox's network, a perl program run as `perl -e JOIN
+ * <the sandbox's init> <nsenter> <command…>`. The sandbox's network is not
+ * owned by its init's user namespace: srt's bwrap clones the network inside a
+ * user namespace mapping the agent's uid to 0 (`--dev` needs root mapped),
+ * then unshares a second one inside it that maps it back, and every process
+ * of the sandbox lives in that second one. The kernel lets `setns` into a
+ * network only to a caller with CAP_SYS_ADMIN over the network's owner and in
+ * its own user namespace (`netns_install`). The agent holds both over the
+ * owner, the user namespace its own uid made from its own; once it has joined
+ * the inner one, it holds none over the owner, its parent (`cap_capable`). So
+ * `nsenter --target <init> --user --net` works only on a util-linux that
+ * enters both in one `setns` on a pidfd (2.40+, obelisk's 2.41.3), and fails
+ * on one that enters them one by one (Ubuntu 24.04's 2.39.3, stage 2's rigs:
+ * `reassociate to namespace 'ns/net' failed: Operation not permitted`).
+ * Here the owner is read off the network itself (`ioctl(NS_GET_USERNS)`,
+ * `_IO(0xb7, 1)`) and both go to nsenter as files, which it enters one by
+ * one, the user namespace first, on every version.
+ */
+const JOIN = [
+  'open(my $net, "<", "/proc/$ARGV[0]/ns/net") or die "cawco: the sandbox $ARGV[0] is gone ($!)\\n";',
+  "my $owner = ioctl($net, 0xb701, 0);",
+  'defined $owner or die "cawco: the user namespace that owns the network of the sandbox $ARGV[0] could not be read ($!)\\n";',
+  'open(my $user, "<&=", $owner) or die "cawco: $!\\n";',
+  'for ($net, $user) { fcntl($_, F_SETFD, 0) or die "cawco: $!\\n"; }',
+  "my (undef, $nsenter, @command) = @ARGV;",
+  'exec { $nsenter } $nsenter, "--user=/proc/self/fd/" . fileno($user), "--net=/proc/self/fd/" . fileno($net), "--preserve-credentials", @command;',
+  'die "cawco: $nsenter could not run ($!)\\n";',
+].join(" ");
 
 /** How long a bridge has to put its socket down. Our call: socat binds in a few ms. */
 const BRIDGE_START_MS = 3000;
@@ -95,7 +121,7 @@ const tool = (name: string): string => {
   const found = Bun.which(name, { PATH: SYSTEM_PATH });
   if (!found) {
     throw new Error(
-      `${name} is not on this machine, so a workspace's server can't be previewed (install util-linux and socat).`
+      `${name} is not on this machine, so a workspace's server can't be previewed (install util-linux, socat and perl).`
     );
   }
   return found;
@@ -249,12 +275,12 @@ const open = async (
       tool("setpriv"),
       "--pdeathsig",
       "KILL",
-      tool("nsenter"),
-      "--target",
+      tool("perl"),
+      "-MFcntl=F_SETFD",
+      "-e",
+      JOIN,
       String(inner),
-      "--user",
-      "--net",
-      "--preserve-credentials",
+      tool("nsenter"),
       tool("socat"),
       `UNIX-LISTEN:${socket},fork`,
       `TCP:127.0.0.1:${port}`,
