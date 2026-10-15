@@ -86,12 +86,14 @@
       {#if model}
         <span class="model">{modelLabel(model)}</span>
       {/if}
+      <!-- The clock is a timer (live off): in the transcript's log the phase
+           and its steps are read when they change, not every second. -->
       <span class="pill {phase}" {@attach clock.watch}>
         {phase}
         {#if view.steps}
           · {view.steps} step{view.steps === 1 ? "" : "s"}
         {/if}
-        · {elapsed}
+        <span role="timer">· {elapsed}</span>
       </span>
     </Collapsible.Trigger>
 

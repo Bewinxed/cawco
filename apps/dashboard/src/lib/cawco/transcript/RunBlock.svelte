@@ -69,10 +69,14 @@
   // block is on show, or a transcript nobody is reading spends a second
   // re-writing its figures (motion/clock).
   const clock = tickingClock(() => going);
-  /** How far along: the steps passed of those it has, and how long it has run. */
-  const progress = $derived.by(() => {
+  /**
+   * How far along: the steps passed of those it has, and how long it has run.
+   * Apart, because the time is a clock (a timer, read where it is reached)
+   * and the steps are news (read when they change).
+   */
+  const progress = $derived.by((): { steps: string; took: string } => {
     if (!run) {
-      return refused ? "" : "starting";
+      return { steps: refused ? "" : "starting", took: "" };
     }
     const end = run.endedAt ? new Date(run.endedAt).getTime() : clock.now;
     const took = formatDuration(
@@ -80,7 +84,10 @@
     );
     const steps = detail?.steps ?? [];
     const passed = steps.filter((step) => step.status === "passed").length;
-    return steps.length ? `${passed}/${steps.length} steps · ${took}` : took;
+    return {
+      steps: steps.length ? `${passed}/${steps.length} steps` : "",
+      took,
+    };
   });
   const failure = $derived(
     refused ? String(meta.toolResult ?? "The run did not start.") : run?.failure
@@ -92,7 +99,11 @@
 <div class="run-block rail-row" data-nest-host {@attach morph({ rows: true })}>
   {#snippet words()}
     <span class="name">{name}</span>
-    <span class="num progress" {@attach clock.watch}>{progress}</span>
+    <span class="num progress" {@attach clock.watch}
+      >{progress.steps}{#if progress.took}<span role="timer"
+          >{progress.steps ? " · " : ""}{progress.took}</span
+        >{/if}</span
+    >
   {/snippet}
   <!-- The glyph stands before the link, in its own cell: the steps' line
        leaves its foot outside any control. -->
