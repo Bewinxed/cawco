@@ -25,20 +25,61 @@
 
 :root {
   /*
-   * Paper is the page ground. Its value is `color.paper` in
-   * design/tokens/cawco.tokens.json, and the build stops if the two differ.
-   * Ink and vermilion are the brand board's. Everything else on the page is
-   * mixed from these three. Spark yellow belongs to the wordmark, the mascot
-   * and brand art: here that is Caw's app icon and his own drawings.
+   * The page follows the reader's system scheme. By day it is the brand board:
+   * paper, crow ink and vermilion, and everything else is mixed from those
+   * three. At night it is the product's own night theme, roost-dark
+   * (DESIGN.md): each colour's second value is the night side of the token
+   * named beside it in design/tokens/cawco.tokens.json.
+   *
+   * Paper is the page ground: `color.paper` by day and `color.background` at
+   * night, and the build stops if either differs from its token. Spark yellow
+   * belongs to the wordmark, the mascot and brand art: here that is Caw's app
+   * icon and his own drawings.
    */
-  --paper: #f4f0e6;
-  --ink: #171715;
-  --vermilion: #e65d46;
+  color-scheme: light dark;
 
-  --ink-2: color-mix(in oklab, var(--paper) 7%, var(--ink));
-  --ink-3: color-mix(in oklab, var(--paper) 14%, var(--ink));
-  --soft-on-ink: color-mix(in oklab, var(--paper) 66%, var(--ink));
-  --soft-on-paper: color-mix(in oklab, var(--ink) 80%, var(--paper));
+  --brand-paper: #f4f0e6;
+  --crow-ink: #171715;
+
+  /* The page: its ground, its type and lines, and their quieter step. */
+  --paper: light-dark(var(--brand-paper), oklch(18.4% 0.004 70));
+  /* color.ink-strong */
+  --ink: light-dark(var(--crow-ink), oklch(93.4% 0.01 82));
+  /* color.ink-muted */
+  --soft-on-paper: light-dark(
+    color-mix(in oklab, var(--crow-ink) 80%, var(--brand-paper)),
+    oklch(77.8% 0.012 78)
+  );
+  /* An ink button under the pointer. At night: color.neutral-11, a step down from ink-solid. */
+  --ink-hover: light-dark(
+    color-mix(in oklab, var(--brand-paper) 16%, var(--crow-ink)),
+    oklch(77.8% 0.012 78)
+  );
+
+  /* color.coral-9, its pointer state (night: color.brand-hover) and the ink on it (color.on-ink). */
+  --vermilion: light-dark(#e65d46, oklch(66.5% 0.17 33));
+  --vermilion-hover: light-dark(
+    color-mix(in oklab, var(--brand-paper) 14%, #e65d46),
+    oklch(70.5% 0.16 34)
+  );
+  --on-vermilion: light-dark(var(--crow-ink), oklch(18.4% 0.004 70));
+
+  /*
+   * The slabs: the feature stage, the command bar and the free card. Ink by
+   * day; at night a raised surface (color.surface-raised) with the product's
+   * night ring, its type in ink-strong and ink-muted, and a step inside it
+   * (the chosen tab, the card's command bar) in color.surface-fill.
+   */
+  --slab: light-dark(var(--crow-ink), oklch(24.8% 0.006 70));
+  --slab-2: light-dark(
+    color-mix(in oklab, var(--brand-paper) 14%, var(--crow-ink)),
+    oklch(31.4% 0.008 70)
+  );
+  --on-slab: light-dark(var(--brand-paper), oklch(93.4% 0.01 82));
+  --soft-on-slab: light-dark(
+    color-mix(in oklab, var(--brand-paper) 66%, var(--crow-ink)),
+    oklch(77.8% 0.012 78)
+  );
 
   --font: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
@@ -128,7 +169,7 @@ code {
 .stage :focus-visible,
 .card-ink :focus-visible,
 .cmd :focus-visible {
-  outline-color: var(--paper);
+  outline-color: var(--on-slab);
 }
 
 .wrap {
@@ -195,6 +236,25 @@ code {
 
   .caw[data-wait]:not(.is-playing) g {
     visibility: hidden;
+  }
+}
+
+/*
+ * On a dark page Caw wears the cream rim his files draw in `dark`
+ * (assets/mascot/README.md): his black silhouette's own stroke in Ivory
+ * (`color.paper`), round-joined and drawn under its fill, so its outer half
+ * shows. That half is the wider of the kit's 5.31 units of his 512 box
+ * (`KIT_RIM` in assets/mascot/scripts/scene.mjs) and one device pixel,
+ * `--caw-pixel`, which src/caw.ts sets from the size he is drawn at. The build
+ * gives each drawing `--caw-unit`, the scale that places it on the box, since
+ * the stroke is drawn in the drawing's own units.
+ */
+@media (prefers-color-scheme: dark) {
+  .caw [data-silhouette] {
+    stroke: var(--brand-paper);
+    stroke-width: calc(2 * max(5.3126, var(--caw-pixel, 0)) / var(--caw-unit));
+    stroke-linejoin: round;
+    paint-order: stroke;
   }
 }
 
@@ -345,8 +405,8 @@ h1 {
   --cmd-inset: 8px;
   padding: var(--cmd-inset) var(--cmd-inset) var(--cmd-inset) 18px;
   border-radius: var(--radius-control);
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--slab);
+  color: var(--on-slab);
 }
 
 .cmd code {
@@ -367,7 +427,7 @@ h1 {
   /* Concentric with the bar; never below DESIGN.md's 2px hair (`rounded.hair`). */
   border-radius: max(2px, var(--radius-control) - var(--cmd-inset));
   background: var(--vermilion);
-  color: var(--ink);
+  color: var(--on-vermilion);
   font: inherit;
   font-weight: 900;
   cursor: pointer;
@@ -474,8 +534,8 @@ h1 {
   row-gap: 14px;
   padding: clamp(14px, 2.2vw, 28px);
   border-radius: var(--radius-container);
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--slab);
+  color: var(--on-slab);
 }
 
 /*
@@ -517,7 +577,7 @@ h1 {
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   font: inherit;
   font-size: 1.02rem;
   font-weight: 800;
@@ -534,8 +594,8 @@ h1 {
 }
 
 .tab[aria-selected='true'] {
-  background: var(--ink-3);
-  color: var(--paper);
+  background: var(--slab-2);
+  color: var(--on-slab);
 }
 
 .tab-bar {
@@ -640,27 +700,45 @@ h1 {
 
 /*
  * A scene is the product, drawn as the product draws itself. These are the
- * app's own light-theme tokens (apps/dashboard/src/lib/tokens/tokens.css), so
- * the needs-you pill is the app's needs-you yellow and nothing else is.
+ * app's own tokens (apps/dashboard/src/lib/tokens/tokens.css), day and night,
+ * so the needs-you pill is the app's needs-you yellow and nothing else is.
+ * Each line names its token in design/tokens/cawco.tokens.json.
  */
 .scene-frame {
-  --app-page: oklch(96.6% 0.008 85);
-  --app-raised: oklch(99.3% 0.004 85);
-  --app-recess: oklch(94.4% 0.01 84);
-  --app-line: oklch(89% 0.013 82);
-  --app-ink: oklch(29.5% 0.01 70);
-  --app-muted: oklch(49.5% 0.014 74);
-  --app-nest: oklch(70% 0.017 78);
-  --app-faint: oklch(81% 0.016 80);
-  --app-brand: oklch(64.5% 0.175 33);
-  --attn-bg: oklch(91% 0.115 95);
-  --attn-ink: oklch(35% 0.075 88);
-  --attn-glyph: oklch(57% 0.125 78);
-  --live-glyph: oklch(50% 0.15 252);
-  --done-glyph: oklch(52% 0.14 140);
-  --mark-2: oklch(53% 0.15 47.4);
-  --mark-5: oklch(51% 0.093 186.7);
-  --mark-8: oklch(51% 0.165 349.8);
+  /* color.background */
+  --app-page: light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70));
+  /* color.surface-raised */
+  --app-raised: light-dark(oklch(99.3% 0.004 85), oklch(24.8% 0.006 70));
+  /* color.surface-recess at night: the ground of a chip, a button or a message on a raised card */
+  --app-recess: light-dark(oklch(94.4% 0.01 84), oklch(22.2% 0.006 70));
+  /* color.border-control */
+  --app-line: light-dark(oklch(89% 0.013 82), oklch(35.2% 0.009 70));
+  /* color.ink-strong, and color.on-ink on it */
+  --app-ink: light-dark(oklch(29.5% 0.01 70), oklch(93.4% 0.01 82));
+  --app-on-ink: light-dark(oklch(99.3% 0.004 85), oklch(18.4% 0.004 70));
+  /* color.ink-muted */
+  --app-muted: light-dark(oklch(49.5% 0.014 74), oklch(77.8% 0.012 78));
+  /* color.nest-ink */
+  --app-nest: light-dark(
+    oklch(70% 0.017 78),
+    color-mix(in oklch, oklch(40.2% 0.01 72) 50%, oklch(48.8% 0.012 74))
+  );
+  /* color.neutral-7 */
+  --app-faint: light-dark(oklch(81% 0.016 80), oklch(40.2% 0.01 72));
+  /* color.brand-solid */
+  --app-brand: light-dark(oklch(64.5% 0.175 33), oklch(66.5% 0.17 33));
+  /* color.status-attn-bg, -ink and -glyph; status-live-glyph; status-done-glyph */
+  --attn-bg: light-dark(oklch(91% 0.115 95), oklch(37% 0.07 92));
+  --attn-ink: light-dark(oklch(35% 0.075 88), oklch(90% 0.115 95));
+  --attn-glyph: light-dark(oklch(57% 0.125 78), oklch(87% 0.14 92));
+  --live-glyph: light-dark(oklch(50% 0.15 252), oklch(74% 0.12 245));
+  --done-glyph: light-dark(oklch(52% 0.14 140), oklch(76% 0.15 135));
+  /* color.mark-2, -5, -8, and color.mark-glyph on them */
+  --mark-2: light-dark(oklch(53% 0.15 47.4), oklch(70% 0.15 47.4));
+  --mark-5: light-dark(oklch(51% 0.093 186.7), oklch(70% 0.095 186.7));
+  --mark-8: light-dark(oklch(51% 0.165 349.8), oklch(70% 0.17 349.8));
+  --mark-glyph: light-dark(oklch(99% 0 0), oklch(18.4% 0.004 70));
+  /* shadow.shadow-tile's drop (its night value, with its ring, is set under the dark scheme) */
   --app-shadow: 0 1px 2px oklch(29.5% 0.01 70 / 0.07);
 
   grid-area: 1 / 2 / 3 / 3;
@@ -718,20 +796,20 @@ h1 {
 .versus dt {
   font-size: 0.86rem;
   font-weight: 900;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
 }
 
 .versus dd {
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   text-wrap: pretty;
 }
 
 .with > dt {
-  color: var(--paper);
+  color: var(--on-slab);
 }
 
 .with > dd {
-  color: var(--paper);
+  color: var(--on-slab);
 }
 
 /* A subagent beside a delegate, row by row. The delegate's column is the bright one. */
@@ -749,7 +827,7 @@ h1 {
 .compare td {
   padding: 5px 10px 5px 0;
   vertical-align: top;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   font-weight: inherit;
   text-wrap: pretty;
 }
@@ -761,7 +839,7 @@ h1 {
 }
 
 .compare tbody tr {
-  border-top: 1px solid var(--ink-3);
+  border-top: 1px solid var(--slab-2);
 }
 
 .compare th[scope='row'] {
@@ -778,12 +856,12 @@ h1 {
 
 .compare :is(th, td):last-child {
   padding-right: 0;
-  color: var(--paper);
+  color: var(--on-slab);
 }
 
 .compare-note {
   margin-top: 10px;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   font-size: 0.9rem;
   line-height: 1.4;
   text-wrap: pretty;
@@ -802,7 +880,7 @@ h1 {
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   font: inherit;
   font-size: 0.9rem;
   font-weight: 800;
@@ -935,7 +1013,7 @@ h1 {
   height: 1.38em;
   border-radius: 0.38em;
   background: var(--fill, var(--app-ink));
-  color: oklch(99% 0 0);
+  color: var(--mark-glyph);
   box-shadow:
     0 0 0 0.09em var(--app-raised),
     0 0 0 0.19em var(--rim);
@@ -1044,7 +1122,7 @@ h1 {
 .app-btn-solid {
   border-color: var(--app-ink);
   background: var(--app-ink);
-  color: var(--app-raised);
+  color: var(--app-on-ink);
 }
 
 .field-k {
@@ -1226,6 +1304,7 @@ h1 {
   pointer-events: none;
 }
 
+/* A terminal, not the product: the same black window in either scheme. */
 .term {
   position: absolute;
   left: var(--x);
@@ -1285,7 +1364,8 @@ h1 {
   border: 0.34em solid var(--app-ink);
   border-radius: 2.1em;
   background: var(--app-page);
-  box-shadow: 0 0.8em 2em oklch(29.5% 0.01 70 / 0.14);
+  /* color.shadow-tint-2 */
+  box-shadow: 0 0.8em 2em light-dark(oklch(29.5% 0.01 70 / 0.14), oklch(18.4% 0.004 70 / 0.66));
 }
 
 .hs-bar {
@@ -1694,7 +1774,7 @@ mark {
   padding: 0.08em 0.5em;
   border-radius: 0.4em;
   background: var(--app-ink);
-  color: var(--app-raised);
+  color: var(--app-on-ink);
   font-size: 0.82em;
   font-weight: 600;
 }
@@ -1908,17 +1988,17 @@ mark {
 }
 
 .card-ink {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--slab);
+  color: var(--on-slab);
 }
 
 .card-ink > p:not(.price) {
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
 }
 
 .card-ink .cmd {
   margin-top: 18px;
-  background: var(--ink-3);
+  background: var(--slab-2);
 }
 
 /* Paper on a paper ground: an ink line marks its edge. */
@@ -1997,20 +2077,38 @@ mark {
   font-weight: 800;
 }
 
+/*
+ * At night a raised surface is told from the page by a 1px inner ring of ink
+ * as well as its tone (DESIGN.md, The Night Ring Rule: `color.night-ring`), and
+ * a scene's tiles take the product's night tile shadow (`shadow.shadow-tile`).
+ */
+
+@media (prefers-color-scheme: dark) {
+  .stage,
+  .cmd,
+  .card-ink {
+    box-shadow: inset 0 0 0 1px oklch(93.4% 0.01 82 / 0.07);
+  }
+
+  .scene-frame {
+    --app-shadow: 0 1px 2px oklch(0% 0 0 / 0.3), 0 0 0 1px oklch(93.4% 0.01 82 / 0.06);
+  }
+}
+
 /* Pointer hover, only where there is a pointer that hovers. */
 
 @media (hover: hover) and (pointer: fine) {
   .btn-ink:hover {
-    background: color-mix(in oklab, var(--paper) 16%, var(--ink));
+    background: var(--ink-hover);
   }
 
   .copy:hover {
-    background: color-mix(in oklab, var(--paper) 14%, var(--vermilion));
+    background: var(--vermilion-hover);
   }
 
   .tab:hover,
   .autoplay:hover {
-    color: var(--paper);
+    color: var(--on-slab);
   }
 
   .tabs-channel .tab:not([aria-selected='true']):hover {
