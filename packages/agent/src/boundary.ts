@@ -112,6 +112,7 @@ import {
   commandLine as commandLineOf,
   commandLines,
   processLineage,
+  processStart,
 } from "@cawco/core/process-identity";
 import {
   embeddedFile,
@@ -219,8 +220,8 @@ interface Retiring extends Held {
 interface Place {
   /**
    * Every process of the sandbox when its runner was ready (its init, srt's
-   * shell and socat bridges, the runner): anything else in the sandbox's pid
-   * namespace is the workspace's work ({@link busy}).
+   * shell and socat bridges, the runner): anything else that descends from
+   * its init is the workspace's work ({@link inTree}, {@link busyOld}).
    */
   readonly idle: readonly number[];
   /** The sandbox's init, whose mount table the executor checks before each command. */
@@ -2167,16 +2168,17 @@ const guardFiles = (id: string, gen: string): [string, string][] =>
 const guardOf = (id: string, gen: string | undefined): string =>
   join(generationDir(id, gen), "place-guard.pl");
 
-/** One process, as {@link busy} reads it. */
+/** One process, as {@link busyOld} reads it. */
 interface Seen {
   readonly command: string;
   readonly pid: number;
-  /** Linux: its pid namespace, as `/proc/<pid>/ns/pid` names it. */
+  /** Linux: its pid namespace, as `/proc/<pid>/ns/pid` names it; an anchor from before srt is judged by it. */
   readonly pidNs?: string;
+  /** Its parent, as `/proc/<pid>/stat` names it, which any process may read. */
   readonly ppid: number;
 }
 
-/** Every process on the machine, read once for every workspace {@link busy} looks at. */
+/** Every process on the machine, read once for every workspace {@link busyOld} looks at. */
 const snapshot = async (): Promise<Seen[]> => {
   const linux = process.platform === "linux";
   const [rows, lines] = await Promise.all([
@@ -2196,10 +2198,40 @@ const snapshot = async (): Promise<Seen[]> => {
   );
 };
 
-/** Linux: the processes in the pid namespace of `inner`, the sandbox's init. */
-const inSandbox = (seen: Seen[], inner: number | undefined): Seen[] => {
-  const space = seen.find((one) => one.pid === inner)?.pidNs;
-  return space === undefined ? [] : seen.filter((one) => one.pidNs === space);
+/**
+ * Linux: `inner`, the sandbox's init, and every process that descends from
+ * it, by each one's parent. Nothing started in the sandbox leaves that tree:
+ * every command is the runner's, inside, and an orphan (a `setsid -f`, a
+ * double fork) goes to a subreaper or the init of its parent's own pid
+ * namespace, never one above (the kernel's `find_new_reaper`), so to `inner`
+ * or below it, in the sandbox's namespace or any nested in it. A parent is
+ * read off `/proc/<pid>/stat`, which needs no access to the process; a pid
+ * namespace's link does (`ptrace_may_access`), and a process in a namespace
+ * nested below the sandbox's has another one, so neither tells.
+ */
+const inTree = (seen: Seen[], inner: number | undefined): Seen[] => {
+  const root = seen.find((one) => one.pid === inner);
+  if (!root) {
+    return [];
+  }
+  const children = new Map<number, Seen[]>();
+  for (const one of seen) {
+    const siblings = children.get(one.ppid);
+    if (siblings) {
+      siblings.push(one);
+    } else {
+      children.set(one.ppid, [one]);
+    }
+  }
+  // Each pid once: the table is read a process at a time, so a pid that
+  // ended and came back meanwhile could read as its own ancestor.
+  const tree = new Map([[root.pid, root]]);
+  for (const one of tree.values()) {
+    for (const child of children.get(one.pid) ?? []) {
+      tree.set(child.pid, child);
+    }
+  }
+  return [...tree.values()];
 };
 
 /**
@@ -2237,12 +2269,17 @@ const executors = (seen: Seen[], id: string): number[] => {
  * Whether anything still runs in an older boundary of workspace `id`
  * ({@link Retiring}): an executor that was on its way into it as it was
  * handed over, or a command or a process one left. On Linux that is anything
- * in its sandbox's pid namespace that was not there when its runner was
- * ready, or, for an anchor from before srt, anything in the anchor's pid
- * namespace but the anchor and its `sleep`. On macOS it is anything carrying
- * the workspace's marker but not the current runner's ({@link
- * BOUNDARY_MARKER}): a process an older runner started cannot be told from
- * one a runner before it started, so the older runners close together.
+ * that descends from its sandbox's init and was not there when its runner
+ * was ready ({@link inTree}), a server a command left behind with
+ * `setsid -f` or a double fork among them, in the sandbox's pid namespace or
+ * one nested in it. For an anchor from before srt, whose commands joined it
+ * from the host with `nsenter` (their parents, and so their orphans'
+ * reapers, are the host's), it is anything in the anchor's pid namespace but
+ * the anchor and its `sleep`. On macOS it is anything carrying the
+ * workspace's marker but not the current runner's ({@link BOUNDARY_MARKER}),
+ * which a `setsid` or double-forked process keeps: both keep the environment
+ * they were started with. A process an older runner started cannot be told
+ * from one a runner before it started, so the older runners close together.
  */
 const busyOld = async (
   seen: Seen[],
@@ -2274,7 +2311,7 @@ const busyOld = async (
   if (process.platform === "linux") {
     const place = await readPlace(id, old.gen);
     const idle = new Set(place?.idle);
-    return inSandbox(seen, place?.inner).some((one) => !idle.has(one.pid));
+    return inTree(seen, place?.inner).some((one) => !idle.has(one.pid));
   }
   const own = current?.gen && `${BOUNDARY_MARKER}=${current.gen}`;
   return seen.some(
@@ -3078,15 +3115,31 @@ const isBwrap = async (pid: number): Promise<boolean> =>
  * Where a workspace's servers listen: on Linux each running boundary's own
  * network, named by its sandbox's init (`inner`), the current boundary first,
  * then each older one still running beside it ({@link handOver}), whose
- * servers run on there; on macOS, which gives a boundary no network of its
- * own, the host's (`host`) while its boundary runs. Empty when no boundary of
- * the workspace runs on this machine.
+ * servers run on there, newest first: a port is served from the newest
+ * generation that listens on it, so a server one generation started is
+ * reached over one an older generation still runs on the same port. On
+ * macOS, which gives a boundary no network of its own, the host's (`host`)
+ * while its boundary runs. Empty when no boundary of the workspace runs on
+ * this machine.
  */
 export const workspaceNetworks = async (
   id: string
 ): Promise<({ inner: number } | "host")[]> => {
   const held = await readHeld(id).catch(() => undefined);
-  const boundaries = [...(held ? [held] : []), ...(await readRetiring(id))];
+  const older = await Promise.all(
+    (await readRetiring(id)).map(async (boundary) => ({
+      boundary,
+      // Its host's start, in clock ticks since boot: a later generation's
+      // host starts later. Gone reads as 0, and `running` drops it below.
+      started: Number(await processStart(boundary.pid)) || 0,
+    }))
+  );
+  const boundaries = [
+    ...(held ? [held] : []),
+    ...older
+      .sort((a, b) => b.started - a.started)
+      .map(({ boundary }) => boundary),
+  ];
   const networks: ({ inner: number } | "host")[] = [];
   for (const boundary of boundaries) {
     // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, current first

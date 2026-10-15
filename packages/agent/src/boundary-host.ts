@@ -45,7 +45,6 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  readlinkSync,
   rmSync,
   type Stats,
   watch,
@@ -520,13 +519,43 @@ const mountinfoSpelling = (path: string): string =>
 /** A process's entry in `/proc`. */
 const PID = /^\d+$/;
 
-const pidNamespace = (pid: string | number): string | undefined => {
+/** A process's parent, from `/proc/<pid>/stat` (after its name, which may hold `)`); undefined once it is gone. */
+const parentOf = (pid: string): number | undefined => {
   try {
-    return readlinkSync(`/proc/${pid}/ns/pid`);
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
   } catch {
-    // Gone, or another user's.
+    // Gone.
     return undefined;
   }
+};
+
+/**
+ * `inner` and every process that descends from it, by each one's parent:
+ * the sandbox, in its own pid namespace and any nested in it. The agent
+ * judges an older boundary by the same tree (`inTree` in boundary.ts).
+ */
+const treeOf = (inner: number): number[] => {
+  const children = new Map<number, number[]>();
+  for (const pid of readdirSync("/proc").filter((name) => PID.test(name))) {
+    const parent = parentOf(pid);
+    if (parent === undefined) {
+      continue;
+    }
+    const siblings = children.get(parent);
+    if (siblings) {
+      siblings.push(Number(pid));
+    } else {
+      children.set(parent, [Number(pid)]);
+    }
+  }
+  const tree = new Set([inner]);
+  for (const pid of tree) {
+    for (const child of children.get(pid) ?? []) {
+      tree.add(child);
+    }
+  }
+  return [...tree];
 };
 
 /** One sandbox: the outer bwrap, the init beneath it, and the protected binds it started with. */
@@ -670,10 +699,7 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
           readFileSync(`/proc/${outer}/task/${outer}/children`, "utf8").trim(),
           10
         );
-        const space = pidNamespace(inner);
-        const idle = readdirSync("/proc").filter(
-          (pid) => PID.test(pid) && pidNamespace(pid) === space
-        );
+        const idle = treeOf(inner);
         const mounted = mountPointsOf(inner) ?? new Set<string>();
         // Guarded: each bind srt made, and each path the host changed while
         // the sandbox started, whose bind is gone already ({@link guard}

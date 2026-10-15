@@ -1600,6 +1600,17 @@ ws_exec() { as_user "$joinerc" sh -c 'cd "$1" && exec "$2" "$3"' sh "$(cat "$rig
 # A boundary generation's sandbox, as its srt host names it: `OUTER INNER IDLE...`.
 ws_place() { as_user "$joinerc" cat "$(ws_state)/boundaries/$1/sandbox"; }
 ns_of() { as_user "$joinerc" readlink "/proc/$1/ns/pid"; }
+# A listener a workspace command leaves behind as a dev server does: `setsid -f`, its own session, reparented to the
+# sandbox's init once the command's shell ends. It answers each connection with one line.
+WS_LISTENER_PORT=5199
+WS_LISTENER_SAYS=cawco-proof-listener
+ws_listener_start() { ws_exec "setsid -f socat TCP-LISTEN:$WS_LISTENER_PORT,fork,reuseaddr SYSTEM:'echo $WS_LISTENER_SAYS' < /dev/null > /dev/null 2>&1"; }
+ws_listener_pid() { as_user "$joinerc" pgrep -o -f "socat TCP-LISTEN:$WS_LISTENER_PORT"; }
+# What the listener answers in the network of the sandbox whose init is $1, reached as the agent's preview bridge
+# reaches a workspace's port (preview-bridge.ts: nsenter into the sandbox's user and network namespaces).
+ws_listener_says() { as_user "$joinerc" nsenter --target "$1" --user --net --preserve-credentials socat -t2 -T3 - "TCP:127.0.0.1:$WS_LISTENER_PORT" < /dev/null 2> /dev/null || true; }
+# Every process that descends from the sandbox init $1, by each one's parent: the tree boundary.ts inTree judges.
+ws_tree() { as_user "$joinerc" ps -e -o pid=,ppid= | awk -v root="$1" '{ parent[$1] = $2 } END { tree[root] = 1; do { grew = 0; for (p in parent) if (!(p in tree) && (parent[p] in tree)) { tree[p] = 1; grew = 1 } } while (grew); for (p in tree) print p }'; }
 # A POST to the hub, answering its body and a last line `HTTP <status>`, so a refusal shows the hub's words.
 ws_post() { as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' "http://127.0.0.1:3456$1" -X POST -H 'content-type: application/json' -d "$2"; }
 # Every credential a command must not read: a planted key, and the machine's CawCo account credential.
@@ -1691,7 +1702,7 @@ workspace_opens() {
 }
 workspace_across_update() {
   need_hub
-  local id gen old_inner old_ns job new new_inner
+  local id gen old_inner old_ns job listener new new_inner
   id=$(cat "$rigdir/ws-id")
   gen=$(ws_gen)
   read -r _ old_inner _ <<< "$(ws_place "$gen")"
@@ -1701,6 +1712,12 @@ workspace_across_update() {
   wait_until 30 '[[ "$(as_user "$joinerc" pgrep -fx "sleep 2999" | wc -l)" == 1 ]]'
   job=$(as_user "$joinerc" pgrep -fx 'sleep 2999')
   [[ "$(ns_of "$job")" == "$old_ns" ]]
+  # And a listener one command leaves behind with `setsid -f`, as a delegate starts the dev server a preview shows.
+  ws_listener_start
+  wait_until 30 '[[ "$(ws_listener_says "'"$old_inner"'")" == "$WS_LISTENER_SAYS" ]]'
+  listener=$(ws_listener_pid)
+  [[ $listener =~ ^[0-9]+$ ]]
+  ws_tree "$old_inner" | grep -qx "$listener" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $old_inner"; return 1; }
   # The new build reaches the hub's machine, then the joined machine, which installs it with the workspace open.
   use_feed next
   learn
@@ -1736,8 +1753,19 @@ workspace_across_update() {
   as_user "$joinerc" test -e "$(ws_state)/retiring-$gen.json"
   [[ "$(child_pids "$joinerc" "boundary-$id-$gen")" =~ ^[0-9]+$ ]]
   as_user "$joinerc" kill -0 "$old_inner"
-  # Once the job ends it closes by itself: its sandbox, its srt host, its record and its files go.
+  # The listener ran through the update and still answers on its port, in the network it started in.
+  as_user "$joinerc" kill -0 "$listener"
+  [[ "$(ws_listener_says "$old_inner")" == "$WS_LISTENER_SAYS" ]]
+  # With the job gone, the listener alone keeps the older boundary running: through four of the agent's looks at
+  # it (boundary.ts STALE_LOOK_MS, 5 s), its record, its sandbox and the listener's answer stay.
   as_user "$joinerc" kill "$job"
+  sleep 20
+  as_user "$joinerc" test -e "$(ws_state)/retiring-$gen.json" || { echo "ASSERTION FAILED: the older boundary closed while the setsid listener ran in it"; return 1; }
+  as_user "$joinerc" kill -0 "$old_inner"
+  as_user "$joinerc" kill -0 "$listener"
+  [[ "$(ws_listener_says "$old_inner")" == "$WS_LISTENER_SAYS" ]]
+  # Once the listener ends it closes by itself: its sandbox, its srt host, its record and its files go.
+  as_user "$joinerc" kill "$listener"
   wait_until 120 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)/retiring-'"$gen"'.json" && ! as_user "$joinerc" test -e "$(ws_state)/boundaries/'"$gen"'"'
   ! as_user "$joinerc" kill -0 "$old_inner" 2> /dev/null
   # The current one is untouched.
@@ -1745,12 +1773,46 @@ workspace_across_update() {
   [[ "$(child_pids "$joinerc" "boundary-$id-$new")" =~ ^[0-9]+$ ]]
   [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$new_inner")" ]]
 }
-export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update
+# Archiving the workspace ends everything its boundary started: a `setsid -f` listener and every other process that
+# descends from its sandbox's init, with the sandbox itself (boundary.ts closeBoundary).
+workspace_archive_ends_all() {
+  need_hub
+  local id gen inner listener tree answer left pid
+  id=$(cat "$rigdir/ws-id")
+  gen=$(ws_gen)
+  read -r _ inner _ <<< "$(ws_place "$gen")"
+  ws_listener_start
+  wait_until 30 '[[ "$(ws_listener_says "'"$inner"'")" == "$WS_LISTENER_SAYS" ]]'
+  listener=$(ws_listener_pid)
+  tree=$(ws_tree "$inner")
+  grep -qx "$listener" <<< "$tree" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $inner"; return 1; }
+  echo "the sandbox's tree before the archive: $(tr '\n' ' ' <<< "$tree")"
+  # A workspace with a live work item refuses its archive: the item ends first, as a leaf ends one it cannot do.
+  answer=$(ws_post /api/work-items/finish "{\"instanceId\":\"$(cat "$rigdir/ws-delegate")\",\"headline\":\"The stage 2 proof ends its workspace.\",\"summary\":\"Ended by the proof before it archives the workspace.\",\"blocked\":{\"command\":\"prove-stage2.sh workspace_archive_ends_all\",\"error\":\"the proof archives this workspace\"}}")
+  echo "the hub answered the finish: $answer"
+  [[ "$answer" == *"HTTP 200" ]]
+  wait_until 60 '[[ "$(hub_api "/api/work-items/$(cat "$rigdir/ws-item")" | json "d => [\"starting\", \"running\"].includes(d.state) ? \"live\" : \"ended\"")" == ended ]]'
+  answer=$(ws_post "/api/workspaces/$id/archive" '{"discard":true}')
+  echo "the hub answered the archive: $answer"
+  [[ "$answer" == *"HTTP 200" ]]
+  wait_until 60 '! as_user "$joinerc" kill -0 "'"$inner"'" 2> /dev/null'
+  left=""
+  for pid in $tree; do
+    if as_user "$joinerc" kill -0 "$pid" 2> /dev/null; then
+      left+=" $pid"
+    fi
+  done
+  [[ -z $left ]] || { echo "ASSERTION FAILED: these processes of the archived workspace's sandbox still run:$left"; return 1; }
+  wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
+}
+export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_listener_start ws_listener_pid ws_listener_says ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export WS_LISTENER_PORT WS_LISTENER_SAYS
 rig_workspace() {
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
   check "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" workspace_opens 600
-  check "a workspace open across an update keeps its job running, its next command runs in the new build's boundary, and the old boundary closes once the job ends" workspace_across_update 900 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
+  check "a workspace open across an update keeps its job and a setsid listener running, the listener answering on its port, its next command runs in the new build's boundary, and the old boundary closes only once the listener ends" workspace_across_update 900 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
+  check "archiving a workspace ends a setsid listener and every other process its sandbox started" workspace_archive_ends_all 300 "a workspace open across an update keeps its job and a setsid listener running, the listener answering on its port, its next command runs in the new build's boundary, and the old boundary closes only once the listener ends"
 }
 
 # ---------------------------------------------------------------- one session's runaway is its own
