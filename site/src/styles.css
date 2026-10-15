@@ -2001,9 +2001,12 @@ mark {
   background: var(--slab-2);
 }
 
-/* Paper on a paper ground: an ink line marks its edge. */
+/*
+ * Paper on a paper ground: an ink line marks its edge. At night the line is a
+ * card's edge (`color.border-card`), so the raised free card still leads.
+ */
 .card-paper {
-  border: 2px solid var(--ink);
+  border: 2px solid light-dark(var(--crow-ink), oklch(40.2% 0.01 72));
   background: var(--paper);
 }
 
