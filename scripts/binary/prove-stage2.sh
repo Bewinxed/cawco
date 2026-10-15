@@ -1917,11 +1917,12 @@ workspace_archive_ends_all() {
   tree=$(ws_tree "$inner")
   grep -qx "$listener" <<< "$tree" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $inner"; return 1; }
   echo "the sandbox's tree before the archive: $(tr '\n' ' ' <<< "$tree")"
-  # A workspace with a live work item refuses its archive: the item ends first, as a leaf ends one it cannot do.
-  answer=$(ws_post /api/work-items/finish "{\"instanceId\":\"$(cat "$rigdir/ws-delegate")\",\"headline\":\"The stage 2 proof ends its workspace.\",\"summary\":\"Ended by the proof before it archives the workspace.\",\"blocked\":{\"command\":\"prove-stage2.sh workspace_archive_ends_all\",\"error\":\"the proof archives this workspace\"}}")
-  echo "the hub answered the finish: $answer"
-  [[ "$answer" == *"HTTP 200" ]]
-  wait_until 60 '[[ "$(hub_api "/api/work-items/$(cat "$rigdir/ws-item")" | json "d => [\"starting\", \"running\"].includes(d.state) ? \"live\" : \"ended\"")" == ended ]]'
+  # A workspace with a live work item refuses its archive. The proof's item is over well before this: its stub session
+  # (proof-harnesses.ts) answers every message and ends the turn without finish_item, each quiet turn draws the hub's
+  # reminder, and the third fails the item (work-items.ts QUIET_TURNS), within seconds of its launch. So nothing here
+  # finishes it (a finish now is refused, "is failed; finish_item finishes live work only"): the archive waits for it.
+  wait_until 60 '[[ "$(hub_api "/api/work-items/$(cat "$rigdir/ws-item")" | json "d => [\"starting\", \"running\"].includes(d.state) ? \"live\" : \"ended\"")" == ended ]]' || { echo "the work item is still live: $(hub_api "/api/work-items/$(cat "$rigdir/ws-item")")"; return 1; }
+  echo "the work item before the archive: $(hub_api "/api/work-items/$(cat "$rigdir/ws-item")" | json 'd => `${d.state}: ${d.error}`')"
   answer=$(ws_post "/api/workspaces/$id/archive" '{"discard":true}')
   echo "the hub answered the archive: $answer"
   [[ "$answer" == *"HTTP 200" ]]
