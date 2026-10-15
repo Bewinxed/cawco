@@ -186,11 +186,20 @@
     background: transparent;
     cursor: pointer;
   }
-  /* Its own name: as `.caw-pop` it shared the glass card's frame
-     (home/CawPanel's `.kit-pop.caw-pop`), which overrode this. */
-  :global(.caw-seat-pop) {
-    inline-size: auto;
-    padding: 0;
+  /* His panel in the glass card's frame (home/CawPanel's `.kit-pop.caw-pop`):
+     the panel's width, its rows 7px in, a narrower cap under 900px. It took
+     that frame through the shared `.caw-pop` name; under its own it says so. */
+  :global(.kit-pop.caw-seat-pop) {
+    width: min(var(--c-panel-w), calc(100vw - 24px));
+    padding: 7px;
+  }
+  @media (max-width: 899px) {
+    :global(.kit-pop.caw-seat-pop) {
+      width: min(
+        var(--c-panel-w),
+        calc(100vw - 12px - env(safe-area-inset-right, 0px))
+      );
+    }
   }
   :global(.caw-sheet) {
     padding-block-end: var(--safe-bottom);

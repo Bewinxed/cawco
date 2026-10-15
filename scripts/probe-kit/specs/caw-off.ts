@@ -4,9 +4,12 @@
  * sessiond; Claude Code against the mock model) in the built dashboard at
  * the desk, read from the page's own words and the hub's answers. The
  * sessions he started are sessions spawned under his (a delegate's row,
- * nested under him), so no workspace is needed. In order:
+ * nested under him), so no workspace is needed. Every question is the
+ * running-sessions tray in the page (StopTray, `data-stop-tray`): in his
+ * panel under the switch, under the head's ⋯ for forget. In order:
  *
- * 1. Nothing he started runs: the switch flips at once, no tray.
+ * 1. His popover stands in the glass card's frame (web/caw-seat-pop's
+ *    check); nothing he started runs: the switch flips at once, no tray.
  * 2. Only his own turn (a routine's) runs: one line under the switch, no
  *    tray; "Stop now" turns him off once the hub says the turn stopped.
  * 3. Two sessions he started run: the tray names both; "Stop 2 and turn Caw
@@ -27,7 +30,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec } from "../kit";
+import { type Kit, open, type Spec, settle } from "../kit";
+import { checkCawSeatPop } from "./web/caw-seat-pop";
 
 const CAW = "You are Caw";
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -49,7 +53,7 @@ const RECORD = () => {
   (window as unknown as { probeSeen: string[] }).probeSeen = seen;
   const note = () => {
     for (const node of document.querySelectorAll(
-      "[data-stop-confirm], [data-slot='alert-dialog-description']"
+      "[data-stop-confirm], [data-stop-tray] p.line"
     )) {
       const words = (node.textContent ?? "").replace(/\s+/g, " ").trim();
       if (words && seen.at(-1) !== words && !seen.includes(words)) {
@@ -139,10 +143,15 @@ const run = async (kit: Kit) => {
     await page.waitForSelector(".caw-panel [role='switch']");
   };
   const flip = () => page.click(".caw-panel [role='switch']");
-  const tray = page.locator("[data-slot='alert-dialog-content']");
+  // The running-sessions tray in the page (StopTray): in his panel under
+  // the switch for Caw off, under the head's ⋯ for forget.
+  const tray = page.locator(`[data-stop-tray="${project.id}"]`);
 
   // ── 1. nothing he started runs ──────────────────────────────────────
   await openPanel();
+  // His popover in the glass card's frame, as it stood before 5a493be53.
+  await settle(page, 400);
+  await checkCawSeatPop(kit, page, "1, his panel");
   await flip();
   await until("Caw off", () => !cawOn(), Boolean, 15_000);
   kit.check(
@@ -208,11 +217,10 @@ const run = async (kit: Kit) => {
     rows === 2 &&
       listed === "Stop 2 and turn Caw off" &&
       other === "Let them finish" &&
-      (
-        (await page
-          .locator("[data-slot='alert-dialog-title']")
-          .textContent()) ?? ""
-      ).includes("Turn Caw off for"),
+      ((await tray.locator("p.title").textContent()) ?? "").includes(
+        "Turn Caw off for"
+      ) &&
+      (await tray.evaluate((node) => Boolean(node.closest(".caw-panel")))),
     `${rows} rows; confirm “${listed}”; other “${other}”`
   );
   await confirm.click();
@@ -250,10 +258,8 @@ const run = async (kit: Kit) => {
       status(two) !== "running",
     `${seen.join(" | ")}; sessions ${status(one)}, ${status(two)}`
   );
-  await page.waitForSelector("[data-slot='alert-dialog-content']", {
-    state: "detached",
-    timeout: 15_000,
-  });
+  // It holds "Caw is off" where it was asked, then leaves.
+  await tray.waitFor({ state: "detached", timeout: 15_000 });
   await turnOn();
 
   // ── 4. a session on a machine that is away ──────────────────────────
@@ -306,10 +312,7 @@ const run = async (kit: Kit) => {
   await flip();
   await tray.waitFor({ timeout: 15_000 });
   await page.locator("[data-stop-other]").click();
-  await page.waitForSelector("[data-slot='alert-dialog-content']", {
-    state: "detached",
-    timeout: 15_000,
-  });
+  await tray.waitFor({ state: "detached", timeout: 15_000 });
   await openPanel();
   const sentence =
     (await page.locator(".caw-panel .sentence").textContent())?.trim() ?? "";
