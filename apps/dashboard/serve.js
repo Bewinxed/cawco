@@ -51,9 +51,9 @@ const relayRuntime = standalone
 /**
  * adapter-node needs the browser's scheme and host for SvelteKit's CSRF check,
  * including mutating requests with no body (preview Close and other deletes),
- * and for the hooks gate's `event.url.origin`: the request's
- * {@link publicOrigin}, stamped on these headers. The adapter reads their
- * names once when its handler loads.
+ * and for every `event.url` the app reads: the request's {@link publicOrigin},
+ * stamped on these headers (the hooks gate reads `publicOrigin` itself). The
+ * adapter reads their names once when its handler loads.
  */
 const PROTOCOL_HEADER = "x-cawco-protocol";
 const HOST_HEADER = "x-cawco-host";

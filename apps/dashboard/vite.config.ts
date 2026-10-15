@@ -268,6 +268,15 @@ export default defineConfig(({ command }) => {
         adapter: adapter({ out: ".build-next" }),
         experimental: { remoteFunctions: true },
         version: { name: BUILD_VERSION },
+        // The dashboard's one CSRF rule is its own gate (hooks.server.ts,
+        // core `browser-gate.ts`), against the request's `publicOrigin`.
+        // Kit's form check judged by `request.url` instead, which `vite
+        // preview` builds from the Host alone: a page reached through a
+        // proxy had its POSTs refused there by the second rule. Every
+        // cross-site form the Kit check refused the gate refuses too (a POST
+        // navigation carries `Sec-Fetch-Site: cross-site` and an Origin that
+        // is not the dashboard's).
+        csrf: { trustedOrigins: ["*"] },
       }),
       Icons({ compiler: "svelte" }),
     ],

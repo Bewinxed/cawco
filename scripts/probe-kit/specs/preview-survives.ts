@@ -37,6 +37,8 @@
  *     Origin and cookies), with no `CAWCO_DASHBOARD_URL` set: the proxy's
  *     origin joins the preview's `frame-ancestors`, and the panel opened
  *     through it shows the page.
+ * 15c. Through that proxy, the page's own POST to the dashboard's `/api`
+ *     passes its gate, and a POST naming another Origin is refused.
  *
  * Every app's server refuses a WebSocket whose Origin is not `http://<its
  * Host>`, as a dashboard's `/ws` gate and Vite's HMR do: the agent rewrites
@@ -682,6 +684,28 @@ const run = async (kit: Kit) => {
       learned &&
       !!proxiedShown.frame,
     `CAWCO_DASHBOARD_URL ${fleet.env.CAWCO_DASHBOARD_URL ?? "unset"}; policy ${JSON.stringify(await policyNow())}; the panel: ${proxiedShown.last}`
+  );
+  // 15c. The dashboard's own gate judges the proxied page by the same origin:
+  // its POST passes, and one naming another origin is refused.
+  const target15c = `/api/instances/${session}/preview-address`;
+  const ownPost = await viaProxy.evaluate(
+    (url) =>
+      fetch(url, { method: "POST" }).then(
+        async (response) => `${response.status} ${await response.text()}`,
+        (error: Error) => error.message
+      ),
+    target15c
+  );
+  const foreign = await fetch(`${proxiedOrigin}${target15c}`, {
+    method: "POST",
+    headers: { origin: "http://elsewhere.localhost:9" },
+  });
+  kit.check(
+    "15c: through the proxy, the page's own POST to the dashboard's /api passes, and a POST with another Origin is refused (403)",
+    ownPost.startsWith("200 ") &&
+      ownPost.includes(`"port":${firstOrigin.split(":").at(-1)}`) &&
+      foreign.status === 403,
+    `own: ${ownPost.slice(0, 160)}; foreign: ${foreign.status} ${(await foreign.text()).slice(0, 120)}`
   );
   await viaProxy.context().close();
   proxy.stop(true);

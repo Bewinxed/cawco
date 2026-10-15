@@ -1,6 +1,7 @@
 import { crossSiteRefusal } from "@cawco/core/browser-gate";
 import type { Handle } from "@sveltejs/kit/hooks";
 import { RESTING_TAB_ICON } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
+import { publicOrigin } from "../public-origin.js";
 
 /**
  * Every request the dashboard's server answers:
@@ -8,7 +9,11 @@ import { RESTING_TAB_ICON } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
  * - **The gate** (core `browser-gate.ts`): a page of another origin, a
  *   previewed app on its own port of this host above all, never reaches
  *   `/api` (and through it the hub) or any other route with the browser's
- *   cookies; a top-level navigation from elsewhere still opens a page.
+ *   cookies; a top-level navigation from elsewhere still opens a page. The
+ *   dashboard's own origin is the request's `publicOrigin`
+ *   (public-origin.js), the one derivation serve.js and the vite servers'
+ *   `/ws` relays read: under `vite dev` and `vite preview` too, where
+ *   `event.url` knows the Host alone.
  * - **Isolation**: `Origin-Agent-Cluster` keeps this origin in its own agent
  *   cluster, apart from a preview on the same site; `frame-ancestors 'self'`
  *   lets no other origin frame the dashboard.
@@ -20,7 +25,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   const refused = crossSiteRefusal(
     event.request.method,
     (name) => event.request.headers.get(name),
-    event.url.origin
+    publicOrigin(Object.fromEntries(event.request.headers)).origin
   );
   if (refused) {
     console.warn(
