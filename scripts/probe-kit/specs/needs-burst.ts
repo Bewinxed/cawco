@@ -91,6 +91,8 @@ interface PushBody {
       alert?: { body?: string; subtitle?: string; title?: string };
       category?: string;
       "content-available"?: number;
+      "interruption-level"?: string;
+      sound?: string;
       "thread-id"?: string;
     };
     cawco?: {
@@ -126,6 +128,14 @@ const run = async (kit: Kit) => {
       return Response.json({ ok: true });
     },
   });
+  /** A push that newly needs the person: it plays the sound, at the default interruption level. */
+  const alerts = (push: Pushed) =>
+    push.body.payload.aps.sound === "default" &&
+    push.body.payload.aps["interruption-level"] === undefined;
+  /** A push that replaces one because the person acted: no sound, passive. */
+  const quietly = (push: Pushed) =>
+    push.body.payload.aps.sound === undefined &&
+    push.body.payload.aps["interruption-level"] === "passive";
   const visible = (since: number) =>
     pushes.filter(
       (one) => one.at >= since && one.body.pushType !== "background"
@@ -406,8 +416,10 @@ const run = async (kit: Kit) => {
     await settled(bBurst);
     const bPushes = visible(bStart);
     kit.check(
-      "b: the first ask goes at once, as itself",
-      ask1Push.at - ask1Parked < 3000 && ask1Push.at < bBurst.at,
+      "b: the first ask goes at once, as itself, with its sound",
+      ask1Push.at - ask1Parked < 3000 &&
+        ask1Push.at < bBurst.at &&
+        alerts(ask1Push),
       `${ask1Push.at - ask1Parked} ms after it parked, under ${ask1Push.body.collapseId}`
     );
     const ask2Sealed = await sealed(ask2Push);
@@ -428,14 +440,15 @@ const run = async (kit: Kit) => {
     );
     const bSealed = await sealed(bBurst);
     kit.check(
-      "b: the burst's push collapses onto the same notification, leads with the newest ask (its category and ids) and counts the rest",
+      "b: the burst's push collapses onto the same notification, leads with the newest ask (its category and ids), counts the rest, and alerts (new items)",
       bBurst.body.collapseId === ask2Push.body.collapseId &&
         bBurst.body.payload.cawco?.kind === "ask" &&
         bBurst.body.payload.cawco.requestId === ask2 &&
         bBurst.body.payload.aps.category === "CAWCO_PERMISSION" &&
         bBurst.body.payload.aps.alert?.body ===
           "Needs you\nAnd 5 more need you" &&
-        bSealed.body?.endsWith("\nAnd 5 more need you") === true,
+        bSealed.body?.endsWith("\nAnd 5 more need you") === true &&
+        alerts(bBurst),
       JSON.stringify({
         collapseId: bBurst.body.collapseId,
         cawco: bBurst.body.payload.cawco,
@@ -543,19 +556,20 @@ const run = async (kit: Kit) => {
     );
     const b2Sealed = await sealed(b2Replaced);
     kit.check(
-      "b2: the push it led is replaced at once under a fresh id, led by the ask still parked, and counts the rest",
+      "b2: the push it led is replaced at once under a fresh id, led by the ask still parked, counting the rest, quietly (no sound, passive)",
       b2Replaced.at - answeredAt < 3000 &&
         b2Id !== burstId &&
         b2Id.startsWith("needs-") &&
         b2Replaced.body.payload.cawco?.kind === "ask" &&
         b2Replaced.body.payload.cawco.requestId === ask1 &&
         b2Replaced.body.payload.aps.category === "CAWCO_PERMISSION" &&
-        b2Sealed.body?.endsWith("\nAnd 4 more need you") === true,
+        b2Sealed.body?.endsWith("\nAnd 4 more need you") === true &&
+        quietly(b2Replaced),
       JSON.stringify({
         ms: b2Replaced.at - answeredAt,
         collapseId: b2Id,
         cawco: b2Replaced.body.payload.cawco,
-        category: b2Replaced.body.payload.aps.category,
+        aps: b2Replaced.body.payload.aps,
         sealed: b2Sealed,
       })
     );
@@ -588,6 +602,7 @@ const run = async (kit: Kit) => {
     kit.check(
       "b2: a single item alone (the answered session's turn) goes under its own id, as itself",
       turn2.body.payload.cawco?.kind === "turn" &&
+        alerts(turn2) &&
         visible(b2Start).length === 2,
       visible(b2Start)
         .map((one) => `${one.body.collapseId} ${one.body.payload.cawco?.kind}`)
@@ -622,12 +637,13 @@ const run = async (kit: Kit) => {
     await settled(turn1);
     const cSealed = await sealed(cReplaced);
     kit.check(
-      "c: with no ask left parked the burst's push is Open only and opens Needs you",
+      "c: with no ask left parked the burst's push is Open only, opens Needs you, and updates quietly (no sound, passive)",
       cReplaced.body.payload.cawco?.kind === "needs" &&
         cReplaced.body.payload.cawco.count === 4 &&
         cReplaced.body.payload.aps.category === "CAWCO_NEEDS" &&
         cReplaced.body.payload.aps.alert?.title === "4 tasks need you" &&
-        cSealed.body === `${t7.title}, and 3 more`,
+        cSealed.body === `${t7.title}, and 3 more` &&
+        quietly(cReplaced),
       JSON.stringify({
         collapseId: cReplaced.body.collapseId,
         cawco: cReplaced.body.payload.cawco,
@@ -637,7 +653,9 @@ const run = async (kit: Kit) => {
     );
     kit.check(
       "c: then the answered session's turn, as itself",
-      turn1.body.payload.cawco?.kind === "turn" && visible(cStart).length === 2,
+      turn1.body.payload.cawco?.kind === "turn" &&
+        alerts(turn1) &&
+        visible(cStart).length === 2,
       visible(cStart)
         .map((one) => `${one.body.collapseId} ${one.body.payload.cawco?.kind}`)
         .join(", ")

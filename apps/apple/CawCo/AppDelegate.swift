@@ -207,7 +207,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         if note.kind == "test" {
             Task { @MainActor in PushRegistry.shared.heardTest() }
         }
-        completionHandler([.banner, .sound, .list])
+        // A passive push replaces one because the person acted (push.ts
+        // `quiet`): it updates the list and never drops a banner over the app.
+        completionHandler(notification.request.content.interruptionLevel == .passive ? [.list] : [.banner, .sound, .list])
     }
 
     nonisolated func userNotificationCenter(_: UNUserNotificationCenter, didReceive response: UNNotificationResponse,

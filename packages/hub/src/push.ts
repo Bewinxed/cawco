@@ -35,7 +35,9 @@
  *   and the burst's push replaces both. An answered ask is over: it leaves
  *   the burst, and a push it led is replaced at once, by the same rule,
  *   under a fresh id (the device's word that it acted on the old one then
- *   takes nothing else down). A push that takes another's place
+ *   takes nothing else down), quietly: no sound, passive, since nothing
+ *   in it newly needs the person. Only what newly needs them alerts. A
+ *   push that takes another's place
  *   names the one it replaces in `cawco.cleared`, so the device takes it
  *   down and never reports it as the person's dismissal. The burst's id
  *   clears once every item it named has cleared.
@@ -242,6 +244,13 @@ interface Notification {
   readonly category: string;
   readonly collapseId: string;
   readonly data: PushData;
+  /**
+   * It replaces one because the person acted (an ask answered, here or
+   * elsewhere): nothing newly needs them, so it updates in place without a
+   * sound and at the passive interruption level. Only what newly needs the
+   * person alerts.
+   */
+  readonly quiet?: boolean;
   /** The real words, sealed for each device into `e`; the app shows them in place of `shown`. */
   readonly sealed: Alert;
   /** The alert Cawrier and Apple see: never what the work said (see `sessionName`). */
@@ -408,7 +417,11 @@ const payloadOf = (
 ) => ({
   aps: {
     alert: notification.shown,
-    sound: "default",
+    // Apple: "passive — the system adds the notification to the notification
+    // list without lighting up the screen or playing a sound".
+    ...(notification.quiet
+      ? { "interruption-level": "passive" }
+      : { sound: "default" }),
     category: notification.category,
     "thread-id": notification.threadId,
     "mutable-content": 1,
@@ -796,10 +809,20 @@ export const createPush = ({
    * Sends `items` for `burst` (one as itself, several under `id`, led by
    * the newest ask among them: `pushOf`), in place of whatever the burst
    * showed before, which the push names in `cawco.cleared` so the device
-   * takes it down.
+   * takes it down. `quiet` when the person acted and nothing newly needs
+   * them: it updates without a sound, passive.
    */
-  const send = (burst: Burst, items: readonly Arrival[], id: string): void => {
-    const { lead, notification } = pushOf(id, items);
+  const send = (
+    burst: Burst,
+    items: readonly Arrival[],
+    id: string,
+    quiet = false
+  ): void => {
+    const pushed = pushOf(id, items);
+    const { lead } = pushed;
+    const notification = quiet
+      ? { ...pushed.notification, quiet }
+      : pushed.notification;
     const replacing =
       burst.showing && burst.showing !== notification.collapseId
         ? [burst.showing]
@@ -828,7 +851,7 @@ export const createPush = ({
     burst.shown = items;
     burst.lead = lead;
     console.log(
-      `[notify] push ${notification.collapseId}: ${items.length === 1 ? "sent" : `${items.length} in one (${ids.join(", ")})${lead ? `, led by ${lead}` : ""}`}${replacing.length > 0 ? `, replacing ${replacing.join(", ")}` : ""}`
+      `[notify] push ${notification.collapseId}: ${items.length === 1 ? "sent" : `${items.length} in one (${ids.join(", ")})${lead ? `, led by ${lead}` : ""}`}${replacing.length > 0 ? `, replacing ${replacing.join(", ")}` : ""}${quiet ? ", quietly" : ""}`
     );
     replace(notification, replacing);
   };
@@ -880,7 +903,8 @@ export const createPush = ({
     console.log(
       `[notify] push ${shownId}: ${id} was answered, replaced by what is left`
     );
-    send(burst, rest, burst.id);
+    // The person acted: what is left is not new, so it updates quietly.
+    send(burst, rest, burst.id, true);
   };
 
   /**
