@@ -158,7 +158,12 @@ export function sceneOne(stage: HTMLElement): gsap.core.Timeline {
   lid.play(timeline, 'close');
 
   // The room goes down with the screen at night (styles.css reads `--dusk` only in the dark).
-  timeline.fromTo(stage, { '--dusk': 0 }, { '--dusk': 1, duration: 0.7, ease: 'sine.inOut' }, 'close+=0.3');
+  timeline.fromTo(
+    stage,
+    { '--dusk': 0 },
+    { '--dusk': 1, duration: 0.7, ease: 'sine.inOut' },
+    'close+=0.3',
+  );
 
   // 4. The magnetic catch settles the laptop by 1px.
   timeline

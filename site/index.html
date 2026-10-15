@@ -89,6 +89,9 @@
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
+    <!-- Mobile Safari tints its status bar and toolbar from fixed strips at the edges (styles.css). -->
+    <div class="edge-top" aria-hidden="true"></div>
+    <div class="edge-bottom" aria-hidden="true"></div>
     <a class="skip" href="#main">Skip to content</a>
 
     <!-- The three agents' glyphs, as the product draws them (HarnessGlyph.svelte). -->
@@ -198,48 +201,48 @@
           takes the launch, the SEO and the docs as well as the code.
         </p>
         <div class="install" id="install">
-            <div class="install-head">
-              <p class="install-label">Install on the machine that stays on</p>
-              <div
-                class="tabs segmented"
-                role="tablist"
-                aria-label="Release channel"
-                data-channel
-                hidden
-              >
-                <button class="tab" role="tab" type="button" aria-selected="true" data-tab="stable">
-                  <span class="tab-name">Stable</span>
-                </button>
-                <button
-                  class="tab"
-                  role="tab"
-                  type="button"
-                  aria-selected="false"
-                  tabindex="-1"
-                  data-tab="nightly"
-                >
-                  <span class="tab-name">Nightly</span>
-                </button>
-                <span class="tab-slider" aria-hidden="true" data-slider></span>
-              </div>
-            </div>
-            <div class="cmd">
-              <code data-cmd>curl -fsSL https://cawco.dev/install.sh | sh</code>
-              <button class="copy" type="button" data-copy>
-                <span class="copy-icons" aria-hidden="true">
-                  <span class="ic-copy"><i data-icon="copy"></i></span>
-                  <span class="ic-done"><i data-icon="check-circle"></i></span>
-                  <span class="ic-fail"><i data-icon="close-circle"></i></span>
-                </span>
-                <span data-copy-label>Copy</span>
+          <div class="install-head">
+            <p class="install-label">Install on the machine that stays on</p>
+            <div
+              class="tabs segmented"
+              role="tablist"
+              aria-label="Release channel"
+              data-channel
+              hidden
+            >
+              <button class="tab" role="tab" type="button" aria-selected="true" data-tab="stable">
+                <span class="tab-name">Stable</span>
               </button>
-              <p class="cmd-alert" aria-hidden="true">
-                Copying is blocked here. Select the command instead.
-              </p>
+              <button
+                class="tab"
+                role="tab"
+                type="button"
+                aria-selected="false"
+                tabindex="-1"
+                data-tab="nightly"
+              >
+                <span class="tab-name">Nightly</span>
+              </button>
+              <span class="tab-slider" aria-hidden="true" data-slider></span>
             </div>
-            <p class="install-note">
-              Free. macOS and Linux with systemd. For more machines, use Add machine on the board.
+          </div>
+          <div class="cmd">
+            <code data-cmd>curl -fsSL https://cawco.dev/install.sh | sh</code>
+            <button class="copy" type="button" data-copy>
+              <span class="copy-icons" aria-hidden="true">
+                <span class="ic-copy"><i data-icon="copy"></i></span>
+                <span class="ic-done"><i data-icon="check-circle"></i></span>
+                <span class="ic-fail"><i data-icon="close-circle"></i></span>
+              </span>
+              <span data-copy-label>Copy</span>
+            </button>
+            <p class="cmd-alert" aria-hidden="true">
+              Copying is blocked here. Select the command instead.
             </p>
+          </div>
+          <p class="install-note">
+            Free. macOS and Linux with systemd. For more machines, use Add machine on the board.
+          </p>
         </div>
 
         <!--
@@ -298,7 +301,7 @@
         </div>
 
         <div class="beats" data-beats>
-          <div class="beat-list" role="group" aria-label="Demos">
+          <fieldset class="beat-list" aria-label="Demos">
             <button
               class="beat"
               type="button"
@@ -344,7 +347,7 @@
             >
               <span class="beat-line"></span>
             </button>
-          </div>
+          </fieldset>
           <button class="demo-pause" type="button" data-demo-pause hidden>
             <span class="ic-pause" aria-hidden="true"><i data-icon="pause"></i></span>
             <span class="ic-play" aria-hidden="true"><i data-icon="play"></i></span>

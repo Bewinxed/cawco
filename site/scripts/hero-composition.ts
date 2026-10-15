@@ -40,7 +40,10 @@ const assets = join(dist, 'assets');
 const css = readdirSync(assets).find((name) => name.endsWith('.css') && name.startsWith('styles'));
 if (!css) throw new Error('dist/assets has no page stylesheet; run `bun run build` first.');
 // The stylesheet's fonts are beside it; inline it with their paths from the composition's root.
-const styles = readFileSync(join(assets, css), 'utf8').replace(/url\(\.?\/?([^)/]+\.woff2)\)/g, 'url(assets/$1)');
+const styles = readFileSync(join(assets, css), 'utf8').replace(
+  /url\(\.?\/?([^)/]+\.woff2)\)/g,
+  'url(assets/$1)',
+);
 
 // gsap loads as its own files, as a composition's runtime expects; the scene takes it from them.
 const GLOBALS: Record<string, string> = { gsap: 'gsap', 'gsap/CustomEase': 'CustomEase' };
@@ -53,7 +56,10 @@ const built = await Bun.build({
     {
       name: 'gsap-globals',
       setup(build) {
-        build.onResolve({ filter: /^gsap(\/CustomEase)?$/ }, ({ path }) => ({ path, namespace: 'global' }));
+        build.onResolve({ filter: /^gsap(\/CustomEase)?$/ }, ({ path }) => ({
+          path,
+          namespace: 'global',
+        }));
         build.onLoad({ filter: /.*/, namespace: 'global' }, ({ path }) => ({
           contents: `const g = window.${GLOBALS[path]}; export default g; export const ${GLOBALS[path]} = g;`,
           loader: 'js',

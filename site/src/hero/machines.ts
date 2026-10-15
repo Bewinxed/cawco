@@ -115,7 +115,9 @@ export function deskBox(): string {
 
   const shadowPoints = [...lift(plan, 0), ...lift(plan, top)];
   const shadow = floorShadow(shadowPoints);
-  const contact = hull(lift(roundedRing(-w / 2 - 3, -d / 2 - 3, w + 6, d + 6, r + 3, 3), 0).map(project));
+  const contact = hull(
+    lift(roundedRing(-w / 2 - 3, -d / 2 - 3, w + 6, d + 6, r + 3, 3), 0).map(project),
+  );
   bounds.add(...shadow, ...contact, ...lift(plan, top).map(project));
 
   const feetAt: V2[] = [
@@ -255,7 +257,9 @@ export function laptop(): string {
 
   const lidRing = roundedRing(-w / 2, 0, w, d, r, 5);
   const baseShadow = floorShadow([...lift(plan, 0), ...lift(plan, base)]);
-  const contact = hull(lift(roundedRing(-w / 2 - 2.5, -d / 2 - 2.5, w + 5, d + 5, r + 2.5, 5), 0).map(project));
+  const contact = hull(
+    lift(roundedRing(-w / 2 - 2.5, -d / 2 - 2.5, w + 5, d + 5, r + 2.5, 5), 0).map(project),
+  );
 
   const shadows: string[] = [];
   const lids: string[] = [];

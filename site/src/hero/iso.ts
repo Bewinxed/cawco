@@ -66,7 +66,14 @@ export const pathOf = (points: V2[], closed = false): string =>
 export const segments = (runs: V2[][]): string => runs.map((run) => pathOf(run)).join('');
 
 /** A rounded rectangle on the floor plan, counter-clockwise from the -y side, as points. */
-export function roundedRing(x: number, y: number, w: number, d: number, r: number, steps = 5): V2[] {
+export function roundedRing(
+  x: number,
+  y: number,
+  w: number,
+  d: number,
+  r: number,
+  steps = 5,
+): V2[] {
   const radius = Math.max(0, Math.min(r, w / 2, d / 2));
   const corners: [number, number, number][] = [
     [x + w - radius, y + radius, -90],
@@ -91,7 +98,8 @@ export function circleRing(cx: number, cy: number, r: number, steps = 16): V2[] 
   });
 }
 
-const cross = (o: V2, a: V2, b: V2) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+const cross = (o: V2, a: V2, b: V2) =>
+  (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
 
 export function hull(points: V2[]): V2[] {
   const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -148,11 +156,19 @@ export interface Solid {
  * plane, for t from 0 to `height`. A floor prism is `at = (u, v, t) => [u, v, z + t]`; the lid is
  * the same ring on a tilted frame.
  */
-export function prism(ring: V2[], height: number, at: (u: number, v: number, t: number) => V3): Solid {
+export function prism(
+  ring: V2[],
+  height: number,
+  at: (u: number, v: number, t: number) => V3,
+): Solid {
   const count = ring.length;
   const base = ring.map(([u, v]) => at(u, v, 0));
   const top = ring.map(([u, v]) => at(u, v, height));
-  const up: V3 = [top[0]![0] - base[0]![0], top[0]![1] - base[0]![1], top[0]![2] - base[0]![2]];
+  // The direction the prism stands in, from its ring's plane: its first point, raised.
+  const [u0 = 0, v0 = 0] = ring[0] ?? [];
+  const [bx, by, bz] = at(u0, v0, 0);
+  const [tx, ty, tz] = at(u0, v0, height);
+  const up: V3 = [tx - bx, ty - by, tz - bz];
   const upLength = Math.hypot(...up) || 1;
   const axis: V3 = [up[0] / upLength, up[1] / upLength, up[2] / upLength];
   const normals = base.map((p, i) => {
@@ -187,7 +203,8 @@ export function prism(ring: V2[], height: number, at: (u: number, v: number, t: 
     edge.push(pathOf(run.map((i) => baseFlat[i] as V2)));
   }
   for (let i = 0; i < count; i++) {
-    if (seen[(i + count - 1) % count] !== seen[i]) edge.push(pathOf([topFlat[i] as V2, baseFlat[i] as V2]));
+    if (seen[(i + count - 1) % count] !== seen[i])
+      edge.push(pathOf([topFlat[i] as V2, baseFlat[i] as V2]));
   }
   return {
     hull: pathOf(hull([...topFlat, ...baseFlat]), true),

@@ -1,0 +1,619 @@
+/*
+ * The hero's stage (scene 1) and its beat rail, imported at the top of styles.css, whose tokens,
+ * scene parts (`.mark`, `.hg`, `.st`, `.pill`) and app tokens it builds on. Nothing here depends
+ * on coming after those: each rule is on the hero's own classes or more specific than the part
+ * it adjusts. The hero's words (eyebrow, headline, subhead, install) are laid out in styles.css.
+ */
+
+/* Each agent's name in the eyebrow carries the glyph the product draws for it (HarnessGlyph.svelte). */
+.eyebrow .hg {
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  margin-right: 0.28em;
+  color: inherit;
+  vertical-align: -0.2em;
+}
+
+/*
+ * The machines' tones are registered colours, so each computes once on the stage, with its
+ * light-dark() already resolved. Parts drawn through `<use>` (keys, feet, screws, the screen)
+ * inherit them as plain colours: Chrome leaves a light-dark() unresolved inside a use's copy.
+ */
+@property --m-top {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --m-a {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --m-b {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --m-rc {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --m-edge {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --m-fine {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --m-lit {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --scr-row {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --scr-mark {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --scr-ink {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+/*
+ * The stage: scene 1 on isometric paper. Every machine is drawn at k px per millimetre, one scale
+ * for the page (`--kpx`: 0.9 at 1200 and up, 0.62 at 768, 0.42 at 390, straight between), and is
+ * placed by its floor origin. The laptop's origin sits on a node of the lattice, and desk-box
+ * stands a whole lattice step away from it, so both register with the paper.
+ */
+.hero-stage {
+  --kpx: clamp(0.42px, 0.42px + (100vw - 390px) * 0.000529, 0.62px);
+  /*
+   * The laptop's floor origin, and desk-box's: 427 by -92.4 units away on screen, snapped to the
+   * nearest lattice vector on an even row (a whole 24px across, a whole 41.6px down), so both
+   * machines stand on nodes of the paper at every k.
+   */
+  --lap-x: calc(50cqw - 96px);
+  --lap-y: 400px;
+  --box-dx: round(calc(427 * var(--kpx)), 24px);
+  --box-dy: round(calc(-92.4 * var(--kpx)), 41.6px);
+  /* Desk-box's front corner on the floor: its cards stand off it. */
+  --corner-x: calc(var(--lap-x) + var(--box-dx) - 38 * var(--kpx));
+  --corner-y: calc(var(--lap-y) + var(--box-dy) + 76 * var(--kpx));
+  /* The size the cards are read at: the feature scenes' (`.scene`) reading size. */
+  --reading: clamp(10.5px, 10.5px + (100vw - 390px) * 0.0037, 13.5px);
+  --dusk: 0;
+
+  /*
+   * The machines' tones: top, side A (facing the light's side), side B, recess, the edge and the
+   * fine ink. By day ink 4 / 10 / 18 / 30% on the paper; at night the paper's own light at
+   * 14 / 9 / 5% on the night page, and the recess is the night itself. `--dusk` (scene.ts) takes
+   * the room down once the laptop's screen goes out.
+   */
+  --m-top: light-dark(
+    color-mix(in oklab, var(--crow-ink) 4%, var(--paper)),
+    color-mix(in oklab, var(--brand-paper) calc(14% - 5% * var(--dusk)), var(--paper))
+  );
+  --m-a: light-dark(
+    color-mix(in oklab, var(--crow-ink) 10%, var(--paper)),
+    color-mix(in oklab, var(--brand-paper) calc(9% - 3.5% * var(--dusk)), var(--paper))
+  );
+  --m-b: light-dark(
+    color-mix(in oklab, var(--crow-ink) 18%, var(--paper)),
+    color-mix(in oklab, var(--brand-paper) calc(5% - 2% * var(--dusk)), var(--paper))
+  );
+  --m-rc: light-dark(color-mix(in oklab, var(--crow-ink) 30%, var(--paper)), var(--paper));
+  --m-edge: light-dark(
+    color-mix(in oklab, var(--crow-ink) 78%, var(--paper)),
+    color-mix(in oklab, var(--brand-paper) calc(55% - 15% * var(--dusk)), var(--paper))
+  );
+  --m-fine: light-dark(
+    color-mix(in oklab, var(--crow-ink) 45%, var(--paper)),
+    color-mix(in oklab, var(--brand-paper) calc(35% - 10% * var(--dusk)), var(--paper))
+  );
+  /* A screen that is off: ink 2%. */
+  --m-off: light-dark(
+    color-mix(in oklab, var(--crow-ink) 2%, var(--paper)),
+    color-mix(in oklab, var(--brand-paper) 2%, var(--paper))
+  );
+  --m-lit: light-dark(var(--crow-ink), var(--brand-paper));
+  /* What the laptop's screen shows, in the app's tokens: its rows, a mark, its ink. */
+  --scr-row: var(--app-line);
+  --scr-mark: var(--mark-2);
+  --scr-ink: var(--app-ink);
+  --m-shadow: light-dark(
+    color-mix(in oklab, var(--crow-ink) 10%, transparent),
+    oklch(0% 0 0 / 0.4)
+  );
+  --pool: color-mix(in oklab, var(--brand-paper) 7%, transparent);
+  --glow: color-mix(in oklab, var(--brand-paper) 55%, transparent);
+  /* The UI cards' drop: ink 12% by day, black 45% at night; fainter for a card held higher. */
+  --card-shadow: light-dark(
+    color-mix(in oklab, var(--crow-ink) 12%, transparent),
+    oklch(0% 0 0 / 0.45)
+  );
+  --card-shadow-faint: light-dark(
+    color-mix(in oklab, var(--crow-ink) 8%, transparent),
+    oklch(0% 0 0 / 0.32)
+  );
+  --card-rim: light-dark(transparent, color-mix(in oklab, var(--brand-paper) 7%, transparent));
+
+  grid-area: stage;
+  position: relative;
+  height: clamp(380px, 380px + (100vw - 390px) * 0.2716, 600px);
+  margin-top: clamp(28px, 4vw, 52px);
+  container-type: size;
+  text-align: left;
+}
+
+/*
+ * The paper: isometric dots, r 1.1px, 24px apart in rows 20.8px apart, every other row half a
+ * pitch along, so its lines run at 0° and ±30°, as the floor's axes do. Printed full-bleed and
+ * faded out from the middle; one node is the laptop's floor origin.
+ */
+.hero-stage::before {
+  --dot: light-dark(
+    color-mix(in oklab, var(--crow-ink) 10%, var(--paper)),
+    color-mix(in oklab, var(--brand-paper) calc(9% - 3% * var(--dusk)), var(--paper))
+  );
+  --node-x: calc(var(--lap-x) - 50cqw + 50vw);
+  position: absolute;
+  inset: 0 calc(50% - 50vw);
+  background-image:
+    radial-gradient(circle at 12px 20.8px, var(--dot) 0.6px, transparent 1.6px),
+    radial-gradient(circle at 12px 20.8px, var(--dot) 0.6px, transparent 1.6px);
+  background-position:
+    calc(var(--node-x) - 12px) calc(var(--lap-y) - 20.8px),
+    var(--node-x) var(--lap-y);
+  background-size: 24px 41.6px;
+  mask-image: radial-gradient(ellipse 60% 55% at 50% 62%, #000 40%, transparent);
+  pointer-events: none;
+  content: '';
+}
+
+/* Stroke weight, caps and joins are inherited, so the parts drawn through `<use>` take them too. */
+.machine {
+  position: absolute;
+  left: calc(var(--ax) - var(--ox) * var(--kpx));
+  top: calc(var(--ay) - var(--oy) * var(--kpx));
+  width: calc(var(--vbw) * var(--kpx));
+  height: calc(var(--vbh) * var(--kpx));
+  overflow: visible;
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.m-lap {
+  --ax: var(--lap-x);
+  --ay: var(--lap-y);
+}
+
+.m-desk {
+  --ax: calc(var(--lap-x) + var(--box-dx));
+  --ay: calc(var(--lap-y) + var(--box-dy));
+}
+
+.machine :is(path, rect, circle, ellipse) {
+  vector-effect: non-scaling-stroke;
+}
+
+/*
+ * The page's parts paint by class; parts inside `<symbol>`s paint inline (machines.ts). Lines
+ * come first, so a part that is filled and edged takes its fill from the tone after them.
+ */
+.machine :is(.E, .F) {
+  fill: none;
+}
+
+.machine .E {
+  stroke: var(--m-edge);
+}
+
+.machine .F {
+  stroke: var(--m-fine);
+}
+
+.machine .t {
+  fill: var(--m-top);
+}
+
+.machine .sa {
+  fill: var(--m-a);
+}
+
+.machine .sb {
+  fill: var(--m-b);
+}
+
+.machine :is(.rc, .rcf, .cam) {
+  fill: var(--m-rc);
+}
+
+.machine .dot {
+  fill: var(--m-fine);
+}
+
+/* The status lamp is the one lit part: ink by day, the paper's light at night. */
+.machine .lamp {
+  fill: var(--m-lit);
+}
+
+.machine .sh {
+  fill: var(--m-shadow);
+  filter: blur(5px);
+}
+
+.machine .ct {
+  fill: var(--m-shadow);
+  filter: blur(2px);
+}
+
+/* The lid's frame clip: one pose (and its shadow) at a time; scene.ts moves `.on`. */
+.machine :is(.lid, .sh[data-frame]):not(.on) {
+  display: none;
+}
+
+/* The screen: on in the app's raised surface, off in ink 2%, mixed by how lit the pose is. */
+.machine .scr {
+  fill: color-mix(in oklab, var(--app-raised) var(--on), var(--m-off));
+}
+
+/* Light that only shows at night: the lit screen's pool, desk-box's lamp glow. */
+.machine :is(.pool, .glow) {
+  display: none;
+}
+
+:root[data-theme='dark'] .machine :is(.pool, .glow) {
+  display: inline;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .machine :is(.pool, .glow) {
+    display: inline;
+  }
+}
+
+/*
+ * The UI cards: flat to the viewer, in the app's tokens and type. They belong to desk-box and
+ * drift along the floor's y axis (down and to the left at 30°) at their own speed, in floor
+ * units per second times k, as scene.ts runs `--t` from 0.
+ */
+.hero-cards {
+  position: absolute;
+  inset: 0;
+  font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--reading);
+  font-weight: 500;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+/*
+ * A card never passes the window's right edge: its place, or as far right as its width allows.
+ * Its height (`--rise`, from the card's state below) rides on this same translate: scene.ts
+ * transforms the card itself for its arrival, and gsap folds a transformed element's own
+ * `translate` into its transform, so a rise set on the card would be lost.
+ */
+.drift {
+  --edge: calc(100cqw + var(--gutter) - 8px);
+  --rise: 0px;
+  position: absolute;
+  left: min(var(--cx), calc(var(--edge) - var(--w)));
+  top: var(--cy);
+  translate: calc(var(--t, 0) * var(--v) * -0.866 * var(--kpx))
+    calc(var(--t, 0) * var(--v) * 0.5 * var(--kpx) - var(--rise));
+}
+
+.drift:has(> [data-height='2']) {
+  --rise: 10px;
+}
+
+/* The cards stand off desk-box's front corner, the farthest back slowest (10, 14, 18 px/s at k 0.9). */
+.drift:nth-child(1) {
+  --cx: calc(var(--corner-x) + 22px);
+  --cy: calc(var(--corner-y) + 13px);
+  --v: 11.1;
+  --w: 19em;
+}
+
+.drift:nth-child(2) {
+  --cx: calc(var(--corner-x) + 74px);
+  --cy: calc(var(--corner-y) + 73px);
+  --v: 15.6;
+  --w: 21.7em;
+}
+
+.drift:nth-child(3) {
+  --cx: calc(var(--corner-x) + 2px);
+  --cy: calc(var(--corner-y) + 131px);
+  --v: 20;
+  --w: 24em;
+}
+
+.session-card {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.6em 0.85em;
+  border: 1px solid var(--app-line);
+  border-radius: 0.9em;
+  background: var(--app-raised);
+  color: var(--app-ink);
+  white-space: nowrap;
+  box-shadow:
+    var(--lift),
+    inset 0 1px 0 var(--card-rim);
+  opacity: 0;
+}
+
+/* Height is state: working rides at h1, a card that needs you is held at h2, a done one rests. */
+.session-card[data-height='0'] {
+  --lift: 0 1px 2px var(--card-shadow);
+}
+
+.session-card[data-height='1'] {
+  --lift: 10px 8px 14px var(--card-shadow);
+}
+
+/* Held 10px higher (`.drift`'s `--rise`), its shadow further off and fainter. */
+.session-card[data-height='2'] {
+  --lift: 18px 14px 22px var(--card-shadow-faint);
+}
+
+.session-card .card-title {
+  font-weight: 600;
+}
+
+.session-card .hg {
+  color: var(--app-muted);
+}
+
+/* The age counts up in place: three values in one cell, one shown at a time (scene.ts). */
+.session-card .card-age {
+  display: grid;
+  min-width: 1.9em;
+  color: var(--app-muted);
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.session-card .card-age > * {
+  grid-area: 1 / 1;
+}
+
+.session-card .card-age > :not(:first-child) {
+  visibility: hidden;
+}
+
+/* Free hand, the top layer. Scene 1 draws nothing on it. */
+.hero-hand {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* The beat rail: one hairline per scene, then the pause. Hover the stage and it holds. */
+.beats {
+  grid-area: beats;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 12px;
+  margin-top: 6px;
+}
+
+.beat-list {
+  display: flex;
+  gap: 2px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.beat {
+  display: grid;
+  align-items: center;
+  width: 56px;
+  height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: pointer;
+  transition: transform 160ms var(--ease-out);
+}
+
+.beat[aria-disabled='true'] {
+  cursor: default;
+}
+
+.beat:not([aria-disabled='true']):active {
+  transform: scale(0.97);
+}
+
+.beat-line {
+  display: block;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--ink) 12%, var(--paper));
+}
+
+.beat.is-done .beat-line {
+  background: color-mix(in oklab, var(--ink) 30%, var(--paper));
+}
+
+.beat-fill {
+  display: block;
+  height: 100%;
+  background: var(--vermilion);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+
+.demo-pause {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--soft-on-paper);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 160ms var(--ease-out);
+}
+
+.demo-pause:active {
+  transform: scale(0.97);
+}
+
+.demo-pause[hidden] {
+  display: none;
+}
+
+.demo-pause .icon {
+  font-size: 1.3rem;
+}
+
+.demo-pause .ic-play,
+.demo-pause[data-paused] .ic-pause {
+  display: none;
+}
+
+.demo-pause[data-paused] .ic-play {
+  display: block;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .demo-pause:hover {
+    color: var(--ink);
+  }
+
+  .beat:not([aria-disabled='true']):hover .beat-line {
+    background: color-mix(in oklab, var(--ink) 30%, var(--paper));
+  }
+}
+
+@media (min-width: 768px) {
+  .hero-stage {
+    --kpx: clamp(0.62px, 0.62px + (100vw - 768px) * 0.000648, 0.9px);
+  }
+}
+
+/*
+ * Between a phone and a desktop the floor keeps the desktop's plan, drawn smaller, and the cards
+ * have no room to desk-box's right, so they stand under its front corner.
+ */
+@media (max-width: 1199px) {
+  .hero-stage {
+    --lap-x: calc(50cqw - 72px);
+    --lap-y: calc(36px + 405 * var(--kpx));
+  }
+
+  .drift:nth-child(1) {
+    --cx: calc(var(--corner-x) - 65px);
+    --cy: calc(var(--corner-y) + 33px);
+  }
+
+  .drift:nth-child(2) {
+    --cx: calc(var(--corner-x) - 45px);
+    --cy: calc(var(--corner-y) + 70px);
+  }
+
+  .drift:nth-child(3) {
+    --cx: calc(var(--corner-x) - 76px);
+    --cy: calc(var(--corner-y) + 107px);
+  }
+}
+
+/*
+ * A phone: the stage comes before the subhead and the install (styles.css orders the hero), so
+ * the fold shows it. Desk-box stands a lattice step nearer, the cards line up under both machines,
+ * and parts under 0.75px at this scale step out.
+ */
+@media (max-width: 599px) {
+  .hero-stage {
+    --lap-x: calc(50cqw - 30px);
+    --lap-y: 200px;
+    --box-dx: 144px;
+    --box-dy: -41.6px;
+    margin-top: 18px;
+  }
+
+  .machine .fine {
+    display: none;
+  }
+
+  .beats {
+    gap: 4px;
+    margin-top: 0;
+  }
+
+  .beat {
+    width: 44px;
+  }
+
+  .demo-pause {
+    padding: 0 8px;
+  }
+
+  .drift:nth-child(1) {
+    --cx: calc(var(--corner-x) - 148px);
+    --cy: calc(var(--corner-y) + 69px);
+  }
+
+  .drift:nth-child(2) {
+    --cx: calc(var(--corner-x) - 128px);
+    --cy: calc(var(--corner-y) + 97px);
+  }
+
+  .drift:nth-child(3) {
+    --cx: calc(var(--corner-x) - 157px);
+    --cy: calc(var(--corner-y) + 130px);
+  }
+}
+
+/* Reduced motion: the stage stands on its summary frame (player.ts), and presses hold still. */
+@media (prefers-reduced-motion: reduce) {
+  .beat,
+  .demo-pause {
+    transition: none;
+  }
+
+  .beat:not([aria-disabled='true']):active,
+  .demo-pause:active {
+    transform: none;
+  }
+}
