@@ -109,8 +109,23 @@ const parentReply = (request: Seen): Reply => {
   return text("done");
 };
 
+/** What the mock answered each delegate's request with, by tag, in order: a failure's detail reads it. */
+const answered = new Map<string, string[]>();
+
+/** A reply in a word: the tool it calls, else its words. */
+const replyWord = (reply: Reply): string =>
+  reply.tool
+    ? `${reply.tool.name} ${JSON.stringify(reply.tool.input).slice(0, 60)}`
+    : reply.words.join("");
+
 const delegateReply = (tag: string, request: Seen): Reply => {
   heard.set(tag, [...(heard.get(tag) ?? []), request]);
+  const reply = delegateAnswer(tag, request);
+  answered.set(tag, [...(answered.get(tag) ?? []), replyWord(reply)]);
+  return reply;
+};
+
+const delegateAnswer = (tag: string, request: Seen): Reply => {
   if (tag === "C") {
     // Spins on short sleeps, a delegate at work on A, until B is paused.
     if (!paused) {
@@ -329,6 +344,20 @@ interface Probe {
   turnOpen: (id: string) => boolean;
 }
 
+/**
+ * A delegate's requests as a failure tells them: each one's time from
+ * `from`, whether it carried a tool's result, the end of what it read and
+ * what the mock answered.
+ */
+const story = (tag: string, from: number): string =>
+  (heard.get(tag) ?? [])
+    .map((seen, i) => {
+      const at = Math.round((seen.at - from) / 1000);
+      const read = JSON.stringify(seen.all.slice(-300));
+      return `[${at >= 0 ? "+" : ""}${at}s${seen.afterTool ? " tool-result" : ""}] …${read} → ${answered.get(tag)?.[i] ?? "?"}`;
+    })
+    .join("\n  ") || "none";
+
 /** The clock a pause's end is said in, as the hub says it. */
 const clock = (at: number): string =>
   new Date(at).toLocaleTimeString("en-GB", {
@@ -423,10 +452,10 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     (count) => count >= 2,
     120_000
   ).catch(() => undefined);
-  check(
+  const cRan = check(
     "p3: a delegate on A runs meanwhile",
     cWorked() >= 2,
-    `C's requests since the pause: ${cWorked()}`
+    `C's requests since the pause: ${cWorked()}; all of C's: ${story("C", pausedAt)}`
   );
 
   // p4
@@ -442,16 +471,30 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     (status) => status.includes("paused"),
     120_000
   ).catch(() => undefined);
-  check(
+  const cWaited = check(
     "p4: a check with machine: probe-b waits, its item's status naming the pause and its end",
     waiting?.includes(words) === true,
-    waiting ?? "no wait said"
+    `${waiting ?? "no wait said"}; C's item: ${JSON.stringify(fleet.query("SELECT state, checking_since, error FROM work_items WHERE id = ?", c.workItemId as string)[0])}`
   );
-  check(
+  const bQuiet = check(
     "p1–p4: nothing reached the delegate on B while paused",
     probe.since("B", pausedAt).length === 0,
-    probe.lasts(probe.since("B", pausedAt))
+    story("B", pausedAt)
   );
+  if (!(cRan && cWaited && bQuiet)) {
+    // The hub's own account of the pause and of what it sent B and C.
+    const ids = [bId, c.instanceId as string].map((id) => id.slice(0, 8));
+    const lines = (await fleet.logs("hub"))
+      .split("\n")
+      .filter(
+        (line) =>
+          line.includes("[pause]") ||
+          line.includes("[work-items]") ||
+          ids.some((id) => line.includes(id))
+      )
+      .slice(-60);
+    kit.note(`hub log, pause and B/C lines:\n${lines.join("\n")}`);
+  }
 
   // p5
   await fleet.stop("hub");
