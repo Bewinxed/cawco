@@ -410,7 +410,7 @@
         inert={!(isActive || (laidOut && !shown))}
         class:pane-hidden={!(shown || laidOut)}
         class:pane-settling={!shown && laidOut}
-        use:slot={{ id: paneId, shown: shown || warm.holds(leaf.id, paneId) }}
+        use:slot={{ id: paneId, shown }}
         {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
           mode: "clip",
         })}
