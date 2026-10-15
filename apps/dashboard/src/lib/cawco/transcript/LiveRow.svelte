@@ -161,10 +161,7 @@
 <!-- MessageRow's assistant turn, drawn by this row while it streams and once
      it has landed: the same section, header and body, so landing adds the
      clock and the last words and nothing else. -->
-{#snippet body(
-  live: Live | Said,
-  phase: Phase
-)}
+{#snippet body(live: Live | Said, phase: Phase)}
   {#if phase === "answer"}
     <section class="turn" class:grouped={live.grouped}>
       <Who
@@ -192,9 +189,7 @@
   {/if}
 {/snippet}
 
-{#snippet thinking(
-  live: Live | Said
-)}
+{#snippet thinking(live: Live | Said)}
   <!-- Live for as long as this row is: a block that has closed keeps its
        label until its settled row takes its place. Relabelled here, the
        narrower label pulled the chevron after it 16px across. -->

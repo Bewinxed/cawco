@@ -683,10 +683,10 @@ async function plus(
     '"+": it runs in the tab in front\'s machine, folder and harness',
     Boolean(
       was &&
-        got &&
-        was.machine_id === got.machine_id &&
-        was.cwd === got.cwd &&
-        was.harness === got.harness
+      got &&
+      was.machine_id === got.machine_id &&
+      was.cwd === got.cwd &&
+      was.harness === got.harness
     ),
     `${JSON.stringify(got)} against ${JSON.stringify(was)}`
   );

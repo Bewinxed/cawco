@@ -131,7 +131,7 @@ function* walk(root: unknown): Generator<string, void, undefined> {
       return;
     }
     emit('"');
-    for (let at = 0; at < text.length; ) {
+    for (let at = 0; at < text.length;) {
       const end = surrogateSafeEnd(text, at + JSON_PIECE_CHARS);
       emit(JSON.stringify(text.slice(at, end)).slice(1, -1));
       yield flush();
@@ -267,13 +267,7 @@ export const jsonSizeEstimate = (
 
 /** What the decoder expects next. */
 type Expect =
-  | "value"
-  | "value-or-end"
-  | "key"
-  | "key-or-end"
-  | "colon"
-  | "after"
-  | "done";
+  "value" | "value-or-end" | "key" | "key-or-end" | "colon" | "after" | "done";
 
 interface Container {
   array: boolean;

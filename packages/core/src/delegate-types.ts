@@ -94,9 +94,9 @@ export const delegateTypeProblem = (
   if (!draft.description?.trim()) {
     return "a delegate type needs a description — it is the whole of how the calling model routes to it";
   }
-  if (
-    !(draft.harness && ["claude", "opencode", "pi"].includes(draft.harness))
-  ) {
+  if (!(
+    draft.harness && ["claude", "opencode", "pi"].includes(draft.harness)
+  )) {
     return `“${draft.harness}” is not a harness a delegate type can run on`;
   }
   if (!draft.model?.trim()) {

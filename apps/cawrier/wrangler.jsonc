@@ -11,22 +11,22 @@
   "durable_objects": {
     "bindings": [
       { "name": "PAIRING", "class_name": "Pairing" },
-      { "name": "SEATS", "class_name": "Seats" }
-    ]
+      { "name": "SEATS", "class_name": "Seats" },
+    ],
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Pairing"] },
     { "tag": "v2", "new_sqlite_classes": ["Seats"] },
     { "tag": "v3", "new_sqlite_classes": ["Experiment"] },
     // The paywall's A/B test is gone (owner: "No test: one paywall"): its counts go with it.
-    { "tag": "v4", "deleted_classes": ["Experiment"] }
+    { "tag": "v4", "deleted_classes": ["Experiment"] },
   ],
   "ratelimits": [
     {
       "name": "ENROLL_LIMIT",
       "namespace_id": "1001",
-      "simple": { "limit": 10, "period": 60 }
-    }
+      "simple": { "limit": 10, "period": 60 },
+    },
   ],
   "vars": {
     "APNS_TOPIC": "dev.cawco.app",
@@ -38,9 +38,9 @@
     "APP_APPLE_ID": "6819139448",
     // Apple allows one notification URL per app: every verified notification's
     // exact body goes on to Yield, the owner's revenue dashboard.
-    "ASSN_FORWARD_URL": "https://yield.petralab.ai/api/asc/webhook"
+    "ASSN_FORWARD_URL": "https://yield.petralab.ai/api/asc/webhook",
   },
   // Secrets, set by hand: APNS_TEAM_ID, APNS_KEY_ID, APNS_P8.
   // No request logs: only the status codes and APNs reasons the code logs.
-  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
 }

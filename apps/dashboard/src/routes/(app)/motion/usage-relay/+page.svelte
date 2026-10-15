@@ -148,11 +148,7 @@
 
 {#if phoneFrame}
   <div class="phone">
-    <iframe
-      height="844"
-      src={frameSrc}
-      title="Phone sheet"
-      width="390"
+    <iframe height="844" src={frameSrc} title="Phone sheet" width="390"
     ></iframe>
   </div>
 {:else if ownStrip}

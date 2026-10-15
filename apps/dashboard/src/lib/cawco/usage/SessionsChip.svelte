@@ -119,7 +119,7 @@
         });
       const own = content.offsetHeight + 2;
       let end = top + own;
-      for (let moved = true; moved; ) {
+      for (let moved = true; moved;) {
         moved = false;
         for (const zone of zones) {
           if (zone.top < end - 0.5 && end < zone.bottom - 0.5) {

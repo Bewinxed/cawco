@@ -23,10 +23,7 @@
   bind:ref
   {...restProps}
 >
-  {#snippet children({
-    selected,
-    highlighted,
-  })}
+  {#snippet children({ selected, highlighted })}
     <span class="absolute end-2 flex size-4 items-center justify-center">
       <IconTick class="kit-tick" data-on={selected} />
     </span>

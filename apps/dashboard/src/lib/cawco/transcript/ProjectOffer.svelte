@@ -87,8 +87,7 @@
       <Button
         class={btn}
         href="/project/{encodeURIComponent(joined.project.id)}"
-        variant="outline"
-        >Open {joined.project.name}</Button
+        variant="outline">Open {joined.project.name}</Button
       >
       <Button
         aria-label="Put this away"

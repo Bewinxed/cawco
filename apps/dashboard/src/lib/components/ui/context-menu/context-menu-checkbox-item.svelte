@@ -30,9 +30,7 @@
   bind:ref
   {...restProps}
 >
-  {#snippet children({
-    checked,
-  })}
+  {#snippet children({ checked })}
     <span class="absolute right-2 pointer-events-none">
       <IconTick class="kit-tick" data-on={checked} />
     </span>

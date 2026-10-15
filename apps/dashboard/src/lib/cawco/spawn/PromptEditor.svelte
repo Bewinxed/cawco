@@ -86,13 +86,11 @@
   }
   function detectTrigger() {
     const selection = window.getSelection();
-    if (
-      !(
-        element &&
-        selection?.rangeCount &&
-        element.contains(selection.anchorNode)
-      )
-    ) {
+    if (!(
+      element &&
+      selection?.rangeCount &&
+      element.contains(selection.anchorNode)
+    )) {
       closeMenu();
       return;
     }
@@ -339,8 +337,7 @@
   {#if promptEmpty}
     <span aria-hidden="true" class="placeholder"
       >What should the agent do first?
-      <span class="hint"
-        >@ machine or project · / skills and plugins</span
+      <span class="hint">@ machine or project · / skills and plugins</span
       ></span
     >
   {/if}
@@ -375,8 +372,8 @@
     outline: none;
     background: transparent;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    font:
-      var(--weight-body) var(--prompt-fs) / var(--prompt-lh) var(--font-body);
+    font: var(--weight-body) var(--prompt-fs) / var(--prompt-lh)
+      var(--font-body);
     color: var(--ink-strong);
     white-space: pre-wrap;
     word-break: break-word;
@@ -389,8 +386,8 @@
     left: 16px;
     top: 12px;
     right: 16px;
-    font:
-      var(--weight-body) var(--prompt-fs) / var(--prompt-lh) var(--font-body);
+    font: var(--weight-body) var(--prompt-fs) / var(--prompt-lh)
+      var(--font-body);
     color: var(--ink-subtle);
     pointer-events: none;
     white-space: nowrap;

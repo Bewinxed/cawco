@@ -39,13 +39,25 @@
     <svg class="defs" width="0" height="0" aria-hidden="true">
       <symbol id="hg-claude" viewBox="0 0 24 24"><path d="M12 4l7 4v8l-7 4-7-4V8z" /></symbol>
       <symbol id="hg-opencode" viewBox="0 0 24 24"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4" /></symbol>
-      <symbol id="hg-pi" viewBox="0 0 24 24"><path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0" /></symbol>
+      <symbol id="hg-pi" viewBox="0 0 24 24">
+        <path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0" />
+      </symbol>
     </svg>
 
     <header class="top wrap">
-      <a class="wordmark" href="./" aria-label="Caw&amp;Co home"><img class="wordmark-icon" src="/src/assets/brand/app-icon.webp" width="84" height="84" alt="">Caw&amp;Co</a>
+      <a class="wordmark" href="./" aria-label="Caw&amp;Co home"
+        ><img
+          class="wordmark-icon"
+          src="/src/assets/brand/app-icon.webp"
+          width="84"
+          height="84"
+          alt=""
+        />Caw&amp;Co</a
+      >
       <nav class="top-nav" aria-label="Site">
-        <a class="top-link" href="https://github.com/Bewinxed/cawco"><i data-mark="github"></i>GitHub</a>
+        <a class="top-link" href="https://github.com/Bewinxed/cawco"
+          ><i data-mark="github"></i>GitHub</a
+        >
         <a class="btn btn-ink" href="#install">Install</a>
       </nav>
     </header>
@@ -53,7 +65,11 @@
     <main id="main">
       <section class="hero wrap">
         <div class="hero-art">
-          <i data-caw="ready-enter-distance" role="img" aria-label="Caw, a small fluffy black crow with vermilion wing tips"></i>
+          <i
+            data-caw="ready-enter-distance"
+            role="img"
+            aria-label="Caw, a small fluffy black crow with vermilion wing tips"
+          ></i>
         </div>
         <div class="hero-copy">
           <h1>One board for every coding agent you run.</h1>
@@ -65,11 +81,24 @@
           <div class="install" id="install">
             <div class="install-head">
               <p class="install-label">Install on your first machine</p>
-              <div class="tabs tabs-channel" role="tablist" aria-label="Release channel" data-channel hidden>
+              <div
+                class="tabs tabs-channel"
+                role="tablist"
+                aria-label="Release channel"
+                data-channel
+                hidden
+              >
                 <button class="tab" role="tab" type="button" aria-selected="true" data-tab="stable">
                   <span class="tab-name">Stable</span>
                 </button>
-                <button class="tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-tab="nightly">
+                <button
+                  class="tab"
+                  role="tab"
+                  type="button"
+                  aria-selected="false"
+                  tabindex="-1"
+                  data-tab="nightly"
+                >
                   <span class="tab-name">Nightly</span>
                 </button>
                 <span class="tab-slider" aria-hidden="true" data-slider></span>
@@ -85,13 +114,15 @@
                 </span>
                 <span data-copy-label>Copy</span>
               </button>
-              <p class="cmd-alert" aria-hidden="true">Copying is blocked here. Select the command instead.</p>
+              <p class="cmd-alert" aria-hidden="true">
+                Copying is blocked here. Select the command instead.
+              </p>
             </div>
             <p class="install-note">
               It's free and open source, and it runs on macOS and on Linux with systemd.
               <a href="install.sh">Read the script first</a> or
-              <a href="https://github.com/Bewinxed/cawco">browse the source</a>.
-              Adding another machine? Use Add machine in your dashboard, not this command.
+              <a href="https://github.com/Bewinxed/cawco">browse the source</a>. Adding another
+              machine? Use Add machine in your dashboard, not this command.
             </p>
           </div>
         </div>
@@ -104,37 +135,89 @@
           <div class="perch" aria-hidden="true"><i data-caw="peer-over" data-wait></i></div>
 
           <div class="tabs" role="tablist" aria-label="What Caw&amp;Co does">
-            <button class="tab" role="tab" type="button" id="tab-board" aria-controls="panel-board" aria-selected="true" data-tab="board">
+            <button
+              class="tab"
+              role="tab"
+              type="button"
+              id="tab-board"
+              aria-controls="panel-board"
+              aria-selected="true"
+              data-tab="board"
+            >
               <i data-icon="widget-5"></i><span class="tab-name">One board</span>
               <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
             </button>
-            <button class="tab" role="tab" type="button" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1" data-tab="phone">
+            <button
+              class="tab"
+              role="tab"
+              type="button"
+              id="tab-phone"
+              aria-controls="panel-phone"
+              aria-selected="false"
+              tabindex="-1"
+              data-tab="phone"
+            >
               <i data-icon="smartphone"></i><span class="tab-name">Phone approvals</span>
               <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
             </button>
-            <button class="tab" role="tab" type="button" id="tab-rules" aria-controls="panel-rules" aria-selected="false" tabindex="-1" data-tab="rules">
+            <button
+              class="tab"
+              role="tab"
+              type="button"
+              id="tab-rules"
+              aria-controls="panel-rules"
+              aria-selected="false"
+              tabindex="-1"
+              data-tab="rules"
+            >
               <i data-icon="chat-round-check"></i><span class="tab-name">Rules</span>
               <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
             </button>
-            <button class="tab" role="tab" type="button" id="tab-delegates" aria-controls="panel-delegates" aria-selected="false" tabindex="-1" data-tab="delegates">
+            <button
+              class="tab"
+              role="tab"
+              type="button"
+              id="tab-delegates"
+              aria-controls="panel-delegates"
+              aria-selected="false"
+              tabindex="-1"
+              data-tab="delegates"
+            >
               <i data-icon="branching-paths-down"></i><span class="tab-name">Delegates</span>
               <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
             </button>
-            <button class="tab" role="tab" type="button" id="tab-sync" aria-controls="panel-sync" aria-selected="false" tabindex="-1" data-tab="sync">
+            <button
+              class="tab"
+              role="tab"
+              type="button"
+              id="tab-sync"
+              aria-controls="panel-sync"
+              aria-selected="false"
+              tabindex="-1"
+              data-tab="sync"
+            >
               <i data-icon="refresh-circle"></i><span class="tab-name">Fleet sync</span>
               <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
             </button>
           </div>
 
           <!-- One board -->
-          <div class="panel is-on" role="tabpanel" id="panel-board" aria-labelledby="tab-board" data-panel="board">
+          <div
+            class="panel is-on"
+            role="tabpanel"
+            id="panel-board"
+            aria-labelledby="tab-board"
+            data-panel="board"
+          >
             <div class="scene-frame">
               <div class="scene scene-board" aria-hidden="true">
                 <div class="win">
                   <div class="win-bar">
                     <b>Projects</b>
                     <span class="bar-meta"><i data-icon="server-2"></i>3 machines online</span>
-                    <span class="pill pill-attn" data-needs><i data-icon="arrow-up"></i>1 needs you</span>
+                    <span class="pill pill-attn" data-needs
+                      ><i data-icon="arrow-up"></i>1 needs you</span
+                    >
                   </div>
                   <ul class="tree">
                     <li>
@@ -146,7 +229,9 @@
                       <ul class="nest">
                         <li data-row>
                           <div class="t-row">
-                            <span class="mark" data-rim="live" style="--fill: var(--mark-2)"><i data-icon="rocket"></i></span>
+                            <span class="mark" data-rim="live" style="--fill: var(--mark-2)"
+                              ><i data-icon="rocket"></i
+                            ></span>
                             <span class="t-name">Fix retry loop</span>
                             <svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>
                             <span class="t-age">2m</span>
@@ -154,7 +239,12 @@
                         </li>
                         <li data-row>
                           <div class="t-row">
-                            <span class="mark mark-deck" data-rim="live" style="--fill: var(--mark-2)"><b>2</b></span>
+                            <span
+                              class="mark mark-deck"
+                              data-rim="live"
+                              style="--fill: var(--mark-2)"
+                              ><b>2</b></span
+                            >
                             <span class="t-name">Ship the 1.4 release</span>
                             <svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>
                             <span class="t-age">now</span>
@@ -162,7 +252,9 @@
                           <ul class="nest" data-branch>
                             <li data-leaf>
                               <div class="t-row">
-                                <span class="mark" data-rim="live" style="--fill: var(--mark-2)"><i data-icon="box"></i></span>
+                                <span class="mark" data-rim="live" style="--fill: var(--mark-2)"
+                                  ><i data-icon="box"></i
+                                ></span>
                                 <span class="t-name">Build and smoke test</span>
                                 <svg class="hg" aria-hidden="true"><use href="#hg-opencode" /></svg>
                                 <span class="t-age">1m</span>
@@ -170,7 +262,9 @@
                             </li>
                             <li data-leaf>
                               <div class="t-row">
-                                <span class="mark" data-rim="live" style="--fill: var(--mark-2)"><i data-icon="book"></i></span>
+                                <span class="mark" data-rim="live" style="--fill: var(--mark-2)"
+                                  ><i data-icon="book"></i
+                                ></span>
                                 <span class="t-name">Review the diff</span>
                                 <svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>
                                 <span class="t-age">now</span>
@@ -189,15 +283,22 @@
                       <ul class="nest">
                         <li data-row data-flip>
                           <div class="t-row">
-                            <span class="mark" data-rim="attn" style="--fill: var(--mark-5)"><i data-icon="bolt"></i></span>
+                            <span class="mark" data-rim="attn" style="--fill: var(--mark-5)"
+                              ><i data-icon="bolt"></i
+                            ></span>
                             <span class="t-name">Migrate auth tables</span>
                             <svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>
-                            <span class="t-age swap"><span data-a>now</span><span class="pill pill-attn" data-b>needs you</span></span>
+                            <span class="t-age swap"
+                              ><span data-a>now</span
+                              ><span class="pill pill-attn" data-b>needs you</span></span
+                            >
                           </div>
                         </li>
                         <li data-row>
                           <div class="t-row">
-                            <span class="mark mark-run" data-rim="live"><i data-icon="routing-2"></i></span>
+                            <span class="mark mark-run" data-rim="live"
+                              ><i data-icon="routing-2"></i
+                            ></span>
                             <span class="t-name">Nightly release check</span>
                             <span class="t-kind">workflow</span>
                             <span class="t-age">now</span>
@@ -230,7 +331,9 @@
                       <ul class="nest">
                         <li data-row>
                           <div class="t-row">
-                            <span class="mark" style="--fill: var(--mark-8)"><i data-icon="leaf"></i></span>
+                            <span class="mark" style="--fill: var(--mark-8)"
+                              ><i data-icon="leaf"></i
+                            ></span>
                             <span class="t-name">Build widget target</span>
                             <svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>
                             <span class="t-age">14m</span>
@@ -241,38 +344,73 @@
                   </ul>
                 </div>
                 <div class="terms">
-                  <div class="term" data-term style="--x: 3%; --y: 6%; --r: -5deg"><b>ssh cloud</b><span></span><span></span><span></span></div>
-                  <div class="term" data-term style="--x: 52%; --y: 3%; --r: 4deg"><b>tmux: 2</b><span></span><span></span><span></span></div>
-                  <div class="term" data-term style="--x: 24%; --y: 34%; --r: 2deg"><b>ssh dev-vm</b><span></span><span></span><span></span></div>
-                  <div class="term" data-term style="--x: 58%; --y: 46%; --r: -3deg"><b>tmux: 4</b><span></span><span></span><span></span></div>
-                  <div class="term tree-extra" data-term style="--x: 8%; --y: 62%; --r: 5deg"><b>ssh laptop</b><span></span><span></span><span></span></div>
+                  <div class="term" data-term style="--x: 3%; --y: 6%; --r: -5deg">
+                    <b>ssh cloud</b><span></span><span></span><span></span>
+                  </div>
+                  <div class="term" data-term style="--x: 52%; --y: 3%; --r: 4deg">
+                    <b>tmux: 2</b><span></span><span></span><span></span>
+                  </div>
+                  <div class="term" data-term style="--x: 24%; --y: 34%; --r: 2deg">
+                    <b>ssh dev-vm</b><span></span><span></span><span></span>
+                  </div>
+                  <div class="term" data-term style="--x: 58%; --y: 46%; --r: -3deg">
+                    <b>tmux: 4</b><span></span><span></span><span></span>
+                  </div>
+                  <div class="term tree-extra" data-term style="--x: 8%; --y: 62%; --r: 5deg">
+                    <b>ssh laptop</b><span></span><span></span><span></span>
+                  </div>
                 </div>
               </div>
             </div>
             <div class="blurb">
               <h3>See every session at once</h3>
               <dl class="versus">
-                <div><dt>The usual way</dt><dd>You keep one terminal tab per agent and one SSH session per machine, and you find out a session is stuck when you happen to look at it.</dd></div>
-                <div class="with"><dt>With Caw&amp;Co</dt><dd>Every session on every machine is a row under its project, and its delegates fold open under it. A workflow chains steps, checks and questions for you; its run shows each step the same way.</dd></div>
+                <div>
+                  <dt>The usual way</dt>
+                  <dd>
+                    You keep one terminal tab per agent and one SSH session per machine, and you
+                    find out a session is stuck when you happen to look at it.
+                  </dd>
+                </div>
+                <div class="with">
+                  <dt>With Caw&amp;Co</dt>
+                  <dd>
+                    Every session on every machine is a row under its project, and its delegates
+                    fold open under it. A workflow chains steps, checks and questions for you; its
+                    run shows each step the same way.
+                  </dd>
+                </div>
               </dl>
             </div>
           </div>
 
           <!-- Phone approvals -->
-          <div class="panel" role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" data-panel="phone">
+          <div
+            class="panel"
+            role="tabpanel"
+            id="panel-phone"
+            aria-labelledby="tab-phone"
+            data-panel="phone"
+          >
             <div class="scene-frame">
               <div class="scene scene-phone" aria-hidden="true">
                 <div class="handset" data-handset>
                   <div class="hs-bar">
                     <i data-icon="alt-arrow-left"></i>
-                    <span class="mark" data-rim="attn" style="--fill: var(--mark-5)"><i data-icon="bolt"></i></span>
+                    <span class="mark" data-rim="attn" style="--fill: var(--mark-5)"
+                      ><i data-icon="bolt"></i
+                    ></span>
                     <span class="t-name">Migrate auth tables</span>
                     <svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>
                   </div>
                   <p class="hs-line">The schema is ready. Pushing it to the database next.</p>
                   <div class="hitl" data-ask>
                     <div class="hitl-head">
-                      <span class="swap pill-swap"><span class="pill pill-attn" data-a><i data-icon="arrow-up"></i>needs you</span><span class="pill pill-done" data-b>answered</span></span>
+                      <span class="swap pill-swap"
+                        ><span class="pill pill-attn" data-a
+                          ><i data-icon="arrow-up"></i>needs you</span
+                        ><span class="pill pill-done" data-b>answered</span></span
+                      >
                       <b>Permission: Bash</b>
                     </div>
                     <p class="hitl-lede">Run a shell command</p>
@@ -280,7 +418,9 @@
                     <span class="hitl-more">What this touches</span>
                     <div class="swap hitl-foot">
                       <div class="choice" data-a>
-                        <span class="app-btn app-btn-yes" data-allow><i data-icon="check-circle"></i>Approve</span>
+                        <span class="app-btn app-btn-yes" data-allow
+                          ><i data-icon="check-circle"></i>Approve</span
+                        >
                         <span class="app-btn"><i data-icon="close-circle"></i>Deny</span>
                       </div>
                       <span class="hitl-done" data-b><i data-icon="check-circle"></i>Approved</span>
@@ -289,9 +429,13 @@
                   <span class="tap" data-tap></span>
                 </div>
                 <div class="aside">
-                  <p class="aside-note"><b>The native app</b>iPhone, iPad and Mac. Not released yet.</p>
+                  <p class="aside-note">
+                    <b>The native app</b>iPhone, iPad and Mac. Not released yet.
+                  </p>
                   <div class="tg" data-tg>
-                    <div class="tg-head"><i data-mark="telegram"></i><b>Telegram</b><small>works today</small></div>
+                    <div class="tg-head">
+                      <i data-mark="telegram"></i><b>Telegram</b><small>works today</small>
+                    </div>
                     <div class="tg-msg">
                       <b>Bash</b>
                       <code>bun run db:push</code>
@@ -308,19 +452,40 @@
             <div class="blurb">
               <h3>Answer a prompt from your phone</h3>
               <dl class="versus">
-                <div><dt>The usual way</dt><dd>The agent stops at a permission prompt and waits until you are back at your desk.</dd></div>
-                <div class="with"><dt>With Caw&amp;Co</dt><dd>The prompt arrives in Telegram today, with Allow and Deny. The native app for iPhone, iPad and Mac is the same board at phone width, so you read the request and approve it there. It isn't released yet.</dd></div>
+                <div>
+                  <dt>The usual way</dt>
+                  <dd>
+                    The agent stops at a permission prompt and waits until you are back at your
+                    desk.
+                  </dd>
+                </div>
+                <div class="with">
+                  <dt>With Caw&amp;Co</dt>
+                  <dd>
+                    The prompt arrives in Telegram today, with Allow and Deny. The native app for
+                    iPhone, iPad and Mac is the same board at phone width, so you read the request
+                    and approve it there. It isn't released yet.
+                  </dd>
+                </div>
               </dl>
             </div>
           </div>
 
           <!-- Rules -->
-          <div class="panel" role="tabpanel" id="panel-rules" aria-labelledby="tab-rules" data-panel="rules">
+          <div
+            class="panel"
+            role="tabpanel"
+            id="panel-rules"
+            aria-labelledby="tab-rules"
+            data-panel="rules"
+          >
             <div class="scene-frame">
               <div class="scene scene-rules" aria-hidden="true">
                 <div class="win">
                   <div class="win-bar">
-                    <span class="mark" data-rim="live" style="--fill: var(--mark-5)"><i data-icon="fire"></i></span>
+                    <span class="mark" data-rim="live" style="--fill: var(--mark-5)"
+                      ><i data-icon="fire"></i
+                    ></span>
                     <b>Trace flaky test</b>
                     <svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>
                     <span class="bar-meta">dev-vm</span>
@@ -328,11 +493,18 @@
                   <div class="talk">
                     <div class="turn">
                       <span class="who">Claude Code</span>
-                      <p data-msg1>Patched the retry helper, so the test <mark data-hit>should work</mark> now.</p>
+                      <p data-msg1>
+                        Patched the retry helper, so the test <mark data-hit>should work</mark> now.
+                      </p>
                     </div>
                     <div class="turn turn-rule" data-reply>
-                      <span class="who"><i data-icon="chat-round-check"></i>Rule: Unverified claim</span>
-                      <p>You said it should work. Run it and report what actually happened, with the output.</p>
+                      <span class="who"
+                        ><i data-icon="chat-round-check"></i>Rule: Unverified claim</span
+                      >
+                      <p>
+                        You said it should work. Run it and report what actually happened, with the
+                        output.
+                      </p>
                     </div>
                     <div class="turn" data-msg2>
                       <span class="who">Claude Code</span>
@@ -369,49 +541,104 @@
             <div class="blurb">
               <h3>Write your standing reply once</h3>
               <dl class="versus">
-                <div><dt>The usual way</dt><dd>You read each transcript to catch the same habits, like a fix that "should work" but was never run, and you type the same reply again.</dd></div>
-                <div class="with"><dt>With Caw&amp;Co</dt><dd>A rule watches what every session says and sends your reply when a phrase or a regular expression matches. Connect Jev and it can match by meaning. Narrow a rule to one machine, project, agent or model.</dd></div>
+                <div>
+                  <dt>The usual way</dt>
+                  <dd>
+                    You read each transcript to catch the same habits, like a fix that "should work"
+                    but was never run, and you type the same reply again.
+                  </dd>
+                </div>
+                <div class="with">
+                  <dt>With Caw&amp;Co</dt>
+                  <dd>
+                    A rule watches what every session says and sends your reply when a phrase or a
+                    regular expression matches. Connect Jev and it can match by meaning. Narrow a
+                    rule to one machine, project, agent or model.
+                  </dd>
+                </div>
               </dl>
             </div>
           </div>
 
           <!-- Delegates -->
-          <div class="panel" role="tabpanel" id="panel-delegates" aria-labelledby="tab-delegates" data-panel="delegates">
+          <div
+            class="panel"
+            role="tabpanel"
+            id="panel-delegates"
+            aria-labelledby="tab-delegates"
+            data-panel="delegates"
+          >
             <div class="scene-frame">
               <div class="scene scene-delegates" aria-hidden="true">
                 <svg class="links" data-links aria-hidden="true"></svg>
                 <div class="node parent" data-node="parent">
-                  <span class="mark mark-deck" data-rim="live" style="--fill: var(--mark-2)"><b>4</b></span>
+                  <span class="mark mark-deck" data-rim="live" style="--fill: var(--mark-2)"
+                    ><b>4</b></span
+                  >
                   <span class="n-main">
                     <b>Ship the 1.4 release</b>
-                    <span class="swap n-sub"><span data-a>orchestrator, working</span><span class="tally" data-b>4 delegates reported</span></span>
+                    <span class="swap n-sub"
+                      ><span data-a>orchestrator, working</span
+                      ><span class="tally" data-b>4 delegates reported</span></span
+                    >
                   </span>
-                  <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>opus<i data-device="cloud"></i></span>
+                  <span class="n-on"
+                    ><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>opus<i
+                      data-device="cloud"
+                    ></i
+                  ></span>
                 </div>
                 <div class="kids">
                   <div class="node kid" data-kid="research">
                     <span class="kid-type">research</span>
                     <b>Read the changelog sources</b>
-                    <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>pi<i data-device="cloud"></i></span>
-                    <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                    <span class="n-on"
+                      ><svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>pi<i
+                        data-device="cloud"
+                      ></i
+                    ></span>
+                    <span class="swap n-state"
+                      ><span class="st st-live" data-a>working</span
+                      ><span class="st st-done" data-b>done</span></span
+                    >
                   </div>
                   <div class="node kid" data-kid="build">
                     <span class="kid-type">build</span>
                     <b>Build and smoke test</b>
-                    <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-opencode" /></svg>deepseek<i data-device="cloud"></i></span>
-                    <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                    <span class="n-on"
+                      ><svg class="hg" aria-hidden="true"><use href="#hg-opencode" /></svg
+                      >deepseek<i data-device="cloud"></i
+                    ></span>
+                    <span class="swap n-state"
+                      ><span class="st st-live" data-a>working</span
+                      ><span class="st st-done" data-b>done</span></span
+                    >
                   </div>
                   <div class="node kid" data-kid="review">
                     <span class="kid-type">review</span>
                     <b>Review the diff</b>
-                    <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>sonnet<i data-device="cloud"></i></span>
-                    <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                    <span class="n-on"
+                      ><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>sonnet<i
+                        data-device="cloud"
+                      ></i
+                    ></span>
+                    <span class="swap n-state"
+                      ><span class="st st-live" data-a>working</span
+                      ><span class="st st-done" data-b>done</span></span
+                    >
                   </div>
                   <div class="node kid" data-kid="simulator">
                     <span class="kid-type">runs on the laptop</span>
                     <b>Run it on the simulator</b>
-                    <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>sonnet<i data-device="laptop"></i></span>
-                    <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                    <span class="n-on"
+                      ><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>sonnet<i
+                        data-device="laptop"
+                      ></i
+                    ></span>
+                    <span class="swap n-state"
+                      ><span class="st st-live" data-a>working</span
+                      ><span class="st st-done" data-b>done</span></span
+                    >
                   </div>
                 </div>
               </div>
@@ -419,23 +646,55 @@
             <div class="blurb">
               <h3>Let a session hand work to another</h3>
               <table class="compare">
-                <caption class="sr-only">A subagent compared with a delegate</caption>
+                <caption class="sr-only">
+                  A subagent compared with a delegate
+                </caption>
                 <thead>
-                  <tr><td></td><th scope="col">Subagent</th><th scope="col">Delegate</th></tr>
+                  <tr>
+                    <td></td>
+                    <th scope="col">Subagent</th>
+                    <th scope="col">Delegate</th>
+                  </tr>
                 </thead>
                 <tbody>
-                  <tr><th scope="row">Agent</th><td>its parent's</td><td>any on your fleet: Claude Code to OpenCode, and back</td></tr>
-                  <tr><th scope="row">Session</th><td>its parent's</td><td>its own, open to you</td></tr>
-                  <tr><th scope="row">Done</th><td>when it answers</td><td>when its parent's checks pass</td></tr>
-                  <tr><th scope="row">Checkout</th><td>usually shared</td><td>always its own clone</td></tr>
+                  <tr>
+                    <th scope="row">Agent</th>
+                    <td>its parent's</td>
+                    <td>any on your fleet: Claude Code to OpenCode, and back</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Session</th>
+                    <td>its parent's</td>
+                    <td>its own, open to you</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Done</th>
+                    <td>when it answers</td>
+                    <td>when its parent's checks pass</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Checkout</th>
+                    <td>usually shared</td>
+                    <td>always its own clone</td>
+                  </tr>
                 </tbody>
               </table>
-              <p class="compare-note">On Claude Code the fleet turns the built-in subagent tool off by default, so the agent reaches for a delegate. A delegate can run on any machine in your fleet: build on the big box, run the iOS simulator on the Mac.</p>
+              <p class="compare-note">
+                On Claude Code the fleet turns the built-in subagent tool off by default, so the
+                agent reaches for a delegate. A delegate can run on any machine in your fleet: build
+                on the big box, run the iOS simulator on the Mac.
+              </p>
             </div>
           </div>
 
           <!-- Fleet sync -->
-          <div class="panel" role="tabpanel" id="panel-sync" aria-labelledby="tab-sync" data-panel="sync">
+          <div
+            class="panel"
+            role="tabpanel"
+            id="panel-sync"
+            aria-labelledby="tab-sync"
+            data-panel="sync"
+          >
             <div class="scene-frame">
               <div class="scene scene-sync" aria-hidden="true">
                 <div class="node hub" data-hub>
@@ -470,7 +729,9 @@
                     <b>cloud</b><small>rented box</small>
                     <ul class="chips">
                       <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
-                      <li class="chip chip-dot" data-dst="skill"><i data-icon="magic-stick-3"></i></li>
+                      <li class="chip chip-dot" data-dst="skill">
+                        <i data-icon="magic-stick-3"></i>
+                      </li>
                       <li class="chip chip-dot" data-dst="market"><i data-icon="box"></i></li>
                     </ul>
                   </div>
@@ -479,7 +740,9 @@
                     <b>dev-vm</b><small>over SSH</small>
                     <ul class="chips">
                       <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
-                      <li class="chip chip-dot" data-dst="skill"><i data-icon="magic-stick-3"></i></li>
+                      <li class="chip chip-dot" data-dst="skill">
+                        <i data-icon="magic-stick-3"></i>
+                      </li>
                       <li class="chip chip-dot" data-dst="market"><i data-icon="box"></i></li>
                     </ul>
                   </div>
@@ -488,7 +751,9 @@
                     <b>laptop</b><small>lid left ajar</small>
                     <ul class="chips">
                       <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
-                      <li class="chip chip-dot" data-dst="skill"><i data-icon="magic-stick-3"></i></li>
+                      <li class="chip chip-dot" data-dst="skill">
+                        <i data-icon="magic-stick-3"></i>
+                      </li>
                       <li class="chip chip-dot" data-dst="market"><i data-icon="box"></i></li>
                     </ul>
                   </div>
@@ -497,7 +762,9 @@
                     <b>desk-box</b><small>always on</small>
                     <ul class="chips">
                       <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
-                      <li class="chip chip-dot" data-dst="skill"><i data-icon="magic-stick-3"></i></li>
+                      <li class="chip chip-dot" data-dst="skill">
+                        <i data-icon="magic-stick-3"></i>
+                      </li>
                       <li class="chip chip-dot" data-dst="market"><i data-icon="box"></i></li>
                     </ul>
                   </div>
@@ -507,8 +774,22 @@
             <div class="blurb">
               <h3>Set a tool up once</h3>
               <dl class="versus">
-                <div><dt>The usual way</dt><dd>You add the same MCP server, skill or hook on each machine by hand, and they drift apart. One is a laptop you carry around half open so its agent stays awake.</dd></div>
-                <div class="with"><dt>With Caw&amp;Co</dt><dd>Paste a skill's install command, an owner/repo slug or a GitHub, npm or https source, and every machine gets it. MCP servers, plugins, memory and hooks sync too. Long jobs can live on a machine that stays on, so the lid can close.</dd></div>
+                <div>
+                  <dt>The usual way</dt>
+                  <dd>
+                    You add the same MCP server, skill or hook on each machine by hand, and they
+                    drift apart. One is a laptop you carry around half open so its agent stays
+                    awake.
+                  </dd>
+                </div>
+                <div class="with">
+                  <dt>With Caw&amp;Co</dt>
+                  <dd>
+                    Paste a skill's install command, an owner/repo slug or a GitHub, npm or https
+                    source, and every machine gets it. MCP servers, plugins, memory and hooks sync
+                    too. Long jobs can live on a machine that stays on, so the lid can close.
+                  </dd>
+                </div>
               </dl>
             </div>
           </div>
@@ -524,12 +805,19 @@
       <section class="facts wrap" aria-labelledby="facts-title">
         <div class="facts-head">
           <h2 id="facts-title" class="section-title">As fluid as your workflow will be</h2>
-          <p class="facts-lede">Lists reflow where they stand and trees fold open along their rails, so you keep your place while the work moves. Ask your system for less motion and the interface holds still.</p>
+          <p class="facts-lede">
+            Lists reflow where they stand and trees fold open along their rails, so you keep your
+            place while the work moves. Ask your system for less motion and the interface holds
+            still.
+          </p>
         </div>
         <div class="fact">
           <i data-icon="inbox-in"></i>
           <h3>Queue the next message</h3>
-          <p>Send while the agent works. The message waits its turn, and you can take it back until it's read.</p>
+          <p>
+            Send while the agent works. The message waits its turn, and you can take it back until
+            it's read.
+          </p>
         </div>
         <div class="fact">
           <i data-icon="history"></i>
@@ -539,12 +827,19 @@
         <div class="fact">
           <i data-icon="restart"></i>
           <h3>Continue in a new session</h3>
-          <p>The hub summarises a long conversation with a model you pick and opens a fresh session from it, on any agent or model.</p>
+          <p>
+            The hub summarises a long conversation with a model you pick and opens a fresh session
+            from it, on any agent or model.
+          </p>
         </div>
         <div class="fact">
           <i data-icon="forward"></i>
           <h3>Hand off, with a cost check</h3>
-          <p>Sessions message each other across machines. When an agent sends follow-up work to a Claude Code session whose prompt cache has expired, the hub refuses the first try and says a fresh delegate is usually cheaper.</p>
+          <p>
+            Sessions message each other across machines. When an agent sends follow-up work to a
+            Claude Code session whose prompt cache has expired, the hub refuses the first try and
+            says a fresh delegate is usually cheaper.
+          </p>
         </div>
         <div class="fact">
           <i data-icon="server-square"></i>
@@ -575,7 +870,9 @@
           <article class="card card-ink">
             <h3>Caw&amp;Co</h3>
             <p class="price">Free</p>
-            <p>The hub, the daemon and the board are open source. You run them on your own machines.</p>
+            <p>
+              The hub, the daemon and the board are open source. You run them on your own machines.
+            </p>
             <div class="cmd">
               <code data-cmd>curl -fsSL https://cawco.dev/install.sh | sh</code>
               <button class="copy" type="button" data-copy>
@@ -586,16 +883,29 @@
                 </span>
                 <span data-copy-label>Copy</span>
               </button>
-              <p class="cmd-alert" aria-hidden="true">Copying is blocked here. Select the command instead.</p>
+              <p class="cmd-alert" aria-hidden="true">
+                Copying is blocked here. Select the command instead.
+              </p>
             </div>
-            <a class="card-link" href="https://github.com/Bewinxed/cawco"><i data-mark="github"></i>github.com/Bewinxed/cawco</a>
+            <a class="card-link" href="https://github.com/Bewinxed/cawco"
+              ><i data-mark="github"></i>github.com/Bewinxed/cawco</a
+            >
           </article>
           <article class="card card-paper">
             <h3>The native app</h3>
             <p class="price">$9.99 <span>once</span></p>
-            <p>It runs on iPhone, iPad and Mac, and it's the same board at the size of your hand. You pay once and there is no trial.</p>
+            <p>
+              It runs on iPhone, iPad and Mac, and it's the same board at the size of your hand. You
+              pay once and there is no trial.
+            </p>
             <div class="store">
-              <img class="store-badge" src="/src/assets/brand/app-store-badge.svg" width="120" height="40" alt="App Store badge">
+              <img
+                class="store-badge"
+                src="/src/assets/brand/app-store-badge.svg"
+                width="120"
+                height="40"
+                alt="App Store badge"
+              />
               <p class="soon">It isn't released yet.</p>
             </div>
           </article>
@@ -604,7 +914,15 @@
     </main>
 
     <footer class="foot wrap">
-      <span class="wordmark"><img class="wordmark-icon" src="/src/assets/brand/app-icon.webp" width="84" height="84" alt="">Caw&amp;Co</span>
+      <span class="wordmark"
+        ><img
+          class="wordmark-icon"
+          src="/src/assets/brand/app-icon.webp"
+          width="84"
+          height="84"
+          alt=""
+        />Caw&amp;Co</span
+      >
       <span class="foot-line">A little flock. A lot of work.</span>
       <nav class="foot-nav" aria-label="Links">
         <a href="https://github.com/Bewinxed/cawco"><i data-mark="github"></i>GitHub</a>

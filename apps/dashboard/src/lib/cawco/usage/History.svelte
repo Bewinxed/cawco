@@ -131,7 +131,7 @@
   const hoursFrom = (start: number): number[] => {
     const out: number[] = [];
     const now = Date.now();
-    for (let at = start; at <= now; ) {
+    for (let at = start; at <= now;) {
       out.push(at);
       at += HOUR_MS;
     }
@@ -298,9 +298,7 @@
             <!-- One slot: the old view leaves over its top while the new one
                  waits for it, and the slot's height morphs to the new. -->
             <div class="body" {@attach morph()}>
-              {#each bodySwap.leaving.filter(
-                (l) => l.harness === chart.harness
-              ) as gone (gone.harness)}
+              {#each bodySwap.leaving.filter((l) => l.harness === chart.harness) as gone (gone.harness)}
                 <div
                   aria-hidden="true"
                   class="leaving"
@@ -333,10 +331,7 @@
   {/if}
 </section>
 
-{#snippet plot(
-  chart: Chart,
-  live: boolean
-)}
+{#snippet plot(chart: Chart, live: boolean)}
   <div class="plot">
     <div class="bars">
       {#each chart.points as point (point.at)}
@@ -350,9 +345,7 @@
         {:else}
           <Tooltip.Root>
             <Tooltip.Trigger>
-              {#snippet child({
-                props,
-              })}
+              {#snippet child({ props })}
                 <span
                   {...props}
                   aria-label="{periodLabel(point.at)}: {chart.approx}{money(
@@ -385,9 +378,7 @@
   </div>
 {/snippet}
 
-{#snippet figures(
-  chart: Chart
-)}
+{#snippet figures(chart: Chart)}
   <table class="figures">
     <thead>
       <tr>

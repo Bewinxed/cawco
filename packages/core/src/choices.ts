@@ -44,9 +44,7 @@ export const PAGE_HASH = /^[0-9a-f]{64}$/;
 
 /** One change the page asks for: exactly one of options, note or value. */
 export type ChoiceChange = { choice: string; pageHash: string } & (
-  | { options: string[] }
-  | { note: string }
-  | { value: unknown }
+  { options: string[] } | { note: string } | { value: unknown }
 );
 
 /** An artifact's choices as the page reads them through the bridge (`cawco.on("picks")`). */

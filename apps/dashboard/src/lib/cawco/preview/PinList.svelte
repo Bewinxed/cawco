@@ -62,9 +62,7 @@
   };
 </script>
 
-{#snippet row(
-  pin: Pin
-)}
+{#snippet row(pin: Pin)}
   <li>
     <button
       aria-current={pin.id === focused || undefined}
@@ -79,10 +77,7 @@
         <span class="last">{lastLine(pin)}</span>
       </span>
       {#if live.has(pin.id)}
-        <span
-          aria-label="The agent is working on it"
-          class="live"
-          role="img"
+        <span aria-label="The agent is working on it" class="live" role="img"
         ></span>
       {/if}
     </button>

@@ -59,9 +59,7 @@ const SENDS_KEPT = 2000;
 
 /** What the gate answers a call: run it now, refuse it with words, or put it on your card. */
 export type GateVerdict =
-  | { kind: "allow" }
-  | { kind: "deny"; message: string }
-  | { kind: "card" };
+  { kind: "allow" } | { kind: "deny"; message: string } | { kind: "card" };
 
 const GATED: ReadonlySet<string> = new Set([
   ...LEAD_GATED_TOOLS.claude,

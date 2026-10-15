@@ -60,8 +60,7 @@
         <Table.Row class="band border-0">
           {#each group.headers as header (header.id)}
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head scope="col"
-              >{header.column.columnDef.header}</Table.Head
+            <Table.Head scope="col">{header.column.columnDef.header}</Table.Head
             >
           {/each}
         </Table.Row>

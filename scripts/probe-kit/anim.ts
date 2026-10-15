@@ -221,7 +221,7 @@ export class Clock {
     const deadline = Date.now() + ms;
     try {
       await action();
-      for (let after = 0; after < 2 && Date.now() < deadline; ) {
+      for (let after = 0; after < 2 && Date.now() < deadline;) {
         // biome-ignore lint/performance/noAwaitInLoops: one frame at a time, until the runs are in
         await frames(this.page);
         const fresh = this.started.slice(read);

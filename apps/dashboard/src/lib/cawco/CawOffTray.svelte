@@ -53,31 +53,28 @@
   /** How many he started that still run: the other way out says "it" or "them". */
   const listed = $derived(ask.running.length);
 
-  const words = $derived.by(
-    (): StopWords => ({
-      title: `Turn Caw off for ${ask.projectName || "this project"}?`,
-      plain: "Turn off",
-      stop: (count) => `Stop ${count} and turn Caw off`,
-      armed: (count) => `Stop ${count} mid-turn and turn Caw off`,
-      ending: "Turning Caw off…",
-      ended: "Caw is off",
-      partway: (stopped, total) =>
-        `Stopped ${stopped} of ${total}; Caw is off.`,
-      line: (phase, count, done) => {
-        switch (phase) {
-          case "list":
-            return `He started ${count} ${plural(count, "thing that is", "things that are")} still running. Let ${plural(count, "it", "them")} finish, or stop ${plural(count, "it", "them")} now.`;
-          case "armed":
-          case "stopping":
-            return "Stopping cuts their turns short. Transcripts stay on disk.";
-          case "fail":
-            return "Caw is off. What couldn't be stopped still runs.";
-          default:
-            return `${done} Caw is off.`;
-        }
-      },
-    })
-  );
+  const words = $derived.by((): StopWords => ({
+    title: `Turn Caw off for ${ask.projectName || "this project"}?`,
+    plain: "Turn off",
+    stop: (count) => `Stop ${count} and turn Caw off`,
+    armed: (count) => `Stop ${count} mid-turn and turn Caw off`,
+    ending: "Turning Caw off…",
+    ended: "Caw is off",
+    partway: (stopped, total) => `Stopped ${stopped} of ${total}; Caw is off.`,
+    line: (phase, count, done) => {
+      switch (phase) {
+        case "list":
+          return `He started ${count} ${plural(count, "thing that is", "things that are")} still running. Let ${plural(count, "it", "them")} finish, or stop ${plural(count, "it", "them")} now.`;
+        case "armed":
+        case "stopping":
+          return "Stopping cuts their turns short. Transcripts stay on disk.";
+        case "fail":
+          return "Caw is off. What couldn't be stopped still runs.";
+        default:
+          return `${done} Caw is off.`;
+      }
+    },
+  }));
 
   /** A row as the tray names it: what it is, and its session. */
   function viewOf(id: string) {

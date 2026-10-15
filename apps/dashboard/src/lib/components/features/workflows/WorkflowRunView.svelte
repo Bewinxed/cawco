@@ -211,9 +211,7 @@
     live ? undefined : `Can't ${doing} while the hub is unreachable`;
 </script>
 
-{#snippet rerunFrom(
-  step: WorkflowStep
-)}
+{#snippet rerunFrom(step: WorkflowStep)}
   <!-- Everything this run did before the step is kept: the new run is
        handed those results and goes live from here. -->
   {@const key = `rerun-step:${step.id}`}
@@ -291,8 +289,7 @@
         <Button
           href="/workflows/{run.workflowId}?tab=program"
           size="sm"
-          variant="outline"
-          >Edit workflow</Button
+          variant="outline">Edit workflow</Button
         >
         <RowFault class="act-fault" reason={faultOf("rerun")} />
       </div>

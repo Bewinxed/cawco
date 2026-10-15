@@ -14,9 +14,7 @@ import type { SubagentState } from "#lib/utils/flow-types.js";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
-  | JsonPrimitive
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export type MessageType = BlockType;
 
@@ -41,9 +39,7 @@ export type Message = Omit<TranscriptBlock, "state" | "metadata"> & {
  * no row — or, before the hub has it, this tab's own.
  */
 export type SendRowState =
-  | "sending"
-  | "unreached"
-  | Exclude<SendState, "replaced">;
+  "sending" | "unreached" | Exclude<SendState, "replaced">;
 
 /** A block's metadata, and what this tab's own rows carry beside it. */
 export interface MessageMetadata extends BlockMetadata {

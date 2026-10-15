@@ -120,7 +120,7 @@
         onclick={() => ontoggle(row.id)}
         style={`--delay:${80 + index * 45}ms;border-radius:${radius(index, on)}`}
         type="button"
-        class:on={on}
+        class:on
       >
         <MachineRow
           hue={row.hue}

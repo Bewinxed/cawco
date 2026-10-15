@@ -75,7 +75,7 @@
       }}
       style={`--delay:${index * 35}ms`}
       type="button"
-      class:on={on}
+      class:on
     >
       <span class="ns-tile tile" style={`color:${option.hue}`}><Icon /></span>
       <span class="text">

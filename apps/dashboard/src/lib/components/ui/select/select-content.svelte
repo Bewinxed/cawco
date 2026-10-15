@@ -51,11 +51,7 @@
     bind:ref
     {...restProps}
   >
-    {#snippet child({
-      props,
-      wrapperProps,
-      open,
-    })}
+    {#snippet child({ props, wrapperProps, open })}
       {#if forceMount || drawn(props)}
         <div {...wrapperProps} style:pointer-events={pressable(open)}>
           <div {...own(props)} style:pointer-events={pressable(open)}>

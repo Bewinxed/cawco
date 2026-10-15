@@ -28,5 +28,4 @@
   bind:this={ref}
   bind:value
   {...restProps}
-  {@attach autosize(() => value)}
-></textarea>
+  {@attach autosize(() => value)}></textarea>

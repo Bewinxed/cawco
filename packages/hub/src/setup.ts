@@ -56,9 +56,7 @@ const placeOf = (
 ): { machineId: string; path: string } | undefined => {
   const entry: ChoiceEntry | undefined = state.place;
   const value = entry?.value as
-    | { machineId?: unknown; path?: unknown }
-    | null
-    | undefined;
+    { machineId?: unknown; path?: unknown } | null | undefined;
   return typeof value?.machineId === "string" &&
     typeof value.path === "string" &&
     value.path.startsWith("/")

@@ -644,9 +644,9 @@
               <MachineRow
                 hue={machineHue(index, online)}
                 icon={machineIcon(machine.os)}
-                meta="{SAID[item?.state ?? ""] ?? "Not reported"} · {machineOs(
+                meta="{SAID[item?.state ?? ''] ?? 'Not reported'} · {machineOs(
                   machine.os
-                ).label}{online ? "" : " · offline, it syncs when back"}"
+                ).label}{online ? '' : ' · offline, it syncs when back'}"
                 name={machineLabel(machine.hostname)}
                 presence={online ? "online" : "off"}
               />

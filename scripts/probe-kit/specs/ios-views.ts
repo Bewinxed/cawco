@@ -343,16 +343,14 @@ async function keepInPlace(
     (text) => text.includes("Probe draft"),
     "Probe draft's page"
   ).catch(() => undefined);
-  if (
-    !(
-      kit.check(
-        `${device.tag} c: a draft opens under its bar, its words and Keep and Discard`,
-        bar?.startsWith("Caw drafted the Probe draft view|keep=") === true &&
-          page !== undefined,
-        `bar ${bar}; page “${page?.text.slice(0, 120)}”`
-      ) && bar
-    )
-  ) {
+  if (!(
+    kit.check(
+      `${device.tag} c: a draft opens under its bar, its words and Keep and Discard`,
+      bar?.startsWith("Caw drafted the Probe draft view|keep=") === true &&
+        page !== undefined,
+      `bar ${bar}; page “${page?.text.slice(0, 120)}”`
+    ) && bar
+  )) {
     return;
   }
   since = device.heard.length;
@@ -394,15 +392,13 @@ async function discardInPlace(
   const bar = await paneSince(device, SCRAP, since, true).catch(
     () => undefined
   );
-  if (
-    !(
-      kit.check(
-        `${device.tag} d: the other draft opens under its bar`,
-        bar?.startsWith("Caw drafted the Probe scrap view|") === true,
-        `bar ${bar}`
-      ) && bar
-    )
-  ) {
+  if (!(
+    kit.check(
+      `${device.tag} d: the other draft opens under its bar`,
+      bar?.startsWith("Caw drafted the Probe scrap view|") === true,
+      `bar ${bar}`
+    ) && bar
+  )) {
     return;
   }
   since = device.heard.length;
@@ -511,8 +507,7 @@ async function launch(
         frame: node.frame as Node["frame"],
       });
       for (const kid of (node.children as
-        | Record<string, unknown>[]
-        | undefined) ?? []) {
+        Record<string, unknown>[] | undefined) ?? []) {
         walk(kid);
       }
     };

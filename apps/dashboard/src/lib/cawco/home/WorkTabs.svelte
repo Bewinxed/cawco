@@ -609,10 +609,7 @@
   }
 </script>
 
-{#snippet header(
-  group: Group,
-  style: string
-)}
+{#snippet header(group: Group, style: string)}
   {@const finished = shown === "finished" ? finishedOn(group.machineId) : []}
   <!-- Where these run, said once for the rows under it. -->
   <h3 class="machine" data-key="head:{group.machineId}" {style}>
@@ -633,11 +630,7 @@
   </h3>
 {/snippet}
 
-{#snippet sessionRow(
-  row: InstanceRow,
-  tab: WorkTab,
-  group: string
-)}
+{#snippet sessionRow(row: InstanceRow, tab: WorkTab, group: string)}
   {@const context = shapeOf(tab, row.id)?.context ?? false}
   <!-- A context line is the parent of delegates listed here, not one of
        the tab's own: its state and name, quietly, and nothing else. -->
@@ -659,10 +652,7 @@
   />
 {/snippet}
 
-{#snippet leavingTree(
-  line: Line,
-  lines: Line[]
-)}
+{#snippet leavingTree(line: Line, lines: Line[])}
   {@const kids = lines.filter(
     (other) => other.row && shapeOf(other.tab, other.key)?.parent === line.key
   )}
@@ -695,10 +685,7 @@
   </li>
 {/snippet}
 
-{#snippet leaving(
-  lines: Line[],
-  layer: boolean
-)}
+{#snippet leaving(lines: Line[], layer: boolean)}
   {@const keys = new Set(lines.map((line) => line.key))}
   <div
     aria-hidden="true"
@@ -708,10 +695,7 @@
     inert
   >
     <ul class="session-tree">
-      {#each lines.filter(
-        (line) =>
-          line.row && !keys.has(shapeOf(line.tab, line.key)?.parent ?? "")
-      ) as line (line.key)}
+      {#each lines.filter((line) => line.row && !keys.has(shapeOf(line.tab, line.key)?.parent ?? "")) as line (line.key)}
         {@render leavingTree(line, lines)}
       {/each}
     </ul>
@@ -748,8 +732,7 @@
                         undefined}
                       data-flip="pop"
                       data-tab={tab.id}
-                      ><span>{count}</span
-                      ><span aria-hidden="true" class="loud"
+                      ><span>{count}</span><span aria-hidden="true" class="loud"
                         >{count}</span
                       ></span
                     >
@@ -761,9 +744,7 @@
         </TabsList>
       </Tabs>
       <Tip label={rail.delegates ? "Hide delegates" : "Show delegates"}>
-        {#snippet children(
-          tip
-        )}
+        {#snippet children(tip)}
           <!-- A switch with no count of its own, at a fixed size, so
                nothing in the header moves when it is pressed. On, its
                glyph turns solid in strong ink; off, the duotone, muted. -->
@@ -823,7 +804,7 @@
               data-machine={id}
               class:filled={entry.rows.length > 0 || entry.kind === "gone"}
             >
-              <hr class="kit-seam">
+              <hr class="kit-seam" />
               {@render header(entry.group, headStyle(entry.kind, id))}
               <div class="rows">
                 {#if plan?.layered.has(id) && entry.gone.length}
@@ -833,17 +814,11 @@
                 {/if}
                 <!-- Each tree is the shared one (SessionTree), drawing this
                      tab's row; the relay gives each line its motion. -->
-                {#snippet line(
-                  row: InstanceRow
-                )}
+                {#snippet line(row: InstanceRow)}
                   {@render sessionRow(row, shown, id)}
                 {/snippet}
                 <ul class="session-tree">
-                  {#each under(
-                    shown,
-                    entry.rows,
-                    null
-                  ) as row (`${swap.gen}:${row.id}`)}
+                  {#each under(shown, entry.rows, null) as row (`${swap.gen}:${row.id}`)}
                     <SessionTree
                       {current}
                       flip={!plan}
@@ -884,8 +859,7 @@
                 <span
                   aria-hidden="true"
                   class="more"
-                  style={leaveAnim(moreKey(id))}
-                  >{plan.more.get(id)}</span
+                  style={leaveAnim(moreKey(id))}>{plan.more.get(id)}</span
                 >
               {/if}
             </div>

@@ -299,12 +299,10 @@ const proxy = Bun.serve<Link>({
         body,
         redirect: "manual",
       });
-    if (
-      !(
-        request.method === "GET" &&
-        url.pathname === `/api/instances/${sessionId}/transcript`
-      )
-    ) {
+    if (!(
+      request.method === "GET" &&
+      url.pathname === `/api/instances/${sessionId}/transcript`
+    )) {
       const answer = await forward();
       return relay(answer, await answer.arrayBuffer());
     }

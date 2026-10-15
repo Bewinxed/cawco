@@ -694,10 +694,7 @@
   });
 </script>
 
-{#snippet pending(
-  rows: number,
-  height: string
-)}
+{#snippet pending(rows: number, height: string)}
   <!-- Rows where the next groups will stand, while their read is out, at the
        height of the rows that replace them. Each stage has its own, gone when
        that stage's groups arrive, so nothing drawn is ever pushed down. -->
@@ -746,19 +743,14 @@
       {list}
       {trees}
     >
-      {#snippet tree(
-        node
-      )}
+      {#snippet tree(node)}
         {@render subRow(node, list)}
       {/snippet}
     </OlderRows>
   {/if}
 {/snippet}
 
-{#snippet subRow(
-  node: Branch,
-  list: TreeList
-)}
+{#snippet subRow(node: Branch, list: TreeList)}
   {@const row = node.row}
   {@const unfolded = node.count > 0 && openTrees.has(row.id, list)}
   <!-- The row's box (`data-flip="box"`): when its delegates open, it takes
@@ -835,9 +827,7 @@
       <Sidebar.Menu aria-label="Workspace" class="min-w-0 flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
-            {#snippet child({
-              props,
-            })}
+            {#snippet child({ props })}
               <a href="/session" {...props} class="{props.class} no-underline">
                 <!-- The app's own icon (the crow on spark), in the lead
                      column every row's mark stands in. -->
@@ -847,7 +837,7 @@
                   height="18"
                   src={cawcoIcon}
                   width="18"
-                >
+                />
                 <span class="brand-wordmark min-w-0 truncate text-foreground"
                   >Caw&amp;Co</span
                 >
@@ -857,9 +847,7 @@
         </Sidebar.MenuItem>
       </Sidebar.Menu>
       <Tip keys="⇧⌘N" label="Start session">
-        {#snippet children(
-          tip
-        )}
+        {#snippet children(tip)}
           <button
             {...tip}
             aria-label="Start session"
@@ -912,9 +900,7 @@
             class={NAV_ROW}
             isActive={path.startsWith("/session") && activeSession === null}
           >
-            {#snippet child({
-              props,
-            })}
+            {#snippet child({ props })}
               <a href="/session" {...props}>
                 <span class={SLOT}><IconBox class={SLOT_GLYPH} /></span>
                 <span>Fleet</span>
@@ -946,9 +932,7 @@
             class={NAV_ROW}
             isActive={path.startsWith("/workflows")}
           >
-            {#snippet child({
-              props,
-            })}
+            {#snippet child({ props })}
               <a href="/workflows" {...props}
                 ><span class={SLOT}><IconWorkflow class={SLOT_GLYPH} /></span
                 ><span>Workflows</span></a
@@ -977,9 +961,7 @@
           <div class="-mr-1 ml-auto flex items-center gap-0.5">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
-                {#snippet child({
-                  props,
-                })}
+                {#snippet child({ props })}
                   <Button
                     {...props}
                     aria-label="Sort sessions — currently {SORT_LABEL[
@@ -1016,9 +998,7 @@
               </DropdownMenu.Content>
             </DropdownMenu.Root>
             <Tip label="New project">
-              {#snippet children(
-                tip
-              )}
+              {#snippet children(tip)}
                 <Button
                   {...tip}
                   aria-label="New project"
@@ -1066,9 +1046,7 @@
                   {project}
                 >
                   <Sidebar.MenuButton class={LIST_ROW} isActive={here}>
-                    {#snippet child({
-                      props,
-                    })}
+                    {#snippet child({ props })}
                       <!-- The row is the link to the project's page. Its
                            mark says what is running in it, as a session's
                            says its delegates, and is the switch that folds
@@ -1093,8 +1071,7 @@
                         <span class="min-w-0 flex-1 truncate"
                           >{project.name}
                           {#if runningCount > 0}
-                            <span class="sr-only"
-                              >, {runningCount} running</span
+                            <span class="sr-only">, {runningCount} running</span
                             >
                           {/if}</span
                         >
@@ -1129,10 +1106,7 @@
                     out:branch={LEAD_TREE}
                     {@attach nestFrom(".tree-mark", LEAD)}
                   >
-                    {#each branches(
-                      lists.recent,
-                      `rail:${project.id}:recent`
-                    ) as node (node.row.id)}
+                    {#each branches(lists.recent, `rail:${project.id}:recent`) as node (node.row.id)}
                       {@render subRow(node, "projects")}
                     {/each}
                     <!-- Its older trees are built only while they are out:
@@ -1203,9 +1177,7 @@
       <Sidebar.Menu aria-label="User" class="w-auto">
         <Sidebar.MenuItem>
           <Tip label="You">
-            {#snippet children(
-              tip
-            )}
+            {#snippet children(tip)}
               <Sidebar.MenuButton
                 {...tip}
                 aria-label="You"
@@ -1218,7 +1190,7 @@
                   height="18"
                   src={cawcoIcon}
                   width="18"
-                >
+                />
               </Sidebar.MenuButton>
             {/snippet}
           </Tip>
@@ -1227,9 +1199,7 @@
       <!-- Configure, the theme and sound: the settings in the corner. -->
       <div class="ms-auto flex items-center gap-1">
         <Tip label="Configure">
-          {#snippet children(
-            tip
-          )}
+          {#snippet children(tip)}
             <Button
               {...tip}
               aria-current={configuring ? "page" : undefined}
@@ -1251,6 +1221,7 @@
   </Sidebar.Footer>
   <SessionHover within={railEl} />
 </div>
+
 <!-- end flex column wrapper -->
 
 <style>

@@ -237,8 +237,7 @@
                       size="sm"
                       total={task.todos.total}
                     />
-                    <span class="num"
-                      >{task.todos.done}/{task.todos.total}</span
+                    <span class="num">{task.todos.done}/{task.todos.total}</span
                     >
                   </span>
                 {/if}

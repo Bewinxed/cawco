@@ -130,9 +130,9 @@ export class FleetMcp {
     const config = this.#db.getMcpServer(row.name)?.config;
     return Boolean(
       config &&
-        "url" in config &&
-        config.url === row.upstream &&
-        this.#db.getMcpOauth(row.name)?.generation === row.generation
+      "url" in config &&
+      config.url === row.upstream &&
+      this.#db.getMcpOauth(row.name)?.generation === row.generation
     );
   }
 

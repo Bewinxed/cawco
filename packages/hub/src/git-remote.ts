@@ -554,12 +554,10 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
             return lfsError(422, "A batch request is JSON.");
           }
           const { operation, objects, transfers } = body;
-          if (
-            !(
-              (operation === "download" || operation === "upload") &&
-              Array.isArray(objects)
-            )
-          ) {
+          if (!(
+            (operation === "download" || operation === "upload") &&
+            Array.isArray(objects)
+          )) {
             return lfsError(
               422,
               "A batch names an operation (download or upload) and its objects."

@@ -13,12 +13,7 @@ import { beginSignin, completeSignin } from "../client.svelte";
 import { failureWords } from "../hub-read";
 
 export type SigninPhase =
-  | "idle"
-  | "opening"
-  | "ready"
-  | "checking"
-  | "signed-in"
-  | "mismatch";
+  "idle" | "opening" | "ready" | "checking" | "signed-in" | "mismatch";
 
 export class SigninFlow {
   phase = $state<SigninPhase>("idle");

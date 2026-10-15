@@ -313,7 +313,7 @@ console.log(
 );
 console.log(`  Total layouts: ${totalLayouts}`);
 console.log(
-  `  Frame budget verdict: ${(avgScript + avgLayout + avgRecalc) < 16 ? "WITHIN 16ms ✓" : "OVER 16ms ✗"}`
+  `  Frame budget verdict: ${avgScript + avgLayout + avgRecalc < 16 ? "WITHIN 16ms ✓" : "OVER 16ms ✗"}`
 );
 
 // ── CLEANUP ─────────────────────────────────────────────────────────

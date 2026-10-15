@@ -113,7 +113,7 @@
   <!-- Caw's runtime and his waiting file go to the HTTP cache at idle
        priority, so a wait that outlasts its grace shows him without fetching. -->
   {#each CAW_PREFETCHES as href (href)}
-    <link crossorigin="anonymous" {href} rel="prefetch">
+    <link crossorigin="anonymous" {href} rel="prefetch" />
   {/each}
 </svelte:head>
 
@@ -123,5 +123,5 @@
   offset={toastOffset}
   position={narrowToasts.current ? "top-center" : "bottom-right"}
 />
-<Shell railWidth={data.railWidth}> {@render children()} </Shell>
+<Shell railWidth={data.railWidth}>{@render children()}</Shell>
 <CanvasStages />

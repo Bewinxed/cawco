@@ -120,15 +120,7 @@ export interface FolderHistory {
 }
 
 export type FolderRefusalStatus =
-  | 400
-  | 403
-  | 404
-  | 409
-  | 413
-  | 415
-  | 422
-  | 500
-  | 503;
+  400 | 403 | 404 | 409 | 413 | 415 | 422 | 500 | 503;
 
 /** A folder request the hub turns down, with the status and the words the caller reads. */
 export class FolderRefusal extends Error {

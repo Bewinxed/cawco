@@ -58,7 +58,7 @@
 </script>
 
 <section
-  aria-label="{label}, {cards.length} {cards.length === 1 ? "task" : "tasks"}"
+  aria-label="{label}, {cards.length} {cards.length === 1 ? 'task' : 'tasks'}"
   class="column"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}

@@ -504,15 +504,15 @@ try {
     "2: the first restart seals every plain secret in place",
     Boolean(
       sealedLine?.includes("sealed in place") &&
-        [
-          "openrouter_connection.api_key 1",
-          "push_devices.secret 1",
-          "push_devices.key 1",
-          "mcp_servers.config 1",
-          "fleet_mcp_oauth.tokens 1",
-          "fleet_mcp_oauth.client 1",
-          "fleet_mcp_oauth.token_client 1",
-        ].every((part) => sealedLine.includes(part))
+      [
+        "openrouter_connection.api_key 1",
+        "push_devices.secret 1",
+        "push_devices.key 1",
+        "mcp_servers.config 1",
+        "fleet_mcp_oauth.tokens 1",
+        "fleet_mcp_oauth.client 1",
+        "fleet_mcp_oauth.token_client 1",
+      ].every((part) => sealedLine.includes(part))
     ),
     sealedLine ?? "(no line)"
   );

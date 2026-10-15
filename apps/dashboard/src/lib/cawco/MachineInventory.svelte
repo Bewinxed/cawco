@@ -160,9 +160,7 @@
               </p>
             {:else}
               <ul class="found">
-                {#each rows as row ("path" in row
-                  ? row.path
-                  : `${row.scope}:${row.name}`)}
+                {#each rows as row ("path" in row ? row.path : `${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
                   <li class="entry">
                     <span class="text">

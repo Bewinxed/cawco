@@ -52,9 +52,7 @@
   }
 </script>
 
-{#snippet entry(
-  one: Moved
-)}
+{#snippet entry(one: Moved)}
   <li data-flip>
     <MovedLogin {onchoose} ondismiss={() => ondismiss([one.id])} {one} />
   </li>
@@ -62,7 +60,7 @@
 
 <div class="group">
   <NoticeRow
-    dismissLabel="Dismiss all {plural(moved.length, "moved login")}"
+    dismissLabel="Dismiss all {plural(moved.length, 'moved login')}"
     label={heading}
     ondismiss={() => ondismiss(moved.map((one) => one.id))}
   >

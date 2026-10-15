@@ -229,10 +229,7 @@
   const when = (at: number) => new Date(at).toLocaleString();
 </script>
 
-{#snippet ref(
-  id: string,
-  remove?: () => void
-)}
+{#snippet ref(id: string, remove?: () => void)}
   <span class="ref">
     <span class="ref-id">{id}</span>
     {#if titleOf(id)}
@@ -252,10 +249,7 @@
   </span>
 {/snippet}
 
-{#snippet pick(
-  label: string,
-  edge: TaskEdge
-)}
+{#snippet pick(label: string, edge: TaskEdge)}
   {#if others.length > 0}
     <Select.Root
       onValueChange={(value) => {
@@ -289,10 +283,10 @@
   bind:open={
     () => taskId !== null,
     (open) => {
-    if (!open) {
-      taskId = null;
+      if (!open) {
+        taskId = null;
+      }
     }
-  }
   }
 >
   <!-- Focus goes to the sheet itself, not its first control: the close
@@ -394,13 +388,7 @@
       {/if}
       <RowFault again={saveTitle} reason={titleProblem} />
       <RowFault reason={stageProblem} />
-      {#if shown?.needsYou ||
-        flags.live ||
-        flags.failed ||
-        flags.stopped ||
-        flags.queued ||
-        flags.blockedBy.length > 0 ||
-        (shown?.labels.length ?? 0) > 0}
+      {#if shown?.needsYou || flags.live || flags.failed || flags.stopped || flags.queued || flags.blockedBy.length > 0 || (shown?.labels.length ?? 0) > 0}
         <div class="flags">
           {#if shown?.needsYou}
             <Badge variant="attn"><IconNeedsYou />Needs you</Badge>
@@ -439,8 +427,7 @@
               class="mt-2"
               onclick={() => taskId && read(taskId)}
               size="sm"
-              variant="outline"
-              >Retry</Button
+              variant="outline">Retry</Button
             >
           </AlertDescription>
         </Alert>

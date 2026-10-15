@@ -353,9 +353,7 @@
     style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: 360px"
     watch={watchOf(openId)}
   >
-    {#snippet children(
-      id
-    )}
+    {#snippet children(id)}
       {@const row = cawco.instanceIndex.byId.get(id)}
       {@const tone = toneOf(id)}
       {@const Sprite = sessionSprite(id)}

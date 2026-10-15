@@ -465,8 +465,7 @@ const headNow = async (what: string): Promise<Head> => {
   const from = seen.length;
   await lineAfter(what, from, (line) => headOf(line) !== undefined);
   const head = seen.slice(from).map(headOf).filter(Boolean).at(-1) as
-    | Head
-    | undefined;
+    Head | undefined;
   if (!head) {
     throw new Error(`no header line: ${what}`);
   }

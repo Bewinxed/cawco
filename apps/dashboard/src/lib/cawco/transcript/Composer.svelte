@@ -2956,7 +2956,7 @@
   style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
   class:asking={askRaised}
   class:drawing={canvasUp}
-  class:minimized={minimized}
+  class:minimized
 >
   {#if prompts}
     <div class="prompts" inert={askRaised} {@attach reflow()}>
@@ -3058,8 +3058,7 @@
             disabled={pending}
             onclick={() => submit()}
             size="sm"
-            variant="ghost"
-            >Send again</Button
+            variant="ghost">Send again</Button
           >
         {/if}
       </div>
@@ -3165,7 +3164,7 @@
         class:hint-back={!!hintBack}
         class:recalling={!!recall}
         class:settling={!!recall && !wheeling}
-        class:wheeling={wheeling}
+        class:wheeling
       >
         {#if perch}
           <div aria-hidden="true" class="perch" bind:clientHeight={perchHeight}>
@@ -3277,8 +3276,7 @@
               },
             })}
             {@attach fitHint}
-            {@attach scrollCue}
-          ></textarea>
+            {@attach scrollCue}></textarea>
           {#if flight}
             <!-- Each layer is its text and, drawn clear after it, the rest of
                the text it will be (`data-rest`), so it lays out whole. The
@@ -3292,16 +3290,14 @@
                 style:inline-size="{flight.outWrap}px"
                 style:opacity={flight.from.opacity}
                 style:transform={flight.from.transform}
-                style:translate="0 {flight.outDrop}px"
-                >{flight.out}</span
+                style:translate="0 {flight.outDrop}px">{flight.out}</span
               >
               <span
                 class="flight-text"
                 data-rest="{flight.text.slice(typed.length)}&#8203;"
                 bind:this={flightIn}
                 style:opacity="0"
-                style:translate="0 {inDrop}px"
-                >{typed}</span
+                style:translate="0 {inDrop}px">{typed}</span
               >
             </span>
           {/if}

@@ -178,8 +178,7 @@
         </Button>
         <span
           class="truncate font-mono text-meta text-muted-foreground"
-          title={path}
-          >{path}</span
+          title={path}>{path}</span
         >
       </div>
 

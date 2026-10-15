@@ -863,8 +863,7 @@ export class OpencodeSession implements HarnessSession {
 
   /** The model reference the session asks for, its effort the model's variant; none when the session names no provider. */
   #modelRef():
-    | { providerID: string; id: string; variant?: string }
-    | undefined {
+    { providerID: string; id: string; variant?: string } | undefined {
     const ref = this.#model ? splitModel(this.#model) : undefined;
     return ref?.providerID
       ? {
@@ -1846,8 +1845,7 @@ export class OpencodeSession implements HarnessSession {
     this.#boundCalls.add(callID);
     const info = this.#childInfo.get(childId);
     const input = this.#toolInputs.get(callID) as
-      | { agent?: string; description?: string }
-      | undefined;
+      { agent?: string; description?: string } | undefined;
     this.#ctx.frame({
       type: "system",
       subtype: "task_started",
@@ -2631,22 +2629,18 @@ export class OpencodeSession implements HarnessSession {
       this.#client.skill.list(at(this.#directory)),
     ]);
     return [
-      ...commands.data.map(
-        (command): SlashCommand => ({
-          name: command.name,
-          description: command.description ?? "",
-          argumentHint: "",
-          kind: "custom",
-        })
-      ),
-      ...skills.data.map(
-        (skill): SlashCommand => ({
-          name: skill.name,
-          description: skill.description ?? "",
-          argumentHint: "",
-          kind: "skill",
-        })
-      ),
+      ...commands.data.map((command): SlashCommand => ({
+        name: command.name,
+        description: command.description ?? "",
+        argumentHint: "",
+        kind: "custom",
+      })),
+      ...skills.data.map((skill): SlashCommand => ({
+        name: skill.name,
+        description: skill.description ?? "",
+        argumentHint: "",
+        kind: "skill",
+      })),
       {
         name: "mcp",
         description: "Connect or disconnect an MCP server",
@@ -2732,16 +2726,14 @@ export class OpencodeSession implements HarnessSession {
         };
       case CONTROL_MCP_STATUS: {
         const listed = await this.#client.mcp.list(at(this.#directory));
-        return listed.data.map(
-          (server): McpServerStatus => ({
-            name: server.name,
-            status:
-              server.status.status === "needs_auth"
-                ? "needs-auth"
-                : server.status.status,
-            ...("error" in server.status ? { error: server.status.error } : {}),
-          })
-        );
+        return listed.data.map((server): McpServerStatus => ({
+          name: server.name,
+          status:
+            server.status.status === "needs_auth"
+              ? "needs-auth"
+              : server.status.status,
+          ...("error" in server.status ? { error: server.status.error } : {}),
+        }));
       }
       case CONTROL_MCP_RECONNECT: {
         const name = args[0] as string;

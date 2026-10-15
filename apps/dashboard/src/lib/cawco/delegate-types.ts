@@ -12,10 +12,7 @@ import { HARNESSES } from "@cawco/core";
  */
 
 // biome-ignore lint/performance/noBarrelFile: re-exporting @cawco/core's validator keeps the hub's own delegate-type rules the single source of truth
-export {
-  type DelegateType,
-  delegateTypeProblem,
-} from "@cawco/core";
+export { type DelegateType, delegateTypeProblem } from "@cawco/core";
 
 /** `DelegateType['harness']` is the same three-value union `HARNESSES` already is. */
 export const DELEGATE_HARNESSES = HARNESSES;

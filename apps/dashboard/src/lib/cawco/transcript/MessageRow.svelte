@@ -636,9 +636,7 @@
                 >
                   {#if canEdit || offered.edit === "queued"}
                     <Tip label={editLabel}>
-                      {#snippet children(
-                        tip
-                      )}
+                      {#snippet children(tip)}
                         <Button
                           {...tip}
                           aria-label={editLabel}
@@ -679,9 +677,7 @@
                   {/if}
                   {#if canFork}
                     <Tip label="Fork from here">
-                      {#snippet children(
-                        tip
-                      )}
+                      {#snippet children(tip)}
                         <Button
                           {...tip}
                           aria-busy={forkPending || undefined}
@@ -712,11 +708,9 @@
             {/if}
           </div>
         </div>
-        {#if message.metadata?.attachments?.length ||
-          message.metadata?.images?.length}
+        {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
           <div class="chips" data-gallery>
-            {#each message.metadata.attachments ??
-              [] as att, i (`${att.name}-${i}`)}
+            {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
               {#if att.kind === "file"}
                 <DocThumb href={att.ref} name={att.name} size={att.size} />
               {:else}
@@ -724,8 +718,7 @@
               {/if}
             {/each}
             <!-- Keyed by position: the same picture sent twice is two pictures. -->
-            {#each message.metadata.images ??
-              [] as img, i (`${i}:${img.src ?? img.mediaType}`)}
+            {#each message.metadata.images ?? [] as img, i (`${i}:${img.src ?? img.mediaType}`)}
               {#if img.src}
                 <Shot
                   alt="Attachment {i + 1} sent with this message"
@@ -757,8 +750,7 @@
               <!-- The way back, right under why (send-recovery.svelte.ts):
                    while what refused it holds, what fixes it; once it no
                    longer does, Send again. -->
-              {#if shownRecovery &&
-                (shownRecovery.actions.length > 0 || !shownRecovery.holds)}
+              {#if shownRecovery && (shownRecovery.actions.length > 0 || !shownRecovery.holds)}
                 <div class="actions recovery">
                   {#if shownRecovery.holds}
                     {#each shownRecovery.actions as action, i (i)}
@@ -850,9 +842,7 @@
   {#if message.content.trim()}
     <Thinking {folding} text={message.content} />
   {/if}
-{:else if kind === "user.peer" ||
-  kind === "user.rule" ||
-  kind === "user.delegate_ask"}
+{:else if kind === "user.peer" || kind === "user.rule" || kind === "user.delegate_ask"}
   <Peer {message} />
 {:else}
   <SystemLine disclosed={disclosure(message)} {message} />

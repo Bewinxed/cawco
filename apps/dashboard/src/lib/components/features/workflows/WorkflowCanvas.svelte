@@ -149,6 +149,7 @@
     });
   }
 </script>
+
 <!-- The kit menu, popping from the pointer. It opens on a node only: the
      pane and the edges keep the browser's own menu. -->
 <ContextMenu.Root
@@ -159,9 +160,7 @@
   }}
 >
   <ContextMenu.Trigger>
-    {#snippet child({
-      props,
-    })}
+    {#snippet child({ props })}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: these are the kit menu trigger's own handlers (in `props`), narrowed to a node; the node's inspector is the keyboard path to the same actions -->
       <section
         {...props}
@@ -242,19 +241,18 @@
   <ContextMenu.Content aria-label="Node actions">
     <ContextMenu.CopyItem
       text={JSON.stringify(menuTarget ?? null, null, 2)}
-      what="Node"
-      >Copy content</ContextMenu.CopyItem
+      what="Node">Copy content</ContextMenu.CopyItem
     >
     <ContextMenu.Item
       onSelect={() => {
         if (menuNode) {
           onselect(menuNode);
         }
-      }}
-      ><IconChat />Open inspector</ContextMenu.Item
+      }}><IconChat />Open inspector</ContextMenu.Item
     >
   </ContextMenu.Content>
 </ContextMenu.Root>
+
 <style>
   .canvas {
     height: 100%;

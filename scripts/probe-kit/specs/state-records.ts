@@ -312,8 +312,8 @@ const spec: Spec = {
       "(b) A's session row names a damaged file of A's, archive its way out",
       Boolean(
         aRow?.damaged?.file.startsWith(aState) &&
-          aRow.damaged.remedy === "archive" &&
-          aRow.damaged.workspaceId === a.workspaceId
+        aRow.damaged.remedy === "archive" &&
+        aRow.damaged.workspaceId === a.workspaceId
       ),
       JSON.stringify(aRow?.damaged ?? aRow?.status)
     );

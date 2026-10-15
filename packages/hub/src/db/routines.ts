@@ -11,8 +11,7 @@ export type RoutineRunRow = typeof routineRuns.$inferSelect;
  * sentence that says why.
  */
 export type RunDecision =
-  | { state: "starting" }
-  | { reason: string; state: "queued" | "skipped" };
+  { state: "starting" } | { reason: string; state: "queued" | "skipped" };
 
 /** What a decision reads: the routine, its run still going, and whether runs wait behind it. */
 export type Decide = (

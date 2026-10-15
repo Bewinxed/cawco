@@ -11,12 +11,7 @@ import { failureWords } from "#lib/cawco/hub-read.js";
 import { awaitDeviceSignin, beginDeviceSignin } from "../client.svelte";
 
 export type DevicePhase =
-  | "idle"
-  | "starting"
-  | "waiting"
-  | "expired"
-  | "signed-in"
-  | "mismatch";
+  "idle" | "starting" | "waiting" | "expired" | "signed-in" | "mismatch";
 
 const deviceCode = (
   challenge: ProviderSigninChallenge

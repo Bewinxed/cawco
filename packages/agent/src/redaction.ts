@@ -96,8 +96,7 @@ interface Delta {
 /** A streamed piece of one content block, if `envelope` is one. */
 const deltaOf = (envelope: Envelope): Delta | undefined => {
   const payload = envelope.payload as
-    | { kind?: string; message?: { type?: string; event?: unknown } }
-    | undefined;
+    { kind?: string; message?: { type?: string; event?: unknown } } | undefined;
   if (
     envelope.verb !== "frames" ||
     payload?.kind !== "frame" ||

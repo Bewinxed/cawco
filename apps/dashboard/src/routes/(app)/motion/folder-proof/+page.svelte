@@ -342,10 +342,10 @@
         bind:value={
           () => taper ?? 0,
           (v) => {
-    taper = v;
-  }
+            taper = v;
+          }
         }
-      >
+      />
       <output>{taper ?? "–"}px</output>
     </label>
     <label>
@@ -358,10 +358,10 @@
         bind:value={
           () => subtle ?? 0,
           (v) => {
-    subtle = v;
-  }
+            subtle = v;
+          }
         }
-      >
+      />
       <output>{subtle ?? "–"}%</output>
     </label>
     <label>
@@ -374,10 +374,10 @@
         bind:value={
           () => width ?? 1.5,
           (v) => {
-    width = v;
-  }
+            width = v;
+          }
         }
-      >
+      />
       <output>{width ?? "–"}px</output>
     </label>
   </div>

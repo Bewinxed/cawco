@@ -232,7 +232,9 @@
     }
   });
 </script>
+
 <section aria-label={label} class="code-view" bind:this={host}></section>
+
 <style>
   .code-view {
     height: 100%;

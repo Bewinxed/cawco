@@ -226,10 +226,7 @@ export type ThreadEvent =
       from?: string;
       name: string;
       what:
-        | "made"
-        | "settings-changed"
-        | "settings-approved"
-        | "settings-declined";
+        "made" | "settings-changed" | "settings-approved" | "settings-declined";
     }
   | {
       kind: "file";
@@ -271,9 +268,7 @@ export interface EventThreadMessage extends ThreadMessageBase {
 }
 
 export type ThreadMessage =
-  | YourThreadMessage
-  | CawThreadMessage
-  | EventThreadMessage;
+  YourThreadMessage | CawThreadMessage | EventThreadMessage;
 
 /** A thread and its messages, oldest first: `GET /api/projects/:id/threads/:threadId`. */
 export interface ThreadRead {

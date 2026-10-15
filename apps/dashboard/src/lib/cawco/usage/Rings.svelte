@@ -70,9 +70,12 @@
     const limit = ring.state === "limit";
     if (wasLimit && !limit && motionOk.current) {
       refill = true;
-      const timer = setTimeout(() => {
-        refill = false;
-      }, dur("--dur-settle") * 2);
+      const timer = setTimeout(
+        () => {
+          refill = false;
+        },
+        dur("--dur-settle") * 2
+      );
       wasLimit = limit;
       return () => clearTimeout(timer);
     }

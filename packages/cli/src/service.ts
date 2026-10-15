@@ -46,11 +46,7 @@ export const isServiceId = (value: string): value is ServiceId =>
   SERVICE_IDS.includes(value as ServiceId);
 
 export type ServiceAction =
-  | "install"
-  | "uninstall"
-  | "restart"
-  | "status"
-  | "logs";
+  "install" | "uninstall" | "restart" | "status" | "logs";
 
 export const SERVICE_ACTIONS: readonly ServiceAction[] = [
   "install",
@@ -278,8 +274,7 @@ const SOCK_SERVICE = /<key>SockServiceName<\/key>\s*<string>([^<]*)<\/string>/;
  * would be moved back to 3000 by the next deploy.
  */
 const installedDashboardAddress = ():
-  | { host: string; port: string }
-  | undefined => {
+  { host: string; port: string } | undefined => {
   if (platform() === "darwin") {
     const path = launchAgentPath("dashboard");
     const text = existsSync(path) ? readFileSync(path, "utf8") : "";
@@ -1500,8 +1495,7 @@ const agentCut = async (fenceMs?: number): Promise<string[] | "unknown"> => {
     return "unknown";
   }
   const readiness = (await answer.json().catch(() => undefined)) as
-    | RestartReadiness
-    | undefined;
+    RestartReadiness | undefined;
   return Array.isArray(readiness?.holds)
     ? holdPhrases(readiness.holds)
     : "unknown";

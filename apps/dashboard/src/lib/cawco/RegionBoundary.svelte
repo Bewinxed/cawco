@@ -46,15 +46,12 @@
 <svelte:boundary {onerror}>
   <RegionHeld />
   {@render children()}
-  {#snippet failed(
-    _error,
-    reset
-  )}
+  {#snippet failed(_error, reset)}
     <div class="region-failed" data-region-failed={region}>
       <Alert variant="warning">
         <AlertDescription
-          >The {region} stopped after an error. {kept ?? ""} The rest of the
-          page still works. Try again to rebuild it.</AlertDescription
+          >The {region} stopped after an error. {kept ?? ""} The rest of the page
+          still works. Try again to rebuild it.</AlertDescription
         >
         <AlertAction>
           <Button

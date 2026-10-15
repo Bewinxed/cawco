@@ -55,7 +55,7 @@ const signal = (pid: number, name: NodeJS.Signals): void => {
 export const treeOf = async (root: number): Promise<Set<number>> => {
   const rows = await processLineage();
   const tree = new Set<number>([root]);
-  for (let grew = true; grew; ) {
+  for (let grew = true; grew;) {
     grew = false;
     for (const row of rows) {
       if (

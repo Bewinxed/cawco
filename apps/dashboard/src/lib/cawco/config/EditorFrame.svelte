@@ -246,9 +246,7 @@
   @media (max-width: 640px) {
     .scroll {
       padding-block-end: calc(
-        var(--c-btn-h-sm) +
-        var(--space-8) +
-        var(--safe-bottom)
+        var(--c-btn-h-sm) + var(--space-8) + var(--safe-bottom)
       );
     }
   }

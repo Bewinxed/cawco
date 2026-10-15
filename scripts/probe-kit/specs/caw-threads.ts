@@ -543,8 +543,7 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
             frame: node.frame as Node["frame"],
           });
           for (const kid of (node.children as
-            | Record<string, unknown>[]
-            | undefined) ?? []) {
+            Record<string, unknown>[] | undefined) ?? []) {
             walk(kid);
           }
         };

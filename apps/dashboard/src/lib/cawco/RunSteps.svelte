@@ -159,9 +159,7 @@
   const clock = tickingClock(() => ticking);
 </script>
 
-{#snippet line(
-  step: WorkflowStep
-)}
+{#snippet line(step: WorkflowStep)}
   <span class="title">{titleOf(step)}</span>
 {/snippet}
 
@@ -256,8 +254,7 @@
               <pre
                 class="result"
                 data-branch-item
-                class:err={!!step.failure}
-              >{result}</pre>
+                class:err={!!step.failure}>{result}</pre>
             {/if}
             {#if more}
               <div class="more" data-branch-item>{@render more(step)}</div>

@@ -17,9 +17,7 @@
 </script>
 
 <Tip {label}>
-  {#snippet children(
-    tip
-  )}
+  {#snippet children(tip)}
     <Button
       {...tip}
       aria-label="Caw moves while the lead works"

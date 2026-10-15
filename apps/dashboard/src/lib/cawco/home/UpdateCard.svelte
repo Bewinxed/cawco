@@ -223,9 +223,7 @@
   }
 </script>
 
-{#snippet lines(
-  n: Notice
-)}
+{#snippet lines(n: Notice)}
   <div class="body">
     {#each n.lines as line, i (i)}
       {#if line.state === "busy" && i === spinnerAt}

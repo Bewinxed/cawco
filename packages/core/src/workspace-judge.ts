@@ -107,8 +107,7 @@ export const protectedConfig = (relative: string): string | undefined => {
 };
 
 export type Verdict =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly reason: string };
+  { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 /** One tool call as a harness hands it over. */
 export interface Call {

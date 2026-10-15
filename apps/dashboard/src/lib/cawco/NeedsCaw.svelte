@@ -575,9 +575,7 @@
      phone's standing outline (the one the width draws is shown, styles
      below). One half of it: the upper, or the lower that fades while his
      panel hangs. -->
-{#snippet rim(
-  low: boolean
-)}
+{#snippet rim(low: boolean)}
   <svg
     aria-hidden="true"
     class={["rim", low && "foot"]}
@@ -625,9 +623,7 @@
 {/snippet}
 
 <Tip label={tipText}>
-  {#snippet children(
-    tip
-  )}
+  {#snippet children(tip)}
     <button
       {...mergeProps(tip, {
         onclick: choose,

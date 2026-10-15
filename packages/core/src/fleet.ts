@@ -64,9 +64,7 @@ export interface FleetPlacement {
  * is the CLI's own affair.
  */
 export type FleetMcpConfig =
-  | McpStdioServerConfig
-  | McpSSEServerConfig
-  | McpHttpServerConfig;
+  McpStdioServerConfig | McpSSEServerConfig | McpHttpServerConfig;
 
 /** One MCP server the fleet should have, keyed by the name sessions see. */
 export interface FleetMcpServer extends FleetPlacement {

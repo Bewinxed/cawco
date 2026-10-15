@@ -42,8 +42,7 @@
   <Drawer.Content class="peek-sheet">
     <Drawer.Title class="sr-only">Peek</Drawer.Title>
     <Drawer.Description class="sr-only"
-      >The tail of one session. Open dives into it; closing keeps your
-      place.</Drawer.Description
+      >The tail of one session. Open dives into it; closing keeps your place.</Drawer.Description
     >
     {#if peek.target}
       <PeekPane onclose={closePeek} target={peek.target} />

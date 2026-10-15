@@ -200,9 +200,9 @@ export const textOf = (content: unknown): string => {
 };
 
 export const contentOf = (content: unknown): string | NeutralContentBlock[] => {
-  if (
-    !(Array.isArray(content) && content.some((block) => block.type === "image"))
-  ) {
+  if (!(
+    Array.isArray(content) && content.some((block) => block.type === "image")
+  )) {
     return textOf(content);
   }
   return (content as (TextContent | ImageContent)[]).map((block) =>
@@ -628,8 +628,7 @@ export class PiProfile {
       }
       const before = entries.length;
       const message = (entry as { message?: unknown }).message as
-        | { role?: string; content?: unknown }
-        | undefined;
+        { role?: string; content?: unknown } | undefined;
       if (!message) {
         continue;
       }

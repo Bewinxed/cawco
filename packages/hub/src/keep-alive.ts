@@ -190,14 +190,12 @@ export const tickKeepAlive = async (
   now = Date.now()
 ): Promise<void> => {
   for (const row of ports.rows()) {
-    if (
-      !(
-        row.keepAliveEnabled &&
-        row.harness === "claude" &&
-        row.status === "running" &&
-        !row.keepAliveTurn
-      )
-    ) {
+    if (!(
+      row.keepAliveEnabled &&
+      row.harness === "claude" &&
+      row.status === "running" &&
+      !row.keepAliveTurn
+    )) {
       continue;
     }
     // A process reading can await a machine. Re-read the stored schedule after
@@ -207,13 +205,11 @@ export const tickKeepAlive = async (
       continue;
     }
     const fresh = ports.row(row.id);
-    if (
-      !(
-        fresh?.keepAliveEnabled &&
-        fresh.status === "running" &&
-        !fresh.keepAliveTurn
-      )
-    ) {
+    if (!(
+      fresh?.keepAliveEnabled &&
+      fresh.status === "running" &&
+      !fresh.keepAliveTurn
+    )) {
       continue;
     }
     const limits = ports.limits();

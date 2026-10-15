@@ -490,17 +490,15 @@
       inset-inline: max(
         min(0px, calc(50% - 12px / var(--hit-scale, 1))),
         calc(
-          var(--hit-gap-x, 24px / var(--hit-scale, 1)) /
-          -2 -
-          var(--hit-edge, 0px)
+          var(--hit-gap-x, 24px / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
         )
       );
       inset-block: max(
         min(0px, calc(50% - 12px / var(--hit-scale, 1))),
         calc(
-          var(--hit-gap-y, 24px / var(--hit-scale, 1)) /
-          -2 -
-          var(--hit-edge, 0px)
+          var(--hit-gap-y, 24px / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
         )
       );
     }

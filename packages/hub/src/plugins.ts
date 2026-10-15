@@ -105,8 +105,7 @@ const fetchMarketplace = async (
       throw new Error(`${trimmed} answered ${response.status}`);
     }
     const manifest = (await response.json().catch(() => undefined)) as
-      | Manifest
-      | undefined;
+      Manifest | undefined;
     if (!manifest || typeof manifest !== "object") {
       throw new Error(`${trimmed} is not a marketplace.json cawco could read`);
     }
@@ -334,8 +333,7 @@ export const marketplaceCatalog = (
 
 /** One resolved plugin, or the sentence saying why it is not. */
 export type ResolvedPlugin =
-  | FleetPluginPayload
-  | { name: string; error: string };
+  FleetPluginPayload | { name: string; error: string };
 
 /**
  * Every wanted plugin of one marketplace, resolved to files.

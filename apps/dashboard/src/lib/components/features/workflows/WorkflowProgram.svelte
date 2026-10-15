@@ -23,6 +23,7 @@
   const lined = $derived(problems.filter((problem) => problem.line));
   /** The hub prefixes a diagnostic with its line; the chip already says it. */
 </script>
+
 <!-- The problems panel is marked for the program's own reflow: when a
      problem arrives or leaves, the panel's edge slides to its new place
      instead of jumping. -->
@@ -77,6 +78,7 @@
     </section>
   {/if}
 </div>
+
 <style>
   .program {
     display: flex;

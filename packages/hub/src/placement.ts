@@ -77,8 +77,7 @@ export interface PlacementInput {
 }
 
 export type Placement =
-  | ({ ok: true } & PlacementExplain)
-  | { ok: false; refusal: string };
+  ({ ok: true } & PlacementExplain) | { ok: false; refusal: string };
 
 /**
  * Why a Claude session can't start on a machine with no CawCo account

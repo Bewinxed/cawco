@@ -240,12 +240,10 @@
       return;
     }
     const { target } = event;
-    if (
-      !(
-        target instanceof Node &&
-        (root?.contains(target) || target === document.body)
-      )
-    ) {
+    if (!(
+      target instanceof Node &&
+      (root?.contains(target) || target === document.body)
+    )) {
       return;
     }
     previewPane?.parentEscape(event);
@@ -440,10 +438,7 @@
 <svelte:window onkeydown={escapeExpanded} />
 
 <div
-  class={[
-    "side-split",
-    { expanded, open: desktopOpen, resizing, sliding },
-  ]}
+  class={["side-split", { expanded, open: desktopOpen, resizing, sliding }]}
   bind:this={root}
   bind:clientWidth={width}
 >

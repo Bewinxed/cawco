@@ -401,9 +401,8 @@ await Bun.write(
 // Each clone is a `git clone --shared` of this repository, as a delegate's
 // workspace is cut.
 const paths = await import("../packages/core/src/paths");
-const { workspacePolicy } = await import(
-  "../packages/core/src/workspace-policy"
-);
+const { workspacePolicy } =
+  await import("../packages/core/src/workspace-policy");
 const { JUDGE_SCRIPT } = await import("../packages/agent/src/boundary");
 await mkdir(paths.workspaceCacheDir(), { recursive: true });
 const workspaceAt = async (id: string, dir: string) => {
@@ -457,23 +456,18 @@ const secret = join(home, "secret.txt");
 await Bun.write(secret, "not for the workspace\n");
 
 const { SessiondServer } = await import("../packages/sessiond/src/server");
-const { SessiondClient } = await import(
-  "../packages/agent/src/sessiond-client"
-);
-const { BOUNDARY_RELAUNCH, mcpGatewayPort, CAWCO_ENV } = await import(
-  "../packages/core/src/index"
-);
+const { SessiondClient } =
+  await import("../packages/agent/src/sessiond-client");
+const { BOUNDARY_RELAUNCH, mcpGatewayPort, CAWCO_ENV } =
+  await import("../packages/core/src/index");
 const { gateForm } = await import("../packages/agent/src/gate-form");
-const { parseProcId, procIdFor } = await import(
-  "../packages/agent/src/proc-id"
-);
-const { PiRemoteSession } = await import(
-  "../packages/agent/src/harnesses/pi-sessiond"
-);
+const { parseProcId, procIdFor } =
+  await import("../packages/agent/src/proc-id");
+const { PiRemoteSession } =
+  await import("../packages/agent/src/harnesses/pi-sessiond");
 const { PiHarness } = await import("../packages/agent/src/harnesses/pi");
-const { OpencodeHarness } = await import(
-  "../packages/agent/src/harnesses/opencode"
-);
+const { OpencodeHarness } =
+  await import("../packages/agent/src/harnesses/opencode");
 type Neutral = import("../packages/core/src/index").NeutralMessage;
 type Context = import("../packages/agent/src/harness").HarnessContext;
 type Session = import("../packages/agent/src/harness").HarnessSession;
@@ -837,9 +831,8 @@ try {
   );
   // Its boundary hook judges the call before chrome-devtools sees it, by the
   // judge and policy this probe's OpenCode server used.
-  const { judgeCall, readPolicy } = await import(
-    "../packages/core/src/workspace-judge"
-  );
+  const { judgeCall, readPolicy } =
+    await import("../packages/core/src/workspace-judge");
   const hookSays = (filePath: string) =>
     judgeCall(readPolicy(policyFile), {
       harness: "claude",
@@ -936,9 +929,8 @@ try {
   const subBash = await turn(sub, seenSub, "BOUNDED");
   const siblingBash = await turn(sessionB, seenB, "BOUNDED");
   await sub.dispose();
-  const { workspaceHolding } = await import(
-    "../packages/agent/src/workspace-records"
-  );
+  const { workspaceHolding } =
+    await import("../packages/agent/src/workspace-records");
   const link = join(sandbox, "into-clone");
   await symlink(inside, link);
   const holding = {
@@ -970,12 +962,10 @@ try {
   // `JSON.stringify(value, null, 2)`, `entry` the fleet's chrome-devtools,
   // `stored` `{}` or what disablePlanAgentFor wrote first. Beside them, two
   // that are not byte for byte what the writer made for their workspace.
-  const { excludeFromCheckout } = await import(
-    "../packages/agent/src/checkout-exclude"
-  );
-  const { removeCawcoSessionConfigs } = await import(
-    "../packages/agent/src/harnesses/opencode"
-  );
+  const { excludeFromCheckout } =
+    await import("../packages/agent/src/checkout-exclude");
+  const { removeCawcoSessionConfigs } =
+    await import("../packages/agent/src/harnesses/opencode");
   const fleetEntry = (
     JSON.parse(
       await Bun.file(join(home, ".config", "opencode", "opencode.json")).text()

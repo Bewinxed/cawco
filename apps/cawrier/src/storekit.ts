@@ -65,9 +65,8 @@ const isEnvironment = (value: unknown): value is TransactionEnvironment =>
  * random values when it loads, which Workers refuse at global scope.
  */
 const verifierFor = async (env: Env, environment: TransactionEnvironment) => {
-  const { Environment, SignedDataVerifier: Verifier } = await import(
-    "@apple/app-store-server-library"
-  );
+  const { Environment, SignedDataVerifier: Verifier } =
+    await import("@apple/app-store-server-library");
   return new Verifier(
     [APPLE_ROOT_CA_G3],
     false,
@@ -99,8 +98,7 @@ export const verifyNotification = async (
     return { ok: false, error: "The notification is too big." };
   }
   const data = unverifiedPayload(signedPayload).data as
-    | { environment?: unknown }
-    | undefined;
+    { environment?: unknown } | undefined;
   const environment = data?.environment;
   if (!isEnvironment(environment)) {
     return {
@@ -235,12 +233,10 @@ export const verifyPurchase = async (
   }
   const products = env.PRO_PRODUCT_IDS.split(",").map((id) => id.trim());
   const trial = transaction.productId === env.TRIAL_PRODUCT_ID;
-  if (
-    !(
-      trial ||
-      (transaction.productId && products.includes(transaction.productId))
-    )
-  ) {
+  if (!(
+    trial ||
+    (transaction.productId && products.includes(transaction.productId))
+  )) {
     return { ok: false, error: "The purchase is not CawCo Pro." };
   }
   if (transaction.revocationDate !== undefined) {

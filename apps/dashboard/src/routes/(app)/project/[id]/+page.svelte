@@ -743,9 +743,7 @@
 <!-- The view strip: the views, then what acts on them. Drawn in the shell's
      bar on a wide screen (`inBar`, bar-strip), as the page's own row under
      the head on a phone. -->
-{#snippet strip(
-  inBar: boolean
-)}
+{#snippet strip(inBar: boolean)}
   <div class="strip" class:in-bar={inBar}>
     <Tabs onValueChange={choose} value={current}>
       <TabsList aria-label="Views" scrollable>
@@ -767,10 +765,7 @@
     {#if trailing}
       <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
            stands only while Needs you follows it there. -->
-      <span
-        aria-hidden="true"
-        class="rule"
-        class:wide={needsYou.length === 0}
+      <span aria-hidden="true" class="rule" class:wide={needsYou.length === 0}
       ></span>
     {/if}
     <div class="trail">
@@ -825,9 +820,7 @@
   {@render strip(true)}
 {/snippet}
 
-{#snippet pane(
-  value: string
-)}
+{#snippet pane(value: string)}
   {#if value.startsWith("view:")}
     {@const view = views.find((each) => `view:${each.name}` === value)}
     {#if view}
@@ -1058,9 +1051,7 @@
         <!-- The board at its real layout, its columns standing empty: the
              next project's read cross-fades in over it. -->
         <div aria-hidden="true" class="board-skeleton" out:crossOut>
-          {#each stageList.filter(
-            (stage) => stage.kind !== "dropped"
-          ) as stage (stage.name)}
+          {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
             <div class="skeleton-column">
               <Skeleton class="h-3.5 w-3/5" />
               <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
@@ -1126,9 +1117,9 @@
       bind:taskId={
         () => openTask,
         (id) => {
-    openTask = id;
-    remember();
-  }
+          openTask = id;
+          remember();
+        }
       }
     />
   {/if}

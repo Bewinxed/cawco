@@ -113,6 +113,7 @@
   style:--z-rest={restAt}
 >
   <svelte:element
+    this={href ? "a" : "button"}
     aria-selected={selected}
     class="hit touch-hit"
     draggable={href ? "false" : undefined}
@@ -120,7 +121,6 @@
     onclick={choose}
     role="tab"
     tabindex={selected ? 0 : -1}
-    this={href ? "a" : "button"}
     type={href ? undefined : "button"}
     {...rest}
   >
@@ -265,9 +265,7 @@
      title's strong ink (opacity). No sheet slides or wipes. */
   :global([data-variant="folder"]) .ff-tab {
     --lean-now: calc(
-      var(--lean) *
-      (1 - var(--pick)) *
-      (1 - var(--lean-lift-now, 0))
+      var(--lean) * (1 - var(--pick)) * (1 - var(--lean-lift-now, 0))
     );
     /* Where a seam is gliding, this tab's side stands in by this much,
        card and sheet with it (TabsList, `--cut-start`/`--cut-end`). */
@@ -333,11 +331,8 @@
           0 of var(--radius) cw,
         line to
           calc(
-            100% -
-            var(--cut-e) -
-            var(--flare) -
-            var(--slope-end) -
-            var(--radius)
+            100% - var(--cut-e) - var(--flare) - var(--slope-end) -
+              var(--radius)
           )
           0,
         arc to calc(100% - var(--cut-e) - var(--flare) - var(--slope-end))
@@ -374,11 +369,8 @@
           0 of var(--radius) cw,
         line to
           calc(
-            100% -
-            var(--cut-e) -
-            var(--flare) -
-            var(--slope-end) -
-            var(--radius)
+            100% - var(--cut-e) - var(--flare) - var(--slope-end) -
+              var(--radius)
           )
           0,
         arc to calc(100% - var(--cut-e) - var(--flare) - var(--slope-end))
@@ -523,7 +515,7 @@
      tab's muted label goes strong on it (app.css .press-tint). Last, so it
      outranks every tab rule above by order as well as by weight. */
   :global(:root:not(.dark))
-  .ff-tab:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
+    .ff-tab:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
     color: var(--ink-strong);
   }
 </style>

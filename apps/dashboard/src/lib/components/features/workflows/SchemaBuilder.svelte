@@ -44,6 +44,7 @@
     });
   }
 </script>
+
 <div class="wf-stack">
   <div class="wf-row wf-spread">
     <h3>Result schema</h3>
@@ -83,7 +84,7 @@
                         required.includes(name)
                       )}
                     value={name}
-                  ></label
+                  /></label
                 ><label
                   >Type<select
                     onchange={(event) =>
@@ -95,14 +96,7 @@
                       )}
                     value={schema.type}
                   >
-                    {#each [
-                      "string",
-                      "number",
-                      "integer",
-                      "boolean",
-                      "array",
-                      "object",
-                    ] as type (type)}
+                    {#each ["string", "number", "integer", "boolean", "array", "object"] as type (type)}
                       <option>{type}</option>
                     {/each}
                   </select></label
@@ -120,7 +114,7 @@
                         event.currentTarget.checked
                       )}
                     type="checkbox"
-                  >Required</label
+                  />Required</label
                 ><button
                   aria-label="Remove field {name}"
                   class="wf-btn"

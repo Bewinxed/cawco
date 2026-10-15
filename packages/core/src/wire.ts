@@ -192,8 +192,7 @@ class Outgoing {
 
 const isPart = (frame: unknown): frame is WirePart => {
   const part = (frame as { part?: unknown } | null)?.part as
-    | WirePart["part"]
-    | undefined;
+    WirePart["part"] | undefined;
   return (
     typeof frame === "object" &&
     frame !== null &&

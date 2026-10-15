@@ -2305,9 +2305,10 @@ export class SessionSupervisor {
         session,
         (async () => {
           await this.#applyStoredPermissionMode(session, mode);
-          const held = (await session.control(VERIFY_SESSION_CREDENTIAL, [])) as
-            | { credential?: string; refused?: boolean }
-            | undefined;
+          const held = (await session.control(
+            VERIFY_SESSION_CREDENTIAL,
+            []
+          )) as { credential?: string; refused?: boolean } | undefined;
           if (held?.credential) {
             rememberCredential(instanceId, held.credential);
           }
@@ -3214,12 +3215,10 @@ export class SessionSupervisor {
         decided(row.instanceId, "attached");
         continue;
       }
-      if (
-        !(
-          this.#adopting.has(row.instanceId) ||
-          this.#attaching.has(row.instanceId)
-        )
-      ) {
+      if (!(
+        this.#adopting.has(row.instanceId) ||
+        this.#attaching.has(row.instanceId)
+      )) {
         this.#holdChild(claude, row, proc, ingested);
       }
       decided(row.instanceId, "held");

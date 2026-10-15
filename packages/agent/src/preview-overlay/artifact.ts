@@ -430,16 +430,14 @@ export const artifact = {
   join: (artifactValue: unknown, sync: unknown): ArtifactRef | null => {
     const raw = artifactValue as Partial<ArtifactRef> | null | undefined;
     const path = typeof sync === "string" ? sync.match(SYNC_PATH) : null;
-    if (
-      !(
-        raw &&
-        typeof raw.id === "string" &&
-        typeof raw.name === "string" &&
-        typeof raw.kind === "string" &&
-        KINDS.has(raw.kind) &&
-        path?.[1] === raw.id
-      )
-    ) {
+    if (!(
+      raw &&
+      typeof raw.id === "string" &&
+      typeof raw.name === "string" &&
+      typeof raw.kind === "string" &&
+      KINDS.has(raw.kind) &&
+      path?.[1] === raw.id
+    )) {
       if (status === "waiting") {
         status = "none";
       }

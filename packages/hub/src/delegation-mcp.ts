@@ -51,11 +51,7 @@ type MemoryTool = ReturnType<Memory["tools"]>[number];
 type TriageTool = ReturnType<FleetWatch["tools"]>[number];
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
-  | RoutineTool
-  | IngressTool
-  | ActionTool
-  | RelayTool
-  | MemoryTool;
+  RoutineTool | IngressTool | ActionTool | RelayTool | MemoryTool;
 
 /** Tools that run for minutes, and what their progress heartbeat says meanwhile. */
 const LONG_CALLS: Record<string, string> = {

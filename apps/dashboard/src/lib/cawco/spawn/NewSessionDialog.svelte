@@ -532,7 +532,7 @@
         prefill?.projectId ||
         projectId ||
         continueFrom) &&
-        !editing
+      !editing
     ) && repo === undefined
   );
   /**
@@ -581,9 +581,9 @@
   const moving = $derived(
     Boolean(
       moveTo &&
-        moveEstimated?.needed &&
-        !moveEstimated.refused &&
-        moveEstimated.ask
+      moveEstimated?.needed &&
+      !moveEstimated.refused &&
+      moveEstimated.ask
     )
   );
   /** The folder there is already a clone of the project: Start starts in it. */
@@ -794,8 +794,8 @@
       ? !(error || moveAnswer?.error || moveEstimated?.refused)
       : Boolean(
           !(error || locationUnverified || unreadable || offlineMachine) &&
-            missingMachines.length &&
-            cawco.hub === "connected"
+          missingMachines.length &&
+          cawco.hub === "connected"
         )
   );
   const summarizerEntries = $derived(
@@ -1665,10 +1665,7 @@
            is open and clears it at once, and the leaving card and scrim let
            presses through (floating-presence). -->
       <DialogPrimitive.Overlay class="session-scrim ns-theme">
-        {#snippet child({
-          props,
-          open: shown,
-        })}
+        {#snippet child({ props, open: shown })}
           <div {...props} style:pointer-events={pressable(shown)}></div>
         {/snippet}
       </DialogPrimitive.Overlay>
@@ -1688,10 +1685,7 @@
         restoreScrollDelay={0}
         bind:ref={card}
       >
-        {#snippet child({
-          props,
-          open: shown,
-        })}
+        {#snippet child({ props, open: shown })}
           <div {...props} style:pointer-events={pressable(shown)}>
             <DialogTitle class="sr-only">New session</DialogTitle>
             {@render formContent()}
@@ -1716,9 +1710,7 @@
     <!-- Step 2's way out is back to the form: the × turns into a back
          chevron in its place, and Esc goes back too. -->
     <Tip keys="Esc" label={moveStep ? "Back" : "Close"}>
-      {#snippet children(
-        tip
-      )}
+      {#snippet children(tip)}
         <button
           {...tip}
           aria-label={moveStep ? "Back" : "Close"}
@@ -2243,8 +2235,7 @@
        the body scrolls between them. */
     :global(.session-card[data-vaul-drawer]) {
       --drawer-max-height: calc(
-        var(--visible-height, 100dvh) -
-        max(env(safe-area-inset-top), 24px)
+        var(--visible-height, 100dvh) - max(env(safe-area-inset-top), 24px)
       );
       margin: 0;
     }

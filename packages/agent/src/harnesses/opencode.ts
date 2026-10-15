@@ -1135,9 +1135,7 @@ const oauthIntegrationsOf = (listed: { data: unknown }): Set<string> =>
 
 /** What a check of one of the machine's own sign-ins found: it cannot work (and why), it works, or it cannot tell. */
 type SignInVerdict =
-  | { state: "fault"; why: string }
-  | { state: "works" }
-  | { state: "unknown" };
+  { state: "fault"; why: string } | { state: "works" } | { state: "unknown" };
 
 /**
  * An OAuth sign-in's check, read locally: past its expiry, one OpenCode
@@ -1387,7 +1385,9 @@ export class OpencodeHarness implements Harness {
       carryOut: (account) => this.#carryOut(account),
       ownCredentials: () => this.#ownCredentials(),
       removeOwnCredential: async (id) => {
-        await (await this.#ensure()).credential.remove(
+        await (
+          await this.#ensure()
+        ).credential.remove(
           { credentialID: id },
           { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
         );
@@ -1402,7 +1402,9 @@ export class OpencodeHarness implements Harness {
    * and never listed.
    */
   async #ownCredentials(): Promise<OpencodeOwnCredential[]> {
-    const stored = await (await this.#ensure()).credential.list({
+    const stored = await (
+      await this.#ensure()
+    ).credential.list({
       signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
     });
     return stored.flatMap((entry) =>
@@ -1733,13 +1735,11 @@ export class OpencodeHarness implements Harness {
    */
   async #leaveUnkept(): Promise<void> {
     for (const slot of this.#slots()) {
-      if (
-        !(
-          slot.client &&
-          // biome-ignore lint/performance/noAwaitInLoops: one slot at a time; each read asks the keepers
-          (await slot.owner.activeKeeperGone().catch(() => false))
-        )
-      ) {
+      if (!(
+        slot.client &&
+        // biome-ignore lint/performance/noAwaitInLoops: one slot at a time; each read asks the keepers
+        (await slot.owner.activeKeeperGone().catch(() => false))
+      )) {
         continue;
       }
       const gone = slot.owner.active;
@@ -2620,7 +2620,9 @@ export class OpencodeHarness implements Harness {
       return;
     }
     this.#oauthIntegrations ??= oauthIntegrationsOf(
-      await (await this.#ensure()).integration.list(
+      await (
+        await this.#ensure()
+      ).integration.list(
         {},
         { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
       )
@@ -2809,8 +2811,7 @@ export class OpencodeHarness implements Harness {
     }
     if (response.status === 401 || response.status === 403) {
       const body = (await response.json().catch(() => undefined)) as
-        | { error?: { message?: unknown } }
-        | undefined;
+        { error?: { message?: unknown } } | undefined;
       const message =
         typeof body?.error?.message === "string" ? body.error.message : "";
       return {
@@ -3751,13 +3752,11 @@ export class OpencodeHarness implements Harness {
         }
       }
       // The location is the remaining sessions'; released only by its last.
-      if (
-        !(
-          [...this.#sessions.values()].some(
-            (session) => session.directory === dir
-          ) || (await this.#runningIn(client, dir))
-        )
-      ) {
+      if (!(
+        [...this.#sessions.values()].some(
+          (session) => session.directory === dir
+        ) || (await this.#runningIn(client, dir))
+      )) {
         await client.debug.location.evict(at(dir), options());
       }
     }
@@ -4720,7 +4719,9 @@ export class OpencodeHarness implements Harness {
       return;
     }
     assertOpencodeKey(sessionKey, "renameSession");
-    await (await this.#homeClient(sessionKey)).session.update({
+    await (
+      await this.#homeClient(sessionKey)
+    ).session.update({
       sessionID: sessionKey,
       title,
     });
@@ -4740,7 +4741,9 @@ export class OpencodeHarness implements Harness {
       return;
     }
     assertOpencodeKey(sessionKey, "deleteSession");
-    await (await this.#homeClient(sessionKey)).session.remove({
+    await (
+      await this.#homeClient(sessionKey)
+    ).session.remove({
       sessionID: sessionKey,
     });
   }

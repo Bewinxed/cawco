@@ -141,8 +141,7 @@ const schemaChecks = (kit: Kit, tools: Listed[]): void => {
   kit.note(`the hub lists ${tools.length} cawco tools`);
   const missing = Object.entries(CAWCO_FILE_ARGS).flatMap(([name, keys]) => {
     const schema = byName.get(name)?.inputSchema as
-      | { properties?: Record<string, unknown> }
-      | undefined;
+      { properties?: Record<string, unknown> } | undefined;
     return keys
       .filter((key) => !schema?.properties?.[key])
       .map((key) => `${name}.${key}`);

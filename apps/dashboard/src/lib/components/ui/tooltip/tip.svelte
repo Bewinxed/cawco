@@ -83,9 +83,7 @@
 
 <Root disabled={disabled || inside} bind:open>
   <Trigger>
-    {#snippet child({
-      props,
-    })}
+    {#snippet child({ props })}
       {@render children(withTap(props))}
     {/snippet}
   </Trigger>

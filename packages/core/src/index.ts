@@ -364,8 +364,7 @@ export interface RepoInfo {
  * the machine's own credential store — cawco never holds a token.
  */
 export type ReposResult =
-  | RepoInfo[]
-  | { error: "gh-missing" | "gh-unauthenticated" };
+  RepoInfo[] | { error: "gh-missing" | "gh-unauthenticated" };
 
 const TRAILING_SLASHES = /\/+$/;
 const URL_SCHEME_AND_HOST = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i;
@@ -740,10 +739,7 @@ export interface SessionAddress {
 }
 
 export type SessionEndIntent =
-  | "stop"
-  | "discard"
-  | "delete"
-  | "delete-transcript";
+  "stop" | "discard" | "delete" | "delete-transcript";
 
 /** Creation provenance, stored by the agent and carried durably on its hub row. */
 export interface ScratchWorktree {
@@ -1330,11 +1326,7 @@ export interface ArtifactPromotion {
  * now (it was closed, or the session ended).
  */
 export type PreviewDown =
-  | "server"
-  | "machine"
-  | "workspace"
-  | "reach"
-  | "closed";
+  "server" | "machine" | "workspace" | "reach" | "closed";
 export const PREVIEW_DOWN_META = "cawco-preview-down";
 /** The machine's own words for a `reach` failure, on the proxy's page beside {@link PREVIEW_DOWN_META}. */
 export const PREVIEW_WHY_META = "cawco-preview-why";

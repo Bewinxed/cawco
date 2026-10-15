@@ -106,17 +106,15 @@ export interface RoleSize {
 
 /** Each role's listed tools, their count and size against its budget. */
 export const measureRoles = (): RoleSize[] => {
-  const rows = SESSION_ROLES.map(
-    (role): InstanceRow => ({
-      id: role,
-      machineId: "machine",
-      cwd: "/",
-      launchDir: "known",
-      sessionId: null,
-      status: "running",
-      ...SAMPLES[role],
-    })
-  );
+  const rows = SESSION_ROLES.map((role): InstanceRow => ({
+    id: role,
+    machineId: "machine",
+    cwd: "/",
+    launchDir: "known",
+    sessionId: null,
+    status: "running",
+    ...SAMPLES[role],
+  }));
   // The server's sweeps start with it; closed below, through the one path.
   const lifetime = makeLifetime();
   const mcp = createDelegationMcp({

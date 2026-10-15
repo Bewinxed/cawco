@@ -201,9 +201,12 @@
     flex: none;
     width: 10px;
     height: 14px;
-    background:
-      radial-gradient(circle, var(--ink-subtle) 1px, transparent 1.5px) 0 0 /
-      5px 5px;
+    background: radial-gradient(
+        circle,
+        var(--ink-subtle) 1px,
+        transparent 1.5px
+      )
+      0 0 / 5px 5px;
   }
   .dot {
     flex: none;

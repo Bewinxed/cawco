@@ -2494,14 +2494,12 @@
     tickets.clear();
     farFromLatest = false;
     const node = scroller;
-    if (
-      !(
-        node &&
-        motionOk.current &&
-        node.scrollHeight - node.clientHeight - node.scrollTop <=
-          JUMP_SMOOTH_SCREENS * node.clientHeight
-      )
-    ) {
+    if (!(
+      node &&
+      motionOk.current &&
+      node.scrollHeight - node.clientHeight - node.scrollTop <=
+        JUMP_SMOOTH_SCREENS * node.clientHeight
+    )) {
       // Landed in the click itself, not in `land`'s next frame: a re-armed
       // `land` (the rows effect) can push that frame back one more.
       atBottom = true;
@@ -2791,8 +2789,7 @@
   <!-- Empty is what is drawn: a conversation whose one row is folding away
        as its retry comes in is not empty for the frame between the two, and
        the empty state shown there pushed the fold 53px down. -->
-  {#if (session.loading || session.cursor !== null) &&
-    renderedRows.length === 0}
+  {#if (session.loading || session.cursor !== null) && renderedRows.length === 0}
     <p class="empty">Loading transcript…</p>
   {:else if renderedRows.length === 0 && !bare}
     <!-- Only once the read has said the conversation is empty, fading in
@@ -2859,13 +2856,11 @@
       bind:this={
         () => list,
         (value) => {
-    list = value as unknown as VirtualizerHandle;
-  }
+          list = value as unknown as VirtualizerHandle;
+        }
       }
     >
-      {#snippet children(
-        row
-      )}
+      {#snippet children(row)}
         <TranscriptRow
           continues={continued.has(row.key)}
           handoff={presentation.handed.get(row.key)}
@@ -2875,9 +2870,7 @@
           onleft={leaver(row.key)}
           rowKey={row.key}
         >
-          {#snippet children(
-            ticket
-          )}
+          {#snippet children(ticket)}
             <!-- The live row, and the answer it streamed once that has
                  landed (rows.ts `keepLive`): one branch, so the settle is
                  the same LiveRow updating, not a MessageRow mounting. -->
@@ -3091,10 +3084,10 @@
        box keeps off a scroller's padding, and the room is a box in the flow. */
     inset-block-end: calc(
       var(--foot-room) +
-      var(
-        --latest-inset,
-        calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))
-      )
+        var(
+          --latest-inset,
+          calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))
+        )
     );
     block-size: 0;
     /* A column hung up from the foot: what overflows its zero height goes

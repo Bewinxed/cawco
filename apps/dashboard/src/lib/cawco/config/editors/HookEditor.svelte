@@ -567,8 +567,8 @@
           problem={shown("matcher")}
         >
           {#snippet hint()}
-            Empty or <span class="font-mono">*</span> matches every value. The
-            tester below shows what this one actually does.
+            Empty or <span class="font-mono">*</span> matches every value. The tester
+            below shows what this one actually does.
           {/snippet}
           <Input
             aria-invalid={shown("matcher") ? "true" : undefined}
@@ -870,10 +870,10 @@
                   hue={machineHue(index, online)}
                   icon={machineIcon(machine.os)}
                   meta="{drifted
-                    ? "Kept its own copy"
-                    : (SAID[item?.state ?? ""] ?? "Not reported")} · {machineOs(
+                    ? 'Kept its own copy'
+                    : (SAID[item?.state ?? ''] ?? 'Not reported')} · {machineOs(
                     machine.os
-                  ).label}{online ? "" : " · offline, it syncs when back"}"
+                  ).label}{online ? '' : ' · offline, it syncs when back'}"
                   name={machineLabel(machine.hostname)}
                   presence={online ? "online" : "off"}
                 />

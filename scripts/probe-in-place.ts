@@ -363,13 +363,11 @@ if (role === "sessiond") {
 } else if (role === "hub") {
   const { Effect, Layer } = await import(hubRequire.resolve("effect"));
   const { Db, DbLayer } = await import("../packages/hub/src/db");
-  const { Registry, RegistryLayer } = await import(
-    "../packages/hub/src/registry"
-  );
+  const { Registry, RegistryLayer } =
+    await import("../packages/hub/src/registry");
   const { Pending, PendingLayer } = await import("../packages/hub/src/pending");
-  const { HubLifetime, HubLifetimeLayer } = await import(
-    "../packages/hub/src/lifetime"
-  );
+  const { HubLifetime, HubLifetimeLayer } =
+    await import("../packages/hub/src/lifetime");
   const { createServer } = await import("../packages/hub/src/server");
   const { CLAUDE_PROVIDER } = await import("../packages/core/src/accounts");
   const { Database } = await import("bun:sqlite");
@@ -582,13 +580,11 @@ if (role === "sessiond") {
   console.log("PRIVATE_READY");
 } else if (role === "agent") {
   const { registerHarness } = await import("../packages/agent/src/harnesses");
-  const { SessiondClient, endProc } = await import(
-    "../packages/agent/src/sessiond-client"
-  );
+  const { SessiondClient, endProc } =
+    await import("../packages/agent/src/sessiond-client");
   const { MESSAGES_READ } = await import("../packages/core/src/harness");
-  const { processEnded } = await import(
-    "../packages/agent/src/harnesses/claude"
-  );
+  const { processEnded } =
+    await import("../packages/agent/src/harnesses/claude");
   const client = await SessiondClient.connect(
     process.env.CAWCO_SESSIOND_ENDPOINT
   );
@@ -951,9 +947,8 @@ if (role === "sessiond") {
       // Its credential installed, as Claude Code's adapter says once its
       // config holds it: the hub settles the launch on this word.
       if (ctx.sessionCredential) {
-        const { acknowledgeSessionCredential } = await import(
-          "../packages/agent/src/session-identity"
-        );
+        const { acknowledgeSessionCredential } =
+          await import("../packages/agent/src/session-identity");
         await acknowledgeSessionCredential(ctx.sessionCredential);
       }
       await log(

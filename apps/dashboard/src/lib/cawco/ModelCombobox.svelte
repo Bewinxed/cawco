@@ -137,9 +137,7 @@
 
 <Popover.Root onOpenChange={opened} bind:open>
   <Popover.Trigger bind:ref={triggerRef}>
-    {#snippet child({
-      props,
-    })}
+    {#snippet child({ props })}
       <Button
         {...props}
         aria-expanded={open}
@@ -263,8 +261,8 @@
       {#if note}
         <p
           class="border-t border-foreground/5 px-3 py-2 text-meta {models.error
-            ? "text-error"
-            : "text-muted-foreground"}"
+            ? 'text-error'
+            : 'text-muted-foreground'}"
           role={models.error ? "alert" : undefined}
         >
           {note}

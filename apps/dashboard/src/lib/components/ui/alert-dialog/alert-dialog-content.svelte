@@ -49,10 +49,7 @@
   >
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
-    {#snippet child({
-      props,
-      open,
-    })}
+    {#snippet child({ props, open })}
       <div {...props} style:pointer-events={pressable(open)}>
         <!-- One column no wider than the tray: a row's unwrapping title is cut
              to it, never pushes past it. -->

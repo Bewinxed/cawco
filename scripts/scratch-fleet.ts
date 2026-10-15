@@ -1632,9 +1632,8 @@ async function standUp(
       }>(
         "SELECT account_id, machine_id, state, checked_at FROM account_signins"
       );
-      const { resolveClaudeExecutable } = await import(
-        "../packages/agent/src/auth"
-      );
+      const { resolveClaudeExecutable } =
+        await import("../packages/agent/src/auth");
       const executable = resolveClaudeExecutable();
       const status = executable
         ? await Bun.$`${executable} auth status --json`

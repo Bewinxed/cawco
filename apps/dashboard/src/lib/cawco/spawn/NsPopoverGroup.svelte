@@ -133,11 +133,7 @@
           style={`--ns-pop-width:${shown.width}px`}
           trapFocus={shown.trapFocus}
         >
-          {#snippet child({
-            props,
-            wrapperProps,
-            open,
-          })}
+          {#snippet child({ props, wrapperProps, open })}
             <!-- Closing, it lets presses through to the page (floating-presence). -->
             <div {...wrapperProps} style:pointer-events={pressable(open)}>
               <!-- The label names what the trigger holds, so it changes as the

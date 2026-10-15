@@ -955,10 +955,7 @@
   }
 </script>
 
-{#snippet mark(
-  item: WorkItemSummary,
-  flies: boolean
-)}
+{#snippet mark(item: WorkItemSummary, flies: boolean)}
   {@const Sprite = sessionSprite(item.instanceId)}
   <span
     aria-hidden="true"
@@ -971,11 +968,7 @@
 <!-- A delegate's chip, in the row or in the fan: `at` is its place in the
      keyboard's order. A chip in the fan is moved by the fan, not by the
      row's reflow, and a mark never flies to one folded away. -->
-{#snippet chipButton(
-  chip: Chip,
-  at: number,
-  fanned: boolean
-)}
+{#snippet chipButton(chip: Chip, at: number, fanned: boolean)}
   {@const { item, tone, entry } = chip}
   {@const flies = entry === "fly" && !fanned}
   <button
@@ -1027,9 +1020,7 @@
           {#if tone === "starting"}
             <Spinner aria-hidden="true" role="presentation" />
           {:else if tone === "running"}
-            <span
-              class="dot"
-              style:animation-delay="-{Date.now() % 2000}ms"
+            <span class="dot" style:animation-delay="-{Date.now() % 2000}ms"
             ></span>
           {:else if tone === "asked" || tone === "needs"}
             <IconAsk />
@@ -1530,9 +1521,9 @@
     clip-path: inset(0 calc(100% - var(--more)) 0 0 round var(--radius-sm));
     transition:
       opacity var(--dur-exit) var(--ease-out)
-      calc(var(--back) * var(--dur-stagger)),
+        calc(var(--back) * var(--dur-stagger)),
       visibility 0s linear
-      calc(var(--dur-exit) + var(--back) * var(--dur-stagger));
+        calc(var(--dur-exit) + var(--back) * var(--dur-stagger));
 
     & > .chip {
       flex: 0 1 auto;
@@ -1546,7 +1537,7 @@
     clip-path: inset(calc(var(--space-2) * -1) round var(--radius-sm));
     transition:
       opacity var(--dur-morph) var(--ease-out)
-      calc(var(--out) * var(--dur-stagger)),
+        calc(var(--out) * var(--dur-stagger)),
       visibility 0s;
 
     /* A chip that joins the open fan comes out of "+N" like the rest. */
@@ -1560,22 +1551,22 @@
     .leaf {
       transition:
         opacity var(--dur-exit) var(--ease-out)
-        calc(var(--back) * var(--dur-stagger)),
+          calc(var(--back) * var(--dur-stagger)),
         translate var(--dur-exit) var(--ease-out)
-        calc(var(--back) * var(--dur-stagger)),
+          calc(var(--back) * var(--dur-stagger)),
         clip-path var(--dur-exit) var(--ease-out)
-        calc(var(--back) * var(--dur-stagger)),
+          calc(var(--back) * var(--dur-stagger)),
         visibility 0s linear
-        calc(var(--dur-exit) + var(--back) * var(--dur-stagger));
+          calc(var(--dur-exit) + var(--back) * var(--dur-stagger));
     }
     .fan.open .leaf {
       transition:
         opacity var(--dur-morph) var(--ease-out)
-        calc(var(--out) * var(--dur-stagger)),
+          calc(var(--out) * var(--dur-stagger)),
         translate var(--dur-morph) var(--ease-out)
-        calc(var(--out) * var(--dur-stagger)),
+          calc(var(--out) * var(--dur-stagger)),
         clip-path var(--dur-morph) var(--ease-out)
-        calc(var(--out) * var(--dur-stagger)),
+          calc(var(--out) * var(--dur-stagger)),
         visibility 0s;
     }
   }

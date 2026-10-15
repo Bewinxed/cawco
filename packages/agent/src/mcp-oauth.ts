@@ -114,8 +114,7 @@ function heldMcpCall(pathname: string, message: unknown): string | undefined {
   const cawco = pathname === "/mcp/cawco";
   for (const one of Array.isArray(message) ? message : [message]) {
     const call = one as
-      | { method?: unknown; params?: { name?: unknown } }
-      | undefined;
+      { method?: unknown; params?: { name?: unknown } } | undefined;
     const name =
       typeof call?.params?.name === "string" ? call.params.name : "unnamed";
     if (call?.method !== "tools/call") {
@@ -274,13 +273,11 @@ export const startMcpGateway = async (hubUrl: () => string) => {
         if (accounts) {
           return await accounts;
         }
-        if (
-          !(
-            MCP_RELAY_PATH.test(url.pathname) ||
-            (request.method === "GET" && TOOL_READ_PATH.test(url.pathname)) ||
-            (request.method === "POST" && TOOL_WRITE_PATH.test(url.pathname))
-          )
-        ) {
+        if (!(
+          MCP_RELAY_PATH.test(url.pathname) ||
+          (request.method === "GET" && TOOL_READ_PATH.test(url.pathname)) ||
+          (request.method === "POST" && TOOL_WRITE_PATH.test(url.pathname))
+        )) {
           return new Response("Not found.", { status: 404 });
         }
         const body = ["GET", "HEAD"].includes(request.method)

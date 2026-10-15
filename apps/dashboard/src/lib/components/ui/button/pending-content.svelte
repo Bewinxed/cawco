@@ -208,6 +208,16 @@
     <span aria-hidden="true" class="kit-arrivals">{@render arrivals()}</span>
   {/if}
 </span>
+{#if label === undefined}
+  <!-- Icon only: nothing to morph. -->
+{:else}
+  <span class="kit-label"
+    ><MorphText {text} />
+    {#if reason}
+      <span class="kit-reason" role="alert" transition:unfold>{reason}</span>
+    {/if}</span
+  >
+{/if}
 
 <style>
   /* Wound from the top, as a clock is read; each new share eases in. */
@@ -246,13 +256,3 @@
     overflow-wrap: anywhere;
   }
 </style>
-{#if label === undefined}
-  <!-- Icon only: nothing to morph. -->
-{:else}
-  <span class="kit-label"
-    ><MorphText {text} />
-    {#if reason}
-      <span class="kit-reason" role="alert" transition:unfold>{reason}</span>
-    {/if}</span
-  >
-{/if}

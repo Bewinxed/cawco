@@ -597,9 +597,7 @@
 
 <!-- The title: what asks, and who, with where it stands among the asks
      waiting when there are several ("2 of 3"): they come one at a time. -->
-{#snippet title(
-  text: string
-)}
+{#snippet title(text: string)}
   <h2 class="part" style:--part="0">
     <span aria-hidden="true" class="glyph">
       {#if questions}
@@ -662,7 +660,7 @@
             {@const sel = isSelected(q.question, opt.label)}
             <ToggleGroup.Item
               aria-keyshortcuts={live ? String(i + 1) : undefined}
-              class="kit-chip touch-hit{sel ? " sel" : ""}"
+              class="kit-chip touch-hit{sel ? ' sel' : ''}"
               onkeydown={optionKey}
               type="button"
               value={opt.label}
@@ -676,8 +674,8 @@
             <ToggleGroup.Item
               aria-keyshortcuts={live ? String(own + 1) : undefined}
               class="kit-chip touch-hit{otherPicked(q) || otherAt === qi
-                ? " sel"
-                : ""}"
+                ? ' sel'
+                : ''}"
               onclick={(event: MouseEvent) => {
                 event.preventDefault();
                 openOther(qi);
@@ -701,8 +699,7 @@
             }}
             type="multiple"
             bind:value={
-              () => pressedOf(q, qi),
-              (labels) => setMulti(qi, labels)
+              () => pressedOf(q, qi), (labels) => setMulti(qi, labels)
             }
           >
             {@render chips()}
@@ -716,8 +713,7 @@
             }}
             type="single"
             bind:value={
-              () => pressedOf(q, qi)[0] ?? "",
-              (label) => setSingle(qi, label)
+              () => pressedOf(q, qi)[0] ?? "", (label) => setSingle(qi, label)
             }
           >
             {@render chips()}

@@ -45,10 +45,7 @@
 </script>
 
 {#snippet face()}
-  <span
-    aria-hidden="true"
-    class="dot"
-    style:--c={hueVar(shown?.hue ?? "amber")}
+  <span aria-hidden="true" class="dot" style:--c={hueVar(shown?.hue ?? "amber")}
   ></span>
   <span class="chip-label" data-account-chip>{name}</span>
 {/snippet}

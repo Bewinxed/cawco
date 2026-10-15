@@ -786,8 +786,7 @@ async function run(kit: Kit): Promise<void> {
           frame: node.frame as Node["frame"],
         });
         for (const kid of (node.children as
-          | Record<string, unknown>[]
-          | undefined) ?? []) {
+          Record<string, unknown>[] | undefined) ?? []) {
           walk(kid);
         }
       };

@@ -155,8 +155,7 @@ export function withDeniedTools(
 
 /** What a boot-time converge came to, so the daemon can say it in one line. */
 export type DenyConvergence =
-  | { state: "applied" | "unchanged" }
-  | { state: "failed"; detail: string };
+  { state: "applied" | "unchanged" } | { state: "failed"; detail: string };
 
 /**
  * Converges `~/.claude/settings.json` with the machine's share of the fleet's

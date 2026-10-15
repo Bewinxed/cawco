@@ -820,8 +820,7 @@ const placeChecks = async (
     (one) => (one.anchor as { selector?: string }).selector === "#para"
   );
   const box = group?.box as
-    | { x: number; y: number; w: number; h: number }
-    | undefined;
+    { x: number; y: number; w: number; h: number } | undefined;
   on.kit.check(
     "2: the group is kept in ink, anchored to the paragraph's selector, its box relative to the paragraph's",
     !!(group && box) &&

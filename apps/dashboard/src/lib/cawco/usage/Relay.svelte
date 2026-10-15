@@ -200,9 +200,7 @@
           side="top"
           tap
         >
-          {#snippet children(
-            props
-          )}
+          {#snippet children(props)}
             <span
               {...props}
               aria-label={tip}
@@ -211,16 +209,14 @@
               onpointerenter={(event) => {
                 (
                   props.onpointerenter as
-                    | ((e: PointerEvent) => void)
-                    | undefined
+                    ((e: PointerEvent) => void) | undefined
                 )?.(event);
                 onlight(id);
               }}
               onpointerleave={(event) => {
                 (
                   props.onpointerleave as
-                    | ((e: PointerEvent) => void)
-                    | undefined
+                    ((e: PointerEvent) => void) | undefined
                 )?.(event);
                 onlight(null);
               }}

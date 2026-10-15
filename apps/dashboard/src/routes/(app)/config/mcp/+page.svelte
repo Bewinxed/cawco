@@ -132,9 +132,7 @@
   ready={store.fleet.value !== null}
   title={section.label}
 >
-  {#snippet actions(
-    down
-  )}
+  {#snippet actions(down)}
     <Button
       disabled={down !== null}
       href="/config/mcp/new"
@@ -183,7 +181,7 @@
           icon={isRemoteMcp(row.config) ? IconGlobe : IconToolMcp}
           meta="{isRemoteMcp(row.config)
             ? `${row.config.type.toUpperCase()} · `
-            : ""}{describeMcp(row.config)}"
+            : ''}{describeMcp(row.config)}"
           name={row.name}
           ontoggle={(next) => toggle(row, next)}
           toggling={busy[row.name] === true}

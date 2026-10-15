@@ -702,11 +702,11 @@ export const createActions = ({
     const row = store.get(actionId);
     return Boolean(
       row &&
-        row.state === "done" &&
-        row.projectId === projectId &&
-        row.taskId === taskId &&
-        row.thenStage === to &&
-        row.stageResult === null
+      row.state === "done" &&
+      row.projectId === projectId &&
+      row.taskId === taskId &&
+      row.thenStage === to &&
+      row.stageResult === null
     );
   };
 

@@ -94,11 +94,7 @@ export interface ToolSpec {
 
 /** What a probe or an install attempt found. The unit every surface renders. */
 export type ToolState =
-  | "installed"
-  | "missing"
-  | "installing"
-  | "failed"
-  | "unsupported";
+  "installed" | "missing" | "installing" | "failed" | "unsupported";
 
 export interface ToolStatus {
   /** When this was learnt, ms epoch. */

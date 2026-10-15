@@ -3484,17 +3484,17 @@ export const createWorkItems = ({
       // A check that ends while waiting (killed, past the most a wait may
       // last, or a machine that could not run it) leaves no wait behind it.
       // biome-ignore lint/performance/noAwaitInLoops: checks run in order, one at a time
-      const { complete, where } = await (check.machine &&
-      check.machine !== workspace.machineId
-        ? runElsewhere(check.machine, check, limit)
-        : command(
-            workspace.machineId,
-            workspace.path,
-            check.command,
-            limit,
-            refOf(workspace),
-            queued
-          ).then((done) => ({ complete: done, where: undefined }))
+      const { complete, where } = await (
+        check.machine && check.machine !== workspace.machineId
+          ? runElsewhere(check.machine, check, limit)
+          : command(
+              workspace.machineId,
+              workspace.path,
+              check.command,
+              limit,
+              refOf(workspace),
+              queued
+            ).then((done) => ({ complete: done, where: undefined }))
       ).finally(() => queued(null));
       const result = checkTails(complete);
       outcomes.push({

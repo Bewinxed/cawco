@@ -161,9 +161,9 @@
   @container (min-width: 30rem) {
     .cards {
       grid-template-columns: repeat(
-          auto-fill,
-          minmax(min(100%, var(--c-starter-w)), 1fr)
-        );
+        auto-fill,
+        minmax(min(100%, var(--c-starter-w)), 1fr)
+      );
     }
   }
   .starter {

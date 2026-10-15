@@ -159,10 +159,7 @@
   </Portal>
 {/each}
 
-{#snippet grip(
-  stage: Stage,
-  handle: Handle
-)}
+{#snippet grip(stage: Stage, handle: Handle)}
   {@const value =
     handle === "top" ? stage.grabValue?.top : stage.grabValue?.corner}
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -- a focusable separator is a widget (WAI-ARIA window splitter): it takes focus, arrows and a drag. -->

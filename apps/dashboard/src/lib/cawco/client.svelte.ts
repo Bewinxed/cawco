@@ -201,10 +201,7 @@ import {
 import { workspace } from "./workspace/workspace.svelte";
 
 export type ConnectionStatus =
-  | "connecting"
-  | "connected"
-  | "disconnected"
-  | "error";
+  "connecting" | "connected" | "disconnected" | "error";
 
 /**
  * What to *tell a reader* about the hub, which is coarser than the socket's own
@@ -4147,10 +4144,10 @@ function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
     const held = state.sessions[id];
     const holds = Boolean(
       streamState.cursors[id] ||
-        held?.blocks.length ||
-        held?.loading ||
-        held?.readFault ||
-        held?.behind
+      held?.blocks.length ||
+      held?.loading ||
+      held?.readFault ||
+      held?.behind
     );
     if (holds && (cause === "reconnect" || !following(streamState, id))) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and subscribes the stream when it lands

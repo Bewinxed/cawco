@@ -15,9 +15,7 @@
   const rows: KeyRow[] = $derived(keyRows(ring, usage.now));
 </script>
 
-{#snippet said(
-  parts: Part[]
-)}
+{#snippet said(parts: Part[])}
   {#each parts as part, i (i)}
     {#if typeof part === "string"}
       {part}

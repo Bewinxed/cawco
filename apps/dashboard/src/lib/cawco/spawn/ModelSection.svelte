@@ -311,9 +311,7 @@
         onpick={(id: string) => onharness(id as HarnessKind)}
         value={harness}
       >
-        {#snippet item(
-          tab: (typeof railItems)[number]
-        )}
+        {#snippet item(tab: (typeof railItems)[number])}
           {#if tab.id === "codex"}
             <ProviderLogo class="codex-mark" provider="openai" size={16} />
           {:else}
@@ -327,9 +325,7 @@
             >
           {/if}
         {/snippet}
-        {#snippet tipExtra(
-          tab: (typeof railItems)[number]
-        )}
+        {#snippet tipExtra(tab: (typeof railItems)[number])}
           {#if tab.soon}
             <span class="soon">soon</span>
           {:else if tab.disabled}
@@ -363,7 +359,7 @@
           spellcheck="false"
           value={query}
           {@attach autowidth(() => query)}
-        >
+        />
         {#if query}
           <button
             aria-label="Clear"
@@ -470,10 +466,7 @@
   </div>
 </section>
 
-{#snippet rowBody(
-  entry: ModelEntry,
-  reason?: string
-)}
+{#snippet rowBody(entry: ModelEntry, reason?: string)}
   {@const provider = providerOf(entry.id)}
   {#if mixedMakers}
     <span class="ns-tile tile vendor">

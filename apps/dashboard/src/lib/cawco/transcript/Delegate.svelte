@@ -398,8 +398,7 @@
         <span
           aria-hidden="true"
           class="mark rail-cell m{markHue(seed)}"
-          {@attach trayCard(() => id)}
-          ><Sprite /></span
+          {@attach trayCard(() => id)}><Sprite /></span
         >
         <span class="tk">{label}</span>
         <span aria-hidden="true" class="chev"><IconChevronRight /></span>

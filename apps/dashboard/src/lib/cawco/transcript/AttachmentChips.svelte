@@ -50,11 +50,7 @@
   };
 </script>
 
-{#if folded ||
-  ink ||
-  draft.images.length ||
-  draft.texts.length ||
-  draft.files.length}
+{#if folded || ink || draft.images.length || draft.texts.length || draft.files.length}
   <div class="atts" transition:unfold {@attach reflow()}>
     {#if folded}
       <!-- The canvas, folded: a tap opens it again out of this box. -->
@@ -72,7 +68,7 @@
           type="button"
         >
           {#if folded.thumb}
-            <img alt="" src="data:image/png;base64,{folded.thumb}">
+            <img alt="" src="data:image/png;base64,{folded.thumb}" />
           {:else}
             <IconArtifactCanvas aria-hidden="true" />
           {/if}
@@ -102,7 +98,7 @@
         role="img"
       >
         {#if ink.thumb}
-          <img alt="" src="data:image/png;base64,{ink.thumb}">
+          <img alt="" src="data:image/png;base64,{ink.thumb}" />
         {:else}
           <IconPen aria-hidden="true" />
         {/if}
@@ -111,7 +107,7 @@
     {/if}
     {#each draft.images as img, i (img.name + i)}
       <span class="att" data-flip="pop">
-        <img alt="" src="data:{img.mediaType};base64,{img.data}">
+        <img alt="" src="data:{img.mediaType};base64,{img.data}" />
         <span class="att-name">{img.name}</span>
         <button
           aria-label={`Remove ${img.name}`}

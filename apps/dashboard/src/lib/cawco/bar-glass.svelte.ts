@@ -65,8 +65,7 @@ export function glassPlacement(
   phone: boolean
 ): {
   collisionPadding:
-    | number
-    | { top: number; bottom: number; left: number; right: number };
+    number | { top: number; bottom: number; left: number; right: number };
   sideOffset: number;
 } {
   if (!(phone && glass)) {

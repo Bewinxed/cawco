@@ -286,9 +286,11 @@ function serveApp(req, res) {
     !existsSync(`${CLIENT_DIR}${pathname}`)
   ) {
     const found = earlier().find((root) => existsSync(`${root}${pathname}`));
-    if (
-      !(reading && found && serveFile(req, res, pathname, found, IMMUTABLE))
-    ) {
+    if (!(
+      reading &&
+      found &&
+      serveFile(req, res, pathname, found, IMMUTABLE)
+    )) {
       // Never stored: a cache in front (the Cloudflare tunnel keeps a 404 on
       // a .css path for minutes) would go on answering it after the file is
       // there, and the page that asked stays unstyled.

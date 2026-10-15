@@ -110,9 +110,7 @@
   ready={store.rules.value !== null}
   title={section.label}
 >
-  {#snippet actions(
-    down
-  )}
+  {#snippet actions(down)}
     <Button
       disabled={down !== null}
       href="/config/rules/new"

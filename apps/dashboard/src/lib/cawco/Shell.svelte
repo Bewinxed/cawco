@@ -906,7 +906,7 @@
   );
 </script>
 
-<svelte:window onkeydown={shortcut}></svelte:window>
+<svelte:window onkeydown={shortcut} />
 
 <a class="skip" href="#main-content">Skip to content</a>
 
@@ -922,7 +922,7 @@
   <div
     class="shell"
     style="--sidebar-width: var(--rail-w, {railWidth === null
-      ? "var(--c-sidebar-w)"
+      ? 'var(--c-sidebar-w)'
       : `${railWidth}px`})"
     style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
   >
@@ -953,8 +953,8 @@
       bind:open={
         () => railOpen && !railed,
         (open) => {
-    railOpen = open;
-  }
+          railOpen = open;
+        }
       }
     >
       <!-- Closed by its search field, the focus stays in the Jump palette
@@ -1042,8 +1042,7 @@
               class="crumb back pressable"
               href="/config"
               in:riseIn
-              out:crossOut
-              ><IconChevronLeft />Configure</a
+              out:crossOut><IconChevronLeft />Configure</a
             >
           {:else}
             <span class="crumb" in:riseIn out:crossOut>
@@ -1068,9 +1067,7 @@
             <span aria-hidden="true" class="join"></span>
             {#if railed}
               <Tip keys="⌘K" label="Jump to session">
-                {#snippet children(
-                  tip
-                )}
+                {#snippet children(tip)}
                   <button
                     {...tip}
                     aria-expanded={barGlass.open === "jump"}
@@ -1125,7 +1122,7 @@
           </div>
         {:else if browser && showBanner}
           <div
-            class="banner {everConnected ? "warn" : "bad"}"
+            class="banner {everConnected ? 'warn' : 'bad'}"
             data-flip
             role="status"
           >
@@ -1173,8 +1170,7 @@
         <div class="swap">
           {#key pageKey}
             <div class="page" in:pageIn out:pageOut>
-              <RegionBoundary region="page"
-                >{@render children()}</RegionBoundary
+              <RegionBoundary region="page">{@render children()}</RegionBoundary
               >
             </div>
           {/key}
@@ -1304,7 +1300,7 @@
     border-bottom: 0;
     background:
       linear-gradient(var(--border-hairline), var(--border-hairline)) bottom /
-      100% 1px no-repeat,
+        100% 1px no-repeat,
       var(--surface-shelf);
   }
   /* One slot for the bar's left-hand content, positioned so the one leaving
@@ -1674,16 +1670,10 @@
       --glyph: var(--c-bar-toggle-glyph);
       align-self: flex-start;
       margin-inline-start: calc(
-        var(--c-bar-phone-edge) +
-        var(--glyph) /
-        2 -
-        22px
+        var(--c-bar-phone-edge) + var(--glyph) / 2 - 22px
       );
       margin-block-start: calc(
-        var(--c-top-bar-h) -
-        var(--c-tab-row-h) /
-        2 -
-        22px
+        var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - 22px
       );
       color: var(--ink-muted);
     }

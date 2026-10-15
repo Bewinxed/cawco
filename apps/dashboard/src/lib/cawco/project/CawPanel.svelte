@@ -239,8 +239,7 @@
             talking = true;
           }}
           size="sm"
-          variant="outline"
-          >Message Caw</Button
+          variant="outline">Message Caw</Button
         >
       {/if}
       {#if lastThread}
@@ -248,8 +247,7 @@
           class="ml-auto"
           href="/session/thread:{lastThread.id}"
           size="sm"
-          variant="ghost"
-          >Open last thread</Button
+          variant="ghost">Open last thread</Button
         >
       {/if}
     </div>

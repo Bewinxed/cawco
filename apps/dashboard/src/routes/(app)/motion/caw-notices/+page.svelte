@@ -371,8 +371,8 @@
         bind:joined={
           () => barGlass.joined,
           (joined) => {
-    barGlass.joined = joined;
-  }
+            barGlass.joined = joined;
+          }
         }
       >
         <CawPanel {feed} onchoose={() => undefined} quiet="All caught up" />

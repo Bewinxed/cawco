@@ -61,10 +61,10 @@
   bind:open={
     () => open !== null,
     (next) => {
-    if (!next) {
-      open = null;
+      if (!next) {
+        open = null;
+      }
     }
-  }
   }
 >
   <Sheet.Content

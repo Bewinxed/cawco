@@ -24,8 +24,8 @@
   bind:open={
     () => root.ready && open,
     (value) => {
-    open = value;
-  }
+      open = value;
+    }
   }
   {...restProps}
 />

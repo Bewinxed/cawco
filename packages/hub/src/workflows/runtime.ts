@@ -528,8 +528,8 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     const [instance] = db.getInstancesByIds([instanceId]);
     return Boolean(
       instance &&
-        deps.online(instance.machineId) &&
-        ["running", "starting"].includes(instance.status)
+      deps.online(instance.machineId) &&
+      ["running", "starting"].includes(instance.status)
     );
   };
   const supervisorLive = (run: WorkflowRunRow) =>
@@ -1695,8 +1695,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       }
       const answers = (
         result.updatedInput as
-          | { answers?: Record<string, string | string[]> }
-          | undefined
+          { answers?: Record<string, string | string[]> } | undefined
       )?.answers;
       const reply = answers && Object.values(answers)[0];
       const answer = answerOf(

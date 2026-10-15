@@ -645,9 +645,10 @@
     });
   }
   function menuByKey(id: string, event: KeyboardEvent) {
-    if (
-      !(event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))
-    ) {
+    if (!(
+      event.key === "ContextMenu" ||
+      (event.key === "F10" && event.shiftKey)
+    )) {
       return false;
     }
     event.preventDefault();
@@ -1400,7 +1401,7 @@
 <!-- `''` when the board is showing: a value no segment carries, so nothing
      is drawn as chosen. -->
 <Tabs
-  class="session-tabs {hosted ? "hosted" : ""}"
+  class="session-tabs {hosted ? 'hosted' : ''}"
   data-strip={leaf.id}
   onValueChange={(id) => workspace.activate(id, leaf.id)}
   {travel}
@@ -1491,8 +1492,7 @@
                 if (anchor) {
                   showDetails(tab.id, anchor, true);
                 }
-              }}
-              >Session details</ContextMenu.Item
+              }}>Session details</ContextMenu.Item
             >
             <ContextMenu.Item
               onSelect={() =>
@@ -1682,12 +1682,12 @@
               bind:joined={
                 () => menuHung === tab.id,
                 (shown) => {
-    if (shown) {
-      menuHung = tab.id;
-    } else if (menuHung === tab.id) {
-      menuHung = null;
-    }
-  }
+                  if (shown) {
+                    menuHung = tab.id;
+                  } else if (menuHung === tab.id) {
+                    menuHung = null;
+                  }
+                }
               }
             >
               {@render options()}
@@ -1727,9 +1727,7 @@
   <div class="strip-new">
     <Tooltip.Root bind:open={newTip}>
       <Tooltip.Trigger>
-        {#snippet child({
-          props,
-        })}
+        {#snippet child({ props })}
           <button
             {...props}
             aria-busy={starting || undefined}
@@ -2040,9 +2038,8 @@
       padding-block-start: 0;
       padding-inline: calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))
         calc(
-          var(--c-bar-phone-gap) +
-          var(--c-bar-caw-glass-phone) +
-          env(safe-area-inset-right, 0px)
+          var(--c-bar-phone-gap) + var(--c-bar-caw-glass-phone) +
+            env(safe-area-inset-right, 0px)
         );
     }
   }
@@ -2244,9 +2241,7 @@
       position: absolute;
       inset-block: var(--shade-top) 0;
       inset-inline: calc(
-          var(--seam-tuck) *
-          var(--cut-start, 0) +
-          var(--slope-start)
+          var(--seam-tuck) * var(--cut-start, 0) + var(--slope-start)
         )
         calc(var(--seam-tuck) * var(--cut-end, 0) + var(--slope-end));
       border-radius: var(--radius) var(--radius) 0 0;
@@ -2337,19 +2332,15 @@
        on the switch's clock (`--sheet-now`, `--depth-prev`,
        `--depth-next`). */
     --rim-mix: calc(
-      var(--rim-rest) +
-      (var(--rim-full) - var(--rim-rest)) *
-      var(--sheet-now)
+      var(--rim-rest) + (var(--rim-full) - var(--rim-rest)) * var(--sheet-now)
     );
     --rim-mix-prev: calc(
-      var(--rest-prev) +
-      (var(--full-prev) - var(--rest-prev)) *
-      (1 - var(--depth-prev, 1))
+      var(--rest-prev) + (var(--full-prev) - var(--rest-prev)) *
+        (1 - var(--depth-prev, 1))
     );
     --rim-mix-next: calc(
-      var(--rest-next) +
-      (var(--full-next) - var(--rest-next)) *
-      (1 - var(--depth-next, 1))
+      var(--rest-next) + (var(--full-next) - var(--rest-next)) *
+        (1 - var(--depth-next, 1))
     );
 
     @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
@@ -2360,9 +2351,7 @@
     /* The tab's lean, as the kit's card has it (TabItem `--lean-now`), for
        the rim drawn on that card. */
     --lean-now: calc(
-      var(--lean) *
-      (1 - var(--pick)) *
-      (1 - var(--lean-lift-now, 0))
+      var(--lean) * (1 - var(--pick)) * (1 - var(--lean-lift-now, 0))
     );
   }
   @media (hover: hover) and (pointer: fine) {
@@ -2435,13 +2424,11 @@
     --py: calc((var(--fn) - var(--ro) * cos(var(--th))) * 1px);
     --cx: calc(
       (
-        var(--ro) *
-        sin(var(--th)) -
-        (var(--fn) - var(--ro) * cos(var(--th))) *
-        cos(var(--th)) /
-        sin(var(--th))
-      ) *
-      1px
+          var(--ro) * sin(var(--th)) -
+            (var(--fn) - var(--ro) * cos(var(--th))) * cos(var(--th)) /
+            sin(var(--th))
+        ) *
+        1px
     );
     display: block;
     position: absolute;
@@ -2501,21 +2488,13 @@
     clip-path: inset(
       0
         calc(
-          var(--F) +
-          var(--slope-end) +
-          var(--radius) -
-          0.5px +
-          var(--seam-tuck) *
-          var(--cut-end, 0)
+          var(--F) + var(--slope-end) + var(--radius) - 0.5px +
+            var(--seam-tuck) * var(--cut-end, 0)
         )
         calc(100% - var(--t))
         calc(
-          var(--F) +
-          var(--slope-start) +
-          var(--radius) -
-          0.5px +
-          var(--seam-tuck) *
-          var(--cut-start, 0)
+          var(--F) + var(--slope-start) + var(--radius) - 0.5px +
+            var(--seam-tuck) * var(--cut-start, 0)
         )
     );
   }
@@ -2544,10 +2523,8 @@
     --beside: var(--rim-mix-prev);
     translate: calc(var(--seam-tuck) * var(--cut-start, 0)) 0;
     opacity: calc(
-      1 -
-      var(--glide) +
-      var(--glide) *
-      min(1, calc(var(--beside) / max(var(--rim-mix), 0.001)))
+      1 - var(--glide) + var(--glide) *
+        min(1, calc(var(--beside) / max(var(--rim-mix), 0.001)))
     );
     /* Its two drawings add up here and nowhere else (`.rim-flared`). */
     isolation: isolate;
@@ -2713,42 +2690,42 @@
         rgb(0 0 0 / calc(1 - pow(1 - max(0.04, var(--a0)), var(--te))))
           calc(
             var(--F) +
-            clamp(0px, 0.04 * var(--taper) - var(--A) * 1px, var(--cap))
+              clamp(0px, 0.04 * var(--taper) - var(--A) * 1px, var(--cap))
           ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.08, var(--a0)), var(--te))))
           calc(
             var(--F) +
-            clamp(0px, 0.08 * var(--taper) - var(--A) * 1px, var(--cap))
+              clamp(0px, 0.08 * var(--taper) - var(--A) * 1px, var(--cap))
           ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.13, var(--a0)), var(--te))))
           calc(
             var(--F) +
-            clamp(0px, 0.13 * var(--taper) - var(--A) * 1px, var(--cap))
+              clamp(0px, 0.13 * var(--taper) - var(--A) * 1px, var(--cap))
           ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.19, var(--a0)), var(--te))))
           calc(
             var(--F) +
-            clamp(0px, 0.19 * var(--taper) - var(--A) * 1px, var(--cap))
+              clamp(0px, 0.19 * var(--taper) - var(--A) * 1px, var(--cap))
           ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.26, var(--a0)), var(--te))))
           calc(
             var(--F) +
-            clamp(0px, 0.26 * var(--taper) - var(--A) * 1px, var(--cap))
+              clamp(0px, 0.26 * var(--taper) - var(--A) * 1px, var(--cap))
           ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.35, var(--a0)), var(--te))))
           calc(
             var(--F) +
-            clamp(0px, 0.35 * var(--taper) - var(--A) * 1px, var(--cap))
+              clamp(0px, 0.35 * var(--taper) - var(--A) * 1px, var(--cap))
           ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.5, var(--a0)), var(--te))))
           calc(
             var(--F) +
-            clamp(0px, 0.5 * var(--taper) - var(--A) * 1px, var(--cap))
+              clamp(0px, 0.5 * var(--taper) - var(--A) * 1px, var(--cap))
           ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.7, var(--a0)), var(--te))))
           calc(
             var(--F) +
-            clamp(0px, 0.7 * var(--taper) - var(--A) * 1px, var(--cap))
+              clamp(0px, 0.7 * var(--taper) - var(--A) * 1px, var(--cap))
           ),
         #000
           calc(var(--F) + clamp(0px, var(--taper) - var(--A) * 1px, var(--cap)))
@@ -2834,11 +2811,7 @@
         of var(--radius) cw,
       line to
         calc(
-          100% -
-          var(--cut-e) -
-          var(--flare) -
-          var(--slope-end) -
-          var(--radius)
+          100% - var(--cut-e) - var(--flare) - var(--slope-end) - var(--radius)
         )
         0,
       arc to calc(100% - var(--cut-e) - var(--flare) - var(--slope-end))

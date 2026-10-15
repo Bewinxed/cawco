@@ -45,6 +45,7 @@
   };
   const Glyph = $derived(icons[tone]);
 </script>
+
 <!-- One chip for the life of the status: a change tints it over --dur-panel,
      the glyph cross-fades in its cell and the label morphs in place. In a
      `reflow` list (the rail, the board's queue) the chip still pops in and
@@ -59,6 +60,7 @@
     {/key}</span
   ><TextMorph as="span" duration={morphMs()} text={label} /></span
 >
+
 <style>
   .wf-status {
     display: inline-flex;

@@ -121,16 +121,14 @@
             class="link"
             data-share="title:{href}"
             {href}
-            {@attach land(() => `title:${href}`, { uniform: true })}
-            >{name}</a
+            {@attach land(() => `title:${href}`, { uniform: true })}>{name}</a
           >
         {:else}
           <span
             class="label"
             {@attach land(() => (share ? `title:${share}` : undefined), {
               uniform: true,
-            })}
-            >{name}</span
+            })}>{name}</span
           >
         {/if}
         {#if badge}
@@ -149,7 +147,7 @@
         <!-- It shows what the row's `enabled` says: a switch whose save
              fails goes back to its old side when the page puts it back. -->
         <Switch
-          aria-label="{enabled ? "Turn off" : "Turn on"} {name}"
+          aria-label="{enabled ? 'Turn off' : 'Turn on'} {name}"
           disabled={toggling}
           bind:checked={() => enabled === true, (next) => ontoggle?.(next)}
         />

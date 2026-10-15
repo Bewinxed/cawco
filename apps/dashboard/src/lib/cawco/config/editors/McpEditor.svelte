@@ -282,9 +282,7 @@
     />
     {#if serverName !== "" && nameProblem}
       <p class="problem" in:appear>{nameProblem}</p>
-    {:else if server &&
-      serverName.trim() !== "" &&
-      serverName.trim() !== server.name}
+    {:else if server && serverName.trim() !== "" && serverName.trim() !== server.name}
       <!-- Said before Save, where the name is changed: that is its consequence. -->
       <p class="note" in:appear>
         A new name makes a new server; {server.name} stays as it is.
@@ -422,8 +420,8 @@
       >
         <p class="note">
           <span class="font-mono">&#36;&#123;VAR&#125;</span>
-          is expanded on each machine, from that machine's own environment —
-          secrets never pass through the hub.
+          is expanded on each machine, from that machine's own environment — secrets
+          never pass through the hub.
         </p>
         <div class="kind" {@attach morph({ ms: dur("--dur-pop") })}>
           {#if mode === "remote"}

@@ -167,8 +167,8 @@
                      aria-pressed:focus-visible:outline-[var(--focus-ring)]"
               onclick={() => folderPrefs.setHue(cwd, hue)}
               title="Hue {hue}{pickedHue === undefined && on
-                ? " (automatic)"
-                : ""}"
+                ? ' (automatic)'
+                : ''}"
               type="button"
             >
               <!-- The chosen hue is ringed where the focus ring would be, in

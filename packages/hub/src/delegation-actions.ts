@@ -236,8 +236,7 @@ const callerMode = (
   instanceId: string
 ): PermissionMode | undefined =>
   (rows.find((row) => row.id === instanceId)?.permissionMode ?? undefined) as
-    | PermissionMode
-    | undefined;
+    PermissionMode | undefined;
 
 /** The calling session as its handoff marker names it: its row's label, or its folder before it has one. */
 const senderName = (own: InstanceRow | undefined, cwd: string): string =>

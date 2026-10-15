@@ -65,15 +65,12 @@
     }
   }
 </script>
+
 <svelte:head><title>Workflows · CawCo</title></svelte:head>
-{#snippet newMenu(
-  inEmptyState: boolean
-)}
+{#snippet newMenu(inEmptyState: boolean)}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger disabled={!live || busy}>
-      {#snippet child({
-        props,
-      })}
+      {#snippet child({ props })}
         <button
           {...props}
           class="wf-btn wf-primary"
@@ -252,6 +249,7 @@
     workflow={launch.workflow}
   />
 {/if}
+
 <style>
   .list-page {
     position: relative;

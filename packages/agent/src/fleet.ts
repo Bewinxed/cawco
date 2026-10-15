@@ -457,8 +457,7 @@ const mergePlacedMcp = async (
   const before = JSON.stringify(file.root.projects ?? {});
   const projects = {
     ...((file.root.projects as
-      | Record<string, Record<string, unknown>>
-      | undefined) ?? {}),
+      Record<string, Record<string, unknown>> | undefined) ?? {}),
   };
   const serversAt = (cwd: string): Record<string, unknown> => {
     const entry = { ...(projects[cwd] ?? {}) };
@@ -1905,12 +1904,7 @@ const fileHashAt = async (path: string): Promise<string | null> => {
 const memoryFileHash = (): Promise<string | null> => fileHashAt(MEMORY_PATH);
 
 export type MemoryPlan =
-  | "write"
-  | "skip"
-  | "drift"
-  | "remove"
-  | "unmanage"
-  | "none";
+  "write" | "skip" | "drift" | "remove" | "unmanage" | "none";
 
 /**
  * What to do about the user CLAUDE.md, from hashes alone. Drift is a machine
@@ -2850,8 +2844,8 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   const claudeJson = await readClaudeJson();
   const projects = claudeJson.ok
     ? ((claudeJson.root.projects as
-        | Record<string, { mcpServers?: Record<string, unknown> }>
-        | undefined) ?? {})
+        Record<string, { mcpServers?: Record<string, unknown> }> | undefined) ??
+      {})
     : {};
   for (const [key, { cwd, name }] of Object.entries(managed.placedMcp)) {
     report.mcp[key] = projects[cwd]?.mcpServers?.[name]
@@ -3209,8 +3203,8 @@ export const inspectConfig = async (
 
   const projects =
     (root.projects as
-      | Record<string, { mcpServers?: Record<string, unknown> }>
-      | undefined) ?? {};
+      Record<string, { mcpServers?: Record<string, unknown> }> | undefined) ??
+    {};
   const local = cwd ? (projects[cwd]?.mcpServers ?? {}) : {};
   const project = cwd
     ? ((

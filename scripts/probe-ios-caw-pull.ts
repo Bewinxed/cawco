@@ -134,8 +134,7 @@ async function tree(udid: string): Promise<Node[]> {
         : undefined,
     });
     for (const child of (raw.children as
-      | Record<string, unknown>[]
-      | undefined) ?? []) {
+      Record<string, unknown>[] | undefined) ?? []) {
       walk(child);
     }
   };

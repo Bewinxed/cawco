@@ -1,10 +1,10 @@
 @font-face {
-  font-family: "Nunito Variable";
+  font-family: 'Nunito Variable';
   font-style: normal;
   font-display: swap;
   font-weight: 200 1000;
-  src: url("../node_modules/@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2")
-    format("woff2-variations");
+  src: url('../node_modules/@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2')
+    format('woff2-variations');
   unicode-range:
     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
@@ -12,12 +12,12 @@
 
 /* Figtree is the product's own typeface. The scenes are set in it so they read as the app. */
 @font-face {
-  font-family: "Figtree Variable";
+  font-family: 'Figtree Variable';
   font-style: normal;
   font-display: swap;
   font-weight: 300 900;
-  src: url("../node_modules/@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2")
-    format("woff2-variations");
+  src: url('../node_modules/@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2')
+    format('woff2-variations');
   unicode-range:
     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
@@ -40,8 +40,8 @@
   --soft-on-ink: color-mix(in oklab, var(--paper) 66%, var(--ink));
   --soft-on-paper: color-mix(in oklab, var(--ink) 80%, var(--paper));
 
-  --font: "Nunito Variable", ui-rounded, system-ui, sans-serif;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --font: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -383,8 +383,8 @@ h1 {
   filter: blur(3px);
 }
 
-.cmd[data-state="copied"] .ic-done,
-.cmd[data-state="blocked"] .ic-fail {
+.cmd[data-state='copied'] .ic-done,
+.cmd[data-state='blocked'] .ic-fail {
   opacity: 1;
   transform: none;
   filter: none;
@@ -416,7 +416,7 @@ h1 {
   pointer-events: none;
 }
 
-.cmd[data-state="blocked"] .cmd-alert {
+.cmd[data-state='blocked'] .cmd-alert {
   opacity: 1;
   visibility: visible;
   transform: none;
@@ -517,7 +517,7 @@ h1 {
   font-size: 1.55rem;
 }
 
-.tab[aria-selected="true"] {
+.tab[aria-selected='true'] {
   background: var(--ink-3);
   color: var(--paper);
 }
@@ -570,12 +570,12 @@ h1 {
 }
 
 .tabs-channel .tab::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: -7px -1px;
 }
 
-.tabs-channel .tab[aria-selected="true"] {
+.tabs-channel .tab[aria-selected='true'] {
   background: var(--ink);
   color: var(--paper);
 }
@@ -747,7 +747,7 @@ h1 {
   border-top: 1px solid var(--ink-3);
 }
 
-.compare th[scope="row"] {
+.compare th[scope='row'] {
   font-weight: 800;
 }
 
@@ -816,7 +816,7 @@ h1 {
   position: absolute;
   inset: 0;
   padding: 5%;
-  font-family: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
   font-size: clamp(10.5px, min(2.05cqi, 2.5cqb), 15.5px);
   font-weight: 500;
   line-height: 1.35;
@@ -934,11 +934,11 @@ h1 {
   line-height: 1;
 }
 
-.mark[data-rim="live"] {
+.mark[data-rim='live'] {
   --rim: color-mix(in oklab, var(--fill, var(--app-ink)) 42%, transparent);
 }
 
-.mark[data-rim="attn"] {
+.mark[data-rim='attn'] {
   --rim: var(--attn-glyph);
 }
 
@@ -949,7 +949,7 @@ h1 {
   z-index: -1;
   border-radius: 0.34em;
   background: color-mix(in oklab, var(--fill) 45%, var(--app-raised));
-  content: "";
+  content: '';
 }
 
 /* The agent's glyph, as HarnessGlyph.svelte strokes it. */
@@ -1050,7 +1050,7 @@ h1 {
   height: 0.5em;
   border-radius: 50%;
   background: currentColor;
-  content: "";
+  content: '';
 }
 
 .st-live {
@@ -1114,7 +1114,7 @@ h1 {
   border-bottom: 1px solid var(--app-nest);
   border-left: 1px solid var(--app-nest);
   border-bottom-left-radius: 0.6em;
-  content: "";
+  content: '';
 }
 
 /* The rail carries on past every row but the last. */
@@ -1124,7 +1124,7 @@ h1 {
   top: 0;
   bottom: calc(-1 * var(--tree-gap));
   border-left: 1px solid var(--app-nest);
-  content: "";
+  content: '';
 }
 
 .t-row {
@@ -1321,7 +1321,7 @@ h1 {
 
 .hitl-more::before {
   margin-right: 0.45em;
-  content: "▸";
+  content: '▸';
 }
 
 .hitl-foot {
@@ -1476,8 +1476,7 @@ h1 {
 mark {
   padding: 0.05em 0.25em;
   border-radius: 0.3em;
-  background:
-    linear-gradient(
+  background: linear-gradient(
       color-mix(in oklab, var(--app-brand) 30%, var(--app-raised)),
       color-mix(in oklab, var(--app-brand) 30%, var(--app-raised))
     )
@@ -1534,7 +1533,7 @@ mark {
   height: 0.95em;
   border: 1px solid var(--app-nest);
   border-radius: 50%;
-  content: "";
+  content: '';
 }
 
 .radios .is-picked {
@@ -1717,7 +1716,7 @@ mark {
   opacity: 0;
 }
 
-.steps > [data-step="skill"] {
+.steps > [data-step='skill'] {
   opacity: 1;
 }
 
@@ -2000,7 +1999,7 @@ mark {
     color: var(--paper);
   }
 
-  .tabs-channel .tab:not([aria-selected="true"]):hover {
+  .tabs-channel .tab:not([aria-selected='true']):hover {
     color: var(--ink);
   }
 
@@ -2275,7 +2274,7 @@ mark {
   }
 
   .cmd-alert,
-  .cmd[data-state="blocked"] .cmd-alert {
+  .cmd[data-state='blocked'] .cmd-alert {
     transform: none;
     transition: none;
   }

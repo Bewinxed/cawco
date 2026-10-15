@@ -312,14 +312,11 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
       set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
       return installScript(`http://${host}`, installation?.releaseHost);
     })
-    .get(
-      "/api/join",
-      async (): Promise<JoinInfo> => ({
-        addresses: await joinAddresses(),
-        sshPublicKey: sshPublicKey(),
-        hubHostname: hostname(),
-      })
-    )
+    .get("/api/join", async (): Promise<JoinInfo> => ({
+      addresses: await joinAddresses(),
+      sshPublicKey: sshPublicKey(),
+      hubHostname: hostname(),
+    }))
     .post(
       "/api/machines/ssh",
       {

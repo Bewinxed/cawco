@@ -1148,8 +1148,7 @@ class SessionMode {
 
   /** The mode the CLI is in, as far as this session knows: what a spawn launches it in. */
   get cli():
-    | import("@anthropic-ai/claude-agent-sdk").PermissionMode
-    | undefined {
+    import("@anthropic-ai/claude-agent-sdk").PermissionMode | undefined {
     return this.#cli;
   }
 
@@ -3214,8 +3213,7 @@ const toInfo = (
 
 const toEntry = (
   entry:
-    | import("@anthropic-ai/claude-agent-sdk").SessionMessage
-    | SDKSessionMessage
+    import("@anthropic-ai/claude-agent-sdk").SessionMessage | SDKSessionMessage
 ): SessionMessage => {
   // Every stored line carries the ISO time the turn was written, and the SDK
   // passes it through — but its `SessionMessage` type does not declare it, so
@@ -3455,8 +3453,7 @@ export class ClaudeHarness implements Harness {
     } as NeutralMessage);
     const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
     const options = spec.options as
-      | { env?: Record<string, string | undefined> }
-      | undefined;
+      { env?: Record<string, string | undefined> } | undefined;
     // What this process has scheduled is known from its start: nothing until
     // a turn of it ends and says otherwise. Kept, so an agent that attaches
     // to it later knows too, though no turn of it has ended since (one its

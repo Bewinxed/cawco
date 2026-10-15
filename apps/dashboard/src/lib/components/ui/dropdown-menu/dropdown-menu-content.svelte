@@ -51,9 +51,7 @@
     bind:ref
     {...restProps}
   >
-    {#snippet child(
-      snippet
-    )}
+    {#snippet child(snippet)}
       {#if forceMount || drawn(snippet.props)}
         {#if callerChild}
           {@render callerChild(snippet)}

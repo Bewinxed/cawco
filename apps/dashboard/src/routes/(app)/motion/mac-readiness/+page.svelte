@@ -100,8 +100,7 @@
       aria-current={picked === each.id ? "page" : undefined}
       href={hrefOf(each.id)}
       size="xs"
-      variant={picked === each.id ? "default" : "outline"}
-      >{each.label}</Button
+      variant={picked === each.id ? "default" : "outline"}>{each.label}</Button
     >
   {/each}
 </nav>

@@ -44,18 +44,15 @@
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
             class="h-auto px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
-            scope="col"
-            >Machine</Table.Head
+            scope="col">Machine</Table.Head
           >
           <Table.Head
             class="h-auto border-l border-border px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
-            scope="col"
-            >Running</Table.Head
+            scope="col">Running</Table.Head
           >
           <Table.Head
             class="h-auto min-w-56 border-l border-border px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
-            scope="col"
-            >Update</Table.Head
+            scope="col">Update</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         </Table.Row>
@@ -83,8 +80,8 @@
                     >
                     <span
                       class="size-2 shrink-0 rounded-full {online
-                        ? "bg-success"
-                        : "bg-muted-foreground/40"}"
+                        ? 'bg-success'
+                        : 'bg-muted-foreground/40'}"
                     ></span>
                   </span>
                   <span class="text-label text-muted-foreground"

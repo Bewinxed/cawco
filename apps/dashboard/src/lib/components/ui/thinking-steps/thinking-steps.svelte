@@ -34,11 +34,11 @@
   bind:open={
     () => open ?? internalOpen,
     (next) => {
-    if (open === undefined) {
-      internalOpen = next;
+      if (open === undefined) {
+        internalOpen = next;
+      }
+      onOpenChange?.(next);
     }
-    onOpenChange?.(next);
-  }
   }
 />
 

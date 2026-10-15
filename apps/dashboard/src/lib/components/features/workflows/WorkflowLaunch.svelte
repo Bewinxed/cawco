@@ -130,6 +130,7 @@
     }
   }
 </script>
+
 <Dialog.Root
   onOpenChangeComplete={(next) => {
     if (!next) {
@@ -144,10 +145,8 @@
     bind:ref={content}
     ><div class="wf wf-stack wf-launch">
       <Dialog.Header
-        ><Dialog.Title>Run {workflow.name}</Dialog.Title
-        ><Dialog.Description
-          >Choose the inputs and workspace for this workflow
-          run.</Dialog.Description
+        ><Dialog.Title>Run {workflow.name}</Dialog.Title><Dialog.Description
+          >Choose the inputs and workspace for this workflow run.</Dialog.Description
         ></Dialog.Header
       >
       <form class="wf-stack" onsubmit={launch}>
@@ -172,14 +171,13 @@
                   id="launch-{input.name}"
                   required={input.required}
                   bind:value={inputs[input.name]}
-                >
+                />
               {:else}
                 <textarea
                   id="launch-{input.name}"
                   required={input.required}
                   rows="2"
-                  bind:value={inputs[input.name]}
-                ></textarea>
+                  bind:value={inputs[input.name]}></textarea>
               {/if}</label
             >
           {/each}
@@ -198,9 +196,7 @@
               value=""
             >
               <option value="">Choose a project</option>
-              {#each cawco.projects.filter((each) =>
-                checkoutOf(each)
-              ) as project (project.id)}
+              {#each cawco.projects.filter( (each) => checkoutOf(each) ) as project (project.id)}
                 <option value={project.id}>{project.name}</option>
               {/each}
             </select></label
@@ -224,7 +220,7 @@
               class="wf-mono"
               required
               bind:value={workspace}
-            ></label
+            /></label
           >
           {#if online}
             <DirectoryPicker
@@ -281,6 +277,7 @@
     </div></Dialog.Content
   ></Dialog.Root
 >
+
 <style>
   .wf-launch :global(button) {
     min-height: 44px;

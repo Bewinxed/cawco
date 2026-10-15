@@ -29,6 +29,7 @@
     }
   }
 </script>
+
 <label
   >{label}
   <textarea
@@ -36,8 +37,7 @@
     class="wf-mono"
     oninput={(event) => change(event.currentTarget.value)}
     rows="7"
-    value={JSON.stringify(value, null, 2)}
-  ></textarea></label
+    value={JSON.stringify(value, null, 2)}></textarea></label
 >
 {#if errorMessage}
   <p class="wf-error" role="alert" in:unfold out:unfold>

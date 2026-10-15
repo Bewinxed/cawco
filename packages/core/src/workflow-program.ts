@@ -88,9 +88,7 @@ export interface AskAnswer<Value = unknown> {
  * `instructions` and every criterion may be text or structured data.
  */
 export type JevText =
-  | string
-  | Readonly<Record<string, unknown>>
-  | readonly unknown[];
+  string | Readonly<Record<string, unknown>> | readonly unknown[];
 export type JevQuestion =
   | {
       readonly type: "noul";
@@ -249,10 +247,7 @@ export interface Workflow<Inputs extends ZodType = ZodType> {
 }
 
 export type StepErrorKind =
-  | "no-result"
-  | "attempt-timeout"
-  | "harness-error"
-  | "cancelled";
+  "no-result" | "attempt-timeout" | "harness-error" | "cancelled";
 
 export class StepError extends Error {
   readonly attempts: number;

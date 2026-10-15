@@ -184,6 +184,7 @@
     });
   }
 </script>
+
 <section aria-label="Workflow inspector" class="wf wf-stack inspector">
   <!-- What is selected gives way to the next in place: the two cross-fade
        (the one leaving is taken out of the flow) while the box tweens to
@@ -202,9 +203,11 @@
             >Title<input
               oninput={(event) => patch({ title: event.currentTarget.value })}
               value={node.title}
-            ></label
+            /></label
           >
-          <label>Node ID<input class="wf-mono" readonly value={node.id}></label>
+          <label
+            >Node ID<input class="wf-mono" readonly value={node.id} /></label
+          >
           {#if node.kind === "step"}
             <div class="wf-well">
               <label
@@ -245,15 +248,11 @@
                   oninput={(event) =>
                     patch({ model: event.currentTarget.value })}
                   value={node.model}
-                >
+                />
                 <datalist id="workflow-models">
-                  {#each [
-                    ...new Set(
-                      types
+                  {#each [...new Set(types
                         .filter((type) => type.harness === node?.harness)
-                        .map((type) => type.model)
-                    ),
-                  ] as model (model)}
+                        .map((type) => type.model))] as model (model)}
                     <option value={model}></option>
                   {/each}
                 </datalist></label
@@ -276,7 +275,7 @@
                   onchange={(event) =>
                     patch({ skills: split(event.currentTarget.value) })}
                   value={node.skills?.join(", ") ?? ""}
-                ></label
+                /></label
               >
               <label
                 >Denied tools (Claude only)<input
@@ -284,7 +283,7 @@
                   onchange={(event) =>
                     patch({ denyTools: split(event.currentTarget.value) })}
                   value={node.denyTools?.join(", ") ?? ""}
-                ></label
+                /></label
               >
             </div>
             <TemplateInput
@@ -307,7 +306,7 @@
                     patch({ retries: event.currentTarget.valueAsNumber })}
                   type="number"
                   value={node.retries ?? 2}
-                ></label
+                /></label
               ><label
                 >Timeout (minutes)<input
                   min="1"
@@ -317,7 +316,7 @@
                     })}
                   type="number"
                   value={node.timeoutMinutes ?? 60}
-                ></label
+                /></label
               >
             </div>
           {:else if node.kind === "start"}
@@ -330,13 +329,13 @@
                       oninput={(event) =>
                         input(index, { name: event.currentTarget.value })}
                       value={entry.name}
-                    ></label
+                    /></label
                   ><label
                     >Label<input
                       oninput={(event) =>
                         input(index, { label: event.currentTarget.value })}
                       value={entry.label}
-                    ></label
+                    /></label
                   >
                 </div>
                 <label
@@ -361,7 +360,7 @@
                           options: split(event.currentTarget.value),
                         })}
                       value={entry.options?.join(", ") ?? ""}
-                    ></label
+                    /></label
                   >
                 {/if}
                 <label
@@ -369,7 +368,7 @@
                     oninput={(event) =>
                       input(index, { default: event.currentTarget.value })}
                     value={entry.default ?? ""}
-                  ></label
+                  /></label
                 >
                 <div class="wf-row wf-spread">
                   <label class="wf-check"
@@ -378,7 +377,7 @@
                       onchange={(event) =>
                         input(index, { required: event.currentTarget.checked })}
                       type="checkbox"
-                    >Required</label
+                    />Required</label
                   ><button
                     class="wf-btn"
                     onclick={() =>
@@ -450,7 +449,7 @@
                         })}
                       type="number"
                       value={entry.expectExit}
-                    ></label
+                    /></label
                   >
                 {:else}
                   <TemplateInput
@@ -465,7 +464,7 @@
                         oninput={(event) =>
                           rule(index, { pattern: event.currentTarget.value })}
                         value={entry.pattern}
-                      ></label
+                      /></label
                     ><label class="wf-check"
                       ><input
                         checked={entry.mustMatch}
@@ -474,7 +473,7 @@
                             mustMatch: event.currentTarget.checked,
                           })}
                         type="checkbox"
-                      >Must match</label
+                      />Must match</label
                     >
                   {:else if entry.kind === "forbidden-words"}
                     <label
@@ -484,7 +483,7 @@
                             words: split(event.currentTarget.value),
                           })}
                         value={entry.words.join(", ")}
-                      ></label
+                      /></label
                     >
                   {/if}
                 {/if}
@@ -501,13 +500,7 @@
                 value=""
               >
                 <option disabled value="">Choose a rule</option>
-                {#each [
-                  "schema",
-                  "regex",
-                  "forbidden-words",
-                  "file-exists",
-                  "command",
-                ] as kind (kind)}
+                {#each ["schema", "regex", "forbidden-words", "file-exists", "command"] as kind (kind)}
                   <option>{kind}</option>
                 {/each}
               </select></label
@@ -530,7 +523,7 @@
                           ),
                         })}
                       value={entry.port}
-                    ></label
+                    /></label
                   ><WhenFields
                     onchange={(when) =>
                       node?.kind === "branch" &&
@@ -605,7 +598,7 @@
                   patch({ concurrency: event.currentTarget.valueAsNumber })}
                 type="number"
                 value={node.concurrency}
-              ></label
+              /></label
             ><button
               class="wf-btn"
               onclick={() => node && editBody(node.id)}
@@ -621,9 +614,7 @@
                 value={node.workflowId}
               >
                 <option disabled value="">Choose workflow</option>
-                {#each workflows.filter(
-                  (entry) => entry.id !== workflowId
-                ) as entry (entry.id)}
+                {#each workflows.filter((entry) => entry.id !== workflowId) as entry (entry.id)}
                   <option value={entry.id}>{entry.name}</option>
                 {/each}
               </select></label
@@ -631,7 +622,7 @@
             {#if childStart?.kind === "start"}
               {#each childStart.inputs as entry (entry.name)}
                 <TemplateInput
-                  label="{entry.label}{entry.required ? " (required)" : ""}"
+                  label="{entry.label}{entry.required ? ' (required)' : ''}"
                   onchange={(value) =>
                     node?.kind === "workflow" &&
                     patch({ inputs: { ...node.inputs, [entry.name]: value } })}
@@ -676,7 +667,7 @@
                         ),
                       })}
                     value={entry.description ?? ""}
-                  ></label
+                  /></label
                 ><button
                   class="wf-btn"
                   onclick={() =>
@@ -709,7 +700,7 @@
                 onchange={(event) =>
                   patch({ allowOther: event.currentTarget.checked })}
                 type="checkbox"
-              >Allow other</label
+              />Allow other</label
             ><label
               >Answered by<select
                 onchange={(event) =>
@@ -730,7 +721,7 @@
                   })}
                 type="number"
                 value={node.waitFor ?? ""}
-              ></label
+              /></label
             >
           {:else if node.kind === "jev"}
             <TemplateInput
@@ -757,7 +748,7 @@
                           id: event.currentTarget.value,
                         })}
                       value={entry.id}
-                    ></label
+                    /></label
                   ><label
                     >Type<select
                       onchange={(event) =>
@@ -767,9 +758,7 @@
                         )}
                       value={entry.type}
                     >
-                      {#each Object.entries(
-                        JEV_TYPE_NAMES
-                      ) as [type, name] (type)}
+                      {#each Object.entries(JEV_TYPE_NAMES) as [type, name] (type)}
                         <option value={type}>{name}</option>
                       {/each}
                     </select></label
@@ -782,8 +771,7 @@
                         ...entry,
                         instructions: event.currentTarget.value,
                       })}
-                    value={entry.instructions}
-                  ></textarea></label
+                    value={entry.instructions}></textarea></label
                 >
                 {#if entry.type === "noul"}
                   <div class="wf-fields">
@@ -798,7 +786,7 @@
                             },
                           })}
                         value={entry.criteria?.true ?? ""}
-                      ></label
+                      /></label
                     ><label
                       >No means (optional)<input
                         oninput={(event) =>
@@ -810,7 +798,7 @@
                             },
                           })}
                         value={entry.criteria?.false ?? ""}
-                      ></label
+                      /></label
                     >
                   </div>
                 {:else if entry.type === "choice"}
@@ -832,7 +820,7 @@
                               ),
                             })}
                           value={row.option}
-                        ></label
+                        /></label
                       ><label
                         >Meaning<input
                           oninput={(event) =>
@@ -848,7 +836,7 @@
                               ),
                             })}
                           value={row.meaning}
-                        ></label
+                        /></label
                       >
                     </div>
                     <button
@@ -896,7 +884,7 @@
                             ),
                           })}
                         value={level}
-                      ></label
+                      /></label
                     >
                     <div class="wf-row">
                       <button
@@ -980,7 +968,7 @@
                   patch({ model: event.currentTarget.value || undefined })}
                 placeholder="jev-latest"
                 value={node.model ?? ""}
-              ></label
+              /></label
             >
           {:else if node.kind === "end"}
             {#each Object.entries(node.outputs) as [name, path], index (index)}
@@ -998,7 +986,7 @@
                         ),
                       })}
                     value={name}
-                  ></label
+                  /></label
                 ><TemplateInput
                   label="Result path"
                   onchange={(value) =>
@@ -1052,17 +1040,12 @@
                       value=""
                     >
                       <option value="">Choose a node</option>
-                      {#each graph.nodes.filter(
-                        (entry) => entry.kind !== "start"
-                      ) as target (target.id)}
+                      {#each graph.nodes.filter((entry) => entry.kind !== "start") as target (target.id)}
                         <option value={target.id}>{target.title}</option>
                       {/each}
                     </select></label
                   >
-                  {#each graph.edges.filter(
-                    (entry) =>
-                      entry.from.node === node?.id && entry.from.port === port
-                  ) as connection (connection.id)}
+                  {#each graph.edges.filter((entry) => entry.from.node === node?.id && entry.from.port === port) as connection (connection.id)}
                     <button
                       class="wf-btn"
                       onclick={() => onselect(connection.id)}
@@ -1094,7 +1077,7 @@
                             ),
                       })}
                     type="checkbox"
-                  >{port}: ends the run as failed</label
+                  />{port}: ends the run as failed</label
                 >
               {/each}
             </details>
@@ -1102,8 +1085,7 @@
           <label
             >Notes<textarea
               oninput={(event) => patch({ notes: event.currentTarget.value })}
-              value={node.notes ?? ""}
-            ></textarea></label
+              value={node.notes ?? ""}></textarea></label
           >
           <button
             class="wf-btn"
@@ -1143,7 +1125,7 @@
                 })}
               type="number"
               value={edge.maxIterations ?? ""}
-            ></label
+            /></label
           ><button
             class="wf-btn"
             onclick={() => {
@@ -1162,8 +1144,7 @@
           <label
             >Description<textarea
               oninput={(event) => ondescription(event.currentTarget.value)}
-              value={description}
-            ></textarea></label
+              value={description}></textarea></label
           ><label
             >Concurrency<input
               min="1"
@@ -1171,7 +1152,7 @@
                 settings({ concurrency: event.currentTarget.valueAsNumber })}
               type="number"
               value={graph.settings?.concurrency ?? 4}
-            ></label
+            /></label
           >
           <label
             >Default project<select
@@ -1238,6 +1219,7 @@
     {/each}
   </section>
 </section>
+
 <style>
   .inspector {
     padding: var(--space-5) var(--space-4) var(--space-8);

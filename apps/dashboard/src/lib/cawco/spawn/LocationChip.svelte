@@ -83,8 +83,7 @@
     <span
       class="chip-label"
       title={mode === "repo" ? repo : dir}
-      class:mono={!empty}
-      >{label}</span
+      class:mono={!empty}>{label}</span
     >
     <Down class="chevron" />
   {/snippet}

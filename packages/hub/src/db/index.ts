@@ -709,8 +709,7 @@ export interface DbShape {
   readonly getFleetHook: (id: string) => FleetHook | undefined;
   /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
   readonly getFleetMemory: () =>
-    | { content: string; hash: string; updatedAt: Date }
-    | undefined;
+    { content: string; hash: string; updatedAt: Date } | undefined;
   readonly getFleetMemoryDoc: (path: string) => MemoryDocRow | undefined;
   /**
    * The named rows, however old they are — the listing's staleness cut-off does
@@ -740,8 +739,7 @@ export interface DbShape {
     | undefined;
   /** The stored OpenRouter key and when it was connected, or undefined while not connected. */
   readonly getOpenRouterConnection: () =>
-    | { apiKey: string; connectedAt: Date }
-    | undefined;
+    { apiKey: string; connectedAt: Date } | undefined;
   /** One rule, or nothing when it has been deleted out from under a caller. */
   readonly getRule: (id: string) => Rule | undefined;
   /** The fleet's choices row (`supervisor_config`), or undefined while none is stored. */

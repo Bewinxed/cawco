@@ -48,12 +48,7 @@ export interface PermissionPresentation {
 
 /** The settings groups an admin write names things in. */
 export type AdminGroup =
-  | "delegate_types"
-  | "hooks"
-  | "mcp_servers"
-  | "plugins"
-  | "rules"
-  | "skills";
+  "delegate_types" | "hooks" | "mcp_servers" | "plugins" | "rules" | "skills";
 
 export interface PresentationContext {
   /** The asking session's name. */

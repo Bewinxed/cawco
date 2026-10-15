@@ -387,9 +387,7 @@
   ready={fleet !== null}
   title={section.label}
 >
-  {#snippet actions(
-    down
-  )}
+  {#snippet actions(down)}
     <FetchSkillPopover
       {down}
       onsaved={landedSkill}
@@ -488,8 +486,7 @@
                 onresolved={resolved}
               />
               {#if historyOf === row.name}
-                {#if versionsOf[row.name] === undefined &&
-                  !versionsFailed[row.name]}
+                {#if versionsOf[row.name] === undefined && !versionsFailed[row.name]}
                   <div
                     aria-label="Reading {row.name}'s previous versions"
                     class="listing"

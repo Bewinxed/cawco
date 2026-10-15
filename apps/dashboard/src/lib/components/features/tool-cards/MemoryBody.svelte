@@ -179,9 +179,7 @@
   });
 </script>
 
-{#snippet well(
-  source: string
-)}
+{#snippet well(source: string)}
   <div class="well"><ToolProse {source} /></div>
 {/snippet}
 

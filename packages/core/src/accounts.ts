@@ -166,13 +166,7 @@ export const providerChoices = (
 
 /** The colour an account is drawn in: the `--account-<name>` token. */
 export type AccountHue =
-  | "amber"
-  | "blue"
-  | "cyan"
-  | "green"
-  | "orange"
-  | "rose"
-  | "violet";
+  "amber" | "blue" | "cyan" | "green" | "orange" | "rose" | "violet";
 
 /**
  * Every account colour, in the order a new account takes the first one no
@@ -261,10 +255,7 @@ export interface AccountSignin {
 
 /** How a provider's new sessions choose among its accounts. */
 export type PlacementStrategy =
-  | "pinned"
-  | "fill-first"
-  | "spread"
-  | "soonest-reset";
+  "pinned" | "fill-first" | "spread" | "soonest-reset";
 
 export const PLACEMENT_STRATEGIES: readonly PlacementStrategy[] = [
   "pinned",

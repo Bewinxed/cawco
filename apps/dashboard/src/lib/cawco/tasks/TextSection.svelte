@@ -54,8 +54,7 @@
           draft = text;
         }}
         size="xs"
-        variant="ghost"
-        >Edit</Button
+        variant="ghost">Edit</Button
       >
     {/if}
   </h3>
@@ -87,8 +86,7 @@
             problem = null;
           }}
           size="sm"
-          variant="ghost"
-          >Cancel</Button
+          variant="ghost">Cancel</Button
         >
         <Button
           failed={problem !== null}

@@ -13,12 +13,7 @@ import { HUB_UNREACHABLE, HubUnreachable, unreachedAnswer } from "./hub-read";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind). */
 export type StageKind =
-  | "todo"
-  | "active"
-  | "waiting"
-  | "you"
-  | "done"
-  | "dropped";
+  "todo" | "active" | "waiting" | "you" | "done" | "dropped";
 
 /** Who moves a task: you, the project's lead, a session, an approved action, a routine. */
 export type Mover = "you" | "lead" | "session" | "action" | "routine";
@@ -89,13 +84,7 @@ export interface Starter {
 
 /** The hub's stage templates (stages.ts `TEMPLATES`), in its order. */
 export type StagesTemplate =
-  | "code"
-  | "launch"
-  | "seo"
-  | "brand"
-  | "design"
-  | "social"
-  | "outreach";
+  "code" | "launch" | "seo" | "brand" | "design" | "social" | "outreach";
 
 export interface StagesTemplateView {
   name: StagesTemplate;
@@ -104,11 +93,7 @@ export interface StagesTemplateView {
 
 /** A work item's life, as the hub's `WorkItemState` names it. */
 export type AttemptState =
-  | "starting"
-  | "running"
-  | "done"
-  | "failed"
-  | "cancelled";
+  "starting" | "running" | "done" | "failed" | "cancelled";
 
 /** One try at a task (WORDS.md: attempt): a work item whose task it is. */
 export interface TaskAttempt {

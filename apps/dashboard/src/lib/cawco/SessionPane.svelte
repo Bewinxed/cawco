@@ -1072,9 +1072,7 @@
 
 <!-- A named state, not an empty pane: what happened, in one line, and the one
      thing that can be done about it. -->
-{#snippet faultState(
-  fault: ReadFault
-)}
+{#snippet faultState(fault: ReadFault)}
   <EmptyState
     class={STATEFUL}
     icon={fault.reason === "offline" ? IconLaptop : IconAlert}

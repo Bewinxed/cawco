@@ -260,7 +260,7 @@
           class:loaded={loaded === src}
           {@attach mounted}
           {@attach sized}
-        >
+        />
       </span>
     </button>
   {/if}

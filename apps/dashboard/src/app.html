@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
     <meta
       content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
       name="viewport"
-    >
+    />
     <title>CawCo — mission control for Claude Code</title>
     <!--
       The tab's icon, in every page's HTML (a route with SSR off has no
@@ -15,7 +15,7 @@
       app's layout (routes/(app)) changes it with the fleet; a bare route
       (an artifact's own tab) keeps it.
     -->
-    <link href="%cawco.tab-icon%" rel="icon" type="image/png">
+    <link href="%cawco.tab-icon%" rel="icon" type="image/png" />
     %sveltekit.head%
     <!--
       The faces the first paint sets its text in, decoded before it. The build
@@ -80,12 +80,10 @@
           held.push(button);
         };
         const holdMenu = (event) => {
-          if (
-            !(
-              event.target instanceof Element &&
-              event.target.closest("[data-context-menu-trigger]")
-            )
-          ) {
+          if (!(
+            event.target instanceof Element &&
+            event.target.closest("[data-context-menu-trigger]")
+          )) {
             return;
           }
           event.preventDefault();

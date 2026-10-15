@@ -17,10 +17,7 @@
   bind:ref
   {...restProps}
 >
-  {#snippet child({
-    props,
-    open,
-  })}
+  {#snippet child({ props, open })}
     <div {...props} style:pointer-events={pressable(open)}></div>
   {/snippet}
 </AlertDialogPrimitive.Overlay>

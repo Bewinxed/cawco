@@ -88,9 +88,7 @@
   bind:open={expanded}
 >
   <Popover.Trigger disabled={down !== null}>
-    {#snippet child({
-      props,
-    })}
+    {#snippet child({ props })}
       <Button {...props} disabled={down !== null} title={down ?? undefined}>
         <IconPlus />
         New document
@@ -104,12 +102,12 @@
     <form class="form" onsubmit={create}>
       <Field
         id="memory-path"
-        label="Path under {userLayerLabel("memories")}/"
+        label="Path under {userLayerLabel('memories')}/"
         {problem}
       >
         {#snippet hint()}
-          A <span class="font-mono">models/&lt;model&gt;.md</span> is put in
-          front of the session running that model.
+          A <span class="font-mono">models/&lt;model&gt;.md</span> is put in front
+          of the session running that model.
         {/snippet}
         <Input
           aria-invalid={problem ? "true" : undefined}

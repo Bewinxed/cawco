@@ -124,9 +124,7 @@
      page as the last row, and drawn in that row's frame it doubled the
      heaviest frame of the well. -->
 <CollapsibleLazy count={shown.length + afterCount} {open}>
-  {#snippet children(
-    limit
-  )}
+  {#snippet children(limit)}
     {@const drawn = shown.slice(0, limit)}
     {@const runs = wellRuns(drawn)}
     <div class="inner">

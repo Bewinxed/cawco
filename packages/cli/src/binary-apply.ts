@@ -303,8 +303,7 @@ export async function resumeBinary(): Promise<void> {
 }
 
 type KeeperMove =
-  | { outcome: "already" | "moved" }
-  | { error: string; outcome: "failed" };
+  { outcome: "already" | "moved" } | { error: string; outcome: "failed" };
 
 /**
  * A keeper's welcome at `endpoint`, within {@link HEALTH_MS}: one that starts
@@ -458,9 +457,10 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
 
 /** A handover that threw is a handover that failed: said, and the keeper before is the machine's. */
 const handOver = (to: string): Promise<KeeperMove> =>
-  handOverKeeper(to).catch(
-    (error): KeeperMove => ({ outcome: "failed", error: message(error) })
-  );
+  handOverKeeper(to).catch((error): KeeperMove => ({
+    outcome: "failed",
+    error: message(error),
+  }));
 
 /**
  * What the update state says about the keeper after a handover: the build it

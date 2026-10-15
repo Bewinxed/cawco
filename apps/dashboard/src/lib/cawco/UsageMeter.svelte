@@ -503,8 +503,7 @@
                   style:inset-inline-start={slotAt(
                     stripMarks.length,
                     stripMarks.length + 1
-                  )}
-                  >+{stripMore}</span
+                  )}>+{stripMore}</span
                 >
               {/if}
             </span>
@@ -537,8 +536,7 @@
             <!-- As its popover cell says it: how long it lasts, or at its
                  limit the refresh mark and when it's back. -->
             {#if goTime?.kind === "back"}
-              <span aria-hidden="true" class="strip-glyph"
-                ><IconRefresh /></span
+              <span aria-hidden="true" class="strip-glyph"><IconRefresh /></span
               >
             {/if}
             <span class="digits" data-strip-go-time
@@ -571,9 +569,7 @@
   {@const tip = dialTip(ring, c, now)}
   <span class="dial">
     <Tip anchor={rowOf(ring.id)} label={tip} {side} tap title={shown}>
-      {#snippet children(
-        props
-      )}
+      {#snippet children(props)}
         <button
           {...props}
           aria-label="{shown}: {tip}"
@@ -589,11 +585,7 @@
   </span>
 {/snippet}
 
-{#snippet lineTwo(
-  ring: RingAccount,
-  time: CellTime,
-  side: TipSide
-)}
+{#snippet lineTwo(ring: RingAccount, time: CellTime, side: TipSide)}
   <!-- The second line on its own tracks: the status slot (a guess's tilde,
        or at its limit the refresh mark, said whole on a rest or a tap), the
        time, a figure alone, then the week's mark and what is left of it. -->
@@ -603,16 +595,13 @@
         ? "At its limit."
         : `At its limit. Back in ${time.figure}.`}
     <Tip anchor={rowOf(ring.id)} label={tip} {side} tap>
-      {#snippet children(
-        props
-      )}
+      {#snippet children(props)}
         <span
           {...props}
           aria-label={tip}
           class="status glyph"
           data-status-slot
-          role="img"
-          ><IconRefresh aria-hidden="true" /></span
+          role="img"><IconRefresh aria-hidden="true" /></span
         >
       {/snippet}
     </Tip>
@@ -637,10 +626,7 @@
   {/if}
 {/snippet}
 
-{#snippet sessionsChip(
-  ring: RingAccount,
-  shown: string
-)}
+{#snippet sessionsChip(ring: RingAccount, shown: string)}
   {#if ring.sessions.length > 0}
     <span class="cell-chip">
       <SessionsChip
@@ -653,18 +639,12 @@
   {/if}
 {/snippet}
 
-{#snippet cell(
-  ring: RingAccount,
-  c: ClaudeRings | null,
-  side: TipSide
-)}
+{#snippet cell(ring: RingAccount, c: ClaudeRings | null, side: TipSide)}
   <!-- The carrier's hairline ring says, on a rest or a tap, that new
        sessions start there. -->
   {#if c && ring.id === c.carry?.id}
     <Tip anchor={rowOf(ring.id)} label="New sessions start here" {side} tap>
-      {#snippet children(
-        props
-      )}
+      {#snippet children(props)}
         {@render cellBody(ring, c, side, props)}
       {/snippet}
     </Tip>
@@ -719,9 +699,7 @@
       {#if c && ring.id === c.delegate?.id}
         {@const tip = delegateTip(c, ring)}
         <Tip anchor={rowOf(ring.id)} label={tip} {side} tap>
-          {#snippet children(
-            tipProps
-          )}
+          {#snippet children(tipProps)}
             <span
               {...tipProps}
               aria-label={tip}
@@ -740,9 +718,7 @@
   </div>
 {/snippet}
 
-{#snippet limits(
-  sheet: boolean
-)}
+{#snippet limits(sheet: boolean)}
   <!-- Its size follows what it lists (a provider arriving, a note going).
        In the popover and in the sheet alike the head and the foot stand
        still and the accounts between them scroll. -->
@@ -761,9 +737,7 @@
                when nothing can now, after the refresh mark, when an
                account is back; said whole on a rest or a tap. -->
           <Tip label={stop?.tip ?? ""} side="bottom" tap>
-            {#snippet children(
-              props
-            )}
+            {#snippet children(props)}
               <span
                 {...props}
                 aria-label={stop?.said}
@@ -833,7 +807,7 @@
                    column, named by its provider, after the hairline that
                    parts the providers, drawn edge to edge. -->
               <div class="block" data-org-group="opencode">
-                <hr class="seam">
+                <hr class="seam" />
                 {@render cell(openCode, null, sideFor())}
               </div>
             {/if}

@@ -598,10 +598,7 @@
   {/if}
 </section>
 
-{#snippet line(
-  item: Item,
-  live: boolean
-)}
+{#snippet line(item: Item, live: boolean)}
   <div class="row">
     {#if item.href && live}
       <a class="name" href={item.href} title={item.label}>{item.label}</a>
@@ -616,9 +613,7 @@
     {#if live}
       <Tooltip.Root>
         <Tooltip.Trigger>
-          {#snippet child({
-            props,
-          })}
+          {#snippet child({ props })}
             <span {...props} class="measure">
               <span class="fill" style:--share={item.share}></span>
               <span class="value num">{item.value}</span>
@@ -636,10 +631,7 @@
   </div>
 {/snippet}
 
-{#snippet leaving(
-  lines: Line[],
-  layer: boolean
-)}
+{#snippet leaving(lines: Line[], layer: boolean)}
   <div
     aria-hidden="true"
     class={layer ? "leaving layer" : "leaving"}

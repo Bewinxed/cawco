@@ -339,8 +339,7 @@ const tree = async (): Promise<Node[]> => {
       frame: node.frame as Node["frame"],
     });
     for (const child of (node.children as
-      | Record<string, unknown>[]
-      | undefined) ?? []) {
+      Record<string, unknown>[] | undefined) ?? []) {
       walk(child);
     }
   };

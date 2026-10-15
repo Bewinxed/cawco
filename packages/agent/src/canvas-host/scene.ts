@@ -1162,9 +1162,8 @@ const fromMermaid = async (
   text: string,
   ink: CanvasInk
 ): Promise<string[]> => {
-  const { parseMermaidToExcalidraw } = await import(
-    "@excalidraw/mermaid-to-excalidraw"
-  );
+  const { parseMermaidToExcalidraw } =
+    await import("@excalidraw/mermaid-to-excalidraw");
   const parsed = await parseMermaidToExcalidraw(text);
   const converted = convertToExcalidrawElements(
     parsed.elements as ExcalidrawElementSkeleton[]

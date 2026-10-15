@@ -17,8 +17,7 @@
    * away: it is the confirmation, nothing closes on its own.
    */
   export type Outcome =
-    | { kind: "working" }
-    | { kind: "done"; state: AuthState };
+    { kind: "working" } | { kind: "done"; state: AuthState };
 
   let {
     outcome,
@@ -75,7 +74,7 @@
         </div>
       {:else if answer}
         <div class="flex flex-col gap-[var(--space-2)]" role="status">
-          <span class="mark enter {ok ? "text-success" : "text-warning"}">
+          <span class="mark enter {ok ? 'text-success' : 'text-warning'}">
             {#if ok}
               <IconSuccess class="size-9" />
             {:else}

@@ -786,8 +786,9 @@ export class UsageScanner {
    */
   #reportBuckets(now: number): UsageBucket[] {
     const current = bucketStart(now);
-    const buckets = this.#report.all(current, current - BUCKET_MS).map(
-      (row): UsageBucket => ({
+    const buckets = this.#report
+      .all(current, current - BUCKET_MS)
+      .map((row): UsageBucket => ({
         harness: row.harness,
         start: row.start,
         spanMs: BUCKET_MS,
@@ -807,8 +808,7 @@ export class UsageScanner {
         },
         costUsd: row.cost,
         messages: row.messages,
-      })
-    );
+      }));
     this.#untouch.run();
     return buckets;
   }

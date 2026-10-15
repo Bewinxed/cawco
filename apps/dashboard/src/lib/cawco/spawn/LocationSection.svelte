@@ -147,7 +147,7 @@
   };
 </script>
 
-<section class="loc" class:embedded={embedded}>
+<section class="loc" class:embedded>
   {#if embedded}
     {@render source()}
   {:else}
@@ -172,10 +172,7 @@
       onchange={onmode}
       value={mode}
     >
-      {#snippet icon(
-        value,
-        on
-      )}
+      {#snippet icon(value, on)}
         {#if value === "dir"}
           <Folder style="color:var(--hue-amber-500)" />
         {:else}
@@ -189,7 +186,7 @@
     </Segmented>
   {/snippet}
 
-  <div class="field field-shell" class:locked={locked}>
+  <div class="field field-shell" class:locked>
     <div class="row">
       <FolderOpen class="lead" />
       <input
@@ -203,7 +200,7 @@
         readonly={locked}
         spellcheck="false"
         value={dir}
-      >
+      />
       {#if locked}
         <span class="badge ns-in">From project</span>
         <button
@@ -325,14 +322,14 @@
               spellcheck="false"
               tabindex={mode === "repo" ? 0 : -1}
               value={repo}
-            >
+            />
           </div>
         </div>
         <div class="note">
           <Refresh />
           <span
-            >Cloned into <span class="mono">{dir.trim() || "~"}</span> on each
-            machine, pulled fresh before the agent starts.</span
+            >Cloned into <span class="mono">{dir.trim() || "~"}</span> on each machine,
+            pulled fresh before the agent starts.</span
           >
         </div>
       </div>

@@ -1875,8 +1875,7 @@ const attach = (
      */
     const refusedByHub = (envelope: Envelope): boolean => {
       const refused = envelope.payload as
-        | { kind?: string; message?: string }
-        | undefined;
+        { kind?: string; message?: string } | undefined;
       if (envelope.verb !== "frames" || refused?.kind !== "error") {
         return false;
       }
@@ -2033,8 +2032,7 @@ const attach = (
       // The hub's answer to a beat: the sessions it keeps awake.
       if (envelope.verb === "heartbeat") {
         const beat = envelope.payload as
-          | Partial<HeartbeatAckPayload>
-          | undefined;
+          Partial<HeartbeatAckPayload> | undefined;
         supervisor.keepAwake(beat?.keepAwake);
         takeSessionLimits(beat?.sessionLimits);
         supervisor.acknowledged(beat);

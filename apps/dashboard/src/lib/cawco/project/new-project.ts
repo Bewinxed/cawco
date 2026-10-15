@@ -15,12 +15,7 @@ import {
 
 /** A template New project offers: the hub's stages template of the same name (stages.ts). */
 export type TemplateName =
-  | "code"
-  | "launch"
-  | "seo"
-  | "brand"
-  | "design"
-  | "social";
+  "code" | "launch" | "seo" | "brand" | "design" | "social";
 
 export interface TemplateCard {
   /** The tile glyph's section hue. */

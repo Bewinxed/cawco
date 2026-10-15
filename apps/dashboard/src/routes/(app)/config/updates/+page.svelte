@@ -152,9 +152,7 @@
   }
 </script>
 
-{#snippet resetAction(
-  _down: string | null
-)}
+{#snippet resetAction(_down: string | null)}
   {#if updates.damaged}
     <Button
       failed={resetFailed}

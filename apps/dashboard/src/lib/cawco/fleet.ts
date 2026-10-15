@@ -791,8 +791,7 @@ export interface FleetMemoryVersion {
 
 /** What a save came to: the row the hub stored, or the one it has instead. */
 export type MemorySave =
-  | { ok: true; memory: FleetMemoryRow }
-  | { ok: false; latest: FleetMemoryRow };
+  { ok: true; memory: FleetMemoryRow } | { ok: false; latest: FleetMemoryRow };
 
 /**
  * Stores the fleet's user-scope CLAUDE.md; every machine gets it from the hub.

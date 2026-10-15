@@ -79,11 +79,7 @@
   });
 </script>
 
-{#snippet Button({
-  props,
-}: {
-  props?: Record<string, unknown>;
-})}
+{#snippet Button({ props }: { props?: Record<string, unknown> })}
   {@const mergedProps = mergeProps(buttonProps, props)}
   {#if child}
     {@render child({ props: mergedProps })}
@@ -99,9 +95,7 @@
 {:else}
   <Tooltip.Root>
     <Tooltip.Trigger>
-      {#snippet child({
-        props,
-      })}
+      {#snippet child({ props })}
         {@render Button({ props })}
       {/snippet}
     </Tooltip.Trigger>

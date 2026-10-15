@@ -554,9 +554,8 @@ export function startInk(deps: InkDeps): Ink {
     const ab = el ? pageBox(el) : null;
     return group.strokes.map((stroke) => ({
       at: stroke.at,
-      points: stroke.points.map(
-        ([fx, fy, p]): Point =>
-          ab ? [ab.x + fx * ab.w, ab.y + fy * ab.h, p] : [0, 0, p]
+      points: stroke.points.map(([fx, fy, p]): Point =>
+        ab ? [ab.x + fx * ab.w, ab.y + fy * ab.h, p] : [0, 0, p]
       ),
     }));
   };
@@ -783,12 +782,15 @@ export function startInk(deps: InkDeps): Ink {
     deps.post("cawco:ink", { unsent, pins: unsentPins });
     clearTimeout(thumbTimer);
     if (unsent > 0 && !onCanvas()) {
-      thumbTimer = setTimeout(async () => {
-        const { png } = await deps.capture(0.25);
-        if (png) {
-          deps.post("cawco:ink", { unsent, pins: unsentPins, thumb: png });
-        }
-      }, chrome.ms("--breath") / 2);
+      thumbTimer = setTimeout(
+        async () => {
+          const { png } = await deps.capture(0.25);
+          if (png) {
+            deps.post("cawco:ink", { unsent, pins: unsentPins, thumb: png });
+          }
+        },
+        chrome.ms("--breath") / 2
+      );
     }
   };
 

@@ -104,6 +104,7 @@
     }
   }
 </script>
+
 <div class="template" bind:this={template}>
   <label for={fieldId}
     >{label}
@@ -118,8 +119,7 @@
         onkeydown={key}
         rows="7"
         {value}
-        bind:this={field}
-      ></textarea>
+        bind:this={field}></textarea>
     {:else}
       <input
         class="wf-mono"
@@ -131,7 +131,7 @@
         onkeydown={key}
         {value}
         bind:this={field}
-      >
+      />
     {/if}
   </label>
   {#if matches.length}
@@ -163,6 +163,7 @@
     </div>
   {/if}
 </div>
+
 <style>
   .template {
     position: relative;

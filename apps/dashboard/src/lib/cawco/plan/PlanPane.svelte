@@ -146,9 +146,7 @@
   const stepsHeaded = $derived(!!plan?.spec || showsTodos);
 </script>
 
-{#snippet mark(
-  status: PlanNode["status"]
-)}
+{#snippet mark(status: PlanNode["status"])}
   <span class="plan-mark" data-status={status}>
     {#if status === "completed"}
       <IconTick class="tick" />
@@ -158,10 +156,7 @@
   </span>
 {/snippet}
 
-{#snippet tree(
-  nodes: PlanNode[],
-  nested: boolean
-)}
+{#snippet tree(nodes: PlanNode[], nested: boolean)}
   <ul
     class={nested ? "kit-nest rows nested" : "rows"}
     in:branch={{ glyph: ".plan-mark" }}

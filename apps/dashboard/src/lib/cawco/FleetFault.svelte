@@ -348,9 +348,8 @@
           >
             {#each shown as fault (fault.scope + fault.key)}
               {#if fault.detail}
-                <pre
-                  class="said"
-                ><span class="for">{faultLabel(fault)}</span>{fault.detail}</pre>
+                <pre class="said"><span class="for">{faultLabel(fault)}</span
+                  >{fault.detail}</pre>
               {/if}
             {/each}
           </div>

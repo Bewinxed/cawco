@@ -1513,8 +1513,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   const pin = Object.values(pins).sort(
     (a, b) => Number(b.number) - Number(a.number)
   )[0] as
-    | { anchor: { selector: string }; id: string; number: number }
-    | undefined;
+    { anchor: { selector: string }; id: string; number: number } | undefined;
   const card = await focusedCard(on, pin?.number);
   const pinCard = on.page.locator(`.pin-card[data-pin-card="${pin?.number}"]`);
   await pinCard.getByRole("textbox").fill("This card, not the first.");
@@ -1524,8 +1523,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
     async () =>
       (
         (await docOf(frame)).pins[pin?.id ?? ""] as
-          | { thread?: unknown[] }
-          | undefined
+          { thread?: unknown[] } | undefined
       )?.thread?.length ?? 0,
     (count) => count === 1,
     5000

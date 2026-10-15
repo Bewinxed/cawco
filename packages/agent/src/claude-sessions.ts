@@ -217,12 +217,10 @@ export type Carried =
 export const carryRefusal = async (
   request: CarryRequest
 ): Promise<string | undefined> => {
-  if (
-    !(
-      TOKEN.test(request.sessionId) &&
-      (!request.accountId || TOKEN.test(request.accountId))
-    )
-  ) {
+  if (!(
+    TOKEN.test(request.sessionId) &&
+    (!request.accountId || TOKEN.test(request.accountId))
+  )) {
     return "not a session and account id to carry";
   }
   const into = resolve(sessionConfigDir(request));
@@ -400,9 +398,10 @@ export const readTaskList = async (
   row: { accountId?: string | null },
   sessionId: string
 ): Promise<NeutralTask[]> => {
-  if (
-    !(TOKEN.test(sessionId) && (!row.accountId || TOKEN.test(row.accountId)))
-  ) {
+  if (!(
+    TOKEN.test(sessionId) &&
+    (!row.accountId || TOKEN.test(row.accountId))
+  )) {
     throw new Error(`not a session and account to read: ${sessionId}`);
   }
   const dir = sessionTasksDir(row, sessionId);

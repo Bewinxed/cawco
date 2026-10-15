@@ -90,12 +90,10 @@ const readOne = async (
   accountId: string
 ): Promise<ProviderAccountReading | undefined> => {
   attempted.set(accountId, Date.now());
-  const read = await readWindows(accountId).catch(
-    (error: unknown): Read => ({
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    })
-  );
+  const read = await readWindows(accountId).catch((error: unknown): Read => ({
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+  }));
   if (!read) {
     return undefined;
   }

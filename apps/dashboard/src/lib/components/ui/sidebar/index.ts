@@ -20,10 +20,7 @@ export {
   default as Header,
   default as SidebarHeader,
 } from "./sidebar-header.svelte";
-export {
-  default as Menu,
-  default as SidebarMenu,
-} from "./sidebar-menu.svelte";
+export { default as Menu, default as SidebarMenu } from "./sidebar-menu.svelte";
 export {
   default as MenuBadge,
   default as SidebarMenuBadge,

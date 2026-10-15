@@ -399,9 +399,7 @@
   );
 </script>
 
-{#snippet renderNode(
-  value: unknown
-)}
+{#snippet renderNode(value: unknown)}
   {#if value === null || value === undefined}
     <!-- nothing -->
   {:else if typeof value === "string"}
@@ -417,9 +415,7 @@
   {/if}
 {/snippet}
 
-{#snippet element(
-  node: ElementNode
-)}
+{#snippet element(node: ElementNode)}
   {@const Comp = library.components[node.typeName]?.component}
   {#if Comp}
     <svelte:boundary

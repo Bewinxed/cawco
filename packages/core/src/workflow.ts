@@ -2,11 +2,7 @@ import { denyToolsProblem } from "./delegate-types";
 import type { EffortLevel } from "./harness";
 
 export type WorkflowRunStatus =
-  | "running"
-  | "waiting"
-  | "done"
-  | "failed"
-  | "cancelled";
+  "running" | "waiting" | "done" | "failed" | "cancelled";
 export type WorkflowStepStatus =
   | "pending"
   | "running"
@@ -307,9 +303,7 @@ export interface WorkflowGraph {
     defaultProject?: string;
     defaultMachine?: string;
     defaultSupervisor?:
-      | { delegateType: string }
-      | { instanceId: string }
-      | null;
+      { delegateType: string } | { instanceId: string } | null;
   };
 }
 export interface Problem {
@@ -910,12 +904,10 @@ export function validateWorkflow(
       ["step", "check", "branch", "ask", "workflow", "jev"].includes(node.kind)
     ) {
       for (const port of workflowPorts(node)) {
-        if (
-          !(
-            outgoing(node.id).some((edge) => edge.from.port === port) ||
-            node.failedPorts?.includes(port)
-          )
-        ) {
+        if (!(
+          outgoing(node.id).some((edge) => edge.from.port === port) ||
+          node.failedPorts?.includes(port)
+        )) {
           add(
             `Output port "${port}" must be wired or marked as ending the run as failed.`,
             node.id
@@ -947,12 +939,10 @@ export function validateWorkflow(
         }
       }
     } else if (node.kind === "step") {
-      if (
-        !(
-          ["claude", "opencode", "pi"].includes(node.harness) &&
-          node.model?.trim()
-        )
-      ) {
+      if (!(
+        ["claude", "opencode", "pi"].includes(node.harness) &&
+        node.model?.trim()
+      )) {
         add("A step needs a supported harness and a model.", node.id);
       }
       templates.push(node.prompt);

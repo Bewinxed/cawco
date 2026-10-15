@@ -34,9 +34,7 @@
   >
     {@render children?.()}
     <TooltipPrimitive.Arrow>
-      {#snippet child({
-        props,
-      })}
+      {#snippet child({ props })}
         <div
           class={cn(
             "z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-hair bg-[var(--ink-solid)] fill-[var(--ink-solid)] data-[side=left]:translate-x-[-1.5px] data-[side=right]:translate-x-[1.5px]",

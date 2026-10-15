@@ -269,8 +269,7 @@
     {@const fields = inputFields(m.metadata?.toolInput)}
     {@const result = resultField(m.metadata?.toolResult)}
     {@const toolInput = (m.metadata?.toolInput ?? undefined) as
-      | Record<string, unknown>
-      | undefined}
+      Record<string, unknown> | undefined}
     {@const changes =
       d.expanded === "diff"
         ? getDiffInfo(toolInput, m.metadata?.toolName, m.metadata?.toolDiff)
@@ -299,7 +298,7 @@
                 {src}
                 in:iconSwap
                 out:iconSwap
-              >
+              />
             {:else}
               <span class="tool-glyph" in:iconSwap out:iconSwap><Icon /></span>
             {/if}</span
@@ -410,8 +409,8 @@
               <!-- What happened and the way back, under the row that asked;
                    the row itself is still the way to open it. -->
               <p class="open-fault" role="alert">
-                Couldn't open {name}: {openFailed.get(callId(m))} Press it to
-                try again.
+                Couldn't open {name}: {openFailed.get(callId(m))} Press it to try
+                again.
               </p>
             {/if}
           {:else if hasBody}
@@ -493,8 +492,7 @@
                             <pre class="v">{result.text}</pre>
                             {#if result.more}
                               <span class="more"
-                                >… {result.more.toLocaleString()} more
-                                chars</span
+                                >… {result.more.toLocaleString()} more chars</span
                               >
                             {/if}
                           </div>

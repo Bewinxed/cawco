@@ -140,8 +140,7 @@
     />
     <Button label="Cancel" onclick={oncancel} size="sm" variant="ghost" />
     {#if problem}
-      <span class="text-label text-error" role="alert" in:appear
-        >{problem}</span
+      <span class="text-label text-error" role="alert" in:appear>{problem}</span
       >
     {/if}
   </div>

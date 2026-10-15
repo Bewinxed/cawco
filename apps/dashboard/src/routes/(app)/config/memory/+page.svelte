@@ -120,9 +120,7 @@
   ready={fleet !== null}
   title={section.label}
 >
-  {#snippet actions(
-    down
-  )}
+  {#snippet actions(down)}
     <NewMemoryPopover
       {down}
       onsaved={created}

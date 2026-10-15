@@ -174,9 +174,7 @@
   settling={Object.keys(reading).length > 0}
   title={section.label}
 >
-  {#snippet actions(
-    down
-  )}
+  {#snippet actions(down)}
     <Button
       disabled={down !== null || agents.length === 0}
       failed={pushFailed}
@@ -268,7 +266,7 @@
           <SectionRow
             meta="{machineLabel(machine.hostname)}{row.description
               ? ` · ${row.description}`
-              : ""}"
+              : ''}"
             mono
             name={row.name}
           >

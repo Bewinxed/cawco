@@ -71,9 +71,7 @@
       <div class="dots-in" transition:fadeDots>
         {#each workspace.leaves as leaf (leaf.id)}
           <span class="dot-slot" transition:fadeDots>
-            <span
-              class="dot"
-              class:dot-on={leaf.id === workspace.focusedLeafId}
+            <span class="dot" class:dot-on={leaf.id === workspace.focusedLeafId}
             ></span>
           </span>
         {/each}

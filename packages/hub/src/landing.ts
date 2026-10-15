@@ -358,8 +358,7 @@ async function leasedPush(
 
 /** What asking GitHub for a pull request came to. */
 export type PullRequestOutcome =
-  | { kind: "opened" | "open"; url: string }
-  | Refusal;
+  { kind: "opened" | "open"; url: string } | Refusal;
 
 const PR_URL = /https?:\/\/\S+\/pull\/\d+/;
 

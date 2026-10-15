@@ -53,13 +53,7 @@ export type HookEvent =
 
 /** How the picker files an event, so thirty-one of them stay findable. */
 export type HookGroup =
-  | "Session"
-  | "Prompt"
-  | "Tool"
-  | "Subagent"
-  | "Task"
-  | "Files"
-  | "Compaction";
+  "Session" | "Prompt" | "Tool" | "Subagent" | "Task" | "Files" | "Compaction";
 
 /**
  * One event as the editor needs to present it. `filters` is the field the
@@ -386,11 +380,7 @@ export function hookMatches(
 
 /** The five things a hook can actually run. */
 export type HookHandlerType =
-  | "command"
-  | "http"
-  | "mcp_tool"
-  | "prompt"
-  | "agent";
+  "command" | "http" | "mcp_tool" | "prompt" | "agent";
 
 /** Fields every handler shares, whatever it runs. */
 interface HookHandlerBase {

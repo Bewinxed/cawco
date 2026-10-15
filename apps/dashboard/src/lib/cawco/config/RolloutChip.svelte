@@ -118,7 +118,7 @@
   <Popover.Trigger
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
       ? `, ${failed} refused`
-      : ""}"
+      : ''}"
     class="rollout"
     data-fail={failed > 0 ? "" : undefined}
   >
@@ -151,9 +151,9 @@
           <MachineRow
             hue={machineHue(index, online)}
             icon={machineIcon(machine.os)}
-            meta="{SAID[item?.state ?? ""] ?? "Not reported"} · {machineOs(
+            meta="{SAID[item?.state ?? ''] ?? 'Not reported'} · {machineOs(
               machine.os
-            ).label}{online ? "" : " · offline"}"
+            ).label}{online ? '' : ' · offline'}"
             name={machineLabel(machine.hostname)}
             presence={online ? "online" : "off"}
           >
@@ -189,9 +189,7 @@
           </MachineRow>
         </div>
         {#if kind === "mcp"}
-          {#each Object.entries(
-            machine.fleet?.mcpByHarness ?? {}
-          ) as [harness, rows] (harness)}
+          {#each Object.entries(machine.fleet?.mcpByHarness ?? {}) as [harness, rows] (harness)}
             {@const runtime = rows?.[name]}
             {#if runtime}
               <p class="note">

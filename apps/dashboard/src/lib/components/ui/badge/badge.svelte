@@ -43,10 +43,10 @@
 </script>
 
 <svelte:element
+  this={href ? "a" : "span"}
   class={cn(badgeVariants({ variant }), className)}
   data-slot="badge"
   {href}
-  this={href ? "a" : "span"}
   bind:this={ref}
   {...restProps}
 >

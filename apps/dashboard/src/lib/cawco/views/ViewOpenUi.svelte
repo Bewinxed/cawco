@@ -91,9 +91,7 @@
         />
       {/snippet}
     </OpenUiRenderer>
-    {#snippet failed(
-      thrown
-    )}
+    {#snippet failed(thrown)}
       <Alert variant="warning">
         <AlertDescription
           >This view could not be drawn:

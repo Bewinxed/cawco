@@ -132,9 +132,7 @@
   bind:open={expanded}
 >
   <Popover.Trigger disabled={down !== null}>
-    {#snippet child({
-      props,
-    })}
+    {#snippet child({ props })}
       <Button
         {...props}
         disabled={down !== null}

@@ -51,10 +51,7 @@
     bind:ref
     {...restProps}
   >
-    {#snippet child({
-      props,
-      open,
-    })}
+    {#snippet child({ props, open })}
       <div {...props} style:pointer-events={pressable(open)}>
         <div
           class={cn(
@@ -65,9 +62,7 @@
           {@render children?.()}
           {#if showCloseButton}
             <DialogPrimitive.Close data-slot="dialog-close">
-              {#snippet child({
-                props: closeProps,
-              })}
+              {#snippet child({ props: closeProps })}
                 <Button
                   class="absolute top-3 right-3"
                   size="icon-sm"

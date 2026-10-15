@@ -91,8 +91,7 @@ export interface Stages {
 
 /** What reading stages.md answers: its stages, or every problem it has. */
 export type StagesReading =
-  | { ok: true; stages: Stages }
-  | { ok: false; problems: string[] };
+  { ok: true; stages: Stages } | { ok: false; problems: string[] };
 
 export const TEMPLATES = [
   "code",

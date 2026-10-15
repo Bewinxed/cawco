@@ -59,8 +59,8 @@
     </p>
   {:else if fault.reason === "offline"}
     <p>
-      Not caught up: <span class="name">{machine}</span> is offline. The rest
-      comes in once it's back.
+      Not caught up: <span class="name">{machine}</span> is offline. The rest comes
+      in once it's back.
     </p>
   {:else}
     <p>Not caught up</p>

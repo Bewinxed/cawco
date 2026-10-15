@@ -141,12 +141,10 @@
       return;
     }
     return pressOutside(card, (event) => {
-      if (
-        !(
-          event.target instanceof Element &&
-          event.target.closest("[aria-modal='true'], dialog[open]")
-        )
-      ) {
+      if (!(
+        event.target instanceof Element &&
+        event.target.closest("[aria-modal='true'], dialog[open]")
+      )) {
         onclose();
       }
     });
@@ -248,10 +246,7 @@
       {/if}
     </span>
     {#if live}
-      <span
-        aria-label="The agent is working on it"
-        class="live"
-        role="img"
+      <span aria-label="The agent is working on it" class="live" role="img"
       ></span>
     {/if}
     <Button
@@ -280,7 +275,7 @@
           onclick={(event) => onpicture(event.currentTarget)}
           type="button"
         >
-          <img alt="" src={`data:image/png;base64,${thumb}`}>
+          <img alt="" src={`data:image/png;base64,${thumb}`} />
         </button>
       {/if}
       {#if pin.thread.length > 0}

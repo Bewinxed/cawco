@@ -110,8 +110,7 @@
         id="preview-mode"
         onchange={(event) => {
           mode = (event.currentTarget as HTMLSelectElement).value as
-            | "port"
-            | "host";
+            "port" | "host";
           refused = undefined;
         }}
         value={mode}
@@ -180,8 +179,8 @@
             <li>
               Set the pattern to
               <code>https://p-{"{session}"}.example.com</code>
-              and save. Keep {"{session}"} in the first label: Cloudflare's free
-              certificate covers one level of subdomain, not
+              and save. Keep {"{session}"} in the first label: Cloudflare's free certificate
+              covers one level of subdomain, not
               <code>*.previews.example.com</code>.
             </li>
           {/if}

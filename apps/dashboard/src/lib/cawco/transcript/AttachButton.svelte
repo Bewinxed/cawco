@@ -40,7 +40,7 @@
   onchange={onpick}
   type="file"
   bind:this={input}
->
+/>
 {#if ondraw}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger aria-label="Attach or draw" class="att-btn touch-hit">

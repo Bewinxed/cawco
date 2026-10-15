@@ -86,9 +86,8 @@
     }
   });
 </script>
-<article
-  class={["wf-node", { map: node.kind === "map", selected }]}
->
+
+<article class={["wf-node", { map: node.kind === "map", selected }]}>
   {#if node.kind !== "start"}
     <Handle
       aria-label="Input for {title}"
@@ -150,6 +149,7 @@
     />
   {/if}
 </article>
+
 <style>
   .wf-node {
     width: 260px;

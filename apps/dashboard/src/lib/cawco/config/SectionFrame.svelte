@@ -88,9 +88,7 @@
 
 <svelte:head><title>{configureWords.documentTitle(title)}</title></svelte:head>
 
-{#snippet fault(
-  text: string
-)}
+{#snippet fault(text: string)}
   <Alert.Root variant="destructive">
     <IconWarningTriangle />
     <Alert.Description>{text}</Alert.Description>

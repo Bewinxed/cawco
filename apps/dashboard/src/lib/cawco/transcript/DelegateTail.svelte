@@ -297,11 +297,10 @@
     >
       {#each shown as key (key)}
         {@const row = dataOf(key)}
-        <div class="row {row?.kind ?? ""}">
+        <div class="row {row?.kind ?? ''}">
           {#if row?.kind === "tool"}
             {@const Icon = row.icon}
-            <span class="ic {row.color}" class:breathe={row.live}
-              ><Icon /></span
+            <span class="ic {row.color}" class:breathe={row.live}><Icon /></span
             >
             {#if row.verb}
               <span class="verb">{row.verb}</span>
@@ -313,8 +312,7 @@
           {:else if row?.kind === "say"}
             <span class="text">{row.text}</span>
           {:else if row?.kind === "stream"}
-            <span class="text"
-              ><MessageBody source={row.text} streaming /></span
+            <span class="text"><MessageBody source={row.text} streaming /></span
             >
           {:else if row?.kind === "peer"}
             {@const Icon = row.icon}

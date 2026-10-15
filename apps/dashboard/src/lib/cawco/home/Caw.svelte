@@ -162,7 +162,7 @@
 
   type RiveRuntime = Awaited<
     ReturnType<
-      typeof import("@rive-app/canvas")["RuntimeLoader"]["awaitInstance"]
+      (typeof import("@rive-app/canvas"))["RuntimeLoader"]["awaitInstance"]
     >
   >;
   type RiveFile = Awaited<ReturnType<RiveRuntime["load"]>>;

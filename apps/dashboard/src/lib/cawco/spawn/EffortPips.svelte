@@ -182,7 +182,7 @@
       role="presentation"
       style={`--kw:${kw}px`}
       class:focus={focused}
-      class:ready={ready}
+      class:ready
       bind:clientWidth={trackWidth}
     >
       <div
@@ -265,7 +265,7 @@
         step="1"
         type="range"
         value={effortIdx}
-      >
+      />
     </div>
   </div>
 </div>

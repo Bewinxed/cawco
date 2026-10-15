@@ -253,7 +253,7 @@
       animateOnMount: true,
       tokenize: "word",
     }}
-    class="{PROSE} {invert ? "prose-invert" : ""}"
+    class="{PROSE} {invert ? 'prose-invert' : ''}"
     {content}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}
@@ -271,9 +271,7 @@
 	     on the token and lets CSS choose. Prose dresses every `pre` and `code` it
 	     contains, so the well opts out of that dressing here; inline code
 	     (`codespan`) keeps it, because it is prose, not a listing. -->
-    {#snippet code({
-      token,
-    })}
+    {#snippet code({ token })}
       <div
         class="not-prose my-3 [&_code]:bg-transparent! [&_code]:p-0! [&_pre]:border-0! [&_pre]:bg-transparent!"
       >
@@ -283,9 +281,7 @@
     <!-- Agents write prices and shell variables, not formulas: `$…$` and
          `\(…\)` read as the characters they are. Streamdown lexes them as math,
          and its fallback would draw the formula without its delimiters. -->
-    {#snippet math({
-      token,
-    })}
+    {#snippet math({ token })}
       {#if token.isInline}
         {token.raw}
       {:else}

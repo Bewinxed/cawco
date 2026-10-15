@@ -906,9 +906,12 @@ function planFold(now: State, exit: number): Plan {
     edge: (t) => now.room * (1 - easeInOut(clamp(t / exit, 0, 1))),
     head: () => now.head,
     when: () => 0,
-    titles: now.titles.map(
-      (v): Seg => ({ from: v, to: v, start: 0, length: 0 })
-    ),
+    titles: now.titles.map((v): Seg => ({
+      from: v,
+      to: v,
+      start: 0,
+      length: 0,
+    })),
     length: 1,
     total: exit,
   };
@@ -1360,7 +1363,7 @@ function piecesOf(shape: Shape, plan: Plan): Piece[] {
 /** The pieces now in view, built and taken off the list. */
 function buildSeen(pieces: Piece[], seen: Shape["seen"]): Animation[] {
   const made: Animation[] = [];
-  for (let i = 0; i < pieces.length; ) {
+  for (let i = 0; i < pieces.length;) {
     const piece = pieces[i];
     if (seen(piece.top, piece.bottom)) {
       made.push(...piece.build());

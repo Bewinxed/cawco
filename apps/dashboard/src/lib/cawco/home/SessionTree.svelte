@@ -100,9 +100,7 @@
             .under(view.boxed, row.id)
             .filter((kid) => older.tops.has(kid.id))}
         >
-          {#snippet tree(
-            kid
-          )}
+          {#snippet tree(kid)}
             <Self
               {current}
               {flip}

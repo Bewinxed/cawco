@@ -268,8 +268,7 @@ export class BinaryUpdater {
    * the helper never takes over ({@link #settleLostHelper}).
    */
   #launched:
-    | { at: number; command?: { version?: string }; job: HelperJob }
-    | undefined;
+    { at: number; command?: { version?: string }; job: HelperJob } | undefined;
   /**
    * The work that outlasted the last drain auto-update ran, by {@link holdKeys}.
    * While any of it still runs, no fence goes up again for it: the work is
@@ -776,9 +775,9 @@ export class BinaryUpdater {
       // A command stands through a failed attempt, which is tried again on
       // the retry schedule, and through a hub that did not answer, before
       // which nothing was tried; a refusal of what the hub offers spends it.
-      if (
-        !(error instanceof AttemptFailed || error instanceof HubUnreachable)
-      ) {
+      if (!(
+        error instanceof AttemptFailed || error instanceof HubUnreachable
+      )) {
         this.#flags.commanded = false;
       }
       await this.#lowerFence();

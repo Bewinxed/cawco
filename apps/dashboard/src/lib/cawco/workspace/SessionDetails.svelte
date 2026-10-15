@@ -91,8 +91,7 @@
   );
   const harness = $derived(
     (session?.harness || row?.harness || context?.harness) as
-      | HarnessKind
-      | undefined
+      HarnessKind | undefined
   );
   const report = $derived(
     machine?.harnesses?.find((item) => item.harness === harness)
@@ -494,9 +493,7 @@
      box, so the strip lays out and wraps by the text's final width while
      torph tweens its own width from the old size (it clips to that width:
      app.css). -->
-{#snippet figure(
-  text: string
-)}
+{#snippet figure(text: string)}
   <span class="figure">
     <span aria-hidden="true" class="figure-size">{text}</span>
     <TextMorph as="span" duration={morphMs} {text} />
@@ -506,9 +503,7 @@
 <!-- One line per field, whatever it is saying: the lines cross-fade at the
      control tier (crossIn / crossOut), the one leaving lifted out of the
      flow so the card only ever holds the one arriving. -->
-{#snippet feedback(
-  slot: Slot
-)}
+{#snippet feedback(slot: Slot)}
   {#if failure(slot)}
     <p class="failure" role="alert" in:crossIn out:crossOut>
       {failure(slot)}
@@ -675,9 +670,7 @@
   <!-- A meter wrapping to a second line tweens the strip's height (morph). -->
   <div class="stats" bind:this={statsEl} {@attach morph()}>
     <div class="context">
-      {#if percent !== null &&
-        stats.totalTokens !== null &&
-        stats.maxTokens !== null}
+      {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}
         <span class="stat-label">Context</span>
         <span class="stat-bar" title={readAt ? `Read at ${readAt}` : undefined}>
           <LimitBar

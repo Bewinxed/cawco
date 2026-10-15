@@ -120,8 +120,7 @@
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action
               data-inside="alert-dialog"
-              onclick={() => inside("alert-dialog")}
-              >Press</AlertDialog.Action
+              onclick={() => inside("alert-dialog")}>Press</AlertDialog.Action
             >
           </AlertDialog.Footer>
         </AlertDialog.Content>
@@ -152,8 +151,7 @@
         <DropdownMenu.Content>
           <DropdownMenu.Item
             data-inside="dropdown-menu"
-            onSelect={() => inside("dropdown-menu")}
-            >Press</DropdownMenu.Item
+            onSelect={() => inside("dropdown-menu")}>Press</DropdownMenu.Item
           >
           <DropdownMenu.Item>Another</DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -197,8 +195,7 @@
         <ContextMenu.Content>
           <ContextMenu.Item
             data-inside="context-menu"
-            onSelect={() => inside("context-menu")}
-            >Press</ContextMenu.Item
+            onSelect={() => inside("context-menu")}>Press</ContextMenu.Item
           >
           <ContextMenu.Item>Another</ContextMenu.Item>
         </ContextMenu.Content>

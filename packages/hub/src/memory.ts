@@ -131,11 +131,7 @@ const CURATOR_NAME = "Memory curator";
 export type Taint = "routine" | "heartbeat" | "subagent" | "web";
 /** What a note is, by the rules, Jev or the curator. */
 export type Verdict =
-  | "lasting"
-  | "scaffolding"
-  | "secret"
-  | "untrusted"
-  | "duplicate";
+  "lasting" | "scaffolding" | "secret" | "untrusted" | "duplicate";
 /** What kind of session wrote a note. */
 type Source = "session" | "delegate" | "attempt" | "lead" | "routine";
 
@@ -1568,13 +1564,11 @@ export const createMemory = ({
       };
     }
     const rel = folderPath(raw);
-    if (
-      !(
-        rel === AGENTS_FILE ||
-        rel.startsWith(`${KNOWLEDGE_DIR}/`) ||
-        rel.startsWith(`${INBOX_DIR}/`)
-      )
-    ) {
+    if (!(
+      rel === AGENTS_FILE ||
+      rel.startsWith(`${KNOWLEDGE_DIR}/`) ||
+      rel.startsWith(`${INBOX_DIR}/`)
+    )) {
       refuse(400, "Read AGENTS.md, a knowledge/ file or a memory/inbox/ note.");
     }
     return await readFolderFile(projectId, rel);

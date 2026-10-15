@@ -209,9 +209,7 @@
   style="--older-h:{height}"
 >
   <Sidebar.MenuSubButton class="{ROW} text-muted-foreground" data-branch-item>
-    {#snippet child({
-      props,
-    })}
+    {#snippet child({ props })}
       <!-- Busy from the press until its rows are drawn: the glyph gives way
            to the kit's spinner, as a pending Button's icon does. -->
       <button

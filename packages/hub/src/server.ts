@@ -1030,9 +1030,7 @@ const CONTINUATION_KEPT_MS = 5 * 60_000;
  * `continue_session`, or the at-limit controller.
  */
 type ContinuationAsker =
-  | { kind: "person" }
-  | { kind: "session"; id: string }
-  | { kind: "at-limit" };
+  { kind: "person" } | { kind: "session"; id: string } | { kind: "at-limit" };
 /** Who asked, as a continuation's log line says it. */
 const askerWords = (by: ContinuationAsker): string => {
   if (by.kind === "session") {
@@ -2712,11 +2710,9 @@ export const createServer = (
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
     // A move's approval is kept on its `moving` row, which no process holds;
     // the move settles one no job waits on (moves.ts `resume`).
-    if (
-      !(
-        row && ["running", "starting", "unknown", "moving"].includes(row.status)
-      )
-    ) {
+    if (!(
+      row && ["running", "starting", "unknown", "moving"].includes(row.status)
+    )) {
       droppedAtStart.push(parked);
       pending.forget(parked.instanceId ?? "");
     }
@@ -8408,11 +8404,10 @@ export const createServer = (
     }
     if (!("page" in source)) {
       const starting = startListener(instanceId, machineId, source, generation);
-      const reach = starting.then(
-        (answer): PreviewReach =>
-          answer.ok
-            ? answer
-            : { ok: false, down: answer.down, error: answer.error }
+      const reach = starting.then((answer): PreviewReach =>
+        answer.ok
+          ? answer
+          : { ok: false, down: answer.down, error: answer.error }
       );
       reaching.set(instanceId, { generation, reach });
       const started = await starting;
@@ -8547,8 +8542,7 @@ export const createServer = (
 
   /** Where page.html and what it names are read: the session's machine, or the project folder. */
   type PageOrigin =
-    | { dir: string; machineId: string }
-    | { projectId: string; folder: string };
+    { dir: string; machineId: string } | { projectId: string; folder: string };
 
   /** page.html in the project folder's `decisions/<page>/`, and what it names there; undefined when it has none. */
   const folderPageSources = async (origin: {
@@ -8639,8 +8633,7 @@ export const createServer = (
    * committed to `decisions/<name>/index.html` by the session, as before.
    */
   type BuiltArtifactPage =
-    | { html: string }
-    | { refused: string; status: PageRefusal["code"] };
+    { html: string } | { refused: string; status: PageRefusal["code"] };
 
   /** page.html and what it names, for `from`; or the page already published, or why neither. */
   const artifactPageSources = async (
@@ -8836,12 +8829,9 @@ export const createServer = (
     let replaces: string | undefined;
     for (const row of db.sendsIn(instance.id, ["pending"])) {
       const body = row.body as SentMessage | null;
-      if (
-        !(
-          body?.origin?.kind === "system" &&
-          body.origin.name === ARTIFACT_ORIGIN
-        )
-      ) {
+      if (!(
+        body?.origin?.kind === "system" && body.origin.name === ARTIFACT_ORIGIN
+      )) {
         continue;
       }
       const earlier = parseArtifactResponses(
@@ -10656,9 +10646,7 @@ export const createServer = (
       return { reason: answer.error ?? "transcript read failed" };
     }
     const reading = answer.result as
-      | { tokens: number; readAt: number }
-      | { reason: string }
-      | undefined;
+      { tokens: number; readAt: number } | { reason: string } | undefined;
     if (!reading) {
       return { reason: "agent has no context reader" };
     }
@@ -12080,8 +12068,7 @@ export const createServer = (
   };
   const withKeepAlive = <
     Row extends
-      | KeepAliveRow
-      | ReturnType<DbShape["listBoardInstances"]>[number],
+      KeepAliveRow | ReturnType<DbShape["listBoardInstances"]>[number],
   >(
     rows: Row[]
   ) => {
@@ -13991,9 +13978,11 @@ export const createServer = (
   ): Promise<void> | undefined => {
     const [stored] = db.getInstancesByIds([instanceId]);
     const owed = stored ? relaunchAtTurnEnd.get(stored.id) : undefined;
-    if (
-      !(stored && owed?.to !== undefined && registry.agent(stored.machineId))
-    ) {
+    if (!(
+      stored &&
+      owed?.to !== undefined &&
+      registry.agent(stored.machineId)
+    )) {
       return undefined;
     }
     const { to } = owed;
@@ -14774,8 +14763,7 @@ export const createServer = (
     payload: unknown
   ): void => {
     const resume = (payload as { resume?: unknown }).resume as
-      | { sessionKey?: string; fork?: boolean; atMessage?: string }
-      | undefined;
+      { sessionKey?: string; fork?: boolean; atMessage?: string } | undefined;
     if (resume?.fork && resume.sessionKey) {
       forkSeeds.set(instanceId, {
         sessionKey: resume.sessionKey,
@@ -16144,13 +16132,11 @@ export const createServer = (
         : undefined;
       // Its parent, or its project's lead: a co-parent of every work item of
       // the project, which may answer, steer and stop it.
-      if (
-        !(
-          row &&
-          (row.parentInstanceId === requester.id ||
-            workItems.ledBy(row.id, requester.id))
-        )
-      ) {
+      if (!(
+        row &&
+        (row.parentInstanceId === requester.id ||
+          workItems.ledBy(row.id, requester.id))
+      )) {
         throw new WorkItemRefusal(
           403,
           "you can only control your own delegates, or the work items of a project you lead"
@@ -17982,14 +17968,12 @@ export const createServer = (
                   const markdown = (files.result as SkillFile[]).find(
                     (file) => file.path === "SKILL.md"
                   );
-                  if (
-                    !(
-                      markdown &&
-                      Buffer.from(markdown.contentBase64, "base64")
-                        .toString()
-                        .includes(`<!-- cawco-workflow:${workflowId} -->`)
-                    )
-                  ) {
+                  if (!(
+                    markdown &&
+                    Buffer.from(markdown.contentBase64, "base64")
+                      .toString()
+                      .includes(`<!-- cawco-workflow:${workflowId} -->`)
+                  )) {
                     throw new Error(
                       `Workflow slug collides with operator-installed skill ${name} on ${machineId}.`
                     );
@@ -19664,14 +19648,11 @@ export const createServer = (
       })
       // ── fleet watch (fleet-watch.ts) ──────────────────────────────────────
       // Its switch, and its limits and Jev as facts: Settings shows them.
-      .get(
-        "/api/fleet-watch",
-        (): FleetWatchSettings => ({
-          on: db.fleetWatchOn(),
-          jev: jevAccess(db) !== undefined,
-          limits: FLEET_WATCH_LIMITS,
-        })
-      )
+      .get("/api/fleet-watch", (): FleetWatchSettings => ({
+        on: db.fleetWatchOn(),
+        jev: jevAccess(db) !== undefined,
+        limits: FLEET_WATCH_LIMITS,
+      }))
       .put(
         "/api/fleet-watch",
         { body: t.Object({ on: t.Boolean() }) },
@@ -21006,12 +20987,10 @@ export const createServer = (
               "Session credential does not belong to the work item's parent"
             );
           }
-          if (
-            !(
-              body.parentInstanceId.trim() &&
-              db.getInstancesByIds([body.parentInstanceId])[0]
-            )
-          ) {
+          if (!(
+            body.parentInstanceId.trim() &&
+            db.getInstancesByIds([body.parentInstanceId])[0]
+          )) {
             return status(
               400,
               "work item needs a known non-empty parentInstanceId"
@@ -21768,8 +21747,7 @@ export const createServer = (
             return status(422, answer.error ?? "The sign-in did not finish.");
           }
           const result = answer.result as
-            | AccountSigninResult
-            | ProviderSigninResult;
+            AccountSigninResult | ProviderSigninResult;
           const settled =
             now.id === params.id
               ? await settleSignin(now, params.machineId, result)
@@ -21925,17 +21903,14 @@ export const createServer = (
       // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
       // The heavy data lives behind these reads; the socket only carries the small
       // limits frame, so the dashboard pulls aggregates when it needs them.
-      .get(
-        "/api/usage/limits",
-        (): UsageLimitsResponse => ({
-          machines: machineReadings(db).map((row) => ({
-            machineId: row.machineId,
-            hostname: row.hostname,
-            limits: row.payload,
-            openCodeGo: row.openCodeGo,
-          })),
-        })
-      )
+      .get("/api/usage/limits", (): UsageLimitsResponse => ({
+        machines: machineReadings(db).map((row) => ({
+          machineId: row.machineId,
+          hostname: row.hostname,
+          limits: row.payload,
+          openCodeGo: row.openCodeGo,
+        })),
+      }))
       .get("/api/usage/spend", (): UsageSpend => spendNow())
       .get(
         "/api/usage/limits/history",
@@ -23138,17 +23113,15 @@ export const createServer = (
                     frame.message.keepAlive = true;
                     const neutral = frame.message;
                     if (neutral.type === "result") {
-                      if (
-                        !(
-                          neutral.uuid &&
-                          db.claimCompletedTurn(
-                            row.id,
-                            neutral.uuid,
-                            neutral.timestamp,
-                            neutral.recovered === true
-                          )
+                      if (!(
+                        neutral.uuid &&
+                        db.claimCompletedTurn(
+                          row.id,
+                          neutral.uuid,
+                          neutral.timestamp,
+                          neutral.recovered === true
                         )
-                      ) {
+                      )) {
                         break;
                       }
                       recordTurnUsage(row, neutral, true);

@@ -35,6 +35,7 @@
     `stroke: var(--neutral-8); stroke-width: ${selected ? 3 : 1.5}px`
   );
 </script>
+
 <BaseEdge {id} path={route[0]} {style} />
 <EdgeLabel selectEdgeOnClick transparent x={route[1]} y={route[2]}>
   <div class="edge-label nodrag nopan">
@@ -58,6 +59,7 @@
     {/if}
   </div>
 </EdgeLabel>
+
 <style>
   /* Keyboard focus on an edge turns its line the ring colour, over the
      inline stroke. */

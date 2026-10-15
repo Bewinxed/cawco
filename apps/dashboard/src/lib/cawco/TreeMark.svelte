@@ -355,13 +355,10 @@
       transform: translateY(
         calc(
           (
-            var(--size) -
-            var(--deck-step) -
-            var(--size) *
-            var(--deck-shrink) *
-            var(--p)
-          ) /
-          (1 - var(--deck-shrink) * var(--p))
+              var(--size) - var(--deck-step) - var(--size) *
+                var(--deck-shrink) * var(--p)
+            ) /
+            (1 - var(--deck-shrink) * var(--p))
         )
       );
     }
@@ -463,12 +460,10 @@
     inset: calc(-1 * var(--reach));
     inset-block-end: calc(
       -1 *
-      min(
-        var(--n) *
-        var(--deck-step) +
-        var(--reach),
-        var(--mark-hit-max, calc(5px + var(--tree-gap)))
-      )
+        min(
+          var(--n) * var(--deck-step) + var(--reach),
+          var(--mark-hit-max, calc(5px + var(--tree-gap)))
+        )
     );
     border-radius: var(--radius-xs);
     cursor: pointer;
@@ -485,17 +480,14 @@
     .hit {
       inset-block-end: calc(-1 * var(--reach));
       --hit-gap-x: calc(
-        2 *
-        (var(--mark-hit-gap, var(--row-compact-gap)) - var(--reach))
+        2 * (var(--mark-hit-gap, var(--row-compact-gap)) - var(--reach))
       );
       --hit-gap-y: calc(
         2 *
-        (
-          var(--mark-hit-max, calc(5px + var(--tree-gap))) -
-          var(--tree-gap) /
-          2 -
-          var(--reach)
-        )
+          (
+            var(--mark-hit-max, calc(5px + var(--tree-gap))) - var(--tree-gap) /
+              2 - var(--reach)
+          )
       );
     }
   }

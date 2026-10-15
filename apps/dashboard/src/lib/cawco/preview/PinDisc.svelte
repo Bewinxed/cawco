@@ -13,8 +13,7 @@
 
 <span
   aria-hidden="true"
-  class={["disc", resolved && "resolved", moved && "moved"]}
-  >{number}</span
+  class={["disc", resolved && "resolved", moved && "moved"]}>{number}</span
 >
 
 <style>

@@ -112,8 +112,7 @@
         }}
         role="button"
         tabindex="0"
-        title="Clear project"
-        ><Clear /></span
+        title="Clear project"><Clear /></span
       >
     {:else}
       <Down class="chevron" />
@@ -130,7 +129,7 @@
           placeholder="Project name"
           spellcheck="false"
           value={draft.name}
-        >
+        />
       </label>
       <label class="field field-shell">
         <Folder />
@@ -146,7 +145,7 @@
           placeholder={codeDir ? `${codeDir}/project` : "/path/to/project"}
           spellcheck="false"
           value={draft.path}
-        >
+        />
       </label>
       <div class="actions">
         <span class="error" role="alert">{createError}</span>
@@ -186,7 +185,7 @@
         onclick={() => onpick(row)}
         style={`--delay:${index * 35}ms`}
         type="button"
-        class:on={on}
+        class:on
       >
         <span class="ns-tile tile" style={`color:${row.hue}`}><Files /></span>
         <span class="text">

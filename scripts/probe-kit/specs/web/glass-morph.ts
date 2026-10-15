@@ -379,8 +379,7 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
     const from = await page.evaluate((sel) => {
       const start = (
         document.querySelector(sel)?.getAnimations()[0]?.effect as
-          | KeyframeEffect
-          | undefined
+          KeyframeEffect | undefined
       )?.getKeyframes()[0];
       return start
         ? [

@@ -338,10 +338,9 @@
       status={sessionStatus(row)}
     />
     <span
-      class="shrink-0 {failed || activity === "blocked"
-        ? "font-medium text-error"
-        : "text-muted-foreground"}"
-      >{stateLabel}</span
+      class="shrink-0 {failed || activity === 'blocked'
+        ? 'font-medium text-error'
+        : 'text-muted-foreground'}">{stateLabel}</span
     >
     {#if activity === "working" && tool}
       <span class="flex min-w-0 items-baseline gap-1.5 text-muted-foreground">

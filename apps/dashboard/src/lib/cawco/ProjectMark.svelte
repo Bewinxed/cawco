@@ -36,7 +36,7 @@
   fill="var(--mark-{hue})"
   {ontoggle}
   {open}
-  switchLabel="{open ? "Hide" : "Show"} {name}'s sessions"
+  switchLabel="{open ? 'Hide' : 'Show'} {name}'s sessions"
 >
   {#snippet face()}
     <IconFolder aria-hidden="true" class="project-mark-glyph" />

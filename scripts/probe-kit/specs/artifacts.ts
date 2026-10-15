@@ -730,13 +730,13 @@ const promoteChecks = async ({
   const secondFiles = secondCommit ? await touched(folder, secondCommit) : [];
   const after = Boolean(
     firstCommit &&
-      secondCommit &&
-      secondCommit !== firstCommit &&
-      (
-        await Bun.$`git -C ${folder} merge-base --is-ancestor ${firstCommit} ${secondCommit}`
-          .quiet()
-          .nothrow()
-      ).exitCode === 0
+    secondCommit &&
+    secondCommit !== firstCommit &&
+    (
+      await Bun.$`git -C ${folder} merge-base --is-ancestor ${firstCommit} ${secondCommit}`
+        .quiet()
+        .nothrow()
+    ).exitCode === 0
   );
   kit.check(
     "15: after a patch a second promote makes a newer commit changing state.json",

@@ -182,7 +182,7 @@ You are a <role>, working in one repository at a time.
       <p class="note">{front.description}</p>
     {/if}
     <Textarea
-      aria-label="{target ?? "New"} definition"
+      aria-label="{target ?? 'New'} definition"
       class="min-h-80 resize-y font-mono"
       spellcheck="false"
       bind:value={draft}

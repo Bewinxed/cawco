@@ -232,10 +232,7 @@
       }}
       restoreScrollDelay={0}
     >
-      {#snippet child({
-        props,
-        open,
-      })}
+      {#snippet child({ props, open })}
         <div {...props} style:pointer-events={pressable(open)}>
           {@render docView()}
         </div>
@@ -267,9 +264,7 @@
           text={doc.content}
         />
         <Tip keys="Esc" label="Close document">
-          {#snippet children(
-            tip
-          )}
+          {#snippet children(tip)}
             <Button
               {...tip}
               aria-label="Close document"

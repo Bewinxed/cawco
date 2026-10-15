@@ -50,9 +50,7 @@
   };
 </script>
 
-{#snippet glyph(
-  task: SessionTask
-)}
+{#snippet glyph(task: SessionTask)}
   <span class="flex w-3 shrink-0 items-center justify-center">
     {#if task.status === "completed"}
       <svg
@@ -74,8 +72,7 @@
     {:else if task.status === "in_progress"}
       <span class="size-1.5 rounded-full bg-warning"></span>
     {:else}
-      <span
-        class="size-1.5 rounded-full border border-muted-foreground/40"
+      <span class="size-1.5 rounded-full border border-muted-foreground/40"
       ></span>
     {/if}
   </span>
@@ -83,10 +80,7 @@
 
 <!-- One row's contents, so the two rows below — the one that opens and the one
      that has nothing to open — say the same thing rather than nearly. -->
-{#snippet line(
-  task: SessionTask,
-  blocker: string | null
-)}
+{#snippet line(task: SessionTask, blocker: string | null)}
   {@render glyph(task)}
   <span class="min-w-0 truncate text-label {subjectClass(task)}"
     >{task.subject}</span
@@ -105,10 +99,9 @@
   {/if}
   <span
     class="shrink-0 font-mono text-meta text-muted-foreground tabular-nums {blocker
-      ? ""
-      : "ml-auto"}"
-    data-tabular
-    >#{task.id}</span
+      ? ''
+      : 'ml-auto'}"
+    data-tabular>#{task.id}</span
   >
 {/snippet}
 
@@ -146,8 +139,8 @@
         <Collapsible.Content>
           <p
             class="max-w-[60ch] pb-2 text-body whitespace-pre-line {dense
-              ? "pr-2 pl-7"
-              : "pr-3 pl-8"}"
+              ? 'pr-2 pl-7'
+              : 'pr-3 pl-8'}"
           >
             {task.description}
           </p>

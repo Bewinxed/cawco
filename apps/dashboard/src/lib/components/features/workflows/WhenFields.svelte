@@ -11,6 +11,7 @@
     onchange: (value: WorkflowWhen | undefined) => void;
   } = $props();
 </script>
+
 <label
   >When<select
     onchange={(event) =>
@@ -33,7 +34,7 @@
         oninput={(event) =>
           value && onchange({ ...value, path: event.currentTarget.value })}
         value={value.path}
-      ></label
+      /></label
     ><label
       >Operator<select
         onchange={(event) =>
@@ -44,16 +45,7 @@
           })}
         value={value.op}
       >
-        {#each [
-          "eq",
-          "neq",
-          "gt",
-          "lt",
-          "contains",
-          "matches",
-          "truthy",
-          "falsy",
-        ] as op (op)}
+        {#each ["eq", "neq", "gt", "lt", "contains", "matches", "truthy", "falsy"] as op (op)}
           <option>{op}</option>
         {/each}
       </select></label

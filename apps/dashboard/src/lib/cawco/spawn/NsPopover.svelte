@@ -138,9 +138,7 @@
         {id}
         style={triggerStyle}
       >
-        {#snippet child({
-          props,
-        })}
+        {#snippet child({ props })}
           <!-- bits-ui marks every trigger as opening a dialog; a list says so. -->
           <button {...props} aria-haspopup={haspopup ?? "dialog"} type="button">
             {@render trigger()}
@@ -171,11 +169,7 @@
         style={`--ns-pop-width:${width}px;--ns-pop-gap:${gap}px`}
         {trapFocus}
       >
-        {#snippet child({
-          props,
-          wrapperProps,
-          open,
-        })}
+        {#snippet child({ props, wrapperProps, open })}
           <!-- Closing, it lets presses through to the page (floating-presence). -->
           <div
             {...wrapperProps}

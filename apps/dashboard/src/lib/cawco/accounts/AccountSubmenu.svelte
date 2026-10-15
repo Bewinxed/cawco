@@ -37,17 +37,14 @@
         bind:value={
           () => instance.accountId ?? "",
           (id) => {
-    moveTo(instance, id);
-  }
+            moveTo(instance, id);
+          }
         }
       >
         {#each accounts as account (account.id)}
           {@const going = account.id === target}
           <ContextMenu.RadioItem disabled={going} value={account.id}>
-            <i
-              aria-hidden="true"
-              class="dot"
-              style:--c={hueVar(account.hue)}
+            <i aria-hidden="true" class="dot" style:--c={hueVar(account.hue)}
             ></i>
             <span class="name"
               >{going ? `Moving to ${nameOf(account)}…` : nameOf(account)}</span

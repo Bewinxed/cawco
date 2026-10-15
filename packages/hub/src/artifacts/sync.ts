@@ -105,9 +105,9 @@ const requestsProblem = (
     }
     const keys = new Set([...request.keys(), ...was.keys()]);
     for (const key of keys) {
-      if (
-        !(SCREEN_REQUEST_KEY.test(key) || same(request.get(key), was.get(key)))
-      ) {
+      if (!(
+        SCREEN_REQUEST_KEY.test(key) || same(request.get(key), was.get(key))
+      )) {
         return `A screen changes only a request's claim and result, not its ${key}.`;
       }
     }
@@ -139,14 +139,12 @@ const entryProblem = (entry: unknown): string | null => {
     return "An element is a map of el, pos and by.";
   }
   const el = entry.get("el") as { id?: unknown } | null | undefined;
-  if (
-    !(
-      el &&
-      typeof el === "object" &&
-      typeof el.id === "string" &&
-      typeof entry.get("pos") === "string"
-    )
-  ) {
+  if (!(
+    el &&
+    typeof el === "object" &&
+    typeof el.id === "string" &&
+    typeof entry.get("pos") === "string"
+  )) {
     return "An element is a map of el, an Excalidraw element with its id, and pos.";
   }
   const by = entry.get("by");
@@ -220,13 +218,11 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
     return canvasProblem(doc, trial);
   }
   for (const name of MAPS) {
-    if (
-      !(
-        name === "state" ||
-        INK_MAPS.includes(name) ||
-        sameMap(trial.getMap(name), doc.getMap(name))
-      )
-    ) {
+    if (!(
+      name === "state" ||
+      INK_MAPS.includes(name) ||
+      sameMap(trial.getMap(name), doc.getMap(name))
+    )) {
       return `A page changes its artifact's state and ink only, not its ${name}.`;
     }
   }
@@ -385,21 +381,19 @@ const sendBodyProblem = (body: unknown): string | null => {
   if (pictures === undefined) {
     return null;
   }
-  if (
-    !(Array.isArray(pictures) && pictures.length <= COMMENT_LIMITS.pictures)
-  ) {
+  if (!(
+    Array.isArray(pictures) && pictures.length <= COMMENT_LIMITS.pictures
+  )) {
     return `pictures is a list of at most ${COMMENT_LIMITS.pictures}.`;
   }
   for (const picture of pictures as (Record<string, unknown> | null)[]) {
-    if (
-      !(
-        picture &&
-        (picture.pin === null || typeof picture.pin === "string") &&
-        typeof picture.png === "string" &&
-        picture.png.length <= COMMENT_LIMITS.pictureChars &&
-        PNG_BASE64.test(picture.png)
-      )
-    ) {
+    if (!(
+      picture &&
+      (picture.pin === null || typeof picture.pin === "string") &&
+      typeof picture.png === "string" &&
+      picture.png.length <= COMMENT_LIMITS.pictureChars &&
+      PNG_BASE64.test(picture.png)
+    )) {
       return `A picture is { pin, png }: a base64 PNG of at most ${COMMENT_LIMITS.pictureChars.toLocaleString()} characters.`;
     }
   }

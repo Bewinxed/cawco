@@ -176,14 +176,12 @@
   const rows = $derived.by((): Row[] => {
     const q = query.trim();
     if (q) {
-      const found = index.search(q).map(
-        ({ entry, terms }): Row => ({
-          key: entry.id,
-          kind: "sent",
-          entry,
-          parts: marked(oneLine(entry.text), terms),
-        })
-      );
+      const found = index.search(q).map(({ entry, terms }): Row => ({
+        key: entry.id,
+        kind: "sent",
+        entry,
+        parts: marked(oneLine(entry.text), terms),
+      }));
       return found.length ? found : [{ key: "none", kind: "none" as const }];
     }
     const own: Row[] = [

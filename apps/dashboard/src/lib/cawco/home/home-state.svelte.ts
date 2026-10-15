@@ -1131,24 +1131,22 @@ class Home {
   readonly #stored = $derived.by<RecentItem[]>(() => {
     // Runs are rows too, but under `run:` ids no stored session carries.
     const index = indexInstances(this.#namingRows);
-    return this.#storedEntries.map(
-      (entry): RecentItem => ({
-        ...entry,
-        instance: null,
-        place: (() => {
-          const row = instanceForSession(index, entry.info.sessionId, {
-            machineId: entry.machineId,
-            cwd: entry.info.cwd,
-          });
-          return row ? placeOfRow(row) : entry.place;
-        })(),
-        title: catalogTitle(entry.info, index, entry.machineId),
-        href: conversationHref(entry.info.sessionId, index, {
+    return this.#storedEntries.map((entry): RecentItem => ({
+      ...entry,
+      instance: null,
+      place: (() => {
+        const row = instanceForSession(index, entry.info.sessionId, {
           machineId: entry.machineId,
           cwd: entry.info.cwd,
-        }),
-      })
-    );
+        });
+        return row ? placeOfRow(row) : entry.place;
+      })(),
+      title: catalogTitle(entry.info, index, entry.machineId),
+      href: conversationHref(entry.info.sessionId, index, {
+        machineId: entry.machineId,
+        cwd: entry.info.cwd,
+      }),
+    }));
   });
 
   /**
@@ -1216,18 +1214,16 @@ class Home {
     const topOf = topsIn(new Map(cawco.listedRows.map((row) => [row.id, row])));
     const tops = new Set(this.#recentRows.map(topOf));
     return [...tops]
-      .map(
-        (row): RecentItem => ({
-          key: row.id,
-          instance: row,
-          info: null,
-          machineId: row.machineId,
-          title: instanceTitle(row),
-          place: placeOfRow(row),
-          href: conversationHref(row.id, cawco.instanceIndex),
-          at: lastAt(row),
-        })
-      )
+      .map((row): RecentItem => ({
+        key: row.id,
+        instance: row,
+        info: null,
+        machineId: row.machineId,
+        title: instanceTitle(row),
+        place: placeOfRow(row),
+        href: conversationHref(row.id, cawco.instanceIndex),
+        at: lastAt(row),
+      }))
       .sort(byRecency);
   });
 

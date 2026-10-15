@@ -68,9 +68,7 @@
 </script>
 
 <Tip label={tip}>
-  {#snippet children(
-    tipProps
-  )}
+  {#snippet children(tipProps)}
     <button
       {...mergeProps(tipProps, { onclick: () => barGlass.toggle("machines") })}
       aria-expanded={barGlass.open === "machines"}

@@ -389,8 +389,7 @@ const forward = async (env: Env, raw: string, uuid: string): Promise<void> => {
 };
 
 let health:
-  | { at: number; body: { apns: ApnsAnswer; key: boolean } }
-  | undefined;
+  { at: number; body: { apns: ApnsAnswer; key: boolean } } | undefined;
 
 const healthCheck = async (env: Env): Promise<Response> => {
   if (!health || Date.now() - health.at > HEALTH_TTL_MS) {

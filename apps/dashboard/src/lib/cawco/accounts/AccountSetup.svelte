@@ -530,10 +530,7 @@
   </section>
 {/snippet}
 
-{#snippet choiceRows(
-  rows: ProviderChoice[],
-  group: string
-)}
+{#snippet choiceRows(rows: ProviderChoice[], group: string)}
   <ul
     aria-labelledby="pick-{group}"
     class="choices"
@@ -542,9 +539,7 @@
     {#each rows as row (keyOf(row))}
       {@const free = runsOn(row.harnesses).length > 0}
       {@const label = choiceLabel(row)}
-      {#snippet button(
-        props: Record<string, unknown>
-      )}
+      {#snippet button(props: Record<string, unknown>)}
         <button
           {...props}
           aria-disabled={free ? undefined : "true"}
@@ -573,9 +568,7 @@
               row.harnesses.map((one) => accountsWords.harnesses[one])
             )}
           >
-            {#snippet children(
-              props
-            )}
+            {#snippet children(props)}
               {@render button(props)}
             {/snippet}
           </Tip>
@@ -593,8 +586,7 @@
           class="ptile"
           {@attach land(() =>
             choice ? `provider:${keyOf(choice)}` : undefined
-          )}
-          ><ProviderMark provider={choice.provider} /></span
+          )}><ProviderMark provider={choice.provider} /></span
         >
         {choiceLabel(choice)}
       </h2>

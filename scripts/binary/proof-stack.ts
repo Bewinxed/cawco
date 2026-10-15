@@ -64,7 +64,7 @@ async function wait(
   predicate: (s: string) => boolean = () => true,
   ms = 10_000
 ) {
-  for (const end = Date.now() + ms; Date.now() < end; ) {
+  for (const end = Date.now() + ms; Date.now() < end;) {
     try {
       const res = await fetch(url);
       const body = await res.text();
@@ -106,7 +106,7 @@ function openDashboard() {
   });
 }
 async function until(what: string, ready: () => boolean, ms = 15_000) {
-  for (const end = Date.now() + ms; Date.now() < end; ) {
+  for (const end = Date.now() + ms; Date.now() < end;) {
     if (ready()) {
       return;
     }

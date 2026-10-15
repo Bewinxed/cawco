@@ -178,11 +178,9 @@ function accountFacts(access: string): {
   const text = (value: unknown) =>
     typeof value === "string" && value ? value : undefined;
   const auth = claims?.["https://api.openai.com/auth"] as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const profile = claims?.["https://api.openai.com/profile"] as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   // Residency-enforced workspaces require the data (else compute) residency.
   const residency =
     text(auth?.chatgpt_data_residency) ??

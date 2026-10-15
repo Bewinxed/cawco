@@ -359,8 +359,7 @@ try {
   );
   const lastBeat = () =>
     presence.at(-1)?.body as
-      | { active?: boolean; sessionId?: string | null }
-      | undefined;
+      { active?: boolean; sessionId?: string | null } | undefined;
 
   // ── (b) A turn ends while the tab is active ──────────────────────────
   const turnStart = Date.now();

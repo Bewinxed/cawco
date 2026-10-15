@@ -234,9 +234,7 @@
 
 <!-- The address the machine is told to reach this hub on, the same choice on
      both tabs: the script is downloaded from it and `join` saves it. -->
-{#snippet addressField(
-  id: string
-)}
+{#snippet addressField(id: string)}
   <div class="field">
     <Label for={id}>Hub address this machine should use</Label>
     <NativeSelect.Root
@@ -465,12 +463,12 @@
     bind:open={
       () => addMachine.open,
       (value) => {
-    if (value) {
-      addMachine.open = true;
-    } else {
-      close();
-    }
-  }
+        if (value) {
+          addMachine.open = true;
+        } else {
+          close();
+        }
+      }
     }
   >
     <!-- Joined, Close is the one act the dialog offers, so it is the one button. -->

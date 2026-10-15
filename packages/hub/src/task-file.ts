@@ -695,8 +695,7 @@ const commentsOf = (
     return comments;
   }
   let open:
-    | { head: Pick<TaskComment, "at" | "author">; lines: string[] }
-    | undefined;
+    { head: Pick<TaskComment, "at" | "author">; lines: string[] } | undefined;
   const close = () => {
     if (open) {
       comments.push({ ...open.head, text: textOf(open.lines) });

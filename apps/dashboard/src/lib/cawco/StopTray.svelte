@@ -4,13 +4,7 @@
 
   /** Where a tray stands. */
   export type StopPhase =
-    | "none"
-    | "list"
-    | "armed"
-    | "stopping"
-    | "fail"
-    | "ending"
-    | "done";
+    "none" | "list" | "armed" | "stopping" | "fail" | "ending" | "done";
 
   /** What a tray says in each state; its caller's words (WORDS.md). */
   export interface StopWords {
@@ -765,12 +759,8 @@
   }
 </script>
 
-{#snippet branch(
-  parentId: string | null
-)}
-  {#each rows.filter(
-    (row) => row.s.parentId === parentId && !row.gone
-  ) as row (row.s.id)}
+{#snippet branch(parentId: string | null)}
+  {#each rows.filter((row) => row.s.parentId === parentId && !row.gone) as row (row.s.id)}
     {@const status = statusOf(row)}
     {@const kids = rows.filter(
       (each) => each.s.parentId === row.s.id && !each.gone
@@ -1093,8 +1083,7 @@
       flex-basis: 100%;
       min-inline-size: 0;
       padding-inline-start: calc(
-        var(--mark-size, 18px) +
-        var(--row-compact-gap)
+        var(--mark-size, 18px) + var(--row-compact-gap)
       );
       padding-block-end: var(--space-1);
     }

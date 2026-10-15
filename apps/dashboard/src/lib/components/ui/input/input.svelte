@@ -47,7 +47,7 @@
     bind:files
     bind:value
     {...restProps}
-  >
+  />
 {:else}
   <input
     class={cn(
@@ -68,5 +68,5 @@
     bind:this={ref}
     bind:value
     {...restProps}
-  >
+  />
 {/if}

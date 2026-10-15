@@ -483,11 +483,7 @@ export function handleStreamMessage(
 
 /** What a delta did, for anyone reading a trace. */
 export type DeltaOutcome =
-  | "applied"
-  | "duplicate"
-  | "gap"
-  | "malformed"
-  | "unfollowed";
+  "applied" | "duplicate" | "gap" | "malformed" | "unfollowed";
 
 function applyDelta(
   state: StreamState,

@@ -95,8 +95,7 @@ export const isHubRemote = (url: string): boolean =>
 
 /** This machine's id and credential for the hub's git remote, or undefined before the first register. */
 export const hubGitLogin = ():
-  | { machineId: string; credential: string }
-  | undefined => hubCredential;
+  { machineId: string; credential: string } | undefined => hubCredential;
 
 const basicOf = (): string => {
   if (!hubCredential) {
@@ -136,12 +135,10 @@ export const remoteWithoutCredential = (
   } catch {
     return { url: remote };
   }
-  if (
-    !(
-      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
-      (parsed.username || parsed.password)
-    )
-  ) {
+  if (!(
+    (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+    (parsed.username || parsed.password)
+  )) {
     return { url: remote };
   }
   const pair = `${decodeURIComponent(parsed.username)}:${decodeURIComponent(parsed.password)}`;

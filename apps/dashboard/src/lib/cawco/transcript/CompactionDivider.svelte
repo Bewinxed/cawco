@@ -222,8 +222,9 @@
          line, why and the way on hung at the text column (SystemLine). -->
     <span class="fail" in:fade={{ duration: dur("--dur-fade") }}>
       <span class="rail-line"
-        ><span class="rail-cell"><IconError /></span
-        ><b>Couldn't compact the conversation</b></span
+        ><span class="rail-cell"><IconError /></span><b
+          >Couldn't compact the conversation</b
+        ></span
       >
       <span class="reason rail-hang">{reason}</span>
     </span>
@@ -365,9 +366,8 @@
     display: block;
     margin-inline-start: var(--x-rail);
     padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
-    background:
-      linear-gradient(var(--status-fail-ink), var(--status-fail-ink)) left top /
-      2px 100% no-repeat;
+    background: linear-gradient(var(--status-fail-ink), var(--status-fail-ink))
+      left top / 2px 100% no-repeat;
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     line-height: var(--leading-body);

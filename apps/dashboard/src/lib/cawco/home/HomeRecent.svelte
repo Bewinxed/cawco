@@ -104,8 +104,7 @@
       <span class="num count">
         <span
           style="display:inline-grid;inline-size:{String(home.recentCount)
-            .length}ch"
-          ><MorphText text={String(home.recentCount)} /></span
+            .length}ch"><MorphText text={String(home.recentCount)} /></span
         >
         {#if !recentOpen && home.recentRunning > 0}
           <span class="live"
@@ -132,14 +131,12 @@
             placeholder="Search sessions…"
             type="search"
             bind:value={search}
-          >
+          />
         </label>
         <!-- A session, wherever it stands in a tree: Recent's own row, or a
              delegate under one. A context line is the parent of delegates
              held here, not one of Recent's own: its state and name only. -->
-        {#snippet line(
-          row: InstanceRow
-        )}
+        {#snippet line(row: InstanceRow)}
           {@const context = view.shapeOf(row.id)?.context ?? false}
           {@const at = lastAt(row)}
           <SessionRow

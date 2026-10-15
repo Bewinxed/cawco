@@ -772,9 +772,7 @@ class RunDriver {
 
 /** What a `cawco-run` handler runs with: the engine and its own execution. */
 type HandlerServices =
-  | WorkflowEngine.WorkflowEngine
-  | WorkflowEngine.WorkflowInstance
-  | Scope.Scope;
+  WorkflowEngine.WorkflowEngine | WorkflowEngine.WorkflowInstance | Scope.Scope;
 
 /** The engine primitives a driver uses, bound to one handler run's services. */
 function driverIO(

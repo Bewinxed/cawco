@@ -113,9 +113,7 @@ export type SkeletonElement = { id?: string; type: string } & Record<
 
 /** What `artifact_update` changes on a canvas: exactly one of these. */
 export type CanvasChange =
-  | { elements: SkeletonElement[] }
-  | { delete: string[] }
-  | { mermaid: string };
+  { elements: SkeletonElement[] } | { delete: string[] } | { mermaid: string };
 
 /** What `artifact_update` changes on a page: exactly one of these. */
 export type PageChange = { html: string } | { patch: Operation[] };
@@ -507,8 +505,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     shownAt: row.shownAt?.toISOString() ?? null,
     promoted:
       (docs.doc(row.id).getMap("meta").get("promoted") as
-        | ArtifactPromotion
-        | undefined) ?? null,
+        ArtifactPromotion | undefined) ?? null,
   });
 
   const sessionOf = (id: string): InstanceRow => {

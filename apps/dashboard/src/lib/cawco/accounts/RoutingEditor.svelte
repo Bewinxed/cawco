@@ -163,10 +163,7 @@
       value={tab}
     >
       <TabsList aria-label={words.whichSessions}>
-        {#each [
-          ["yours", words.yours],
-          ["delegates", words.delegates],
-        ] as [kind, label] (kind)}
+        {#each [["yours", words.yours], ["delegates", words.delegates]] as [kind, label] (kind)}
           <TabItem {label} value={kind}>
             {#snippet trail()}
               <span class="strategy"

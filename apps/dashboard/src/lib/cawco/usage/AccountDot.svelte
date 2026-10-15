@@ -36,9 +36,7 @@
 {#if account}
   {@const name = accountName(account)}
   <Tip label={name}>
-    {#snippet children(
-      tip
-    )}
+    {#snippet children(tip)}
       <span
         {...tip}
         aria-label="On {name}"

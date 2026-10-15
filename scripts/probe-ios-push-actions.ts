@@ -1043,9 +1043,8 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
 
   // ── 6. Reply on a failed attempt's push arrives as a user message ──────
   const { createPush } = await import("../packages/hub/src/push");
-  const { createNotifications } = await import(
-    "../packages/hub/src/notifications"
-  );
+  const { createNotifications } =
+    await import("../packages/hub/src/notifications");
   const { makeLifetime } = await import("../packages/hub/src/lifetime");
   const deviceRows = () =>
     fleet

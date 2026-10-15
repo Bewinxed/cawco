@@ -291,7 +291,7 @@
   data-flip
   data-kind={item.kind}
   data-peek={peeks || undefined}
-  data-share="pane:{item.kind === "ask" ? item.instanceId : item.key}"
+  data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
   data-stale={held || undefined}
 >
   <!-- The whole row opens it; the panel closes. -->
@@ -300,8 +300,7 @@
     class="cover press-tint focus-inset"
     {href}
     onclick={onchoose}
-    {onkeydown}
-    ><span class="sr-only">Open {item.title}</span></a
+    {onkeydown}><span class="sr-only">Open {item.title}</span></a
   >
   <!-- The session's own mark, as the rail draws it; a run and a budget their glyphs. -->
   <span class="lead">
@@ -334,9 +333,7 @@
     <!-- Glance → peek → dive: read what led here before answering. -->
     <span class="end">
       <Tip disabled={peekTipOff()} label="Peek">
-        {#snippet children(
-          tip
-        )}
+        {#snippet children(tip)}
           <button
             {...tip}
             aria-label="Peek {item.title}"
@@ -508,10 +505,7 @@
   .row {
     --peek-glyph: var(--icon-md);
     --peek-ink: calc(
-      (24px - var(--peek-glyph)) /
-      2 +
-      var(--peek-glyph) *
-      1.25 / 24
+      (24px - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24
     );
     --peek-room: calc(24px - var(--peek-ink) + var(--space-2));
     position: relative;

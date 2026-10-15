@@ -271,7 +271,7 @@
             spellcheck="false"
             bind:value={draft}
             {@attach (node) => node.select()}
-          >
+          />
         {:else}
           <button
             class="name press-tint"
@@ -352,9 +352,7 @@
     {:else}
       <Popover.Root bind:open={spawnOpen}>
         <Popover.Trigger>
-          {#snippet child({
-            props,
-          })}
+          {#snippet child({ props })}
             <Button {...props} class="pressable">New session</Button>
           {/snippet}
         </Popover.Trigger>
@@ -420,9 +418,7 @@
     {/if}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
-        {#snippet child({
-          props,
-        })}
+        {#snippet child({ props })}
           <Button
             {...props}
             aria-label="More for {project.name}"
@@ -453,8 +449,7 @@
                 if (more) {
                   onask?.(more);
                 }
-              }}
-              >Ask Caw for a view</DropdownMenu.Item
+              }}>Ask Caw for a view</DropdownMenu.Item
             >
           {/if}
           <DropdownMenu.Separator />
@@ -465,8 +460,7 @@
               if (more) {
                 onstages?.(more);
               }
-            }}
-            >Pick stages…</DropdownMenu.Item
+            }}>Pick stages…</DropdownMenu.Item
           >
         {/if}
         <DropdownMenu.Item
@@ -480,8 +474,7 @@
         <!-- The forget unfolds under this head (forget.svelte.ts). -->
         <DropdownMenu.Item
           onSelect={() => forgetProject(project, forgetAt)}
-          variant="destructive"
-          >Forget project…</DropdownMenu.Item
+          variant="destructive">Forget project…</DropdownMenu.Item
         >
       </DropdownMenu.Content>
     </DropdownMenu.Root>

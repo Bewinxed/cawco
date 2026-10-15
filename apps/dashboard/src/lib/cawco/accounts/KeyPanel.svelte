@@ -106,9 +106,7 @@
   }
 </script>
 
-{#snippet outcome(
-  machineId: string
-)}
+{#snippet outcome(machineId: string)}
   {@const result = results.get(machineId)}
   {#if result?.ok}
     <span class="ok"><Check />{words.sent}</span>
@@ -166,12 +164,12 @@
               bind:checked={
                 () => online && ticked.has(machine.machineId),
                 (on) => {
-    if (on) {
-      ticked.add(machine.machineId);
-    } else {
-      ticked.delete(machine.machineId);
-    }
-  }
+                  if (on) {
+                    ticked.add(machine.machineId);
+                  } else {
+                    ticked.delete(machine.machineId);
+                  }
+                }
               }
             />
             <label class="mname" for="{id}-{machine.machineId}"

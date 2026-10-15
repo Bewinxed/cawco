@@ -120,11 +120,7 @@ export interface UsageLimitsReading {
  * clock, so no fold here picks a zone.
  */
 export type UsageGroupBy =
-  | "machine"
-  | "model"
-  | "project"
-  | "session"
-  | "start";
+  "machine" | "model" | "project" | "session" | "start";
 
 /** The machine a summary row ran on: named, never shown by id. */
 export interface UsageRowMachine {

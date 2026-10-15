@@ -301,7 +301,7 @@
         spellcheck="false"
         bind:value={draft}
         {@attach (node) => node.select()}
-      >
+      />
     {:else}
       <span class="cell title"
         ><span class="sr-only"
@@ -339,9 +339,7 @@
   </span>
 {/snippet}
 
-{#snippet body(
-  trigger: Record<string, unknown>
-)}
+{#snippet body(trigger: Record<string, unknown>)}
   <div
     class="item"
     data-archivable={onarchive ? true : undefined}
@@ -356,8 +354,7 @@
   >
     {#if onarchive}
       <!-- What a finger uncovers as it draws the row away. -->
-      <span aria-hidden="true" class="swipe-reveal"
-        ><IconArchive />Archive</span
+      <span aria-hidden="true" class="swipe-reveal"><IconArchive />Archive</span
       >
     {/if}
     {#if draft !== null}
@@ -403,9 +400,7 @@
     {/if}
     {#if onarchive}
       <Tip label="Archive">
-        {#snippet children(
-          tip
-        )}
+        {#snippet children(tip)}
           <button
             {...tip}
             aria-label="Archive {title}"
@@ -424,9 +419,7 @@
            list. A workflow run has no tail of its own: its card is its
            steps. -->
       <Tip disabled={peekTipOff()} label="Peek">
-        {#snippet children(
-          tip
-        )}
+        {#snippet children(tip)}
           <button
             {...tip}
             aria-label="Peek {title}"
@@ -448,9 +441,7 @@
   {@render body({})}
 {:else if instance}
   <LiveSessionMenu asker={asks} {instance} {onarchive} onrename={editTitle}>
-    {#snippet children(
-      trigger
-    )}
+    {#snippet children(trigger)}
       {@render body(trigger)}
     {/snippet}
   </LiveSessionMenu>
@@ -484,8 +475,7 @@
 {#if act?.note}
   <p class="session-note" data-compact={compact || undefined} transition:unfold>
     {act.note.text}
-    <a href={act.note.href} onclick={() => noteOn(sessionId, undefined)}
-      >Open</a
+    <a href={act.note.href} onclick={() => noteOn(sessionId, undefined)}>Open</a
     >
   </p>
 {/if}
@@ -531,9 +521,7 @@
     gap: var(--row-compact-gap);
     min-height: var(--row-compact-h);
     --mark-hit-max: calc(
-      (var(--row-compact-h) - var(--mark-size, 18px)) /
-      2 +
-      var(--tree-gap)
+      (var(--row-compact-h) - var(--mark-size, 18px)) / 2 + var(--tree-gap)
     );
     --mark-hit-gap: var(--row-compact-gap);
     padding: 0 var(--row-compact-pad-end) 0 var(--row-compact-gap);

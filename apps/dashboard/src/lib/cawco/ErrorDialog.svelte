@@ -44,8 +44,7 @@
 
       <pre
         class="error-text max-h-[60vh] overflow-auto whitespace-pre-wrap break-words"
-        data-error-text
-      >{message}</pre>
+        data-error-text>{message}</pre>
 
       <Dialog.Footer>
         <Button onclick={copy} type="button" variant="outline">

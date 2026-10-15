@@ -1005,7 +1005,9 @@ const arrowChecks = async (on: OnCanvas, id: string) => {
     ],
   });
   const outline = (await reader(on, id)()).outline ?? "";
-  const stored = await (await canvasFrame(on.page)).evaluate(() => {
+  const stored = await (
+    await canvasFrame(on.page)
+  ).evaluate(() => {
     const probe = (window as unknown as { cawcoCanvasProbe: CanvasProbe })
       .cawcoCanvasProbe;
     const live = probe.live

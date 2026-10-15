@@ -120,8 +120,7 @@ export function stopOnRow(instanceId: string, machineId: string): void {
 
 /** Which session a row renames: one the hub keeps, or a transcript only its machine has. */
 export type RenameTarget =
-  | { instanceId: string }
-  | { info: NeutralSessionInfo; machineId: string };
+  { instanceId: string } | { info: NeutralSessionInfo; machineId: string };
 
 /**
  * The owner's name for a session. One the hub keeps is named there, the one

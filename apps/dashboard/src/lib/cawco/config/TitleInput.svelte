@@ -43,7 +43,7 @@
     {placeholder}
     spellcheck="false"
     bind:value
-  >
+  />
 </label>
 
 <style>

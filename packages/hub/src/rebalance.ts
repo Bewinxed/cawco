@@ -1113,13 +1113,11 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     // Re-armed only when what can be balanced changed: the hub says the
     // accounts moved at every reading, and re-arming each time would put
     // the next look off for as long as readings keep coming.
-    if (
-      !(
-        was &&
-        same(was.signed, signed) &&
-        same(new Set(was.benched.keys()), new Set(benched.keys()))
-      )
-    ) {
+    if (!(
+      was &&
+      same(was.signed, signed) &&
+      same(new Set(was.benched.keys()), new Set(benched.keys()))
+    )) {
       // Another account to carry to, or one fewer: a refused carry may go now.
       refused.clear();
       deps.replan();

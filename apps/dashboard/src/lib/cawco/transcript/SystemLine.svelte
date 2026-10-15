@@ -452,9 +452,7 @@
       color: var(--brand-ink);
     }
   }
-  @media (hover: hover) and (pointer: fine) and (
-      prefers-reduced-motion: no-preference
-    ) {
+  @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
     .aname {
       transition: color var(--dur-control) var(--ease-out);
     }

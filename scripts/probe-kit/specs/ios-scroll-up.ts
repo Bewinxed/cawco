@@ -413,7 +413,7 @@ async function flingToTop(
     flings += 1;
     // Looked for every 50 ms: the next fling goes as soon as the list rests.
     let rested: RegExpExecArray | undefined;
-    for (const end = Date.now() + REST_WAIT_MS; !rested && Date.now() < end; ) {
+    for (const end = Date.now() + REST_WAIT_MS; !rested && Date.now() < end;) {
       // biome-ignore lint/performance/noAwaitInLoops: a poll, in order
       await Bun.sleep(50);
       rested = heard

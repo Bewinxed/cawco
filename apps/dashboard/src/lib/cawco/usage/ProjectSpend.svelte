@@ -246,17 +246,14 @@
           {/if}
           <Popover.Root bind:open={capOpen}>
             <Popover.Trigger>
-              {#snippet child({
-                props,
-              })}
+              {#snippet child({ props })}
                 <!-- The tile says Budget; the button only what it does, named
                      whole for a reader that hears it on its own. -->
                 <Button
                   {...props}
                   aria-label={cap ? "Change budget" : "Set budget"}
                   size="sm"
-                  variant="outline"
-                  >{cap ? "Change" : "Set"}</Button
+                  variant="outline">{cap ? "Change" : "Set"}</Button
                 >
               {/snippet}
             </Popover.Trigger>
@@ -272,8 +269,8 @@
                 }}
               >
                 <p class="note">
-                  What {projectName} may spend, its Caw and its attempts
-                  together. Leave it empty for no limit.
+                  What {projectName} may spend, its Caw and its attempts together.
+                  Leave it empty for no limit.
                 </p>
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
                 <label class="field"
@@ -349,17 +346,14 @@
         {#snippet action()}
           <Popover.Root bind:open={budgetOpen}>
             <Popover.Trigger>
-              {#snippet child({
-                props,
-              })}
+              {#snippet child({ props })}
                 <Button
                   {...props}
                   aria-label={spend?.budget
                     ? "Change the attempt limit"
                     : "Set the attempt limit"}
                   size="sm"
-                  variant="outline"
-                  >{spend?.budget ? "Change" : "Set"}</Button
+                  variant="outline">{spend?.budget ? "Change" : "Set"}</Button
                 >
               {/snippet}
             </Popover.Trigger>
@@ -420,9 +414,7 @@
       </StatTile>
     </div>
 
-    {#if spend.monthUsd > 0 ||
-      spend.threads.length > 0 ||
-      spend.attempts.length > 0}
+    {#if spend.monthUsd > 0 || spend.threads.length > 0 || spend.attempts.length > 0}
       <!-- This month's ledger: Caw's threads (and his turns no thread
            woke), the attempts, every other session, and their total, which
            is the This month tile. -->
@@ -491,8 +483,7 @@
                       href="/project/{encodeURIComponent(
                         projectId
                       )}?task={attempt.taskId}"
-                      >{attempt.title}<span class="id"
-                        >{attempt.taskId}</span
+                      >{attempt.title}<span class="id">{attempt.taskId}</span
                       ></a
                     >
                   </Table.Cell>
@@ -502,8 +493,7 @@
                       ? "attempt"
                       : "attempts"}</Table.Cell
                   >
-                  <Table.Cell class="col-usd num"
-                    >{usd(attempt.usd)}</Table.Cell
+                  <Table.Cell class="col-usd num">{usd(attempt.usd)}</Table.Cell
                   >
                   <Table.Cell class="col-last"
                     >{STATE_WORD[attempt.state] ?? attempt.state}</Table.Cell

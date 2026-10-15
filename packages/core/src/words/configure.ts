@@ -51,9 +51,7 @@ export type ConfigSlug =
  * - `updates-waiting`: machines whose update waits on the operator.
  */
 export type ConfigBadgeRule =
-  | "fleet-faults"
-  | "account-faults"
-  | "updates-waiting";
+  "fleet-faults" | "account-faults" | "updates-waiting";
 
 /** One entry of the Configure rail: where it lives and what it is for. */
 export interface ConfigSectionDefinition {

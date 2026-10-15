@@ -248,9 +248,7 @@ const spec: Spec = {
       const written = async (name: string) =>
         (
           await Promise.all(
-            (
-              await claudeJsons()
-            ).map(async (path) =>
+            (await claudeJsons()).map(async (path) =>
               Boolean((await readJson(path)).mcpServers?.[name])
             )
           )
@@ -397,9 +395,7 @@ const spec: Spec = {
       );
       const leftOff = (
         await Promise.all(
-          (
-            await claudeJsons()
-          ).map(async (path) =>
+          (await claudeJsons()).map(async (path) =>
             Object.entries((await readJson(path)).projects ?? {})
               .filter(([, entry]) =>
                 entry.disabledMcpServers?.some(

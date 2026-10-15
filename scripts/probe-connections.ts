@@ -924,7 +924,7 @@ try {
       "5: two accounts of one service, each answering as itself",
       Boolean(
         answered?.all.includes('ECHO[alpha]: {"said":"hello alpha"}') &&
-          answered.all.includes('ECHO[beta]: {"said":"hello beta"}')
+        answered.all.includes('ECHO[beta]: {"said":"hello beta"}')
       ) &&
         calls
           .filter((one) => one.path === "/mcp/key" && one.tool === "echo")

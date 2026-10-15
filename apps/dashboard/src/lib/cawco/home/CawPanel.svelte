@@ -180,8 +180,7 @@
             class="clear text-[var(--ink-muted)] hover:text-[var(--ink-strong)]"
             onclick={clearAll}
             size="xs"
-            variant="ghost"
-            >Clear all</Button
+            variant="ghost">Clear all</Button
           >
         {/if}
       </div>
@@ -288,11 +287,7 @@
   @media (max-width: 639px) {
     .list {
       max-block-size: calc(
-        100dvh -
-        44px -
-        var(--space-3) -
-        var(--safe-bottom) -
-        96px
+        100dvh - 44px - var(--space-3) - var(--safe-bottom) - 96px
       );
     }
   }

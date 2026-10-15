@@ -450,7 +450,8 @@
     }
   }
 </script>
-<svelte:window onkeydown={keys}></svelte:window>
+
+<svelte:window onkeydown={keys} />
 {#snippet palette()}
   <div class="palette wf-stack" {@attach highlight({ rows: ".palette-item" })}>
     <div class="wf-row wf-spread">
@@ -475,9 +476,7 @@
     {#each ["Flow", "Work", "People"] as group (group)}
       <section class="wf-stack">
         <h3>{group}</h3>
-        {#each kinds.filter(
-          (entry) => entry.group === group
-        ) as entry (entry.kind)}
+        {#each kinds.filter((entry) => entry.group === group) as entry (entry.kind)}
           <button
             class="palette-item press-tint"
             onclick={() => add(entry.kind)}
@@ -575,7 +574,7 @@
           aria-label="Workflow name"
           disabled={!workflow}
           bind:value={name}
-        >
+        />
       </div>
       <div class="wf-row">
         <button
@@ -710,13 +709,11 @@
                   onExpand={() => {
                     paletteCollapsed = false;
                   }}
-                  bind:this={palettePane}
-                  >{@render palette()}</Resizable.Pane
+                  bind:this={palettePane}>{@render palette()}</Resizable.Pane
                 ><Resizable.Handle />
                 <Resizable.Pane
                   defaultSize={100 - (592 / panelWidth) * 100}
-                  minSize={20}
-                  >{@render canvas()}</Resizable.Pane
+                  minSize={20}>{@render canvas()}</Resizable.Pane
                 ><Resizable.Handle />
                 <Resizable.Pane
                   defaultSize={(360 / panelWidth) * 100}
@@ -744,11 +741,7 @@
                     axis: "x",
                   })}
                 >
-                  {#each [
-                    { value: "all", label: "All" },
-                    { value: "waiting", label: "Needs you" },
-                    { value: "failed", label: "Failed" },
-                  ] as item (item.value)}
+                  {#each [{ value: "all", label: "All" }, { value: "waiting", label: "Needs you" }, { value: "failed", label: "Failed" }] as item (item.value)}
                     <button
                       aria-pressed={filter === item.value}
                       class="wf-btn"
@@ -809,8 +802,7 @@
 {#if narrow.current}
   <Dialog.Root bind:open={paletteOpen}
     ><Dialog.Content class="max-h-[85dvh] overflow-y-auto"
-      ><Dialog.Title>Add node</Dialog.Title
-      ><Dialog.Description
+      ><Dialog.Title>Add node</Dialog.Title><Dialog.Description
         >Choose a kind or a delegate template.</Dialog.Description
       >
       <div class="wf">{@render palette()}</div></Dialog.Content
@@ -829,6 +821,7 @@
     </Drawer.Content>
   </Drawer.Root>
 {/if}
+
 <style>
   .editor {
     display: flex;

@@ -1050,11 +1050,7 @@ export type WorkOrigin = Origin | "kept";
 
 /** A work item's life. Only `starting` and `running` take messages. */
 export type WorkItemState =
-  | "starting"
-  | "running"
-  | "done"
-  | "failed"
-  | "cancelled";
+  "starting" | "running" | "done" | "failed" | "cancelled";
 
 /**
  * One acceptance check of a work item: a shell command the hub runs in the
@@ -2840,11 +2836,7 @@ export const routines = sqliteTable(
  * skipped (nothing started).
  */
 export type RoutineRunState =
-  | "queued"
-  | "starting"
-  | "running"
-  | "ended"
-  | "skipped";
+  "queued" | "starting" | "running" | "ended" | "skipped";
 
 /**
  * How a run ended, by its delegate's `finish_item` summary or Caw's

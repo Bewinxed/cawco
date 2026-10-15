@@ -100,10 +100,8 @@
     </div>
   {/key}
   {#if reading && cell.buttons.includes("error")}
-    <pre
-      class="said"
-      transition:unfold
-    >{machine.binaryUpdate?.error ?? "The machine did not say why."}</pre>
+    <pre class="said" transition:unfold>{machine.binaryUpdate?.error ??
+        "The machine did not say why."}</pre>
   {/if}
   <RowFault again={refused?.again} reason={refused?.reason} />
 </div>

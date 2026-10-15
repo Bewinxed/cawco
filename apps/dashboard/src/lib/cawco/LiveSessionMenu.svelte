@@ -277,9 +277,7 @@
 <!-- Built on the row's first hover or focus (ContextMenu.Lazy): a list
      draws a row per session, and the menu was half of each. -->
 <ContextMenu.Lazy>
-  {#snippet trigger(
-    props
-  )}
+  {#snippet trigger(props)}
     {@render children(props)}
   {/snippet}
 

@@ -245,7 +245,7 @@
       onOpenAutoFocus={(event) => event.preventDefault()}
       style="inset:0;width:100%;height:100%;{initial
         ? `--initial-transform:${initial}`
-        : ""}"
+        : ''}"
       trapFocus={false}
       bind:ref={drawer}
     >

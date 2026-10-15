@@ -141,8 +141,7 @@
       {#if tools.modes.length && tools.permission}
         <span
           class={["ns-chip-btn tool static", fullSend && "full-send"]}
-          title={look?.desc || undefined}
-          >{@render permissionChip()}</span
+          title={look?.desc || undefined}>{@render permissionChip()}</span
         >
       {/if}
     </span>

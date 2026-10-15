@@ -93,9 +93,8 @@ const run = async (kit: Kit) => {
   });
   const runtime = await mkdtemp(join(tmpdir(), "pb-"));
   process.env.XDG_RUNTIME_DIR = runtime;
-  const { closeBridge, reachWorkspace } = await import(
-    "../../../packages/agent/src/preview-bridge"
-  );
+  const { closeBridge, reachWorkspace } =
+    await import("../../../packages/agent/src/preview-bridge");
   const workspace = crypto.randomUUID();
 
   try {

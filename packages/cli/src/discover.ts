@@ -17,12 +17,7 @@ import {
 
 /** Which rung of the ladder answered. */
 export type HubSource =
-  | "flag"
-  | "env"
-  | "config"
-  | "mdns"
-  | "tailscale"
-  | "localhost";
+  "flag" | "env" | "config" | "mdns" | "tailscale" | "localhost";
 
 export interface Hub {
   /** `http://host:port` — the REST API's base. */

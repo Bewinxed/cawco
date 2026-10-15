@@ -461,15 +461,15 @@
     --shadow-xs: 0 1px 2px var(--shadow-tint);
     --shadow-tile:
       0 1px 2px
-      light-dark(
-        oklch(from var(--neutral-12) l c h / 0.07),
-        oklch(0% 0 0 / 0.3)
-      ),
+        light-dark(
+          oklch(from var(--neutral-12) l c h / 0.07),
+          oklch(0% 0 0 / 0.3)
+        ),
       0 0 0 1px
-      light-dark(
-        oklch(from var(--neutral-12) l c h / 0.035),
-        oklch(from var(--neutral-12) l c h / 0.06)
-      );
+        light-dark(
+          oklch(from var(--neutral-12) l c h / 0.035),
+          oklch(from var(--neutral-12) l c h / 0.06)
+        );
     --shadow-raised:
       0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint),
       inset 0 0 0 1px var(--night-ring);
@@ -528,9 +528,9 @@
     /* Inner vermillion ring and soft inner glow on code blocks. */
     --code-ring:
       inset 0 0 0 1px
-      light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)),
+        light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)),
       inset 0 1px 6px
-      light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.1));
+        light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.1));
     --selected-shadow: none;
     /* Caw&Co wordmark: the approved landing's Nunito Variable face. */
     --font-wordmark: "Nunito Variable", ui-rounded, system-ui, sans-serif;
@@ -738,20 +738,14 @@
     /* How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach. */
     --c-ask-diff-share: 0.4;
     --c-composer-panel: calc(
-      var(--c-composer-field) +
-      var(--c-composer-inset) *
-      2 +
-      2px
+      var(--c-composer-field) + var(--c-composer-inset) * 2 + 2px
     );
     /* The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line). */
     --c-composer-w: min(720px, calc(100% - 50px));
     /* A suggestion chip: its Tab key cap, padding and border. */
     --c-suggest-chip: calc(1.25rem + var(--space-1) * 2 + 2px);
     --c-suggest-row: calc(
-      var(--space-4) +
-      var(--space-1) *
-      2 +
-      var(--c-suggest-chip)
+      var(--space-4) + var(--space-1) * 2 + var(--c-suggest-chip)
     );
     --c-suggest-room: calc(var(--c-suggest-row) + var(--space-2));
     /* A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters). */

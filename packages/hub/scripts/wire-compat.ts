@@ -606,9 +606,9 @@ class Comparer {
     if (isObject(before.items) && isObject(after.items)) {
       this.compare(before.items, after.items, element);
     }
-    if (
-      !(Array.isArray(before.prefixItems) && Array.isArray(after.prefixItems))
-    ) {
+    if (!(
+      Array.isArray(before.prefixItems) && Array.isArray(after.prefixItems)
+    )) {
       return;
     }
     const later = after.prefixItems as unknown[];

@@ -26,9 +26,7 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import type { Map as YMap } from "yjs";
-import tokensCss from "../../../hub/skills/decision-page/kit/tokens.css" with {
-  type: "text",
-};
+import tokensCss from "../../../hub/skills/decision-page/kit/tokens.css" with { type: "text" };
 import type { ArtifactGlobal, ArtifactHold } from "../preview-overlay/artifact";
 import {
   heardFromHost,

@@ -330,12 +330,7 @@ export interface McpServerStatus {
   scope?: string;
   serverInfo?: { name: string; version?: string };
   status:
-    | "connected"
-    | "failed"
-    | "needs-auth"
-    | "pending"
-    | "disabled"
-    | string;
+    "connected" | "failed" | "needs-auth" | "pending" | "disabled" | string;
   tools?: { name: string; description?: string }[];
 }
 
@@ -405,11 +400,7 @@ export type SupportedCommands = SlashCommand[];
 /* ----------------------------------------------------------- permissions — */
 
 export type PermissionUpdateDestination =
-  | "userSettings"
-  | "projectSettings"
-  | "localSettings"
-  | "session"
-  | "cliArg";
+  "userSettings" | "projectSettings" | "localSettings" | "session" | "cliArg";
 
 /** A permission the SDK suggests persisting, so "always allow" has something to write. */
 export type PermissionUpdate =
@@ -439,9 +430,7 @@ export type PermissionUpdate =
  * every harness reports its own auth word through the same three states.
  */
 export type AuthState =
-  | "authenticated"
-  | "unauthenticated"
-  | "unreadable-credentials";
+  "authenticated" | "unauthenticated" | "unreadable-credentials";
 
 /** A parked permission's answer. `remember` is opencode's "always". */
 export type PermissionResult =
@@ -789,11 +778,7 @@ export type SendMode = "turn" | "note";
  * why), or sent again as another send (`replaced`).
  */
 export type SendState =
-  | "pending"
-  | "read"
-  | "failed"
-  | "replaced"
-  | "cancelled";
+  "pending" | "read" | "failed" | "replaced" | "cancelled";
 
 /**
  * Why the hub would not hand a send to its session, as the facts the way
@@ -1573,8 +1558,7 @@ export const CONTROL_GIT_CHANGES = "gitChanges";
 
 /** A directory's git state as {@link CONTROL_GIT_CHANGES} answers it. */
 export type GitChanges =
-  | { repo: false }
-  | { repo: true; status: string; log: string };
+  { repo: false } | { repo: true; status: string; log: string };
 
 /**
  * Makes a delegation workspace: a shared clone (`git clone --shared`) of the

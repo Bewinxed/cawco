@@ -110,10 +110,7 @@
   }
 </script>
 
-{#snippet addForm(
-  under: string,
-  depth: number
-)}
+{#snippet addForm(under: string, depth: number)}
   <form
     class="add"
     onsubmit={add}

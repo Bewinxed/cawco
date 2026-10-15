@@ -442,14 +442,10 @@
               label={row.label}
               status={STATUS[row.phase]}
             >
-              {#if row.step === "snapshot" &&
-                job.snapshot?.branch &&
-                row.phase !== "ahead"}
+              {#if row.step === "snapshot" && job.snapshot?.branch && row.phase !== "ahead"}
                 <code class="sub mono">{job.snapshot.branch}</code>
               {/if}
-              {#if (row.step === "clone" || row.step === "lfs") &&
-                row.phase === "active" &&
-                job.progress}
+              {#if (row.step === "clone" || row.step === "lfs") && row.phase === "active" && job.progress}
                 {@const progress = job.progress}
                 <div class="bytes" in:unfold out:unfold>
                   <Progress
@@ -466,10 +462,7 @@
               {/if}
               <!-- The file in flight, when it is one of several: alone, it is
                    the stage, and its row would repeat the bar above. -->
-              {#if row.step === "lfs" &&
-                row.phase === "active" &&
-                job.lfsFile &&
-                (job.lfs?.files ?? 0) > 1}
+              {#if row.step === "lfs" && row.phase === "active" && job.lfsFile && (job.lfs?.files ?? 0) > 1}
                 {@const file = job.lfsFile}
                 <div class="file" in:unfold out:unfold>
                   {#key file.file}
@@ -486,9 +479,7 @@
                   >
                 </div>
               {/if}
-              {#if row.step === "install" &&
-                (row.phase === "active" || row.phase === "failed") &&
-                job.install}
+              {#if row.step === "install" && (row.phase === "active" || row.phase === "failed") && job.install}
                 <code class="sub mono">{job.install.command}</code>
               {/if}
               {#if row.phase === "asking" && job.ask}
@@ -591,8 +582,7 @@
         <Button
           class="foot-button"
           onclick={() => workspace.close(job.targetInstanceId)}
-          variant="secondary"
-          >Close</Button
+          variant="secondary">Close</Button
         >
       {/if}
     </div>

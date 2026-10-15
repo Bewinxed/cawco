@@ -103,9 +103,7 @@
   ready={store.hooks.value !== null}
   title={section.label}
 >
-  {#snippet actions(
-    down
-  )}
+  {#snippet actions(down)}
     <Button
       disabled={down !== null}
       href="/config/hooks/new"

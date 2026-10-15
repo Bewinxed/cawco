@@ -110,7 +110,7 @@
            text-label tabular-nums
            hover:bg-muted
            transition-[background-color,color] duration-(--dur-control) ease-out
-           {compacting ? "text-foreground" : TEXT[band]}"
+           {compacting ? 'text-foreground' : TEXT[band]}"
     title={meterTitle}
   >
     {#if compacting}
@@ -132,8 +132,7 @@
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={shown}
-        role="progressbar"
-        >{usage ? `${shown}%` : "—"}</span
+        role="progressbar">{usage ? `${shown}%` : "—"}</span
       >
       {#if recentlyCompacted}
         <IconCompact class="size-3 text-muted-foreground" />

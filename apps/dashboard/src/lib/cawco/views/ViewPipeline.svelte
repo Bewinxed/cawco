@@ -37,9 +37,7 @@
   const dropped = $derived(stages.filter((stage) => stage.kind === "dropped"));
 </script>
 
-{#snippet row(
-  stage: Pick<Stage, "kind" | "name">
-)}
+{#snippet row(stage: Pick<Stage, "kind" | "name">)}
   {@const count = counts.get(stage.name) ?? 0}
   <li>
     <div class="row" data-kind={stage.kind}>

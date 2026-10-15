@@ -68,11 +68,10 @@
     <span class="sr-only">{name}</span>
   {:else}
     {#if !you && voice?.face}
-      <span aria-hidden="true" class="dot face"
-        >{@render voice.face(live)}</span
+      <span aria-hidden="true" class="dot face">{@render voice.face(live)}</span
       >
     {:else}
-      <span aria-hidden="true" class="dot {you ? "u" : "a"}">
+      <span aria-hidden="true" class="dot {you ? 'u' : 'a'}">
         {#if you}
           <IconUser />
         {:else}

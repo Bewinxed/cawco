@@ -87,11 +87,7 @@ export type SubagentNode = Node<SubagentNodeData, "subagent">;
 export type SystemNode = Node<SystemNodeData, "system">;
 
 export type FlowNode =
-  | UserNode
-  | AssistantNode
-  | ToolNode
-  | SubagentNode
-  | SystemNode;
+  UserNode | AssistantNode | ToolNode | SubagentNode | SystemNode;
 
 // ============================================================
 // Message Grouping Types
@@ -120,9 +116,7 @@ export interface SubagentMessageGroup {
 
 /** Union type for message groups */
 export type MessageGroup =
-  | SingleMessageGroup
-  | ToolMessageGroup
-  | SubagentMessageGroup;
+  SingleMessageGroup | ToolMessageGroup | SubagentMessageGroup;
 
 // ============================================================
 // Flow Data Types

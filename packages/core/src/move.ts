@@ -17,12 +17,7 @@ import type { EffortLevel, HarnessKind, PermissionMode } from "./harness";
 
 /** A stage the job does work in. */
 export type MoveStep =
-  | "approval"
-  | "snapshot"
-  | "clone"
-  | "lfs"
-  | "install"
-  | "start";
+  "approval" | "snapshot" | "clone" | "lfs" | "install" | "start";
 
 /** Where a job stands: at one of its steps, or settled. */
 export type MoveStage = MoveStep | "started" | "failed" | "cancelled";

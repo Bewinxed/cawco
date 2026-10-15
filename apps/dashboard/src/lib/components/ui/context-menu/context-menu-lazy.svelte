@@ -81,9 +81,7 @@
 {#if asked}
   <ContextMenu>
     <ContextMenuTrigger class={className}>
-      {#snippet child({
-        props,
-      })}
+      {#snippet child({ props })}
         <LazyProps
           {props}
           to={(read) => {

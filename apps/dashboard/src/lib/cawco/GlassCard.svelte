@@ -364,11 +364,11 @@
   bind:open={
     () => asked !== null || warmOpen,
     (value) => {
-    if (!value) {
-      warmOpen = false;
-      close();
+      if (!value) {
+        warmOpen = false;
+        close();
+      }
     }
-  }
   }
 >
   <HangCard
@@ -471,8 +471,8 @@
     bind:joined={
       () => barGlass.joined,
       (joined) => {
-    barGlass.joined = joined;
-  }
+        barGlass.joined = joined;
+      }
     }
     bind:ref={content}
   >

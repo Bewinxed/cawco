@@ -301,8 +301,7 @@ const IDENTITY = "cawcoIdentity";
 
 const keptIdentity = (credential: Credential): AccountIdentity | undefined => {
   const kept = (credential as Record<string, unknown>)[IDENTITY] as
-    | AccountIdentity
-    | undefined;
+    AccountIdentity | undefined;
   return kept && typeof kept.email === "string" ? kept : undefined;
 };
 
@@ -1322,7 +1321,9 @@ const answers = async (accountId: string): Promise<string | undefined> => {
   if (lenderOf(held.credential)) {
     return await borrowedAnswers(accountId);
   }
-  const auth = await (await runtimeOf(accountId, held.provider))
+  const auth = await (
+    await runtimeOf(accountId, held.provider)
+  )
     .getAuth(held.provider)
     .catch(() => undefined);
   return auth

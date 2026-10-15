@@ -58,7 +58,7 @@
 }
 
 /* A remembered hub is on its way: the button only offers to stop it. */
-.handback[data-state="returning"] .handback-go {
+.handback[data-state='returning'] .handback-go {
   background: transparent;
   color: var(--ink);
   box-shadow: inset 0 0 0 2px var(--ink);

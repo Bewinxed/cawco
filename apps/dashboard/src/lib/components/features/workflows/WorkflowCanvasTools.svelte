@@ -54,6 +54,7 @@
     step(glide());
   };
 </script>
+
 <svelte:window
   onkeydown={(event) => {
     if (
@@ -76,9 +77,7 @@
     </button>
   {/if}
   <Tip label="Zoom out">
-    {#snippet children(
-      tip
-    )}
+    {#snippet children(tip)}
       <button
         {...tip}
         aria-label="Zoom out"
@@ -89,11 +88,8 @@
         <IconMinus class="size-4" />
       </button>
     {/snippet}
-  </Tip><span>{Math.round(zoom * 100)}%</span
-  ><Tip label="Zoom in">
-    {#snippet children(
-      tip
-    )}
+  </Tip><span>{Math.round(zoom * 100)}%</span><Tip label="Zoom in">
+    {#snippet children(tip)}
       <button
         {...tip}
         aria-label="Zoom in"
@@ -106,9 +102,7 @@
     {/snippet}
   </Tip>
   <Tip keys="F" label="Fit graph">
-    {#snippet children(
-      tip
-    )}
+    {#snippet children(tip)}
       <button
         {...tip}
         aria-label="Fit graph"
@@ -122,9 +116,7 @@
   </Tip>
   {#if undo || redo}
     <Tip label="Undo">
-      {#snippet children(
-        tip
-      )}
+      {#snippet children(tip)}
         <button
           {...tip}
           aria-label="Undo"
@@ -137,9 +129,7 @@
         </button>
       {/snippet}
     </Tip><Tip label="Redo">
-      {#snippet children(
-        tip
-      )}
+      {#snippet children(tip)}
         <button
           {...tip}
           aria-label="Redo"
@@ -154,6 +144,7 @@
     </Tip>
   {/if}
 </div>
+
 <style>
   .tools {
     display: flex;

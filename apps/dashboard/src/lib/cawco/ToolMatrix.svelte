@@ -85,11 +85,7 @@
   }
 </script>
 
-{#snippet cell(
-  machine: Machine,
-  spec: ToolSpec,
-  online: boolean
-)}
+{#snippet cell(machine: Machine, spec: ToolSpec, online: boolean)}
   {@const toolStatus = machine.tools?.[spec.id]}
   {@const pending = asked[cellKey(machine.machineId, spec.id)] === true}
   {@const shown = toolStatus?.state ?? "unknown"}
@@ -137,9 +133,7 @@
     <span class="flex items-center gap-[var(--space-1)]">
       <Popover.Root>
         <Popover.Trigger>
-          {#snippet child({
-            props,
-          })}
+          {#snippet child({ props })}
             <Badge
               {...props}
               aria-label="Why {spec.name} did not install on {machineLabel(
@@ -172,8 +166,8 @@
             {/if}
           </header>
           <pre
-            class="max-h-56 overflow-auto px-[var(--space-3)] py-[var(--space-2)] font-mono text-label whitespace-pre-wrap"
-          >{toolStatus?.detail ?? "The machine did not say why."}</pre>
+            class="max-h-56 overflow-auto px-[var(--space-3)] py-[var(--space-2)] font-mono text-label whitespace-pre-wrap">{toolStatus?.detail ??
+              "The machine did not say why."}</pre>
           <footer
             class="border-t border-border px-[var(--space-3)] py-[var(--space-2)]"
           >
@@ -205,9 +199,7 @@
   {:else if shown === "unsupported"}
     <Popover.Root>
       <Popover.Trigger>
-        {#snippet child({
-          props,
-        })}
+        {#snippet child({ props })}
           <Badge
             {...props}
             aria-label="Why {spec.name} cannot run on {machineLabel(
@@ -233,14 +225,11 @@
     <span class="flex items-center gap-[var(--space-1)]">
       <Tooltip.Root>
         <Tooltip.Trigger>
-          {#snippet child({
-            props,
-          })}
+          {#snippet child({ props })}
             <Badge
               {...props}
               class="{CHIP} text-[var(--ink-subtle)]"
-              variant="ghost"
-              >Unknown</Badge
+              variant="ghost">Unknown</Badge
             >
           {/snippet}
         </Tooltip.Trigger>
@@ -293,8 +282,7 @@
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
             class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
-            scope="col"
-            >Machine</Table.Head
+            scope="col">Machine</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           {#each columns as spec (spec.id)}
@@ -367,8 +355,8 @@
                     >
                     <span
                       class="size-2 shrink-0 rounded-full {online
-                        ? "bg-success"
-                        : "bg-muted-foreground/40"}"
+                        ? 'bg-success'
+                        : 'bg-muted-foreground/40'}"
                     ></span>
                   </span>
                   <span class="text-label text-muted-foreground"

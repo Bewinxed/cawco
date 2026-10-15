@@ -152,7 +152,7 @@
           draggable="false"
           src={dark ? PICTURES[chosen].dark : PICTURES[chosen].light}
           style:transform="scale({PICTURES[chosen].scale})"
-        >
+        />
       </span>
     {/key}
   </RadioGroup.Root>

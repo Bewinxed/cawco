@@ -24,9 +24,7 @@
     );
 </script>
 
-{#snippet branch(
-  parentId: string | null
-)}
+{#snippet branch(parentId: string | null)}
   {#each under(parentId) as item (item.id)}
     {@const kids = under(item.id)}
     <li data-item={item.id}>

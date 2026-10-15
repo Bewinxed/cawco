@@ -70,8 +70,7 @@ export interface PreviewFrame {
  * wire-compat.ts `BRIDGES`).
  */
 export type PreviewAddress =
-  | { port: number }
-  | { origin: string; host: string };
+  { port: number } | { origin: string; host: string };
 
 /**
  * The origin a client loads a session's previews from: in port mode the

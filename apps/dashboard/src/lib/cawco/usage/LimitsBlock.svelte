@@ -109,9 +109,7 @@
   };
 </script>
 
-{#snippet running(
-  ring: RingAccount
-)}
+{#snippet running(ring: RingAccount)}
   <div class="running">
     {#if ring.sessions.length > 0}
       <span class="heading"
@@ -211,9 +209,7 @@
         <!-- Where new delegates go; why, on a rest or a tap, in placement's
              own terms, so the line holds one line on a phone. -->
         <Tip label={why} side="bottom" tap>
-          {#snippet children(
-            props
-          )}
+          {#snippet children(props)}
             <span
               {...props}
               aria-label="Delegates go to {claude.delegate?.name}. {why}"
@@ -277,8 +273,7 @@
       {/if}
       {#if spend && spend.all > 0}
         <p class="line">
-          <span class="label">Spend</span
-          ><span
+          <span class="label">Spend</span><span
             ><span class="mono-figure">{money(spend.today)}</span>
             today, <span class="mono-figure">{money(spend.week)}</span>
             this week,

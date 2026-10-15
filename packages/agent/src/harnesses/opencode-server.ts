@@ -589,9 +589,9 @@ export class OpencodeServerOwner {
     const proc = listed.procs.find((row) => row.procId === identity.procId);
     return Boolean(
       listed.epoch === identity.epoch &&
-        proc?.alive &&
-        proc.pid === identity.pid &&
-        (await processStart(identity.pid)) === identity.startedAt
+      proc?.alive &&
+      proc.pid === identity.pid &&
+      (await processStart(identity.pid)) === identity.startedAt
     );
   }
 

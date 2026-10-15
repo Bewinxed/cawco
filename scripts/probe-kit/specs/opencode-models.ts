@@ -158,13 +158,12 @@ const spawnRead = async (
 
 /** The machine's OpenCode models as the hub holds its last report. */
 const reportedModels = async (fleet: KitFleet): Promise<string[]> => {
-  const rows =
-    await fleet.api<
-      {
-        machineId: string;
-        harnesses?: { harness: string; models?: { value: string }[] }[];
-      }[]
-    >("/api/agents");
+  const rows = await fleet.api<
+    {
+      machineId: string;
+      harnesses?: { harness: string; models?: { value: string }[] }[];
+    }[]
+  >("/api/agents");
   return (
     rows
       .find((row) => row.machineId === MACHINE)

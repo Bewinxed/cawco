@@ -104,10 +104,10 @@ export interface MediaIntake {
 export const carriesMedia = (message: TelegramMedia): boolean =>
   Boolean(
     message.voice ??
-      message.audio ??
-      message.video_note ??
-      message.photo?.length ??
-      message.document
+    message.audio ??
+    message.video_note ??
+    message.photo?.length ??
+    message.document
   );
 
 const extensionOf = (name: string): string =>
@@ -320,65 +320,66 @@ export const createMediaIntake = ({
     }
 
     const chat = readEnv(CAWCO_ENV.telegramAsrMode) === "chat";
-    const response = await (chat
-      ? // An audio-capable LLM has no transcription API — it is asked to
-        // transcribe the way it is asked anything, with the audio attached.
-        fetch(`${url}/v1/chat/completions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: name,
-            temperature: 0,
-            // Bounded: the serving model is a reasoning family — without a cap
-            // a "transcription" can ramble. 1024 covers ~8 minutes of speech;
-            // the router caps audio at ~10.5 min anyway.
-            max_tokens: 1024,
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "input_audio",
-                    input_audio: {
-                      data: Buffer.from(bytes).toString("base64"),
-                      format: extensionOf(filename) || "ogg",
-                    },
-                  },
-                  {
-                    type: "text",
-                    text:
-                      "Transcribe this audio exactly as spoken. Output only the transcript" +
-                      " — no commentary, no quotation marks.",
-                  },
-                ],
-              },
-            ],
-          }),
-          signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
-        })
-      : (() => {
-          const form = new FormData();
-          // `BlobPart` wants a Uint8Array over a plain ArrayBuffer; `bytes` is
-          // typed over ArrayBufferLike, so re-view it — a view copy of the
-          // header only, never of the audio payload.
-          form.append(
-            "file",
-            new Blob([
-              new Uint8Array(
-                bytes.buffer as ArrayBuffer,
-                bytes.byteOffset,
-                bytes.byteLength
-              ),
-            ]),
-            filename
-          );
-          form.append("model", name);
-          return fetch(`${url}/v1/audio/transcriptions`, {
+    const response = await (
+      chat
+        ? // An audio-capable LLM has no transcription API — it is asked to
+          // transcribe the way it is asked anything, with the audio attached.
+          fetch(`${url}/v1/chat/completions`, {
             method: "POST",
-            body: form,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: name,
+              temperature: 0,
+              // Bounded: the serving model is a reasoning family — without a cap
+              // a "transcription" can ramble. 1024 covers ~8 minutes of speech;
+              // the router caps audio at ~10.5 min anyway.
+              max_tokens: 1024,
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "input_audio",
+                      input_audio: {
+                        data: Buffer.from(bytes).toString("base64"),
+                        format: extensionOf(filename) || "ogg",
+                      },
+                    },
+                    {
+                      type: "text",
+                      text:
+                        "Transcribe this audio exactly as spoken. Output only the transcript" +
+                        " — no commentary, no quotation marks.",
+                    },
+                  ],
+                },
+              ],
+            }),
             signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
-          });
-        })()
+          })
+        : (() => {
+            const form = new FormData();
+            // `BlobPart` wants a Uint8Array over a plain ArrayBuffer; `bytes` is
+            // typed over ArrayBufferLike, so re-view it — a view copy of the
+            // header only, never of the audio payload.
+            form.append(
+              "file",
+              new Blob([
+                new Uint8Array(
+                  bytes.buffer as ArrayBuffer,
+                  bytes.byteOffset,
+                  bytes.byteLength
+                ),
+              ]),
+              filename
+            );
+            form.append("model", name);
+            return fetch(`${url}/v1/audio/transcriptions`, {
+              method: "POST",
+              body: form,
+              signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
+            });
+          })()
     ).catch(() => undefined);
     if (!response) {
       return { kind: "refused", reason: "The router took too long to answer." };

@@ -1786,8 +1786,7 @@ export const createCaw = ({
     projectId: string
   ): string | undefined => {
     const asked = asks().find((ask) => ask.instanceId === leadId)?.payload as
-      | { threadId?: string }
-      | undefined;
+      { threadId?: string } | undefined;
     return [
       asked?.threadId,
       turns.get(leadId)?.threadId,

@@ -7,9 +7,7 @@ import { browserExecutable } from "./capabilities";
 import { resolveBin, toolEnv, toolPath } from "./tools";
 
 type McpLauncher =
-  | { config: FleetMcpConfig }
-  | { failure: string }
-  | { unavailable: string };
+  { config: FleetMcpConfig } | { failure: string } | { unavailable: string };
 
 const WINDOWS_SHIM = /\.(cmd|bat)$/i;
 

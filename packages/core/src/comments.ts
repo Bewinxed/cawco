@@ -131,15 +131,13 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 
 /** Why a thread entry may not be kept; null when it may. */
 const entryProblem = (entry: unknown): string | null => {
-  if (
-    !(
-      isObject(entry) &&
-      typeof entry.id === "string" &&
-      (entry.by === "person" || entry.by === "agent") &&
-      typeof entry.text === "string" &&
-      typeof entry.at === "string"
-    )
-  ) {
+  if (!(
+    isObject(entry) &&
+    typeof entry.id === "string" &&
+    (entry.by === "person" || entry.by === "agent") &&
+    typeof entry.text === "string" &&
+    typeof entry.at === "string"
+  )) {
     return "A thread entry is an object with its id, by, text and at.";
   }
   if (entry.text.length > COMMENT_LIMITS.text) {
@@ -163,16 +161,14 @@ const entryProblem = (entry: unknown): string | null => {
 
 /** Why a pin may not be kept; null when it may. */
 export function pinProblem(value: unknown): string | null {
-  if (
-    !(
-      isObject(value) &&
-      typeof value.id === "string" &&
-      typeof value.number === "number" &&
-      (value.kind === "annotation" || value.kind === "comment") &&
-      isObject(value.anchor) &&
-      Array.isArray(value.thread)
-    )
-  ) {
+  if (!(
+    isObject(value) &&
+    typeof value.id === "string" &&
+    typeof value.number === "number" &&
+    (value.kind === "annotation" || value.kind === "comment") &&
+    isObject(value.anchor) &&
+    Array.isArray(value.thread)
+  )) {
     return "A pin is an object with its id, number, kind, anchor and thread.";
   }
   if (value.thread.length > COMMENT_LIMITS.entries) {

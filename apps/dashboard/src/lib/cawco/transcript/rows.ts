@@ -1617,15 +1617,13 @@ function settledInto(
  */
 function answerLanding(prior: LiveMemo, rows: Row[]): LiveContent | null {
   const last = rows.at(-1);
-  if (
-    !(
-      prior.on &&
-      prior.answer &&
-      last?.kind === "single" &&
-      last.message.type === "thinking" &&
-      last.message.sdkUuid
-    )
-  ) {
+  if (!(
+    prior.on &&
+    prior.answer &&
+    last?.kind === "single" &&
+    last.message.type === "thinking" &&
+    last.message.sdkUuid
+  )) {
     return null;
   }
   const message = last.message.sdkUuid;

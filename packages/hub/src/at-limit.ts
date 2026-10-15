@@ -1006,13 +1006,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const held = db.atLimit.hold(row.id);
     db.atLimit.dropHold(row.id);
     const last = db.atLimit.events([row.id]).at(-1)?.move;
-    if (
-      !(
-        last?.kind === "stopped" &&
-        last.account.id === current.id &&
-        last.resetsAt === resetsAt
-      )
-    ) {
+    if (!(
+      last?.kind === "stopped" &&
+      last.account.id === current.id &&
+      last.resetsAt === resetsAt
+    )) {
       // Its line says it, in the log too ({@link AtLimitPorts.note}).
       ports.note(row, {
         kind: "stopped",

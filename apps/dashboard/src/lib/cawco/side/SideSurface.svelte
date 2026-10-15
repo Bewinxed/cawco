@@ -75,8 +75,8 @@
   aria-label={label}
   class="side-card {className}"
   bind:this={section}
-  class:expanded={expanded}
-  class:recessed={recessed}
+  class:expanded
+  class:recessed
 >
   <header class="side-head">
     {#if switcher}

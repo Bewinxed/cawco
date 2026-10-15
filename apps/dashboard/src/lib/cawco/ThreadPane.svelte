@@ -526,15 +526,11 @@
   );
 </script>
 
-{#snippet face(
-  live: boolean
-)}
+{#snippet face(live: boolean)}
   <CawFace size={18} status={live ? "working" : "ready"} />
 {/snippet}
 
-{#snippet taskCards(
-  ids: string[]
-)}
+{#snippet taskCards(ids: string[])}
   <ul class="thread-tasks">
     {#each ids as id (id)}
       {@const task = tasks.find((each) => each.id === id)}
@@ -554,10 +550,7 @@
   </ul>
 {/snippet}
 
-{#snippet folderFiles(
-  files: string[],
-  messageId: string
-)}
+{#snippet folderFiles(files: string[], messageId: string)}
   <FolderFiles {files} {projectId} />
   {#if messageId === boardAfter}
     <div class="board-link">
@@ -609,7 +602,7 @@
       ? foot.parked
       : 0}px; {writable && foot.stack
       ? `--latest-inset: calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
-      : ""}"
+      : ''}"
   >
     <SideSplit
       {active}

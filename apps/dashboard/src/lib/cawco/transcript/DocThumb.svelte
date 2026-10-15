@@ -102,8 +102,9 @@
   {/if}
   <span class="text">
     <span class="name"
-      ><span class="head">{name.slice(0, cut)}</span
-      ><span class="tail">{name.slice(cut)}</span></span
+      ><span class="head">{name.slice(0, cut)}</span><span class="tail"
+        >{name.slice(cut)}</span
+      ></span
     >
     {#if file?.failed}
       <span class="meta failed">Couldn't upload</span>

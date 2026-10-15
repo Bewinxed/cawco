@@ -64,17 +64,12 @@
   >
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
-    {#snippet child({
-      props,
-      open,
-    })}
+    {#snippet child({ props, open })}
       <div {...props} style:pointer-events={pressable(open)}>
         {@render children?.()}
         {#if showCloseButton}
           <SheetPrimitive.Close data-slot="sheet-close">
-            {#snippet child({
-              props: closeProps,
-            })}
+            {#snippet child({ props: closeProps })}
               <Button
                 class="absolute top-4 right-4"
                 size="icon-sm"

@@ -1283,8 +1283,7 @@
       href={`/artifact/${encodeURIComponent(artifact.id)}`}
       rel="noopener"
       target="_blank"
-      title="Open in new tab"
-      ><IconExternal /></a
+      title="Open in new tab"><IconExternal /></a
     >
   {/if}
   {#if !isCanvas}
@@ -1386,9 +1385,7 @@
     </div>
   {:else}
     <!-- The frame loads once its origin answered the probe (and, in host mode, its entry is in hand); the cover stands meanwhile. -->
-    {#each reached?.origin === paneOrigin
-      ? frames.filter((held) => !byHost || entries[held])
-      : [] as key (key)}
+    {#each reached?.origin === paneOrigin ? frames.filter((held) => !byHost || entries[held]) : [] as key (key)}
       {@const current = key === frameKey}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
       <iframe
@@ -1454,8 +1451,7 @@
             The way to the page's server on {ownerMachine} didn't open{downWhy
               ? `: ${downWhy}`
               : "."}
-            Try again; if it fails again, start the server again from its
-            session.
+            Try again; if it fails again, start the server again from its session.
           {:else if down === "closed"}
             Its session shows something else now, or has ended, so there is no
             page here. Open its session to show it again.
@@ -1511,8 +1507,7 @@
         {sheet}
         thumb={thumbs[cardPin.id] ?? null}
         bind:draft={
-          () => drafts.text(cardPin.id),
-          (text) => drafts.set(cardPin.id, text)
+          () => drafts.text(cardPin.id), (text) => drafts.set(cardPin.id, text)
         }
       />
     {/if}

@@ -140,10 +140,7 @@ export interface InkChrome {
   token: (
     name: string,
     property?:
-      | "color"
-      | "font"
-      | "transition-duration"
-      | "transition-timing-function"
+      "color" | "font" | "transition-duration" | "transition-timing-function"
   ) => string;
 }
 

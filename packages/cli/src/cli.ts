@@ -459,9 +459,8 @@ const runService = async (args: Args): Promise<number> => {
   // On a binary install the hub, dashboard and agent units start through the wrapper, never a
   // build's own path, or an update would restart the build it was meant to replace; the session
   // keeper's unit is the current keeper's own, the build the `keeper` link names.
-  const { readInstallation, readKeeperVersion } = await import(
-    "@cawco/core/binary-installation"
-  );
+  const { readInstallation, readKeeperVersion } =
+    await import("@cawco/core/binary-installation");
   const { binaryLayout } = await import("./binary-install");
   const installation = await readInstallation();
   const keeper = installation ? await readKeeperVersion() : undefined;

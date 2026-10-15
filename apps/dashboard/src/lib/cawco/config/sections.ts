@@ -26,8 +26,10 @@ import {
  * the native app reads too), its Solar glyph as the component that draws
  * it, and its hue token as the colour it is.
  */
-export interface ConfigSection
-  extends Omit<ConfigSectionDefinition, "hue" | "icon"> {
+export interface ConfigSection extends Omit<
+  ConfigSectionDefinition,
+  "hue" | "icon"
+> {
   hue: string;
   icon: Component;
 }

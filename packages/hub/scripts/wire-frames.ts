@@ -56,8 +56,7 @@ class Reader {
 
   constructor(document: Schema, open: Set<string>) {
     const components = document.components as
-      | { schemas?: Record<string, Schema> }
-      | undefined;
+      { schemas?: Record<string, Schema> } | undefined;
     this.schemas = components?.schemas ?? {};
     this.open = open;
   }
@@ -119,15 +118,13 @@ class Reader {
     at: string
   ): void {
     const discriminator = schema.discriminator as
-      | { propertyName?: string }
-      | undefined;
+      { propertyName?: string } | undefined;
     const tag = discriminator?.propertyName;
     if (tag && isObject(value)) {
       const branch = branches.find((candidate) => {
         const property = (
           this.resolve(candidate).schema.properties as
-            | Record<string, Schema>
-            | undefined
+            Record<string, Schema> | undefined
         )?.[tag];
         const tagSchema = property ? this.resolve(property).schema : undefined;
         const values = (tagSchema?.enum as unknown[] | undefined) ?? [
