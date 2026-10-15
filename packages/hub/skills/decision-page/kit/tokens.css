@@ -759,6 +759,14 @@
     --c-starter-h: 56px;
     /* The column an empty state with starters takes at most: four cards across with their gaps. */
     --c-starters-w: calc(var(--c-starter-w) * 4 + var(--space-2) * 3);
+    /* A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after. */
+    --c-row-lead: 28px;
+    /* A routines-page row's pitch: the whole row is its own 44px opener on every pointer. */
+    --c-row-h: 44px;
+    /* A routines-page row's trailing fact column ("Tomorrow 09:00", "Failed 2d ago"), fixed so a fact that changes as you watch ("Running…") never moves the title. */
+    --c-fact-w: 7rem;
+    /* The same fact column on a card under 400px (a phone): it still holds "Tomorrow 09:00" in meta, and gives the title the rest. */
+    --c-fact-w-compact: 6rem;
     /* The delegate tray's row: a chip, and the step down to the pill. */
     --c-tray-chip: 28px;
     --c-tray-gap: var(--space-2);

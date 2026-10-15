@@ -36,7 +36,7 @@
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { IconMore } from "#lib/icons.js";
+  import { IconClock, IconMore } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import CawSeat from "./CawSeat.svelte";
   import type { CawLead } from "./caw-lead.svelte";
@@ -49,7 +49,10 @@
     onnewtask,
     onask,
     onstages,
+    routines = null,
   }: {
+    /** PREVIEW (S1 b): the routines' own page, reached from here. */
+    routines?: string | null;
     project: ProjectRow;
     machine: Machine | null;
     lead: CawLead;
@@ -238,6 +241,12 @@
     </div>
   </div>
   <div class="acts">
+    {#if routines}
+      <Button class="pressable" href={routines} variant="ghost">
+        <IconClock />
+        Routines
+      </Button>
+    {/if}
     {#if !primary}
       <!-- No checkout yet: a session needs a machine and folder, which the
            New Session dialog asks for. -->

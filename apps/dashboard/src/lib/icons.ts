@@ -96,6 +96,8 @@ export { default as IconGraphUp } from "~icons/solar/graph-up-bold-duotone";
 /** A person is asked for: the Needs-you glyph (DESIGN.md, Session status). */
 export { default as IconNeedsYou } from "~icons/solar/hand-shake-bold-duotone";
 export { default as IconHistory } from "~icons/solar/history-bold-duotone";
+/** A routine turning itself off soon unless kept. */
+export { default as IconHourglass } from "~icons/solar/hourglass-bold-duotone";
 export { default as IconHandoff } from "~icons/solar/inbox-in-bold-duotone";
 export { default as IconInfo } from "~icons/solar/info-circle-bold-duotone";
 export { default as IconKey } from "~icons/solar/key-bold-duotone";
@@ -103,6 +105,8 @@ export { default as IconLaptop } from "~icons/solar/laptop-minimalistic-bold-duo
 export { default as IconLayers } from "~icons/solar/layers-bold-duotone";
 export { default as IconLeaf } from "~icons/solar/leaf-bold-duotone";
 export { default as IconLink } from "~icons/solar/link-minimalistic-2-bold-duotone";
+/** The relay: the public path push-only services reach the hub by. */
+export { default as IconLinkRound } from "~icons/solar/link-round-bold-duotone";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
 export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
@@ -128,6 +132,8 @@ export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
 export { default as IconPaperclip } from "~icons/solar/paperclip-bold-duotone";
 /** Caw holds still while his lead works (the sidebar's motion switch). */
 export { default as IconPause } from "~icons/solar/pause-bold-duotone";
+/** A paused routine's state glyph. */
+export { default as IconPauseCircle } from "~icons/solar/pause-circle-bold-duotone";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
 /** The person's ink on an artifact: the composer's Ink chip, the pen of the stroke's icon. */
 export { default as IconPen } from "~icons/solar/pen-bold-duotone";

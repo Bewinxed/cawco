@@ -46,6 +46,7 @@
   import {
     createTask,
     firstTodoStage,
+    listArchived,
     listTasks,
     movesFrom,
     moveTask,
@@ -58,6 +59,8 @@
     type TaskView,
   } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
+  import PreviewSwitches from "#lib/cawco/routines/PreviewSwitches.svelte";
+  import { picks } from "#lib/cawco/routines/preview.svelte.js";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import StagesControl from "#lib/cawco/tasks/StagesControl.svelte";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
@@ -73,6 +76,7 @@
   import ViewCanvas from "#lib/cawco/views/ViewCanvas.svelte";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import ViewPipeline from "#lib/cawco/views/ViewPipeline.svelte";
+  import ViewRoutines from "#lib/cawco/views/ViewRoutines.svelte";
   import {
     discardView,
     keepView,
@@ -93,6 +97,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
+    IconArchive,
     IconNeedsYou,
     IconPlus,
     IconSparkles,
@@ -160,6 +165,21 @@
   );
   const newIn = $derived(firstTodoStage(stageList)?.name);
   const empty = $derived(list !== null && list.tasks.length === 0);
+
+  /** PREVIEW (T5): the archived tasks, and whether the strip's Archived shows them in place. */
+  let archived = $state<TaskSummary[]>([]);
+  let showArchived = $state(false);
+  async function readArchived() {
+    const id = projectId;
+    try {
+      const read = await listArchived(id);
+      if (id === projectId) {
+        archived = read.tasks;
+      }
+    } catch {
+      // The board stands without them.
+    }
+  }
 
   const allowedFrom = (stage: string): Set<string> =>
     stages ? movesFrom(stages, stage) : new Set();
@@ -295,6 +315,10 @@
     { value: "board", label: "Board", draft: false },
     { value: "table", label: "Table", draft: false },
     { value: "pipeline", label: "Pipeline", draft: false },
+    // PREVIEW (S1 a): Routines, the fourth tab, always there.
+    ...(picks.place === "tab"
+      ? [{ value: "routines", label: "Routines", draft: false }]
+      : []),
     // The task graph, while the tasks draw one (an edge between two).
     ...(taskEdges(tasks).length > 0
       ? [{ value: "canvas", label: "Canvas", draft: false }]
@@ -410,6 +434,8 @@
     }
     // biome-ignore lint/complexity/noVoid: the re-read sets its own state
     void readDated();
+    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+    void readArchived();
   }
 
   /** A task the hub just wrote, put into the list until the list is read again. */
@@ -607,6 +633,7 @@
       lead.read();
       readViews();
       readDated();
+      readArchived();
       if (list) {
         refresh();
       }
@@ -709,7 +736,11 @@
    * form — once a task is being added by hand.
    */
   const standing = $derived(
-    empty && canTalk && !adding && !current.startsWith("view:")
+    empty &&
+      canTalk &&
+      !adding &&
+      !current.startsWith("view:") &&
+      current !== "routines"
   );
 
   /**
@@ -788,6 +819,24 @@
           Needs you
           <span class="num">{needsYou.length}</span>
         </button>
+      {/if}
+      {#if picks.archived === "dim" &&
+        archived.length > 0 &&
+        current === "board"}
+        <!-- PREVIEW (T5 a): the archived tasks, dimmed in their columns while on. -->
+        <Button
+          aria-pressed={showArchived}
+          class="archived-toggle pressable"
+          onclick={() => {
+            showArchived = !showArchived;
+          }}
+          size="sm"
+          variant={showArchived ? "secondary" : "ghost"}
+        >
+          <IconArchive />
+          Archived
+          <span class="num">{archived.length}</span>
+        </Button>
       {/if}
       {#if strippedNewTask}
         <Button
@@ -868,6 +917,22 @@
     {:else}
       <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
     {/if}
+  {:else if value === "routines" && project}
+    <!-- PREVIEW (S1 a): the routines, the strip's fourth tab. -->
+    {#key picks.layout}
+      <ViewRoutines
+        {canTalk}
+        cawProblem={lead.view?.problem ?? null}
+        layout={picks.layout}
+        project={{
+          id: project.id,
+          name: project.name,
+          // A template standing in for a missing stages.md is not the project's.
+          template:
+            stages?.source === "file" ? (stages.template ?? null) : null,
+        }}
+      />
+    {/key}
   {:else if !list}
     <div class="state">
       <EmptyState
@@ -934,6 +999,8 @@
   {:else if value === "board"}
     <TaskBoard
       {allowedFrom}
+      {archived}
+      archivedAs={picks.archived}
       {dateOf}
       hrefOf={(id) => hrefOf(id)}
       {kindOf}
@@ -943,6 +1010,7 @@
       onmove={drop}
       onopen={openOne}
       refused={refusedMove}
+      {showArchived}
       stages={shownStages}
       tasks={shownTasks}
       bind:adding
@@ -1005,6 +1073,9 @@
           }
         : null}
       {project}
+      routines={picks.place === "page"
+        ? `/project/${projectId}/routines`
+        : null}
       seated={!standing}
     />
 
@@ -1105,6 +1176,8 @@
       />
     </Popover.Content>
   </Popover.Root>
+
+  <PreviewSwitches {projectId} />
 
   <StagesControl
     anchor={stagesAnchor}

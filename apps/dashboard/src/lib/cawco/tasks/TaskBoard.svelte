@@ -17,6 +17,7 @@
     stageLabel,
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
+  import { IconArchive } from "#lib/icons.js";
   import { boardDrag, stageDropTarget } from "./board-dnd.svelte.js";
   import NewTaskForm from "./NewTaskForm.svelte";
   import TaskColumn from "./TaskColumn.svelte";
@@ -35,7 +36,16 @@
     oncreate,
     moving,
     refused,
+    archived = [],
+    archivedAs = "dim",
+    showArchived = false,
   }: {
+    /** PREVIEW (T5): the project's archived tasks. */
+    archived?: TaskSummary[];
+    /** PREVIEW (T5): dimmed in their columns, or folded into a rail after the last. */
+    archivedAs?: "dim" | "rail";
+    /** PREVIEW (T5 a): the strip's Archived is on, so they stand dimmed in place. */
+    showArchived?: boolean;
     stages: Stage[];
     tasks: TaskSummary[];
     /** The column that takes new tasks: the first of kind todo. */
@@ -56,9 +66,14 @@
   } = $props();
 
   const named = $derived(new Set(stages.map((stage) => stage.name)));
+  /** PREVIEW (T5 a): the archived tasks standing dimmed in their columns, after the live ones. */
+  const dimmed = $derived(archivedAs === "dim" && showArchived ? archived : []);
+  const archivedIds = $derived(new Set(dimmed.map((task) => task.id)));
+  /** PREVIEW (T5 b): the archive rail, open as a column of its own. */
+  let railOpen = $state(false);
   const byStage = $derived.by(() => {
     const columns = new Map<string, TaskSummary[]>();
-    for (const task of tasks) {
+    for (const task of [...tasks, ...dimmed]) {
       const key = named.has(task.stage) ? task.stage : "";
       const column = columns.get(key);
       if (column) {
@@ -83,6 +98,7 @@
   cards: TaskSummary[]
 )}
   <TaskColumn
+    {archivedIds}
     {cards}
     closed={open !== null && name !== boardDrag.from && !open.has(name)}
     {dateOf}
@@ -103,7 +119,10 @@
   <NewTaskForm {oncreate} stage={newIn ?? ""} bind:open={adding} />
 {/snippet}
 
-<div class="board kit-edge-fade">
+<div
+  class="board kit-edge-fade"
+  style:--stage-count={stages.length + (stray.length > 0 ? 1 : 0)}
+>
   {#each stages as stage (stage.name)}
     {@render column(
       stage.name,
@@ -114,6 +133,44 @@
   {/each}
   {#if stray.length > 0}
     {@render column("", "Other stages", null, stray)}
+  {/if}
+  {#if archivedAs === "rail" && archived.length > 0}
+    {#if railOpen}
+      <div class="rail-open">
+        <TaskColumn
+          archivedIds={new Set(archived.map((task) => task.id))}
+          cards={archived}
+          {dateOf}
+          {hrefOf}
+          kind={null}
+          {kindOf}
+          label="Archive"
+          {onopen}
+        />
+        <button
+          class="rail-close press-tint"
+          onclick={() => {
+            railOpen = false;
+          }}
+          type="button"
+        >
+          Fold the archive
+        </button>
+      </div>
+    {:else}
+      <button
+        aria-label="Archive, {archived.length} tasks. Open it."
+        class="archive-rail press-tint"
+        onclick={() => {
+          railOpen = true;
+        }}
+        type="button"
+      >
+        <IconArchive aria-hidden="true" />
+        <span class="rail-name">Archive</span>
+        <span class="rail-count num">{archived.length}</span>
+      </button>
+    {/if}
   {/if}
 </div>
 
@@ -130,6 +187,52 @@
     padding-block-end: var(--space-3);
     overscroll-behavior-x: contain;
   }
+  /* PREVIEW (T5 b): the archive folded to a narrow rail after the last
+     column; open, it is a column like the others, quieter. */
+  .board:has(> .archive-rail) {
+    grid-template-columns: repeat(var(--stage-count), minmax(15rem, 22rem)) auto;
+  }
+  .archive-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    inline-size: var(--c-btn-h-lg);
+    padding: var(--space-3) 0;
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--surface-band);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .archive-rail :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
+  .rail-name {
+    font: var(--type-label);
+    writing-mode: vertical-rl;
+  }
+  .rail-count {
+    font: var(--type-meta);
+    color: var(--ink-subtle);
+  }
+  .rail-open {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-block-size: 0;
+  }
+  .rail-close {
+    padding: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
   /* A phone shows one column and the edge of the next, and a swipe settles
      on a column. */
   @media (max-width: 639px) {
@@ -137,7 +240,14 @@
       grid-auto-columns: calc(100% - var(--space-8));
       scroll-snap-type: x mandatory;
     }
-    .board > :global(.column) {
+    .board:has(> .archive-rail) {
+      grid-template-columns:
+        repeat(var(--stage-count), calc(100% - var(--space-8)))
+        auto;
+    }
+    .board > :global(.column),
+    .board > .archive-rail,
+    .board > .rail-open {
       scroll-snap-align: start;
     }
   }
