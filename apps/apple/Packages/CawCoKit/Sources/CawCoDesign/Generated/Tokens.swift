@@ -587,6 +587,14 @@ public enum Size {
     public static let cStarterH: Double = 56
     /// The column an empty state with starters takes at most: four cards across with their gaps.
     public static let cStartersW: Double = 725
+    /// A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after.
+    public static let cRowLead: Double = 28
+    /// A routines-page row's pitch: the whole row is its own 44px opener on every pointer.
+    public static let cRowH: Double = 44
+    /// A routines-page row's trailing fact column ("Tomorrow 09:00", "Failed 2d ago"), fixed so a fact that changes as you watch ("Running…") never moves the title.
+    public static let cFactW: Double = 112
+    /// The same fact column on a card under 400px (a phone): it still holds "Tomorrow 09:00" in meta, and gives the title the rest.
+    public static let cFactWCompact: Double = 96
     /// The delegate tray's row: a chip, and the step down to the pill.
     public static let cTrayChip: Double = 28
     /// `cTrayChip` under a coarse pointer (touch).

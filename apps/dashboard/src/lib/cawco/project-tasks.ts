@@ -296,6 +296,10 @@ const one = (projectId: string, taskId: string) =>
 export const listTasks = (projectId: string): Promise<TaskList> =>
   send(`${base(projectId)}/tasks`);
 
+/** PREVIEW (T5): the project's archived tasks, instead of the board's. */
+export const listArchived = (projectId: string): Promise<TaskList> =>
+  send(`${base(projectId)}/tasks?archived=1`);
+
 export const readStages = (projectId: string): Promise<StagesView> =>
   send(`${base(projectId)}/stages`);
 

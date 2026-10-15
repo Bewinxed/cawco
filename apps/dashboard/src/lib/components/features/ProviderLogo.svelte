@@ -26,11 +26,14 @@
   import IconClaude from "~icons/logos/claude-icon";
   import IconGithub from "~icons/logos/github-icon";
   import IconGrok from "~icons/logos/grok-icon";
+  import IconLinear from "~icons/logos/linear-icon";
   import IconMistral from "~icons/logos/mistral-ai-icon";
   import IconMoonshot from "~icons/logos/moonshot-ai-icon";
   import IconOpenai from "~icons/logos/openai-icon";
   import IconQwen from "~icons/logos/qwen-icon";
+  import IconSlack from "~icons/logos/slack-icon";
   import IconDeepseek from "~icons/thesvg-color/deepseek";
+  import IconGmail from "~icons/thesvg-color/gmail";
   import IconGemini from "~icons/thesvg-color/google-gemini";
   import IconMeta from "~icons/thesvg-color/metaai";
   import IconMinimax from "~icons/thesvg-color/minimax";
@@ -53,6 +56,9 @@
     minimax: IconMinimax,
     nvidia: IconNvidia,
     github: IconGithub,
+    linear: IconLinear,
+    slack: IconSlack,
+    gmail: IconGmail,
   };
 
   /* The marks drawn in a single ink. Upstream they carry a fixed dark fill
