@@ -4,7 +4,7 @@ The modal that starts sessions, opened from the Shell (`new-session.svelte.ts`).
 
 ## 1. Layout
 
-Above 640px the modal is a centred card, `min(980px, 100vw - 48px)` wide and at most `100dvh - 48px` tall, on `--surface-recess` with `--radius-lg` and `--shadow-modal`. It has a head (the "Sessions · New" or "Sessions · Continue" title and Close), a scrolling body on `--surface-raised`, and a footer with Cancel and Start. Head and footer stay in view; the body scrolls when the card is capped.
+Above 640px the modal is a centred card, `min(980px, 100vw - 48px)` wide and at most `100dvh - 48px` tall, on `--surface-recess` with `--radius-lg` and `--shadow-modal`. It has a head (the "Sessions · New" or "Sessions · Continue" title and Close), a scrolling body on `--surface-raised`, and a footer with Cancel and Start. Head and footer stay in view; the body scrolls when the card is capped, and fades the edge it has more to scroll to (the house edge fade), so a capped form says it runs on where the system hides its scrollbar.
 
 The body holds the "New Session" heading, then the First prompt section: the prompt editor and the composer chips in one field, with a one-line reading slot under them for location and start messages. Below it is the Model section, or on a continuation the "Summarise with" and "Continue on" model sections side by side.
 

@@ -31,7 +31,7 @@
 </script>
 
 <Popover.Root bind:open={expanded}>
-  <Popover.Trigger aria-label="{label}: {chosen}" class="picker">
+  <Popover.Trigger aria-label="{label}: {chosen}" class="picker-chip">
     <span class="k">{label}</span>
     <span class="v num"><TextMorph text={chosen} /></span>
     <IconChevronDown />
@@ -70,7 +70,13 @@
 </Popover.Root>
 
 <style>
-  :global(.picker) {
+  /* The trigger is bits-ui's element, so its rules are global: under this
+     chip's own name. As the bare `.picker` they also drew the New session
+     dialog's model panel (ModelSection's `.picker`) once Config had loaded
+     them: 32px tall, its rail centred against the list, and the whole panel
+     pressed to --press-scale by any press inside it (`:active` holds on every
+     ancestor of the pressed element). */
+  :global(.picker-chip) {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -90,23 +96,23 @@
     }
   }
   @media (prefers-reduced-motion: no-preference) {
-    :global(.picker:active) {
+    :global(.picker-chip:active) {
       transform: scale(var(--press-scale));
     }
   }
-  :global(.picker:hover) {
+  :global(.picker-chip:hover) {
     background: var(--surface-hover);
   }
-  :global(.picker svg) {
+  :global(.picker-chip svg) {
     width: 16px;
     height: 16px;
     flex: none;
     color: var(--ink-muted);
   }
-  :global(.picker) .k {
+  :global(.picker-chip) .k {
     color: var(--ink-muted);
   }
-  :global(.picker) .v {
+  :global(.picker-chip) .v {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

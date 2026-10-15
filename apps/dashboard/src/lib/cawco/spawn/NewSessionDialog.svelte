@@ -1731,8 +1731,11 @@
        move asks left in it: the chips that say where it runs, and what
        moving does. Everything else is kept as it was, out of sight, for
        Back. -->
+  <!-- A capped body fades the edge it has more to scroll to (the house edge
+       fade): where the system hides its scrollbar (macOS), that edge is
+       what says the form runs on past it. -->
   <div
-    class="body fai-scroll kit-sheet-scroll"
+    class="body fai-scroll kit-sheet-scroll kit-edge-fade-block"
     data-vaul-no-drag
     inert={busy}
     onscroll={bodyScroll}
