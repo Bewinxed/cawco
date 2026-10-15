@@ -404,7 +404,7 @@ interface StackFrame {
 /** A sampling profile's chunk (`ProfileChunk`): new call-tree nodes, and samples with the µs since the last. */
 interface ProfileData {
   cpuProfile?: {
-    nodes?: { callFrame: Partial<StackFrame>; id: number }[];
+    nodes?: { callFrame: Partial<StackFrame>; id: number; parent?: number }[];
     samples?: number[];
   };
   startTime?: number;
@@ -433,10 +433,18 @@ interface TraceEvent {
   ts: number;
 }
 
+/** A call-tree node's script frame, `name@file:line:column`; null for the engine's own. */
+const scriptFrame = (c: Partial<StackFrame>): string | null =>
+  c.url
+    ? `${c.functionName || "(anonymous)"}@${c.url.split("/").pop()}:${(c.lineNumber ?? 0) + 1}:${(c.columnNumber ?? 0) + 1}`
+    : null;
+
 /**
  * The main thread's sampling profile, out of the trace's `Profile` and
  * `ProfileChunk` events: each sample's time (µs, the trace clock), how long
- * it stands for, and the function it was taken in.
+ * it stands for, and the function it was taken in. A frame of the engine's
+ * own (a native like `getAnimations`, with the style or layout it forces)
+ * is named with the script frame that called it: `getAnimations ← f@file`.
  */
 function samplesOf(
   events: TraceEvent[],
@@ -450,7 +458,29 @@ function samplesOf(
   if (!head) {
     return [];
   }
+  const frames = new Map<number, Partial<StackFrame>>();
+  const parents = new Map<number, number>();
   const fns = new Map<number, string>();
+  const nameOf = (id: number): string => {
+    const known = fns.get(id);
+    if (known !== undefined) {
+      return known;
+    }
+    const own = frames.get(id) ?? {};
+    let name = scriptFrame(own);
+    if (name === null) {
+      name = own.functionName || "(native)";
+      for (let up = parents.get(id); up !== undefined; up = parents.get(up)) {
+        const caller = scriptFrame(frames.get(up) ?? {});
+        if (caller) {
+          name = `${name} ← ${caller}`;
+          break;
+        }
+      }
+    }
+    fns.set(id, name);
+    return name;
+  };
   const samples: { at: number; fn: string; us: number }[] = [];
   let at = head.args?.data?.startTime ?? head.ts;
   for (const chunk of events) {
@@ -462,21 +492,17 @@ function samplesOf(
       continue;
     }
     const data = chunk.args?.data;
-    for (const { callFrame: c, id } of data?.cpuProfile?.nodes ?? []) {
-      // The engine's own frames ("(program)", "(garbage collector)", a
-      // native's) come with no script and no line.
-      fns.set(
-        id,
-        c.url
-          ? `${c.functionName || "(anonymous)"}@${c.url.split("/").pop()}:${(c.lineNumber ?? 0) + 1}`
-          : c.functionName || "(native)"
-      );
+    for (const { callFrame, id, parent } of data?.cpuProfile?.nodes ?? []) {
+      frames.set(id, callFrame);
+      if (parent !== undefined) {
+        parents.set(id, parent);
+      }
     }
     const ids = data?.cpuProfile?.samples ?? [];
     const deltas = data?.timeDeltas ?? [];
     ids.forEach((id, i) => {
       at += deltas[i] ?? 0;
-      samples.push({ at, fn: fns.get(id) ?? "?", us: deltas[i + 1] ?? 0 });
+      samples.push({ at, fn: nameOf(id), us: deltas[i + 1] ?? 0 });
     });
   }
   return samples;
