@@ -52,8 +52,42 @@ export const PROJECTS_DIR = hubProjectsDir();
 /** A deleted project's folder, kept rather than erased. */
 const TRASH_DIR = join(PROJECTS_DIR, ".trash");
 
-/** Reads and writes stop here: the folder holds text read whole. */
+/**
+ * Reads and writes stop here, text or bytes: the folder is a git repository
+ * whose every version the hub keeps, read whole. A design system's fonts
+ * (woff2, tens of KiB) and images fit; heavier media are not the folder's.
+ */
 export const FOLDER_FILE_LIMIT = 1024 * 1024;
+
+/** How a write's content is given: words as they are, or bytes as base64 (a font, an image). */
+export const FOLDER_ENCODINGS = ["utf8", "base64"] as const;
+export type FolderEncoding = (typeof FOLDER_ENCODINGS)[number];
+/** The longest content a write takes as given: a whole file's bytes, as base64, are a third longer. */
+export const FOLDER_CONTENT_LIMIT = Math.ceil(FOLDER_FILE_LIMIT / 3) * 4;
+const WHITESPACE = /\s+/g;
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/**
+ * `content` as what a write puts in the file: the words themselves, or the
+ * bytes its base64 spells; refused when it is not base64. The write sizes
+ * it ({@link FOLDER_FILE_LIMIT}) as any other.
+ */
+export const folderContent = (
+  content: string,
+  encoding: FolderEncoding = "utf8"
+): string | Uint8Array => {
+  if (encoding === "utf8") {
+    return content;
+  }
+  const compact = content.replace(WHITESPACE, "");
+  if (compact.length % 4 !== 0 || !BASE64.test(compact)) {
+    throw new FolderRefusal(
+      400,
+      "The content is not base64: give the file's bytes as standard base64 (A–Z, a–z, 0–9, + and /, padded with =)."
+    );
+  }
+  return new Uint8Array(Buffer.from(compact, "base64"));
+};
 /** Entries one listing answers before it says it stopped. */
 const LIST_LIMIT = 2000;
 /** Commits one history answers by default, and at most. */
@@ -1715,7 +1749,11 @@ export const projectFolderRoutes = (
       {
         body: t.Object({
           path: t.String(),
-          content: t.String(),
+          content: t.String({ maxLength: FOLDER_CONTENT_LIMIT }),
+          // `base64`: `content` is the file's bytes (a font, an image).
+          encoding: t.Optional(
+            t.Union(FOLDER_ENCODINGS.map((each) => t.Literal(each)))
+          ),
           message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
         }),
       },
@@ -1725,7 +1763,7 @@ export const projectFolderRoutes = (
           const written = await writeFolderFile(
             params.id,
             body.path,
-            body.content,
+            folderContent(body.content, body.encoding),
             { author: YOU, message: body.message }
           );
           changed(params.id);

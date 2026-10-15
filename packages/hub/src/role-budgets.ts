@@ -78,11 +78,15 @@ import type { Tasks } from "./tasks";
  * `scope` (memory-scopes.ts): the fleet's orchestrator text reached every
  * leaf and every non-code project. About 160 tokens for the worker, the
  * groups' words cut to a clause each (worker 24,165 measured).
+ * 2026-10-16: folder_write's `encoding` (base64), so the design-system flow
+ * writes a project's fonts and images into `design/` itself
+ * (project-folder.ts `folderContent`). About 11 tokens for the lead, its
+ * description cut to a line (lead 15,664 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 24_170,
   delegate: 6500,
-  lead: 15_660,
+  lead: 15_670,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

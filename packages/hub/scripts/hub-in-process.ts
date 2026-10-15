@@ -30,7 +30,7 @@ export async function hubInProcess(dbPath: string, home: string) {
             telegram: undefined,
             lifetime,
           },
-          { resumeWorkflows: false }
+          { background: false }
         );
         return { db, hub, lifetime };
       }),

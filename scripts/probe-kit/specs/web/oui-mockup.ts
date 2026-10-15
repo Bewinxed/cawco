@@ -25,28 +25,22 @@
  *    reach nothing inside it.
  * f. A project with no `design/` draws the primitives neutral: the system's
  *    face and a grey accent, not CawCo's.
+ * g. The shop's binary design files, its font (woff2) and a photo (png),
+ *    are written into its folder as base64 (`encoding: "base64"`, the
+ *    folder's write as folder_write makes it), never onto the hub's disk by
+ *    hand, and the mockup's file route serves each byte-identical. Caw's
+ *    own folder_write is specs/folder-bytes.ts.
  *
  *   bun scripts/probe-kit/run.ts web oui-mockup
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one project, one file, one page at a time
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import {
-  type Kit,
-  type KitFleet,
-  open,
-  ROOT,
-  type Spec,
-  settle,
-} from "../../kit";
+import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
+import { FONT, photo } from "./oui-mockup/bytes";
 
 const HERE = join(import.meta.dir, "oui-mockup");
-/** A font the dashboard ships, given to the made-up shop under a name of its own. */
-const FONT = join(
-  ROOT,
-  "apps/dashboard/node_modules/@fontsource/fredoka/files/fredoka-latin-400-normal.woff2"
-);
 const SAMPLES = ["session", "board", "dialog"] as const;
 const COMPONENT_CALL = /\b([A-Z][A-Za-z0-9]*)\(/g;
 const TASK_CARD_CALL = /\bTaskCard\(/g;
@@ -188,19 +182,26 @@ const computedColor = (page: Page, color: string) =>
     return computed;
   }, color);
 
+/** A file written into a project's folder on the hub, as words or, with `base64`, as bytes. */
+const folderPut = (
+  fleet: KitFleet,
+  projectId: string,
+  path: string,
+  content: string,
+  encoding?: "base64"
+) =>
+  fetch(`${fleet.base}/api/projects/${projectId}/folder/file`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path, content, encoding }),
+  });
+
 /** The three projects on the hub: CawCo's own, the shop with a design, and one with none. */
 async function seed(fleet: KitFleet) {
   const project = (name: string) =>
     fleet.api<{ id: string }>("/api/projects", { name, caw: false });
   const put = async (projectId: string, path: string, content: string) => {
-    const response = await fetch(
-      `${fleet.base}/api/projects/${projectId}/folder/file`,
-      {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path, content }),
-      }
-    );
+    const response = await folderPut(fleet, projectId, path, content);
     if (!response.ok) {
       throw new Error(
         `PUT ${path}: ${response.status} ${await response.text()}`
@@ -217,8 +218,8 @@ async function seed(fleet: KitFleet) {
     await put(cockpit.id, `design/mockups/${name}.oui`, sources[name]);
   }
 
-  // Harbour, a made-up shop with a design of its own; its font is binary,
-  // written into its folder on the hub's disk as a session's file would be.
+  // Harbour, a made-up shop with a design of its own; its binary files are
+  // written as base64 (g).
   const harbour = await project("Harbour");
   for (const path of [
     "manifest.json",
@@ -229,21 +230,59 @@ async function seed(fleet: KitFleet) {
   ]) {
     await put(harbour.id, `design/${path}`, await fixture(`harbour/${path}`));
   }
-  const fonts = join(
-    fleet.sandbox,
-    "hub",
-    "projects",
-    harbour.id,
-    "design",
-    "fonts"
-  );
-  await mkdir(fonts, { recursive: true });
-  await copyFile(FONT, join(fonts, "harbour-round.woff2"));
 
   // A project with no design at all.
   const plain = await project("Plain");
   await put(plain.id, "mockups/neutral.oui", await fixture("neutral.oui"));
   return { cockpit: cockpit.id, harbour: harbour.id, plain: plain.id, sources };
+}
+
+/**
+ * g: the shop's font and photo written into its folder as base64, and the
+ * mockup's file route serving each byte-identical; a content that is not
+ * base64 is refused with the reason.
+ */
+async function byteWrites(kit: Kit, fleet: KitFleet, project: string) {
+  const files = [
+    { path: "design/fonts/harbour-round.woff2", bytes: await readFile(FONT) },
+    { path: "design/assets/catch.png", bytes: photo() },
+  ];
+  for (const file of files) {
+    const written = await folderPut(
+      fleet,
+      project,
+      file.path,
+      file.bytes.toString("base64"),
+      "base64"
+    );
+    const said = await written.text();
+    const served = await fetch(
+      `${fleet.base}/api/projects/${project}/mockups/file?path=${encodeURIComponent(file.path)}`
+    );
+    const bytes = Buffer.from(await served.arrayBuffer());
+    kit.check(
+      `g: ${file.path} is written into the folder from base64, and the mockup's file route serves it byte-identical`,
+      written.ok &&
+        served.ok &&
+        bytes.equals(file.bytes) &&
+        served.headers.get("content-type") ===
+          (file.path.endsWith(".png") ? "image/png" : "font/woff2"),
+      `write ${written.status} “${said.slice(0, 120)}”; served ${served.status} ${served.headers.get("content-type")}, ${bytes.byteLength} of ${file.bytes.byteLength} bytes, equal ${bytes.equals(file.bytes)}`
+    );
+  }
+  const garbled = await folderPut(
+    fleet,
+    project,
+    "design/assets/broken.png",
+    "not base64 at all!",
+    "base64"
+  );
+  const reason = await garbled.text();
+  kit.check(
+    "g: a content that is not base64 is refused with the reason, and nothing is written",
+    garbled.status === 400 && reason.includes("not base64"),
+    `${garbled.status} “${reason.slice(0, 160)}”`
+  );
 }
 
 /** b: the dialog sample's switch, Closed then Open; the parts the Open state draws. */
@@ -363,7 +402,8 @@ const shopLook = (page: Page, family: string) =>
       tagColor: style(".price-tag")?.color,
       amount: part(".price-tag__amount")?.textContent?.trim() ?? "",
       note: part(".price-tag__note")?.innerText.trim() ?? "",
-      wave: loaded("[data-mk='Image']"),
+      wave: loaded("[data-asset='wave']"),
+      photo: loaded("[data-asset='catch']"),
       tagWave: loaded(".price-tag__wave"),
       tagWaveSrc: part(".price-tag__wave")?.getAttribute("src") ?? "",
     };
@@ -450,7 +490,7 @@ async function shop(
     `family ${family}; Text's font-family ${look.font}; face ${look.faceStatus}; usable ${look.fontUsable}`
   );
   kit.check(
-    "d: its specimen is filled from the call (props and children) and its asset is loaded, by name, from the design's files",
+    "d: its specimen is filled from the call (props and children) and its assets are loaded, by name, from the design's files (the photo written as bytes among them)",
     ["Stack", "Device", "Image", "Text", "PriceTag", "Button"].every((each) =>
       parts.names.includes(each)
     ) &&
@@ -458,9 +498,10 @@ async function shop(
       look.amount === "$12.00" &&
       look.note.includes("per kilo") &&
       look.wave &&
+      look.photo &&
       look.tagWave &&
       look.tagWaveSrc.includes("/mockups/file?path=design%2Fassets%2Fwave.svg"),
-    `drawn ${parts.names.join(", ")}; tone ${look.tag}, amount ${look.amount}, note “${look.note}”; images ${look.wave}/${look.tagWave}`
+    `drawn ${parts.names.join(", ")}; tone ${look.tag}, amount ${look.amount}, note “${look.note}”; images wave ${look.wave}, photo ${look.photo}, specimen's ${look.tagWave}`
   );
 
   const withShop = await pageStyles(page);
@@ -516,10 +557,13 @@ async function neutral(kit: Kit, page: Page, base: string, project: string) {
 const spec: Spec = {
   name: "oui-mockup",
   run: async (kit) => {
+    // The hub alone: no session runs here.
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
     fleet.launch("hub");
     await fleet.hubUp();
     const ids = await seed(fleet);
+    // The shop's font and photo, written as bytes before it is drawn.
+    await byteWrites(kit, fleet, ids.harbour);
     const base = await fleet.devDashboard();
     const page = await kit.page("desk");
     page.setDefaultTimeout(60_000);

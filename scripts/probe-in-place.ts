@@ -443,7 +443,7 @@ if (role === "sessiond") {
             lifetime: yield* HubLifetime,
             build: { version: "private", startedAt: Date.now() },
           },
-          { resumeWorkflows: false }
+          { background: false }
         )
           .post("/proof/limit", ({ body }) => {
             // An account's limit as the hub learns it: benched until four

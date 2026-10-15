@@ -2433,9 +2433,22 @@ export const normalizeRelayMessage = (body: unknown): string | undefined => {
   sent.origin ??= { kind: "human" };
 };
 
+/** How a hub is built: one that serves, or one built only to be read. */
+export interface ServerOptions {
+  /**
+   * It serves, so it starts the work that runs off the boot path: resumes,
+   * catch-ups, pollers, first looks, repairs. False for a hub built in a
+   * script only to be read (scripts/openapi.ts, scripts/hub-in-process.ts,
+   * probe-in-place.ts): none of that work starts, so nothing outlives the
+   * script's `lifetime.close()` to reach a closed database. A timer goes
+   * through `lifetime`, which that close cancels.
+   */
+  background?: boolean;
+}
+
 export const createServer = (
   { build: hubBuild, registry, db, pending, telegram, lifetime }: HubServices,
-  { resumeWorkflows = true }: { resumeWorkflows?: boolean } = {}
+  { background = true }: ServerOptions = {}
 ) => {
   // Honest ground, before anything is served. A fresh process holds no agent
   // sockets, so every row still claiming `online` is a leftover from a hub that
@@ -2445,6 +2458,13 @@ export const createServer = (
   // a `sqlite3` session at 3am. A column nobody has to remember to distrust is
   // worth one write at startup.
   db.markAllAgentsOffline();
+
+  /**
+   * The work a serving hub starts off the boot path (resumes, catch-ups,
+   * pollers, first looks, repairs), each where what it needs is made, all
+   * started once at the end and only with `background` (ServerOptions).
+   */
+  const offBoot: (() => void)[] = [];
 
   /**
    * `raw` as a path on `machineId` (db `machinePathOn`, core `machinePath`):
@@ -9526,7 +9546,7 @@ export const createServer = (
   };
   restoreShownPreviews();
   // Marks the person wrote just before the hub went down still go.
-  artifacts.resumeMarks();
+  offBoot.push(() => artifacts.resumeMarks());
 
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
@@ -14261,9 +14281,11 @@ export const createServer = (
   };
   // Named first, so a plugin re-resolved below is looked up under its row's
   // current name.
-  detach(
-    nameMarketplacesByManifest().then(reresolveFailed),
-    "fleet marketplace names and source re-resolve"
+  offBoot.push(() =>
+    detach(
+      nameMarketplacesByManifest().then(reresolveFailed),
+      "fleet marketplace names and source re-resolve"
+    )
   );
 
   /** Each place's path by its id, for a folded hook report to say which place a copy failed in. */
@@ -16219,14 +16241,12 @@ export const createServer = (
   onWorkflowAnswer(pending, (id, result) =>
     workflowRuntime.settleQuestion(id, result)
   );
-  // Schema generation needs the route types, not restored workflow attempts
-  // and parked questions accessing its scratch database after it is removed.
-  if (resumeWorkflows) {
+  offBoot.push(() => {
     detach(workflowRuntime.resume(), "workflow resume");
     // Moves go on from their records: an approval is asked again, every
     // other step waits for its machine's register.
     moves.resume();
-  }
+  });
   // A project's tasks: files in its hub folder, indexed here (tasks.ts).
   // One repository is one project: duplicates fold into the oldest
   // (project-merge.ts), at start and when a project learns its remote.
@@ -16273,34 +16293,32 @@ export const createServer = (
   // A project made from a template before the hub recorded which one is
   // known by its stages.md (stages.ts `templateOf`: kinds and moves, through
   // renames), so its starter skills reach it. A tie is left to Apply template.
-  detach(
-    (async () => {
-      let found = false;
-      for (const project of db.listProjects()) {
-        if (project.template) {
-          continue;
-        }
-        // biome-ignore lint/performance/noAwaitInLoops: one project's folder at a time, once per boot
-        const view = await tasks.stages(project.id).catch(() => undefined);
-        if (!(view?.source === "file" && view.problems.length === 0)) {
-          continue;
-        }
-        const match = templateOf(view);
-        if ("template" in match) {
-          db.setProjectTemplate(project.id, match.template);
-          found = true;
-        } else if (match.candidates.length > 1) {
-          console.log(
-            `[templates] ${project.id}: stages match no single template (${match.candidates.join(", ")})`
-          );
-        }
+  const recordTemplates = async (): Promise<void> => {
+    let found = false;
+    for (const project of db.listProjects()) {
+      if (project.template) {
+        continue;
       }
-      if (found) {
-        fanOutFleet();
+      // biome-ignore lint/performance/noAwaitInLoops: one project's folder at a time, once per boot
+      const view = await tasks.stages(project.id).catch(() => undefined);
+      if (!(view?.source === "file" && view.problems.length === 0)) {
+        continue;
       }
-    })(),
-    "project templates"
-  );
+      const match = templateOf(view);
+      if ("template" in match) {
+        db.setProjectTemplate(project.id, match.template);
+        found = true;
+      } else if (match.candidates.length > 1) {
+        console.log(
+          `[templates] ${project.id}: stages match no single template (${match.candidates.join(", ")})`
+        );
+      }
+    }
+    if (found) {
+      fanOutFleet();
+    }
+  };
+  offBoot.push(() => detach(recordTemplates(), "project templates"));
   // Attempts at tasks: started by a session, a stage's `runs:` hook, or the
   // dispatcher itself for a project that dispatches (dispatch.ts).
   // A project's views: drafts Caw writes, kept when you approve, and the
@@ -16332,7 +16350,7 @@ export const createServer = (
     },
   });
   // Open proposals are the person's asks again as the hub starts.
-  detach(projectMemory.start(), "memory proposals");
+  offBoot.push(() => detach(projectMemory.start(), "memory proposals"));
   /**
    * The control interrupt_delegate sends: the turn stops, the session keeps
    * its state. `hold`: as {@link noteInterrupt} says.
@@ -16464,7 +16482,7 @@ export const createServer = (
     history: (instanceId) => readHistory(instanceId),
     restore: caw.restore,
   });
-  repairThread();
+  offBoot.push(repairThread);
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
   // triage run per episode whose word goes to the session's lead.
   watch = createFleetWatch({
@@ -16847,7 +16865,7 @@ export const createServer = (
     },
   });
   leadRuns = routines;
-  if (resumeWorkflows) {
+  offBoot.push(() => {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
     // Stage holds (`until:`, `after:`) over: their tasks move on (waits.ts).
@@ -16862,7 +16880,7 @@ export const createServer = (
       mergeSameRemote(merging).then(() => tasks.syncAll()),
       "project merge and task catch-up"
     );
-  }
+  });
   // Connections (connections.ts): outside services the hub signs in to and
   // calls for the sessions its delegate types and projects grant them to.
   const connections = createConnections({
@@ -17173,9 +17191,9 @@ export const createServer = (
     },
   });
   ({ toolsMayHaveChanged } = delegationMcp);
-  // Each connection looked at once, off the boot path: its tools for sessions' lists.
-  connections.start();
-  if (resumeWorkflows) {
+  offBoot.push(() => {
+    // Each connection looked at once, off the boot path: its tools for sessions' lists.
+    connections.start();
     // The pollers pick up from the cursors a stopped hub kept.
     ingress.start();
     // The receiver listens and the relays' wanted state is applied.
@@ -17183,7 +17201,7 @@ export const createServer = (
     // A call a stopped hub left under way becomes unknown, never re-run;
     // then due approved actions run.
     actions.start();
-  }
+  });
 
   /**
    * What the hub holds in memory for sessions whose rows were just deleted —
@@ -18776,6 +18794,14 @@ export const createServer = (
     }
     publishInstances(message.machineId);
   };
+
+  // Everything is made: a hub that serves starts its work off the boot path.
+  // One built only to be read starts none of it.
+  if (background) {
+    for (const start of offBoot) {
+      start();
+    }
+  }
 
   return Object.assign(
     new Elysia()

@@ -96,7 +96,9 @@ const { hub, lifetime } = await Effect.runPromise(
             telegram: undefined,
             lifetime: life,
           },
-          { resumeWorkflows: false }
+          // Built only to be read: nothing starts off the boot path to reach
+          // the scratch database after `lifetime.close()` below.
+          { background: false }
         ),
       };
     }),

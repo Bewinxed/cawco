@@ -11,7 +11,12 @@
     "radius": "1rem"
   },
   "assets": [
-    { "name": "wave", "file": "assets/wave.svg", "alt": "Harbour's wave mark" }
+    { "name": "wave", "file": "assets/wave.svg", "alt": "Harbour's wave mark" },
+    {
+      "name": "catch",
+      "file": "assets/catch.png",
+      "alt": "The morning's catch"
+    }
   ],
   "specimens": [
     {

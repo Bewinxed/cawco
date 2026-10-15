@@ -800,7 +800,15 @@
                     "type": "string"
                   },
                   "content": {
+                    "maxLength": 1398104,
                     "type": "string"
+                  },
+                  "encoding": {
+                    "type": "string",
+                    "enum": [
+                      "utf8",
+                      "base64"
+                    ]
                   },
                   "message": {
                     "maxLength": 2000,

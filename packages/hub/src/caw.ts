@@ -108,8 +108,10 @@ import { VIEW_PROMPT } from "./openui";
 import type { Caps } from "./project-caps";
 import { readProjectTypes } from "./project-delegate-types";
 import {
-  FOLDER_FILE_LIMIT,
+  FOLDER_CONTENT_LIMIT,
+  FOLDER_ENCODINGS,
   FolderRefusal,
+  folderContent,
   folderPath,
   listFolder,
   readFolderFile,
@@ -2899,20 +2901,26 @@ export const createCaw = ({
         ),
         tool(
           "folder_write",
-          "Write a text file to your project's folder on the hub, as a commit. stages.md must read cleanly.",
+          "Commit a file to your project's hub folder; bytes as base64. stages.md must parse.",
           {
             path: z.string().min(1),
-            content: z.string().max(FOLDER_FILE_LIMIT),
+            content: z.string().max(FOLDER_CONTENT_LIMIT),
+            encoding: z.enum(FOLDER_ENCODINGS).optional(),
           },
-          async ({ path, content }) => {
+          async ({ path, content, encoding }) => {
             const projectId = mine();
             const rel = await folderCall(() => folderPath(path));
             const theirs = personsTier(rel);
             if (theirs) {
               throw new Error(`${rel} was not written: ${theirs}`);
             }
+            const body = await folderCall(() =>
+              folderContent(content, encoding)
+            );
             if (rel === STAGES_FILE) {
-              const reading = readStages(content);
+              const reading = readStages(
+                typeof body === "string" ? body : new TextDecoder().decode(body)
+              );
               if (!reading.ok) {
                 throw new Error(
                   `stages.md was not written: ${reading.problems.join(" ")}`
@@ -2920,7 +2928,7 @@ export const createCaw = ({
               }
             }
             const written = await folderCall(() =>
-              writeFolderFile(projectId, rel, content, {
+              writeFolderFile(projectId, rel, body, {
                 author: { name: "Caw" },
               })
             );
