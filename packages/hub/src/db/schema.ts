@@ -1484,6 +1484,28 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   lastOpenedAt: timestamp("last_opened_at"),
 });
 
+/**
+ * Each session the hub's fleet MCP relay opened (fleet-mcp-relay.ts), by the
+ * `Mcp-Session-Id` it handed the session: the `initialize` params the
+ * session announced itself with (its capabilities, clientInfo and protocol
+ * version). A session that outlives a hub restart opens its upstream session
+ * with them, exactly as it first did. Gone when the session closes, when its
+ * server is removed, and once unused for 30 days (fleet-mcp-relay.ts
+ * `SESSION_TTL_MS`).
+ */
+export const fleetMcpSessions = sqliteTable(
+  "fleet_mcp_sessions",
+  {
+    id: text("id").primaryKey(),
+    server: text("server").notNull(),
+    init: text("init", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    usedAt: timestamp("used_at").notNull(),
+  },
+  (table) => [index("fleet_mcp_sessions_used").on(table.usedAt)]
+);
+
 /** The plugin marketplaces the fleet links, so their skills can be installed. */
 export const marketplaces = sqliteTable("marketplaces", {
   name: text("name").primaryKey(),

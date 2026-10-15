@@ -102,12 +102,19 @@ export class FleetMcp {
   readonly #refreshing = new Map<string, Promise<OAuthRow>>();
   readonly #signingIn = new Map<string, Promise<SignInStart>>();
   /** Every session's requests to a signed-in server, through the hub's one identity there. */
-  readonly #relay = new FleetMcpRelay();
+  readonly #relay: FleetMcpRelay;
 
   constructor(db: DbShape, changed: () => void, lifetime: HubLifetimeShape) {
     this.#db = db;
     this.#changed = changed;
     this.#lifetime = lifetime;
+    this.#relay = new FleetMcpRelay({
+      get: (id, server) => db.getMcpSession(id, server),
+      put: (id, server, init) => db.putMcpSession({ id, server, init }),
+      touch: (id) => db.touchMcpSession(id),
+      delete: (id) => db.deleteMcpSession(id),
+      prune: (before) => db.pruneMcpSessions(before),
+    });
   }
 
   async ready(): Promise<void> {

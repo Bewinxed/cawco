@@ -19,6 +19,9 @@
  *    restarts, and every session heals to {@link TOOLS} tools with no new
  *    sign-in or change at the hub; the stub again never saw more than
  *    {@link LIMIT} within any window.
+ * 4. A session opened at the relay announcing `{ elicitation: {} }`, then a
+ *    hub restart: its next `tools/call` is answered, and reaches the stub on
+ *    an upstream session whose `initialize` carried that capability.
  *
  *   bun scripts/probe-kit/run.ts mcp-fleet-burst
  */
@@ -40,6 +43,7 @@ const respond = (request: Seen): Reply =>
 interface Rpc {
   id?: number | string;
   method: string;
+  params?: { capabilities?: unknown };
 }
 
 /** The stub upstream: its rate limit, what it saw, and a switch that fails its listing. */
@@ -51,8 +55,11 @@ const stub = () => {
     requests: 0,
     calls: 0,
     methods: {} as Record<string, number>,
+    /** For each call, the capabilities its upstream session's `initialize` announced. */
+    callCapabilities: [] as string[],
   };
-  const sessions = new Set<string>();
+  /** Each upstream session, and the capabilities its `initialize` announced. */
+  const sessions = new Map<string, string>();
   let broken = false;
   const tools = Array.from({ length: TOOLS }, (_, i) => ({
     name: `tool${i + 1}`,
@@ -82,7 +89,7 @@ const stub = () => {
   const answer = (message: Rpc, session: string | null): Response => {
     if (message.method === "initialize") {
       const id = crypto.randomUUID();
-      sessions.add(id);
+      sessions.set(id, JSON.stringify(message.params?.capabilities ?? null));
       return rpc(
         message.id,
         {
@@ -115,6 +122,7 @@ const stub = () => {
     }
     if (message.method === "tools/call") {
       stats.calls += 1;
+      stats.callCapabilities.push(sessions.get(session) ?? "none");
       return rpc(message.id, {
         result: { content: [{ type: "text", text: "stub-called" }] },
       });
@@ -208,6 +216,7 @@ const stub = () => {
         requests: 0,
         calls: 0,
         methods: {},
+        callCapabilities: [],
       });
     },
     setBroken: (value: boolean) => {
@@ -378,45 +387,52 @@ const spec: Spec = {
       // 2. Past the limit on purpose: every call answered, none 429.
       await upstream.reset();
       const relay = `${fleet.base}/mcp/fleet/${SERVER}`;
-      const opened = await fetch(relay, {
-        method: "POST",
-        headers: {
-          Accept: "application/json, text/event-stream",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: {
-            protocolVersion: "2025-06-18",
-            capabilities: {},
-            clientInfo: { name: "probe", version: "1" },
+      /** A session of the relay's own, announcing `capabilities`: its `Mcp-Session-Id`. */
+      const relayOpen = async (capabilities: object) => {
+        const opened = await fetch(relay, {
+          method: "POST",
+          headers: {
+            Accept: "application/json, text/event-stream",
+            "Content-Type": "application/json",
           },
-        }),
-      });
-      const relaySession = opened.headers.get("Mcp-Session-Id") ?? "";
-      await opened.body?.cancel();
-      const answers = await Promise.all(
-        Array.from({ length: SESSIONS }, async (_, i) => {
-          const response = await fetch(relay, {
-            method: "POST",
-            headers: {
-              Accept: "application/json, text/event-stream",
-              "Content-Type": "application/json",
-              "Mcp-Session-Id": relaySession,
-              "MCP-Protocol-Version": "2025-06-18",
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+              protocolVersion: "2025-06-18",
+              capabilities,
+              clientInfo: { name: "probe", version: "1" },
             },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 10 + i,
-              method: "tools/call",
-              params: { name: "tool1", arguments: {} },
-            }),
-            signal: AbortSignal.timeout(60_000),
-          });
-          return { status: response.status, text: await response.text() };
-        })
+          }),
+        });
+        await opened.body?.cancel();
+        return opened.headers.get("Mcp-Session-Id") ?? "";
+      };
+      const relayCall = async (session: string, id: number) => {
+        const response = await fetch(relay, {
+          method: "POST",
+          headers: {
+            Accept: "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Mcp-Session-Id": session,
+            "MCP-Protocol-Version": "2025-06-18",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id,
+            method: "tools/call",
+            params: { name: "tool1", arguments: {} },
+          }),
+          signal: AbortSignal.timeout(60_000),
+        });
+        return { status: response.status, text: await response.text() };
+      };
+      const relaySession = await relayOpen({});
+      const answers = await Promise.all(
+        Array.from({ length: SESSIONS }, (_, i) =>
+          relayCall(relaySession, 10 + i)
+        )
       );
       const answered = answers.filter(
         (one) => one.status === 200 && one.text.includes("stub-called")
@@ -477,6 +493,26 @@ const spec: Spec = {
         `3: through the heal, the stub never saw more than ${LIMIT} requests within ${WINDOW_MS / 1000} s, and refused none`,
         upstream.stats.maxInWindow <= LIMIT && upstream.stats.refused === 0,
         stubSaw()
+      );
+
+      // 4. A session's own announcement outlives a hub restart.
+      await upstream.reset();
+      const announcing = await relayOpen({ elicitation: {} });
+      await fleet.stop("hub");
+      fleet.launch("hub");
+      await fleet.hubUp();
+      const after = await relayCall(announcing, 99);
+      kit.check(
+        "4: after a hub restart, a session's next call is answered",
+        after.status === 200 && after.text.includes("stub-called"),
+        `${after.status} ${after.text.slice(0, 200)}`
+      );
+      kit.check(
+        "4: it reached the stub on an upstream session whose initialize carried the session's elicitation capability",
+        upstream.stats.callCapabilities.length === 1 &&
+          upstream.stats.callCapabilities[0] ===
+            JSON.stringify({ elicitation: {} }),
+        JSON.stringify(upstream.stats.callCapabilities)
       );
       kit.note(
         (await fleet.logs("agent"))

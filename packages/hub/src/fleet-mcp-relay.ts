@@ -37,6 +37,10 @@ const LISTING_TTL_MS = 5 * 60_000;
 const LISTER_TIMEOUT_MS = 30_000;
 /** A session the hub has not heard from in this long, with no stream open, is forgotten. */
 const IDLE_MS = 30 * 60_000;
+/** A kept session's use is written at most this often. */
+const TOUCH_MS = 60 * 60_000;
+/** A kept session unused this long is dropped from the store (CawCo's own bound: rows are small, sessions can rest for days). */
+const SESSION_TTL_MS = 30 * 24 * 60 * 60_000;
 const BACKOFF_FIRST_MS = 1000;
 const BACKOFF_MAX_MS = 60_000;
 
@@ -95,6 +99,15 @@ export interface Exchange {
 }
 export type Upstream = (exchange: Exchange) => Promise<Response>;
 
+/** Where each session's `initialize` params are kept across hub restarts (the hub's `fleet_mcp_sessions`). */
+export interface KeptSessions {
+  delete: (id: string) => void;
+  get: (id: string, server: string) => Record<string, unknown> | undefined;
+  prune: (before: Date) => number;
+  put: (id: string, server: string, init: Record<string, unknown>) => void;
+  touch: (id: string) => void;
+}
+
 interface Message {
   error?: unknown;
   id?: number | string | null;
@@ -138,6 +151,8 @@ interface Downstream {
   /** Its own `initialize` params, sent upstream when its upstream session opens; none for one adopted. */
   init?: Record<string, unknown>;
   streams: number;
+  /** When its use was last written to the store. */
+  touched: number;
   /** Its own upstream session (null for a stateless upstream), once a request needed it. */
   upstream?: Promise<string | null>;
   used: number;
@@ -241,7 +256,29 @@ const rpcAnswer = (
 
 export class FleetMcpRelay {
   readonly #servers = new Map<string, ServerState>();
+  readonly #kept: KeptSessions;
   #ids = 0;
+  #pruned = 0;
+
+  constructor(kept: KeptSessions) {
+    this.#kept = kept;
+    this.#prune();
+  }
+
+  /** Drops kept sessions unused for {@link SESSION_TTL_MS}, at most once an hour. */
+  #prune(): void {
+    const now = Date.now();
+    if (now - this.#pruned < TOUCH_MS) {
+      return;
+    }
+    this.#pruned = now;
+    const dropped = this.#kept.prune(new Date(now - SESSION_TTL_MS));
+    if (dropped > 0) {
+      console.info(
+        `[fleet-mcp] dropped ${dropped} relay session(s) unused for ${SESSION_TTL_MS / 86_400_000} days`
+      );
+    }
+  }
 
   #nextId(): number {
     this.#ids += 1;
@@ -295,8 +332,9 @@ export class FleetMcpRelay {
     return state;
   }
 
-  /** Forgets sessions gone quiet; their next request (if any) adopts them again. */
+  /** Forgets sessions gone quiet; their next request (if any) adopts them again, from the store. */
   #sweep(state: ServerState): void {
+    this.#prune();
     const now = Date.now();
     if (now - state.swept < 60_000) {
       return;
@@ -960,7 +998,9 @@ export class FleetMcpRelay {
         ? asked
         : lister.protocol;
     const id = crypto.randomUUID();
+    this.#kept.put(id, name, single.params ?? {});
     state.sessions.set(id, {
+      touched: Date.now(),
       init: single.params,
       used: Date.now(),
       streams: 0,
@@ -1077,6 +1117,33 @@ export class FleetMcpRelay {
     throw error;
   }
 
+  /**
+   * The session a request names. One not in memory (from before a hub
+   * restart, or forgotten while idle) is adopted with the `initialize` params
+   * it was opened with, read back from the store, so its upstream session
+   * opens as it first announced itself. Its use is written at most once an
+   * hour.
+   */
+  #downstream(name: string, state: ServerState, id: string): Downstream {
+    const now = Date.now();
+    let downstream = state.sessions.get(id);
+    if (!downstream) {
+      downstream = {
+        ...(id ? { init: this.#kept.get(id, name) } : {}),
+        used: now,
+        touched: now,
+        streams: 0,
+      };
+      state.sessions.set(id, downstream);
+    }
+    downstream.used = now;
+    if (id && now - downstream.touched > TOUCH_MS) {
+      downstream.touched = now;
+      this.#kept.touch(id);
+    }
+    return downstream;
+  }
+
   async handle(
     name: string,
     generation: string,
@@ -1096,21 +1163,17 @@ export class FleetMcpRelay {
       return await this.#open(name, state, upstream, single);
     }
 
-    // A session this hub never opened (one from before a hub restart, or
-    // before this relay) is adopted: its upstream session opens as it needs one.
     const id = request.headers.get("Mcp-Session-Id") ?? "";
-    let downstream = state.sessions.get(id);
-    if (!downstream) {
-      downstream = { used: Date.now(), streams: 0 };
-      state.sessions.set(id, downstream);
-    }
-    downstream.used = Date.now();
+    const downstream = this.#downstream(name, state, id);
 
     if (request.method === "GET") {
       return this.#stream(state, downstream, request);
     }
     if (request.method === "DELETE") {
       state.sessions.delete(id);
+      if (id) {
+        this.#kept.delete(id);
+      }
       this.#close(name, state, upstream, downstream);
       return new Response(null, { status: 200 });
     }

@@ -111,6 +111,7 @@ import {
   fleetHookHistory,
   fleetHooks,
   fleetMcpOauth,
+  fleetMcpSessions,
   fleetMemory,
   fleetMemoryDocs,
   fleetMemoryHistory,
@@ -632,6 +633,8 @@ export interface DbShape {
   readonly deleteMarketplace: (name: string) => void;
   readonly deleteMcpOauth: (name: string) => void;
   readonly deleteMcpServer: (name: string) => void;
+  /** A fleet MCP relay session closed: its `initialize` params go. */
+  readonly deleteMcpSession: (id: string) => void;
   readonly deleteMove: (id: string) => void;
   readonly deletePlugin: (id: string) => void;
   /** The project and its places; the sessions started from it stay, unattached. */
@@ -744,6 +747,11 @@ export interface DbShape {
         config: FleetMcpConfig;
       })
     | undefined;
+  /** The `initialize` params a fleet MCP relay session of `server` opened with, if it is kept. */
+  readonly getMcpSession: (
+    id: string,
+    server: string
+  ) => Record<string, unknown> | undefined;
   /** The stored OpenRouter key and when it was connected, or undefined while not connected. */
   readonly getOpenRouterConnection: () =>
     { apiKey: string; connectedAt: Date } | undefined;
@@ -1342,6 +1350,8 @@ export interface DbShape {
   ) => { projectId: string; path: string }[];
   /** A project's threads, newest first, each with its newest message. */
   readonly projectThreads: (projectId: string) => ThreadListRow[];
+  /** Drops the fleet MCP relay sessions unused since `before`; answers how many. */
+  readonly pruneMcpSessions: (before: Date) => number;
   /** The iOS app's pushes (push.ts): the devices that registered, by their Cawrier pairing. */
   readonly push: {
     readonly devices: () => PushDeviceRow[];
@@ -1392,6 +1402,12 @@ export interface DbShape {
     enabled?: boolean;
     projectId?: string | null;
   }) => FleetMcpServer;
+  /** A fleet MCP relay session opened: its `initialize` params, kept across hub restarts. */
+  readonly putMcpSession: (row: {
+    id: string;
+    server: string;
+    init: Record<string, unknown>;
+  }) => void;
   /** Stores the machine's latest OpenCode Go reading; one row per machine. */
   readonly putOpenCodeGoLimits: (
     machineId: string,
@@ -1881,6 +1897,8 @@ export interface DbShape {
    * Called off the daemon's pulse and throttled by the caller.
    */
   readonly touchInstanceActivity: (id: string) => void;
+  /** A fleet MCP relay session was used now. */
+  readonly touchMcpSession: (id: string) => void;
   /**
    * What a session's delegate tray can still show, oldest first: of the
    * items it delegated and the items of the projects in `ledProjectIds` (it
@@ -3558,6 +3576,36 @@ const make = async (path: string): Promise<DbShape> => {
     deleteMcpOauth: (name) => {
       db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
     },
+    getMcpSession: (id, server) =>
+      db
+        .select({ init: fleetMcpSessions.init })
+        .from(fleetMcpSessions)
+        .where(
+          and(eq(fleetMcpSessions.id, id), eq(fleetMcpSessions.server, server))
+        )
+        .get()?.init,
+    putMcpSession: ({ id, server, init }) => {
+      const row = { id, server, init, usedAt: new Date() };
+      db.insert(fleetMcpSessions)
+        .values(row)
+        .onConflictDoUpdate({ target: fleetMcpSessions.id, set: row })
+        .run();
+    },
+    touchMcpSession: (id) => {
+      db.update(fleetMcpSessions)
+        .set({ usedAt: new Date() })
+        .where(eq(fleetMcpSessions.id, id))
+        .run();
+    },
+    deleteMcpSession: (id) => {
+      db.delete(fleetMcpSessions).where(eq(fleetMcpSessions.id, id)).run();
+    },
+    pruneMcpSessions: (before) =>
+      db
+        .delete(fleetMcpSessions)
+        .where(lt(fleetMcpSessions.usedAt, before))
+        .returning({ id: fleetMcpSessions.id })
+        .all().length,
     setMcpAuth: (name, mode, error) => {
       db.update(mcpServers)
         .set({ authMode: mode, authError: error ?? null })
@@ -5149,6 +5197,9 @@ const make = async (path: string): Promise<DbShape> => {
     },
     deleteMcpServer: (name) => {
       db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
+      db.delete(fleetMcpSessions)
+        .where(eq(fleetMcpSessions.server, name))
+        .run();
       db.delete(mcpServers).where(eq(mcpServers.name, name)).run();
     },
     putMarketplace: ({ name, source }) => {

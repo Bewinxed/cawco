@@ -1212,6 +1212,13 @@
       "when": 1792067048233,
       "tag": "0172_apple_gate",
       "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "6",
+      "when": 1792080053383,
+      "tag": "0173_fleet_mcp_sessions",
+      "breakpoints": true
     }
   ]
 }
