@@ -63,9 +63,8 @@
               "Queue the next message",
               "Long transcripts stay light",
               "Continue in a new session",
-              "Hand off, with a cost check",
+              "Hand off with a cost check",
               "Self-hosted",
-              "Three agents, one board",
               "Your own accounts",
               "Spend in view"
             ],
@@ -119,9 +118,8 @@
         <div class="hero-copy">
           <h1>One board for every coding agent you run.</h1>
           <p class="lede">
-            Caw&amp;Co is a self-hosted control plane for Claude Code, OpenCode and pi. A small
-            daemon on each machine reports to a hub on your own network. One browser tab then shows
-            you every session and lets you answer the ones that are waiting.
+            Run Claude Code, OpenCode and pi across your machines, and answer every waiting session
+            from one browser tab.
           </p>
           <div class="install" id="install">
             <div class="install-head">
@@ -164,10 +162,12 @@
               </p>
             </div>
             <p class="install-note">
-              It's free, and it runs on macOS and on Linux with systemd.
-              <a href="install.sh">Read the script first</a> or
-              <a href="https://github.com/Bewinxed/cawco">browse the source</a>. Adding another
-              machine? Use Add machine in your dashboard, not this command.
+              It's free and runs on macOS and Linux with systemd.
+              <a href="install.sh">Read the script</a> or
+              <a href="https://github.com/Bewinxed/cawco">browse the source</a>.
+            </p>
+            <p class="install-note install-more">
+              For more machines, use Add machine in your dashboard, not this command.
             </p>
           </div>
         </div>
@@ -509,7 +509,7 @@
                   <dd>
                     The prompt arrives in Telegram today, with Allow and Deny. The native app for
                     iPhone, iPad and Mac is the same board at phone width, so you read the request
-                    and approve it there. It isn't released yet.
+                    and approve it there.
                   </dd>
                 </div>
               </dl>
@@ -856,55 +856,58 @@
             still.
           </p>
         </div>
-        <div class="fact">
-          <i data-icon="inbox-in"></i>
-          <h3>Queue the next message</h3>
-          <p>
-            Send while the agent works. The message waits its turn, and you can take it back until
-            it's read.
-          </p>
+        <div class="facts-group">
+          <div class="fact">
+            <i data-icon="inbox-in"></i>
+            <h3>Queue the next message</h3>
+            <p>
+              Send while the agent works. The message waits its turn, and you can take it back until
+              it's read.
+            </p>
+          </div>
+          <div class="fact">
+            <i data-icon="history"></i>
+            <h3>Long transcripts stay light</h3>
+            <p>Only the rows on screen are drawn, and older history loads a page at a time.</p>
+          </div>
+          <div class="fact">
+            <i data-icon="restart"></i>
+            <h3>Continue in a new session</h3>
+            <p>
+              The hub summarises a long conversation with a model you pick and opens a fresh session
+              from it, on any agent or model.
+            </p>
+          </div>
+          <div class="fact">
+            <i data-icon="forward"></i>
+            <h3>Hand off with a cost check</h3>
+            <p>
+              Sessions message each other across machines. When an agent sends follow-up work to a
+              Claude Code session whose prompt cache has expired, the hub refuses the first try and
+              says a fresh delegate is usually cheaper.
+            </p>
+          </div>
         </div>
-        <div class="fact">
-          <i data-icon="history"></i>
-          <h3>Long transcripts stay light</h3>
-          <p>Only the rows on screen are drawn, and older history loads a page at a time.</p>
-        </div>
-        <div class="fact">
-          <i data-icon="restart"></i>
-          <h3>Continue in a new session</h3>
-          <p>
-            The hub summarises a long conversation with a model you pick and opens a fresh session
-            from it, on any agent or model.
-          </p>
-        </div>
-        <div class="fact">
-          <i data-icon="forward"></i>
-          <h3>Hand off, with a cost check</h3>
-          <p>
-            Sessions message each other across machines. When an agent sends follow-up work to a
-            Claude Code session whose prompt cache has expired, the hub refuses the first try and
-            says a fresh delegate is usually cheaper.
-          </p>
-        </div>
-        <div class="fact">
-          <i data-icon="server-square"></i>
-          <h3>Self-hosted</h3>
-          <p>The hub runs on your tailnet or LAN and is never bound to a public address.</p>
-        </div>
-        <div class="fact">
-          <i data-icon="code-square"></i>
-          <h3>Three agents, one board</h3>
-          <p>Claude Code, OpenCode and pi run side by side.</p>
-        </div>
-        <div class="fact">
-          <i data-icon="key-minimalistic-square-2"></i>
-          <h3>Your own accounts</h3>
-          <p>You sign in to each agent yourself. Caw&amp;Co doesn't sell model usage.</p>
-        </div>
-        <div class="fact">
-          <i data-icon="wallet-money"></i>
-          <h3>Spend in view</h3>
-          <p>See what each agent cost today, against a budget you set.</p>
+        <h3 class="facts-subhead">Yours to run</h3>
+        <div class="facts-group">
+          <div class="fact">
+            <i data-icon="server-square"></i>
+            <h4>Self-hosted</h4>
+            <p>
+              A small daemon on each machine reports to a hub on your tailnet or LAN. The hub is
+              never bound to a public address.
+            </p>
+          </div>
+          <div class="fact">
+            <i data-icon="key-minimalistic-square-2"></i>
+            <h4>Your own accounts</h4>
+            <p>You sign in to each agent yourself. Caw&amp;Co doesn't sell model usage.</p>
+          </div>
+          <div class="fact">
+            <i data-icon="wallet-money"></i>
+            <h4>Spend in view</h4>
+            <p>See what each agent cost today, against a budget you set.</p>
+          </div>
         </div>
       </section>
 
@@ -947,7 +950,7 @@
                 src="/src/assets/brand/app-store-badge.svg"
                 width="120"
                 height="40"
-                alt="App Store badge"
+                alt="Coming to the App Store"
               />
               <p class="soon">It isn't released yet.</p>
             </div>

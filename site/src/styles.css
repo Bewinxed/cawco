@@ -46,7 +46,13 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
-  --btn-radius: 12px;
+  /*
+   * Page chrome takes one of two corners: a control is DESIGN.md's `rounded.lg`
+   * and a container is its `rounded.panel`. Status pills stay pills, and the
+   * scenes keep the product's own corners.
+   */
+  --radius-control: 12px;
+  --radius-container: 16px;
 
   --gutter: clamp(16px, 4vw, 40px);
 
@@ -80,6 +86,7 @@ body {
 h1,
 h2,
 h3,
+h4,
 p,
 dl,
 dd,
@@ -144,7 +151,7 @@ code {
   top: 8px;
   z-index: 10;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--ink);
   color: var(--paper);
   font-weight: 800;
@@ -217,7 +224,7 @@ code {
 .wordmark-icon {
   height: min(1.3em, 44px);
   width: auto;
-  border-radius: calc(var(--btn-radius) - 9px);
+  border-radius: calc(var(--radius-control) - 9px);
 }
 
 .top-nav {
@@ -248,7 +255,7 @@ code {
   justify-content: center;
   min-height: 44px;
   padding: 0 18px;
-  border-radius: var(--btn-radius);
+  border-radius: var(--radius-control);
   font-weight: 800;
   text-decoration: none;
   transition:
@@ -278,8 +285,10 @@ code {
   padding-block: clamp(12px, 3vw, 40px) clamp(40px, 6vw, 72px);
 }
 
+/* The headline is sized by its own column, so it holds two lines on desktop. */
 .hero-copy {
   grid-area: 1 / 1;
+  container-type: inline-size;
 }
 
 .hero-art {
@@ -291,7 +300,7 @@ code {
 }
 
 h1 {
-  font-size: clamp(2.4rem, 1.15rem + 5.3vw, 4.75rem);
+  font-size: clamp(2.4rem, 9cqi, 4.75rem);
   font-weight: 1000;
   line-height: 0.98;
   letter-spacing: -0.04em;
@@ -333,7 +342,7 @@ h1 {
   gap: 10px;
   max-width: 620px;
   padding: 8px 8px 8px 18px;
-  border-radius: 16px;
+  border-radius: var(--radius-control);
   background: var(--ink);
   color: var(--paper);
 }
@@ -353,7 +362,7 @@ h1 {
   min-height: 44px;
   padding: 0 16px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--vermilion);
   color: var(--ink);
   font: inherit;
@@ -399,7 +408,7 @@ h1 {
   max-width: 100%;
   padding: 9px 12px;
   border: 2px solid var(--ink);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--paper);
   color: var(--ink);
   font-size: 0.92rem;
@@ -434,6 +443,10 @@ h1 {
   text-wrap: balance;
 }
 
+.install-more {
+  margin-top: 2px;
+}
+
 /* Features */
 
 .section-title {
@@ -457,7 +470,7 @@ h1 {
   column-gap: clamp(16px, 2.4vw, 32px);
   row-gap: 14px;
   padding: clamp(14px, 2.2vw, 28px);
-  border-radius: clamp(20px, 2.4vw, 28px);
+  border-radius: var(--radius-container);
   background: var(--ink);
   color: var(--paper);
 }
@@ -499,7 +512,7 @@ h1 {
   min-height: 48px;
   padding: 8px 12px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--soft-on-ink);
   font: inherit;
@@ -562,7 +575,7 @@ h1 {
   min-height: 0;
   height: 30px;
   padding: 0 12px;
-  border-radius: var(--btn-radius);
+  border-radius: var(--radius-control);
   color: var(--soft-on-paper);
   font-size: 0.88rem;
   font-weight: 900;
@@ -651,7 +664,7 @@ h1 {
   position: relative;
   overflow: hidden;
   min-height: clamp(430px, 38vw, 540px);
-  border-radius: clamp(14px, 1.6vw, 18px);
+  border-radius: var(--radius-container);
   background: var(--app-page);
   color: var(--app-ink);
   container-type: size;
@@ -682,7 +695,8 @@ h1 {
     filter 260ms ease 60ms;
 }
 
-.panel h3 {
+.panel h3,
+.facts-subhead {
   font-size: clamp(1.2rem, 1rem + 0.8vw, 1.5rem);
   font-weight: 1000;
   line-height: 1.1;
@@ -783,7 +797,7 @@ h1 {
   min-height: 44px;
   padding: 0 12px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--soft-on-ink);
   font: inherit;
@@ -1809,14 +1823,21 @@ mark {
 /* Facts */
 
 .facts {
+  --facts-gap: clamp(20px, 2.6vw, 36px);
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(20px, 2.6vw, 36px);
+  gap: var(--facts-gap);
   padding-block: clamp(40px, 5.5vw, 72px);
 }
 
-.facts-head {
-  grid-column: 1 / -1;
+.facts-group {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--facts-gap);
+}
+
+.facts-subhead {
+  margin-top: clamp(4px, 1vw, 12px);
+  margin-bottom: calc(var(--facts-gap) * -0.5);
 }
 
 .facts-lede {
@@ -1830,7 +1851,7 @@ mark {
   font-size: 2.2rem;
 }
 
-.fact h3 {
+.fact :is(h3, h4) {
   margin-top: 10px;
   font-size: 1.15rem;
   font-weight: 1000;
@@ -1875,7 +1896,7 @@ mark {
   position: relative;
   overflow: hidden;
   padding: clamp(20px, 3vw, 32px);
-  border-radius: clamp(20px, 2.4vw, 28px);
+  border-radius: var(--radius-container);
 }
 
 .card-ink {
@@ -1935,6 +1956,8 @@ mark {
   width: auto;
   height: 40px;
   margin: 10px;
+  /* The app isn't out: the badge is shown muted and links nowhere. */
+  opacity: 0.4;
 }
 
 .soon {
@@ -2080,15 +2103,19 @@ mark {
   }
 
   .facts {
+    --facts-gap: 22px;
+  }
+
+  .facts-group {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 22px 18px;
+    column-gap: 18px;
   }
 
   .fact .icon {
     font-size: 1.8rem;
   }
 
-  .fact h3 {
+  .fact :is(h3, h4) {
     margin-top: 6px;
     font-size: 1.05rem;
     line-height: 1.2;
@@ -2118,6 +2145,10 @@ mark {
 
   .cmd-alert {
     left: 0;
+  }
+
+  .facts-group {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* The wordmark now carries the icon: the tagline must still fit beside it on one line. */
