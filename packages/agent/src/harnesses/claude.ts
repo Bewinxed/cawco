@@ -74,6 +74,7 @@ import {
   CONTROL_GET_TODOS,
   CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_HOME_LOGIN,
@@ -154,6 +155,7 @@ import {
   readSkillFiles,
   syncFleetConfig,
 } from "../fleet";
+import { proxiedFleetMcpUrl, proxiedToolCount } from "../fleet-mcp-listing";
 import { sessionGitEnv } from "../git-credential";
 import {
   type Harness,
@@ -2774,6 +2776,11 @@ class ClaudeSession implements HarnessSession {
       this.#fleetMcp = taking.catch(() => undefined);
       return await taking;
     }
+    if (method === CONTROL_MCP_FLEET_HEAL) {
+      const healing = this.#fleetMcp.then(() => this.#healFleetMcp());
+      this.#fleetMcp = healing.catch(() => undefined);
+      return await healing;
+    }
     // Effort is the one neutral verb with no `Query` method behind it: it is a
     // flag setting, applied over user/project/local settings and never written
     // to any of them, which is exactly a session-scoped switch. `max` is only
@@ -2887,9 +2894,10 @@ class ClaudeSession implements HarnessSession {
         })),
       };
     }
+    const configured = await this.#configuredMcp();
     const plan = planFleetMcp(
       changes,
-      await this.#configuredMcp(),
+      configured,
       await this.#handle.mcpServerStatus(),
       this.#launchMcp
     );
@@ -2921,22 +2929,115 @@ class ClaudeSession implements HarnessSession {
         server,
       ])
     );
-    const servers = changes.map(({ name, kind }): FleetMcpOutcome => {
-      const now = after.get(name);
-      const why = plan.kept.get(name);
-      const error = errors[name] ?? now?.error;
-      return {
-        name,
-        kind,
-        status: why ? `kept: ${why}` : (now?.status ?? "gone"),
-        ...(now?.tools ? { tools: now.tools.length } : {}),
-        ...(error ? { error } : {}),
-      };
-    });
+    const servers = await Promise.all(
+      changes.map(async ({ name, kind }): Promise<FleetMcpOutcome> => {
+        const now = after.get(name);
+        const why = plan.kept.get(name);
+        // The CLI keeps a server whose `tools/list` failed after its
+        // `initialize` as `connected` with no tools (CLI 2.1.296: its catch
+        // sets `e.toolsListError=y` and answers `[]`). Against the proxy's own
+        // list, that is not the server taken.
+        const short =
+          now?.status === "connected" &&
+          !why &&
+          now.tools?.length === 0 &&
+          this.#proxied(configured, name)
+            ? await proxiedToolCount(name)
+            : undefined;
+        const error =
+          errors[name] ??
+          now?.error ??
+          (short
+            ? `holds none of the ${short} tools the fleet proxy lists`
+            : undefined);
+        return {
+          name,
+          kind,
+          status: why ? `kept: ${why}` : (now?.status ?? "gone"),
+          ...(now?.tools ? { tools: now.tools.length } : {}),
+          ...(error ? { error } : {}),
+        };
+      })
+    );
     console.info(
       `[claude] ${this.instanceId}: fleet MCP ${servers.map(outcomeLine).join("; ")}`
     );
     return { servers };
+  }
+
+  /** Whether the files name `name` as a fleet server the hub proxies, dialled on this machine's path to it. */
+  #proxied(configured: Record<string, McpServerConfig>, name: string): boolean {
+    return (
+      !this.#launchMcp.has(name) &&
+      (configured[name] as { url?: string } | undefined)?.url ===
+        proxiedFleetMcpUrl(name)
+    );
+  }
+
+  /**
+   * Every fleet server the hub proxies that this session holds failed (or
+   * needing a sign-in, which the proxy never asks of it), connected with none
+   * of the tools the proxy lists, or not at all, taken again as a sign-in
+   * takes it ({@link #takeFleetMcp}). Asked by the machine at the session's
+   * attach and after each fleet sync, so a session left without a server's
+   * tools heals with no new sign-in. A server the person turned off here, or
+   * one still connecting, is left as it is; so is one whose proxy list could
+   * not be read, or lists nothing.
+   */
+  async #healFleetMcp(): Promise<{ healed: FleetMcpOutcome[] }> {
+    if (this.#fence) {
+      return { healed: [] };
+    }
+    const configured = await this.#configuredMcp();
+    const proxied = Object.keys(configured).filter((name) =>
+      this.#proxied(configured, name)
+    );
+    if (proxied.length === 0) {
+      return { healed: [] };
+    }
+    const held = new Map(
+      (await this.#handle.mcpServerStatus()).map((server) => [
+        server.name,
+        server,
+      ])
+    );
+    const broken: { name: string; was: string }[] = [];
+    for (const name of proxied) {
+      const has = held.get(name);
+      if (
+        has?.status === "disabled" ||
+        has?.status === "pending" ||
+        (has?.status === "connected" && (has.tools?.length ?? 0) > 0)
+      ) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one reading per server, shared by every session asking within seconds
+      const listed = await proxiedToolCount(name);
+      if (!listed) {
+        continue;
+      }
+      broken.push({
+        name,
+        was: has
+          ? `${has.status}${has.status === "connected" ? " (0 tools)" : ""}`
+          : "not held",
+      });
+    }
+    if (broken.length === 0) {
+      return { healed: [] };
+    }
+    const { servers } = await this.#takeFleetMcp(
+      broken.map(({ name }) => ({ name, kind: "signed-in" }))
+    );
+    console.info(
+      `[claude] ${this.instanceId}: healed fleet MCP ${broken
+        .map(({ name, was }) => {
+          const now = servers.find((server) => server.name === name);
+          return `${name} was ${was}, now ${now?.status ?? "unknown"}${now?.tools === undefined ? "" : ` (${now.tools} tools)`}${now?.error ? ` — ${now.error}` : ""}`;
+        })
+        .join("; ")}`
+    );
+    return { healed: servers };
   }
 
   async #withdraw(uuid: string): Promise<"withdrawn" | "started"> {

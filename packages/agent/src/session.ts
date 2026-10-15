@@ -49,6 +49,7 @@ import {
   CAWCO_SCRATCH_TAG,
   CONTROL_CARRY_SESSIONS,
   CONTROL_GIT_CHANGES,
+  CONTROL_MCP_FLEET_HEAL,
   CONTROL_QUERIES,
   CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
@@ -854,6 +855,8 @@ export class SessionSupervisor {
    * child rather than wait on an answer it may never give.
    */
   readonly #attaching = new Map<string, AbortController>();
+  /** The fleet MCP heal passes, one session after another ({@link #healFleetMcp}). */
+  #healing: Promise<void> = Promise.resolve();
   /**
    * The held children taken into custody whose turn is not decided yet: busy
    * until it is, as unknown is ({@link busyNow}).
@@ -2368,6 +2371,7 @@ export class SessionSupervisor {
       console.info(
         `[custody] ${instanceId}: answered after its attach: ${mode === undefined ? "no stored mode" : `in its stored mode (${mode})`}, its credential proved`
       );
+      this.#healFleetMcp([instanceId]);
     } catch (problem) {
       if (stopped?.aborted || this.#sessions.get(instanceId) !== session) {
         return;
@@ -4550,6 +4554,32 @@ export class SessionSupervisor {
     import("@cawco/core").FleetItemState
   >();
 
+  /**
+   * Asks each named live Claude session, one after another, to take again
+   * every fleet server the hub proxies that it holds broken: failed, or
+   * connected with none of the tools the proxy lists (claude.ts
+   * `#healFleetMcp`). After a fleet sync and at an attach, which every
+   * session meets at an agent restart, so sessions a past burst left without
+   * a server's tools heal with no new sign-in. One at a time, so a pass over
+   * a machine's sessions is never a burst of its own. Nothing waits on it.
+   */
+  #healFleetMcp(instanceIds: string[]): void {
+    this.#healing = this.#healing.then(async () => {
+      for (const instanceId of instanceIds) {
+        const session = this.#sessions.get(instanceId);
+        if (session?.harness !== "claude") {
+          continue;
+        }
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: one session's heal at a time, through the proxy's rate
+          await session.control(CONTROL_MCP_FLEET_HEAL, []);
+        } catch (error) {
+          warn(`fleet MCP heal of ${instanceId} failed: ${errorText(error)}`);
+        }
+      }
+    });
+  }
+
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   #syncFleet(
     incoming: FleetConfig | undefined,
@@ -4832,7 +4862,12 @@ export class SessionSupervisor {
             "fleet sync skipped: this is not the machine's agent, so machine-wide harness config is left to the agent that is"
           );
         }
-        return await this.#syncFleet(args[0] as FleetConfig, "syncFleet");
+        const report = await this.#syncFleet(
+          args[0] as FleetConfig,
+          "syncFleet"
+        );
+        this.#healFleetMcp([...this.#sessions.keys()]);
+        return report;
       }
       if (method === FLEET_STATUS) {
         return await this.#syncFleet(undefined, "fleetStatus");

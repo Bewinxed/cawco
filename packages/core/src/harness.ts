@@ -1430,6 +1430,14 @@ export interface FleetMcpChange {
  */
 export const CONTROL_MCP_FLEET_CHANGED = "fleetMcpChanged";
 /**
+ * The machine's own ask of one live session, at its attach and after each
+ * fleet sync: every fleet server the hub proxies that the session holds
+ * failed, or connected with fewer tools than the proxy lists (none), or not
+ * at all, is taken again as a sign-in would take it. Answers `{ healed }`,
+ * what each server it took again reads afterwards.
+ */
+export const CONTROL_MCP_FLEET_HEAL = "fleetMcpHeal";
+/**
  * Puts a session to sleep now if it is at rest: its machine stops everything
  * the session runs (the harness, the MCP servers it started, their browsers)
  * and says so with an `asleep` frame; its conversation stays, and its next

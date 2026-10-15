@@ -14,6 +14,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import type { DbShape } from "./db";
+import { type Exchange, FleetMcpRelay } from "./fleet-mcp-relay";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
@@ -27,13 +28,6 @@ const SHARED_REDIRECT = `${CAWCO_OAUTH_URL}/callback`;
 export interface SignInStart {
   authorizationUrl: string;
 }
-const MCP_HEADERS = [
-  "Mcp-Session-Id",
-  "MCP-Protocol-Version",
-  "Accept",
-  "Content-Type",
-  "Last-Event-ID",
-];
 const DISCOVERY_TIMEOUT_MS = 15_000;
 /** Re-probes of a server the hub could not reach: 30 s, 1 m, 2 m, 4 m, 8 m, then every 15 m. */
 const REPROBE_FIRST_MS = 30_000;
@@ -107,6 +101,8 @@ export class FleetMcp {
   >();
   readonly #refreshing = new Map<string, Promise<OAuthRow>>();
   readonly #signingIn = new Map<string, Promise<SignInStart>>();
+  /** Every session's requests to a signed-in server, through the hub's one identity there. */
+  readonly #relay = new FleetMcpRelay();
 
   constructor(db: DbShape, changed: () => void, lifetime: HubLifetimeShape) {
     this.#db = db;
@@ -143,6 +139,9 @@ export class FleetMcp {
     }
     // This probe stands in for a scheduled one; an unreachable answer schedules the next.
     this.#lifetime.cancel(this.#reprobes.get(name)?.timer);
+    // A put (its config, or its switch) starts the relay over: sessions that
+    // take the server again read it as it is now, not a list kept before.
+    this.#relay.reset(name);
     const probing = this.#probe(name).finally(() => this.#probing.delete(name));
     this.#probing.set(name, probing);
     return probing;
@@ -150,6 +149,7 @@ export class FleetMcp {
 
   /** A removed server is probed no more. */
   forget(name: string): void {
+    this.#relay.reset(name);
     this.#lifetime.cancel(this.#reprobes.get(name)?.timer);
     this.#reprobes.delete(name);
   }
@@ -497,6 +497,7 @@ export class FleetMcp {
       pending: null,
     });
     this.#db.setMcpAuth(row.name, "oauth");
+    this.#relay.reset(row.name);
     this.#changed();
     return { name: row.name };
   }
@@ -563,6 +564,7 @@ export class FleetMcp {
           tokens: null,
           expiresAt: null,
         });
+        this.#relay.reset(row.name);
         this.#changed();
       }
       // biome-ignore lint/style/useErrorCause: upstream OAuth exceptions may contain token responses; they must stay out of logs
@@ -572,86 +574,78 @@ export class FleetMcp {
     }
   }
 
+  /**
+   * One request to the upstream as the hub's sign-in: its bearer, refreshed
+   * when near expiry or refused once. A second refusal signs the server out
+   * and throws. The relay's gate stands in front of every call here.
+   */
+  async #upstream(name: string, exchange: Exchange): Promise<Response> {
+    const server = this.#server(name);
+    let row = this.#db.getMcpOauth(name);
+    if (!row?.tokens) {
+      throw new Error("Signed out.");
+    }
+    if (row.expiresAt && row.expiresAt.getTime() <= Date.now() + 60_000) {
+      row = await this.#refresh(row);
+    }
+    const upstream = new URL(row.upstream);
+    upstream.search = exchange.search || upstream.search;
+    const call = (token: string) => {
+      const headers = new Headers(
+        "url" in server.config ? server.config.headers : undefined
+      );
+      for (const [header, value] of exchange.headers) {
+        headers.set(header, value);
+      }
+      headers.set("Authorization", `Bearer ${token}`);
+      return fetch(upstream, {
+        method: exchange.method,
+        body: exchange.body,
+        headers,
+        signal: exchange.signal,
+        redirect: "error",
+      });
+    };
+    let response = await call(row.tokens?.access_token ?? "");
+    if (response.status !== 401) {
+      return response;
+    }
+    await response.body?.cancel();
+    // A concurrent request may already have refreshed the token rejected here.
+    const latest = this.#db.getMcpOauth(name);
+    row =
+      latest?.tokens?.access_token &&
+      latest.tokens.access_token !== row.tokens?.access_token
+        ? latest
+        : await this.#refresh(row);
+    response = await call(row.tokens?.access_token ?? "");
+    if (response.status === 401) {
+      await response.body?.cancel();
+      this.#db.putMcpOauth({ ...row, tokens: null, expiresAt: null });
+      this.#relay.reset(name);
+      this.#changed();
+      throw new Error("Signed out.");
+    }
+    return response;
+  }
+
   async forward(name: string, request: Request): Promise<Response> {
     await this.#probing.get(name);
     const server = this.#server(name);
     if (!server.enabled) {
       return new Response("This server is disabled.", { status: 403 });
     }
-    let row = this.#db.getMcpOauth(name);
+    const row = this.#db.getMcpOauth(name);
     if (!(row?.tokens && server.authMode === "oauth")) {
       return signedOut();
     }
     try {
-      if (row.expiresAt && row.expiresAt.getTime() <= Date.now() + 60_000) {
-        row = await this.#refresh(row);
-      }
-      const body =
-        request.method === "GET" || request.method === "HEAD"
-          ? undefined
-          : await request.arrayBuffer();
-      const upstream = new URL(row.upstream);
-      upstream.search = new URL(request.url).search || upstream.search;
-      const call = (token: string) => {
-        const headers = new Headers(
-          "url" in server.config ? server.config.headers : undefined
-        );
-        for (const header of MCP_HEADERS) {
-          const value = request.headers.get(header);
-          if (value !== null) {
-            headers.set(header, value);
-          }
-        }
-        headers.set("Authorization", `Bearer ${token}`);
-        return fetch(upstream, {
-          method: request.method,
-          body,
-          headers,
-          signal: request.signal,
-          redirect: "error",
-        });
-      };
-      let response = await call(row.tokens?.access_token ?? "");
-      if (response.status === 401) {
-        await response.body?.cancel();
-        // A concurrent request may already have refreshed the token rejected here.
-        const latest = this.#db.getMcpOauth(name);
-        row =
-          latest?.tokens?.access_token &&
-          latest.tokens.access_token !== row.tokens?.access_token
-            ? latest
-            : await this.#refresh(row);
-        response = await call(row.tokens?.access_token ?? "");
-        if (response.status === 401) {
-          await response.body?.cancel();
-          this.#db.putMcpOauth({ ...row, tokens: null, expiresAt: null });
-          this.#changed();
-          return signedOut();
-        }
-      }
-      const headers = new Headers(response.headers);
-      headers.delete("WWW-Authenticate");
-      // Fetch decoded any content encoding; a streamed response describes those decoded bytes.
-      headers.delete("Content-Encoding");
-      headers.delete("Content-Length");
-      // Hop-by-hop framing belongs to the hub's outgoing connection.
-      for (const header of [
-        "Connection",
-        "Transfer-Encoding",
-        "Keep-Alive",
-        "TE",
-        "Trailer",
-        "Upgrade",
-        "Proxy-Authenticate",
-        "Proxy-Authorization",
-      ]) {
-        headers.delete(header);
-      }
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      });
+      return await this.#relay.handle(
+        name,
+        row.generation,
+        request,
+        (exchange) => this.#upstream(name, exchange)
+      );
     } catch {
       return this.#db.getMcpOauth(name)?.tokens
         ? new Response(
