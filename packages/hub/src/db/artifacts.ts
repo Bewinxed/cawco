@@ -54,6 +54,8 @@ export interface ArtifactsDb {
   readonly legacy: () => LegacyCanvas[];
   /** A session's artifacts, newest first. */
   readonly ofInstance: (instanceId: string) => ArtifactRow[];
+  /** A project's artifacts, any of its sessions', newest first. */
+  readonly ofProject: (projectId: string) => ArtifactRow[];
   /**
    * The artifacts, any session's, that show what a workspace serves: a port
    * preview naming it (`source.workspace`), or a folder preview of its clone
@@ -161,6 +163,13 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .select()
       .from(artifacts)
       .where(eq(artifacts.instanceId, instanceId))
+      .orderBy(desc(artifacts.createdAt))
+      .all(),
+  ofProject: (projectId) =>
+    db
+      .select()
+      .from(artifacts)
+      .where(eq(artifacts.projectId, projectId))
       .orderBy(desc(artifacts.createdAt))
       .all(),
   previewing: ({ id, machineId, path }) =>

@@ -480,6 +480,11 @@ export interface ArtifactServiceDeps {
   ) => Promise<void>;
   docs: ArtifactDocs;
   instance: (id: string) => InstanceRow | undefined;
+  /**
+   * The projects session `instance` leads (their Caw): an ended writer's
+   * marks are routed to him, and he answers them in their pins' threads.
+   */
+  ledProjects: (instance: InstanceRow) => string[];
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
@@ -578,12 +583,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return row;
   };
 
-  /** Pin `pinId` on one of the session's artifacts, and that artifact; refused when no artifact of the session holds it. */
+  /**
+   * The artifacts whose pins a session answers: its own, and, for a
+   * project's lead (Caw), those of every session of the project he leads,
+   * whose ended writer's marks come to him. No other session's.
+   */
+  const answerable = (instance: InstanceRow): ArtifactRow[] => [
+    ...db.ofInstance(instance.id),
+    ...deps
+      .ledProjects(instance)
+      .flatMap((projectId) =>
+        db
+          .ofProject(projectId)
+          .filter(
+            (row) =>
+              row.instanceId !== instance.id &&
+              deps.instance(row.instanceId)?.projectId === projectId
+          )
+      ),
+  ];
+
+  /** Pin `pinId` on an artifact the session answers ({@link answerable}), and that artifact; refused when none holds it. */
   const pinOf = (
     instance: InstanceRow,
     pinId: string
   ): { pin: Pin; row: ArtifactRow } => {
-    for (const row of db.ofInstance(instance.id)) {
+    for (const row of answerable(instance)) {
       const pin = docs.doc(row.id).getMap("pins").get(pinId) as Pin | undefined;
       if (pin) {
         return { pin, row };

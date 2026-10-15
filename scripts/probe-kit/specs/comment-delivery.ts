@@ -22,13 +22,26 @@
  * 5. A pen stroke no pin stands on: one more delivery, the ink over its
  *    element with its box, and the page with the ink as its picture.
  * 6. Still no Send control in the pane.
+ * 7. A writer that has ended: a session of a project with Caw makes a page,
+ *    and its conversation is gone (the hub's own record, `last_error`, as
+ *    the harness sets it when a resume finds nothing). A pin on its page
+ *    wakes the project's Caw instead, the delivery naming the pin's id; his
+ *    comment_reply lands in that pin's thread, by the agent, where the
+ *    person reads it (7a). Caw's own turn needs his place's sandbox: run
+ *    from inside a workspace on a host that cannot nest one (core
+ *    boundary-nesting.ts), the hub's refusal of his wake is noted and the
+ *    writer is checked to be sent nothing. 7b, the rule through the tool:
+ *    a session that is not the project's lead is refused the pin; once the
+ *    hub's record names it the lead, its comment_reply lands in the thread.
  *
  *   bun scripts/probe-kit/run.ts comment-delivery
  */
 import { Database } from "bun:sqlite";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame } from "playwright-core";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox, strokeOver } from "./ink";
 
@@ -66,6 +79,57 @@ const html = `<!doctype html>
 ${PARAS.map((p) => `  <p id="${p.id}" data-insp-path="src/Page.svelte:${p.line}:3">${p.text}</p>`).join("\n")}
 </main></body></html>`;
 
+/** The ended writer's page (7). */
+const WRITER_PAGE = "ended-writer";
+const WRITER_HTML = `<!doctype html><html><body style="margin:0;font:18px/1.6 system-ui"><main style="padding:24px">
+  <p id="w" data-insp-path="src/Writer.svelte:7:3" style="width:70%">The writer's paragraph, pinned after it ended.</p>
+</main></body></html>`;
+const REPLY_TOOL = "mcp__cawco__comment_reply";
+/** The delivery routed to Caw: the writer's page, a pin's id, and that it comes to him. */
+const ROUTED =
+  /The person commented on the page "ended-writer"[\s\S]*?- Pin: ([0-9a-f-]{36})[\s\S]*?so these come to you/;
+/** The hub's log lines step 7 reads. */
+const HUB_LINE = /caw|artifacts|marks|lead/i;
+/** The host's refusal of a sandbox inside another (core boundary-nesting.ts). */
+const NESTED = /inside another bwrap sandbox|unpriv_bwrap/;
+/** The project's lead's reply in 7b. */
+const LEAD_WORDS = "The project's lead: I'll take this one.";
+const CAW_WORDS = "Caw here: its writer has ended, so I'll take this one.";
+/** Caw's part (7): the pin the delivery named, his reply issued, and its answer. */
+const caw: { answer?: string; heard?: string; issued: boolean; pin?: string } =
+  { issued: false };
+
+/** Caw's turns on the routed delivery: comment_reply on the pin it names (loaded through ToolSearch first when deferred). */
+const cawReply = (request: Seen, routed: RegExpExecArray): Reply => {
+  const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+  caw.pin ??= routed[1];
+  caw.heard ??= request.last;
+  if (caw.issued) {
+    if (request.afterTool && !caw.answer) {
+      caw.answer = request.last;
+    }
+    return text("Answered in the pin's thread.");
+  }
+  if (request.toolNames.includes(REPLY_TOOL)) {
+    caw.issued = true;
+    return {
+      everyMs: 5,
+      words: [],
+      tool: { name: REPLY_TOOL, input: { pin: caw.pin, text: CAW_WORDS } },
+    };
+  }
+  return request.toolNames.includes("ToolSearch")
+    ? {
+        everyMs: 5,
+        words: [],
+        tool: {
+          name: "ToolSearch",
+          input: { query: `select:${REPLY_TOOL}`, max_results: 1 },
+        },
+      }
+    : text(`${REPLY_TOOL} is not offered`);
+};
+
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
@@ -80,6 +144,10 @@ const respond = (request: Seen): Reply => {
   heard.push(request);
   if (NOTICE.test(request.last)) {
     return text("Heard the comments.");
+  }
+  const routed = ROUTED.exec(request.all);
+  if (routed) {
+    return cawReply(request, routed);
   }
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? asks.get(marker) : undefined;
@@ -206,6 +274,202 @@ const writePins = async (on: On, frame: Frame): Promise<number[]> => {
   return keptAt;
 };
 
+/** Comment mode on in the pane, a tap on `selector`, the person's words in pin `number`'s card. */
+const pinWith = async (
+  on: On,
+  frame: Frame,
+  selector: string,
+  number: number,
+  words: string
+) => {
+  const comment = on.page.locator(
+    ".preview-pane button[aria-keyshortcuts='C']"
+  );
+  await comment.focus();
+  await on.page.keyboard.press("c");
+  await pageInComment(frame);
+  await settle(on.page, 300);
+  const b = await screenBox(on, frame, selector);
+  await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
+  const card = on.page.locator(`.pin-card[data-pin-card="${number}"]`);
+  await card.waitFor({ timeout: 5000 });
+  await card.getByRole("textbox").fill(words);
+  await card.getByRole("button", { name: "Reply" }).click();
+  await until(
+    `pin ${number}'s words in the doc`,
+    () => docOf(frame),
+    (now) => (numbered(now.pins, number)?.thread.length ?? 0) === 1,
+    5000
+  );
+  await on.page.keyboard.press("Escape");
+  await on.page.keyboard.press("Escape");
+};
+
+/** 7. A writer that has ended: its page's pin goes to the project's Caw, whose reply lands in the pin's thread. */
+const endedWriterChecks = async (
+  desk: On,
+  base: string,
+  callIn: (to: string, tool: string, input: object) => Promise<string>
+) => {
+  const { fleet, kit } = desk;
+  const place = join(fleet.sandbox, "writer-place");
+  await mkdir(place, { recursive: true });
+  await writeFile(join(place, "README.md"), "The writer's place.\n");
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Ended writer",
+    machineId: MACHINE,
+    cwd: place,
+    caw: true,
+  });
+  const writer = await fleet.spawn("claude", "Writer", place, {
+    projectId: project.id,
+  });
+  const made = await callIn(writer, CREATE, {
+    kind: "page",
+    name: WRITER_PAGE,
+    html: WRITER_HTML,
+  });
+  if (!made.match(ANSWERED_ID)) {
+    kit.check("7: the writer's page is made", false, made.slice(0, 300));
+    return;
+  }
+  // The writer has ended: its conversation is gone, as the hub records it.
+  // One write beside the running hub's, waiting for its lock.
+  const db = new Database(fleet.env.CAWCO_DB_PATH as string);
+  try {
+    db.exec("PRAGMA busy_timeout = 15000");
+    db.query("UPDATE instances SET last_error = ? WHERE id = ?").run(
+      CLAUDE_CONVERSATION_GONE,
+      writer
+    );
+  } finally {
+    db.close();
+  }
+  // The writer's session in a tab of its own, as the person opens it.
+  const tab = await kit.page("desk");
+  const on: On = { ...desk, page: tab, session: writer };
+  await open(tab, `${base}/session/${writer}`, ".artifact-trigger");
+  const frame = await pageFrame(on);
+  await frame.waitForSelector("#w", { timeout: 60_000 });
+  await settle(on.page, 600);
+  await pinWith(on, frame, "#w", 1, "Who picks this up now?");
+  const pin = numbered((await docOf(frame)).pins, 1);
+  const hubLines = async () =>
+    (await fleet.logs("hub")).split("\n").filter((line) => HUB_LINE.test(line));
+  // Caw's reply in the thread; or, on a host whose sandbox cannot nest his
+  // (core boundary-nesting.ts), the hub's word that his wake could not start.
+  const outcome: {
+    nested: string | undefined;
+    pin: ReturnType<typeof numbered>;
+  } = await until(
+    "Caw's reply in the pin's thread, or his wake refused by the host",
+    async () => ({
+      pin: numbered((await docOf(frame)).pins, 1),
+      nested: (await hubLines()).find(
+        (line) => line.includes("marks were not delivered") && NESTED.test(line)
+      ),
+    }),
+    (now) =>
+      !!now.nested ||
+      (now.pin?.thread ?? []).some((entry) => entry.by === "agent"),
+    240_000
+  ).catch(async () => ({
+    pin: numbered((await docOf(frame)).pins, 1),
+    nested: undefined,
+  }));
+  const lead = fleet.query<{ lead_instance_id: string | null }>(
+    "SELECT lead_instance_id FROM projects WHERE id = ?",
+    project.id
+  )[0]?.lead_instance_id;
+  const writerEvents = fleet.query<{ n: number }>(
+    "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND body LIKE '%commented on the page%'",
+    writer
+  )[0]?.n;
+  const readCard = async () => {
+    await tab.locator('.pin-list .pin-row[data-pin-row="1"]').click();
+    const said = await tab
+      .locator('.pin-card[data-pin-card="1"] .entry[data-by="agent"]')
+      .allInnerTexts();
+    await tab.keyboard.press("Escape");
+    return said.join(" | ");
+  };
+  if (outcome.nested) {
+    kit.note(
+      `7a: Caw's own turn cannot run here: ${outcome.nested.slice(0, 400)} Run this spec outside a workspace for 7a's live turn.`
+    );
+    kit.check(
+      "7a: the ended writer is sent nothing; its pin's delivery goes to the project's Caw (his wake, which this host's nested sandbox refuses)",
+      writerEvents === 0 && !!pin,
+      `writer's comment events ${writerEvents}; hub ${outcome.nested.slice(0, 300)}`
+    );
+  } else {
+    const agentSaid = outcome.pin?.thread.find((entry) => entry.by === "agent");
+    kit.check(
+      "7a: a pin on an ended writer's page wakes the project's Caw, the delivery naming the pin's id",
+      !!pin &&
+        writerEvents === 0 &&
+        caw.pin === pin.id &&
+        !!caw.heard?.includes(`- Pin: ${pin.id}`) &&
+        !!lead &&
+        lead !== writer,
+      `pin ${pin?.id}; Caw heard pin ${caw.pin}; lead ${lead}; writer's comment events ${writerEvents}; heard ${caw.heard?.slice(0, 500)}; hub ${(await hubLines()).slice(-8).join(" | ")}`
+    );
+    const inCard = await readCard();
+    kit.check(
+      "7a: Caw's comment_reply lands in that pin's thread, by the agent, and the person reads it in the pin's card",
+      agentSaid?.text === CAW_WORDS && inCard.includes(CAW_WORDS),
+      `thread ${JSON.stringify(outcome.pin?.thread)}; card ${JSON.stringify(inCard)}; tool answered ${caw.answer?.slice(0, 300)}`
+    );
+  }
+
+  // 7b. The rule itself (artifacts/service.ts `answerable`), through the
+  // tool: a session of no part in the project is refused the pin; once the
+  // hub's record names it the project's lead, its reply lands in the thread.
+  if (!pin) {
+    return;
+  }
+  const refused = await callIn(desk.session, REPLY_TOOL, {
+    pin: pin.id,
+    text: "A sibling's word.",
+  });
+  const write = new Database(fleet.env.CAWCO_DB_PATH as string);
+  try {
+    write.exec("PRAGMA busy_timeout = 15000");
+    write
+      .query("UPDATE projects SET lead_instance_id = ? WHERE id = ?")
+      .run(desk.session, project.id);
+  } finally {
+    write.close();
+  }
+  const leadReply = await callIn(desk.session, REPLY_TOOL, {
+    pin: pin.id,
+    text: LEAD_WORDS,
+  });
+  const landed = await until(
+    "the lead's reply in the pin's thread",
+    async () => numbered((await docOf(frame)).pins, 1),
+    (now) => (now?.thread ?? []).some((entry) => entry.text === LEAD_WORDS),
+    10_000
+  ).catch(() => numbered({}, 1));
+  await settle(tab, 600);
+  const card = await readCard();
+  kit.check(
+    "7b: a session that is not the project's lead is refused the writer's pin, and no word of it lands",
+    refused.includes(`No artifact of this session holds pin ${pin.id}`) &&
+      !(landed?.thread ?? []).some(
+        (entry) => entry.text === "A sibling's word."
+      ),
+    refused.slice(0, 300)
+  );
+  kit.check(
+    "7b: the project's lead's comment_reply on the ended writer's pin lands in its thread, by the agent, and the person reads it in the pin's card",
+    (landed?.thread ?? []).some(
+      (entry) => entry.by === "agent" && entry.text === LEAD_WORDS
+    ) && card.includes(LEAD_WORDS),
+    `tool ${leadReply.slice(0, 200)}; thread ${JSON.stringify(landed?.thread)}; card ${JSON.stringify(card)}`
+  );
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -219,11 +483,15 @@ const run = async (kit: Kit) => {
   const session = await fleet.spawn("claude", "Comment delivery", fleet.repo);
   const dbPath = fleet.env.CAWCO_DB_PATH ?? "";
   let sent = 0;
-  const call = async (tool: string, input: object): Promise<string> => {
+  const callIn = async (
+    to: string,
+    tool: string,
+    input: object
+  ): Promise<string> => {
     sent += 1;
     const marker = String(sent);
     asks.set(marker, { name: tool, input });
-    await fleet.send(session, `PROBE-CALL:${marker}`);
+    await fleet.send(to, `PROBE-CALL:${marker}`);
     return (await until(
       `the ${tool} call (${marker})`,
       () => answered.get(marker),
@@ -231,6 +499,7 @@ const run = async (kit: Kit) => {
       180_000
     )) as string;
   };
+  const call = (tool: string, input: object) => callIn(session, tool, input);
   const made = await call(CREATE, { kind: "page", name: NAME, html });
   const id = made.match(ANSWERED_ID)?.[1];
   if (!id) {
@@ -443,6 +712,7 @@ const run = async (kit: Kit) => {
     atEnd === 0,
     `${atEnd} Send control(s)`
   );
+  await endedWriterChecks(on, base, callIn);
   kit.check(
     "the page said no error",
     said.length === 0,

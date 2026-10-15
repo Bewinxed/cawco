@@ -9155,7 +9155,7 @@ export const createServer = (
       if (refused && artifact.projectId && lead) {
         await lead.wake(artifact.projectId, {
           by: "you",
-          text: `${text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${refused.reason.replace(CLOSING_STOP, "")}), so these come to you.`,
+          text: `${text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${refused.reason.replace(CLOSING_STOP, "")}), so these come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
           ...(images.length > 0 ? { carried: { images } } : {}),
         });
         return;
@@ -9212,6 +9212,12 @@ export const createServer = (
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
     instance: (id) => db.getInstancesByIds([id])[0],
+    // Caw answers the pins of his project's sessions whose writer ended.
+    ledProjects: (instance) =>
+      db
+        .listProjects()
+        .filter((project) => project.leadInstanceId === instance.id)
+        .map((project) => project.id),
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
     open: async (artifact) => {
