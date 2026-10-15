@@ -83,17 +83,31 @@ public final class Ledger {
     /// alone. Its frame is kept as the bytes the hub sent: an absent field and
     /// an explicit null differ in the transcript's partial tail/facts updates,
     /// and what the frame says is the transcript's to read (`applyFrame`).
+    ///
+    /// An event whose frame this app cannot read keeps its place in the
+    /// order: the cursor moves past its seq and nothing is applied
+    /// (`skipped`). Dropped, its seq would be a hole, and the replay asked
+    /// for it would carry the same event, again and again.
     struct Event {
         let seq: Double
         let sessionId: String
-        let frame: Data
+        /// Nil when the frame cannot be read: the event is skipped in its place.
+        let frame: Data?
 
-        init?(_ raw: [String: Any]) {
-            guard let seq = (raw["seq"] as? NSNumber)?.doubleValue, let sessionId = raw["sessionId"] as? String,
-                  let frame = raw["frame"], let bytes = try? JSONSerialization.data(withJSONObject: frame) else { return nil }
-            self.seq = seq
-            self.sessionId = sessionId
-            self.frame = bytes
+        /// The protocol's fields one by one, each nil when it does not read.
+        struct Fields {
+            var seq: Double?
+            var sessionId: String?
+            var frame: Data?
+
+            /// A frame is an object: anything else is unreadable, never handed
+            /// to `JSONSerialization`, which raises an Objective-C exception for it.
+            init(_ raw: Any) {
+                guard let raw = raw as? [String: Any] else { return }
+                seq = (raw["seq"] as? NSNumber)?.doubleValue
+                sessionId = raw["sessionId"] as? String
+                frame = (raw["frame"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+            }
         }
     }
 
@@ -207,9 +221,11 @@ public final class Ledger {
     /// message, its seq was never applied, every event after it was a hole,
     /// and the one replay asked for carried the same frame and failed too.
     /// The stream then dropped everything after it, silently, for as long as
-    /// the transcript stayed open. A message of a session's stream that still
-    /// cannot be read is a read of that session again (`unreadable`), which
-    /// the dock says.
+    /// the transcript stayed open. So an event this app cannot read keeps its
+    /// place and is skipped there (`Event`, `backlog`), and the rest apply. A
+    /// message whose own fields do not read (no session, no events, no seq
+    /// anywhere) is a read of that session again (`unreadable`), which the
+    /// dock says.
     func handle(_ data: Data) {
         guard let raw = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let type = raw["type"] as? String else {
             log.error("stream: unreadable message: \(String(decoding: data.prefix(300), as: UTF8.self), privacy: .public)")
@@ -217,16 +233,24 @@ public final class Ledger {
         }
         switch type {
         case "stream.event":
-            let event = raw["event"] as? [String: Any]
-            guard let read = event.flatMap(Event.init) else {
-                unreadable(event?["sessionId"] as? String, type)
+            let fields = raw["event"].map(Event.Fields.init)
+            guard let sessionId = fields?.sessionId else {
+                unreadable(nil, type)
                 return
             }
-            apply(read)
+            // Its place is unknown: the next event reads as a hole, and the
+            // replay that asks for places it by its neighbours (the backlog's rule).
+            guard let seq = fields?.seq else {
+                HubNewer.skipped(1, of: "stream.event", at: ".event.seq", because: "no seq")
+                return
+            }
+            if fields?.frame == nil {
+                HubNewer.skipped(1, of: "stream.event", at: ".event.frame", because: "a frame this app cannot read")
+            }
+            apply(Event(seq: seq, sessionId: sessionId, frame: fields?.frame))
         case "stream.backlog":
-            let events = raw["events"] as? [[String: Any]]
-            let read = events?.compactMap(Event.init)
-            guard let sessionId = raw["sessionId"] as? String, let read, read.count == events?.count else {
+            guard let sessionId = raw["sessionId"] as? String, let events = raw["events"] as? [Any],
+                  let read = backlog(events, of: sessionId) else {
                 unreadable(raw["sessionId"] as? String, type)
                 return
             }
@@ -250,6 +274,34 @@ public final class Ledger {
             }
         default:
             log.error("stream: unknown message type \(type, privacy: .public)")
+        }
+    }
+
+    /// A backlog's events, each in its place. The hub sends them contiguous,
+    /// so one with no seq stands one past the event before it (or one before
+    /// the event after it), and is skipped there: its seq is a guess, its
+    /// frame never applied on one. One whose frame does not read is skipped
+    /// in its place too. Each kind of skip is said once (`HubNewer.skipped`).
+    /// Nil when no event names a seq: nothing places them.
+    private func backlog(_ events: [Any], of sessionId: String) -> [Event]? {
+        let fields = events.map(Event.Fields.init)
+        var seqs = fields.map(\.seq)
+        guard let known = seqs.firstIndex(where: { $0 != nil }), let anchor = seqs[known] else {
+            return events.isEmpty ? [] : nil
+        }
+        for index in seqs.indices where seqs[index] == nil {
+            seqs[index] = index < known ? anchor - Double(known - index) : (seqs[index - 1] ?? anchor) + 1
+        }
+        let placed = fields.filter { $0.seq == nil }.count
+        let unread = fields.filter { $0.seq != nil && $0.frame == nil }.count
+        if placed > 0 {
+            HubNewer.skipped(placed, of: "stream.backlog", at: ".events[*].seq", because: "no seq, skipped where its neighbours place it")
+        }
+        if unread > 0 {
+            HubNewer.skipped(unread, of: "stream.backlog", at: ".events[*].frame", because: "a frame this app cannot read")
+        }
+        return zip(seqs, fields).map { seq, field in
+            Event(seq: seq ?? anchor, sessionId: sessionId, frame: field.seq == nil ? nil : field.frame)
         }
     }
 
@@ -300,13 +352,18 @@ public final class Ledger {
             resync(event.sessionId)
             return
         }
-        log.debug("stream: \(session, privacy: .public) seq \(event.seq) applied")
         applyEvent(event, to: &cursor)
         cursors[event.sessionId] = cursor
     }
 
+    /// Applies its frame, or, one this app cannot read, only takes its place.
     private func applyEvent(_ event: Event, to cursor: inout Cursor) {
-        applyFrame(event.sessionId, event.frame)
+        if let frame = event.frame {
+            log.debug("stream: \(event.sessionId.prefix(8), privacy: .public) seq \(event.seq) applied")
+            applyFrame(event.sessionId, frame)
+        } else {
+            log.info("stream: \(event.sessionId.prefix(8), privacy: .public) seq \(event.seq) skipped, unreadable")
+        }
         cursor.lastSeq = event.seq
         cursor.seen = true
         cursor.subscribed = true
@@ -357,6 +414,7 @@ public final class Ledger {
             cursor.resyncFailures = 0
             cursor.warned = false
             cursors[sessionId] = cursor
+            log.info("stream: backlog for \(sessionId.prefix(8), privacy: .public) applied through \(cursor.lastSeq)")
             return
         }
         if !cursor.warned {

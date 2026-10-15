@@ -763,8 +763,14 @@ public final class SessionsStore {
         } else { blocks.append(block) }
     }
 
+    /// Read as every hub message is (`Wire.lossy`): a field of a block this app cannot read is left out of it.
+    /// A value that is not an object or array throws here, never as the
+    /// Objective-C exception `JSONSerialization` raises for it.
     private func decode<T: Decodable>(_ raw: Any) throws -> T {
-        try Wire.decoder().decode(T.self, from: JSONSerialization.data(withJSONObject: raw))
+        guard JSONSerialization.isValidJSONObject(raw) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "not a JSON object or array: \(type(of: raw))"))
+        }
+        return try Wire.lossy(T.self, from: JSONSerialization.data(withJSONObject: raw))
     }
 
     private func merge<T: Codable>(_ value: T, with patch: [String: Any]) throws -> T {

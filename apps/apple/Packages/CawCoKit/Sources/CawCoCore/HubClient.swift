@@ -20,7 +20,7 @@ extension Client {
     }
 }
 
-/// The connect-time reads (`HubConnection.readFleet`), read as the socket's
+/// The connect-time reads (`HubConnection.readFleet`) and a transcript's page, read as the socket's
 /// frames are (`Wire.lossy`): a machine, a row or a project this app's types
 /// refuse is left out of its list, and the list is read, where the generated
 /// client alone would refuse the whole answer and the board would not read.
@@ -39,6 +39,9 @@ private struct LossyReads: ClientMiddleware {
         Operations.GetApiFleetWatchNotices.id: prune(Components.Schemas.GetApiFleetWatchNotices200.self),
         Operations.GetApiUsageLimits.id: prune(Components.Schemas.UsageLimitsResponse.self),
         Operations.GetApiUsageSpend.id: prune(Components.Schemas.UsageSpend.self),
+        // A transcript's page: the read again an unreadable stream event asks
+        // for (`SessionsStore.apply`) reads without what it cannot, and ends.
+        Operations.GetApiInstancesByIdTranscript.id: prune(Components.Schemas.TranscriptPage.self),
     ]
 
     private static func prune<T: Codable & Sendable>(_: T.Type) -> Prune {
