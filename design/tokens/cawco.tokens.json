@@ -2431,6 +2431,11 @@
       "$type": "dimension",
       "$value": "32px"
     },
+    "c-find-w": {
+      "$type": "dimension",
+      "$value": "520px",
+      "$description": "Find, as the glass's card on a desk: wide enough that a row's meta line (\"Needs you · cockpit · delegate of Orchestrate cockpit fleet · linux\", 12px meta) stands on one line beside a 16px glyph, and narrow enough to leave the page live beside it at 1055px (docs/tom/find-and-mention-chosen.md)."
+    },
     "c-panel-w": {
       "$type": "dimension",
       "$value": "380px",

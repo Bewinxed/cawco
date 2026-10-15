@@ -693,6 +693,8 @@
     /* A ledger's toolbar zone, holding 32px controls 11px in. */
     --c-toolbar-zone: 55px;
     --c-toolbar-ctl: 32px;
+    /* Find, as the glass's card on a desk: wide enough that a row's meta line ("Needs you · cockpit · delegate of Orchestrate cockpit fleet · linux", 12px meta) stands on one line beside a 16px glyph, and narrow enough to leave the page live beside it at 1055px (docs/tom/find-and-mention-chosen.md). */
+    --c-find-w: 520px;
     /* A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line. */
     --c-panel-w: 380px;
     /* The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top. */
