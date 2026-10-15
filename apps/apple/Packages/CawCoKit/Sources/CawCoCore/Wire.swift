@@ -35,8 +35,9 @@ public enum Wire {
 
     /// One generated wire type read as another of the same JSON: the REST
     /// routes and the socket name the same row with two generated types.
+    /// Read as every hub message is (`lossy`): a row the other type refuses is left out.
     static func transcode<Out: Decodable>(_ value: some Encodable, as _: Out.Type = Out.self) throws -> Out {
-        try decoder().decode(Out.self, from: encoder().encode(value))
+        try lossy(Out.self, from: encoder().encode(value))
     }
 
     /// The bytes of an untyped payload (a frame inside an envelope or a stream event).
@@ -178,23 +179,23 @@ enum Inbound {
 
     /// The pulses a board frame carries, when it carries any.
     static func pulses(_ data: Data, enveloped: Bool) -> [String: Components.Schemas.SessionPulse] {
-        let decoder = Wire.decoder()
         let read = enveloped
-            ? (try? decoder.decode(Envelope<Pulses>.self, from: data))?.payload
-            : try? decoder.decode(Pulses.self, from: data)
+            ? (try? Wire.lossy(Envelope<Pulses>.self, from: data))?.payload
+            : try? Wire.lossy(Pulses.self, from: data)
         return read?.pulses ?? [:]
     }
 
     private static let streamTypes: Set<String> = ["stream.event", "stream.backlog", "stream.reset", "command.ack"]
 
+    /// Every typed read here is `Wire.lossy`: what this app cannot read in a
+    /// frame (one preview, one row) is left out of it, and the frame is read.
     static func read(_ data: Data) throws -> Inbound {
-        let decoder = Wire.decoder()
-        let route = try decoder.decode(Route.self, from: data)
+        let route = try Wire.lossy(Route.self, from: data)
         if let type = route.type, streamTypes.contains(type) {
             return .stream(data)
         }
         if route.type == "notificationsCleared" {
-            return .notificationsCleared(try decoder.decode(Cleared.self, from: data).collapseIds)
+            return .notificationsCleared(try Wire.lossy(Cleared.self, from: data).collapseIds)
         }
         if route.type == "plan.snapshot" || route.type == "plan.delta" {
             return .plan(data)
@@ -202,17 +203,16 @@ enum Inbound {
         guard route.verb == "frames" else {
             return .other
         }
-        let peek = try decoder.decode(Envelope<PayloadRoute>.self, from: data).payload
-        let payload = try decoder.decode(Envelope<Components.Schemas.FramePayload>.self, from: data).payload
+        let peek = try Wire.lossy(Envelope<PayloadRoute>.self, from: data).payload
+        let payload = try Wire.lossy(Envelope<Components.Schemas.FramePayload>.self, from: data).payload
         return .frame(Frame(payload, peek, answering: route.requestId, machineId: route.machineId ?? ""))
     }
 
     /// A frame payload on its own (a `/api/pending` envelope's payload), from
     /// the envelope's `machineId`.
     static func frame(_ data: Data, machineId: String) throws -> Frame {
-        let decoder = Wire.decoder()
-        let peek = try decoder.decode(PayloadRoute.self, from: data)
-        return Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data), peek, answering: nil, machineId: machineId)
+        let peek = try Wire.lossy(PayloadRoute.self, from: data)
+        return Frame(try Wire.lossy(Components.Schemas.FramePayload.self, from: data), peek, answering: nil, machineId: machineId)
     }
 }
 

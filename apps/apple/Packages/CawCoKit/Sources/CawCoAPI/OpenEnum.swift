@@ -32,8 +32,9 @@ extension OpenEnum {
     }
 }
 
-/// The hub sent a value this app does not know: it is newer than the app.
-/// Each enum, field and value is logged once; the first of a launch posts
+/// The hub sent a value this app does not know, or something its types cannot
+/// read: it is newer than the app. Each enum, field and value, and each
+/// skipped place and reason, is logged once; the first of a launch posts
 /// `noticed`, which the app turns into its one update notice.
 public enum HubNewer {
     /// Posted (on the decoding thread) the first time in a launch the hub sends an unknown value.
@@ -48,15 +49,28 @@ public enum HubNewer {
     static func saw(_ type: Any.Type, at path: [any CodingKey], raw: String) {
         let name = String(describing: type)
         let field = path.last { $0.intValue == nil }?.stringValue ?? "(top)"
-        let (first, new) = seen.withLock { seen in
-            let first = seen.isEmpty
-            return (first, seen.insert("\(name)\u{1F}\(field)\u{1F}\(raw)").inserted)
-        }
-        guard new else { return }
+        guard met("\(name)\u{1F}\(field)\u{1F}\(raw)") else { return }
         let where_ = path.map { $0.intValue.map { "[\($0)]" } ?? ".\($0.stringValue)" }.joined()
         log.notice("hub sent a value this app does not know: enum \(name, privacy: .public) field \(field, privacy: .public) value \(raw, privacy: .public) at \(where_, privacy: .public)")
+    }
+
+    /// The hub sent something this app's types cannot read, and the message
+    /// was read without it (CawCoCore's `Wire.lossy`): `count` places at
+    /// `place` (array indices as `[*]`) in a `message`, and why.
+    public static func skipped(_ count: Int, of message: String, at place: String, because reason: String) {
+        guard met("skipped\u{1F}\(message)\u{1F}\(place)\u{1F}\(reason)") else { return }
+        log.notice("hub sent what this app cannot read, read without it: \(count) at \(place, privacy: .public) in \(message, privacy: .public): \(reason, privacy: .public)")
+    }
+
+    /// Whether `key` is new this launch; the first of a launch posts `noticed`.
+    private static func met(_ key: String) -> Bool {
+        let (first, new) = seen.withLock { seen in
+            let first = seen.isEmpty
+            return (first, seen.insert(key).inserted)
+        }
         if first {
             NotificationCenter.default.post(name: noticed, object: nil)
         }
+        return new
     }
 }

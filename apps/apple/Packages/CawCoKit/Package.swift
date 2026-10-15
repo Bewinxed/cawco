@@ -25,6 +25,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-openapi-generator", from: "1.13.1"),
         .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.12.2"),
         .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.3.2"),
+        // The runtime's own HTTP types, named by CawCoCore's client middleware.
+        .package(url: "https://github.com/apple/swift-http-types", from: "1.8.0"),
         .package(url: "https://github.com/rive-app/rive-ios", from: "6.28.0"),
         .package(url: "https://github.com/apple/swift-markdown", from: "0.7.3"),
         .package(url: "https://github.com/raspu/Highlightr", from: "2.3.0"),
@@ -54,6 +56,7 @@ let package = Package(
                 "CawCoPush",
                 .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
                 .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),
+                .product(name: "HTTPTypes", package: "swift-http-types"),
             ],
             swiftSettings: concurrency
         ),
