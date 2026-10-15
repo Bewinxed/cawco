@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { artifacts, artifactUpdates, shownPreviews } from "./schema";
 
@@ -54,6 +54,17 @@ export interface ArtifactsDb {
   readonly legacy: () => LegacyCanvas[];
   /** A session's artifacts, newest first. */
   readonly ofInstance: (instanceId: string) => ArtifactRow[];
+  /**
+   * The artifacts, any session's, that show what a workspace serves: a port
+   * preview naming it (`source.workspace`), or a folder preview of its clone
+   * or a folder inside it on its machine. Every session's shown preview
+   * (shown_previews) is one of these rows, so this covers what panels show.
+   */
+  readonly previewing: (workspace: {
+    id: string;
+    machineId: string;
+    path: string;
+  }) => ArtifactRow[];
   /** Removes an artifact and its log. */
   readonly remove: (id: string) => void;
   /** Keeps `artifactId` as what session `instanceId`'s panel shows, in place of any other. */
@@ -148,6 +159,24 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .select()
       .from(artifacts)
       .where(eq(artifacts.instanceId, instanceId))
+      .orderBy(desc(artifacts.createdAt))
+      .all(),
+  previewing: ({ id, machineId, path }) =>
+    db
+      .select()
+      .from(artifacts)
+      .where(
+        or(
+          sql`json_extract(${artifacts.source}, '$.workspace') = ${id}`,
+          and(
+            eq(artifacts.machineId, machineId),
+            or(
+              sql`json_extract(${artifacts.source}, '$.dir') = ${path}`,
+              sql`substr(json_extract(${artifacts.source}, '$.dir'), 1, ${path.length + 1}) = ${`${path}/`}`
+            )
+          )
+        )
+      )
       .orderBy(desc(artifacts.createdAt))
       .all(),
   remove: (id) => {

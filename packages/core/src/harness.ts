@@ -1806,6 +1806,16 @@ export interface WorkspaceHolding {
   ahead: number;
   bytes: number;
   dirty: number;
+  /**
+   * Files git ignores that the clone's own work wrote (agent workspace.ts
+   * `ignoredOwn`): matched by a `.gitignore` or the person's own excludes,
+   * never by the clone's `info/exclude` (where CawCo lists what it wrote
+   * there), outside dependency and build trees, not a secret file. How many,
+   * and their size. Every archive saves them to a carry first; past
+   * {@link IGNORED_CARRY_LIMIT} they keep the workspace instead.
+   */
+  ignored?: number;
+  ignoredBytes?: number;
   stashes: number;
   /**
    * Set when the clone's folder is there and its `.git` is no repository
@@ -1821,12 +1831,30 @@ export interface WorkspaceHolding {
   strays?: number;
 }
 
-/** Whether a workspace holds nothing that is nowhere else. */
+/**
+ * The most of a clone's own ignored files ({@link WorkspaceHolding}
+ * `ignored`) an archive saves to a carry on its own. What a delegate keeps
+ * there by hand (a preview harness, probe scripts, notes, seeds) is a few
+ * MB at most; past 64 MB it is a dataset, a model or a build output under a
+ * name no rule knows, and carries are never pruned (`~/.cawco/carries`),
+ * while a machine's disk filling with spent work is what retiring
+ * workspaces is for. Past it the workspace is kept and listed, naming the
+ * size, until a person archives it with discard (which saves them all) or
+ * moves them. Decimal, as {@link sizeWords} says sizes.
+ */
+export const IGNORED_CARRY_LIMIT = 64e6;
+
+/** Whether a workspace's own ignored files are more than an archive saves on its own ({@link IGNORED_CARRY_LIMIT}). */
+const ignoredPastLimit = (holding: WorkspaceHolding): boolean =>
+  (holding.ignoredBytes ?? 0) > IGNORED_CARRY_LIMIT;
+
+/** Whether a workspace holds nothing that is nowhere else and that an archive would not save on its own. */
 export const holdsNothing = (holding: WorkspaceHolding): boolean =>
   holding.ahead === 0 &&
   holding.dirty === 0 &&
   holding.stashes === 0 &&
-  !holding.strays;
+  !holding.strays &&
+  !ignoredPastLimit(holding);
 
 const counted = (count: number, one: string, many: string): string =>
   `${count} ${count === 1 ? one : many}`;
@@ -1841,6 +1869,8 @@ export const holdingWords = (holding: WorkspaceHolding): string =>
     holding.stashes > 0 && counted(holding.stashes, "stash", "stashes"),
     holding.strays &&
       `${counted(holding.strays, "entry", "entries")} of its own in a folder that is no git clone`,
+    ignoredPastLimit(holding) &&
+      `${counted(holding.ignored ?? 0, "ignored file", "ignored files")} of its own (${sizeWords(holding.ignoredBytes ?? 0)}), past the ${sizeWords(IGNORED_CARRY_LIMIT)} an archive saves`,
   ]
     .filter(Boolean)
     .join(", ") || "nothing unlanded";

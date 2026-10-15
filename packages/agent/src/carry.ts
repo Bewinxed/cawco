@@ -15,6 +15,9 @@
  *   own is untouched;
  * - `stashes/<n>.patch`: each stash entry with its untracked files (a
  *   clone's; a worktree shares its repository's stash, which outlives it);
+ * - `ignored/`: a workspace clone's own files git ignores (workspace.ts
+ *   `ignoredOwn`), copied at their paths on this host once its boundary is
+ *   closed; every archive of a clone holding any writes a carry for them;
  * - `head` and `branch`: the commit and branch it was on;
  * - `README.md`: what it is and how to take each part back.
  *
@@ -224,13 +227,19 @@ export const carryReadme = async ({
       () => true,
       () => false
     );
-  const [bundle, commits, uncommitted, stashes] = await Promise.all(
-    ["commits.bundle", "commits", "uncommitted.patch", "stashes"].map(has)
+  const [bundle, commits, uncommitted, stashes, ignored] = await Promise.all(
+    [
+      "commits.bundle",
+      "commits",
+      "uncommitted.patch",
+      "stashes",
+      "ignored",
+    ].map(has)
   );
   return [
     `# ${title}`,
     "",
-    `Its ${checkout} ${path} held ${words} when a person let it go, on ${new Date().toISOString()}, on ${branch || "no branch"} at ${head || "an unread commit"}. This folder is that work; the ${checkout} is gone.`,
+    `Its ${checkout} ${path} held ${words} when it went, on ${new Date().toISOString()}, on ${branch || "no branch"} at ${head || "an unread commit"}. This folder is that work; the ${checkout} is gone.`,
     "",
     bundle &&
       `- \`commits.bundle\`: the commits only the ${checkout} had (\`${LOST_COMMITS[checkout]}\`). In a clone of the repository: \`git fetch ${folder}/commits.bundle 'HEAD:refs/heads/carry'\`.`,
@@ -240,6 +249,11 @@ export const carryReadme = async ({
       `- \`uncommitted.patch\`: every changed, deleted and untracked file against ${head || "HEAD"}: \`git apply ${folder}/uncommitted.patch\` at that commit.`,
     stashes &&
       "- `stashes/<n>.patch`: stash entry n, untracked files included: `git apply`.",
+    ignored &&
+      `- \`ignored/\`: the files git ignores that the work in the ${checkout} wrote (no dependency or build tree, no secret, nothing CawCo put there), each at its path in it: \`cp -a ${folder}/ignored/. <a clone>\`.`,
+    ...(left.length > 0
+      ? ["", "Not copied:", ...left.map((one) => `- ${one}`)]
+      : []),
     "",
   ]
     .filter((line): line is string => line !== false)

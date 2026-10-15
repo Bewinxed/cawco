@@ -38441,6 +38441,13 @@
           "dirty": {
             "type": "number"
           },
+          "ignored": {
+            "description": "Files git ignores that the clone's own work wrote (agent workspace.ts\n`ignoredOwn`): matched by a `.gitignore` or the person's own excludes,\nnever by the clone's `info/exclude` (where CawCo lists what it wrote\nthere), outside dependency and build trees, not a secret file. How many,\nand their size. Every archive saves them to a carry first; past\n{@link IGNORED_CARRY_LIMIT} they keep the workspace instead.",
+            "type": "number"
+          },
+          "ignoredBytes": {
+            "type": "number"
+          },
           "stashes": {
             "type": "number"
           },
