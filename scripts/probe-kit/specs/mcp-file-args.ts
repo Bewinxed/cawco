@@ -16,9 +16,17 @@
  *    workspace 7c34546f) passes; `dir` outside the workspace is refused, and
  *    inside it passes; `artifact_update`'s JSON Pointer passes; each other
  *    file argument outside the workspace is refused; another server's
- *    `filePath` outside is refused.
- * 3. Control: the judge as it stood before the cawco table (fdd325e91)
- *    refuses the live call, so the probe catches what the fix ends.
+ *    `filePath` outside is refused. Each argument the hub only reads
+ *    (`show_image` `path`, `send_to_user` `attachments`, `artifact_create`
+ *    `dir`, `generate_image` `reference_images`) passes on a dir the policy
+ *    reads but does not write, and is refused, as a read, in a sibling
+ *    workspace's scratch dir; `generate_image`'s `output_path`, a write,
+ *    is refused on that read-only dir.
+ * 3. Controls: the judge as it stood before the cawco table (fdd325e91)
+ *    refuses the live call, and the judge before the table carried each
+ *    argument's access (c09c4a28f) refuses `show_image` on the read-only
+ *    dir as a write (the live refusal of 2026-10-15), so the probe catches
+ *    what each fix ends.
  *
  *   bun scripts/probe-kit/run.ts mcp-file-args
  */
@@ -142,7 +150,7 @@ const schemaChecks = (kit: Kit, tools: Listed[]): void => {
   const missing = Object.entries(CAWCO_FILE_ARGS).flatMap(([name, keys]) => {
     const schema = byName.get(name)?.inputSchema as
       { properties?: Record<string, unknown> } | undefined;
-    return keys
+    return Object.keys(keys)
       .filter((key) => !schema?.properties?.[key])
       .map((key) => `${name}.${key}`);
   });
@@ -156,7 +164,7 @@ const schemaChecks = (kit: Kit, tools: Listed[]): void => {
       .filter(
         (key) =>
           PATH_LIKE.test(key) &&
-          !CAWCO_FILE_ARGS[tool.name]?.includes(key) &&
+          !CAWCO_FILE_ARGS[tool.name]?.[key] &&
           !NOT_FILES[tool.name]?.[key]
       )
       .map((key) => `${tool.name}.${key}`)
@@ -190,16 +198,23 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
   const clone = join(home, "clone");
   const scratch = join(root, "scratch");
   const elsewhere = join(home, "elsewhere");
+  // A dir the workspace reads but never writes, as it reads a toolchain.
+  const readOnly = join(home, "toolchain");
+  // Another workspace's scratch dir, which this one does not read.
+  const sibling = join(home, ".cawco", "tmp", "704c3333");
   await Promise.all(
-    [clone, scratch, elsewhere].map((dir) => mkdir(dir, { recursive: true }))
+    [clone, scratch, elsewhere, readOnly, sibling].map((dir) =>
+      mkdir(dir, { recursive: true })
+    )
   );
   const real = {
     home: resolveReal(home),
     clone: resolveReal(clone),
     scratch: resolveReal(scratch),
+    readOnly: resolveReal(readOnly),
   };
   const policy: Policy = {
-    allowRead: [real.clone, real.scratch],
+    allowRead: [real.clone, real.scratch, real.readOnly],
     allowWrite: [real.clone, real.scratch],
     clone: real.clone,
     denyRead: [real.home],
@@ -212,10 +227,13 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
     { harness: "claude", prefix: "mcp__cawco__" },
     { harness: "opencode", prefix: "cawco_" },
   ] as const;
+  const shot = (dir: string) => join(dir, "routines-shots", "s1.png");
   const cases: {
     allowed: boolean;
     input: Record<string, unknown>;
     label: string;
+    /** What a refusal must say, when it is one. */
+    says?: string;
     tool: string;
   }[] = [
     {
@@ -289,6 +307,55 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
       input: { message: "x", attachments: [outside("clip.mp4")] },
       allowed: false,
     },
+    {
+      label: "an image shown from a dir the workspace reads but never writes",
+      tool: "show_image",
+      input: { path: shot(readOnly), caption: "x" },
+      allowed: true,
+    },
+    {
+      label: "an attachment from a dir the workspace only reads",
+      tool: "send_to_user",
+      input: { message: "x", attachments: [shot(readOnly)] },
+      allowed: true,
+    },
+    {
+      label: "a preview of a folder the workspace only reads",
+      tool: "artifact_create",
+      input: { kind: "preview", name: "folder", dir: readOnly },
+      allowed: true,
+    },
+    {
+      label: "a reference image from a dir the workspace only reads",
+      tool: "generate_image",
+      input: {
+        prompt: "x",
+        output_path: join(clone, "out.png"),
+        reference_images: [shot(readOnly)],
+      },
+      allowed: true,
+    },
+    {
+      label: "an image written to a dir the workspace only reads",
+      tool: "generate_image",
+      input: { prompt: "x", output_path: join(readOnly, "out.png") },
+      allowed: false,
+      says: "writing",
+    },
+    {
+      label: "an image shown from a sibling workspace's scratch dir",
+      tool: "show_image",
+      input: { path: shot(sibling) },
+      allowed: false,
+      says: "reading",
+    },
+    {
+      label: "an attachment from a sibling workspace's scratch dir",
+      tool: "send_to_user",
+      input: { message: "x", attachments: [shot(sibling)] },
+      allowed: false,
+      says: "reading",
+    },
   ];
   for (const { harness, prefix } of harnesses) {
     for (const one of cases) {
@@ -298,9 +365,13 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
         input: one.input,
         cwd: clone,
       });
+      const said =
+        verdict.ok ||
+        one.says === undefined ||
+        verdict.reason.includes(`was refused: ${one.says} `);
       kit.check(
-        `${harness} ${one.tool}: ${one.label} is ${one.allowed ? "allowed" : "refused"}`,
-        verdict.ok === one.allowed,
+        `${harness} ${one.tool}: ${one.label} is ${one.allowed ? "allowed" : `refused${one.says ? ` for ${one.says}` : ""}`}`,
+        verdict.ok === one.allowed && said,
         verdict.ok ? "allowed" : verdict.reason
       );
     }
@@ -341,6 +412,28 @@ const judgeChecks = async (kit: Kit, root: string): Promise<void> => {
     "control: the judge before this change refuses the live call as a write",
     !live.ok && live.reason.includes("is outside what this workspace writes"),
     live.ok ? "allowed" : live.reason
+  );
+
+  // Control: the judge before the table carried each argument's access
+  // (c09c4a28f), on show_image from a dir the workspace only reads.
+  const allWrites = join(root, "judge-all-writes.ts");
+  await writeFile(
+    allWrites,
+    await Bun.$`git show c09c4a28f:packages/core/src/workspace-judge.ts`
+      .quiet()
+      .text()
+  );
+  const writes = (await import(allWrites)) as { judgeCall: Judge };
+  const shown = writes.judgeCall(policy, {
+    harness: "claude",
+    tool: "mcp__cawco__show_image",
+    input: { path: shot(readOnly) },
+    cwd: clone,
+  });
+  kit.check(
+    "control: the judge before the table's access refuses show_image on a read-only dir as a write",
+    !shown.ok && shown.reason.includes("is outside what this workspace writes"),
+    shown.ok ? "allowed" : shown.reason
   );
 };
 

@@ -436,8 +436,17 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
 /**
  * CawCo's own MCP server: the arguments of each of its tools that name a
  * file on the machine, from the input schemas the hub serves
- * (packages/hub/src: artifacts/tools.ts, delegation-tools.ts). Each is
- * judged as a write, the strictest case. Every other argument of a cawco
+ * (packages/hub/src: artifacts/tools.ts, delegation-tools.ts), each with
+ * what the hub does to the file on the session's behalf. Read: the hub
+ * reads it and hands it to the person or a service, never back to the
+ * session — `show_image`'s `path` (the dashboard renders it from disk),
+ * `send_to_user`'s `attachments` (sent to Telegram), `artifact_create`'s
+ * `dir` (a preview's folder served, or a page's page.html read) and
+ * `generate_image`'s `reference_images` (uploaded with the prompt). Write:
+ * `generate_image`'s `output_path`, the new PNG. Each is judged against the
+ * workspace's own policy, its read set like its write set: the hub reads
+ * outside any boundary, so a file the session may not read is not shown,
+ * sent or uploaded for it either. Every other argument of a cawco
  * tool names no file, whatever its name: `artifact_create`'s `path` is a
  * preview's URL path, `artifact_update`'s `patch[].path` a JSON Pointer,
  * `workflow_read`'s `path` a path into a result, `run_workflow`'s
@@ -449,11 +458,13 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
  * workspace. A cawco tool missing here names no file. The `mcp-file-args`
  * probe holds this table to the hub's schemas.
  */
-export const CAWCO_FILE_ARGS: Readonly<Record<string, readonly string[]>> = {
-  artifact_create: ["dir"],
-  generate_image: ["output_path", "reference_images"],
-  send_to_user: ["attachments"],
-  show_image: ["path"],
+export const CAWCO_FILE_ARGS: Readonly<
+  Record<string, Readonly<Record<string, Access>>>
+> = {
+  artifact_create: { dir: "read" },
+  generate_image: { output_path: "write", reference_images: "read" },
+  send_to_user: { attachments: "read" },
+  show_image: { path: "read" },
 };
 
 /** The cawco tool a harness's tool name is: Claude Code's `mcp__cawco__<tool>`, OpenCode's `cawco_<tool>`. */
@@ -607,21 +618,22 @@ const targets = (policy: Policy, call: Call): Target[] => {
   const input = call.input as Record<string, unknown>;
   const fields = BUILT_INS[call.harness][call.tool];
   if (!fields) {
-    // An MCP tool: every path it names is judged as a write, the strictest
-    // case, against the call's directory and the clone, where an MCP server
-    // may resolve it. A cawco tool names the files its table says; any other
-    // tool, those its arguments' names say.
+    // An MCP tool: every path it names is judged against the call's
+    // directory and the clone, where an MCP server may resolve it. A cawco
+    // tool names the files its table says, with the access it gives each;
+    // any other tool, those its arguments' names say, each judged as a
+    // write, the strictest case.
     const cawco = cawcoTool(call);
-    const paths =
+    const paths: { access: Access; path: string }[] =
       cawco === undefined
-        ? argumentPaths(input)
-        : (CAWCO_FILE_ARGS[cawco] ?? []).flatMap((key) => strings(input[key]));
-    return paths.flatMap((path) =>
+        ? argumentPaths(input).map((path) => ({ path, access: "write" }))
+        : Object.entries(CAWCO_FILE_ARGS[cawco] ?? {}).flatMap(
+            ([key, access]) =>
+              strings(input[key]).map((path) => ({ path, access }))
+          );
+    return paths.flatMap(({ path, access }) =>
       against(path, [...new Set([call.cwd, policy.clone])], policy.home).map(
-        (resolved) => ({
-          path: resolved,
-          access: "write" as const,
-        })
+        (resolved) => ({ path: resolved, access })
       )
     );
   }
