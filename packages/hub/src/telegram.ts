@@ -11,7 +11,6 @@ import {
   questionsOf as askedIn,
   CAWCO_ENV,
   changeStat,
-  commandOf,
   readEnv,
 } from "@cawco/core";
 import { detach, failureOf } from "@cawco/core/detach";
@@ -612,10 +611,11 @@ export const createTelegramBridge = ({
   };
 
   /** Where a session is, in the words its reader knows it by: its row, by its key. */
-  const header = (instanceId: string, mark: string): string => {
+  /** Who and where, the message's first line; `asker` names the session as its ask's presentation does ("Caw"). */
+  const header = (instanceId: string, mark: string, asker?: string): string => {
     const [row] = db.listedInstancesByIds([instanceId]);
     if (!row) {
-      return `${mark} <b>${esc(instanceId.slice(0, 8))}</b>`;
+      return `${mark} <b>${esc(asker ?? instanceId.slice(0, 8))}</b>`;
     }
     const machineLabel =
       db.listAgents().find((agent) => agent.machineId === row.machineId)
@@ -624,7 +624,10 @@ export const createTelegramBridge = ({
       ? db.listProjects().find((candidate) => candidate.id === row.projectId)
           ?.name
       : undefined;
-    const parts = [`<b>${esc(sessionLabel(row).name)}</b>`, esc(machineLabel)];
+    const parts = [
+      `<b>${esc(asker ?? sessionLabel(row).name)}</b>`,
+      esc(machineLabel),
+    ];
     if (project) {
       parts.push(esc(project));
     }
@@ -690,7 +693,9 @@ export const createTelegramBridge = ({
     }
     const request = envelope.payload as PermissionRequest;
     const { requestId } = envelope;
-    const lines = [header(request.instanceId, "❓")];
+    const lines = [
+      header(request.instanceId, "❓", request.presentation?.asker),
+    ];
     let buttons: InlineButton[][] | undefined;
 
     const questions = questionsOf(request);
@@ -720,9 +725,9 @@ export const createTelegramBridge = ({
         `Answer in the dashboard → ${esc(dashboardUrl(registry))}/session/${request.instanceId}`
       );
     } else {
-      // The card's own words (core permission-presentation.ts): what will
-      // happen and to what, how much it changes, and who asks. The diff
-      // itself stays in the app.
+      // The card's own words (core permission-presentation.ts), under the
+      // header that names who asks and where: what will happen and why, how
+      // much it changes, then the command. The diff itself stays in the app.
       const { presentation } = request;
       lines.push("", `<b>${esc(clip(presentation.summary, 600))}</b>`);
       if (presentation.changes.length > 0) {
@@ -733,16 +738,14 @@ export const createTelegramBridge = ({
       } else if (presentation.detail) {
         lines.push(esc(presentation.detail));
       }
-      const command = commandOf(request.input);
-      if (command) {
-        lines.push(`<code>${esc(clip(command, 900))}</code>`);
+      if (presentation.command) {
+        lines.push(`<code>${esc(clip(presentation.command, 900))}</code>`);
       }
       for (const field of presentation.fields.slice(0, TELEGRAM_FIELDS)) {
         lines.push(
           `${esc(field.key)}: <code>${esc(clip(field.value, 200))}</code>`
         );
       }
-      lines.push(`<i>Asked by ${esc(presentation.asker)}</i>`);
       buttons = [
         [
           { text: "Allow", callback_data: `p:${requestId}:a` },

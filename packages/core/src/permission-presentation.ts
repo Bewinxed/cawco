@@ -34,17 +34,35 @@ export interface PermissionField {
 }
 
 export interface PermissionPresentation {
-  /** The session that asked, by the name the board gives it. */
+  /** The session that asked, by the name the board gives it ("Caw" for a project's lead). */
   asker: string;
   /** The changes the call makes, each drawn as a diff. Empty when it changes no text. */
   changes: PermissionChange[];
+  /**
+   * The shell command a shell call runs, whole and out of a boundary's
+   * rewrite: shown under the summary on every surface, one line until
+   * opened. Absent for any other call.
+   */
+  command?: string;
   /** The line under the summary: how much changes and where ("3 lines changed in Working style"). */
   detail?: string;
   /** The rest of the input worth reading, secrets hidden. What the summary and the diffs already say is left out. */
   fields: PermissionField[];
-  /** What will happen and to what, in one line: "Change the fleet's CLAUDE.md". */
+  /** The project the asker works in, by name; absent for a session in none. The card's head reads "Caw · cockpit". */
+  project?: string;
+  /**
+   * What will happen and why, in one line: "Change the fleet's CLAUDE.md";
+   * for a shell call, the session's own reason for it ("Check whether the
+   * two commits are on origin/main"), its command under it in `command`.
+   */
   summary: string;
 }
+
+/** Who asks and where, as an ask's head names them: "Caw · cockpit". */
+export const askerLine = (presentation: PermissionPresentation): string =>
+  presentation.project
+    ? `${presentation.asker} · ${presentation.project}`
+    : presentation.asker;
 
 /** The settings groups an admin write names things in. */
 export type AdminGroup =
@@ -57,6 +75,8 @@ export interface PresentationContext {
   memory: (path: string | null) => string | undefined;
   /** The current name of a setting the fleet keeps, by the key the write names it with; undefined when it does not exist. */
   named: (group: AdminGroup, key: string) => string | undefined;
+  /** The asking session's project, by name; undefined when it is in none. */
+  project?: string;
 }
 
 // ── line changes ─────────────────────────────────────────────────────────
@@ -902,25 +922,20 @@ export const unboundedCommand = (command: string): string => {
 };
 
 /**
- * A shell call, presented: the command first, on every surface that shows
- * the summary alone (Caw's panel, the peek), since what runs is what the
- * person approves; the session's own words for it follow. Its fields carry
- * the command whole, out of a boundary's rewrite.
+ * A shell call, presented: the session's own reason for it as the summary
+ * ("Run a command" when it gave none), and the command whole, out of a
+ * boundary's rewrite, as `command`. Every surface draws `command` under the
+ * summary, the peek and Caw's panel too, since what runs is what the
+ * person approves.
  */
 const shellCall = (input: Record<string, unknown>): Presented => {
-  const described = text(input.description);
   const whole = commandOf(input);
-  const command = whole?.split("\n")[0]?.trim() ?? "";
-  const words = described ? ` · ${described}` : "";
-  return only(
-    command
-      ? `Run: ${cut(command, COMMAND_CAP)}${words}`
-      : `Run a command${words}`,
-    fieldsOf(whole === null ? input : { ...input, command: whole }, [
-      "command",
-      "description",
-    ])
-  );
+  return {
+    summary: text(input.description)?.trim() ?? "Run a command",
+    changes: [],
+    ...(whole?.trim() ? { command: whole } : {}),
+    fields: fieldsOf(input, ["command", "description"]),
+  };
 };
 
 /** The shell command a permission is about, said whole under the summary. */
@@ -938,20 +953,24 @@ export function presentPermission(
   input: Record<string, unknown>,
   context: PresentationContext
 ): PermissionPresentation {
+  const who = {
+    asker: context.asker,
+    ...(context.project ? { project: context.project } : {}),
+  };
   const questions = questionsOf(toolName, input);
   if (questions) {
     return {
-      asker: context.asker,
+      ...who,
       summary: questions.map((question) => question.question).join(" · "),
       changes: [],
       fields: [],
     };
   }
   if (toolName === MEMORY_PROPOSAL_TOOL) {
-    return { asker: context.asker, ...memoryProposal(input) };
+    return { ...who, ...memoryProposal(input) };
   }
   if (toolName === PROJECT_SETTINGS_TOOL) {
-    return { asker: context.asker, ...projectSettings(input) };
+    return { ...who, ...projectSettings(input) };
   }
   const admin = CAWCO_ADMIN_WRITE.exec(toolName);
   // An MCP tool is never a harness's own, whatever it is called.
@@ -959,5 +978,5 @@ export function presentPermission(
     (admin ? adminWrite(admin[1], input, context) : undefined) ??
     (MCP_NAME.test(toolName) ? undefined : builtIn(toolName, input)) ??
     only(toolDisplayName(toolName), fieldsOf(input));
-  return { asker: context.asker, ...presented };
+  return { ...who, ...presented };
 }

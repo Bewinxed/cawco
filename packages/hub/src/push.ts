@@ -258,6 +258,13 @@ interface Notification {
   readonly threadId: string;
 }
 
+/** What an ask's visible name reads of its session's row. */
+interface AskRow {
+  readonly role?: string | null;
+  readonly title: string | null;
+  readonly titleSource: string | null;
+}
+
 /** What the visible alert says under a name: the status line. */
 const NEEDS_YOU = "Needs you";
 
@@ -1098,12 +1105,15 @@ export const createPush = ({
     return host ? `${harness} on ${machineLabel(host)}` : harness;
   };
 
-  /** An ask's visible name: the owner's title for its session, its workflow's name, else {@link sessionName}. */
+  /** An ask's visible name: Caw for a project's lead, the owner's title for its session, its workflow's name, else {@link sessionName}. */
   const askName = (
-    row: { title: string | null; titleSource: string | null } | undefined,
+    row: AskRow | undefined,
     workflowRunId: string | undefined,
     instanceId: string
   ): string => {
+    if (row?.role === "lead") {
+      return "Caw";
+    }
     const owned = row?.titleSource === "owner" ? row.title?.trim() : undefined;
     const run = workflowRunId ? db.getWorkflowRun(workflowRunId) : undefined;
     return (
@@ -1120,7 +1130,7 @@ export const createPush = ({
    * any other by its session or workflow ({@link askName}).
    */
   const askTitle = (
-    row: { title: string | null; titleSource: string | null } | undefined,
+    row: AskRow | undefined,
     payload: Partial<PermissionRequestFrame> & { workflowRunId?: string },
     instanceId: string
   ): string => {

@@ -6,7 +6,7 @@
  * made from or joined to a folder. Every workspace is then a clone, on one
  * path. The person is never asked: CawCo makes one local commit of what is
  * safe to keep in history, pushes nothing, adds no remote, and notes in the
- * project's newest thread what the commit took and what it left out.
+ * project's newest conversation what the commit took and what it left out.
  *
  * The contract other modules call ({@link PlaceRepos}):
  *
@@ -36,7 +36,7 @@ export interface PlaceRepoDeps {
     method: string,
     args: unknown[]
   ) => Promise<unknown>;
-  readonly db: Pick<DbShape, "listAgents" | "newestThread" | "project">;
+  readonly db: Pick<DbShape, "listAgents" | "newestConversation" | "project">;
   /**
    * A note in a project's thread, waking no model (caw.ts `notice`); called
    * only once the hub is up, so it may reach a Caw made after this.
@@ -96,22 +96,26 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     return agent ? machineLabel(agent.hostname) : machineId;
   };
 
-  /** The note a made repository leaves in the project's newest thread. */
+  /** The note a made repository leaves in the project's newest conversation. */
   const noteMade = (
     place: PlaceRef,
     made: Exclude<PlaceRepo, { state: "checkout" }>
   ): void => {
     const leaf = made.root.split("/").filter(Boolean).at(-1) ?? made.root;
-    notice(place.projectId, db.newestThread(place.projectId)?.id ?? null, {
-      title: `Made ${leaf} a git repository`,
-      event: {
-        kind: "repo",
-        root: made.root,
-        machineId: place.machineId,
-        commit: made.commit ?? null,
-      },
-      body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit?.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}`,
-    });
+    notice(
+      place.projectId,
+      db.newestConversation(place.projectId)?.id ?? null,
+      {
+        title: `Made ${leaf} a git repository`,
+        event: {
+          kind: "repo",
+          root: made.root,
+          machineId: place.machineId,
+          commit: made.commit ?? null,
+        },
+        body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit?.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}`,
+      }
+    );
   };
 
   const ensure = async (place: PlaceRef): Promise<PlaceRepo> => {

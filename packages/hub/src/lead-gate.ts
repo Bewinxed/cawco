@@ -18,14 +18,21 @@
  * 3. **Size**: an edit that would take the wake past {@link FILES_PER_WAKE}
  *    files, or touches a file that is not docs, config or assets by its path,
  *    is refused: "file a task".
- * 4. **Wake source**: a turn whose every read send is the owner's message
+ * 4. **Reads run**: a shell line that only reads ({@link readOnly}: readers
+ *    and reading git, `git fetch` of a named remote among them, output only
+ *    into `/dev/null` or another descriptor) runs without asking whatever
+ *    woke him: it writes nothing in the tree, publishes nothing, and reaches
+ *    no host the project does not name.
+ * 5. **Wake source**: a turn whose every read send is the owner's message
  *    (a thread message, a view request, his own words straight into the
  *    session) with no outside text riding on it, and that has read no web
- *    content, runs the {@link allowlisted} commands without asking. Anything
- *    else (an event, a routine, a report, a nudge, an inbox of outside
- *    events, a web read, a turn whose source is unknown) is external: every
- *    call raises the Approve card, the ask parked as any session's is.
- * 5. **Visible**: every call is a `lead_calls` row and a note in the thread
+ *    content, also runs `git init`, `git add <paths>` and `git commit` where
+ *    no one else works ({@link allowlisted}). Anything else (an edit, any
+ *    other write, a line the gate cannot read; or those tidy writes in a turn
+ *    an event, a routine, a report, a nudge, an inbox of outside events or a
+ *    web read woke) raises the Approve card, the ask parked as any session's
+ *    is.
+ * 6. **Visible**: every call is a `lead_calls` row and a note in the thread
  *    his turn answers: the command, its exit, the files it touched; a
  *    refusal with why, your Deny as yours.
  *
@@ -72,10 +79,27 @@ const GATED: ReadonlySet<string> = new Set([
 interface ShellLine {
   /** A `$(…)`, backticks or `<(…)` / `>(…)`: commands run to make words. */
   readonly nested: string[];
-  /** A redirection (`>`, `>>`, `<`, `2>&1`) or a background `&`. */
-  readonly redirects: boolean;
   readonly segments: string[][];
+  /**
+   * It writes or leaves something running by its own syntax: a redirection
+   * into a file (`>`, `>>`, `>|`, `&>` anywhere but `/dev/null`), a here
+   * document or string, a process substitution, or a background `&`. A
+   * redirection into `/dev/null`, one file descriptor onto another (`2>&1`)
+   * and input from a file (`< notes.txt`) only read.
+   */
+  readonly writes: boolean;
 }
+
+/** A redirection's operator, at the `<` or `>` it starts with. */
+const REDIRECT_OP = /^(?:<<<|<<-?|<>|<&|>>|>\||>&|<|>)/;
+/** Where one file descriptor goes onto another, or is closed: `&1`'s `1`, `&-`'s `-`. */
+const DESCRIPTOR = /^(?:\d+|-)$/;
+/** A redirection's target ends at a blank or at what ends a command. */
+const TARGET_END = /[ \t\n|;&()<>]/;
+/** Where output may go and nothing is written. */
+const DEV_NULL = "/dev/null";
+/** An fd number written right before a redirection, as in `2>`. */
+const FD_NUMBER = /^\d+$/;
 
 const BLANK = /[ \t]/;
 
@@ -118,7 +142,7 @@ const SEPARATORS: ReadonlySet<string> = new Set(["|", ";", "\n", "(", ")"]);
 class ShellReader {
   readonly segments: string[][] = [[]];
   readonly nested: string[] = [];
-  redirects = false;
+  writes = false;
   /** The word being read; undefined between words (`''` is a word). */
   #word: string | undefined;
   #quote: "'" | '"' | null = null;
@@ -138,7 +162,7 @@ class ShellReader {
     return {
       segments: this.segments.filter((words) => words.length > 0),
       nested: this.nested,
-      redirects: this.redirects,
+      writes: this.writes,
     };
   }
 
@@ -209,16 +233,21 @@ class ShellReader {
       return at;
     }
     if (char === "<" || char === ">") {
-      return this.#redirect(after, at);
+      return this.#redirect(at);
     }
     if (BLANK.test(char)) {
       this.#endWord();
       return at;
     }
+    if (char === "&" && after === ">") {
+      // `&>` and `&>>`: both streams, read as `>` is.
+      this.#endWord();
+      return this.#redirect(at + 1);
+    }
     if (char === "&") {
-      const before = this.#text[at - 1];
-      if (after !== "&" && before !== ">" && before !== "<") {
-        this.redirects = true;
+      if (after !== "&") {
+        // A background `&`: the command is left running past the call.
+        this.writes = true;
       }
       this.#nextCommand();
       return after === "&" ? at + 1 : at;
@@ -231,17 +260,58 @@ class ShellReader {
     return at;
   }
 
-  #redirect(after: string | undefined, at: number): number {
-    this.redirects = true;
-    if (after === "(") {
+  /**
+   * A redirection at `at`: its operator and its target taken off the
+   * command's words, and whether it writes noted. An fd number written right
+   * before it (`2>`) is its own, not a word of the command.
+   */
+  #redirect(at: number): number {
+    if (this.#text[at + 1] === "(") {
+      // A process substitution: its commands are read as any nested ones.
+      this.writes = true;
       const { inner, end } = closing(this.#text, at + 2);
       this.nested.push(inner);
       return end;
     }
-    this.#endWord();
-    return at;
+    if (this.#word !== undefined && FD_NUMBER.test(this.#word)) {
+      this.#word = undefined;
+    } else {
+      this.#endWord();
+    }
+    const op = REDIRECT_OP.exec(this.#text.slice(at))?.[0] ?? ">";
+    let from = at + op.length;
+    while (from < this.#text.length && BLANK.test(this.#text[from] as string)) {
+      from += 1;
+    }
+    let end = from;
+    while (
+      end < this.#text.length &&
+      !TARGET_END.test(this.#text[end] as string)
+    ) {
+      end += 1;
+    }
+    const target = this.#text.slice(from, end);
+    if (!redirectReads(op, target)) {
+      this.writes = true;
+    }
+    return end - 1;
   }
 }
+
+/**
+ * Whether a redirection only reads: one descriptor onto another or closed
+ * (`2>&1`, `>&2`, `<&-`), output into `/dev/null`, or input from a file. A
+ * here document or string (`<<`, `<<<`) and `<>` are not read by the gate.
+ */
+const redirectReads = (op: string, target: string): boolean => {
+  if (op === ">&" || op === "<&") {
+    return DESCRIPTOR.test(target) || target === DEV_NULL;
+  }
+  if (op === ">" || op === ">>" || op === ">|") {
+    return target === DEV_NULL;
+  }
+  return op === "<" && target !== "";
+};
 
 const readShell = (command: string): ShellLine =>
   new ShellReader(command).read();
@@ -359,11 +429,30 @@ const programWords = (segment: string[]): string[] => {
   }
 };
 
+/** A name a `for` or `select` loop binds. */
+const LOOP_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Whether a simple command is a `for NAME in WORDS` or `select NAME in
+ * WORDS` header: it runs no program, it only names the words its body runs
+ * over (any substitution among them is read as a nested line).
+ */
+const loopHeader = (segment: string[]): boolean => {
+  const [keyword, name, word] = segment;
+  return (
+    (keyword === "for" || keyword === "select") &&
+    name !== undefined &&
+    LOOP_NAME.test(name) &&
+    (word === undefined || word === "in")
+  );
+};
+
 /** A command line, read: every command it runs, and whether it is more than that. */
 interface Commands {
   argvs: string[][];
   opaque: boolean;
-  redirects: boolean;
+  /** {@link ShellLine.writes}, of the line or any line nested in it. */
+  writes: boolean;
 }
 
 /** What a simple command runs besides itself: a shell's `-c` script, `eval`'s words; `opaque` when that cannot be read. */
@@ -391,24 +480,27 @@ const unreadable = (program: string): boolean =>
 
 const commandsOf = (command: string, depth = 0): Commands => {
   if (depth > 4) {
-    return { argvs: [], opaque: true, redirects: true };
+    return { argvs: [], opaque: true, writes: true };
   }
   const line = readShell(command);
   const read: Commands = {
     argvs: [],
     opaque: false,
-    redirects: line.redirects,
+    writes: line.writes,
   };
   const take = (inner: string) => {
     const more = commandsOf(inner, depth + 1);
     read.argvs.push(...more.argvs);
     read.opaque ||= more.opaque;
-    read.redirects ||= more.redirects;
+    read.writes ||= more.writes;
   };
   for (const inner of line.nested) {
     take(inner);
   }
   for (const segment of line.segments) {
+    if (loopHeader(segment)) {
+      continue;
+    }
     const words = programWords(segment);
     const [program] = words;
     if (program === undefined) {
@@ -535,44 +627,112 @@ const GIT_READS: ReadonlySet<string> = new Set([
   "whatchanged",
   "reflog",
 ]);
-/** `git branch`, `git tag` and `git remote` options that only list. */
+/** `git branch` and `git tag` options that only list. */
 const LISTS =
-  /^(?:-a|--all|-r|--remotes|-v|-vv|--verbose|-l|--list|--show-current|--contains|--merged|--no-merged|--sort=.*|--format=.*|--points-at|-n\d*)$/;
+  /^(?:-a|--all|-r|--remotes|-v|-vv|--verbose|-l|--list|--show-current|-i|--ignore-case|--column|--no-column|--contains|--no-contains|--merged|--no-merged|--points-at|--sort|--format|(?:--contains|--no-contains|--merged|--no-merged|--points-at|--sort|--format)=.*|-n\d*)$/;
+/** `git branch` and `git tag` listing options whose value may be the next word: a commit, a key, a format. */
+const LIST_VALUED: ReadonlySet<string> = new Set([
+  "--contains",
+  "--no-contains",
+  "--merged",
+  "--no-merged",
+  "--points-at",
+  "--sort",
+  "--format",
+]);
+/** The listing options under which the words after are patterns to list by, never a name to make. */
+const LIST_MODE: ReadonlySet<string> = new Set(["-l", "--list"]);
 /** Arguments that make a reading git command write a file. */
 const WRITES_OUTPUT = /^--output(?:=|$)|^-o$/;
 /** `git config`'s options that only read. */
 const CONFIG_READS = /^(?:--get|--get-all|--get-regexp|--list|-l)$/;
+/**
+ * `git fetch`'s options that change nothing but its remote-tracking refs:
+ * none runs a program (`--upload-pack`), recurses into submodules or writes
+ * a local branch.
+ */
+const FETCH_FLAGS =
+  /^(?:-q|--quiet|-v|--verbose|-p|--prune|-P|--prune-tags|-t|--tags|-n|--no-tags|--all|--multiple|--dry-run|--progress|--no-progress|--no-recurse-submodules|--no-write-fetch-head|--depth=\d+|--deepen=\d+|--shallow-since=\S+|--shallow-exclude=\S+|--unshallow)$/;
+/** A configured remote's name: never a URL or a path, which would reach a host the project does not name. */
+const REMOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+/** A ref to fetch, into FETCH_HEAD and the remote-tracking refs only: no `:<dst>` naming a local branch to write. */
+const FETCH_REF = /^\+?[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 
-/** Whether a git command line only reads, or, in a place no one else uses, is `git init`, `git add <paths>` or `git commit`. */
-const gitAllowed = (argv: string[], shared: boolean): boolean => {
-  const git = gitOf(argv);
-  if (!git || git.risky || git.args.some((arg) => WRITES_OUTPUT.test(arg))) {
-    return false;
+/**
+ * Whether a `git branch` or `git tag` line only lists: every option one
+ * that lists, a word after one only as its value, and other words only as
+ * patterns under `--list` (`git branch -r --contains 8c2f706b9`).
+ */
+const listsOnly = (args: string[]): boolean => {
+  const listing = args.some((arg) => LIST_MODE.has(arg));
+  for (let at = 0; at < args.length; at += 1) {
+    const arg = args[at] as string;
+    if (LISTS.test(arg)) {
+      const next = args[at + 1];
+      if (LIST_VALUED.has(arg) && next !== undefined && !next.startsWith("-")) {
+        at += 1;
+      }
+    } else if (arg.startsWith("-") || !listing) {
+      return false;
+    }
   }
-  const reads = gitReads(git);
-  if (reads !== undefined) {
-    return reads;
-  }
-  return !shared && gitTidies(git);
+  return true;
 };
 
-/** Whether a git command only reads; undefined for one that is no reading command. */
-const gitReads = (git: {
-  args: string[];
-  sub: string;
-}): boolean | undefined => {
+/**
+ * Whether a `git fetch` line only brings the remote's refs in: options from
+ * {@link FETCH_FLAGS}, a configured remote by name, and refs without a local
+ * destination.
+ */
+const fetchesOnly = (args: string[]): boolean => {
+  const words = args.filter((arg) => !FETCH_FLAGS.test(arg));
+  const [remote, ...refs] = words;
+  return (
+    words.every((word) => !word.startsWith("-")) &&
+    (remote === undefined || REMOTE_NAME.test(remote)) &&
+    refs.every((ref) => FETCH_REF.test(ref))
+  );
+};
+
+/** Whether a git command line only reads, or, in a place no one else uses, is `git init`, `git add <paths>` or `git commit`. */
+const gitAllowed = (argv: string[], shared: boolean): boolean =>
+  gitReadOnly(argv) || gitTidy(argv, shared);
+
+/** Whether a git command line only reads (`git fetch` of a named remote among them). */
+const gitReadOnly = (argv: string[]): boolean => {
+  const git = gitOf(argv);
+  return (
+    !!git &&
+    !git.risky &&
+    !git.args.some((arg) => WRITES_OUTPUT.test(arg)) &&
+    gitReads(git)
+  );
+};
+
+/** Whether a git command line is `git init`, `git add <paths>` or `git commit`, in a place no one else uses. */
+const gitTidy = (argv: string[], shared: boolean): boolean => {
+  const git = gitOf(argv);
+  return !(shared || !git || git.risky) && gitTidies(git);
+};
+
+/** Whether a git command only reads. */
+const gitReads = (git: { args: string[]; sub: string }): boolean => {
   const [first] = git.args;
   if (GIT_READS.has(git.sub)) {
     return git.sub !== "reflog" || first === undefined || first === "show";
   }
-  if (git.sub === "branch" || git.sub === "tag") {
-    return git.args.every((arg) => LISTS.test(arg));
-  }
-  if (git.sub === "remote") {
-    return git.args.every((arg) => arg === "-v" || arg === "--verbose");
-  }
-  if (git.sub === "config") {
-    return git.args.some((arg) => CONFIG_READS.test(arg));
+  switch (git.sub) {
+    case "branch":
+    case "tag":
+      return listsOnly(git.args);
+    case "remote":
+      return git.args.every((arg) => arg === "-v" || arg === "--verbose");
+    case "config":
+      return git.args.some((arg) => CONFIG_READS.test(arg));
+    case "fetch":
+      return fetchesOnly(git.args);
+    default:
+      return false;
   }
 };
 
@@ -616,7 +776,19 @@ const gitTidies = (git: { args: string[]; sub: string }): boolean => {
 const FIND_ACTS =
   /^-(?:exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/;
 
-/** The programs that only read, each with what of its arguments would make it write or run something. */
+/** `tail`'s options that keep it running after the file's end. */
+const FOLLOWS = /^(?:-f|-F|--follow(?:=.*)?|--retry)$/;
+/** `sort`'s options that write a file or run a program. */
+const SORT_ACTS = /^(?:-o|--output(?:=.*)?|--compress-program(?:=.*)?)$/;
+
+/** The words of a command that are not options. */
+const operands = (args: string[]): string[] =>
+  args.filter((arg) => !arg.startsWith("-"));
+
+/**
+ * The programs that only read, or print what they are given, each with what
+ * of its arguments would make it write, run something or keep running.
+ */
 const READERS: Readonly<Record<string, (args: string[]) => boolean>> = {
   ls: () => true,
   cat: () => true,
@@ -624,29 +796,63 @@ const READERS: Readonly<Record<string, (args: string[]) => boolean>> = {
   wc: () => true,
   head: () => true,
   find: (args) => !args.some((arg) => FIND_ACTS.test(arg)),
+  echo: () => true,
+  printf: () => true,
+  tr: () => true,
+  cut: () => true,
+  pwd: () => true,
+  true: () => true,
+  tail: (args) => !args.some((arg) => FOLLOWS.test(arg)),
+  sort: (args) => !args.some((arg) => SORT_ACTS.test(arg)),
+  // A second operand is the file uniq writes its output to.
+  uniq: (args) => operands(args).length <= 1,
+};
+
+/** Whether every command of a line passes `allowed`, nothing in it writes by its syntax, and it can all be read. */
+const every = (
+  command: string,
+  allowed: (argv: string[], name: string) => boolean
+): boolean => {
+  const read = commandsOf(command);
+  if (read.opaque || read.writes || read.argvs.length === 0) {
+    return false;
+  }
+  return read.argvs.every((argv) => allowed(argv, baseName(argv[0] ?? "")));
+};
+
+/** Whether one command is a {@link READERS} reader within its limits. */
+const reads = (argv: string[], name: string): boolean => {
+  const reader = READERS[name];
+  return reader ? reader(argv.slice(1)) : false;
 };
 
 /**
- * Whether a shell line is one a turn your words woke runs without asking:
- * every command it runs is `ls`, `cat`, `grep`, `find` (no action that runs
- * or writes), `wc`, `head`, a git command that only reads, or, in a place no
- * one else uses, `git init`, `git add <paths>` or `git commit`; nothing
- * redirected, backgrounded or unreadable.
+ * Whether a shell line only reads, so the hub runs it in any wake without
+ * asking: every command it runs is a {@link READERS} reader within its
+ * limits or a git command that only reads (`git fetch` of a configured
+ * remote by name among them, which moves only its remote-tracking refs);
+ * redirected only into `/dev/null`, onto another descriptor or from a file;
+ * nothing backgrounded, nothing unreadable. Nothing such a line does writes
+ * the place's tree, publishes, or reaches a host the project does not name,
+ * and Caw's own Read and Grep tools, which no gate holds, read as much.
  */
-export const allowlisted = (command: string, shared: boolean): boolean => {
-  const read = commandsOf(command);
-  if (read.opaque || read.redirects || read.argvs.length === 0) {
-    return false;
-  }
-  return read.argvs.every((argv) => {
-    const name = baseName(argv[0] ?? "");
-    const reader = READERS[name];
-    if (reader) {
-      return reader(argv.slice(1));
-    }
-    return name === "git" && gitAllowed(argv, shared);
-  });
-};
+export const readOnly = (command: string): boolean =>
+  every(
+    command,
+    (argv, name) => reads(argv, name) || (name === "git" && gitReadOnly(argv))
+  );
+
+/**
+ * Whether a shell line is one a turn your words woke runs without asking:
+ * {@link readOnly}, or, in a place no one else uses, `git init`,
+ * `git add <paths>` or `git commit` among its reading commands.
+ */
+export const allowlisted = (command: string, shared: boolean): boolean =>
+  every(
+    command,
+    (argv, name) =>
+      reads(argv, name) || (name === "git" && gitAllowed(argv, shared))
+  );
 
 /** What in a shell line is refused in a shared checkout, in words; none when nothing is. */
 export const sharedRefusal = (command: string): string | undefined =>
@@ -976,7 +1182,13 @@ export const createLeadGate = ({
         wake.files.add(file);
       }
     }
-    if (yours(wake) && call.shell && allowlisted(call.command, isShared)) {
+    // A line that only reads runs whatever woke him; the tidy writes only
+    // in a turn your words woke; anything else is put to you.
+    if (
+      call.shell &&
+      (readOnly(call.command) ||
+        (yours(wake) && allowlisted(call.command, isShared)))
+    ) {
       return { kind: "allow" };
     }
     return { kind: "card" };

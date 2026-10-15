@@ -1052,8 +1052,13 @@ export interface DbShape {
     | { named: true; row: PublicInstanceRow }
     | { named: false; row: PublicInstanceRow }
     | undefined;
-  /** A project's newest thread: the one with the newest message. */
-  readonly newestThread: (projectId: string) => ThreadRow | undefined;
+  /**
+   * A project's newest conversation: the thread whose newest message from
+   * you or Caw is the newest. Event notes (a routine's runs, his call notes)
+   * never rank it, so a routine's own thread, which only notes its runs, is
+   * never one. Undefined when no thread has a word from either.
+   */
+  readonly newestConversation: (projectId: string) => ThreadRow | undefined;
   /** Records the window a claude turn reported for its model. */
   readonly noteAgentAddressContract: (
     machineId: string,
@@ -6285,12 +6290,25 @@ const make = async (path: string): Promise<DbShape> => {
         return { ...row, last: last?.body ?? "" };
       });
     },
-    newestThread: (projectId) =>
+    newestConversation: (projectId) =>
       db
-        .select()
+        .select(getTableColumns(projectThreads))
         .from(projectThreads)
-        .where(eq(projectThreads.projectId, projectId))
-        .orderBy(desc(projectThreads.updatedAt), desc(projectThreads.id))
+        .innerJoin(
+          threadMessages,
+          eq(threadMessages.threadId, projectThreads.id)
+        )
+        .where(
+          and(
+            eq(projectThreads.projectId, projectId),
+            inArray(threadMessages.author, ["you", "caw"])
+          )
+        )
+        .groupBy(projectThreads.id)
+        .orderBy(
+          desc(sql`max(${threadMessages.createdAt})`),
+          desc(projectThreads.id)
+        )
         .limit(1)
         .get(),
     allThreads: () =>

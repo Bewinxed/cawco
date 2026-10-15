@@ -94,7 +94,7 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         // One group to VoiceOver, named for what asks.
         accessibilityContainerType = .semanticGroup
         accessibilityIdentifier = "prompt-card"
-        accessibilityLabel = ask.isQuestion ? "Question from the agent" : "Permission request from \(ask.presentation.asker)"
+        accessibilityLabel = ask.isQuestion ? "Question from the agent" : "Permission request from \(ask.askerLine)"
         // The card in full and its bar are one column's two rows, one shown.
         let faces = UIStackView()
         faces.axis = .vertical
@@ -516,12 +516,13 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
 
     // MARK: Permission
 
-    /// Who asks, what will happen and to what, how much changes, then the
-    /// change and the fields, open (Prompt.svelte's permission body). The
-    /// words are the hub's, the same on the web and in Telegram.
+    /// Who asks and where ("Caw · cockpit"), what will happen and why, how
+    /// much changes, the command on one line until opened, then the change
+    /// and the fields, open (Prompt.svelte's permission body). The words are
+    /// the hub's, the same on the web and in Telegram.
     private func buildPermission(diff: (PermissionChange) -> UIView) {
         let presentation = ask.presentation
-        let top = head("\(presentation.asker) asks for permission")
+        let top = head(ask.askerLine)
         column.addArrangedSubview(top)
         column.setCustomSpacing(Space.space2, after: top)
         let words = lede(presentation.summary)
@@ -535,18 +536,8 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         } else {
             place(words, gap: Space.space2)
         }
-        if let command = ask.command {
-            let text = KitLabel(TypeScale.typeCode, ink: Palette.inkStrong, lines: 0)
-            text.role = TypeRole(weight: .regular, size: TypeScale.textLabel ... TypeScale.textLabel, leading: TypeScale.leadingCode, family: FontFamily.fontMono)
-            text.text = command
-            let rule = UIView()
-            rule.backgroundColor = Palette.borderHairline
-            rule.widthAnchor.constraint(equalToConstant: 2).isActive = true
-            let block = UIStackView(arrangedSubviews: [rule, text])
-            block.spacing = Space.space3
-            block.isLayoutMarginsRelativeArrangement = true
-            block.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0)
-            place(block, gap: Space.space2)
+        if let command = ask.command, let first = ask.commandLine {
+            place(commandBlock(command, first: first), gap: Space.space2)
         }
         // The change itself, open: a grant is made on what it changes.
         for change in presentation.changes {
@@ -587,6 +578,85 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         let choice = UIStackView(arrangedSubviews: [approve, UIView(), deny])
         choice.spacing = Space.space8
         foot.addArrangedSubview(choice)
+    }
+
+    /// A shell ask's command on the surfaces that answer it from one row
+    /// (Needs you, the peek; NeedsCard.svelte `.cmd`): its first line under
+    /// the reason, cut at its tail, behind the transcript's command rule.
+    public static func commandLine(_ line: String) -> UIView {
+        let text = KitLabel(TypeScale.typeCode, ink: Palette.inkMuted, lines: 1)
+        text.role = TypeRole(weight: .regular, size: TypeScale.textMeta ... TypeScale.textMeta, leading: TypeScale.leadingCode, family: FontFamily.fontMono)
+        text.lineBreakMode = .byTruncatingTail
+        text.text = line
+        let rule = UIView()
+        rule.backgroundColor = Palette.borderHairline
+        rule.widthAnchor.constraint(equalToConstant: 2).isActive = true
+        let row = UIStackView(arrangedSubviews: [rule, text])
+        row.spacing = Space.space2
+        row.isAccessibilityElement = true
+        row.accessibilityLabel = "Command: \(line)"
+        return row
+    }
+
+    /// The command under the reason (Prompt.svelte `.cmd`): its first line,
+    /// cut at its tail, in muted ink, so the sentence leads; a chevron opens
+    /// it whole in strong ink when there is more than the line shows.
+    private func commandBlock(_ command: String, first: String) -> UIView {
+        let text = KitLabel(TypeScale.typeCode, ink: Palette.inkMuted, lines: 1)
+        text.role = TypeRole(weight: .regular, size: TypeScale.textLabel ... TypeScale.textLabel, leading: TypeScale.leadingCode, family: FontFamily.fontMono)
+        text.lineBreakMode = .byTruncatingTail
+        text.text = first
+        text.accessibilityLabel = "Command: \(command)"
+        let rule = UIView()
+        rule.backgroundColor = Palette.borderHairline
+        rule.widthAnchor.constraint(equalToConstant: 2).isActive = true
+        let toggle = UIButton(type: .system)
+        toggle.setImage(Glyph.chevronDown.image.resized(to: 16), for: .normal)
+        toggle.tintColor = Palette.inkMuted
+        toggle.accessibilityLabel = "Show the whole command"
+        toggle.accessibilityIdentifier = "prompt-command-toggle"
+        NSLayoutConstraint.activate([
+            toggle.widthAnchor.constraint(equalToConstant: 24),
+            toggle.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        toggle.setContentHuggingPriority(.required, for: .horizontal)
+        toggle.setContentCompressionResistancePriority(.required, for: .horizontal)
+        // Offered when the line hides something: a second line, or a first
+        // line wider than the card, measured at the width it is drawn at.
+        let many = command.trimmingCharacters(in: .whitespacesAndNewlines).contains("\n")
+        toggle.isHidden = !many
+        toggle.addAction(UIAction { [weak self, weak text, weak toggle] _ in
+            guard let text, let toggle else { return }
+            // Open is the label drawing every line.
+            let open = text.numberOfLines == 1
+            text.numberOfLines = open ? 0 : 1
+            text.ink = open ? Palette.inkStrong : Palette.inkMuted
+            text.text = open ? command : first
+            toggle.accessibilityLabel = open ? "Show the command on one line" : "Show the whole command"
+            toggle.transform = open ? CGAffineTransform(rotationAngle: .pi) : .identity
+            self?.setNeedsLayout()
+        }, for: .touchUpInside)
+        let block = CommandRow(arrangedSubviews: [rule, text, toggle])
+        block.spacing = Space.space3
+        block.alignment = .top
+        block.isLayoutMarginsRelativeArrangement = true
+        block.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0)
+        block.measured = { [weak text, weak toggle] in
+            guard let text, let toggle, !many, text.numberOfLines == 1 else { return }
+            let whole = text.sizeThatFits(CGSize(width: .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)).width
+            let fits = whole <= text.bounds.width + 0.5
+            if toggle.isHidden != fits { toggle.isHidden = fits }
+        }
+        // No reason given: the command is all there is to read, so it starts open.
+        if !ask.reasoned {
+            text.numberOfLines = 0
+            text.ink = Palette.inkStrong
+            text.text = command
+            toggle.isHidden = false
+            toggle.accessibilityLabel = "Show the command on one line"
+            toggle.transform = CGAffineTransform(rotationAngle: .pi)
+        }
+        return block
     }
 
     // MARK: Answering
@@ -804,6 +874,17 @@ extension SpinnerView {
 @MainActor
 public protocol RedrawsOnReveal: UIView {
     func redraw()
+}
+
+/// The command's row on a permission card: told after each layout, so the
+/// card can offer its chevron only when the one line cuts something off.
+final class CommandRow: UIStackView {
+    var measured: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        measured?()
+    }
 }
 
 /// A minimized question (Composer.svelte `.asked-chip`): the tray row's chip

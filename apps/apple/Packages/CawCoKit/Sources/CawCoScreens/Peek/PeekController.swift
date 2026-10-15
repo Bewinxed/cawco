@@ -476,6 +476,8 @@ final class PeekController: ObservedViewController {
             let words = KitLabel(TypeScale.typeBody, ink: Palette.foreground, lines: 0)
             words.text = summary
             words.wrap = .pretty
+            // What runs, under why: Approve here is made on the command too.
+            let command: UIView? = ask.isQuestion ? nil : ask.commandLine.map { PromptCardView.commandLine($0) }
             let buttons = UIStackView()
             buttons.alignment = .center
             if ask.isQuestion {
@@ -500,7 +502,10 @@ final class PeekController: ObservedViewController {
                 buttons.addArrangedSubview(UIView())
                 buttons.addArrangedSubview(approve)
             }
-            let card = UIStackView(arrangedSubviews: [words, buttons])
+            var parts: [UIView] = [words]
+            if let command { parts.append(command) }
+            parts.append(buttons)
+            let card = UIStackView(arrangedSubviews: parts)
             card.axis = .vertical
             card.spacing = 8
             let box = UIView()

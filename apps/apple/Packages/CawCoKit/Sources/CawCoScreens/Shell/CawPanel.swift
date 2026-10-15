@@ -385,6 +385,10 @@ private final class NeedRow: UIControl {
         switch item.kind {
         case let .ask(parked):
             ask.text = parked.summary
+            // What runs, under why: Approve here is made on the command too.
+            if !parked.isQuestion, let line = parked.commandLine {
+                column.addArrangedSubview(PromptCardView.commandLine(line))
+            }
             let actions = UIStackView()
             actions.distribution = .equalSpacing
             if parked.isQuestion {

@@ -42299,7 +42299,7 @@
         "type": "object",
         "properties": {
           "asker": {
-            "description": "The session that asked, by the name the board gives it.",
+            "description": "The session that asked, by the name the board gives it (\"Caw\" for a project's lead).",
             "type": "string"
           },
           "changes": {
@@ -42308,6 +42308,10 @@
             "items": {
               "$ref": "#/components/schemas/PermissionChange"
             }
+          },
+          "command": {
+            "description": "The shell command a shell call runs, whole and out of a boundary's\nrewrite: shown under the summary on every surface, one line until\nopened. Absent for any other call.",
+            "type": "string"
           },
           "detail": {
             "description": "The line under the summary: how much changes and where (\"3 lines changed in Working style\").",
@@ -42320,8 +42324,12 @@
               "$ref": "#/components/schemas/PermissionField"
             }
           },
+          "project": {
+            "description": "The project the asker works in, by name; absent for a session in none. The card's head reads \"Caw · cockpit\".",
+            "type": "string"
+          },
           "summary": {
-            "description": "What will happen and to what, in one line: \"Change the fleet's CLAUDE.md\".",
+            "description": "What will happen and why, in one line: \"Change the fleet's CLAUDE.md\";\nfor a shell call, the session's own reason for it (\"Check whether the\ntwo commits are on origin/main\"), its command under it in `command`.",
             "type": "string"
           }
         },

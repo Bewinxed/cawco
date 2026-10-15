@@ -25,7 +25,7 @@
  *   lead. Each wake is one message to its session through the one send path,
  *   which revives a session at rest. An event the person should read is also
  *   noted in a thread (`author: "event"`): the thread it belongs to, else the
- *   project's newest.
+ *   project's newest conversation (never a routine's own thread).
  * - **Off**: no event wakes him and nothing he would do on his own spends.
  *   His session stays, resting between turns (it costs nothing so), so your
  *   next words carry on his context. A turn an event started is cut when he
@@ -451,7 +451,7 @@ export interface CawDeps {
     | "ingress"
     | "leadTurns"
     | "listProjects"
-    | "newestThread"
+    | "newestConversation"
     | "project"
     | "projectAttempts"
     | "projectSpend"
@@ -914,7 +914,7 @@ export const createCaw = ({
   };
 
   /**
-   * Notes an event in its thread, else the project's newest, else a thread
+   * Notes an event in its thread, else the project's newest conversation, else a thread
    * of its own; answers the thread it went to. `withRow` as {@link said}.
    * A project deleted since the event began has no threads to note it in.
    */
@@ -927,7 +927,7 @@ export const createCaw = ({
     projectOf(projectId);
     const thread =
       (threadId ? db.thread(threadId) : undefined) ??
-      db.newestThread(projectId);
+      db.newestConversation(projectId);
     const event = eventRow(note);
     if (thread) {
       const added = db.addThreadMessage({ threadId: thread.id, ...event });
@@ -1484,7 +1484,7 @@ export const createCaw = ({
 
   /**
    * The thread an attempt's end is noted in, and its report follows: the
-   * one that named its task, else the project's newest; kept by item, as
+   * one that named its task, else the project's newest conversation; kept by item, as
    * its note ({@link attemptEnded}) and its report reaching Caw
    * ({@link heard}) come in either order: the second of them takes it.
    */
@@ -1500,7 +1500,7 @@ export const createCaw = ({
     }
     const found =
       db.threadOfTask(projectId, item.taskId ?? "")?.id ??
-      db.newestThread(projectId)?.id;
+      db.newestConversation(projectId)?.id;
     if (found) {
       attemptThreads.set(item.id, found);
       // One whose other half never comes (a report that reached someone
@@ -1779,7 +1779,7 @@ export const createCaw = ({
    * The thread your words sent straight to Caw's session belong to: the one
    * his parked question stands in (you are answering beside it), else the
    * one his turn under way answers, else the one he answered last, else the
-   * project's newest; none when the project has no thread yet.
+   * project's newest conversation; none when it has none yet.
    */
   const threadOfLead = (
     leadId: string,
@@ -1791,7 +1791,7 @@ export const createCaw = ({
       asked?.threadId,
       turns.get(leadId)?.threadId,
       answered.get(leadId),
-      db.newestThread(projectId)?.id,
+      db.newestConversation(projectId)?.id,
     ].find(
       (id): id is string => !!id && db.thread(id)?.projectId === projectId
     );
@@ -2324,9 +2324,10 @@ export const createCaw = ({
      * session's own ask is yours), and its send (`sent`, when the hub took
      * it) waits to be read as any wake does. An attempt's report is the wake
      * of the thread its end is noted in ({@link attemptThread}), which reads
-     * `working` until the turn that reads it ends; anything else says `what`
-     * it answers on his panel, never on a thread it would only be guessed
-     * from.
+     * `working` until the turn that reads it ends; any other session's
+     * report or question is the wake of the thread it works for, recorded on
+     * it at its spawn (`spawnThread`); anything else says `what` it answers
+     * on his panel, never on a thread it would only be guessed from.
      */
     heard(
       leadId: string,
@@ -2341,28 +2342,34 @@ export const createCaw = ({
       }
       const item = from.workItemId ? db.workItem(from.workItemId) : undefined;
       const by = item?.origin ?? "you";
-      const threadId =
+      const attempt =
         report && item?.taskId && (item.origin === "you" || project.caw)
           ? attemptThread(project.id, item)
           : undefined;
+      const recorded = from.threadId ? db.thread(from.threadId) : undefined;
+      const threadId =
+        attempt ??
+        (recorded?.projectId === project.id ? recorded.id : undefined);
       follow(leadId, project.id, by, sent, threadId ? { threadId } : { what });
     },
 
     /**
      * The thread a session's question goes to, when the session is its
      * project's lead: the one whose message woke this turn, else the
-     * project's newest. Undefined for any other session.
+     * project's newest conversation (never a routine's own thread, which
+     * only notes its runs). Undefined for any other session.
      */
     askThread(asker: InstanceRow): string | undefined {
       const project = leadOf(asker);
       return project
-        ? (turns.get(asker.id)?.threadId ?? db.newestThread(project.id)?.id)
+        ? (turns.get(asker.id)?.threadId ??
+            db.newestConversation(project.id)?.id)
         : undefined;
     },
 
     /**
      * One of his shell or edit calls, noted in the thread his turn answers,
-     * else the project's newest (lead-gate.ts): nothing for a session that
+     * else the project's newest conversation (lead-gate.ts): nothing for a session that
      * is no project's lead.
      */
     noteCall(instanceId: string, note: ThreadNote): void {

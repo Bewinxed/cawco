@@ -76,30 +76,49 @@ export const createAskPresenter = (
   delegateTypes: DelegateTypesShape
 ) => {
   /**
-   * The session that asked, as the board names it: its given title, else the
-   * title its first message gave it, else its folder. A workflow's question is
-   * its workflow's.
+   * The session that asked, as the board names it (a project's lead is Caw;
+   * any other its given title, else the title its first message gave it,
+   * else its folder), and its project by name. A workflow's question is its
+   * workflow's.
    */
   const askerOf = (
     instanceId: string | undefined,
     payload: { proposer?: unknown; workflowRunId?: unknown }
-  ): string => {
-    // A memory proposal (memory.ts) is no session's: it names who proposed it.
+  ): { asker: string; project?: string } => {
+    // A memory proposal (memory.ts) is no session's: it names who proposed
+    // it and its project ("Memory curator · cawco").
     if (typeof payload.proposer === "string") {
-      return payload.proposer;
+      return { asker: payload.proposer };
     }
     const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
     if (row) {
-      return boardTitle(row);
+      return sessionAsker(row);
     }
-    if (typeof payload.workflowRunId === "string") {
-      const run = db.getWorkflowRun(payload.workflowRunId);
-      const workflow = run ? db.getWorkflow(run.workflowId) : undefined;
-      if (workflow) {
-        return `Workflow ${workflow.name}`;
-      }
+    const workflow =
+      typeof payload.workflowRunId === "string"
+        ? workflowName(payload.workflowRunId)
+        : undefined;
+    if (workflow) {
+      return { asker: `Workflow ${workflow}` };
     }
-    return instanceId ? instanceId.slice(0, 8) : "A session";
+    return { asker: instanceId ? instanceId.slice(0, 8) : "A session" };
+  };
+
+  /** A session as an ask names it: Caw for a project's lead, else as the board does; with its project. */
+  const sessionAsker = (
+    row: ReturnType<DbShape["getInstancesByIds"]>[number]
+  ): { asker: string; project?: string } => {
+    const project = row.projectId ? db.project(row.projectId)?.name : undefined;
+    return {
+      asker: row.role === "lead" ? "Caw" : boardTitle(row),
+      ...(project ? { project } : {}),
+    };
+  };
+
+  /** A workflow run's workflow, by name. */
+  const workflowName = (runId: string): string | undefined => {
+    const run = db.getWorkflowRun(runId);
+    return run ? db.getWorkflow(run.workflowId)?.name : undefined;
   };
 
   const named = (group: AdminGroup, key: string): string | undefined => {
@@ -129,7 +148,7 @@ export const createAskPresenter = (
       workflowRunId?: unknown;
     };
     payload.presentation = presentPermission(payload.toolName, payload.input, {
-      asker: askerOf(envelope.instanceId ?? payload.instanceId, payload),
+      ...askerOf(envelope.instanceId ?? payload.instanceId, payload),
       memory,
       named,
     });

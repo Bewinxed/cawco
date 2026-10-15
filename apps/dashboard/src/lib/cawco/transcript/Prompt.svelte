@@ -16,7 +16,7 @@
     UserAnswers,
     UserQuestion,
   } from "@cawco/core";
-  import { commandOf, questionsOf } from "@cawco/core";
+  import { askerLine, questionsOf } from "@cawco/core";
   /**
    * The one human-in-the-loop surface, held in the composer's grown shape
    * (Composer, grown.ts): a permission gate (a measurably-symmetric Approve /
@@ -30,7 +30,7 @@
    * as the shape grows (`shown`), and sink back as it folds.
    */
   import { ToggleGroup } from "bits-ui";
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -89,7 +89,44 @@
   const input = $derived(request.input as Record<string, unknown>);
   const questions = $derived(questionsOf(request.toolName, input));
   const presentation = $derived(request.presentation);
-  const command = $derived(commandOf(input));
+  /** Who asks and where: "Caw · cockpit". */
+  const who = $derived(askerLine(presentation));
+
+  /**
+   * The command under the reason: one line until opened, so the sentence
+   * leads. The disclosure is offered only when there is more than the line
+   * shows: a second line, or a first line wider than the card.
+   */
+  // Open from the start when the session gave no reason: then the command is
+  // all there is to read. The card is keyed by its ask, so this is per ask.
+  let commandOpen = $state(
+    untrack(
+      () =>
+        !(
+          typeof request.input.description === "string" &&
+          request.input.description.trim()
+        )
+    )
+  );
+  let commandLine = $state<HTMLElement | null>(null);
+  let commandClipped = $state(false);
+  const command = $derived(presentation.command ?? null);
+  $effect(() => {
+    const node = commandLine;
+    const whole = command;
+    if (!(node && whole)) {
+      commandClipped = false;
+      return;
+    }
+    const measure = () => {
+      commandClipped =
+        whole.trim().includes("\n") || node.scrollWidth > node.clientWidth;
+    };
+    measure();
+    const sizes = new ResizeObserver(measure);
+    sizes.observe(node);
+    return () => sizes.disconnect();
+  });
   const rule = $derived(
     request.suggestions ? suggestedRule(request.suggestions) : null
   );
@@ -629,7 +666,7 @@
 <section
   aria-label={questions
     ? `Question from ${asker}`
-    : `Permission request from ${presentation.asker}`}
+    : `Permission request from ${who}`}
   class={["hitl", { shown }]}
   ontouchcancel={() => {
     swipe = null;
@@ -761,18 +798,39 @@
       {@render wait()}
     </div>
   {:else}
-    {@render title(`${presentation.asker} asks for permission`)}
-    <!-- What will happen and to what, then the change itself, open: a grant
-         is made on what it changes, never on a sentence about it. The words
-         are the hub's (core permission-presentation.ts), the same on iOS and
-         Telegram; secrets in the fields are already hidden. -->
+    {@render title(who)}
+    <!-- What will happen and why, then the command or the change itself: a
+         grant is made on what runs, never on a sentence about it alone. The
+         words are the hub's (core permission-presentation.ts), the same on
+         iOS and Telegram; secrets in the fields are already hidden. -->
     <div class="body part" style:--part="1">
       <p class="lede summary">{presentation.summary}</p>
       {#if presentation.detail}
         <p class="detail">{presentation.detail}</p>
       {/if}
       {#if command}
-        <div class="cmd">{command}</div>
+        <div class="cmd" class:open={commandOpen}>
+          <code class="cmd-text" bind:this={commandLine}
+            >{commandOpen ? command : command.trim().split("\n")[0]}</code
+          >
+          {#if commandOpen || commandClipped}
+            <Button
+              aria-expanded={commandOpen}
+              aria-label={commandOpen
+                ? "Show the command on one line"
+                : "Show the whole command"}
+              class="cmd-toggle touch-hit"
+              onclick={() => {
+                commandOpen = !commandOpen;
+              }}
+              size="icon-xs"
+              title={commandOpen ? "Show less" : "Show the whole command"}
+              variant="ghost"
+            >
+              <IconChevronDown />
+            </Button>
+          {/if}
+        </div>
       {/if}
       {#if presentation.changes.length > 0}
         <div class="changes">
@@ -982,15 +1040,45 @@
   .railed .lede {
     padding-inline-start: var(--space-2);
   }
+  /* The command under the reason, in the transcript's command rule: one
+     line, cut with an ellipsis, until its chevron opens it whole. */
   .cmd {
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-    color: var(--ink-strong);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
     border-inline-start: 2px solid var(--border-hairline);
     padding-block: 3px;
     padding-inline: var(--space-3) 0;
     margin-block-end: var(--space-2);
+  }
+  .cmd-text {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+  }
+  .cmd.open .cmd-text {
+    color: var(--ink-strong);
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .cmd :global(.cmd-toggle) {
+    flex: none;
+    margin-block: calc(var(--space-1) * -1);
+    color: var(--ink-muted);
+
+    & :global(svg) {
+      @media (prefers-reduced-motion: no-preference) {
+        transition: rotate var(--dur-control) var(--ease-drawer);
+      }
+    }
+  }
+  .cmd.open :global(.cmd-toggle svg) {
+    rotate: 180deg;
   }
 
   /* What will happen, in the title's weight: the line the grant is made on. */

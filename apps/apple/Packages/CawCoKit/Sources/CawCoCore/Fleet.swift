@@ -657,26 +657,26 @@ public struct ParkedAsk: Sendable {
 
     public var isQuestion: Bool { Naming.questions(toolName, input.value) != nil }
     public var questions: [Components.Schemas.UserQuestion] { Naming.questions(toolName, input.value) ?? [] }
-    /// What will happen and to what, in one line.
+    /// What will happen and why, in one line: for a shell call, the session's own reason.
     public var summary: String { presentation.summary }
-    /// The shell command a permission is about, said whole (Prompt.svelte `.cmd`): as its
-    /// session wrote it, out of a workspace boundary's rewrite (core `commandOf`).
-    public var command: String? {
-        (input.value["command"] as? String).map(ParkedAsk.unboundedCommand)
+    /// The shell command a shell call runs, whole and out of a workspace boundary's rewrite,
+    /// as the hub read it (core permission-presentation.ts `command`): drawn under the
+    /// summary on every surface, one line until opened.
+    public var command: String? { presentation.command }
+    /// Whether the session gave its reason for the call (its `description`): without one,
+    /// the card opens the command whole, since it is all there is to read.
+    public var reasoned: Bool {
+        !((input.value["description"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
     }
 
-    /// The command a shell call runs, out of a workspace boundary's rewrite once when it is
-    /// in one (core permission-presentation.ts `unboundedCommand`): Claude Code runs the
-    /// boundary's hook before it asks, so a bounded session's ask (every one of a project's
-    /// Caw's) carries `'<exec>' --cwd-out '<file>' '<command>'; __cawco_status=$?; …`. The
-    /// ask's input keeps the rewrite, so an answer never runs it unbounded.
-    static func unboundedCommand(_ command: String) -> String {
-        guard
-            let bounded = try? Regex(#"^'[^']+' --cwd-out '[^']+' '((?:[^']|'\\'')*)'; __cawco_status=\$\?; "#),
-            let match = command.firstMatch(of: bounded),
-            let inner = match.output[1].substring
-        else { return command }
-        return String(inner).replacingOccurrences(of: #"'\''"#, with: "'")
+    /// The command's first line, for the surfaces that show one line of it.
+    public var commandLine: String? {
+        command?.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n", maxSplits: 1).first.map(String.init)
+    }
+
+    /// Who asks and where, as the card's head names them (core `askerLine`): "Caw · cockpit".
+    public var askerLine: String {
+        presentation.project.map { "\(presentation.asker) · \($0)" } ?? presentation.asker
     }
 }
 

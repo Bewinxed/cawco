@@ -349,6 +349,13 @@
     </span>
   {/if}
   <span class="want">{want}</span>
+  {#if item.kind === "ask" && item.request.presentation.command}
+    <!-- What runs, under why: its first line, so Approve here is made on
+         the command as much as on the card. -->
+    <code class="cmd"
+      >{item.request.presentation.command.trim().split("\n")[0]}</code
+    >
+  {/if}
   {#if item.kind === "ask"}
     <!-- Where it came from: the project first, in its mark and strong ink;
          then what it asks for; then the machine, by its OS mark. -->
@@ -742,6 +749,31 @@
      well that scrolls, then where it is from, then the peers. Everything
      the call says is read before the choice is made, in the order it is
      made: when, as whom, what, with what. */
+  /* A shell ask's command: one line under its reason, in the transcript's
+     command rule, cut with an ellipsis; its place and the peers move down
+     one row. */
+  .cmd {
+    position: relative;
+    pointer-events: none;
+    grid-row: 3;
+    grid-column: 2 / 4;
+    min-inline-size: 0;
+    margin-block: 2px var(--space-1);
+    padding-inline-start: var(--space-2);
+    border-inline-start: 2px solid var(--border-hairline);
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    color: var(--ink-muted);
+    text-overflow: ellipsis;
+    white-space: pre;
+  }
+  .row:has(> .cmd) > .meta {
+    grid-row: 4;
+  }
+  .row:has(> .cmd) > .peers {
+    grid-row: 5;
+  }
   .row[data-kind="action"] > .meta {
     grid-row: 5;
   }

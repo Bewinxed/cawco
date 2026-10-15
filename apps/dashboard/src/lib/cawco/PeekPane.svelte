@@ -384,6 +384,13 @@
       class="flex flex-col gap-2 border-t border-border/50 bg-[var(--status-attn-bg)] px-4 py-3"
     >
       <p class="text-body">{summary}</p>
+      {#if !question && request.presentation.command}
+        <!-- What runs, under why: Approve here is made on the command. -->
+        <code
+          class="block truncate whitespace-pre border-l-2 border-[var(--border-hairline)] ps-2 font-mono text-meta text-[var(--ink-muted)]"
+          >{request.presentation.command.trim().split("\n")[0]}</code
+        >
+      {/if}
       {#if question}
         <!-- A question wants a real choice, which is made on its own card
              in the session — never guessed at from out here. -->
