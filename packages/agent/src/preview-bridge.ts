@@ -11,8 +11,9 @@
  * Each request chooses its network: the newest generation of the workspace
  * whose sandbox runs and listens on the port, else the current one's
  * ({@link target}). A bridge is opened into it on the preview's first request,
- * and again whenever the network chosen is another one (a server started
- * again in a newer generation) or the one it had is gone: its socat exited,
+ * and again whenever the request names another workspace or port, or the
+ * network chosen is another one (a server started again in a newer
+ * generation), or the one it had is gone: its socat exited,
  * or the boundary it joined closed (its init's network is not the one it
  * joined). It goes with its preview, and with the agent: it runs under
  * `setpriv --pdeathsig KILL`, and the hub starts each preview again at the
@@ -78,26 +79,41 @@ const STDERR_KEPT = 2000;
 
 const WORKSPACE_ID = /^[0-9a-f-]{36}$/;
 
-interface Bridge {
+/**
+ * What a bridge reaches: `port` of workspace `workspace`, in the network of
+ * the sandbox whose init is `inner`. A preview may be pointed at another
+ * workspace or port in turn (an orchestrator showing each delegate's dev
+ * server): a bridge serves a request only when it reaches what the request
+ * names ({@link sameReach}).
+ */
+interface Reach {
   readonly inner: number;
+  readonly port: number;
+  readonly workspace: string;
+}
+
+interface Bridge extends Reach {
   /** The network it joined, as its sandbox init's `ns/net` read then. */
   readonly net: string;
   readonly proc: Subprocess<"ignore", "ignore", "pipe">;
   readonly socket: string;
 }
 
+const sameReach = (a: Reach, b: Reach): boolean =>
+  a.workspace === b.workspace && a.port === b.port && a.inner === b.inner;
+
 /** Each preview's bridge, by its instance id. */
 const bridges = new Map<string, Bridge>();
-/** Each preview's bridge while it opens: one open, however many requests ask. */
-const opening = new Map<string, Promise<string>>();
+/** Each preview's bridge while it opens: one open, however many requests for the same reach ask. */
+const opening = new Map<string, Reach & { readonly socket: Promise<string> }>();
 /**
  * How many times each preview was stopped: an open that finds the count
  * changed once its spawn settles was stopped under it, and takes down what it
  * made instead of registering it (a stop wins).
  */
 const stops = new Map<string, number>();
-/** The previews (macOS) whose workspace's network is the host's. */
-const onHost = new Set<string>();
+/** The previews (macOS) whose workspace's network is the host's, each with that workspace. */
+const onHost = new Map<string, string>();
 
 /** The agent's own dir for bridge sockets, beside its other sockets; no workspace reads it. */
 const bridgeDir = (): string => {
@@ -158,7 +174,7 @@ const inGroup = (pgid: number): number[] =>
  */
 export const closeBridge = async (instanceId: string): Promise<void> => {
   stops.set(instanceId, (stops.get(instanceId) ?? 0) + 1);
-  await opening.get(instanceId)?.catch(() => {
+  await opening.get(instanceId)?.socket.catch(() => {
     // Its open was stopped, or failed: nothing of it stands.
   });
   await teardown(instanceId);
@@ -242,13 +258,9 @@ const target = async (
   return inners[listens.indexOf(true)] ?? first.inner;
 };
 
-/** Opens preview `instanceId`'s bridge into the network of the sandbox whose init is `inner`, replacing the one it had. */
-const open = async (
-  instanceId: string,
-  workspace: string,
-  port: number,
-  inner: number
-): Promise<string> => {
+/** Opens preview `instanceId`'s bridge to `reach`, replacing the one it had. */
+const open = async (instanceId: string, reach: Reach): Promise<string> => {
+  const { inner, port, workspace } = reach;
   const stop = stops.get(instanceId);
   const stopped = () => stops.get(instanceId) !== stop;
   await teardown(instanceId);
@@ -326,7 +338,7 @@ const open = async (
     await killGroup(instanceId, proc, socket);
     throw new BridgeStopped();
   }
-  bridges.set(instanceId, { inner, net, proc, socket });
+  bridges.set(instanceId, { ...reach, net, proc, socket });
   return socket;
 };
 
@@ -336,14 +348,16 @@ export const workspaceGone = async (workspace: string): Promise<boolean> =>
 
 /**
  * Where one request of preview `instanceId` for workspace `workspace`'s
- * `port` goes, chosen for each request ({@link target}): the socket of its
- * bridge into that network, opened now when the bridge it has joined another
- * network or no longer reaches it; `host` on macOS, whose boundaries share the
- * host's network. A bridge is never held to the generation it first opened
- * into: once a newer generation listens on the port (its server started
- * again there), the next request goes there. Throws {@link WorkspaceDown}
- * when no sandbox of the workspace runs here; a request that then finds
- * nothing answering asks {@link workspaceGone}.
+ * `port` goes, chosen for each request ({@link target}): the socket of a
+ * bridge that reaches exactly that workspace, port and network, the preview's
+ * own when it does and still runs, else one opened now in its place; `host`
+ * on macOS, whose boundaries share the host's network. A bridge is never held
+ * to what it first opened for: once the preview names another workspace or
+ * port, or a newer generation listens on the port (its server started again
+ * there), the next request goes there. One bridge per preview at a time: an
+ * open under way for another reach finishes before this one's starts. Throws
+ * {@link WorkspaceDown} when no sandbox of the workspace runs here; a request
+ * that then finds nothing answering asks {@link workspaceGone}.
  */
 export const reachWorkspace = async (
   instanceId: string,
@@ -353,28 +367,38 @@ export const reachWorkspace = async (
   if (!WORKSPACE_ID.test(workspace)) {
     throw new Error(`${workspace} is not a workspace id.`);
   }
-  if (onHost.has(instanceId)) {
+  if (onHost.get(instanceId) === workspace) {
     return "host";
   }
-  // An open under way finishes first: one bridge per preview at a time.
-  await opening.get(instanceId)?.catch(() => {
-    // Its own request was told why; this one chooses again below.
-  });
   const inner = await target(workspace, port);
   if (inner === "host") {
-    onHost.add(instanceId);
+    onHost.set(instanceId, workspace);
     return "host";
   }
+  onHost.delete(instanceId);
+  const reach: Reach = { inner, port, workspace };
+  for (;;) {
+    const pending = opening.get(instanceId);
+    if (!pending) {
+      break;
+    }
+    if (sameReach(pending, reach)) {
+      return pending.socket;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: waits out each open for another reach in turn, until none is under way
+    await pending.socket.catch(() => {
+      // Its own request was told why; this one opens its own below.
+    });
+  }
   const bridge = bridges.get(instanceId);
-  if (bridge && bridge.inner === inner && alive(bridge)) {
+  if (bridge && sameReach(bridge, reach) && alive(bridge)) {
     return bridge.socket;
   }
-  let pending = opening.get(instanceId);
-  if (!pending) {
-    pending = open(instanceId, workspace, port, inner).finally(() =>
-      opening.delete(instanceId)
-    );
-    opening.set(instanceId, pending);
-  }
-  return pending;
+  const socket = open(instanceId, reach).finally(() => {
+    if (opening.get(instanceId)?.socket === socket) {
+      opening.delete(instanceId);
+    }
+  });
+  opening.set(instanceId, { ...reach, socket });
+  return socket;
 };
