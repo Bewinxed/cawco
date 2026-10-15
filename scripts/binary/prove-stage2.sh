@@ -275,11 +275,18 @@ case "$1" in
     # A build cannot run one verb because its executable is replaced by a stub that fails for that verb ($3,
     # `sessiond` by default) and runs the real program (kept as a hard link, `cawco.real`) for every other verb.
     # `slow-when-staged` instead holds its `sessiond` verb $3 seconds before running it: a keeper slow to start.
-    # Each first waits for the update to put the build on disk (the extracted directory appears whole, by
-    # rename) and stubs it in a few milliseconds, long before the swap.
+    # Each waits until the agent has put the build on disk (the extracted directory appears whole, by rename) AND
+    # says it is installing it: before that the agent runs the staged build itself (`cawco binary-pins`,
+    # binary-update.ts #replace), and a file replaced under a process starting from it leaves that process's
+    # executable "<path> (deleted)", which its own realpath at load refuses (nightly 2ebcc2a04: binary-pins exited
+    # with "ENOENT: no such file or directory, lstat '…/cawco (deleted)'", the attempt failed, and its retry staged
+    # the build again, without the stub). From `installing` on, nothing runs the build until the swap: the update
+    # helper runs from the build before, and starts a second or so later.
     v="$root/versions/$2"
+    state="$root/update-state.json"
     n=0
-    until [ -f "$v/cawco" ] && [ -f "$v/release.json" ]; do
+    until [ -f "$v/cawco" ] && [ -f "$v/release.json" ] && grep -q '"phase":"installing"' "$state" 2> /dev/null &&
+      grep -q "\"availableVersion\":\"$2\"" "$state"; do
       n=$((n + 1))
       [ "$n" -lt 30000 ] || exit 1
       sleep 0.02
@@ -1620,8 +1627,20 @@ ws_listener_start() {
 # The newest listener on the port: the one just started.
 ws_listener_pid() { as_user "$joinerc" pgrep -n -f "socat TCP-LISTEN:$WS_LISTENER_PORT"; }
 # What a listener answers in the network of the sandbox whose init is $1, reached as the agent's preview bridge
-# reaches a workspace's port (preview-bridge.ts: nsenter into the sandbox's user and network namespaces).
-ws_listener_says() { as_user "$joinerc" nsenter --target "$1" --user --net --preserve-credentials socat -t2 -T3 - "TCP:127.0.0.1:$WS_LISTENER_PORT" < /dev/null 2> /dev/null || true; }
+# reaches a workspace's port (preview-bridge.ts: nsenter into the sandbox's user and network namespaces). nsenter's and
+# socat's own words come with it: an answer that is not the listener's says why.
+ws_listener_says() { as_user "$joinerc" nsenter --target "$1" --user --net --preserve-credentials socat -t2 -T3 - "TCP:127.0.0.1:$WS_LISTENER_PORT" < /dev/null 2>&1 || true; }
+# Why the sandbox whose init is $1 gave no listener's answer: the listener processes running, the TCP ports listened
+# on in that sandbox's network (its init's /proc/<pid>/net/tcp, state 0A, read without joining it), and the answer.
+ws_listener_why() {
+  echo "listeners running: $(as_user "$joinerc" pgrep -af "socat TCP-LISTEN:$WS_LISTENER_PORT" | tr '\n' ';')"
+  local hex ports=""
+  for hex in $(as_user "$joinerc" cat "/proc/$1/net/tcp" | awk 'NR > 1 && $4 == "0A" { split($2, a, ":"); print a[2] }'); do
+    ports+="$((16#$hex)) "
+  done
+  echo "ports listened on in $1's network: ${ports:-none}"
+  echo "its answer: $(ws_listener_says "$1")"
+}
 # The workspace's preview of the listener's port, opened as a session opens one (its `artifact_create` tool, here
 # from a command through the workspace's tool door), and the hub's preview port for it, as the dashboard learns it.
 ws_preview_open() { ws_exec "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"name\":\"proof-listener\",\"port\":$WS_LISTENER_PORT}'"; }
@@ -1761,10 +1780,10 @@ workspace_across_update() {
   [[ "$(ns_of "$job")" == "$old_ns" ]]
   # And a listener one command leaves behind with `setsid -f`, as a delegate starts the dev server a preview shows.
   ws_listener_start gen-old
-  wait_until 30 '[[ "$(ws_listener_says "'"$old_inner"'")" == *gen-old* ]]'
+  wait_until 30 '[[ "$(ws_listener_pid)" =~ ^[0-9]+$ ]]' || { echo "ASSERTION FAILED: no listener runs after the command that started it ended"; ws_listener_why "$old_inner"; return 1; }
   listener=$(ws_listener_pid)
-  [[ $listener =~ ^[0-9]+$ ]]
   ws_tree "$old_inner" | grep -qx "$listener" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $old_inner"; return 1; }
+  wait_until 30 '[[ "$(ws_listener_says "'"$old_inner"'")" == *gen-old* ]]' || { ws_listener_why "$old_inner"; return 1; }
   # The new build reaches the hub's machine, then the joined machine, which installs it with the workspace open.
   use_feed next
   learn
@@ -1832,7 +1851,7 @@ workspace_across_update() {
   # taken over, and it closes with what runs in it (boundary.ts supersededPorts). Its sandbox, its srt host, its
   # record and its files go, the old listener with them.
   ws_listener_start gen-new
-  wait_until 30 '[[ "$(ws_listener_says "'"$new_inner"'")" == *gen-new* ]]'
+  wait_until 30 '[[ "$(ws_listener_says "'"$new_inner"'")" == *gen-new* ]]' || { ws_listener_why "$new_inner"; return 1; }
   wait_until 120 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)/retiring-'"$gen"'.json" && ! as_user "$joinerc" test -e "$(ws_state)/boundaries/'"$gen"'"'
   ! as_user "$joinerc" kill -0 "$old_inner" 2> /dev/null
   ! as_user "$joinerc" kill -0 "$listener" 2> /dev/null || { echo "ASSERTION FAILED: the older generation's listener $listener outlived its generation"; return 1; }
@@ -1844,6 +1863,11 @@ workspace_across_update() {
   answer=$(ws_preview_mode port)
   echo "the hub answered port mode: $answer"
   [[ "$answer" == *"HTTP 200" ]]
+  # The session's port is read again, as a dashboard learns it: host mode bars the range's first port to sessions, so
+  # a session that kept it moved to another as host mode began, and keeps that one (packages/hub/src/preview.ts
+  # `barred`, `portFor`).
+  wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
+  echo "back in port mode the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
   wait_until 60 '[[ "$(ws_preview_says)" == *gen-new* ]]' || { echo "the preview answered: $(ws_preview_says)"; return 1; }
   # The current one is untouched.
   [[ "$(ws_gen)" == "$new" ]]
