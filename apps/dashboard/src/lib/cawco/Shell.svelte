@@ -45,7 +45,7 @@
   import GlassCard from "./GlassCard.svelte";
   import { deviceRatio } from "./home/device-ratio.svelte";
   import { sessionName } from "./home/home-state.svelte";
-  import { refuseInternalDrops } from "./internal-drag";
+  import { guardDrops } from "./internal-drag";
   import MachinesButton from "./MachinesButton.svelte";
   import { hangShadow } from "./motion/hung-shadow";
   import NeedsCaw from "./NeedsCaw.svelte";
@@ -592,8 +592,9 @@
   onMount(() => {
     stripMounted = true;
   });
-  // A row or card dragged inside the page never types into a field (internal-drag.ts).
-  onMount(refuseInternalDrops);
+  // A row or card dragged inside the page never types into a field, and a
+  // file let go off a composer never opens in the tab (internal-drag.ts).
+  onMount(guardDrops);
 
   /* ── The bar's slot ──────────────────────────────────────────────────
      The hosted tabs, a page's strip, the crumb and Configure's back link

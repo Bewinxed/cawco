@@ -98,6 +98,7 @@
   import { mcpSignInIntent, signInToMcp } from "../fleet";
   import CawFace from "../home/CawFace.svelte";
   import { newId } from "../id";
+  import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
   import { inkExtras, inks } from "../preview/ink.svelte";
   import {
@@ -2849,6 +2850,22 @@
     }
   }
 
+  /** A file over the field is one it takes; text keeps the field's own drop. */
+  function ondragover(event: DragEvent): void {
+    if (event.dataTransfer && carriesFiles(event.dataTransfer)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    }
+  }
+
+  /** A file dropped on the field joins the draft as a pasted one does. */
+  function ondrop(event: DragEvent): void {
+    if (event.dataTransfer && carriesFiles(event.dataTransfer)) {
+      event.preventDefault();
+      draft.paste(event.dataTransfer);
+    }
+  }
+
   /**
    * The field's one-line height and line height, off its stylesheet, and
    * the height its whole text takes (autosize reports it at each fit).
@@ -3225,6 +3242,8 @@
               refocus(false);
             }}
             onclick={noteCaret}
+            {ondragover}
+            {ondrop}
             onfocus={() => refocus(true)}
             oninput={noteCaret}
             {onkeydown}

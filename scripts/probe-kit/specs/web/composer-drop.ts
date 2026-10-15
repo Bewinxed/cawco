@@ -20,7 +20,9 @@
  * - row into a pane: the same row let go in the right pane's middle joins
  *   that group's tabs, as before.
  * - outside: text dragged in from outside (CDP's drag events) is not
- *   refused and lands in the composer; a file's hover is not refused.
+ *   refused and lands in the composer; a file dropped on the composer is
+ *   taken and becomes an attachment chip, as a pasted file does; a file
+ *   dropped on a pane's empty area leaves the tab where it was.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one step at a time, as a hand makes them
 import { writeFile } from "node:fs/promises";
@@ -39,7 +41,14 @@ const INTERNAL = "application/x-cawco-drag";
 const TEXT_TYPES = ["text/plain", "text/uri-list", "text/html"];
 
 interface Trace {
-  drops: { data: Record<string, string>; types: string[] }[];
+  /** Each drop: its types and data, and whether the page cancelled its default. */
+  drops: {
+    cancelled: boolean;
+    data: Record<string, string>;
+    types: string[];
+  }[];
+  /** Each hover anywhere but a text field: whether the page cancelled it with effect "none". */
+  elsewhere: { refused: boolean; types: string[] }[];
   /** Each hover over a text field: its types and whether the page cancelled it with effect "none". */
   hovers: { refused: boolean; types: string[] }[];
   inputs: { data: string | null; inputType: string }[];
@@ -48,19 +57,26 @@ interface Trace {
 
 function watch() {
   const w = window as unknown as { __trace: Trace };
-  w.__trace = { drops: [], hovers: [], inputs: [], layoutInField: [] };
+  w.__trace = {
+    drops: [],
+    elsewhere: [],
+    hovers: [],
+    inputs: [],
+    layoutInField: [],
+  };
   window.addEventListener(
     "dragover",
     (e) => {
-      if (!(e.target instanceof HTMLTextAreaElement)) {
-        return;
-      }
+      const into =
+        e.target instanceof HTMLTextAreaElement
+          ? w.__trace.hovers
+          : w.__trace.elsewhere;
       // What the page decided is read once the dispatch is over (a task
       // later: a microtask runs between one listener and the next); its
       // types now, while the data store can still be read.
       const types = [...(e.dataTransfer?.types ?? [])];
       setTimeout(() =>
-        w.__trace.hovers.push({
+        into.push({
           types,
           refused: e.defaultPrevented && e.dataTransfer?.dropEffect === "none",
         })
@@ -76,7 +92,10 @@ function watch() {
       for (const type of dt?.types ?? []) {
         data[type] = (dt?.getData(type) ?? "").slice(0, 200);
       }
-      w.__trace.drops.push({ types: [...(dt?.types ?? [])], data });
+      const types = [...(dt?.types ?? [])];
+      setTimeout(() =>
+        w.__trace.drops.push({ types, data, cancelled: e.defaultPrevented })
+      );
     },
     true
   );
@@ -112,6 +131,7 @@ const resetTrace = (page: Page) =>
   page.evaluate(() => {
     const t = (window as unknown as { __trace: Trace }).__trace;
     t.drops = [];
+    t.elsewhere = [];
     t.hovers = [];
     t.inputs = [];
     t.layoutInField = [];
@@ -330,7 +350,7 @@ async function drag(
 }
 
 /** Text and a file dragged in from outside the page, over CDP. */
-async function outside(kit: Kit, page: Page, leaf: string) {
+async function outside(kit: Kit, page: Page, leaf: string, right: string) {
   const cdp = await page.context().newCDPSession(page);
   const at = mid(await boxOf(page, fieldOf(leaf)));
   await resetTrace(page);
@@ -351,19 +371,60 @@ async function outside(kit: Kit, page: Page, leaf: string) {
 
   const file = join(kit.out, "dropped.txt");
   await writeFile(file, "a file's words\n");
+  const chip = 'button[aria-label="Remove dropped.txt"]';
+  const navigated: string[] = [];
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) {
+      navigated.push(frame.url());
+    }
+  });
+  const url = page.url();
   await resetTrace(page);
-  await drag(cdp, at, ["dragEnter", "dragOver", "dragCancel"], {
+  await drag(cdp, at, ["dragEnter", "dragOver", "drop"], {
     items: [],
     files: [file],
     dragOperationsMask: 1,
   });
+  await settle(page);
   t = await trace(page);
+  const chips = await page.locator(chip).count();
+  const after = await fields(page);
   kit.check(
-    "outside: a file dragged in over the composer is not refused",
+    "outside: a file dropped on the composer is taken (effect copy) and becomes one attachment chip, the field's words unchanged",
     t.hovers.length > 0 &&
-      t.hovers.every((h) => !h.refused) &&
-      (t.hovers[0]?.types ?? []).includes("Files"),
-    JSON.stringify(t.hovers)
+      t.hovers.every((h) => !h.refused && h.types.includes("Files")) &&
+      chips === 1 &&
+      after.find((f) => f.leaf === leaf)?.value === "outside words" &&
+      page.url() === url,
+    `${chips} chips; ${JSON.stringify(after)}; hovers ${JSON.stringify(t.hovers)}; url ${page.url()}`
+  );
+
+  // A pane's empty area: the right pane's transcript, well above its composer.
+  await resetTrace(page);
+  const pane = await boxOf(page, `[data-drop-leaf="${right}"]`);
+  await drag(
+    cdp,
+    { x: pane.left + pane.width / 2, y: pane.top + pane.height * 0.3 },
+    ["dragEnter", "dragOver", "drop"],
+    { items: [], files: [file], dragOperationsMask: 1 }
+  );
+  await page.waitForTimeout(1500);
+  t = await trace(page);
+  // What the browser's default (opening the file in the tab) waits on: a
+  // hover nobody cancelled, or a drop nobody cancelled.
+  kit.check(
+    "outside: over a pane's empty area every file hover is refused (effect none), and no drop goes uncancelled",
+    t.elsewhere.length > 0 &&
+      t.elsewhere.every((h) => h.refused && h.types.includes("Files")) &&
+      t.drops.every((d) => d.cancelled),
+    `hovers ${JSON.stringify(t.elsewhere)}; drops ${JSON.stringify(t.drops.map((d) => ({ types: d.types, cancelled: d.cancelled })))}`
+  );
+  kit.check(
+    "outside: a file dropped on a pane's empty area leaves the tab where it was, no chip added",
+    page.url() === url &&
+      navigated.length === 0 &&
+      (await page.locator(chip).count()) === 1,
+    `url ${page.url()} (was ${url}); navigations ${JSON.stringify(navigated)}; ${await page.locator(chip).count()} chips`
   );
   await cdp.detach();
 }
@@ -405,7 +466,7 @@ const spec: Spec = {
     const split = await tabAcross(kit, page, ids, left);
     const right = split[1]?.leaf ?? "";
     await rowAcross(kit, page, ids, left, right);
-    await outside(kit, page, left);
+    await outside(kit, page, left, right);
     await page.close();
   },
 };

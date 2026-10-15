@@ -13,7 +13,8 @@
  *
  * So each internal drag source empties the browser's data as its drag
  * starts and carries {@link INTERNAL_DRAG} alone; and one guard, on the
- * window, refuses any drag carrying that type over every text field.
+ * window, refuses any drag carrying that type over every text field, and
+ * any file let go where nothing takes it ({@link guardDrops}).
  */
 
 /** The private type every internal drag carries, and nothing a field reads. */
@@ -50,28 +51,54 @@ const isTextField = (target: EventTarget | null): boolean =>
   (target instanceof HTMLInputElement && target.type !== "file") ||
   (target instanceof HTMLElement && target.isContentEditable);
 
+/** Whether a drag carries files: readable from `dragenter` on. */
+export const carriesFiles = (data: DataTransfer | null): boolean =>
+  data?.types.includes("Files") ?? false;
+
+/** A file picker's own drop, which takes the files as its default does. */
+const isFilePicker = (target: EventTarget | null): boolean =>
+  target instanceof HTMLInputElement && target.type === "file";
+
 /**
- * Over a text field, an internal drag finds no drop: the field's own
- * default (which would take it) is cancelled and the effect is "none"; and
- * a drop that still arrives inserts nothing. A hover one of Pragmatic's
- * targets has already taken (its window listeners capture, so they run
- * first and cancel it) keeps that target's effect. Installed once, for the
- * page's life; returns its removal.
+ * Two refusals, on the window, for the page's life:
+ *
+ * - Over a text field, an internal drag finds no drop: the field's own
+ *   default (which would take it) is cancelled and the effect is "none";
+ *   and a drop that still arrives inserts nothing.
+ * - A file finds no drop anywhere no one takes it (a composer's field does,
+ *   Composer `ondrop`): the browser's default for a file let go on a page
+ *   opens it in the tab, and the session goes with it.
+ *
+ * A hover something has already taken keeps its effect: Pragmatic's
+ * targets (its window listeners capture, so they run first) and the
+ * composer's field (its own listener, before the window's) cancel it
+ * themselves. Returns the guard's removal.
  */
-export function refuseInternalDrops(): () => void {
+export function guardDrops(): () => void {
   const hover = (event: DragEvent) => {
+    const data = event.dataTransfer;
     if (
-      !event.defaultPrevented &&
-      event.dataTransfer &&
-      isInternalDrag(event.dataTransfer) &&
-      isTextField(event.target)
+      event.defaultPrevented ||
+      !data ||
+      isFilePicker(event.target) ||
+      !(
+        carriesFiles(data) ||
+        (isInternalDrag(data) && isTextField(event.target))
+      )
     ) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "none";
+      return;
     }
+    event.preventDefault();
+    data.dropEffect = "none";
   };
+  // Capture: before the field's own drop, which still hears it and takes
+  // a file it wants (a cancelled drop is only one the browser leaves be).
   const drop = (event: DragEvent) => {
-    if (isInternalDrag(event.dataTransfer) && isTextField(event.target)) {
+    const data = event.dataTransfer;
+    if (
+      (carriesFiles(data) && !isFilePicker(event.target)) ||
+      (isInternalDrag(data) && isTextField(event.target))
+    ) {
       event.preventDefault();
     }
   };
