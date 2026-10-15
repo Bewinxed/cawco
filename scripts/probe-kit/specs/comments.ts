@@ -13,11 +13,12 @@
  * 2. A pen stroke's radial Comment writes pin 2 on the ink, with the ink's
  *    box; the list shows two rows; J and K move the focus between the pins
  *    and the overlay's outline follows.
- * 3. A reply typed in the card is in pin 1's thread, by the person; "Send 2"
- *    tells the session it has responses to read (pins with comment_read),
- *    both pins' pictures with it, drawn as one quiet line and no row of the
- *    person's, after which the head reads "Send" and every pin and entry has `sentAt`; a
- *    second reply makes N 1.
+ * 3. A reply typed in the card is in pin 1's thread, by the person; with no
+ *    Send it reaches the session by itself once quiet: the comments notice
+ *    carrying pin 1, its words and its picture (pin 2, said nothing in yet,
+ *    waits), drawn as one quiet line and no row of the person's, pin 1 and
+ *    its entry stamped `sentAt`; the pane has no Send control. A second
+ *    reply is one more delivery.
  * 4. comment_read answers both pins, what pin 1 stands on and its reply, and
  *    pin 2's ink box; comment_reply on pin 1 is in its card
  *    within 2 s, the live dot showing while the agent's turn runs;
@@ -96,8 +97,11 @@ const REPLY = "mcp__cawco__comment_reply";
 const RESOLVE = "mcp__cawco__comment_resolve";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
-/** The responses notice a Send puts to the session (core injected.ts `artifactResponsesNotice`). */
-const NOTICE = /\[CawCo\] The page "[a-z0-9-]+" has new responses since \d+\./;
+/** The person's comments, delivered by themselves (core injected.ts `artifactCommentsNotice`). */
+const NOTICE =
+  /\[CawCo\] The person commented on the page "[a-z0-9-]+" \(artifact [0-9a-f-]{36}\)\./;
+/** How long a delivery may take: the hub's quiet period (10 s) and the way to the model. */
+const DELIVERY_MS = 30_000;
 /** An image block in a request's body. */
 const IMAGE_BLOCK = /"type":"image"/g;
 const RESOLVED_TAB = /^Resolved/;
@@ -148,6 +152,9 @@ const respond = (request: Seen): Reply => {
     return text("Probe title");
   }
   heard.push({ last: request.last, body: request.body });
+  if (NOTICE.test(request.last) && !request.afterTool) {
+    return text("Heard the comments.");
+  }
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? asks.get(marker) : undefined;
   if (!(marker && ask)) {
@@ -281,9 +288,6 @@ const near = (
   Math.abs(a.y - b.y) <= slack &&
   Math.abs(a.w - b.w) <= slack &&
   Math.abs(a.h - b.h) <= slack;
-
-const sendLabel = (on: On) =>
-  on.page.locator(".preview-pane .send .send-label").textContent();
 
 const run = async (kit: Kit) => {
   const on = await setUp(kit);
@@ -503,10 +507,12 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
   return pin?.id ?? null;
 };
 
-/** 3. A reply in the card, Send 2, N back to 0, a second reply makes it 1. */
+/** 3. A reply in the card, delivered by itself once quiet; a second reply, one more delivery. */
 const sendChecks = async (on: On, frame: Frame, one: string) => {
   await on.page.locator('.pin-list .pin-row[data-pin-row="1"]').click();
   const card = on.page.locator('.pin-card[data-pin-card="1"]');
+  const before = heard.length;
+  const rows = await on.page.locator(".turn.you").count();
   await card.getByRole("textbox").fill("Make it bolder.");
   await card.getByRole("button", { name: "Reply" }).click();
   const replied = await until(
@@ -524,18 +530,15 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
     entry?.by === "person" && entry.text === "Make it bolder.",
     JSON.stringify(entry)
   );
+  await on.page.keyboard.press("Escape");
 
-  const label = await sendLabel(on);
-  const before = heard.length;
-  const rows = await on.page.locator(".turn.you").count();
-  await on.page.locator(".preview-pane .send").click();
   const message = await until(
-    "the responses event at the model",
+    "the comments' delivery at the model",
     () => heard.slice(before).find((said) => NOTICE.test(said.last)),
     Boolean,
-    60_000
+    DELIVERY_MS
   ).catch(() => undefined);
-  // The event's pictures ride with it: the only images in that request.
+  // The delivery's pictures ride with it: the only images in that request.
   const pictures = message?.body.match(IMAGE_BLOCK)?.length ?? 0;
   const line = on.page.locator("[data-artifact-responses]");
   await line
@@ -546,43 +549,51 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   const ownRows = await on.page.locator(".turn.you").count();
   const lines = await line.count();
   const stamped = await until(
-    "sentAt on every pin and entry",
+    "sentAt on pin 1 and its entry",
     () => docOf(frame),
-    (doc) =>
-      Object.values(doc.pins).every(
-        (pin) =>
-          !!pin.sentAt &&
-          (pin.thread as { by: string; sentAt?: string }[]).every(
-            (said) => said.by !== "person" || !!said.sentAt
-          )
-      ),
+    (doc) => {
+      const pin = doc.pins[one] as
+        | { sentAt?: string; thread: { by: string; sentAt?: string }[] }
+        | undefined;
+      return (
+        !!pin?.sentAt &&
+        pin.thread.every((said) => said.by !== "person" || !!said.sentAt)
+      );
+    },
     10_000
   ).catch(() => docOf(frame));
-  const after = await sendLabel(on);
-  const disabled = await on.page.locator(".preview-pane .send").isDisabled();
+  const sendControls = await on.page.locator(".preview-pane .send").count();
+  const words = message?.last ?? "";
   on.kit.check(
-    "3: Send 2 tells the session it has responses to read, pins with comment_read, with both pins' pictures; one quiet line, no row of the person's; then the head reads Send, no count, and every pin and entry has sentAt",
-    label?.trim() === "Send 2" &&
-      !!message?.last.includes("and its pins with comment_read") &&
-      pictures === 2 &&
+    "3: with no Send, the reply reaches the session by itself: pin 1 with its words and its picture (pin 2, said nothing in, waits); one quiet line, no row of the person's; pin 1 stamped sentAt; no Send control in the pane",
+    words.includes("## 1. comment on #para") &&
+      words.includes('- I wrote: "Make it bolder."') &&
+      words.includes(`- Pin: ${one}`) &&
+      !words.includes("## 2.") &&
+      pictures === 1 &&
       lines === 1 &&
       ownRows === rows &&
-      after?.trim() === "Send" &&
-      disabled &&
-      Object.values(stamped.pins).every((pin) => !!pin.sentAt),
-    `label ${label} → ${after} (disabled ${disabled}); pictures ${pictures}; lines ${lines}; person's rows ${rows} → ${ownRows}; heard ${message?.last.slice(0, 300)}`
+      sendControls === 0 &&
+      !!(stamped.pins[one] as { sentAt?: string } | undefined)?.sentAt,
+    `pictures ${pictures}; lines ${lines}; person's rows ${rows} → ${ownRows}; Send controls ${sendControls}; heard ${words.slice(0, 400)}`
   );
 
-  // The press on Send, outside the card, closed it: it opens again from its row.
+  const again = heard.length;
   await on.page.locator('.pin-list .pin-row[data-pin-row="1"]').click();
   await card.getByRole("textbox").fill("And a little larger.");
   await card.getByRole("button", { name: "Reply" }).click();
-  await settle(on.page, 400);
-  const again = await sendLabel(on);
+  await on.page.keyboard.press("Escape");
+  const second = await until(
+    "the second reply's delivery",
+    () => heard.slice(again).find((said) => NOTICE.test(said.last)),
+    Boolean,
+    DELIVERY_MS
+  ).catch(() => undefined);
   on.kit.check(
-    "3: a second reply makes N 1",
-    again?.trim() === "Send 1",
-    String(again)
+    "3: a second reply is one more delivery, with that reply",
+    !!second?.last.includes('- I wrote: "And a little larger."') &&
+      !second.last.includes('- I wrote: "Make it bolder."'),
+    second?.last.slice(0, 300) ?? "no delivery"
   );
 };
 

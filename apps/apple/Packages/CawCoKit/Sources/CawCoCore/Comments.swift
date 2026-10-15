@@ -27,7 +27,7 @@ public extension Pin {
         return source.line.map { "\(file):\(Int($0))" } ?? file
     }
 
-    /// Something the session has not heard: the pin itself, or a person's entry since (core `pinUnsent`).
+    /// Not yet delivered to the session: the pin itself, or a person's entry since (core `pinUnsent`'s first two).
     var unsent: Bool {
         sentAt == nil || thread.contains { $0.by == .person && $0.sentAt == nil }
     }
@@ -45,8 +45,9 @@ public extension Pin {
 }
 
 /// An artifact's pins as the hub has them, and how many picks the session
-/// has not heard: N on Send N is those picks and the unsent pins
-/// (PreviewPane.svelte `owed`).
+/// has not heard, which Send picks sends (PreviewPane.svelte `unsentPicks`).
+/// The pins go to the session by themselves once quiet (the hub's
+/// artifacts/service.ts).
 public struct ArtifactComments: Sendable, Equatable {
     /// By number.
     public let pins: [Pin]
@@ -57,17 +58,17 @@ public struct ArtifactComments: Sendable, Equatable {
     /// An artifact with no pins and nothing unsent, until the hub is read.
     public static let empty = ArtifactComments(pins: [], unsentPicks: 0, sentAt: nil)
 
-    public var owed: Int { unsentPicks + pins.count { $0.unsent } }
     /// Open pins on the page: the Pins button's badge.
     public var open: Int { pins.count { !$0.moved && !$0.resolved } }
 
     /// The pins the agent is working on (PreviewPane.svelte `live`): while
-    /// the session works, the open pins the last send carried, the pin
+    /// the session works, the open pins the last delivery carried, the pin
     /// itself or an entry of its thread.
     public func live(working: Bool) -> Set<String> {
-        guard working, let sentAt else { return [] }
+        let stamps = pins.flatMap { pin in [pin.sentAt ?? ""] + pin.thread.map { $0.sentAt ?? "" } }
+        guard working, let last = stamps.max(), !last.isEmpty else { return [] }
         return Set(pins.filter { pin in
-            !pin.resolved && (pin.sentAt == sentAt || pin.thread.contains { $0.sentAt == sentAt })
+            !pin.resolved && (pin.sentAt == last || pin.thread.contains { $0.sentAt == last })
         }.map(\.id))
     }
 }

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { artifacts, artifactUpdates, shownPreviews } from "./schema";
 
@@ -71,6 +71,8 @@ export interface ArtifactsDb {
   readonly show: (instanceId: string, artifactId: string) => void;
   /** Every session's shown artifact, with its row: what the hub serves after a restart. */
   readonly shown: () => { artifact: ArtifactRow; instanceId: string }[];
+  /** Every artifact whose doc took an update (or that changed) at or after `at`. */
+  readonly touchedSince: (at: Date) => ArtifactRow[];
   /** Session `instanceId`'s panel shows nothing. */
   readonly unshow: (instanceId: string) => void;
   readonly update: (
@@ -197,6 +199,8 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .from(shownPreviews)
       .innerJoin(artifacts, eq(artifacts.id, shownPreviews.artifactId))
       .all(),
+  touchedSince: (at) =>
+    db.select().from(artifacts).where(gte(artifacts.updatedAt, at)).all(),
   unshow: (instanceId) => {
     db.delete(shownPreviews)
       .where(eq(shownPreviews.instanceId, instanceId))

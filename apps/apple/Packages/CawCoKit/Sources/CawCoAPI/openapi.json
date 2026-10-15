@@ -28928,7 +28928,7 @@
         }
       },
       "CommentRead": {
-        "description": "What `comment_read` answers: each of the session's artifacts with pins\nthat match, the page's address the person last sent from, and the time to\npass as the next `since`. A pin on ink carries the ink's box in the page.",
+        "description": "What `comment_read` answers: each of the session's artifacts with pins\nthat match, the page's address the person last marked it at, and the time to\npass as the next `since`. A pin on ink carries the ink's box in the page.",
         "type": "object",
         "properties": {
           "artifacts": {
@@ -28937,7 +28937,7 @@
               "type": "object",
               "properties": {
                 "address": {
-                  "description": "The page's address the person last sent from; its own route before any send.",
+                  "description": "The page's address the person last marked it at; its own route before any delivery.",
                   "type": "string"
                 },
                 "id": {
@@ -29038,6 +29038,10 @@
               }
             ]
           },
+          "heard": {
+            "description": "What of it the session was last told ({@link pinSaid}); the hub stamps it on delivery.",
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -29076,7 +29080,7 @@
             "type": "string"
           },
           "sentAt": {
-            "description": "When it first went to the session with a send.",
+            "description": "When it was first delivered to the session.",
             "type": "string"
           },
           "thread": {
@@ -29291,9 +29295,6 @@
               "of"
             ]
           },
-          "tag": {
-            "type": "string"
-          },
           "classes": {
             "type": "array",
             "items": {
@@ -29376,6 +29377,9 @@
               "padding",
               "position"
             ]
+          },
+          "tag": {
+            "type": "string"
           }
         },
         "required": [
@@ -29410,7 +29414,7 @@
             "type": "string"
           },
           "sentAt": {
-            "description": "When it went to the session with a send; a person's entry only.",
+            "description": "When it was delivered to the session; a person's entry only.",
             "type": "string"
           },
           "text": {
@@ -36513,6 +36517,11 @@
           },
           "artifactName": {
             "description": "That artifact's name, as its line says it.",
+            "type": "string"
+          },
+          "artifactSaid": {
+            "description": "What its line says came: the person's comments (\"Comments on\"); none, their picks (\"Responses on\").",
+            "const": "comments",
             "type": "string"
           },
           "askLabel": {

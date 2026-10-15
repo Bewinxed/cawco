@@ -8,13 +8,13 @@ import {
   COMMENT_LIMITS,
   deletePin,
   findAnchor,
+  type MarkPicture,
   type PageAnchor,
   type Pin,
   type PinnedElement,
   pinUnsent,
   replyToPin,
   resolvePin,
-  type SendPicture,
   withdrawPin,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
@@ -186,7 +186,7 @@ let docTelling: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * The doc changed — a pick, a note, a pin, the agent's patch, a Send's
- * stamp — so a host that counts from the hub's reads (the app's Send N)
+ * stamp — so a host that counts from the hub's reads (the app's pins and Send picks)
  * reads again at once (`cawco:doc`): one word per burst.
  */
 function tellDoc() {
@@ -310,6 +310,7 @@ artifact.watch({
     ink.changed();
     tellDoc();
   },
+  marked: () => picturesLater(),
   link: (link) => tellLink(link),
   synced: () => {
     reflect();
@@ -1131,8 +1132,11 @@ window.addEventListener(
   true
 );
 
-/** The pictures a send carries: each unsent pin's, and the page with its ink when ink no pin stands on is unsent. */
-async function sendPictures(): Promise<SendPicture[]> {
+/**
+ * The pictures of the person's marks the session has not heard: each unsent
+ * pin's, and the page with its ink when ink no pin stands on is unsent.
+ */
+async function markPictures(): Promise<MarkPicture[]> {
   const doc = artifact.doc();
   const all = [...(doc.getMap("pins") as YMap<Pin>).values()];
   const owed = all.filter(pinUnsent).sort((a, b) => a.number - b.number);
@@ -1140,7 +1144,7 @@ async function sendPictures(): Promise<SendPicture[]> {
   const loose = [...(doc.getMap("ink") as YMap<InkGroup>).values()].some(
     (group) => !(group.sentAt || pinned.has(group.id))
   );
-  const pictures: SendPicture[] = [];
+  const pictures: MarkPicture[] = [];
   if (loose) {
     const png = await pins.pagePicture();
     if (png) {
@@ -1155,6 +1159,33 @@ async function sendPictures(): Promise<SendPicture[]> {
     }
   }
   return pictures;
+}
+
+/**
+ * How long after the person's last mark here the page draws its pictures
+ * for the hub: a pause in the burst, well inside the hub's quiet period
+ * (service.ts `MARKS_QUIET_MS`, 10 s), so the delivery carries them. Our call.
+ */
+const PICTURES_AFTER_MS = 1500;
+let picturesTimer: ReturnType<typeof setTimeout> | undefined;
+/** The person marked this page: once they pause, its pictures of what is unheard go to the hub. A canvas's picture is its own. */
+function picturesLater() {
+  clearTimeout(picturesTimer);
+  if (artifact.kind() === "canvas") {
+    return;
+  }
+  picturesTimer = setTimeout(async () => {
+    const pictures = await markPictures();
+    if (pictures.length > 0) {
+      await artifact
+        .pictures({ pictures, url: location.href })
+        .catch((error: unknown) => {
+          console.warn(
+            `[cawco] the marks' pictures did not reach the hub: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+    }
+  }, PICTURES_AFTER_MS);
 }
 
 type HostMessage = Record<string, unknown>;
@@ -1252,13 +1283,6 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         });
       }
     },
-    // The person's Send N: each unsent pin's picture, and the page with its ink.
-    "cawco:send-pictures": async (message) =>
-      post("cawco:send-pictures", {
-        ask: message.ask,
-        url: location.href,
-        pictures: await sendPictures(),
-      }),
     "cawco:capture": async () =>
       post("cawco:capture", await capture(document.documentElement)),
     // The composer's Send: the pins as text and the page with its ink as a picture.

@@ -82,7 +82,7 @@ export const previewRoutes = (deps: {
         }
         return mintTicket(params.id);
       })
-      // The person's Send N from the pane, as the page's own send would.
+      // The pane's Send picks, as the page's own send would.
       .post(
         "/api/instances/:id/artifacts/:artifact/send",
         ({ params, request }) =>

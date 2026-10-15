@@ -37,6 +37,7 @@ import {
   SESSION_STOPPED,
 } from "./harness";
 import {
+  parseArtifactComments,
   parseArtifactResponses,
   parseDelegateAsk,
   parseFleetWatchNudge,
@@ -1580,17 +1581,20 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
   // quiet line naming it, never their bubble; the sentence to the agent is
   // not drawn.
   const responses = parseArtifactResponses(text);
-  if (responses) {
+  const comments = responses ? null : parseArtifactComments(text);
+  const artifact = responses ?? comments;
+  if (artifact) {
     return {
       ...base,
       type: "ui.system_note",
       content: "",
       metadata: {
         subtype: ARTIFACT_RESPONSES,
-        noteTitle: `Responses on ${responses.name}`,
-        artifactId: responses.id,
-        artifactKind: responses.kind,
-        artifactName: responses.name,
+        noteTitle: `${comments ? "Comments" : "Responses"} on ${artifact.name}`,
+        artifactId: artifact.id,
+        artifactKind: artifact.kind,
+        artifactName: artifact.name,
+        ...(comments ? { artifactSaid: "comments" as const } : {}),
       },
     };
   }

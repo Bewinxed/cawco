@@ -872,7 +872,7 @@ enum PreviewProbe {
     static let workingAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-working")
     /// `-preview-reply`: once the open card's pin has gone with a send, the card's Reply runs once, then Resolve.
     static let replyAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-reply")
-    /// `-preview-send`: Send N runs once, the first time something is owed.
+    /// `-preview-send`: Send picks runs once, the first time a pick is unsent.
     static let sendAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-send")
     /// The click, in the page: what the overlay's Comment mode hears from a mouse.
     static let click = """

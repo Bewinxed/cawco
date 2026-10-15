@@ -19,6 +19,7 @@ import {
   changedEntry,
   choiceEntryProblem,
 } from "@cawco/core/choices";
+import type { MarkPictures } from "@cawco/core/comments";
 import { WebsocketProvider } from "y-websocket";
 import {
   applyUpdate,
@@ -86,6 +87,8 @@ export interface Watchers {
   ink: () => void;
   /** The doc's link to the hub changed. */
   link: (link: Link) => void;
+  /** The person's ink or pins changed in this page: what the hub delivers, with this page's pictures of them. */
+  marked: () => void;
   /** `meta` changed: a new revision, a send. */
   meta: () => void;
   /** The hub would not keep what this page wrote; the doc was joined again from the hub's. */
@@ -277,9 +280,12 @@ const observe = (own: Doc) => {
     }
   });
   for (const name of ["ink", "moved", "pins"]) {
-    own.getMap(name).observe(() => {
+    own.getMap(name).observe((event) => {
       if (own === doc) {
         watchers?.ink();
+        if (name !== "moved" && event.transaction.local) {
+          watchers?.marked();
+        }
       }
     });
   }
@@ -529,6 +535,28 @@ export const artifact = {
     if (!response.ok) {
       throw new Error(
         (await response.text()).slice(0, 300) || "The hub refused the send."
+      );
+    }
+  },
+
+  /**
+   * This page's pictures of the person's marks it holds unheard, to the hub
+   * beside the doc's socket, which holds them for the delivery that carries
+   * those marks; nothing when this page joined no doc.
+   */
+  pictures: async (body: MarkPictures): Promise<void> => {
+    if (!syncPath) {
+      return;
+    }
+    const response = await fetch(`${syncPath}/pictures`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(
+        (await response.text()).slice(0, 300) ||
+          "The hub refused the marks' pictures."
       );
     }
   },

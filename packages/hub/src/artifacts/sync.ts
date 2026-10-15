@@ -1,7 +1,8 @@
 /**
  * The y-websocket protocol (y-protocols/sync) for one artifact's doc, on the
  * preview listener at `/__cawco/artifact/<id>` (preview.ts), and the
- * person's send beside it at `/__cawco/artifact/<id>/send`. Sync only:
+ * person's send of their picks beside it at `/__cawco/artifact/<id>/send`,
+ * and the page's pictures of their marks at `…/pictures`. Sync only:
  * awareness, auth and awareness queries are read and ignored, so a client
  * keeps its socket fresh with its own resync (`resyncInterval`).
  *
@@ -25,6 +26,7 @@ import {
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
   COMMENT_LIMITS,
+  type MarkPictures,
   pinsProblem,
   type SendBody,
 } from "@cawco/core/comments";
@@ -272,7 +274,7 @@ export const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
  * as the overlay and the canvas's host page reach them.
  */
 export const ARTIFACT_PATH =
-  /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send|\/picture)?$/;
+  /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send|\/picture|\/pictures)?$/;
 
 /** Where a canvas's latest picture is kept: its folder under the artifacts' root. */
 export const picturePath = (root: string, artifactId: string): string =>
@@ -350,39 +352,51 @@ const holdClaims = (docs: ArtifactDocs, artifactId: string) => {
   });
 };
 
-/** The longest send body read: its text, its address and its pictures at their bounds, as JSON. */
-const SEND_BODY_MAX =
-  4 * CHOICE_LIMITS.note +
-  COMMENT_LIMITS.pictures * (COMMENT_LIMITS.pictureChars + 100) +
-  4096;
+/** The longest send body read: its text at its bound, as JSON. */
+const SEND_BODY_MAX = 4 * CHOICE_LIMITS.note + 4096;
 
-/** The longest page address a send names. Our call. */
+/** The longest pictures body read: its pictures and its address at their bounds, as JSON. */
+const PICTURES_BODY_MAX =
+  COMMENT_LIMITS.pictures * (COMMENT_LIMITS.pictureChars + 100) + 4096;
+
+/** The longest page address a post names. Our call. */
 const URL_MAX = 2048;
 
 const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;
 
-const SEND_SHAPE = "Send takes JSON: { text?, url?, pictures? }.";
+const SEND_SHAPE = "Send takes JSON: { text? }.";
+
+const PICTURES_SHAPE = "Pictures take JSON: { pictures, url? }.";
+
+const isRecord = (body: unknown): body is Record<string, unknown> =>
+  !!body && typeof body === "object" && !Array.isArray(body);
 
 /** Why a send's body is not one, or its fields; null when it is. */
 const sendBodyProblem = (body: unknown): string | null => {
-  if (!(body && typeof body === "object" && !Array.isArray(body))) {
+  if (!isRecord(body)) {
     return SEND_SHAPE;
   }
-  const { text, url, pictures } = body as Record<string, unknown>;
+  const { text } = body;
   if (
     text !== undefined &&
     !(typeof text === "string" && text.length <= CHOICE_LIMITS.note)
   ) {
     return `text is a string of at most ${CHOICE_LIMITS.note} characters.`;
   }
+  return null;
+};
+
+/** Why a pictures post's body is not one, or its fields; null when it is. */
+const picturesBodyProblem = (body: unknown): string | null => {
+  if (!isRecord(body)) {
+    return PICTURES_SHAPE;
+  }
+  const { url, pictures } = body;
   if (
     url !== undefined &&
     !(typeof url === "string" && url.length <= URL_MAX)
   ) {
     return `url is a string of at most ${URL_MAX} characters.`;
-  }
-  if (pictures === undefined) {
-    return null;
   }
   if (!(
     Array.isArray(pictures) && pictures.length <= COMMENT_LIMITS.pictures
@@ -404,11 +418,62 @@ const sendBodyProblem = (body: unknown): string | null => {
 };
 
 /**
- * The person sends (`cawco.send`, and the panel's Send N): what the send
- * applies first (a project's setup page: its fleet choices and place), then
- * the session hears it has new responses to read, with the pins' pictures
- * (service.ts `send`). `instanceId` already owns `artifactId` (the listener
- * checked).
+ * The page posts its pictures of the marks the person just made on it
+ * (`POST …/pictures`, core `MarkPictures`): the hub holds them for the
+ * delivery that carries those marks (service.ts `pictures`). `instanceId`
+ * already owns `artifactId` (the listener checked).
+ */
+export const artifactPictures =
+  (
+    keep: (
+      instanceId: string,
+      artifactId: string,
+      body: MarkPictures
+    ) => { held: number }
+  ) =>
+  async (
+    request: Request,
+    instanceId: string,
+    artifactId: string
+  ): Promise<Response> => {
+    if (request.method !== "POST") {
+      return new Response("Pictures are a POST.", {
+        status: 405,
+        headers: { allow: "POST" },
+      });
+    }
+    const raw = await request.text();
+    if (raw.length > PICTURES_BODY_MAX) {
+      return new Response(
+        `A post carries at most ${COMMENT_LIMITS.pictures} pictures.`,
+        { status: 413 }
+      );
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return new Response(PICTURES_SHAPE, { status: 400 });
+    }
+    const problem = picturesBodyProblem(body);
+    if (problem) {
+      return new Response(problem, { status: 400 });
+    }
+    try {
+      return Response.json(keep(instanceId, artifactId, body as MarkPictures));
+    } catch (error) {
+      if (error instanceof ArtifactRefusal) {
+        return new Response(error.message, { status: error.status });
+      }
+      throw error;
+    }
+  };
+
+/**
+ * The person sends their picks (`cawco.send`): what the send applies first
+ * (a project's setup page: its fleet choices and place), then the session
+ * hears it has new responses to read (service.ts `send`). `instanceId`
+ * already owns `artifactId` (the listener checked).
  */
 export const artifactSend =
   (
@@ -446,13 +511,14 @@ export const artifactSend =
     if (problem) {
       return new Response(problem, { status: 400 });
     }
-    const { text, ...rest } = body as SendBody;
+    const { text } = body as SendBody;
     try {
       return Response.json(
-        await send(instanceId, artifactId, {
-          ...rest,
-          ...(text?.trim() ? { text: text.trim() } : {}),
-        })
+        await send(
+          instanceId,
+          artifactId,
+          text?.trim() ? { text: text.trim() } : {}
+        )
       );
     } catch (error) {
       if (error instanceof ArtifactRefusal) {

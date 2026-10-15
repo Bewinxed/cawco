@@ -10,7 +10,6 @@
     previewRoute,
     type ShownFailure,
   } from "@cawco/core";
-  import { pinUnsent, type SendPicture } from "@cawco/core/comments";
   import { type Snippet, untrack } from "svelte";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -32,7 +31,6 @@
   import {
     artifactShown,
     createDraftCanvas,
-    exportCanvas,
     showArtifact,
   } from "../artifact-api";
   import {
@@ -70,7 +68,6 @@
     previewErrorOf,
     previewKey,
     previewPickPlace,
-    previewPictures,
     previewPinAt,
     previewPinId,
     previewPng,
@@ -117,13 +114,14 @@
   /**
    * What last went wrong, and what trying again means: the frame's own
    * errors (a capture the page refused) reload the frame; a refused close
-   * asks again; a refused send sends again. A field the hub's bounds
-   * refused has no way back here: the page says so under the field, and
-   * the band goes once the field is kept.
+   * asks again. A page's own send the hub refused, and a field the hub's
+   * bounds refused, have no way back here: the page sends again from its
+   * own button, and says a field's problem under the field; the band goes
+   * once the page is heard from again.
    */
   let failure = $state<{
     message: string;
-    again: "reload" | "close" | "send" | null;
+    again: "reload" | "close" | null;
   } | null>(null);
   let well = $state<HTMLDivElement>();
   /** The session's panel, row and machines, from whichever store this tree set (pane-fleet.ts). */
@@ -353,8 +351,6 @@
   }
   const frameError = (message: string | null) =>
     message ? { message, again: "reload" as const } : null;
-  /** The way back from what a page's `cawco:error` names. */
-  const AGAIN = { send: "send", field: null } as const;
 
   /*
    * Nothing serves the page: the proxy answered with its own page, which
@@ -499,25 +495,21 @@
   /*
    * The page keeps its own state (Projects spec §5.10): the overlay joins
    * the artifact's live document itself, on the path `cawco:hello` names.
-   * The pane joins the same doc too (artifact-doc.ts): the picks and pins
-   * the session has not heard, which Send N sends, and the pins' threads,
-   * which the list and the card read and the person writes.
+   * The pane joins the same doc too (artifact-doc.ts): the pins' threads,
+   * which the list and the card read and the person writes. The person's
+   * pins, replies and ink go to the session by themselves once quiet (the
+   * hub's artifacts/service.ts); their picks go by the page's own send.
    */
   let view = $state.raw<ArtifactView | null>(null);
   let doc: ArtifactDoc | null = null;
-  /** Picks the session has not heard sent. */
-  const unsentPicks = $derived(
-    view
-      ? Object.values(view.choices).filter(
-          (entry) => !view?.sentAt || entry.at > view.sentAt
-        ).length
-      : 0
-  );
-  /** N on Send N: every pick, pin and reply the session has not heard. */
-  const owed = $derived(
-    unsentPicks + (view ? view.pins.filter(pinUnsent).length : 0)
-  );
   const pins = $derived(view?.pins ?? []);
+  /** The page has picks the session has not heard: the head offers to send them. */
+  const unsentPicks = $derived(
+    !!view &&
+      Object.values(view.choices).some(
+        (entry) => !view?.sentAt || entry.at > view.sentAt
+      )
+  );
   let sending = $state(false);
   const artifactId = $derived(artifact?.id);
   $effect(() => {
@@ -537,95 +529,49 @@
     };
   });
 
-  /**
-   * A page's answers to the pane's asks (pictures for a send, a pin's
-   * picture), each under the ask's number.
+  /*
+   * The setup page is done once the person sends it from the page (its own
+   * `cawco.send`, which stamps the doc's `sentAt`): on a phone its sheet
+   * stands over the thread, where Caw answers with the files and "Open the
+   * board". The `sentAt` it opened with is not a send.
    */
-  let nextAsk = 1;
-  const asks = new Map<
-    number,
-    (pictures: SendPicture[] | null, url: string | null) => void
-  >();
-  /** How long a page has to draw a send's pictures. Our call: a page's rasters take a second or two. */
-  const PICTURES_MS = 20_000;
-  function pagePictures(): Promise<{
-    pictures: SendPicture[];
-    url: string | null;
-  }> {
-    const ask = nextAsk;
-    nextAsk += 1;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        asks.delete(ask);
-        reject(
-          new Error(
-            "The page didn't draw its pins' pictures, so nothing was sent. Send again."
-          )
-        );
-      }, PICTURES_MS);
-      asks.set(ask, (pictures, address) => {
-        clearTimeout(timer);
-        asks.delete(ask);
-        if (pictures) {
-          resolve({ pictures, url: address });
-        } else {
-          reject(
-            new Error(
-              "The page's pictures weren't ones the hub takes, so nothing was sent. Send again."
-            )
-          );
-        }
-      });
-      post({ type: "cawco:send-pictures", ask });
-    });
-  }
-  /** A canvas's own picture, as the hub keeps it, with its pins. */
-  async function canvasPictures(id: string): Promise<SendPicture[]> {
-    const { png } = await exportCanvas(id);
-    return png ? [{ pin: null, png }] : [];
-  }
-
   /**
-   * Send N: the hub's send, which applies a setup page's fleet choices and
-   * place first, then tells the session it has new responses here to read,
-   * with each pin's picture. A refusal is said where the person is: under
-   * the open card's field, else in the band over the page, its way back
-   * sending again.
+   * Send picks: the hub's send, which applies a setup page's fleet choices
+   * and place first, then tells the session it has the page's picks to
+   * read. A refusal is said in the band over the page.
    */
-  async function send() {
+  async function sendPicks() {
     if (!artifact) {
       return;
     }
     sending = true;
     try {
-      const drawn = isCanvas
-        ? { pictures: await canvasPictures(artifact.id), url: null }
-        : await pagePictures();
-      await sendArtifact(instanceId, artifact.id, {
-        pictures: drawn.pictures,
-        ...(drawn.url ? { url: drawn.url } : {}),
-      });
-      cardError = null;
-      if (failure?.again === "send") {
-        failure = null;
-      }
+      await sendArtifact(instanceId, artifact.id);
     } catch (error) {
-      const message = failureWords(error);
-      if (openPin) {
-        cardError = message;
-      } else {
-        failure = { message, again: "send" };
-      }
-      return;
+      failure = { message: failureWords(error), again: null };
     } finally {
       sending = false;
     }
-    // The setup page is done once sent: on a phone its sheet stands over the
-    // thread, where Caw answers with the files and "Open the board".
-    if (sheet && isSetupPage(artifact, owner?.projectId)) {
-      await close();
-    }
   }
+  let sentSeen: string | null | undefined;
+  $effect(() => {
+    if (!view) {
+      sentSeen = undefined;
+      return;
+    }
+    const at = view.sentAt;
+    const was = sentSeen;
+    sentSeen = at;
+    if (
+      was !== undefined &&
+      at &&
+      at !== was &&
+      sheet &&
+      isSetupPage(artifact, owner?.projectId)
+    ) {
+      untrack(close);
+    }
+  });
   /** A page's `cawco.pickPlace()` waiting on the person: the request it answers. */
   let picking = $state<{ id: number | string } | null>(null);
   /** The place picked goes back to the page, which keeps it in its state. */
@@ -703,10 +649,14 @@
   let roomW = $state(0);
   let roomH = $state(0);
   const cardPin = $derived(pins.find((pin) => pin.id === openPin) ?? null);
-  /** Pins the agent is working on: the last send carried them and its turn runs. */
+  /** Pins the agent is working on: the last delivery carried them and its turn runs. */
   const live = $derived.by(() => {
-    const sentAt = view?.sentAt;
-    if (!(sentAt && fleet.working(instanceId))) {
+    const stamps = pins.flatMap((pin) => [
+      pin.sentAt ?? "",
+      ...pin.thread.map((entry) => entry.sentAt ?? ""),
+    ]);
+    const last = stamps.reduce((a, b) => (b > a ? b : a), "");
+    if (!(last && fleet.working(instanceId))) {
       return new Set<string>();
     }
     return new Set(
@@ -714,8 +664,8 @@
         .filter(
           (pin) =>
             !pin.resolvedAt &&
-            (pin.sentAt === sentAt ||
-              pin.thread.some((entry) => entry.sentAt === sentAt))
+            (pin.sentAt === last ||
+              pin.thread.some((entry) => entry.sentAt === last))
         )
         .map((pin) => pin.id)
     );
@@ -1031,14 +981,6 @@
         }
         break;
       }
-      case "cawco:send-pictures": {
-        const answer = asks.get(Number(message.ask));
-        answer?.(
-          previewPictures(message.pictures),
-          previewUrl(message.url, paneOrigin)
-        );
-        break;
-      }
       case "cawco:key": {
         const name = previewKey(message.key);
         if (name) {
@@ -1054,9 +996,9 @@
         const said = previewError(message.message);
         const of = previewErrorOf(message.of);
         if (said) {
-          // A send the page made itself goes again from Send; a field's
-          // problem is the page's to show under the field.
-          failure = { message: said, again: of ? AGAIN[of] : "reload" };
+          // A send the page made itself goes again from its own button; a
+          // field's problem is the page's to show under the field.
+          failure = { message: said, again: of ? null : "reload" };
         }
         retrying = false;
         break;
@@ -1238,19 +1180,18 @@
 />
 
 {#snippet controls()}
-  {#if artifact}
-    <!-- Send N: every unsent pick, pin and reply as one turn (WORDS.md: the count is a number). -->
+  {#if artifact && unsentPicks}
+    <!-- The page's picks the session has not heard; pins and ink go by themselves. -->
     <button
       aria-busy={sending || undefined}
       aria-disabled={sending || undefined}
       class="send touch-hit"
-      disabled={owed === 0 && !sending}
-      onclick={whileIdle(() => sending, send)}
-      title={owed === 0 ? "Nothing new to send" : `Send ${owed} to the session`}
+      onclick={whileIdle(() => sending, sendPicks)}
+      title="Send the page's picks to the session"
       type="button"
     >
       <PendingContent icon={IconSend} pending={sending} />
-      <span class="send-label">{owed === 0 ? "Send" : `Send ${owed}`}</span>
+      <span class="send-label">Send picks</span>
     </button>
   {/if}
   {#if !(ownTab || linkSession)}
@@ -1527,15 +1468,6 @@
           size="sm"
           variant="outline"
         />
-      {:else if failure.again === "send"}
-        <Button
-          label="Send again"
-          onclick={send}
-          pending={sending}
-          pendingLabel="Sending…"
-          size="sm"
-          variant="outline"
-        />
       {:else if failure.again === "close"}
         <Button
           label="Try again"
@@ -1577,9 +1509,6 @@
     & > :global(*) {
       pointer-events: auto;
     }
-  }
-  .send-label {
-    font-variant-numeric: tabular-nums;
   }
   /* The replacement's load releases the old paint independently of the overlay. */
   iframe {

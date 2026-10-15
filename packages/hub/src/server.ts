@@ -117,6 +117,7 @@ import {
   accountProvidersOf,
   agentProblem,
   archiveRefusal,
+  artifactCommentsNotice,
   artifactResponsesNotice,
   attachedFileLine,
   attachedFileName,
@@ -233,6 +234,7 @@ import {
   type ProviderSigninChallenge,
   type ProviderSigninResult,
   parseAgentFrontMatter,
+  parseArtifactComments,
   parseArtifactResponses,
   providerChoices,
   providerLimitRefused,
@@ -285,6 +287,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
+import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
@@ -322,6 +325,7 @@ import {
 } from "./artifacts/service";
 import {
   artifactPicture,
+  artifactPictures,
   artifactSend,
   artifactSocket,
 } from "./artifacts/sync";
@@ -388,6 +392,7 @@ import type {
 } from "./db";
 import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
 import type { LoginMove } from "./db/accounts";
+import type { ArtifactRow } from "./db/artifacts";
 import type { PriorConversation } from "./db/schema";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
@@ -881,6 +886,9 @@ const restartedWords = (restartedAt: Date): string =>
   `CawCo restarted this session's process at ${utcClock(restartedAt)} while your turn was running. ${CARRY_ON_CUT}`;
 
 /** What a session whose process a signal killed is told of the turn that kill cut. */
+/** A sentence's closing full stop, taken off to set it inside another. */
+const CLOSING_STOP = /\.$/;
+
 const killedWords = (signal: string, killedAt: Date): string =>
   `Your process was killed (${signal}) at ${utcClock(killedAt)} while your turn was running, and CawCo started it again. ${CARRY_ON_CUT}`;
 
@@ -8934,29 +8942,25 @@ export const createServer = (
   };
 
   /**
-   * The person's Send on an artifact, to its session: one event (core
-   * `artifactResponsesNotice`, origin {@link ARTIFACT_ORIGIN}) saying it has
-   * new responses to read, never the picks as the person's words. A session
-   * hears one event per artifact at a time: one it has not read yet is
-   * withdrawn and this one stands in its place ({@link withdrawPending},
-   * `replaces`), from the earlier `since`, its pins and pictures carried
-   * over. One it already read is not repeated; this one starts after it.
-   * Sends for one artifact settle one after another.
+   * The person's word on an artifact, to its session: one event of origin
+   * {@link ARTIFACT_ORIGIN}, never their bubble. Their picks' Send is a
+   * notice to read them (core `artifactResponsesNotice`); their pins, replies,
+   * resolves and ink go by themselves as a notice that carries them (core
+   * `artifactCommentsNotice`). A session hears one of each per artifact at a
+   * time: one it has not read yet is withdrawn and the new one stands in its
+   * place ({@link withdrawPending}, `replaces`), what the withdrawn one said
+   * folded in (the earlier `since`; the earlier pins and pictures first). One
+   * it already read is not repeated. Each artifact's events settle one after
+   * another.
    */
-  const responsesInFlight = new Map<string, Promise<void>>();
-  const signalResponses: ArtifactServiceDeps["signal"] = (
-    instance,
-    artifact,
-    responses
-  ) => {
-    const before = responsesInFlight.get(artifact.id) ?? Promise.resolve();
-    const next = before
-      .catch(() => undefined)
-      .then(() => supersedeResponses(instance, artifact, responses));
-    responsesInFlight.set(artifact.id, next);
+  const artifactEventsInFlight = new Map<string, Promise<void>>();
+  const artifactInOrder = (key: string, run: () => Promise<void>) => {
+    const before = artifactEventsInFlight.get(key) ?? Promise.resolve();
+    const next = before.catch(() => undefined).then(run);
+    artifactEventsInFlight.set(key, next);
     return next.finally(() => {
-      if (responsesInFlight.get(artifact.id) === next) {
-        responsesInFlight.delete(artifact.id);
+      if (artifactEventsInFlight.get(key) === next) {
+        artifactEventsInFlight.delete(key);
       }
     });
   };
@@ -8976,13 +8980,27 @@ export const createServer = (
             : []
         );
   };
-  const supersedeResponses: ArtifactServiceDeps["signal"] = async (
-    instance,
-    artifact,
-    { images, pins, since }
-  ) => {
-    let told = { images, pins, since };
+  /**
+   * Withdraws each of the session's unread artifact events `same` names
+   * (by its words), in order: the words and pictures of each one withdrawn,
+   * and the last one's uuid, which the new event `replaces`.
+   */
+  const withdrawArtifactEvents = async (
+    instance: InstanceRow,
+    artifact: ArtifactRow,
+    same: (text: string) => boolean
+  ): Promise<{
+    replaces?: string;
+    withdrawn: {
+      images: { data: string; mediaType: string }[];
+      text: string;
+    }[];
+  }> => {
     let replaces: string | undefined;
+    const withdrawn: {
+      images: { data: string; mediaType: string }[];
+      text: string;
+    }[] = [];
     for (const row of db.sendsIn(instance.id, ["pending"])) {
       const body = row.body as SentMessage | null;
       if (!(
@@ -8990,39 +9008,35 @@ export const createServer = (
       )) {
         continue;
       }
-      const earlier = parseArtifactResponses(
-        transcriptUserText(body.message) ?? ""
-      );
-      if (earlier?.id !== artifact.id) {
+      const text = transcriptUserText(body.message) ?? "";
+      if (!same(text)) {
         continue;
       }
       // Read before the withdrawal, which clears what the record held.
-      const pictures = picturesOf(row.owed ?? row.envelope);
+      const images = picturesOf(row.owed ?? row.envelope);
       // biome-ignore lint/performance/noAwaitInLoops: each withdrawal is the harness's atomic answer, taken one at a time so what each carried is folded in order
       const outcome = await withdrawPending(row, instance.machineId).catch(
         (error: unknown) => {
           console.warn(
-            `[artifacts] ${artifact.name}: its unread responses event ${row.uuid} could not be withdrawn, so it stands: ${error instanceof Error ? error.message : String(error)}`
+            `[artifacts] ${artifact.name}: its unread event ${row.uuid} could not be withdrawn, so it stands: ${error instanceof Error ? error.message : String(error)}`
           );
           return "started" as const;
         }
       );
       if (outcome === "withdrawn") {
-        told = {
-          images: [...pictures, ...told.images],
-          pins: told.pins || earlier.pins,
-          since: Math.min(told.since, earlier.since),
-        };
+        withdrawn.push({ text, images });
         replaces = row.uuid;
       }
     }
-    const text = artifactResponsesNotice({
-      id: artifact.id,
-      kind: artifact.kind,
-      name: artifact.name,
-      pins: told.pins,
-      since: told.since,
-    });
+    return { withdrawn, ...(replaces ? { replaces } : {}) };
+  };
+  /** One artifact event to its session, through the one send path. */
+  const sendArtifactEvent = (
+    instance: InstanceRow,
+    text: string,
+    images: { data: string; mediaType: string }[],
+    replaces: string | undefined
+  ) => {
     deliverSend({
       verb: "send",
       machineId: instance.machineId,
@@ -9035,10 +9049,10 @@ export const createServer = (
           message: {
             role: "user",
             content:
-              told.images.length === 0
+              images.length === 0
                 ? text
                 : [
-                    ...told.images.map(({ mediaType, data }) => ({
+                    ...images.map(({ mediaType, data }) => ({
                       type: "image" as const,
                       source: {
                         type: "base64" as const,
@@ -9056,9 +9070,92 @@ export const createServer = (
       },
     });
   };
+  const signalResponses: ArtifactServiceDeps["signal"] = (
+    instance,
+    artifact,
+    { since }
+  ) =>
+    artifactInOrder(`${artifact.id}:picks`, async () => {
+      const { withdrawn, replaces } = await withdrawArtifactEvents(
+        instance,
+        artifact,
+        (text) => parseArtifactResponses(text)?.id === artifact.id
+      );
+      const earliest = Math.min(
+        since,
+        ...withdrawn.map(
+          (one) => parseArtifactResponses(one.text)?.since ?? since
+        )
+      );
+      sendArtifactEvent(
+        instance,
+        artifactResponsesNotice({
+          id: artifact.id,
+          kind: artifact.kind,
+          name: artifact.name,
+          since: earliest,
+        }),
+        [],
+        replaces
+      );
+    });
+  /**
+   * The person's marks on an artifact (artifacts/service.ts
+   * `deliverMarks`), to the session that made it, which they wake as the
+   * person's own words do (core `byPerson`): a stopped or sleeping one is
+   * started again. One that takes no input any more (its conversation gone,
+   * its finished work's workspace archived or taken over by a later item)
+   * has ended: the marks wake the project's Caw instead, as the projects
+   * plan's §5.8 says for a page whose writer ended ("wakes the session that
+   * wrote the page, or Caw if it has ended"). Outside a project there is no
+   * Caw, and the send records why it was not taken.
+   */
+  const deliverArtifactMarks: ArtifactServiceDeps["deliverMarks"] = (
+    instance,
+    artifact,
+    { text, images }
+  ) =>
+    artifactInOrder(`${artifact.id}:marks`, async () => {
+      const refused = inputRefusal(instance.id, {
+        kind: "system",
+        name: ARTIFACT_ORIGIN,
+      });
+      if (refused && artifact.projectId && lead) {
+        await lead.wake(artifact.projectId, {
+          by: "you",
+          text: `${text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${refused.reason.replace(CLOSING_STOP, "")}), so these come to you.`,
+          ...(images.length > 0 ? { carried: { images } } : {}),
+        });
+        return;
+      }
+      const { withdrawn, replaces } = await withdrawArtifactEvents(
+        instance,
+        artifact,
+        (words) => parseArtifactComments(words)?.id === artifact.id
+      );
+      const sections = [
+        ...withdrawn.flatMap((one) => {
+          const earlier = parseArtifactComments(one.text);
+          return earlier ? [earlier.sections] : [];
+        }),
+        parseArtifactComments(text)?.sections ?? "",
+      ];
+      sendArtifactEvent(
+        instance,
+        withdrawn.length === 0
+          ? text
+          : artifactCommentsNotice(artifact, sections),
+        [...withdrawn.flatMap((one) => one.images), ...images].slice(
+          0,
+          COMMENT_LIMITS.pictures
+        ),
+        replaces
+      );
+    });
 
   // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
-  // listener; the person's Send tells the session to read it (artifacts/).
+  // listener; the person's picks' Send tells the session to read them, and
+  // their marks go to it by themselves (artifacts/).
   const artifactDocs = createArtifactDocs({ db: db.artifacts });
   const artifacts: Artifacts = createArtifacts({
     // The panel closes at once; a preview's machine that can't stop its
@@ -9074,11 +9171,14 @@ export const createServer = (
     db: db.artifacts,
     docs: artifactDocs,
     root: ARTIFACTS_ROOT,
-    // Your picks and pins on a session's own page reach that session as the
-    // page's word for its tools to read (artifact_read, comment_read), never
-    // as your message: Caw's decision page is his to read, never a thread line.
+    // Your picks on a session's own page reach that session as the page's
+    // word for its tools to read (artifact_read), never as your message:
+    // Caw's decision page is his to read, never a thread line.
     signal: (instance, artifact, responses) =>
       signalResponses(instance, artifact, responses),
+    // Your pins, replies, resolves and ink go by themselves once quiet.
+    deliverMarks: (instance, artifact, delivery) =>
+      deliverArtifactMarks(instance, artifact, delivery),
     instance: (id) => db.getInstancesByIds([id])[0],
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
@@ -9155,6 +9255,8 @@ export const createServer = (
     }
   };
   restoreShownPreviews();
+  // Marks the person wrote just before the hub went down still go.
+  artifacts.resumeMarks();
 
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
@@ -9163,6 +9265,7 @@ export const createServer = (
     reach: reachPreview,
     unreachable: previewUnreachable,
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
+    pictures: artifactPictures(artifacts.pictures),
     send: artifactSend(artifacts.send),
     socket: artifactSocket(artifactDocs),
     state: artifactDocs.snapshot,

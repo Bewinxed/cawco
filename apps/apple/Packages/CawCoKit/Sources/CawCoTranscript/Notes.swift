@@ -207,7 +207,9 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                 default: .toolRead
                 }
                 set(glyph, title: "")
-                let said = NSMutableAttributedString(attributedString: words("Responses on ", ink: Palette.inkMuted))
+                // Comments delivered by themselves (core artifactSaid) read "Comments on"; picks "Responses on".
+                let what = block.string("artifactSaid") == "comments" ? "Comments on " : "Responses on "
+                let said = NSMutableAttributedString(attributedString: words(what, ink: Palette.inkMuted))
                 let name = NSMutableAttributedString(attributedString: words(block.string("artifactName") ?? "", ink: Palette.inkStrong))
                 name.addAttributes([.underlineStyle: NSUnderlineStyle.single.rawValue,
                                     .underlineColor: Palette.inkStrong.withAlphaComponent(0.35)],

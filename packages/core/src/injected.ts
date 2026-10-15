@@ -180,10 +180,10 @@ export function parseUndelivered(
 }
 
 /**
- * The person sent responses on one of the session's artifacts (hub
- * artifacts/service.ts `send`): the session reads them itself, with
- * `artifact_read` from `since` and, when pins came with them, `comment_read`.
- * Picks never travel as the person's words. Sent under the system origin
+ * The person sent their picks on one of the session's artifacts (hub
+ * artifacts/service.ts `send`, the page's `cawco.send`): the session reads
+ * them itself, with `artifact_read` from `since`. Picks never travel as the
+ * person's words. Sent under the system origin
  * {@link import("./harness").ARTIFACT_ORIGIN}; a transcript draws it as one
  * quiet line ({@link import("./harness").ARTIFACT_RESPONSES}).
  */
@@ -191,8 +191,6 @@ export interface ArtifactResponses {
   id: string;
   kind: ArtifactKind;
   name: string;
-  /** Whether pins came with them, which `comment_read` returns. */
-  pins: boolean;
   /** The `seq` to read from: the last one the session was told of. */
   since: number;
 }
@@ -201,13 +199,12 @@ export const artifactResponsesNotice = ({
   id,
   kind,
   name,
-  pins,
   since,
 }: ArtifactResponses): string =>
-  `[CawCo] The ${kind} "${name}" has new responses since ${since}. Read them with artifact_read({ id: "${id}", since: ${since} })${pins ? `, and its pins with comment_read({ artifact: "${id}" })` : ""}.`;
+  `[CawCo] The ${kind} "${name}" has new responses since ${since}. Read them with artifact_read({ id: "${id}", since: ${since} }).`;
 
 const ARTIFACT_RESPONSES_LINE =
-  /^\[CawCo\] The (page|canvas|preview) "([a-z0-9][a-z0-9-]{0,62})" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: \d+ \}\)(, and its pins with comment_read)?/;
+  /^\[CawCo\] The (page|canvas|preview) "([a-z0-9][a-z0-9-]{0,62})" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: \d+ \}\)/;
 
 /** An artifact's responses notice read back into what it names. */
 export function parseArtifactResponses(text: string): ArtifactResponses | null {
@@ -220,7 +217,46 @@ export function parseArtifactResponses(text: string): ArtifactResponses | null {
     name: line[2],
     since: Number(line[3]),
     id: line[4],
-    pins: line[5] !== undefined,
+  };
+}
+
+/**
+ * The person's pins, replies, resolves and ink on one of the session's
+ * artifacts, delivered by themselves once they have been quiet a while (hub
+ * artifacts/service.ts `deliverMarks`): the sections say each pin (its
+ * number, id, anchor, source and words) and each loose stroke group, so the
+ * session acts on them without reading first. Sent under the system origin
+ * {@link import("./harness").ARTIFACT_ORIGIN}, like the picks' notice; a
+ * transcript draws it as the same quiet line, "Comments on <name>".
+ */
+export interface ArtifactComments {
+  id: string;
+  kind: ArtifactKind;
+  name: string;
+}
+
+export const artifactCommentsNotice = (
+  { id, kind, name }: ArtifactComments,
+  sections: string[]
+): string =>
+  `[CawCo] The person commented on the ${kind} "${name}" (artifact ${id}). Answer each pin in its thread with comment_reply({ pin, text }), and comment_resolve once a change settles it; comment_read has the history.\n\n${sections.join("\n\n")}`;
+
+const ARTIFACT_COMMENTS_LINE =
+  /^\[CawCo\] The person commented on the (page|canvas|preview) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\)\.[^\n]*\n\n/;
+
+/** An artifact's comments notice read back into what it names, and its sections as one text. */
+export function parseArtifactComments(
+  text: string
+): (ArtifactComments & { sections: string }) | null {
+  const line = ARTIFACT_COMMENTS_LINE.exec(text);
+  if (!line) {
+    return null;
+  }
+  return {
+    kind: line[1] as ArtifactKind,
+    name: line[2],
+    id: line[3],
+    sections: text.slice(line[0].length),
   };
 }
 

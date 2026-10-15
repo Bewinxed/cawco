@@ -4,10 +4,12 @@
  * numbered pin in the doc's `pins` map. An annotation stands on a stroke
  * group's ink (core ink.ts); a comment stands on the element the person
  * tapped in Comment mode, or on ink by the radial menu's Comment, and carries
- * a thread the person and the agent both write. Nothing of it reaches the
- * session until the person's Send, which tells the session it has new
- * responses to read with `comment_read` and stamps every unsent pin and
- * thread entry `sentAt`.
+ * a thread the person and the agent both write. It reaches the session by
+ * itself: the hub hears every person's write on `pins` and `ink`, and once
+ * they have been quiet a while delivers the burst as one message carrying
+ * the pins themselves ({@link pinSection}, {@link inkSection}), then stamps
+ * each pin `sentAt` and `heard` ({@link pinSaid}), each entry and stroke
+ * group `sentAt`.
  *
  * A pin is placed again after every revision of the page by its anchor, in
  * one order ({@link findAnchor}): the element at its source's file:line
@@ -27,6 +29,7 @@
  */
 import type { Doc, Map as YMap } from "yjs";
 import type { PreviewElement } from "./index";
+import type { InkGroup } from "./ink";
 
 export const COMMENT_LIMITS = {
   /** Pins an artifact keeps. */
@@ -41,27 +44,35 @@ export const COMMENT_LIMITS = {
   file: 300,
   /** Characters of the element's text an anchor keeps. */
   anchorText: 200,
-  /** Pictures one send carries: a pin's crop each, and the page with its ink. Our call. */
+  /** Pictures one post carries: a pin's crop each, and the page with its ink. Our call. */
   pictures: 20,
   /** Base64 characters one picture holds, about 2.2 MB of PNG. Our call. */
   pictureChars: 3_000_000,
 } as const;
 
 /**
- * A picture a send carries: pin `pin`'s element or ink, cropped, or with
- * `pin` null the page with the person's ink on it.
+ * A picture the page draws of the person's marks: pin `pin`'s element or
+ * ink, cropped, or with `pin` null the page with the person's ink on it.
  */
-export interface SendPicture {
+export interface MarkPicture {
   pin: string | null;
   /** Base64 PNG. */
   png: string;
 }
 
-/** What the person's Send carries beside the doc: the page's words (`cawco.send(text)`), the page's address, the pictures. */
-export interface SendBody {
-  pictures?: SendPicture[];
-  text?: string;
+/**
+ * What the page posts of the person's marks it just made, beside the doc
+ * (`/__cawco/artifact/<id>/pictures`): their pictures and the page's
+ * address, which the next delivery carries.
+ */
+export interface MarkPictures {
+  pictures: MarkPicture[];
   url?: string;
+}
+
+/** What the page's `cawco.send(text)` carries beside the doc: its words. */
+export interface SendBody {
+  text?: string;
 }
 
 /**
@@ -98,7 +109,7 @@ export interface ThreadEntry {
   /** Files an agent's reply names as changed. */
   files?: string[];
   id: string;
-  /** When it went to the session with a send; a person's entry only. */
+  /** When it was delivered to the session; a person's entry only. */
   sentAt?: string;
   text: string;
 }
@@ -109,6 +120,8 @@ export interface Pin {
   by: "person";
   /** The page's elements under it (a comment: the one tapped); a canvas's, by id. */
   elements: PinnedElement[] | string[];
+  /** What of it the session was last told ({@link pinSaid}); the hub stamps it on delivery. */
+  heard?: string;
   id: string;
   /** The stroke group it stands on, when it stands on ink. */
   ink?: string;
@@ -120,7 +133,7 @@ export interface Pin {
   /** Where on its element a tapped pin stands: fractions of the element's box. */
   point?: { x: number; y: number };
   resolvedAt?: string;
-  /** When it first went to the session with a send. */
+  /** When it was first delivered to the session. */
   sentAt?: string;
   /** Oldest first. */
   thread: ThreadEntry[];
@@ -219,10 +232,58 @@ export function pinsProblem(
   return null;
 }
 
-/** Whether a pin has something the session has not heard: itself, or a person's entry since. */
+/** FNV-1a, 32 bits, as hex: a short fingerprint, the same in the hub and a page. */
+const fingerprint = (text: string): string => {
+  let hash = 0x81_1c_9d_c5;
+  for (let i = 0; i < text.length; i += 1) {
+    // biome-ignore lint/suspicious/noBitwiseOperators: FNV-1a's xor
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01_00_01_93);
+  }
+  // biome-ignore lint/suspicious/noBitwiseOperators: as unsigned
+  return (hash >>> 0).toString(16).padStart(8, "0");
+};
+
+/**
+ * What of a pin is the person's to say, as a fingerprint: whether it stands
+ * resolved, and their words in its thread. The session was told the pin as
+ * it is when its `heard` reads this; a resolve, a reopen or an edited word
+ * since makes it owed again. Re-anchoring after a revision is not the
+ * person's, and does not count.
+ */
+export const pinSaid = (pin: Pin): string =>
+  fingerprint(
+    JSON.stringify([
+      !!pin.resolvedAt,
+      pin.thread
+        .filter((entry) => entry.by === "person")
+        .map((entry) => [entry.id, entry.text]),
+    ])
+  );
+
+/** Whether a pin has something the session has not heard: itself, a person's entry since, or a change to what they said. */
 export const pinUnsent = (pin: Pin): boolean =>
   !pin.sentAt ||
-  pin.thread.some((entry) => entry.by === "person" && !entry.sentAt);
+  pin.thread.some((entry) => entry.by === "person" && !entry.sentAt) ||
+  (pin.heard !== undefined && pin.heard !== pinSaid(pin));
+
+/**
+ * Whether an unsent pin is ready to go: a comment is made by a tap before
+ * the person writes in it, and goes once they have (or resolved it). An
+ * annotation stands on its ink, and goes as it is.
+ */
+export const pinReady = (pin: Pin): boolean =>
+  pin.kind === "annotation" || pin.thread.length > 0 || !!pin.resolvedAt;
+
+/** Pin `pin` as delivered at `at`: stamped sent, its person's entries too, and what it says now as heard. */
+export const pinDelivered = (pin: Pin, at: string): Pin => ({
+  ...pin,
+  sentAt: pin.sentAt ?? at,
+  heard: pinSaid(pin),
+  thread: pin.thread.map((entry) =>
+    entry.by === "person" && !entry.sentAt ? { ...entry, sentAt: at } : entry
+  ),
+});
 
 /**
  * A version 4 UUID from `crypto.getRandomValues`: a page or a dashboard
@@ -458,7 +519,67 @@ export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
   (was.text ?? "") !== (now.text ?? "") ||
   JSON.stringify(was.source) !== JSON.stringify(now.source);
 
-/** One pin's section of a send: what it stands on, where, and what the session has not heard of its thread. */
+/**
+ * One pin's part of a delivery: a pin the session already has, where only
+ * its resolve moved, is one line; else its section ({@link pinSection}),
+ * with its id for `comment_reply`, and its resolve when it stands resolved.
+ */
+export function pinDelivery(
+  pin: Pin,
+  context: Parameters<typeof pinSection>[1]
+): string {
+  const said = pin.thread.some(
+    (entry) => entry.by === "person" && !entry.sentAt
+  );
+  if (pin.sentAt && !said) {
+    return `## ${pin.number}. ${pin.resolvedAt ? "Resolved" : "Reopened"} by the person (pin ${pin.id})`;
+  }
+  return [
+    pinSection(pin, context),
+    `- Pin: ${pin.id}`,
+    ...(pin.resolvedAt ? ["- Resolved by the person."] : []),
+  ].join("\n");
+}
+
+/**
+ * A stroke group no pin stands on, as a delivery says it: what it is drawn
+ * over (its element by selector, source and text, or a canvas's element),
+ * and its box in the page; `picture` when the delivery carries the page with
+ * the ink on it.
+ */
+export function inkSection(
+  group: InkGroup,
+  context: { picture: boolean; url: string }
+): string {
+  const { anchor, page } = group;
+  const what = group.illustration ? "Illustration" : "Ink";
+  const box = `- Box: ${Math.round(page.w)} × ${Math.round(page.h)} px at ${Math.round(page.x)}, ${Math.round(page.y)} in the page`;
+  const lines =
+    "selector" in anchor
+      ? [
+          `## ${what} over ${anchor.selector}`,
+          ...(anchor.frames?.length
+            ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]
+            : []),
+          ...(anchor.source?.file
+            ? [
+                `- Source: ${anchor.source.file}${anchor.source.line ? `:${anchor.source.line}` : ""}`,
+              ]
+            : []),
+          `- Page: ${context.url}`,
+          ...(anchor.text?.trim()
+            ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]
+            : []),
+          box,
+        ]
+      : [`## ${what} on the canvas's element ${anchor.element}`];
+  if (context.picture) {
+    lines.push("- In the picture of the page with its ink.");
+  }
+  return lines.join("\n");
+}
+
+/** One pin's section: what it stands on, where, and what the session has not heard of its thread. */
 export function pinSection(
   pin: Pin,
   context: {

@@ -125,6 +125,10 @@
           id: message.metadata.artifactId,
           name: message.metadata.artifactName ?? "",
           kind: message.metadata.artifactKind ?? "page",
+          said:
+            message.metadata.artifactSaid === "comments"
+              ? "Comments"
+              : "Responses",
         }
       : null
   );
@@ -253,7 +257,7 @@
     <span class="hline rail-line">
       <span class="rail-cell"><ResponseGlyph /></span>
       <span class="ftitle"
-        >Responses on
+        >{responses.said} on
         <button
           aria-busy={opening}
           class="aname"

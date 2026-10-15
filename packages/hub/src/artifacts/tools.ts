@@ -144,7 +144,7 @@ export const artifactRead = {
   description:
     "Read the person's picks, notes and values on one of your artifacts, each with the page hash it was made on. " +
     "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. " +
-    "When the person sends, you are told the `since` to read from. A canvas answers " +
+    "When the person sends picks, you are told the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture.",
   input: {
@@ -182,13 +182,13 @@ export const artifactDelete = {
 const pin = z
   .string()
   .regex(/^[0-9a-f-]{36}$/)
-  .describe("The pin's id, from comment_read.");
+  .describe("The pin's id, as its delivery names it.");
 
 export const commentRead = {
   name: "comment_read",
   description:
     "Read the person's pins on your artifacts: each numbered, its anchor (selector, file:line, text, ink box), " +
-    "its thread, and the page address they sent from. No artifact: all of yours.",
+    "its thread. New ones reach you by themselves. No artifact: all of yours.",
   input: {
     artifact: id.optional(),
     filter: z.enum(["open", "resolved", "all"]).default("open"),

@@ -32,6 +32,7 @@ import {
   ARTIFACT_PATH,
   type ArtifactSocket,
   type artifactPicture,
+  type artifactPictures,
   type artifactSend,
   type artifactSocket,
 } from "./artifacts/sync";
@@ -231,6 +232,8 @@ export interface PreviewListenerDeps {
   /** The session that owns an artifact; undefined when there is none. */
   ownerOf: (artifactId: string) => string | undefined;
   picture: ReturnType<typeof artifactPicture>;
+  /** The page's pictures of the person's marks, held for their delivery. */
+  pictures: ReturnType<typeof artifactPictures>;
   /** Where a shown preview of a machine's is served now, its listener started when it has none. */
   reach: (instanceId: string) => Promise<PreviewReach>;
   send: ReturnType<typeof artifactSend>;
@@ -260,6 +263,9 @@ const joinArtifact = (
   }
   if (action === "/picture") {
     return deps.picture(request, artifactId);
+  }
+  if (action === "/pictures") {
+    return deps.pictures(request, instanceId, artifactId);
   }
   const screen = new URL(request.url).searchParams.get("screen") === "1";
   return server.upgrade(request, { data: { artifactId, screen } })

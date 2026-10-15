@@ -18,7 +18,7 @@
  *    Return, sends the session nothing.
  * 2. The page's Send: exactly one pending send to the session, of the system
  *    origin `artifact`, its words the responses notice; no person's send.
- *    The panel's head then reads "Send", no count.
+ *    The pane's head then offers no Send: nothing of the page is unsent.
  * 3. A third note edit and a second Send while that one waits: still one
  *    pending event, from the first one's `since`; the first is `replaced`.
  * 4. The transcript draws it as one line: "Responses on <page>", "waiting for
@@ -28,7 +28,7 @@
  *    the id and `since` it names: the answer holds the pick and the final
  *    note as typed, its inner line break kept and no Return at its end.
  * 6. The line then says "read".
- * 7. A pick after that makes the panel's head read "Send 1".
+ * 7. A pick after that makes the pane's head offer "Send picks", no count.
  *
  *   bun scripts/probe-kit/run.ts artifact-responses
  */
@@ -326,20 +326,18 @@ const run = async (kit: Kit) => {
       !firstSend.some((one) => one.origin === "human"),
     JSON.stringify(firstSend)
   );
-  // The panel's head counts only what the session has not been sent: none now.
-  const sendLabel = page.locator(".preview-pane .send .send-label");
-  const labelReads = (want: string) =>
-    until(
-      `the head reading "${want}"`,
-      () => sendLabel.innerText(),
-      (words) => words.trim() === want,
-      10_000
-    ).catch(() => sendLabel.innerText());
-  const afterSend = await labelReads("Send");
+  // The pane's head offers Send picks only while the page has unsent picks: none now.
+  const sendControl = page.locator(".preview-pane .send");
+  const afterSend = await until(
+    "the head's Send picks gone",
+    () => sendControl.count(),
+    (count) => count === 0,
+    10_000
+  ).catch(() => sendControl.count());
   kit.check(
-    "2b: once the Send is taken the panel's head reads Send, no count",
-    afterSend.trim() === "Send",
-    afterSend
+    "2b: once the Send is taken the pane's head offers no Send",
+    afterSend === 0,
+    `${afterSend} Send control(s)`
   );
 
   // 3. A third edit and a second Send while it waits.
@@ -460,12 +458,20 @@ const run = async (kit: Kit) => {
   );
   await page.screenshot({ path: join(kit.out, "artifact-responses-read.png") });
 
-  // 7. A pick after the Send is counted again.
+  // 7. A pick after the Send is offered again.
   await frame.locator('[data-option="original"]').click();
-  const afterPick = await labelReads("Send 1");
+  const label = sendControl.locator(".send-label");
+  const labelNow = async () =>
+    (await label.count()) > 0 ? await label.innerText() : "no Send control";
+  const afterPick = await until(
+    "the head reading Send picks",
+    labelNow,
+    (words) => words.trim() === "Send picks",
+    10_000
+  ).catch(labelNow);
   kit.check(
-    "7: a later pick makes the panel's head read Send 1",
-    afterPick.trim() === "Send 1",
+    "7: a later pick makes the pane's head offer Send picks, no count",
+    afterPick.trim() === "Send picks",
     afterPick
   );
 };

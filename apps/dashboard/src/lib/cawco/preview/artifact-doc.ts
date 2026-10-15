@@ -4,7 +4,6 @@ import {
   type Pin,
   replyToPin,
   resolvePin,
-  type SendBody,
   withdrawPin,
 } from "@cawco/core/comments";
 import { WebsocketProvider } from "y-websocket";
@@ -12,9 +11,9 @@ import { Doc } from "yjs";
 
 /**
  * The pane's hold on an artifact's live document (Projects spec §5.10): the
- * picks and pins the session has not heard, which Send N sends, and the
  * pins' threads, which the pane's list and card read and the person writes
- * (a reply, resolve, reopen, delete). The page in the pane joins the same doc itself
+ * (a reply, resolve, reopen, delete); the hub delivers them to the session
+ * by themselves once quiet (artifacts/service.ts). The page in the pane joins the same doc itself
  * (the overlay), on its own preview origin, which writes its picks and
  * places its pins; the pane joins it on the dashboard's origin, through the
  * hub's `/ws/artifact/<session>/<artifact>`.
@@ -29,7 +28,7 @@ const RESYNC_MS = 10_000;
 
 /** The doc as the pane reads it. */
 export interface ArtifactView extends ArtifactChoices {
-  /** Ink groups the person drew that no pin stands on and no send has carried. */
+  /** Ink groups the person drew that no pin stands on and no delivery has carried. */
   looseInk: number;
   /** The pins, by number. */
   pins: Pin[];
@@ -73,27 +72,26 @@ export const artifactSyncPath = (artifactId: string): string =>
   `/__cawco/artifact/${artifactId}`;
 
 /**
- * The person sends (the head's Send N): the session hears it has new
- * responses to read, with the pins' pictures, through the hub's send on the
+ * The person sends the page's picks (the head's Send picks): the session
+ * hears it has new responses to read, through the hub's send on the
  * dashboard's own origin, the one a page's `cawco.send` reaches on its
  * preview origin.
  */
 export async function sendArtifact(
   instanceId: string,
-  artifactId: string,
-  body: SendBody
+  artifactId: string
 ): Promise<void> {
   const response = await fetch(
     `/api/instances/${encodeURIComponent(instanceId)}/artifacts/${encodeURIComponent(artifactId)}/send`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      body: "{}",
     }
   );
   if (!response.ok) {
     throw new Error(
-      (await response.text()) || "The hub didn't take the send. Send again."
+      (await response.text()) || "The hub didn't take the picks. Send again."
     );
   }
 }

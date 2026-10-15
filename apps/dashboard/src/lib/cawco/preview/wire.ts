@@ -1,5 +1,3 @@
-import { COMMENT_LIMITS, type SendPicture } from "@cawco/core/comments";
-
 /**
  * What the pane accepts from the previewed page. The overlay is ours, but it
  * shares a window with the app under preview — code an agent wrote — and any
@@ -105,26 +103,4 @@ export function previewKey(
   return typeof value === "string" && PANE_KEYS.has(value)
     ? (value as "c" | "j" | "k" | "Enter" | "Escape")
     : null;
-}
-
-/** The pictures a page drew for a send: at most a send's, each a pin's or the page's. */
-export function previewPictures(value: unknown): SendPicture[] | null {
-  if (!Array.isArray(value) || value.length > COMMENT_LIMITS.pictures) {
-    return null;
-  }
-  const pictures: SendPicture[] = [];
-  for (const item of value) {
-    const raw = record(item);
-    const png = previewPng(raw?.png);
-    const pin = raw?.pin === null ? null : previewPinId(raw?.pin);
-    if (
-      !png ||
-      png.length > COMMENT_LIMITS.pictureChars ||
-      (raw?.pin !== null && pin === null)
-    ) {
-      return null;
-    }
-    pictures.push({ pin, png });
-  }
-  return pictures;
 }

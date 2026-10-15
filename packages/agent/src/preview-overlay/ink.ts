@@ -30,6 +30,7 @@ import {
   type PageAnchor,
   type Pin,
   type PinnedElement,
+  pinDelivered,
   pinUnsent,
 } from "@cawco/core/comments";
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
@@ -829,16 +830,9 @@ export function startInk(deps: InkDeps): Ink {
             ink.set(group.id, { ...group, sentAt: at });
           }
         }
+        // As the hub's own delivery stamps them, so it does not tell them again.
         for (const pin of [...pins.values()].filter(pinUnsent)) {
-          pins.set(pin.id, {
-            ...pin,
-            sentAt: pin.sentAt ?? at,
-            thread: pin.thread.map((entry) =>
-              entry.by === "person" && !entry.sentAt
-                ? { ...entry, sentAt: at }
-                : entry
-            ),
-          });
+          pins.set(pin.id, pinDelivered(pin, at));
         }
       });
     },

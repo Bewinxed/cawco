@@ -6,9 +6,12 @@
  * project's folder with `artifact_promote`, and removes one it superseded
  * with `artifact_delete`; the person's picks, notes and values
  * live in the artifact's doc (docs.ts). They are never the person's words in
- * the session: when the person sends, the session hears that the artifact
- * has new responses ({@link ArtifactServiceDeps.signal}) and reads them
- * itself with `artifact_read` and `comment_read`.
+ * the session: when the person sends their picks, the session hears that the
+ * artifact has new responses ({@link ArtifactServiceDeps.signal}) and reads
+ * them itself with `artifact_read`. The person's pins, replies, resolves and
+ * ink go by themselves: once they have been quiet {@link MARKS_QUIET_MS},
+ * the burst is delivered as one message carrying them
+ * ({@link ArtifactServiceDeps.deliverMarks}).
  */
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +22,7 @@ import {
   type ArtifactKind,
   type ArtifactPromotion,
   type ArtifactSummary,
+  artifactCommentsNotice,
   type ChoiceEntry,
   choiceEntryProblem,
   type InstanceRow,
@@ -36,7 +40,13 @@ import {
 } from "@cawco/core/canvas";
 import {
   COMMENT_LIMITS,
+  inkSection,
+  type MarkPictures,
   type Pin,
+  pinDelivered,
+  pinDelivery,
+  pinReady,
+  pinSaid,
   pinUnsent,
   type SendBody,
   type ThreadEntry,
@@ -260,12 +270,12 @@ export interface ShownAck {
 
 /**
  * What `comment_read` answers: each of the session's artifacts with pins
- * that match, the page's address the person last sent from, and the time to
+ * that match, the page's address the person last marked it at, and the time to
  * pass as the next `since`. A pin on ink carries the ink's box in the page.
  */
 export interface CommentRead {
   artifacts: {
-    /** The page's address the person last sent from; its own route before any send. */
+    /** The page's address the person last marked it at; its own route before any delivery. */
     address: string;
     id: string;
     kind: ArtifactKind;
@@ -427,6 +437,28 @@ export interface Removed {
   showing: { id: string; kind: ArtifactKind; name: string } | null;
 }
 
+/**
+ * How long the person's marks on an artifact (pins, replies, resolves, ink)
+ * stay quiet before they go to the session: since the last one. A batch of
+ * pins is written a pin every few seconds (a tap, a sentence, the next tap),
+ * so 10 s of nothing reads as the batch done without leaving the session
+ * waiting long for it. Our call.
+ */
+export const MARKS_QUIET_MS = 10_000;
+
+/**
+ * The longest a burst waits from its first mark: someone pinning steadily
+ * for a minute is not held back past it. Our call.
+ */
+export const MARKS_LONGEST_MS = 60_000;
+
+/** What a delivery of the person's marks carries: the words and the pictures. */
+export interface MarksDelivery {
+  images: { data: string; mediaType: string }[];
+  /** The comments notice (core `artifactCommentsNotice`), its sections the marks themselves. */
+  text: string;
+}
+
 export interface ArtifactServiceDeps {
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => Promise<void>;
@@ -436,6 +468,16 @@ export interface ArtifactServiceDeps {
    * delegated, or one of a project it leads (as `stop_delegate` decides).
    */
   delegatesIn: (instance: InstanceRow, workspaceId: string) => boolean;
+  /**
+   * Delivers the person's marks on `artifact` to the session that made it,
+   * waking it as their own words do; to the project's Caw when that session
+   * takes no input any more (server.ts `deliverMarks`).
+   */
+  deliverMarks: (
+    instance: InstanceRow,
+    artifact: ArtifactRow,
+    delivery: MarksDelivery
+  ) => Promise<void>;
   docs: ArtifactDocs;
   instance: (id: string) => InstanceRow | undefined;
   /** The machines the hub knows. */
@@ -483,20 +525,16 @@ export interface ArtifactServiceDeps {
   /** The artifact a session's panel shows now, if any. */
   showing: (instanceId: string) => string | undefined;
   /**
-   * Tells the session the person sent responses on `artifact`, which it reads
-   * from `since` with its tools, `pins` with `comment_read`, the send's
-   * pictures with it (core `artifactResponsesNotice`). One the session has
-   * not read yet for the same artifact is superseded, not added to: the
-   * session hears once, from the earliest `since` it was not told of.
+   * Tells the session the person sent their picks on `artifact`, which it
+   * reads from `since` with `artifact_read` (core `artifactResponsesNotice`).
+   * One the session has not read yet for the same artifact is superseded,
+   * not added to: the session hears once, from the earliest `since` it was
+   * not told of.
    */
   signal: (
     instance: InstanceRow,
     artifact: ArtifactRow,
-    responses: {
-      images: { data: string; mediaType: string }[];
-      pins: boolean;
-      since: number;
-    }
+    responses: { since: number }
   ) => Promise<void>;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
@@ -857,19 +895,179 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * A send's page with the person's ink on it (its picture with no pin)
+   * A delivered page with the person's ink on it (its picture with no pin)
    * becomes a page's or preview's picture, as a canvas keeps its own;
    * `artifact_promote` writes it.
    */
-  const keepComposited = (row: ArtifactRow, body: SendBody) => {
-    const composited = body.pictures?.findLast((one) => one.pin === null);
-    if (!composited || row.kind === "canvas") {
+  const keepComposited = (row: ArtifactRow, png: string | undefined) => {
+    if (!png || row.kind === "canvas") {
       return;
     }
     writeStateFileSync(
       picturePath(deps.root, row.id),
-      Buffer.from(composited.png, "base64")
+      Buffer.from(png, "base64")
     );
+  };
+
+  /*
+   * The person's marks (pins, replies, resolves, ink) go by themselves
+   * (core comments.ts). Each person's write on an artifact's `pins` or `ink`
+   * (docs.ts `onMarks`) pushes its delivery back to {@link MARKS_QUIET_MS}
+   * from now, never past {@link MARKS_LONGEST_MS} from the burst's first.
+   * The page posts its pictures of the marks it just made beside the doc
+   * (sync.ts `artifactPictures`); they wait here for the delivery.
+   */
+  const bursts = new Map<
+    string,
+    { first: number; timer: ReturnType<typeof setTimeout> }
+  >();
+  const held = new Map<
+    string,
+    { pictures: Map<string | null, string>; url?: string }
+  >();
+  const marked = (id: string) => {
+    const now = Date.now();
+    const burst = bursts.get(id);
+    clearTimeout(burst?.timer);
+    const first = burst?.first ?? now;
+    const wait = Math.max(
+      0,
+      Math.min(MARKS_QUIET_MS, first + MARKS_LONGEST_MS - now)
+    );
+    bursts.set(id, {
+      first,
+      timer: setTimeout(() => {
+        bursts.delete(id);
+        deliverMarks(id).catch((error: unknown) => {
+          console.warn(
+            `[artifacts] ${id}: the person's marks were not delivered: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+      }, wait),
+    });
+  };
+  docs.onMarks(marked);
+
+  /**
+   * What of the person's marks on an artifact's doc the session has not
+   * heard: each pin ready to go (core `pinReady`), by number, and each
+   * stroke group no pin stands on; with every group, moved ones too, by id.
+   */
+  const marksOwed = (doc: Doc) => {
+    const pins = Object.values(
+      doc.getMap("pins").toJSON() as Record<string, Pin>
+    );
+    const pinned = new Set(pins.map((pin) => pin.ink));
+    const ink = doc.getMap("ink").toJSON() as Record<string, InkGroup>;
+    return {
+      pins,
+      owed: pins
+        .filter((pin) => pinUnsent(pin) && pinReady(pin))
+        .sort((a, b) => a.number - b.number),
+      loose: Object.values(ink).filter(
+        (group) => !(group.sentAt || pinned.has(group.id))
+      ),
+      groups: {
+        ...(doc.getMap("moved").toJSON() as Record<string, InkGroup>),
+        ...ink,
+      },
+    };
+  };
+
+  /** The delivered pins, their ink and the loose groups stamped heard at `at`, and the address they were made at. */
+  const stampDelivered = (
+    id: string,
+    owed: Pin[],
+    loose: InkGroup[],
+    url: string
+  ) => {
+    const at = new Date().toISOString();
+    const delivered = new Set([
+      ...loose.map((group) => group.id),
+      ...owed.flatMap((pin) => (pin.ink ? [pin.ink] : [])),
+    ]);
+    docs.transact(id, "hub", (live) => {
+      const livePins = live.getMap("pins");
+      for (const pin of owed) {
+        livePins.set(pin.id, pinDelivered(pin, at));
+      }
+      const ink = live.getMap("ink");
+      const groups = ink.toJSON() as Record<string, InkGroup>;
+      for (const group of Object.values(groups)) {
+        if (delivered.has(group.id) && !group.sentAt) {
+          ink.set(group.id, { ...group, sentAt: at });
+        }
+      }
+      live.getMap("meta").set("sentUrl", url);
+    });
+  };
+
+  /** What went is let go of the held pictures; a pin not ready yet keeps its own for its delivery. */
+  const letGoPictures = (id: string, owed: Pin[], pins: Pin[]) => {
+    const kept = held.get(id);
+    if (!kept) {
+      return;
+    }
+    kept.pictures.delete(null);
+    const went = new Set(owed.map((pin) => pin.id));
+    const here = new Set(pins.map((pin) => pin.id));
+    for (const pin of kept.pictures.keys()) {
+      if (pin !== null && (went.has(pin) || !here.has(pin))) {
+        kept.pictures.delete(pin);
+      }
+    }
+    if (kept.pictures.size === 0) {
+      held.delete(id);
+    }
+  };
+
+  /**
+   * Delivers what of the person's marks on artifact `id` the session has
+   * not heard ({@link marksOwed}), as one message: each pin as its section
+   * or its one resolve line, each loose stroke group, with the page's
+   * pictures of them; then stamps them heard. Nothing owed, nothing goes.
+   */
+  const deliverMarks = async (id: string) => {
+    const row = db.get(id);
+    const instance = row ? deps.instance(row.instanceId) : undefined;
+    if (!(row && instance)) {
+      held.delete(id);
+      return;
+    }
+    const doc = docs.doc(id);
+    const { pins, owed, loose, groups } = marksOwed(doc);
+    if (owed.length === 0 && loose.length === 0) {
+      return;
+    }
+    const kept = held.get(id);
+    const url =
+      kept?.url ??
+      (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
+      routeOf(id);
+    // The page with its ink: a canvas's own picture, else the one the page drew.
+    const page =
+      (row.kind === "canvas" ? pictureOf(id) : kept?.pictures.get(null)) ??
+      undefined;
+    const shown = loose.length > 0 && page !== undefined;
+    const images = [
+      ...(shown && page ? [page] : []),
+      ...owed.flatMap((pin) => kept?.pictures.get(pin.id) ?? []),
+    ]
+      .slice(0, COMMENT_LIMITS.pictures)
+      .map((data) => ({ mediaType: "image/png", data }));
+    const text = artifactCommentsNotice(row, [
+      ...owed.map((pin) =>
+        pinDelivery(pin, {
+          url,
+          ...(pin.ink && groups[pin.ink] ? { ink: groups[pin.ink].page } : {}),
+        })
+      ),
+      ...loose.map((group) => inkSection(group, { url, picture: shown })),
+    ]);
+    stampDelivered(id, owed, loose, url);
+    keepComposited(row, shown ? page : undefined);
+    letGoPictures(id, owed, pins);
+    await deps.deliverMarks(instance, row, { text, images });
   };
 
   /** A canvas's `.excalidraw` file and its outline, as the doc holds them now. */
@@ -1601,19 +1799,60 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             },
           ].slice(-COMMENT_LIMITS.entries)
         : pin.thread;
+      const resolved: Pin = { ...pin, thread, resolvedAt: at };
+      // The agent's own resolve is not the person's to tell it of.
       docs.transact(row.id, "hub", (doc) =>
-        doc.getMap("pins").set(pin.id, { ...pin, thread, resolvedAt: at })
+        doc.getMap("pins").set(pin.id, {
+          ...resolved,
+          ...(pin.heard === undefined ? {} : { heard: pinSaid(resolved) }),
+        })
       );
       return { pin: pin.id, number: pin.number, resolvedAt: at };
     },
 
     /**
-     * The person sends, by any path (the panel's Send N, a page's
-     * `cawco.send`): what the send applies first (`sending`), then the
-     * session hears that the artifact has new responses since the last it
-     * was told of ({@link ArtifactServiceDeps.signal}), with the send's
-     * pictures. Every unsent pin and thread entry is stamped `sentAt`, and a
-     * page's words are kept as `sentText` for `artifact_read`.
+     * The page's pictures of the marks the person just made there (core
+     * `MarkPictures`), each pin's by its id and the page with its ink: the
+     * next delivery carries the ones it delivers. A later post replaces a
+     * pin's picture.
+     */
+    pictures: (
+      instanceId: string,
+      id: string,
+      body: MarkPictures
+    ): { held: number } => {
+      const row = own(sessionOf(instanceId), id);
+      const kept: { pictures: Map<string | null, string>; url?: string } =
+        held.get(row.id) ?? { pictures: new Map() };
+      for (const picture of body.pictures) {
+        kept.pictures.set(picture.pin, picture.png);
+      }
+      if (body.url) {
+        kept.url = body.url;
+      }
+      held.set(row.id, kept);
+      return { held: kept.pictures.size };
+    },
+
+    /**
+     * After a restart: each artifact changed within the last day has its
+     * delivery scheduled again, so marks written just before the hub went
+     * down still go (nothing owed, nothing goes). A day, our call: a hub down
+     * longer than that has a person who has moved on from those marks.
+     */
+    resumeMarks: (): void => {
+      for (const row of db.touchedSince(new Date(Date.now() - 86_400_000))) {
+        marked(row.id);
+      }
+    },
+
+    /**
+     * The person sends their picks, by the page's `cawco.send` (a decision
+     * page's "Send picks"): what the send applies first (`sending`), then
+     * the session hears that the artifact has new responses since the last
+     * it was told of ({@link ArtifactServiceDeps.signal}); the page's words
+     * are kept as `sentText` for `artifact_read`. Pins and ink are not sent:
+     * they go by themselves ({@link MARKS_QUIET_MS}).
      */
     send: async (
       instanceId: string,
@@ -1628,53 +1867,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const picked = Object.values(state).some(
         (entry) => !sentAt || entry.at > sentAt
       );
-      const pins = doc.getMap("pins").toJSON() as Record<string, Pin>;
-      const owed = Object.values(pins)
-        .filter(pinUnsent)
-        .sort((a, b) => a.number - b.number);
-      if (!(picked || owed.length > 0 || body.text)) {
+      if (!(picked || body.text)) {
         throw new ArtifactRefusal(
           409,
-          "Nothing new to send: every pick and pin here has gone to the session."
+          "Nothing new to send: every pick here has gone to the session."
         );
       }
       if (picked) {
         await deps.sending(instance, row, state);
       }
-      await deps.signal(instance, row, {
-        since: row.deliveredSeq,
-        pins: owed.length > 0,
-        images: (body.pictures ?? []).map(({ png }) => ({
-          mediaType: "image/png",
-          data: png,
-        })),
-      });
-      keepComposited(row, body);
-      const groups = doc.getMap("ink").toJSON() as Record<string, InkGroup>;
+      await deps.signal(instance, row, { since: row.deliveredSeq });
       const at = new Date().toISOString();
       docs.transact(row.id, "hub", (live) => {
         const meta = live.getMap("meta");
         meta.set("sentAt", at);
         meta.set("sentText", body.text || null);
-        meta.set("sentUrl", body.url ?? null);
-        const livePins = live.getMap("pins");
-        for (const pin of owed) {
-          livePins.set(pin.id, {
-            ...pin,
-            sentAt: pin.sentAt ?? at,
-            thread: pin.thread.map((entry) =>
-              entry.by === "person" && !entry.sentAt
-                ? { ...entry, sentAt: at }
-                : entry
-            ),
-          });
-        }
-        const ink = live.getMap("ink");
-        for (const group of Object.values(groups)) {
-          if (!group.sentAt) {
-            ink.set(group.id, { ...group, sentAt: at });
-          }
-        }
       });
       db.update(row.id, { deliveredSeq: (db.get(row.id) as ArtifactRow).seq });
       return { choices: state, ...metaOf(doc) };

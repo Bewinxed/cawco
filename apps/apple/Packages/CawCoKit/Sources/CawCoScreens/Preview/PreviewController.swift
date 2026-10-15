@@ -6,7 +6,7 @@ import UIKit.UIGestureRecognizerSubclass
 import WebKit
 
 /// A session's preview (preview/PreviewPane.svelte): its header (the
-/// artifact's name and path, Send N, Pins, Comment, Reload, Close) over the
+/// artifact's name and path, Send picks, Pins, Comment, Reload, Close) over the
 /// page, which a web view loads from the session's own preview origin (a
 /// port of the hub's, or a host name of its own). The page carries the agent's
 /// overlay, which talks to its host as an iframe talks to the dashboard: the
@@ -22,7 +22,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var web: WKWebView!
     private let titleLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private let pathLabel = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
-    /// Send N: every pick, pin and reply the session has not heard, as one turn.
+    /// Send picks: the page's picks the session has not heard; pins and ink go by themselves.
     private var sendButton: UIButton!
     private var sending = false
     private var pinsButton: UIButton!
@@ -64,7 +64,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private let coverLine = SkeletonView(height: 11)
     private let failure = KitAlert(tone: .destructive)
     /// What the band's failure is of (PreviewPane.svelte `failure.again`):
-    /// "send" goes again from Send N, "field" clears when the page keeps the
+    /// "send" clears when the picks are sent, "field" when the page keeps the
     /// field after all, "pins" when the pins are read again; nil, anything
     /// else, goes again from Reload.
     private var failureOf: String?
@@ -164,7 +164,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             part.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             part.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
-        sendButton = KitButton.make("Send", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
+        sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
         pinsButton = KitButton.make("Pins", glyph: .pin, variant: .ghost, height: .sm) { [weak self] in self?.openList() }
         pinsBadge.isUserInteractionEnabled = false
         pinsBadge.isAccessibilityElement = false
@@ -649,7 +649,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             if let title = Self.text(body["title"], 300), !title.isEmpty { titleLabel.text = title }
             if body["type"] as? String == "cawco:ready" { ready() }
         case "cawco:doc":
-            // A pick, a note, a pin, the agent's patch or a Send's stamp: Send N reads again now.
+            // A pick, a note, a pin, the agent's patch or a Send's stamp: the pins and Send picks read again now.
             refresh()
         case "cawco:pin-open":
             guard let id = Self.pinId(body["id"]) else { return }
@@ -895,10 +895,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         if held, let openPin, !read.pins.contains(where: { $0.id == openPin }) { closeCard() }
         paintCard()
         #if DEBUG
-        PreviewProbe.say("preview pins n=\(read.pins.count) open=\(read.open) owed=\(read.owed) picks=\(read.unsentPicks) sent=\(read.sentAt ?? "-") " + read.pins.map {
+        PreviewProbe.say("preview pins n=\(read.pins.count) open=\(read.open) picks=\(read.unsentPicks) sent=\(read.sentAt ?? "-") " + read.pins.map {
             "\($0.label)=\($0.moved ? "moved" : $0.resolved ? "resolved" : "open"):\($0.thread.count)\($0.unsent ? ":unsent" : "")"
         }.joined(separator: " "))
-        if PreviewProbe.sendAtLaunch, !sentAtLaunch, read.owed > 0, connected {
+        if PreviewProbe.sendAtLaunch, !sentAtLaunch, read.unsentPicks > 0, connected {
             sentAtLaunch = true
             send()
         }
@@ -935,7 +935,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintCard()
     }
 
-    /// The head's Pins (shown once there is a pin), its badge the open pins, and Send N.
+    /// The head's Pins (shown once there is a pin), its badge the open pins, and Send picks.
     private func paintPins() {
         guard isViewLoaded else { return }
         pinsButton.isHidden = comments.pins.isEmpty
@@ -948,18 +948,20 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintSend()
     }
 
+    /// Send picks stands only while the page has picks the session has not
+    /// heard (PreviewPane.svelte `unsentPicks`); pins and ink go by themselves.
     private func paintSend() {
         guard isViewLoaded else { return }
-        let owed = comments.owed
+        let picks = comments.unsentPicks > 0
         sendButton.configuration?.showsActivityIndicator = sending
-        // Nothing owed is plain "Send" (PreviewPane.svelte `.send-label`): no count of nothing.
-        let words = owed == 0 ? "Send" : "Send \(owed)"
-        KitButton.setTitle(sending ? "Sending…" : words, of: sendButton, variant: .ghost, height: .sm)
+        let words = sending ? "Sending…" : "Send picks"
+        KitButton.setTitle(words, of: sendButton, variant: .ghost, height: .sm)
         #if DEBUG
-        PreviewProbe.say("preview send words=\(sending ? "Sending…" : words)")
+        PreviewProbe.say("preview send words=\(picks ? words : "-")")
         #endif
-        sendButton.isEnabled = connected && owed > 0 && !sending
-        sendButton.accessibilityHint = owed == 0 ? "Nothing new to send" : "Sends \(owed) to the session"
+        sendButton.isHidden = !(picks || sending)
+        sendButton.isEnabled = connected && picks && !sending
+        sendButton.accessibilityHint = "Sends the page's picks to the session"
     }
 
     /// The list, as a house sheet from the head (PinList.svelte).
@@ -1270,14 +1272,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         deliver(["type": "cawco:picture", "id": openPin, "thumb": false])
     }
 
-    // MARK: Send N
+    // MARK: Send picks
 
-    /// Send N (PreviewPane.svelte `send`): the page draws each unsent pin's
-    /// picture and the page with its ink (`cawco:send-pictures`), and posts
-    /// them to the listener's send beside the doc's socket, which carries
-    /// every unsent pick, pin and reply to the session as one turn. It runs
-    /// in the page, so the pictures never cross into the app. A refusal
-    /// stands under the open card's field, else in the band, Send N still there.
+    /// Send picks (PreviewPane.svelte `sendPicks`): the page posts to the
+    /// listener's send beside the doc's socket, which tells the session it
+    /// has the page's picks to read. Pins, replies and ink are never sent:
+    /// the hub delivers them by themselves once quiet. A refusal stands in
+    /// the band, Send picks still there.
     private func send() {
         guard !sending, connected, let artifact = artifactId else { return }
         sending = true
@@ -1288,25 +1289,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 // WebKit's own method, not the Swift overlay's `async` refinement of it:
                 // that lives in libswiftWebKit, which iOS 18 does not ship, and
                 // linking it stopped the app at launch there (OS_REASON_DYLD).
-                let pictures = try await withCheckedThrowingContinuation { (done: CheckedContinuation<Int, any Error>) in
+                _ = try await withCheckedThrowingContinuation { (done: CheckedContinuation<Int, any Error>) in
                     web.__callAsyncJavaScript(Self.sendScript, arguments: ["sync": "/__cawco/artifact/\(artifact)"], inFrame: nil, in: .page) { value, error in
                         if let error { done.resume(throwing: error) } else { done.resume(returning: (value as? NSNumber)?.intValue ?? 0) }
                     }
                 }
-                cardError = nil
                 if failureOf == "send" { clearFailure() }
                 #if DEBUG
-                PreviewProbe.say("preview send ok pictures=\(pictures)")
-                #else
-                _ = pictures
+                PreviewProbe.say("preview send ok")
                 #endif
             } catch {
                 let message = Self.sentence(error)
-                if openPin != nil {
-                    cardError = message
-                } else {
-                    failed(message, of: "send")
-                }
+                failed(message, of: "send")
                 #if DEBUG
                 PreviewProbe.say("preview send failed: \(message)")
                 #endif
@@ -1324,21 +1318,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return said.hasPrefix("Error: ") ? String(said.dropFirst(7)) : said
     }
 
-    /// The send, in the page: the overlay's pictures, then the listener's
-    /// send (artifact-doc.ts `sendArtifact`); answers how many pictures went.
+    /// The send, in the page: the listener's send beside the doc's socket
+    /// (artifact-doc.ts `sendArtifact`).
     private static let sendScript = """
-    const drawn = await window.__cawcoSendPictures(20000);
-    const body = { pictures: Array.isArray(drawn.pictures) ? drawn.pictures : [] };
-    if (typeof drawn.url === "string") body.url = drawn.url;
     const response = await fetch(`${sync}/send`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      body: "{}",
     });
     if (!response.ok) {
-      throw new Error((await response.text()).slice(0, 300) || "The hub didn't take the send. Send again.");
+      throw new Error((await response.text()).slice(0, 300) || "The hub didn't take the picks. Send again.");
     }
-    return body.pictures.length;
+    return 0;
     """
 
     // MARK: Shown
@@ -1542,22 +1533,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Stands in for the dashboard's window, the overlay's `window.parent`:
     /// what the page posts goes to the app, and what the app hands the page
     /// arrives at its message listeners from that same parent, on its own
-    /// origin, as the overlay checks. A send's pictures stay in the page:
-    /// `__cawcoSendPictures` asks the overlay for them and takes its answer
-    /// here (PreviewPane.svelte `pagePictures`).
+    /// origin, as the overlay checks.
     private static let host = """
     (() => {
       const listeners = new Set();
-      const asks = new Map();
-      let nextAsk = 1;
       const host = {
         postMessage(data) {
-          if (data && data.type === "cawco:send-pictures" && asks.has(data.ask)) {
-            const answer = asks.get(data.ask);
-            asks.delete(data.ask);
-            answer(data);
-            return;
-          }
           window.webkit.messageHandlers.cawco.postMessage(JSON.stringify(data));
         },
       };
@@ -1583,15 +1564,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
           } catch (error) { console.error(error); }
         }
       };
-      window.__cawcoSendPictures = (ms) => new Promise((resolve, reject) => {
-        const ask = nextAsk++;
-        const timer = setTimeout(() => {
-          asks.delete(ask);
-          reject(new Error("The page didn't draw its pins' pictures, so nothing was sent. Send again."));
-        }, ms);
-        asks.set(ask, (data) => { clearTimeout(timer); resolve(data); });
-        window.__cawcoDeliver({ type: "cawco:send-pictures", ask });
-      });
     })();
     """
 }

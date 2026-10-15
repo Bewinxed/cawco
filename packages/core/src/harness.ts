@@ -174,11 +174,13 @@ export const ACCOUNT_MOVE = "account_move";
 export const CONTINUATION_ORIGIN = "continuation";
 
 /**
- * The `system` origin name of the hub's word that the person sent responses
- * on one of the session's artifacts (core injected.ts
- * `artifactResponsesNotice`): the session reads them with its tools. It is
- * the person's act, so it reaches the session as their own words do
- * ({@link byPerson}). Its row is the note {@link ARTIFACT_RESPONSES}.
+ * The `system` origin name of the hub's word on the person's acts on one of
+ * the session's artifacts: their picks sent (core injected.ts
+ * `artifactResponsesNotice`), which the session reads with its tools, and
+ * their pins, replies, resolves and ink, delivered by themselves
+ * (`artifactCommentsNotice`). It is the person's act, so it reaches the
+ * session as their own words do ({@link byPerson}). Its row is the note
+ * {@link ARTIFACT_RESPONSES}.
  */
 export const ARTIFACT_ORIGIN = "artifact";
 
@@ -190,9 +192,9 @@ export const ARTIFACT_ORIGIN = "artifact";
 export const ARTIFACT_RESPONSES = "artifact_responses";
 
 /**
- * Whether a send is the person's own act: their words, or their Send on one
- * of the session's artifacts ({@link ARTIFACT_ORIGIN}). Either may wake a
- * stopped session and reopen finished work.
+ * Whether a send is the person's own act: their words, or their picks or
+ * comments on one of the session's artifacts ({@link ARTIFACT_ORIGIN}).
+ * Either may wake a stopped session and reopen finished work.
  */
 export const byPerson = (origin: NeutralOrigin): boolean =>
   origin.kind === "human" ||
