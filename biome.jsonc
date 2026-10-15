@@ -28,11 +28,18 @@
       "!assets/mascot/clips/*/body-*.svg"
     ]
   },
+  // Biome lints; `bun fmt` formats (scripts/fmt.ts, .prettierrc). Each
+  // language's formatter is off too: ultracite's preset turns them on one by one.
+  "formatter": { "enabled": false },
   "javascript": {
     // __CAWCO_COMMIT__: the dashboard's build commit, a `define` in
     // apps/dashboard/vite.config.ts.
-    "globals": ["Bun", "__CAWCO_COMMIT__"]
+    "globals": ["Bun", "__CAWCO_COMMIT__"],
+    "formatter": { "enabled": false }
   },
+  "json": { "formatter": { "enabled": false } },
+  "css": { "formatter": { "enabled": false } },
+  "html": { "formatter": { "enabled": false } },
   // Both sorters can change what the code does: JS object key order is
   // observable through Object.keys/entries and JSON output, and a CSS
   // longhand moved after its logical shorthand (margin-left after
@@ -74,6 +81,18 @@
                 "filenameCases": ["PascalCase", "kebab-case"]
               }
             }
+          }
+        }
+      },
+      // The formatter owns a Svelte component's layout: "Use Prettier for code
+      // formatting concerns, and linters for code-quality concerns"
+      // (prettier.io/docs/integrating-with-linters). bun fmt prints Svelte as
+      // prettier-plugin-svelte does, which puts `this=` first on
+      // <svelte:element>; sorting attributes there undoes it on every run.
+      "assist": {
+        "actions": {
+          "source": {
+            "useSortedAttributes": "off"
           }
         }
       }

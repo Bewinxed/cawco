@@ -1,0 +1,25 @@
+# `bun fmt` (scripts/fmt.ts) leaves these as they are: what biome.jsonc's and
+# site/biome.json's `files.includes` left out, each for the reason given there.
+mocks/
+.design-foundations/
+.mcp.json
+packages/jsonl-parser/
+packages/hub/drizzle/meta/
+packages/core/src/views-spec.json
+packages/hub/skills/decision-page/kit/vendor/
+packages/hub/skills/decision-page/kit/page.html
+apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json
+apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Resources/Icons.xcassets/
+assets/mascot/loops/*/body-*.svg
+assets/mascot/clips/*/body-*.svg
+site/research/
+site/art/
+site/src/assets/
+site/wrangler.jsonc
+site/scripts/deploy.mjs
+
+# Languages Biome never formatted here.
+*.md
+*.yml
+*.yaml
+*.toml

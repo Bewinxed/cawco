@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/build.mjs",
-    "check": "biome check . && tsc --noEmit",
+    "check": "bun ../scripts/fmt.ts --check . && biome check . && tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "deploy": "node scripts/deploy.mjs"
   },
