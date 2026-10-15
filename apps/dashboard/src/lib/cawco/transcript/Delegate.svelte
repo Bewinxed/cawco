@@ -437,14 +437,20 @@
                 >
               {/if}</span
             >
+            <!-- The clock is a timer (live off): in the transcript's log the
+                 phase words are read when they change, not every second. -->
             <span class="sr-only"
-              >{[pillWords, elapsed].filter(Boolean).join(" · ")}</span
+              >{pillWords}{#if elapsed}<span role="timer"
+                  >{pillWords ? " · " : ""}{elapsed}</span
+                >{/if}</span
             >
           {:else}
             {pillWords}
             {#if elapsed}
               {pillWords ? " · " : ""}
-              <span class="elapsed" class:ticking={inFlight}>{elapsed}</span>
+              <span class="elapsed" class:ticking={inFlight} role="timer"
+                >{elapsed}</span
+              >
             {/if}
           {/if}
         </span>
