@@ -2579,6 +2579,26 @@
       "$value": "calc({size.c-starter-w} * 4 + {space.space-2} * 3)",
       "$description": "The column an empty state with starters takes at most: four cards across with their gaps."
     },
+    "c-row-lead": {
+      "$type": "dimension",
+      "$value": "28px",
+      "$description": "A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after."
+    },
+    "c-row-h": {
+      "$type": "dimension",
+      "$value": "44px",
+      "$description": "A routines-page row's pitch: the whole row is its own 44px opener on every pointer."
+    },
+    "c-fact-w": {
+      "$type": "dimension",
+      "$value": "7rem",
+      "$description": "A routines-page row's trailing fact column (\"Tomorrow 09:00\", \"Failed 2d ago\"), fixed so a fact that changes as you watch (\"Running…\") never moves the title."
+    },
+    "c-fact-w-compact": {
+      "$type": "dimension",
+      "$value": "6rem",
+      "$description": "The same fact column on a card under 400px (a phone): it still holds \"Tomorrow 09:00\" in meta, and gives the title the rest."
+    },
     "c-tray-chip": {
       "$type": "dimension",
       "$value": "28px",
