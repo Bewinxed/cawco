@@ -164,12 +164,6 @@ export interface Hang {
   onneck: (neck: Neck) => void;
   /** The card starts to stand open (true), or to fold back into its anchor (false). */
   onshown?: (shown: boolean) => void;
-  /**
-   * Read as the card would grow or fold: true while it is opened only to be
-   * placed ahead of its first real open (Caw's panel), so it stays shut up
-   * behind the cut and nothing plays.
-   */
-  quiet?: () => boolean;
 }
 
 /** The card's attachment: on the popover's content, inside its floating wrapper. */
@@ -301,7 +295,7 @@ function growMotion(
     node.dispatchEvent(new Event(FOLDED));
   };
   const grow = () => {
-    if (!placed || options.quiet?.()) {
+    if (!placed) {
       return;
     }
     node.dataset.shown = "";
@@ -330,9 +324,6 @@ function growMotion(
       .catch(() => undefined);
   };
   const fold = () => {
-    if (options.quiet?.()) {
-      return;
-    }
     if (
       options.folded?.() ||
       !motionOk.current ||
@@ -431,7 +422,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
     node.dispatchEvent(new Event(FOLDED));
   };
   const grow = () => {
-    if (!placed || options.quiet?.()) {
+    if (!placed) {
       return;
     }
     node.dataset.shown = "";
@@ -457,9 +448,6 @@ function slideMotion(node: HTMLElement, options: Hang) {
       .catch(() => undefined);
   };
   const fold = () => {
-    if (options.quiet?.()) {
-      return;
-    }
     options.onshown?.(false);
     // Nothing to fold: shut by a finger, with less motion, or never drawn out.
     if (

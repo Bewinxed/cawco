@@ -10,6 +10,9 @@
  * before the tap) with the CPU the page's main thread ran in it (cpu.ts, the
  * kernel's run time: its script, style, layout and the paint's recording):
  *
+ *  - the card's rehearsal as the page loads (GlassCard: its whole open,
+ *    unseen, so the first press finds nothing cold) ran before the first
+ *    tap, hidden and with the glass never joined;
  *  - the panel opens on every tap;
  *  - in no interval of any open, the press's own included, does the main
  *    thread run over 25ms (a 60Hz frame and a half: a frame the page
@@ -66,6 +69,34 @@ const NOTES = [
  * focus to a button being clicked, but Safari does not, by design" (MDN,
  * <button>, Clicking and focus). Playwright's Linux WebKit does.
  */
+/**
+ * Every state the glass's card and the glass's join stand in, from the
+ * page's load: whether the card is drawn out (`data-shown`), hidden, and the
+ * glass joined. GlassCard rehearses the card's whole open as the page loads,
+ * which must be seen by no one.
+ */
+function rehearsal() {
+  const states: { hidden: boolean; joined: boolean; shown: boolean }[] = [];
+  (window as unknown as { __rehearsal: typeof states }).__rehearsal = states;
+  new MutationObserver(() => {
+    const card = document.querySelector(
+      '[data-popover-content][aria-label="Needs you"]'
+    );
+    if (!card) {
+      return;
+    }
+    states.push({
+      shown: card.hasAttribute("data-shown"),
+      hidden: getComputedStyle(card).visibility === "hidden",
+      joined: document.querySelector("[data-bar-group][data-joined]") !== null,
+    });
+  }).observe(document, {
+    attributes: true,
+    attributeFilter: ["data-shown", "data-joined"],
+    subtree: true,
+  });
+}
+
 function noButtonFocus() {
   window.addEventListener(
     "mousedown",
@@ -122,7 +153,7 @@ const spec: Spec = {
     const page = await kit.page("phone", {
       engine: "webkit",
       scale: 3,
-      init: [watch, attribute, noButtonFocus],
+      init: [watch, attribute, noButtonFocus, rehearsal],
     });
     await open(page, await fleet.dashboard(), "[data-needs-caw]", 90_000);
     await page.waitForFunction(
@@ -141,6 +172,22 @@ const spec: Spec = {
     const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     // Fonts, the first snapshot, his face drawn ahead.
     await page.waitForTimeout(3000);
+    const rehearsed = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __rehearsal: { hidden: boolean; joined: boolean; shown: boolean }[];
+          }
+        ).__rehearsal
+    );
+    const drawnOut = rehearsed.filter((one) => one.shown);
+    kit.check(
+      "the card's rehearsal ran unseen before the first tap",
+      drawnOut.length > 0 &&
+        drawnOut.every((one) => one.hidden && !one.joined) &&
+        !rehearsed.some((one) => one.joined),
+      `${drawnOut.length} state(s) drawn out, ${drawnOut.filter((one) => !one.hidden).length} of them visible, glass joined in ${rehearsed.filter((one) => one.joined).length}`
+    );
     const cpu = await pageCpu(page);
     const opened: boolean[] = [];
     /** Each open's frame intervals, with the page's main-thread CPU and its own code inside each. */

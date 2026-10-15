@@ -312,36 +312,62 @@
     return () => node.removeEventListener(FOLDED, folded);
   });
 
-  /* ── The unseen first open ─────────────────────────────────────────── */
+  /* ── The rehearsal ─────────────────────────────────────────────────── */
   /**
-   * Opened once, unseen, just after the page has loaded, and shut again as
-   * soon as bits-ui has placed it: a popover's first open (its first
-   * placement, its layers' first run) cost a first press 30–45 ms frames
-   * that every later one was spared. While it lasts the card stays shut up
-   * behind the cut and inert, `hang` plays nothing (`quiet`), the glass does
-   * not join it, and focus stays where it is.
+   * The card opens and shuts once, unseen, just after the page has loaded:
+   * its whole open, placed, drawn down out of the glass with the join armed
+   * (`hang`, the box's morph), and folded back, while it is hidden and
+   * inert, the focus stays where it is, and the glass draws no join for it
+   * (bar-glass `rehearsing`). A first press found all of that cold: a
+   * popover's first open (its first placement, its layers' first run) cost
+   * a first press 30–45 ms frames, and with the card only placed ahead of
+   * it, the first press's frame still took 21–28 ms of WebKit's main thread
+   * against 13–15 for every later one (probe-kit webkit-caw); rehearsed
+   * whole, 15. A real open while it lasts ends it there: the card shows and
+   * the glass joins it as it opens.
    */
-  let warming = $state(false);
-  let warmOpen = $state(false);
-  let warmed = false;
+  let rehearsing = $state(false);
+  let rehearsalOpen = $state(false);
+  let rehearsed = false;
+  const endRehearsal = () => {
+    rehearsing = false;
+    rehearsalOpen = false;
+    barGlass.rehearsing = false;
+  };
   $effect(() => {
-    if (warmed || !content || !glass) {
+    const node = content;
+    if (rehearsed || !node || !glass) {
       return;
     }
-    warmed = true;
+    rehearsed = true;
+    // Grown out of the glass, it shuts; folded back behind the cut, done.
+    const grown = () => {
+      rehearsalOpen = false;
+    };
     let timer: ReturnType<typeof setTimeout> | undefined;
     const frame = requestAnimationFrame(() => {
       timer = setTimeout(() => {
-        if (asked === null) {
-          warming = true;
-          warmOpen = true;
+        if (asked !== null) {
+          return;
         }
+        node.addEventListener(GROWN, grown, { once: true });
+        node.addEventListener(FOLDED, endRehearsal, { once: true });
+        rehearsing = true;
+        barGlass.rehearsing = true;
+        rehearsalOpen = true;
       });
     });
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(timer);
+      node.removeEventListener(GROWN, grown);
+      node.removeEventListener(FOLDED, endRehearsal);
     };
+  });
+  $effect.pre(() => {
+    if (asked !== null && untrack(() => rehearsing)) {
+      endRehearsal();
+    }
   });
 
   const close = () => {
@@ -360,27 +386,26 @@
 
 <Popover.Root
   bind:open={
-    () => asked !== null || warmOpen,
+    () => asked !== null || rehearsalOpen,
     (value) => {
       if (!value) {
-        warmOpen = false;
+        rehearsalOpen = false;
         close();
       }
-    }
   }
 >
   <HangCard
     align="end"
     anchor={glass}
     aria-label={LABEL[shown]}
-    class={FRAME[shown]}
+    class={[FRAME[shown], rehearsing && "invisible"]}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
     folded={() => barGlass.instant}
     forceMount
     glass
     held={() => barGlass.instant}
-    inert={asked === null || warming}
+    inert={asked === null || rehearsing}
     morphs={{
       width: true,
       // At once from the keyboard, and while it is not drawn out of the
@@ -389,7 +414,7 @@
     }}
     onCloseAutoFocus={(event) => {
       event.preventDefault();
-      if (warming) {
+      if (rehearsing) {
         return;
       }
       // Shut by a press elsewhere, or by a press on the glass that took the
@@ -415,18 +440,10 @@
       }
       closedOutside = true;
     }}
-    onneck={() => {
-      if (warming && warmOpen) {
-        // Placed: shut again, still quiet until the shut has been seen.
-        warmOpen = false;
-        requestAnimationFrame(() => {
-          warming = false;
-        });
-      }
-    }}
     onOpenAutoFocus={(event) => {
       event.preventDefault();
-      if (warming || asked === null) {
+      // Rehearsed (opened with nothing asked), the focus stays where it is.
+      if (asked === null) {
         return;
       }
       // What invoked it, or what invoked the opener that has gone (the
@@ -462,7 +479,6 @@
       }
       focusIn(card, node);
     }}
-    quiet={() => warming}
     side="bottom"
     sideOffset={placement.sideOffset}
     trapFocus={false}

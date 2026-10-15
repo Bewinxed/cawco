@@ -88,8 +88,6 @@
     held?: () => boolean;
     /** A finger folded it into its anchor: it is shut, with nothing left to play. */
     folded?: () => boolean;
-    /** It is opened only to be placed ahead of its first real open: nothing plays. */
-    quiet?: () => boolean;
     /** How the popover's box tweens to a new size (motion/morph): the popover's own `as` only. */
     morphs?: Morph;
     children: Snippet;
@@ -106,7 +104,6 @@
     onneck,
     held,
     folded,
-    quiet,
     forceMount = false,
     class: className,
     children,
@@ -312,7 +309,6 @@
       },
       held: () => held?.() ?? false,
       folded: () => folded?.() ?? false,
-      quiet: () => quiet?.() ?? false,
       grow: layer ? grow : undefined,
     })(node);
     return () => {
