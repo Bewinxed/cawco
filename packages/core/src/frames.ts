@@ -565,6 +565,17 @@ export interface TasksChangedFrame {
   projectId: string;
 }
 
+export interface DecisionsChangedFrame {
+  instanceId?: undefined;
+  /**
+   * Hub-originated: a project's decision pages changed (one was built,
+   * picked on or sent, its record written, its graph edited): read them
+   * again.
+   */
+  kind: "decisions.changed";
+  projectId: string;
+}
+
 export interface ThreadMessageFrame {
   instanceId?: undefined;
   /** Hub-originated: a message was added to a thread. */

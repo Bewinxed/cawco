@@ -358,7 +358,9 @@ function takeTheme(said: unknown) {
  * interactive comes before the canvas's own module listens.
  */
 function takeInset(said: unknown) {
-  const inset = said as { side?: unknown; top?: unknown } | undefined;
+  const inset = said as
+    | { bottom?: unknown; side?: unknown; top?: unknown }
+    | undefined;
   if (!inset) {
     return;
   }
@@ -366,6 +368,12 @@ function takeInset(said: unknown) {
     typeof value === "number" && Number.isFinite(value) && value >= 0
       ? `${value}px`
       : null;
+  // `bottom`: what a host's docked composer covers of the page's foot (the
+  // Decisions tab's); the kit's page pads for it (page.css `.dp`).
+  const bottom = px(inset.bottom);
+  if (bottom !== null) {
+    document.documentElement.style.setProperty("--page-inset-bottom", bottom);
+  }
   const top = px(inset.top);
   if (top === null) {
     return;
@@ -403,8 +411,13 @@ const kept = (node: Node): boolean =>
   (node instanceof HTMLScriptElement &&
     node.getAttribute("src") === "/__cawco/overlay.js");
 
-/** Where the page is served: the root of its own address. */
-const pageUrl = () => new URL("/", location.origin);
+/**
+ * Where the page was served: the root of its own address in the panel, its
+ * own path (`/__cawco/page/<id>/`) in the Decisions tab. Read at load, so a
+ * page's own history moves never move it.
+ */
+const servedAt = location.pathname;
+const pageUrl = () => new URL(servedAt, location.origin);
 
 let fetching = false;
 let fetchAgain = false;

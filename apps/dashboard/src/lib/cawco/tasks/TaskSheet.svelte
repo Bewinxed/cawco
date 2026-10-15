@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { DECIDED_FIELD, decidedOf } from "@cawco/core/decisions";
+  import { readDecision } from "#lib/cawco/decisions/decisions-api.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
   /**
@@ -227,6 +229,45 @@
 
   const titleOf = (id: string) => byId.get(id)?.title;
   const when = (at: number) => new Date(at).toLocaleString();
+
+  /**
+   * The decision this task was made from (its `decided: <page>#<card>`
+   * field, hub decisions.ts): the page's title and the card's question, as
+   * its record has them, and the way to that card on the Decisions tab.
+   */
+  let decided = $state<{
+    href: string;
+    page: string;
+    question: string | null;
+  } | null>(null);
+  $effect(() => {
+    const field = shown?.extra[DECIDED_FIELD];
+    const named = decidedOf(typeof field === "string" ? field : null);
+    decided = null;
+    if (!named) {
+      return;
+    }
+    const href = `/project/${encodeURIComponent(projectId)}?view=decisions&page=${encodeURIComponent(named.page)}#${encodeURIComponent(named.card)}`;
+    let live = true;
+    readDecision(projectId, named.page)
+      .then((read) => {
+        if (live) {
+          decided = {
+            href,
+            page: read.title,
+            question:
+              read.record?.cards.find((card) => card.id === named.card)
+                ?.question ?? null,
+          };
+        }
+      })
+      .catch(() => {
+        // The page is gone or did not read: the sheet names no decision.
+      });
+    return () => {
+      live = false;
+    };
+  });
 </script>
 
 {#snippet ref(id: string, remove?: () => void)}
@@ -388,6 +429,14 @@
       {/if}
       <RowFault again={saveTitle} reason={titleProblem} />
       <RowFault reason={stageProblem} />
+      {#if decided}
+        <p class="decided">
+          Decided on <a href={decided.href}
+            >{decided.page}{#if decided.question}
+              › {decided.question}{/if}</a
+          >
+        </p>
+      {/if}
       {#if shown?.needsYou || flags.live || flags.failed || flags.stopped || flags.queued || flags.blockedBy.length > 0 || (shown?.labels.length ?? 0) > 0}
         <div class="flags">
           {#if shown?.needsYou}
@@ -598,6 +647,15 @@
     align-items: center;
     gap: var(--space-2);
     padding-inline-end: var(--space-8);
+  }
+  /* The decision it was made from: a meta line under the title, its card a link. */
+  .decided {
+    margin: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .decided a {
+    color: var(--link-ink);
   }
   /* Its own line under the id and stage: the sheet is too narrow for all three. */
   .dates {

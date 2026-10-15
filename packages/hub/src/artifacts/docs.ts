@@ -118,7 +118,11 @@ const elementsIn = (
       return element ? [element] : [];
     });
 
-export const createArtifactDocs = (deps: { db: ArtifactsDb }): ArtifactDocs => {
+export const createArtifactDocs = (deps: {
+  /** A page's `state` changed at `keys` (a pick, a note), by anyone: its project's Decisions tab hears of it. */
+  changed?: (id: string) => void;
+  db: ArtifactsDb;
+}): ArtifactDocs => {
   const loaded = new Map<string, Loaded>();
 
   const sleep = (id: string, entry: Loaded) => {
@@ -155,6 +159,9 @@ export const createArtifactDocs = (deps: { db: ArtifactsDb }): ArtifactDocs => {
     }
     if (deps.db.updateCount(id) >= COMPACT_EVERY) {
       deps.db.compact(id, encodeStateAsUpdate(entry.doc));
+    }
+    if (changed.keys.length > 0) {
+      deps.changed?.(id);
     }
   };
 

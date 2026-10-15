@@ -4600,6 +4600,556 @@
         }
       }
     },
+    "/api/projects/{id}/decisions": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdDecisions",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdDecisions 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionsList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdDecisions 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdDecisions 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdDecisions 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdDecisions 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdDecisions 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/decisions/graph": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdDecisionsGraph",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdDecisionsGraph 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionGraph"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdDecisionsGraph 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdDecisionsGraph 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdDecisionsGraph 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdDecisionsGraph 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdDecisionsGraph 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "places": {
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "x",
+                        "y"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "places"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdDecisionsGraph",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdDecisionsGraph 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiProjectsByIdDecisionsGraph200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdDecisionsGraph 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdDecisionsGraph 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiProjectsByIdDecisionsGraph 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdDecisionsGraph 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiProjectsByIdDecisionsGraph 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/decisions/{name}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdDecisionsByName",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdDecisionsByName 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionPageRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdDecisionsByName 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdDecisionsByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdDecisionsByName 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdDecisionsByName 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdDecisionsByName 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/decisions/{name}/send": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdDecisionsByNameSend",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdDecisionsByNameSend 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionSent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdDecisionsByNameSend 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdDecisionsByNameSend 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdDecisionsByNameSend 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdDecisionsByNameSend 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdDecisionsByNameSend 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/decisions/{name}/tasks": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdDecisionsByNameTasks",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdDecisionsByNameTasks 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionPageRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdDecisionsByNameTasks 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdDecisionsByNameTasks 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdDecisionsByNameTasks 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdDecisionsByNameTasks 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdDecisionsByNameTasks 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/push": {
       "get": {
         "operationId": "getApiPush",
@@ -20344,6 +20894,17 @@
           }
         ]
       },
+      "putApiProjectsByIdDecisionsGraph200": {
+        "type": "object",
+        "properties": {
+          "placed": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "placed"
+        ]
+      },
       "getApiPush200": {
         "type": "object",
         "properties": {
@@ -20941,11 +21502,11 @@
           "description": {
             "type": "string"
           },
-          "slug": {
-            "type": "string"
-          },
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "slug": {
+            "type": "string"
           },
           "program": {
             "type": "string"
@@ -21013,11 +21574,11 @@
           "description": {
             "type": "string"
           },
-          "slug": {
-            "type": "string"
-          },
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "slug": {
+            "type": "string"
           },
           "program": {
             "type": "string"
@@ -21071,11 +21632,11 @@
           "description": {
             "type": "string"
           },
-          "slug": {
-            "type": "string"
-          },
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "slug": {
+            "type": "string"
           },
           "program": {
             "type": "string"
@@ -21319,6 +21880,9 @@
           "workspace": {
             "type": "string"
           },
+          "graph": {
+            "$ref": "#/components/schemas/WorkflowGraph"
+          },
           "state": {
             "type": "object"
           },
@@ -21342,9 +21906,6 @@
               "null",
               "string"
             ]
-          },
-          "graph": {
-            "$ref": "#/components/schemas/WorkflowGraph"
           },
           "program": {
             "type": "string"
@@ -21478,6 +22039,9 @@
               "workspace": {
                 "type": "string"
               },
+              "graph": {
+                "$ref": "#/components/schemas/WorkflowGraph"
+              },
               "state": {
                 "type": "object"
               },
@@ -21501,9 +22065,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "graph": {
-                "$ref": "#/components/schemas/WorkflowGraph"
               },
               "program": {
                 "type": "string"
@@ -25602,6 +26163,9 @@
             "$ref": "#/components/schemas/TasksChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/DecisionsChangedFrame"
+          },
+          {
             "$ref": "#/components/schemas/ProjectsChangedFrame"
           },
           {
@@ -25667,6 +26231,7 @@
             "thread.upsert": "#/components/schemas/ThreadUpsertFrame",
             "thread.message": "#/components/schemas/ThreadMessageFrame",
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
+            "decisions.changed": "#/components/schemas/DecisionsChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
             "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
@@ -29021,6 +29586,454 @@
           "width",
           "x",
           "y"
+        ]
+      },
+      "DecisionsList": {
+        "type": "object",
+        "properties": {
+          "graph": {
+            "description": "`decisions/decisions.json` is in the folder: the decisions form a graph.",
+            "type": "boolean"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionPageSummary"
+            }
+          },
+          "problems": {
+            "description": "What could not be read, one sentence each.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "graph",
+          "pages",
+          "problems"
+        ]
+      },
+      "DecisionPageSummary": {
+        "description": "A page as the Decisions tab lists it.",
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "description": "Its artifact; null for a page whose artifact the hub no longer holds.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cards": {
+            "description": "Its cards.",
+            "type": "number"
+          },
+          "decided": {
+            "description": "Cards decided in its record; 0 before Make tasks.",
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notes": {
+            "description": "Cards with a note.",
+            "type": "number"
+          },
+          "picked": {
+            "description": "Cards picked.",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/DecisionState"
+          },
+          "tasks": {
+            "description": "Tasks filed from it ({@link DECIDED_FIELD} naming it).",
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "When it was built, picked or sent last, ms epoch.",
+            "type": "number"
+          },
+          "writer": {
+            "$ref": "#/components/schemas/DecisionWriter"
+          }
+        },
+        "required": [
+          "artifactId",
+          "cards",
+          "decided",
+          "name",
+          "notes",
+          "picked",
+          "state",
+          "tasks",
+          "title",
+          "updatedAt"
+        ]
+      },
+      "DecisionState": {
+        "type": "string",
+        "enum": [
+          "decided",
+          "making",
+          "picking",
+          "sent"
+        ]
+      },
+      "DecisionWriter": {
+        "description": "The session that wrote a page.",
+        "type": "object",
+        "properties": {
+          "ended": {
+            "description": "It was ended: its person, parent or the hub stopped it, so Caw is woken instead.",
+            "type": "boolean"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ended",
+          "instanceId",
+          "title"
+        ]
+      },
+      "DecisionGraph": {
+        "description": "`decisions/decisions.json`.",
+        "type": "object",
+        "properties": {
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GraphCard"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GraphGroup"
+            }
+          }
+        },
+        "required": [
+          "cards",
+          "edges",
+          "groups"
+        ]
+      },
+      "GraphCard": {
+        "description": "One card on the graph: its page's card by id, and its place.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "page": {
+            "description": "The page it is a card of.",
+            "type": "string"
+          },
+          "picked": {
+            "description": "Picked on its page: derived on read, never written to the file.",
+            "type": "boolean"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "page",
+          "x",
+          "y"
+        ]
+      },
+      "GraphGroup": {
+        "type": "object",
+        "properties": {
+          "cards": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cards",
+          "id",
+          "name"
+        ]
+      },
+      "DecisionPageRead": {
+        "description": "A page opened in the Decisions tab: its summary, its record and its last send.",
+        "type": "object",
+        "properties": {
+          "record": {
+            "$ref": "#/components/schemas/DecisionRecord"
+          },
+          "sentAt": {
+            "description": "When the person last sent (I'm done picking, a comment), ISO; null before.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactId": {
+            "description": "Its artifact; null for a page whose artifact the hub no longer holds.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cards": {
+            "description": "Its cards.",
+            "type": "number"
+          },
+          "decided": {
+            "description": "Cards decided in its record; 0 before Make tasks.",
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notes": {
+            "description": "Cards with a note.",
+            "type": "number"
+          },
+          "picked": {
+            "description": "Cards picked.",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/DecisionState"
+          },
+          "tasks": {
+            "description": "Tasks filed from it ({@link DECIDED_FIELD} naming it).",
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "When it was built, picked or sent last, ms epoch.",
+            "type": "number"
+          },
+          "writer": {
+            "$ref": "#/components/schemas/DecisionWriter"
+          }
+        },
+        "required": [
+          "artifactId",
+          "cards",
+          "decided",
+          "name",
+          "notes",
+          "picked",
+          "sentAt",
+          "state",
+          "tasks",
+          "title",
+          "updatedAt"
+        ]
+      },
+      "DecisionRecord": {
+        "description": "`decisions/<name>/record.json`.",
+        "type": "object",
+        "properties": {
+          "askedOf": {
+            "description": "The session asked to make its tasks; null when none was reached.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordCard"
+            }
+          },
+          "madeAt": {
+            "description": "When Make tasks wrote it, ISO.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "askedOf",
+          "cards",
+          "madeAt",
+          "name",
+          "title"
+        ]
+      },
+      "RecordCard": {
+        "description": "One card of a decided page's record.",
+        "type": "object",
+        "properties": {
+          "chosen": {
+            "description": "Options picked, by id; empty when it was left open.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dials": {
+            "description": "Its dials' values, in order: a panel named as the card.",
+            "type": "array",
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "mockup": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "note": {
+            "description": "The person's note; empty when none.",
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionOption"
+            }
+          },
+          "question": {
+            "type": "string"
+          },
+          "still": {
+            "description": "The mockup's still in the chosen state, by its mockup's built output; null when there is none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tasks": {
+            "description": "Tasks filed from it.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chosen",
+          "dials",
+          "id",
+          "mockup",
+          "note",
+          "options",
+          "question",
+          "still",
+          "tasks",
+          "why"
+        ]
+      },
+      "DecisionOption": {
+        "description": "One option of a card, as the page labelled it.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "keycap": {
+            "description": "Its digit in the card: the kit numbers options 1, 2, 3… in page order.",
+            "type": "number"
+          },
+          "label": {
+            "type": "string"
+          },
+          "line": {
+            "description": "The line under its label; empty when it has none.",
+            "type": "string"
+          },
+          "recommended": {
+            "description": "The writer marked it Recommended.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "keycap",
+          "label",
+          "line",
+          "recommended"
+        ]
+      },
+      "DecisionSent": {
+        "description": "What the hub answers a send on a page: who heard it.",
+        "type": "object",
+        "properties": {
+          "threadId": {
+            "description": "The thread Caw was woken in, when he was.",
+            "type": "string"
+          },
+          "to": {
+            "$ref": "#/components/schemas/DecisionSentTo"
+          }
+        },
+        "required": [
+          "to"
         ]
       },
       "PushOutcome": {
@@ -32601,12 +33614,12 @@
           "description": {
             "type": "string"
           },
-          "slug": {
-            "type": "string"
-          },
           "graph": {
             "description": "The editor's model. Null for a program written by hand or by an agent.",
             "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "slug": {
+            "type": "string"
           },
           "inputs": {
             "description": "The program's `inputs` export, as the launch dialog and stubs need it.",
@@ -43477,6 +44490,25 @@
           "projectId"
         ]
       },
+      "DecisionsChangedFrame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Hub-originated: a project's decision pages changed (one was built,\npicked on or sent, its record written, its graph edited): read them\nagain.",
+            "type": "string",
+            "enum": [
+              "decisions.changed"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "projectId"
+        ]
+      },
       "ProjectsChangedFrame": {
         "type": "object",
         "properties": {
@@ -44320,6 +45352,13 @@
         "enum": [
           "archive",
           "end"
+        ]
+      },
+      "DecisionSentTo": {
+        "type": "string",
+        "enum": [
+          "caw",
+          "session"
         ]
       },
       "DelegateBudgetPer": {

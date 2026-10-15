@@ -838,6 +838,12 @@ const state = $state({
    * reads them again when it moves.
    */
   tasksChanged: {} as Record<string, number>,
+  /**
+   * How many times each project's decision pages have changed since this
+   * page connected (`decisions.changed` frames): the Decisions tab reads them
+   * again when it moves.
+   */
+  decisionsChanged: {} as Record<string, number>,
   sessions: {} as Record<string, SessionState>,
   /**
    * Each instance's coarse now-state, pushed by the daemon ~1/sec (broadcast).
@@ -2860,6 +2866,12 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "tasks.changed") {
     state.tasksChanged[frame.projectId] =
       (state.tasksChanged[frame.projectId] ?? 0) + 1;
+    return;
+  }
+
+  if (frame.kind === "decisions.changed") {
+    state.decisionsChanged[frame.projectId] =
+      (state.decisionsChanged[frame.projectId] ?? 0) + 1;
     return;
   }
 
@@ -7534,6 +7546,9 @@ export const cawco = {
   /** A count that moves each time the project's tasks change (`tasks.changed`). */
   tasksChangedOf: (projectId: string): number =>
     state.tasksChanged[projectId] ?? 0,
+  /** A count that moves each time the project's decision pages change (`decisions.changed`). */
+  decisionsChangedOf: (projectId: string): number =>
+    state.decisionsChanged[projectId] ?? 0,
   threadMessagesOf: (threadId: string): ThreadMessage[] | null =>
     state.threadMessages[threadId] ?? null,
   session: (instanceId: string): SessionState | null =>

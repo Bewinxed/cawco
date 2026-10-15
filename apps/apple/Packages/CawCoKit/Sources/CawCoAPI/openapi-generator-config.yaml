@@ -37,6 +37,8 @@ typeOverrides:
     ContinuationJobStage: OpenEnums.ContinuationJobStage
     ContinueStep: OpenEnums.ContinueStep
     DamagedRowRemedy: OpenEnums.DamagedRowRemedy
+    DecisionSentTo: OpenEnums.DecisionSentTo
+    DecisionState: OpenEnums.DecisionState
     DelegateBudgetPer: OpenEnums.DelegateBudgetPer
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus

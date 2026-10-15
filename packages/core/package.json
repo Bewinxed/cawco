@@ -30,6 +30,7 @@
     "./preview-proxy": "./src/preview-proxy.ts",
     "./browser-gate": "./src/browser-gate.ts",
     "./choices": "./src/choices.ts",
+    "./decisions": "./src/decisions.ts",
     "./canvas": "./src/canvas.ts",
     "./ink": "./src/ink.ts",
     "./shapes": "./src/shapes.ts",

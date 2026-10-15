@@ -1192,6 +1192,88 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/DecisionSentTo`.
+    public enum DecisionSentTo: OpenEnum {
+        case caw
+        case session
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "caw": self = .caw
+            case "session": self = .session
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .caw: "caw"
+            case .session: "session"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.caw, .session]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/DecisionState`.
+    public enum DecisionState: OpenEnum {
+        case decided
+        case making
+        case picking
+        case sent
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "decided": self = .decided
+            case "making": self = .making
+            case "picking": self = .picking
+            case "sent": self = .sent
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .decided: "decided"
+            case .making: "making"
+            case .picking: "picking"
+            case .sent: "sent"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.decided, .making, .picking, .sent]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/DelegateBudgetPer`.
     public enum DelegateBudgetPer: OpenEnum {
         case attempt

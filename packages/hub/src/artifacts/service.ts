@@ -430,6 +430,12 @@ export interface ArtifactServiceDeps {
   delegatesIn: (instance: InstanceRow, workspaceId: string) => boolean;
   docs: ArtifactDocs;
   instance: (id: string) => InstanceRow | undefined;
+  /**
+   * Whether `instance` leads project `projectId` (its Caw): he reads every
+   * page of his project, so a page whose session ended is his to act on
+   * (Projects spec §5.8, decisions.ts).
+   */
+  leads: (instance: InstanceRow, projectId: string) => boolean;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
@@ -524,6 +530,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
     }
     return row;
+  };
+
+  /** What the session may read: its own artifacts, and, for a project's lead, every page of his project. */
+  const readable = (instance: InstanceRow, id: string): ArtifactRow => {
+    const row = db.get(id);
+    if (
+      row?.kind === "page" &&
+      row.projectId &&
+      row.instanceId !== instance.id &&
+      deps.leads(instance, row.projectId)
+    ) {
+      return row;
+    }
+    return own(instance, id);
   };
 
   /** Pin `pinId` on one of the session's artifacts, and that artifact; refused when no artifact of the session holds it. */
@@ -1322,7 +1342,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): ArtifactRead => {
       const instance = sessionOf(instanceId);
       const row =
-        id === undefined ? db.ofInstance(instance.id)[0] : own(instance, id);
+        id === undefined
+          ? db.ofInstance(instance.id)[0]
+          : readable(instance, id);
       if (!row) {
         throw new ArtifactRefusal(
           404,

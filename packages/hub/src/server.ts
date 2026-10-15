@@ -124,6 +124,7 @@ import {
   BUCKET_MS,
   byPerson,
   CANCEL_BINARY_UPDATE,
+  type ChoiceEntry,
   CLAUDE_CONVERSATION_GONE,
   CLAUDE_PROVIDER,
   CONFIGURE_BINARY_UPDATES,
@@ -184,6 +185,7 @@ import {
   deriveTitleFromFirstMessage,
   EFFORT_NONE,
   EFFORT_READ,
+  ENDED_STATUSES,
   type EndedBy,
   estimateTokens,
   FLEET_STATUS,
@@ -390,6 +392,12 @@ import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { PriorConversation } from "./db/schema";
 import { buildDecisionPage, type PageSources } from "./decision-page";
+import {
+  createDecisions,
+  DecisionRefusal,
+  decidedTasks,
+  decisionRoutes,
+} from "./decisions";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import {
   hubHttpUrl,
@@ -491,13 +499,16 @@ import {
 } from "./project-delegate-types";
 import { createProjectEdits, ProjectEditRefusal } from "./project-edit";
 import {
+  changeFolderFiles,
   FolderRefusal,
+  folderFileNames,
   listFolder,
   projectFolderRoutes,
   projectRoot,
   readFolderFile,
   trashProjectFolder,
   writeFolderFile,
+  YOU as FOLDER_YOU,
 } from "./project-folder";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
@@ -8858,6 +8869,7 @@ export const createServer = (
           refused: error.message,
         };
       }
+      decisionsChanged(row.projectId);
     }
     return { html: built.html };
   };
@@ -9056,9 +9068,43 @@ export const createServer = (
     });
   };
 
+  /**
+   * Every dashboard showing a project reads its decision pages again
+   * (`decisions.changed`, decisions.ts): a page built, picked on or sent,
+   * its record written, its graph edited. A burst of picks (a note typed)
+   * is told once per {@link DECISIONS_TOLD_MS}.
+   */
+  const DECISIONS_TOLD_MS = 400;
+  const decisionsTelling = new Map<string, ReturnType<typeof setTimeout>>();
+  const decisionsChanged = (projectId: string): void => {
+    if (decisionsTelling.has(projectId)) {
+      return;
+    }
+    decisionsTelling.set(
+      projectId,
+      setTimeout(() => {
+        decisionsTelling.delete(projectId);
+        registry.broadcast({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "decisions.changed", projectId },
+        });
+      }, DECISIONS_TOLD_MS)
+    );
+  };
+
   // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
   // listener; the person's Send tells the session to read it (artifacts/).
-  const artifactDocs = createArtifactDocs({ db: db.artifacts });
+  const artifactDocs = createArtifactDocs({
+    db: db.artifacts,
+    // A pick or a note on a project's page moves its Decisions tab.
+    changed: (id) => {
+      const row = db.artifacts.get(id);
+      if (row?.kind === "page" && row.projectId) {
+        decisionsChanged(row.projectId);
+      }
+    },
+  });
   const artifacts: Artifacts = createArtifacts({
     db: db.artifacts,
     docs: artifactDocs,
@@ -9069,6 +9115,8 @@ export const createServer = (
     signal: (instance, artifact, responses) =>
       signalResponses(instance, artifact, responses),
     instance: (id) => db.getInstancesByIds([id])[0],
+    leads: (instance, projectId) =>
+      db.project(projectId)?.leadInstanceId === instance.id,
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
     open: async (artifact) => {
@@ -15912,7 +15960,10 @@ export const createServer = (
         ? onlineMachines().length > 0
         : Boolean(registry.agent(machineId)),
     leadHome,
-    folderChanged: (projectId) => tasks.touched(projectId),
+    folderChanged: (projectId) => {
+      tasks.touched(projectId);
+      decisionsChanged(projectId);
+    },
     fleetChoicesSet: () => Boolean(db.getSupervisorConfig()?.choicesSetAt),
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
     publish: (payload) =>
@@ -16040,6 +16091,93 @@ export const createServer = (
       payload: { kind: "tasks.changed", projectId: event.projectId },
     })
   );
+  // The project page's Decisions tab (decisions.ts): its pages, their sends
+  // and Make tasks, its graph. A record keeps its tasks as they are filed.
+  const decisions = createDecisions({
+    artifacts: (projectId) => db.artifacts.ofProject(projectId, "page"),
+    builtPage: async (artifactId) => {
+      const file = Bun.file(join(ARTIFACTS_ROOT, artifactId, "index.html"));
+      return (await file.exists()) ? await file.text() : undefined;
+    },
+    changed: decisionsChanged,
+    commit: async (projectId, change, message) => {
+      await changeFolderFiles(projectId, change, {
+        author: FOLDER_YOU,
+        message,
+      });
+    },
+    folderText,
+    folderNames: (projectId, path) => folderFileNames(projectId, path),
+    instance: (id) => db.getInstancesByIds([id])[0],
+    page: (artifactId) => {
+      const doc = artifactDocs.doc(artifactId);
+      const meta = doc.getMap("meta");
+      return {
+        state: doc.getMap("state").toJSON() as Record<string, ChoiceEntry>,
+        meta: {
+          sentAt: (meta.get("sentAt") as string | null | undefined) ?? null,
+          sentText: (meta.get("sentText") as string | null | undefined) ?? null,
+        },
+      };
+    },
+    projectExists: (projectId) => db.project(projectId) !== undefined,
+    send: async (instanceId, artifactId, text) => {
+      try {
+        await artifacts.send(instanceId, artifactId, text ? { text } : {});
+      } catch (error) {
+        if (error instanceof ArtifactRefusal) {
+          throw new DecisionRefusal(
+            error.status === 409 || error.status === 404 ? error.status : 503,
+            error.message,
+            { cause: error }
+          );
+        }
+        throw error;
+      }
+    },
+    stampSent: (artifactId, text) =>
+      artifactDocs.transact(artifactId, "hub", (doc) => {
+        const meta = doc.getMap("meta");
+        meta.set("sentAt", new Date().toISOString());
+        meta.set("sentText", text ?? null);
+      }),
+    tasks: async (projectId) =>
+      decidedTasks((await tasks.list(projectId)).tasks),
+    tell: (instance, text) => {
+      deliverSend({
+        verb: "send",
+        machineId: instance.machineId,
+        instanceId: instance.id,
+        payload: {
+          instanceId: instance.id,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content: text },
+            parent_tool_use_id: null,
+            origin: { kind: "human" },
+          },
+        },
+      });
+    },
+    wakeCaw: async (projectId, text) =>
+      (await caw.start(projectId, text)).thread.id,
+    working: (instance) =>
+      !ENDED_STATUSES.has(instance.status) &&
+      pulses.get(instance.id)?.busy === true,
+    threadWorking: (threadId) => {
+      const thread = db.thread(threadId);
+      return (
+        !!thread &&
+        caw
+          .allThreads()
+          [thread.projectId]?.some(
+            (each) => each.id === threadId && each.status === "working"
+          ) === true
+      );
+    },
+  });
+  tasks.listen((event) => decisions.tasksChanged(event.projectId));
   // "Make this a project": offered once to a plain session that outgrew
   // itself, at a turn's end or a delegate's spawn (project-offers.ts).
   const projectOffers = createProjectOffers({
@@ -18297,11 +18435,15 @@ export const createServer = (
       .use(
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
-          (id) => tasks.touched(id)
+          (id) => {
+            tasks.touched(id);
+            decisionsChanged(id);
+          }
         )
       )
       .use(taskRoutes(tasks))
       .use(artifactRoutes(artifacts))
+      .use(decisionRoutes(decisions))
       .use(pushRoutes(db, push))
       .use(notificationRoutes(db, notifications))
       // The hub as a git remote and LFS server, for fleet machines and
