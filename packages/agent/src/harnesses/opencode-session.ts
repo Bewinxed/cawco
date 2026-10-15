@@ -2787,7 +2787,11 @@ export class OpencodeSession implements HarnessSession {
     }
     await storeOpencodeCredential(
       this.#opencodeSessionId(),
-      { credential, instanceId: this.instanceId },
+      {
+        credential,
+        instanceId: this.instanceId,
+        workspace: this.#ctx.workspace ?? null,
+      },
       this.#liveSessions()
     );
     await acknowledgeSessionCredential(credential);

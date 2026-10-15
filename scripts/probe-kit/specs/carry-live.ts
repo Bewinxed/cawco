@@ -29,15 +29,20 @@
  *    `-caw` workspace record naming the session's folder, as Caw's boundary
  *    writes it) runs on the host, before and after a move: its shell's
  *    pid namespace and /proc/1 are the spec runner's own, never a boundary's.
+ *    Its git changes (a continuation's read) run on the host, no boundary
+ *    stood up for the place; and a person's OpenCode session in that folder
+ *    (one OpenCode location for every session there) runs its `shell` on
+ *    the host too.
  *
  *   bun scripts/probe-kit/run.ts carry-live
  *   CARRY_CASE=4 bun scripts/probe-kit/run.ts carry-live
  */
-import { readFileSync, readlinkSync } from "node:fs";
+import { existsSync, readFileSync, readlinkSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MOVE_LATER_WAIT_MS } from "../../../packages/core/src/accounts";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import { WORKSPACE_POLICY_NAME } from "../../../packages/core/src/paths";
 import { LEAD_PLACE_SUFFIX } from "../../../packages/core/src/workspace-policy";
 import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -87,6 +92,8 @@ const ENDED_NOTICE =
 /** Case 5's shell: its pid namespace, then its pid 1's command line. */
 const SHELL_PROBE =
   "readlink /proc/self/ns/pid; tr '\\0' ' ' < /proc/1/cmdline; echo";
+/** A tool's result as a request carries it (chat completions' `tool` message, Anthropic's `tool_result`), for a failed check to show. */
+const TOOL_RESULT = /"role":"tool".{0,600}|"tool_result".{0,600}/;
 /** What a workspace boundary's pid 1 names in its command line (agent boundary.ts). */
 const BOUNDARY_MARK = "cawco-boundary";
 /** The shell probe's answer as the request after it carries it, for a failed check to show. */
@@ -164,7 +171,9 @@ const watcherReply = (request: Seen): Reply | undefined => {
 const shellReply = (request: Seen): Reply | undefined => {
   if (request.last.includes("SHELL-MARK") && !request.afterTool) {
     shellAsked = true;
-    return tool("Bash", { command: SHELL_PROBE, description: "Read pid 1" });
+    // Claude Code's shell is `Bash`; OpenCode 2.0's is `shell`.
+    const name = request.toolNames.includes("shell") ? "shell" : "Bash";
+    return tool(name, { command: SHELL_PROBE, description: "Read pid 1" });
   }
   if (!(shellAsked && request.afterTool)) {
     return undefined;
@@ -554,6 +563,9 @@ const run = async (kit: Kit) => {
       join(place, "create.json"),
       JSON.stringify({ path: fleet.workdir })
     );
+    // A place's policy, as its boundary writes it: OpenCode's plugin reads it
+    // as a location the place holds boots.
+    await writeFile(join(place, WORKSPACE_POLICY_NAME), "{}");
     // The runner's own view: the session's shell sees the same, with no
     // boundary's pid namespace between them.
     const hostNs = readlinkSync("/proc/self/ns/pid");
@@ -572,6 +584,13 @@ const run = async (kit: Kit) => {
         `${name}: the shell's answer ${step}`,
         120_000
       ).catch(() => undefined);
+      if (!read) {
+        for (const one of fleet.seen.slice(before)) {
+          console.log(
+            `  seen: tools ${one.toolNames.slice(0, 12).join(",")} afterTool ${one.afterTool} last ${JSON.stringify(one.last.slice(0, 120))} tool result ${JSON.stringify(TOOL_RESULT.exec(one.body)?.[0] ?? "none")}`
+          );
+        }
+      }
       const body = read?.body ?? "";
       const sameNs = body.includes(hostNs);
       const sameInit = body.includes(JSON.stringify(hostInit).slice(1, -1));
@@ -579,13 +598,15 @@ const run = async (kit: Kit) => {
       // own pid 1; the shell sees no other.
       const noBoundary =
         hostInit.includes(BOUNDARY_MARK) || !body.includes(BOUNDARY_MARK);
+      const host = sameNs && sameInit && noBoundary;
       kit.check(
         `${name}: ${step}, its shell is in the runner's pid namespace and sees its pid 1`,
-        sameNs && sameInit && noBoundary,
+        host,
         read
           ? `same pid namespace ${sameNs}, same pid 1 ${sameInit}, no boundary of its own ${noBoundary}; runner ${hostNs} "${hostInit.slice(0, 60)}"; the shell's answer ${SHELL_ANSWER.exec(body)?.[0] ?? "not found"}`
           : "no answer seen"
       );
+      return host;
     };
     const s = await start("Person in a lead's folder");
     await shellSees(s.id, "as it starts", "first");
@@ -602,6 +623,42 @@ const run = async (kit: Kit) => {
       120_000
     );
     await shellSees(s.id, "after its move", "after");
+
+    // Its git changes (a continuation's read, CONTROL_GIT_CHANGES) run on the
+    // host: no boundary is stood up for the place, which would write its
+    // boundary.json first.
+    await Bun.$`git init -q && git -c user.email=probe@scratch.test -c user.name=probe commit -q --allow-empty -m first && echo changed > changed.txt`
+      .cwd(fleet.workdir)
+      .quiet();
+    const read = await fleet
+      .api<{ entries: number }>(`/api/instances/${s.id}/continue`)
+      .then(
+        () => "answered",
+        (error: unknown) => String(error)
+      );
+    const boundaryStarted = existsSync(join(place, "boundary.json"));
+    kit.check(
+      `${name}: its git changes are read on the host, with no boundary for the lead's place`,
+      read === "answered" && !boundaryStarted,
+      `continuation read ${read}; the place's boundary.json ${boundaryStarted ? "written" : "absent"}`
+    );
+
+    // An OpenCode session of a person's in the same folder: one OpenCode
+    // location serves every session there, and the plugin bounds only the
+    // lead's own sessions by his place.
+    const oc = await fleet.spawn(
+      "opencode",
+      "Person's OpenCode in a lead's folder"
+    );
+    if (!(await shellSees(oc, "on OpenCode", "opencode"))) {
+      console.log(
+        (await fleet.logs("agent"))
+          .split("\n")
+          .filter((line) => line.includes("[opencode]") || line.includes(oc))
+          .slice(-40)
+          .join("\n")
+      );
+    }
     await rm(place, { recursive: true, force: true });
   }
 

@@ -70,7 +70,7 @@ import {
 } from "./move";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
-import { workspaceHolding } from "./workspace-records";
+import { cloneHolding } from "./workspace-records";
 
 type Git = (root: string, ...args: string[]) => Promise<string>;
 
@@ -235,8 +235,9 @@ export const createWorkspace = async (
     }
   );
   // A workspace cut from another workspace's clone: that clone's config is
-  // the other workspace's to write.
-  const source = await workspaceHolding(repoRoot);
+  // the other workspace's to write. A lead's place is a person's own repo,
+  // whose config is theirs.
+  const source = await cloneHolding(repoRoot);
   const problem = source
     ? await repositoryConfigProblem(join(source.path, ".git"))
     : undefined;

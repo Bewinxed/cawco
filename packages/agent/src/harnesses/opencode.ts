@@ -114,7 +114,7 @@ import { fenced } from "../restart";
 import type { SessiondClient } from "../sessiond-client";
 import { listStandIns } from "../stand-ins";
 import { resolveBin } from "../tools";
-import { workspaceHolding, workspaceRefs } from "../workspace-records";
+import { cloneHolding, workspaceRefs } from "../workspace-records";
 import { readJson, readSidecar, writeJson } from "./fleet-common";
 import { OpencodeActivity } from "./opencode-activity";
 import {
@@ -709,7 +709,7 @@ const disablePlanAgentFor = async (
   if (!spec.cawcoTodos || (await resolvedFleetDenials()).cawcoTodos) {
     return;
   }
-  const workspace = await workspaceHolding(cwd);
+  const workspace = spec.workspace ?? (await cloneHolding(cwd));
   if (!workspace) {
     console.warn(
       `[opencode] ${spec.instanceId}: its delegate type turns CawCo's to-dos on, but it runs in ${cwd}, inside no workspace's clone, so OpenCode's plan agent is left as it is there.`

@@ -22,6 +22,14 @@ import { delegationHubUrl } from "../delegation";
 export interface HeldCredential {
   credential: string;
   instanceId: string;
+  /**
+   * The workspace whose boundary the session's spawn put it in (agent
+   * `HarnessContext.workspace`), or null for none. The plugin reads it for a
+   * location a project lead's place holds: one OpenCode location serves
+   * every session in its folder, and only the lead's own sessions there are
+   * bounded by his place.
+   */
+  workspace: string | null;
 }
 
 /** One file per hub, so an agent for a test hub never touches the machine's. */

@@ -29,7 +29,13 @@
  *   the `shell` that runs every command through the workspace's executor,
  *   inside its boundary, in place of the built-in (2.0's id for the shell
  *   tool is `shell`, settled #2). The server pins the built-in's description
- *   for the model, so a clone's session context gives it the boundary's.
+ *   for the model, so a clone's session context gives it the boundary's. A
+ *   location serves every session in its folder, so in a project lead's
+ *   place the `shell` decides per session (`context.sessionID`): the lead's
+ *   own sessions, the ones the agent records with that place (opencode-
+ *   credentials.ts `workspace`), and any not recorded yet, run inside it;
+ *   a person's session there runs through the built-in it replaces, which
+ *   asks and runs on the host as it always does, with no judge.
  * - `ctx.shell.hook("create.before")`: every shell a session's `shell` call
  *   opens acts as that session (its instance and credential, for `cawco
  *   tool` and git), and none gets the server's password or CawCo's wiring.
@@ -50,6 +56,7 @@ import { CAWCO_ENV } from "@cawco/core";
 import { WORKSPACE_POLICY_NAME, workspacesDir } from "@cawco/core/paths";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { LEAD_PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { JUDGE_SCRIPT } from "../boundary";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import { readJson, writeJson } from "./fleet-common";
@@ -107,6 +114,10 @@ const machineDataHome = (): string =>
 
 const BOUNDED_SHELL_DESCRIPTION =
   "Runs a bash command inside this workspace's boundary, in the session's directory unless workdir says otherwise. The command can write only the clone, $TMPDIR (the workspace's own scratch dir: temp files go there, not /tmp) and the workspaces' own package cache; it reads nothing in the home dir outside the clone, toolchains and the user's git config, and none of the credentials CawCo, the harnesses and the machine's tools keep; it reaches any public host but none of the owner's machines (cawco tools reaches the hub's tools); it sees and signals only this workspace's processes, and cannot reach the service manager. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.";
+
+/** The `shell` a person's session in a project lead's place sees: the built-in's, on this machine. */
+const HOST_SHELL_DESCRIPTION =
+  "Runs a bash command on this machine, in the session's directory unless workdir says otherwise. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.";
 
 /** The plugin's module source, as every server on this machine loads it. */
 export const buildPluginSource =
@@ -261,8 +272,41 @@ const withoutSecret = (input) => {
   return rest;
 };
 
+// A project lead's place (the agent's isLeadPlace): a person's own folder,
+// bounded only for the lead's own sessions there.
+const leadPlaceSuffix = ${JSON.stringify(LEAD_PLACE_SUFFIX)};
+
 const OUTPUT_LIMIT = 30000;
-const boundedShell = (id, root, directory) => ({
+// Runs \`file args\` as one \`shell\` call of the session: its env, its
+// timeout and abort, its output cut at OUTPUT_LIMIT.
+const runShell = async (file, args, input, context, directory) => {
+  const timeout = Math.min(input.timeout ?? 120000, 600000);
+  const env = { ...cleanEnv({ ...process.env }), ...sessionEnv(context.sessionID) };
+  const child = spawn(file, args, { cwd: input.workdir ?? directory, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  let output = "";
+  const take = (chunk) => { output += chunk.toString(); };
+  child.stdout.on("data", take);
+  child.stderr.on("data", take);
+  const stop = () => { try { process.kill(-child.pid, "SIGKILL"); } catch {} };
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; stop(); }, timeout);
+  context.signal.addEventListener("abort", stop, { once: true });
+  const exit = await new Promise((resolve) => {
+    child.on("error", (error) => { output += String(error); resolve(127); });
+    child.on("close", (code, signal) => resolve(code ?? signal));
+  });
+  clearTimeout(timer);
+  context.signal.removeEventListener("abort", stop);
+  const cut = output.length > OUTPUT_LIMIT ? output.slice(0, OUTPUT_LIMIT) + "\\n[output cut at " + OUTPUT_LIMIT + " characters]" : output;
+  const notes = (timedOut ? "\\n[killed after " + timeout + "ms]" : "") + (exit === 0 ? "" : "\\n[exit " + exit + "]");
+  return { content: cut + notes, metadata: { exit, description: input.description ?? "" } };
+};
+
+// The \`shell\` of a location a workspace holds. A session \`bounded\` there runs
+// every command inside the workspace's boundary; any other (a person's
+// session in a lead's place) runs it through \`host\`, the built-in this
+// replaces, which asks and runs as it always does on the host.
+const boundedShell = (id, root, directory, bounded, host) => ({
   name: "shell",
   description: ${JSON.stringify(BOUNDED_SHELL_DESCRIPTION)},
   input: {
@@ -277,27 +321,15 @@ const boundedShell = (id, root, directory) => ({
   },
   options: { codemode: false },
   async execute(input, context) {
-    const held = boundaryOf(id, root);
-    const timeout = Math.min(input.timeout ?? 120000, 600000);
-    const env = { ...cleanEnv({ ...process.env }), ...sessionEnv(context.sessionID) };
-    const child = spawn(held.exec, [input.command], { cwd: input.workdir ?? directory, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
-    let output = "";
-    const take = (chunk) => { output += chunk.toString(); };
-    child.stdout.on("data", take);
-    child.stderr.on("data", take);
-    const stop = () => { try { process.kill(-child.pid, "SIGKILL"); } catch {} };
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; stop(); }, timeout);
-    context.signal.addEventListener("abort", stop, { once: true });
-    const exit = await new Promise((resolve) => {
-      child.on("error", (error) => { output += String(error); resolve(127); });
-      child.on("close", (code, signal) => resolve(code ?? signal));
-    });
-    clearTimeout(timer);
-    context.signal.removeEventListener("abort", stop);
-    const cut = output.length > OUTPUT_LIMIT ? output.slice(0, OUTPUT_LIMIT) + "\\n[output cut at " + OUTPUT_LIMIT + " characters]" : output;
-    const notes = (timedOut ? "\\n[killed after " + timeout + "ms]" : "") + (exit === 0 ? "" : "\\n[exit " + exit + "]");
-    return { content: cut + notes, metadata: { exit, description: input.description ?? "" } };
+    if (bounded(context.sessionID)) {
+      const held = boundaryOf(id, root);
+      return runShell(held.exec, [input.command], input, context, directory);
+    }
+    if (!host) throw new Error("cawco: this location has no built-in shell to run a command outside workspace " + id + "'s boundary, so it did not run.");
+    // Its words and metadata; not its structured \`output\`, which this tool
+    // declares no schema for (the server refuses such a result).
+    const { output: _output, ...result } = await host(input, context);
+    return result;
   },
 });
 
@@ -327,6 +359,17 @@ export default {
     const holding = workspaceOf(directory);
     const workspace = holding?.id;
     const state = workspace ? cawcoWorkspaces + "/" + workspace : undefined;
+    // In a lead's place, a session is bounded by it only when the agent put
+    // it there (its spawn named the place: the workspace its record names),
+    // or before the agent has recorded it at all, never unbounded on a
+    // guess. Every session in a clone is the clone's.
+    const leadPlace = workspace?.endsWith(leadPlaceSuffix) === true;
+    const bounded = (sessionID) => {
+      if (!holding) return false;
+      if (!leadPlace) return true;
+      const held = sessionHeld(sessionID);
+      return !held || held.workspace === workspace;
+    };
 
     // Each session's parent, as its server keeps it: a subagent reads back
     // what its parents saved too. A session's parent never changes.
@@ -390,7 +433,9 @@ export default {
           return { content: await written.text() };
         },
       });
-      if (holding) editor.add(boundedShell(holding.id, holding.root, directory));
+      // In a lead's place, the built-in runs a person's session's commands:
+      // taken from the editor before it is replaced, each time it replays.
+      if (holding) editor.add(boundedShell(holding.id, holding.root, directory, bounded, leadPlace ? editor.get("shell")?.execute : undefined));
     });
 
     // The workspace's scratch is a root of its chrome-devtools (and its clone:
@@ -421,7 +466,7 @@ export default {
 
     // Judges the call and stamps a CawCo call with its session's credential.
     const admit = async (event) => {
-      if (workspace) {
+      if (workspace && bounded(event.sessionID)) {
         let saved;
         try {
           saved = await savedFor(workspace, event.sessionID);
@@ -456,13 +501,13 @@ export default {
       } else if (program && event.input && typeof event.input === "object") {
         program.slots.set(event.input, slot);
       }
-      if (event.tool === "shell" && !holding && typeof event.input?.command === "string") {
+      if (event.tool === "shell" && !bounded(event.sessionID) && typeof event.input?.command === "string") {
         shells.push({ command: event.input.command, sessionID: event.sessionID });
       }
     });
 
     await ctx.tool.hook("execute.after", async (event) => {
-      if (workspace && event.status === "completed") {
+      if (workspace && bounded(event.sessionID) && event.status === "completed") {
         const saved = savedOutputOf(event.result);
         if (saved) recordSaved(workspace, event.sessionID, saved);
       }
@@ -501,7 +546,9 @@ export default {
 
     if (holding) {
       await ctx.session.hook("context", (event) => {
-        if (event.tools.shell) event.tools.shell.description = ${JSON.stringify(BOUNDED_SHELL_DESCRIPTION)};
+        if (event.tools.shell) {
+          event.tools.shell.description = bounded(event.sessionID) ? ${JSON.stringify(BOUNDED_SHELL_DESCRIPTION)} : ${JSON.stringify(HOST_SHELL_DESCRIPTION)};
+        }
       });
     }
   },

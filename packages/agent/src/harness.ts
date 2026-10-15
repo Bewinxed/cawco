@@ -171,6 +171,12 @@ export interface HarnessContext {
   session(sessionId: string): void;
   /** Delivered by the hub, held only by this session's MCP configuration/closures. */
   readonly sessionCredential?: string;
+  /**
+   * The workspace whose {@link boundary} this is, by id: a delegation
+   * workspace's clone, or a project lead's place the spawn named (core
+   * `isLeadPlace`). Absent with the boundary.
+   */
+  readonly workspace?: string;
 }
 
 /** One live session, owned by a harness. */

@@ -497,10 +497,12 @@ const ghAvailable = async (): Promise<boolean> =>
  * `git status` refusing (exit 128: no work tree here) answers `{ repo: false }`.
  * In a workspace's clone they run inside its boundary, as every git call
  * there does (`safe-git.ts`): its config and hooks are the workspace's to
- * write, and `git status` runs what they name (an fsmonitor, a filter).
+ * write, and `git status` runs what they name (an fsmonitor, a filter). A
+ * project lead's place is a person's own folder, whose protected config the
+ * lead cannot write (core workspace-policy.ts): there they run on the host.
  */
 const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
-  const workspace = await workspaceHolding(dir);
+  const workspace = await cloneHolding(dir);
   const git = async (args: string) =>
     workspace
       ? await runWorkflowCommand(
@@ -2625,8 +2627,9 @@ export class SessionSupervisor {
       // own spawns name that place. A Claude session's account goes with
       // it: the boundary reads that account's user layer by the paths the
       // session is given.
+      const place = spec.workspace ?? (await cloneHolding(workdir));
       const boundary = await boundaryFor(
-        spec.workspace ?? (await cloneHolding(workdir)),
+        place,
         (spec.harness ?? "claude") === "claude"
           ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
           : undefined
@@ -2638,7 +2641,7 @@ export class SessionSupervisor {
         adapter,
         holder,
         spec.processGeneration,
-        boundary,
+        boundary && place ? { boundary, workspace: place.id } : undefined,
         grant?.sessionCredential,
         !!spec.reattachOnly
       );
@@ -2852,10 +2855,11 @@ export class SessionSupervisor {
     adapter: Harness,
     holder: { session: HarnessSession | null },
     processGeneration: string | undefined,
-    boundary?: Boundary,
+    bounded?: { boundary: Boundary; workspace: string },
     sessionCredential?: string,
     recovery = false
   ): SessiondAwareContext {
+    const boundary = bounded?.boundary;
     if (!processGeneration) {
       throw new Error("The hub did not supply this process's generation.");
     }
@@ -2902,7 +2906,7 @@ export class SessionSupervisor {
       },
       instanceId,
       cwd: workdir,
-      ...(boundary ? { boundary } : {}),
+      ...(bounded ? bounded : {}),
       ...(this.#ingested.get(instanceId)
         ? { ingested: this.#ingested.get(instanceId) }
         : {}),
