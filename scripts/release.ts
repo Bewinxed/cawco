@@ -239,6 +239,110 @@ function logStep(what: string, started: number): void {
   const label = what.length > 140 ? `${what.slice(0, 137)}...` : what;
   console.log(`[release] ${seconds}s ${label}`);
 }
+
+/**
+ * The arm64 userland a published linux-arm64 binary runs on here, through
+ * the host's qemu-aarch64 binfmt entry: Debian trixie's glibc, which is all
+ * a Bun binary links (libc, ld, libpthread, libdl, libm). Pinned by its
+ * snapshot.debian.org address and sha256, unpacked once.
+ */
+const ARM64_LIBC = {
+  url: "https://snapshot.debian.org/file/6ee536e6a461ca319776fac983202946f4d3dce8/libc6_2.41-12%2Bdeb13u4_arm64.deb",
+  sha256: "8784eda966b189c777a384dac5ce009e8fc9b52d006926c5a013e7fa8aa688cc",
+};
+const arm64Root = join(homedir(), ".cache", "cawco-release", "arm64-sysroot");
+const arm64Sysroot = async (): Promise<string> => {
+  if (
+    await Bun.file(join(arm64Root, "lib", "ld-linux-aarch64.so.1")).exists()
+  ) {
+    return arm64Root;
+  }
+  const response = await fetch(ARM64_LIBC.url);
+  if (!response.ok) {
+    throw new Error(`${ARM64_LIBC.url} answered ${response.status}`);
+  }
+  const deb = new Uint8Array(await response.arrayBuffer());
+  const sha256 = new Bun.CryptoHasher("sha256").update(deb).digest("hex");
+  if (sha256 !== ARM64_LIBC.sha256) {
+    throw new Error(
+      `The arm64 glibc package's sha256 is ${sha256}, not the pinned ${ARM64_LIBC.sha256}`
+    );
+  }
+  const temp = `${arm64Root}.${process.pid}`;
+  await rm(temp, { recursive: true, force: true });
+  await mkdir(temp, { recursive: true });
+  await writeFile(join(temp, "libc6.deb"), deb);
+  await run(["ar", "x", "libc6.deb"], temp);
+  await run(
+    [
+      "sh",
+      "-c",
+      "tar -xf data.tar.* && rm -f libc6.deb data.tar.* control.tar.* debian-binary && ln -s usr/lib lib",
+    ],
+    temp
+  );
+  await rm(arm64Root, { recursive: true, force: true });
+  await rename(temp, arm64Root);
+  return arm64Root;
+};
+
+/** `env`'s exit status when it cannot execute the program: here, an arm64 binary with no binfmt entry. */
+const CANNOT_EXECUTE = 126;
+
+/**
+ * A published linux binary run on this host before it is published, under a
+ * scratch HOME and nothing else of this run's environment: `--version`, and
+ * `build-info`, which must name the build's version, commit and protocol.
+ * linux-arm64 runs through the qemu-aarch64 binfmt entry on the pinned glibc
+ * above; a host without the entry cannot run it, and the release stops there.
+ */
+const runPublished = async (
+  target: string,
+  binary: string,
+  home: string,
+  expect: Pick<ReleaseManifest, "commit" | "protocol" | "version">
+): Promise<void> => {
+  const env = [
+    "env",
+    "-i",
+    `PATH=${process.env.PATH ?? ""}`,
+    `HOME=${home}`,
+    ...(target === "linux-arm64"
+      ? [`QEMU_LD_PREFIX=${await arm64Sysroot()}`]
+      : []),
+  ];
+  const say = (args: string[]): Promise<string> =>
+    run([...env, binary, ...args], repo, true).catch((error: unknown) => {
+      if (String(error).includes(`exit status ${CANNOT_EXECUTE}:`)) {
+        throw new Error(
+          `The published ${target} binary cannot run on this host: it has no qemu-aarch64 binfmt entry. Install it: sudo apt install qemu-user-binfmt`,
+          { cause: error }
+        );
+      }
+      throw error;
+    });
+  const version = await say(["--version"]);
+  if (!version.includes(expect.version)) {
+    throw new Error(
+      `The published ${target} binary says ${version}, not ${expect.version}`
+    );
+  }
+  const info = JSON.parse(await say(["build-info"])) as Pick<
+    ReleaseManifest,
+    "commit" | "protocol" | "version"
+  >;
+  if (
+    info.version !== expect.version ||
+    info.commit !== expect.commit ||
+    JSON.stringify(info.protocol) !== JSON.stringify(expect.protocol)
+  ) {
+    throw new Error(
+      `The published ${target} binary's build-info ${JSON.stringify(info)} is not this build's ${JSON.stringify(expect)}`
+    );
+  }
+  console.log(`published ${target} binary ran: ${version}, build-info matches`);
+};
+
 const commit = await run(
   ["git", "rev-parse", `${commitInput}^{commit}`],
   repo,
@@ -403,7 +507,12 @@ const recordProven = async (path: string, commitId: string): Promise<void> => {
   await writeFile(path, `${commitId}\n`);
 };
 
-/** Stage 1 (prove-stage1.sh) on the proof build, unless it passed on these inputs. */
+/**
+ * Stage 1 (prove-stage1.sh) on the proof build, unless it passed on these
+ * inputs; then the frames its hub sent (kept with the verdict) read with every
+ * TestFlight build installable now, on every release, since the builds in
+ * testers' hands change when the hub does not.
+ */
 async function proveStage1(
   checkout: string,
   staging: string,
@@ -412,22 +521,32 @@ async function proveStage1(
   commitId: string
 ): Promise<void> {
   const verdict = join(proofVerdicts, inputs, "stage1");
-  if (await proven(verdict)) {
+  const frames = join(proofVerdicts, inputs, "frames.jsonl");
+  if ((await proven(verdict)) && (await proven(frames))) {
     console.log(
       `Stage 1 passed on these inputs (${inputs}) before: not run again`
     );
-    return;
+  } else {
+    await run(
+      [
+        "bash",
+        "scripts/binary/prove-stage1.sh",
+        join(staging, "container-proof"),
+        proofBinary,
+      ],
+      checkout
+    );
+    await mkdir(join(proofVerdicts, inputs), { recursive: true });
+    await cp(
+      join(staging, "container-proof", "clean-binary", "frames.jsonl"),
+      frames
+    );
+    await recordProven(verdict, commitId);
   }
   await run(
-    [
-      "bash",
-      "scripts/binary/prove-stage1.sh",
-      join(staging, "container-proof"),
-      proofBinary,
-    ],
+    [process.execPath, "packages/hub/scripts/wire-frames.ts", frames],
     checkout
   );
-  await recordProven(verdict, commitId);
 }
 
 /** Stage 2's rigs and how many checks each has, as the script lists them (`PROOF_LIST`). */
@@ -752,6 +871,9 @@ const build = async (current: Request): Promise<void> => {
   me.checkout = checkout;
   me.staging = staging;
   await writeHolder();
+  // The release records (shipped.ts): typecheck's wire check and the frame
+  // read below hold this build to what is in people's hands, as tagged now.
+  await run(["git", "fetch", "--quiet", "--tags", "origin"]);
   await run(["git", "worktree", "add", "--detach", checkout, current.commit]);
   await mkdir(staging, { recursive: true });
   try {
@@ -843,6 +965,8 @@ const build = async (current: Request): Promise<void> => {
       const macDir = `build/cawco-agent-sign/${current.commit.slice(0, 12)}`;
       const bundleFiles = join(staging, "agent-bundle");
       await mkdir(bundleFiles, { recursive: true });
+      /** Each published linux binary's run, going on while the next target compiles. */
+      const runs: Promise<void>[] = [];
       await run(
         [
           process.execPath,
@@ -918,6 +1042,10 @@ const build = async (current: Request): Promise<void> => {
               ["tar", "-czf", join(staging, archive), "-C", dir, "cawco"],
               checkout
             );
+            const ran = runPublished(target, binary, infoHome, manifest);
+            // Its failure is read at `Promise.all(runs)`, after the compiles.
+            ran.catch(() => undefined);
+            runs.push(ran);
           }
           const sha256 = new Bun.CryptoHasher("sha256")
             .update(await Bun.file(join(staging, archive)).bytes())
@@ -938,6 +1066,7 @@ const build = async (current: Request): Promise<void> => {
             `${sha256}  ${archive}\n`
           );
         }
+        await Promise.all(runs);
       } finally {
         await run(["ssh", mac, "rm", "-rf", macDir]);
         // Not an artifact: only the archives and the manifest are published.

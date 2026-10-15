@@ -22,58 +22,23 @@
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, parse, relative, resolve } from "node:path";
-import { openEnumNames, wireBreaks } from "./wire-compat";
+import { dirname, join, parse, resolve } from "node:path";
+import { shippedBaselines } from "./shipped";
+import {
+  APP_SCHEMA,
+  BRIDGES,
+  FRAMES,
+  GENERATOR_CONFIG,
+  openEnumNames,
+  SENT,
+  wireBreaks,
+  wireProtocolAt,
+  withoutBridge,
+} from "./wire-compat";
 
 const HUB = resolve(import.meta.dir, "..");
 const CORE = resolve(HUB, "../core/src");
-const OUT = resolve(
-  HUB,
-  "../../apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json"
-);
-
-/**
- * The dashboard socket's frames, by the core file that declares them: the
- * Ledger Protocol's messages both ways, the transcript a session's stream
- * carries (blocks the hub built, and the events that change them), and the
- * envelope every other message rides in — `FramePayload` out, the verbs'
- * payloads in. The fleet types they carry come along as components.
- */
-const FRAMES: Record<string, string[]> = {
-  "stream.ts": ["StreamServerMessage", "StreamClientMessage"],
-  "transcript-types.ts": [
-    "TranscriptBlock",
-    "TranscriptBranch",
-    "TranscriptEvent",
-    "TranscriptPage",
-    "TranscriptStreamFrame",
-  ],
-  "index.ts": [
-    "Envelope",
-    "FramePayload",
-    "SpawnPayload",
-    "StopPayload",
-    "ControlPayload",
-    "FsPayload",
-    "FsEntry",
-    "FsMedia",
-    "SendPayload",
-    "ReposResult",
-    "UpdateReport",
-  ],
-  // `NeutralSessionInfo`: what a machine's `listSessions` control answers,
-  // the stored transcripts the home's Recent lists.
-  "harness.ts": [
-    "NeutralMessage",
-    "NeutralSessionInfo",
-    "ModelInfo",
-    "McpServerStatus",
-    "SupportedCommands",
-    "AuthState",
-    "NeutralTask",
-  ],
-  "tools.ts": ["ToolStatus"],
-};
+const OUT = resolve(HUB, "../..", APP_SCHEMA);
 
 const scratch = mkdtempSync(join(tmpdir(), "cawco-openapi-"));
 // Before the hub's modules load: config.ts reads it once, at import.
@@ -698,17 +663,8 @@ if (untyped.length) {
  * closed there: the generator picks branches by which ones decode, so an open
  * one would match them all.
  * What the app only sends (request bodies, parameters, its own socket
- * messages) stays as the generator writes it.
+ * messages, wire-compat.ts `SENT`) stays as the generator writes it.
  */
-const SENT = new Set([
-  "StreamClientMessage",
-  "Envelope",
-  "SpawnPayload",
-  "StopPayload",
-  "ControlPayload",
-  "FsPayload",
-  "SendPayload",
-]);
 const isStringEnum = (
   value: unknown
 ): value is Schema & { type: "string"; enum: string[] } =>
@@ -1289,10 +1245,14 @@ if (leftNulls.length) {
 }
 
 /**
- * The wire a shipped app reads (wire-compat.ts). The base is where this
- * change grows from: `git merge-base HEAD origin/main`, or `--base <ref>`.
- * What would break an app built at the base is refused, named by schema and
- * property, unless WIRE_PROTOCOL rose since the base; nothing is written then.
+ * The wire every reader of this hub was built against (wire-compat.ts): the
+ * base this change grows from (`git merge-base HEAD origin/main`, or
+ * `--base <ref>`), and what is in people's hands now (shipped.ts): the newest
+ * published nightly, whose dashboard tabs and joined agents meet this hub
+ * after an update, and every TestFlight build still installable. What would
+ * break a reader built at any of them is refused, named by schema and
+ * property, unless WIRE_PROTOCOL rose above that reader's; nothing is
+ * written then.
  */
 const git = (...args: string[]): string => {
   const run = Bun.spawnSync(["git", ...args], { cwd: HUB });
@@ -1309,33 +1269,77 @@ const baseRef =
 if (!baseRef) {
   throw new Error("--base needs a git ref");
 }
-const repo = git("rev-parse", "--show-toplevel").trim();
-const atBase = (path: string): string =>
-  git("show", `${baseRef}:${relative(repo, path)}`);
-const baseProtocol = Number(
-  /export const WIRE_PROTOCOL = (\d+);/.exec(
-    atBase(join(CORE, "stream.ts"))
-  )?.[1]
-);
-const breaks = wireBreaks(JSON.parse(atBase(OUT)), document, {
-  frames: Object.values(FRAMES).flat(),
-  sent: SENT,
-  openBefore: openEnumNames(
-    atBase(join(dirname(OUT), "openapi-generator-config.yaml"))
-  ),
+// One compare per commit: a shipped build can be the base itself.
+const byCommit = new Map<string, { label: string; commit: string }>();
+for (const base of [
+  { label: `the base ${baseRef.slice(0, 12)}`, commit: baseRef },
+  ...shippedBaselines(HUB),
+]) {
+  const commit = git("rev-parse", `${base.commit}^{commit}`).trim();
+  byCommit.set(commit, byCommit.get(commit) ?? { ...base, commit });
+}
+const bases = [...byCommit.values()];
+const readers = bases.map((base) => {
+  const atBase = (path: string): string =>
+    git("show", `${base.commit}:${path}`);
+  const schema = JSON.parse(atBase(APP_SCHEMA)) as object;
+  const roots = {
+    frames: Object.values(FRAMES).flat(),
+    sent: SENT,
+    openBefore: openEnumNames(atBase(GENERATOR_CONFIG)),
+  };
+  return {
+    ...base,
+    protocol: wireProtocolAt(atBase),
+    breaks: (next: unknown, reader: unknown = schema) =>
+      wireBreaks(reader as object, next as object, roots),
+    schema,
+  };
 });
-if (breaks.length) {
-  if (!(WIRE_PROTOCOL > baseProtocol)) {
-    rmSync(scratch, { recursive: true, force: true });
-    console.error(
-      `The wire would break an app built at ${baseRef.slice(0, 12)} (WIRE_PROTOCOL ${baseProtocol}), at ${breaks.length} place${breaks.length === 1 ? "" : "s"}:\n${breaks.map((line) => `  ${line}`).join("\n")}\nKeep each readable by that app (scripts/wire-compat.ts), or raise WIRE_PROTOCOL in packages/core/src/stream.ts in the same change. Nothing was written.`
+const refused: string[] = [];
+// A bridge no shipped reader needs any more goes. Each reader is taken as
+// built without it too: one built since reads `beside` and loses nothing,
+// one built before reads only the bridge and breaks without it.
+for (const bridge of BRIDGES) {
+  const without = withoutBridge(document, bridge);
+  const needed = readers.some((reader) => {
+    const built = withoutBridge(reader.schema, bridge);
+    return (
+      reader.breaks(without, built).length >
+      reader.breaks(document, built).length
     );
-    process.exit(1);
+  });
+  if (!needed) {
+    refused.push(
+      `\`${bridge.property}\` beside \`${bridge.beside}\` is a bridge no shipped reader needs now (${bridge.until}): remove it, and its entry in BRIDGES (scripts/wire-compat.ts).`
+    );
   }
-  console.log(
-    `WIRE_PROTOCOL rose from ${baseProtocol} to ${WIRE_PROTOCOL}: ${breaks.length} wire break${breaks.length === 1 ? "" : "s"} since ${baseRef.slice(0, 12)} allowed`
+}
+for (const { label, protocol, breaks: against } of readers) {
+  const breaks = against(document);
+  if (breaks.length === 0) {
+    continue;
+  }
+  if (WIRE_PROTOCOL > protocol) {
+    console.log(
+      `WIRE_PROTOCOL rose from ${protocol} to ${WIRE_PROTOCOL}: ${breaks.length} wire break${breaks.length === 1 ? "" : "s"} against ${label} allowed`
+    );
+    continue;
+  }
+  refused.push(
+    `The wire would break ${label} (WIRE_PROTOCOL ${protocol}), at ${breaks.length} place${breaks.length === 1 ? "" : "s"}:\n${breaks.map((line) => `  ${line}`).join("\n")}`
   );
 }
+if (refused.length) {
+  rmSync(scratch, { recursive: true, force: true });
+  console.error(
+    `${refused.join("\n")}\nKeep each readable by them (scripts/wire-compat.ts), or raise WIRE_PROTOCOL in packages/core/src/stream.ts in the same change. Nothing was written.`
+  );
+  process.exit(1);
+}
+console.log(
+  `Wire checked against ${bases.map((base) => base.label).join(", ")}`
+);
 
 const outputs: [string, string][] = [
   [OUT, `${JSON.stringify(document, null, 2)}\n`],

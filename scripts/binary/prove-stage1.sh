@@ -46,6 +46,10 @@ mkdir -p "$1"
 out=$(realpath "$1")
 bin=$(realpath "$2")
 [[ "$out" != *" "* && "$bin" != *" "* ]] || { echo "the output and binary paths may not contain spaces" >&2; exit 2; }
+# The browser step's Chromium: the host's cached playwright browsers, and the bun that drives it.
+browsers="${PLAYWRIGHT_BROWSERS_PATH:-${XDG_CACHE_HOME:-$HOME/.cache}/ms-playwright}"
+bun=$(command -v bun) || { echo "prove-stage1: the browser step needs bun on PATH" >&2; exit 2; }
+nsenter=$(command -v nsenter) || { echo "prove-stage1: the browser step needs nsenter (util-linux)" >&2; exit 2; }
 mkdir -p "$out/tmp" "$out/images"
 export TMPDIR="$out/tmp"
 
@@ -78,11 +82,38 @@ run_step "boot the systemd container" "$out/systemd-id.txt" $P run -d --name "$p
 step="inspect the systemd container"
 step_log=""
 $P inspect "$prefix-systemd" > "$out/systemd-config.json"
-run_step "run the proofs under systemd" "$out/systemd-proof.log" $P exec "$prefix-systemd" bash -c 'mkdir -p "$HOME"; /cawco capabilities > /output/capabilities-present.json; /cawco proof-stack'
+# The proofs under systemd, their stack held at its end for the browser step: the dashboard the
+# binary serves, loaded in a headless Chromium (proof-browser.ts) that runs in the container's own
+# network namespace, so the container keeps --network none. The Chromium and its libraries are the
+# host's; only the namespace is entered (`$P unshare`: this instance's user namespace, which owns it).
+mkdir -p "$out/browser"
+systemd_started=$SECONDS
+$P exec --env CAWCO_PROOF_BROWSER_DONE=/output/browser/done "$prefix-systemd" bash -c 'mkdir -p "$HOME"; /cawco capabilities > /output/capabilities-present.json; /cawco proof-stack' > "$out/systemd-proof.log" 2>&1 &
+stack=$!
+step="load the served dashboard in a browser"
+step_log="$out/browser.log"
+while [[ ! -e $out/browser/stack-ready ]] && kill -0 "$stack" 2> /dev/null; do sleep 0.2; done
+browser_rc=0
+if [[ -e $out/browser/stack-ready ]]; then
+  browser_started=$SECONDS
+  pid=$($P inspect -f '{{.State.Pid}}' "$prefix-systemd")
+  $P unshare "$nsenter" -t "$pid" -n -- env PLAYWRIGHT_BROWSERS_PATH="$browsers" "$bun" "$here/proof-browser.ts" http://127.0.0.1:43458/ "$out/browser/stack-ready" "$out/browser/done" > "$step_log" 2>&1 || browser_rc=$?
+  # The stack waits on this file; a browser that never started wrote none.
+  touch "$out/browser/done"
+  echo "step: $step ($((SECONDS - browser_started))s, inside the systemd proof)"
+fi
+step="run the proofs under systemd"
+step_log="$out/systemd-proof.log"
+wait "$stack"
+echo "step: $step ($((SECONDS - systemd_started))s)"
+step="load the served dashboard in a browser"
+step_log="$out/browser.log"
+[[ -e $out/browser/stack-ready ]] || { echo "the stack under systemd ended before it was ready for the browser" >> "$step_log"; exit 1; }
+(( browser_rc == 0 )) || exit "$browser_rc"
 step="run the proofs in the clean image"
 step_log="$out/clean-proof.log"
 wait "$clean"
 echo "step: $step ($((SECONDS - clean_started))s, beside the systemd proof)"
-cat "$out/clean-proof.log" "$out/systemd-proof.log"
+cat "$out/clean-proof.log" "$out/systemd-proof.log" "$out/browser.log"
 echo "total: ${SECONDS}s"
 echo "Evidence: $out"

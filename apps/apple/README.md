@@ -89,15 +89,30 @@ refused, since it could wait on a slot its own caller holds.
 From the repository on obelisk:
 
 ```sh
-bash apps/apple/scripts/testflight.sh --notes notes.md   # clean origin/main archive, upload and internal distribution
+bash apps/apple/scripts/testflight.sh --commit <sha> --notes notes.md   # prove, archive, record, upload, internal distribution
 bash apps/apple/scripts/testflight.sh --status           # IN_BETA_GROUP <version> (<build>) or exit 1 with what is missing
 bash apps/apple/scripts/testflight.sh --set-notes <build> notes.md  # replace a shipped build's What to Test
-bash apps/apple/scripts/testflight.sh --mac --notes notes.md  # the same for the Mac Catalyst build
+bash apps/apple/scripts/testflight.sh --record <build> <sha>  # record a build uploaded before builds recorded their commit
+bash apps/apple/scripts/testflight.sh --expire <build>   # no tester installs it again, and no wire check holds a hub to it
+bash apps/apple/scripts/testflight.sh --mac --commit <sha> --notes notes.md  # the same for the Mac Catalyst build
 bash apps/apple/scripts/build-both.sh both --compile-only
 ```
 
+An upload archives the commit it names (on origin/main), never whatever main is.
+Before anything reaches the Mac it runs that commit's `bun run typecheck` (the
+wire against every shipped build, migrations, roles, tools) and `bun run lint`
+in a checkout of it, and holds the app to the newest published nightly's hub
+(`packages/hub/scripts/wire-compat.ts --app <sha> --hub <nightly>`): an app
+that cannot read the hub people run waits for a nightly that can. The archive is
+the app's compile; nothing uploads unless it succeeds. Once the archive has its
+build number, the build is recorded as the annotated tag
+`testflight-<ios|mac>-<build>` on the commit, pushed to origin, before the
+upload: every later wire check holds the hub to it for the 90 days it stays
+installable (`packages/hub/scripts/shipped.ts`). Its What to Test ends with
+`Build <n> from commit <sha12>`.
+
 `--mac` goes first and applies to every command (`--status`, `--attach`,
-`--set-notes`): the Mac Catalyst build ships on the same App Store record, a
+`--set-notes`, `--record`, `--expire`): the Mac Catalyst build ships on the same App Store record, a
 universal purchase, as its own TestFlight train (`MAC_OS`). It archives
 `generic/platform=macOS,variant=Mac Catalyst` and exports with `CawCo Mac
 Catalyst App Store 20261009` and `CawCo NotificationService Mac Catalyst App

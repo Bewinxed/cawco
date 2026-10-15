@@ -9,6 +9,8 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "dev": "CAWCO_NO_MDNS=1 bun --watch src/index.ts",
+    "fixture-db": "bun scripts/fixture-db.ts",
+    "migrations:check": "bun scripts/migrations-check.ts",
     "openapi": "bun scripts/openapi.ts",
     "openapi:check": "bun scripts/openapi.ts --check",
     "roles:check": "bun scripts/role-budgets.ts",

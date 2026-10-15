@@ -2,8 +2,13 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: readiness and restart-phase polls observe successive real states.
 // biome-ignore-all lint/complexity/noVoid: log writers consume live process pipes concurrently; awaiting them before process exit would deadlock.
 import { dlopen, FFIType, ptr } from "bun:ffi";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import {
+  accountClaudeJson,
+  accountConfigDir,
+} from "../../packages/core/src/paths";
+import { WIRE_PROTOCOL } from "../../packages/core/src/stream";
 
 const home = process.env.HOME ?? "";
 if (!home?.includes("binary")) {
@@ -56,9 +61,10 @@ async function command(args: string[]) {
 }
 async function wait(
   url: string,
-  predicate: (s: string) => boolean = () => true
+  predicate: (s: string) => boolean = () => true,
+  ms = 10_000
 ) {
-  for (let i = 0; i < 100; i += 1) {
+  for (const end = Date.now() + ms; Date.now() < end; ) {
     try {
       const res = await fetch(url);
       const body = await res.text();
@@ -99,13 +105,53 @@ function openDashboard() {
     };
   });
 }
+async function until(what: string, ready: () => boolean, ms = 15_000) {
+  for (const end = Date.now() + ms; Date.now() < end; ) {
+    if (ready()) {
+      return;
+    }
+    await Bun.sleep(100);
+  }
+  throw new Error(`Did not happen: ${what}`);
+}
+/**
+ * Every message the hub's dashboard socket sends from its start, as the
+ * Apple app reads it: on this hub's wire, named as the app names it, no
+ * Origin. Written to frames.jsonl; the release reads each against the
+ * schema of every TestFlight build still installable (hub scripts
+ * wire-frames.ts).
+ */
+const captured: string[] = [];
+function capture() {
+  return new Promise<WebSocket>((resolve, reject) => {
+    const ws = new WebSocket(
+      `ws://127.0.0.1:43456/ws/dashboard?protocol=${WIRE_PROTOCOL}`
+    );
+    ws.onmessage = (event) => captured.push(String(event.data));
+    ws.onopen = () => resolve(ws);
+    ws.onerror = () => reject(new Error("Capture websocket failed"));
+  });
+}
+const parsed = () =>
+  captured.map(
+    (text) =>
+      JSON.parse(text) as {
+        event?: { sessionId?: string };
+        payload?: { kind?: string };
+        type?: string;
+        verb?: string;
+      }
+  );
 const systemd = process.env.CAWCO_PROOF_SYSTEMD === "1";
+/** Set by prove-stage1.sh's browser step: the stack stays up until that file exists. */
+const browserDone = process.env.CAWCO_PROOF_BROWSER_DONE;
 try {
   mkdirSync(home, { recursive: true });
   await exec("proof-fixture");
   spawn("sessiond");
   spawn("hub");
   console.log(`health ${await wait("http://127.0.0.1:43456/health")}`);
+  const captureWs = await capture();
   let agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const registered = await wait("http://127.0.0.1:43456/api/agents", (s) =>
     JSON.parse(s).some((a: { status: string }) => a.status === "online")
@@ -191,6 +237,25 @@ try {
   await exec("proof-worker");
   await exec("proof-migration-check");
   await exec("proof-custody-start");
+  // A CawCo account the machine signs in to as it registers again below, as
+  // `claude auth login` leaves one (prove-stage2.sh account-dir.sh): no real
+  // credential, only what lets the stub harness start a session.
+  const account = (await post("/api/accounts", {
+    provider: "anthropic",
+    kind: "subscription",
+  })) as { id: string };
+  const accountDir = accountConfigDir(account.id);
+  mkdirSync(accountDir, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(accountDir, ".credentials.json"),
+    '{"claudeAiOauth":{"accessToken":"sk-ant-oat01-proof-not-a-token","refreshToken":"sk-ant-ort01-proof-not-a-token","expiresAt":4102444800000,"scopes":["user:inference","user:profile"],"subscriptionType":"max"}}\n',
+    { mode: 0o600 }
+  );
+  writeFileSync(
+    accountClaudeJson(account.id),
+    '{"oauthAccount":{"accountUuid":"00000000-0000-4000-8000-000000000001","emailAddress":"proof@cawco.test","organizationUuid":"00000000-0000-4000-8000-000000000002","organizationName":"CawCo proof","organizationRole":"admin"}}\n',
+    { mode: 0o600 }
+  );
   agent.kill("SIGTERM");
   await agent.exited;
   agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
@@ -198,6 +263,78 @@ try {
     JSON.parse(s).some((a: { status: string }) => a.status === "online")
   );
   await exec("proof-custody-check");
+  await wait("http://127.0.0.1:43456/api/accounts", (s) =>
+    (
+      JSON.parse(s) as { signins: { accountId: string; state: string }[] }
+    ).signins.some(
+      (row) => row.accountId === account.id && row.state === "signed-in"
+    )
+  );
+  // A session started and spoken to the way the app does it, on the capture
+  // socket: the board's deltas for it, and its stream's events.
+  const sessionId = crypto.randomUUID();
+  captureWs.send(
+    JSON.stringify({
+      verb: "spawn",
+      machineId: machine.machineId,
+      instanceId: sessionId,
+      requestId: crypto.randomUUID(),
+      payload: {
+        instanceId: sessionId,
+        cwd: home,
+        harness: "claude",
+        model: "stub",
+        title: "Binary proof",
+      },
+    })
+  );
+  // A first start materializes the harness's runtime: as long as stage 2 gives one.
+  await wait(
+    "http://127.0.0.1:43456/api/instances",
+    (s) =>
+      (JSON.parse(s) as { id: string; status: string }[]).some(
+        (row) => row.id === sessionId && row.status === "running"
+      ),
+    60_000
+  );
+  captureWs.send(JSON.stringify({ type: "stream.subscribe", sessionId }));
+  captureWs.send(
+    JSON.stringify({
+      type: "command",
+      commandId: crypto.randomUUID(),
+      kind: "send",
+      machineId: machine.machineId,
+      sessionId,
+      payload: {
+        instanceId: sessionId,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: { role: "user", content: "binary proof" },
+          parent_tool_use_id: null,
+          origin: { kind: "human" },
+        },
+      },
+    })
+  );
+  await until("the session's stream sends an event", () =>
+    parsed().some(
+      (frame) =>
+        frame.type === "stream.event" && frame.event?.sessionId === sessionId
+    )
+  );
+  const kinds = new Set(
+    parsed().map((frame) => frame.payload?.kind ?? frame.type ?? frame.verb)
+  );
+  for (const kind of ["instances", "instances_delta", "stream.event"]) {
+    if (!kinds.has(kind)) {
+      throw new Error(`The hub's socket sent no ${kind} frame`);
+    }
+  }
+  captureWs.close();
+  console.log(
+    `captured ${captured.length} socket frames (${[...kinds].sort().join(", ")})`
+  );
   const closed = new Promise<void>((resolve) => {
     ws.onclose = () => resolve();
   });
@@ -264,8 +401,21 @@ try {
   const replacement = await openDashboard();
   replacement.close();
   console.log("old websocket drained; replacement websocket delivers a frame");
+  if (browserDone) {
+    // The served dashboard, its machine and session on the board, held for a
+    // browser (prove-stage1.sh), which writes the file when it has loaded it.
+    writeFileSync(join(dirname(browserDone), "stack-ready"), sessionId);
+    await until(
+      "the browser step loads the dashboard",
+      () => existsSync(browserDone),
+      60_000
+    );
+    console.log("the browser step loaded the served dashboard");
+  }
   console.log("PASS");
 } finally {
+  // What the socket sent, read by the release, or by whoever reads a failed run's evidence.
+  writeFileSync(join(home, "frames.jsonl"), `${captured.join("\n")}\n`);
   for (const child of children) {
     try {
       child.kill("SIGTERM");

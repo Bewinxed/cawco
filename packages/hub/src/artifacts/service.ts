@@ -206,6 +206,8 @@ export interface ArtifactRead {
 }
 
 export interface Created {
+  /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`). */
+  host?: string;
   id: string;
   kind: ArtifactKind;
   name: string;
@@ -276,6 +278,8 @@ export interface CommentRead {
 /** A canvas's export: the `.excalidraw` file, its outline and its latest picture. */
 export interface CanvasExport {
   file: ReturnType<typeof excalidrawFile>;
+  /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`). */
+  host?: string;
   /** Its session's preview origin, where the canvas's page stands (`Created.port` / `origin`). */
   origin?: string;
   outline: string;

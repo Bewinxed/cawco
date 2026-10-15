@@ -116,8 +116,11 @@ def read_notes(path):
     return text
 
 
-def set_whats_new(build, notes):
-    """Writes the build's en-US What to Test and prints App Store Connect's answer."""
+def set_whats_new(build, notes, commit):
+    """Writes the build's en-US What to Test and prints App Store Connect's answer.
+    Its last line names the commit the build was archived from (testflight.sh
+    tags the same commit `testflight-<platform>-<build>`)."""
+    notes = f"{notes}\n\nBuild {build['attributes']['version']} from commit {commit[:12]}"
     localizations = listed(f"/v1/builds/{build['id']}/betaBuildLocalizations")
     english = next((row for row in localizations if row["attributes"]["locale"] == "en-US"), None)
     if english is None:
@@ -162,7 +165,17 @@ def await_build(app, number, platform):
     raise RuntimeError(f"Build {number} not VALID after 30 minutes")
 
 
-def finish(app, build, notes, platform):
+def expire(app, number, platform):
+    """Ends testing of one build ("Expire a build", PATCH /v1/builds/{id}): no
+    tester can install it from now on."""
+    build = next((b for b in builds(app, platform) if b["attributes"]["version"] == number), None)
+    if build is None:
+        raise RuntimeError(f"MISSING {PLATFORMS[platform]['asc']} build {number}")
+    answer = api("PATCH", f"/v1/builds/{build['id']}", {"data": {"type": "builds", "id": build["id"], "attributes": {"expired": True}}})
+    print(f"EXPIRED {PLATFORMS[platform]['asc']} {number} {answer['data']['attributes']['expired']}")
+
+
+def finish(app, build, notes, platform, commit):
     """Everything ship() does once a build is VALID: tester, notes, beta group."""
     internal = group(app)
     if internal is None:
@@ -172,7 +185,7 @@ def finish(app, build, notes, platform):
     members = listed(f"/v1/betaGroups/{internal['id']}/betaTesters?limit=200")
     if not any(t["attributes"]["email"] == owner["attributes"]["email"] for t in members):
         api("POST", "/v1/betaTesters", {"data": {"type": "betaTesters", "attributes": {key: owner["attributes"][key] for key in ["email", "firstName", "lastName"]}, "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": internal["id"]}]}}}})
-    set_whats_new(build, notes)
+    set_whats_new(build, notes, commit)
     api("POST", f"/v1/betaGroups/{internal['id']}/relationships/builds", {"data": [{"type": "builds", "id": build["id"]}]})
     print(f"APP_ID {app} GROUP_ID {internal['id']} BUILD_ID {build['id']}")
     status(app, platform)
@@ -200,8 +213,9 @@ def next_number(used):
     return today if not suffixes else f"{today}.{max(suffixes) + 1}"
 
 
-def ship(app, mode, notes, platform):
-    """mode is "archive" (archive only), "upload-archive" (upload the kept archive) or "full"."""
+def ship(app, mode, notes, platform, commit):
+    """mode is "archive" (archive only) or "upload-archive" (upload the kept
+    archive): testflight.sh records the archive's build number between the two."""
     ROOT.mkdir(parents=True, exist_ok=True)
     lock = ROOT / ".upload-lock"
     lock.mkdir()  # Concurrent uploads must not reuse the same build number or archive.
@@ -250,24 +264,33 @@ def ship(app, mode, notes, platform):
         issuer = next(v for k, v in identifiers.items() if k.endswith("ISSUER_ID"))
         signed(["xcodebuild", "-exportArchive", "-archivePath", str(archive), "-exportOptionsPlist", str(options), "-exportPath", str(work / "export"), "-authenticationKeyPath", str(HOME / f".appstoreconnect/private_keys/AuthKey_{key_id}.p8"), "-authenticationKeyID", key_id, "-authenticationKeyIssuerID", issuer], work / "upload.log")
         build = await_build(app, number, platform)
-        finish(app, build, notes, platform)
+        finish(app, build, notes, platform, commit)
     finally:
         lock.rmdir()
 
 
-USAGE = "usage: testflight.py [--mac] --notes <file> [--upload-archive] | --archive | --status | --attach <build> --notes <file> | --set-notes <build> <file> | --dry-run"
+USAGE = "usage: testflight.py [--mac] --archive | --upload-archive --notes <file> --commit <sha> | --status | --attach <build> --notes <file> --commit <sha> | --set-notes <build> <file> --commit <sha> | --expire <build> | --dry-run"
+
+
+def take(args, flag):
+    """`flag <value>` taken off the arguments: (the rest, the value or None)."""
+    if flag not in args:
+        return args, None
+    at = args.index(flag)
+    if at + 1 >= len(args):
+        raise RuntimeError(USAGE)
+    return args[:at] + args[at + 2:], args[at + 1]
 
 
 def options(args):
-    """Splits `--mac` and `--notes <file>` off the arguments; the rest name the command."""
+    """Splits `--mac`, `--notes <file>` and `--commit <sha>` off the arguments; the rest name the command."""
     platform = "mac" if "--mac" in args else "ios"
     args = [a for a in args if a != "--mac"]
-    if "--notes" not in args:
-        return args, None, platform
-    at = args.index("--notes")
-    if at + 1 >= len(args):
-        raise RuntimeError(USAGE)
-    return args[:at] + args[at + 2:], read_notes(args[at + 1]), platform
+    args, notes = take(args, "--notes")
+    args, commit = take(args, "--commit")
+    if commit is not None and not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise RuntimeError(f"--commit takes a full commit id, not {commit}")
+    return args, (read_notes(notes) if notes else None), platform, commit
 
 
 def dry_run(platform):
@@ -287,17 +310,25 @@ def needs(notes):
     return notes
 
 
+def named(commit):
+    """Every build's notes name its commit (testflight.sh passes the one it archived or tagged)."""
+    if commit is None:
+        raise RuntimeError("A build's notes name its commit: --commit <sha>")
+    return commit
+
+
 try:
-    command, notes, platform = options(sys.argv[1:])
+    command, notes, platform, commit = options(sys.argv[1:])
     if command == ["--dry-run"]:
         dry_run(platform)
         sys.exit(0)
     # Signing keys and App Store Connect credentials never reach a CawCo workspace.
     if os.environ.get("CAWCO_WORKSPACE"):
         sys.exit("Signed builds, device builds and TestFlight run from the orchestrator's shell, not a CawCo workspace: hand the commit to your parent.")
-    # Every upload carries its own notes: refuse before touching App Store Connect.
-    if command in [[], ["--upload-archive"]] or command[:1] == ["--attach"]:
+    # Every upload carries its own notes and commit: refuse before touching App Store Connect.
+    if command == ["--upload-archive"] or command[:1] == ["--attach"]:
         needs(notes)
+        named(commit)
     apps = listed("/v1/apps?filter[bundleId]=dev.cawco.app&limit=200")
     if len(apps) != 1 and command != ["--archive"]:
         raise RuntimeError("MISSING CawCo app record (create CawCo, cawco-ios, en-US in App Store Connect)")
@@ -305,18 +336,18 @@ try:
     if command == ["--status"]:
         status(app, platform)
     elif len(command) == 2 and command[0] == "--attach":
-        finish(app, await_build(app, command[1], platform), needs(notes), platform)
+        finish(app, await_build(app, command[1], platform), needs(notes), platform, named(commit))
     elif len(command) == 3 and command[0] == "--set-notes":
         build = next((b for b in builds(app, platform) if b["attributes"]["version"] == command[1]), None)
         if build is None:
             raise RuntimeError(f"MISSING {PLATFORMS[platform]['asc']} build {command[1]}")
-        set_whats_new(build, read_notes(command[2]))
-    elif command == []:
-        ship(app, "full", needs(notes), platform)
+        set_whats_new(build, read_notes(command[2]), named(commit))
+    elif len(command) == 2 and command[0] == "--expire":
+        expire(app, command[1], platform)
     elif command == ["--upload-archive"]:
-        ship(app, "upload-archive", needs(notes), platform)
+        ship(app, "upload-archive", needs(notes), platform, named(commit))
     elif command == ["--archive"]:
-        ship(app, "archive", None, platform)
+        ship(app, "archive", None, platform, None)
     else:
         raise RuntimeError(USAGE)
 except (RuntimeError, OSError, subprocess.CalledProcessError, StopIteration) as error:

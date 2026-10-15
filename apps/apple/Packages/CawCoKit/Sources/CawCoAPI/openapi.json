@@ -19953,9 +19953,13 @@
             "properties": {
               "origin": {
                 "type": "string"
+              },
+              "host": {
+                "type": "string"
               }
             },
             "required": [
+              "host",
               "origin"
             ]
           }
@@ -27993,6 +27997,10 @@
       "Created": {
         "type": "object",
         "properties": {
+          "host": {
+            "description": "Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`).",
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -28720,6 +28728,10 @@
               "type",
               "version"
             ]
+          },
+          "host": {
+            "description": "Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`).",
+            "type": "string"
           },
           "origin": {
             "description": "Its session's preview origin, where the canvas's page stands (`Created.port` / `origin`).",
@@ -39363,6 +39375,10 @@
               "kind",
               "name"
             ]
+          },
+          "host": {
+            "description": "Host mode's `name[:port]` beside `origin`: a bridge for readers before it ({@link PreviewAddress}).",
+            "type": "string"
           },
           "instanceId": {
             "type": "string"

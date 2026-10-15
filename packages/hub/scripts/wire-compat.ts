@@ -26,6 +26,120 @@
  * a new optional property, a new value of an open enum, a new route.
  */
 
+/** Where the app's schema and its generator's config sit, from the repository's root. */
+export const APP_SCHEMA =
+  "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json";
+export const GENERATOR_CONFIG =
+  "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi-generator-config.yaml";
+const STREAM = "packages/core/src/stream.ts";
+const WIRE_PROTOCOL_LINE = /export const WIRE_PROTOCOL = (\d+);/;
+
+/**
+ * The dashboard socket's frames, by the core file that declares them: the
+ * Ledger Protocol's messages both ways, the transcript a session's stream
+ * carries (blocks the hub built, and the events that change them), and the
+ * envelope every other message rides in — `FramePayload` out, the verbs'
+ * payloads in. The fleet types they carry come along as components.
+ */
+export const FRAMES: Record<string, string[]> = {
+  "stream.ts": ["StreamServerMessage", "StreamClientMessage"],
+  "transcript-types.ts": [
+    "TranscriptBlock",
+    "TranscriptBranch",
+    "TranscriptEvent",
+    "TranscriptPage",
+    "TranscriptStreamFrame",
+  ],
+  "index.ts": [
+    "Envelope",
+    "FramePayload",
+    "SpawnPayload",
+    "StopPayload",
+    "ControlPayload",
+    "FsPayload",
+    "FsEntry",
+    "FsMedia",
+    "SendPayload",
+    "ReposResult",
+    "UpdateReport",
+  ],
+  // `NeutralSessionInfo`: what a machine's `listSessions` control answers,
+  // the stored transcripts the home's Recent lists.
+  "harness.ts": [
+    "NeutralMessage",
+    "NeutralSessionInfo",
+    "ModelInfo",
+    "McpServerStatus",
+    "SupportedCommands",
+    "AuthState",
+    "NeutralTask",
+  ],
+  "tools.ts": ["ToolStatus"],
+};
+
+/** The frames only the app sends: the rest it receives. */
+export const SENT = new Set([
+  "StreamClientMessage",
+  "Envelope",
+  "SpawnPayload",
+  "StopPayload",
+  "ControlPayload",
+  "FsPayload",
+  "SendPayload",
+]);
+
+/**
+ * A field the hub still sends only so shipped readers can read it: in every
+ * object schema that declares `beside`, the property `property`. Each is
+ * time-boxed: openapi.ts takes it out of the document and compares again,
+ * and refuses the bridge once no shipped reader breaks without it.
+ */
+export interface Bridge {
+  beside: string;
+  property: string;
+  /** What it is for and when it goes. */
+  until: string;
+}
+export const BRIDGES: Bridge[] = [
+  {
+    property: "host",
+    beside: "origin",
+    until:
+      "host mode's address before `origin` (core frames.ts PreviewAddress); it goes in the change that expires TestFlight 20261015",
+  },
+];
+
+/** The document as it would be without `bridge`: the property gone from every schema that has both. */
+export const withoutBridge = (document: unknown, bridge: Bridge): unknown => {
+  if (Array.isArray(document)) {
+    return document.map((item) => withoutBridge(item, bridge));
+  }
+  if (!isObject(document)) {
+    return document;
+  }
+  const out: Schema = {};
+  for (const [key, value] of Object.entries(document)) {
+    out[key] = withoutBridge(value, bridge);
+  }
+  const { properties } = out;
+  if (
+    isObject(properties) &&
+    bridge.beside in properties &&
+    bridge.property in properties
+  ) {
+    const { [bridge.property]: _gone, ...kept } = properties;
+    out.properties = kept;
+    if (Array.isArray(out.required)) {
+      out.required = out.required.filter((name) => name !== bridge.property);
+    }
+  }
+  return out;
+};
+
+/** The WIRE_PROTOCOL a commit's core declares, read through `show` (a path from the root). */
+export const wireProtocolAt = (show: (path: string) => string): number =>
+  Number(WIRE_PROTOCOL_LINE.exec(show(STREAM))?.[1]);
+
 type Schema = Record<string, unknown>;
 type Content = Record<string, { schema?: Schema }>;
 interface Document {
@@ -593,3 +707,68 @@ export const wireBreaks = (
 /** The typeOverrides names in an openapi-generator-config.yaml: the enums its app reads open. */
 export const openEnumNames = (config: string): Set<string> =>
   new Set([...config.matchAll(OPEN_ENUM)].map((match) => match[1] as string));
+
+/**
+ * An app built at one commit against a hub built at another, both as
+ * committed (each commit's typecheck holds its openapi.json to its code):
+ * the breaks, and whether WIRE_PROTOCOL allows them (the hub's is above the
+ * app's, so the hub speaks the app's older wire to it).
+ */
+export const commitBreaks = (
+  show: (commit: string, path: string) => string,
+  app: string,
+  hub: string
+): { allowed: boolean; breaks: string[]; app: number; hub: number } => {
+  const appProtocol = wireProtocolAt((path) => show(app, path));
+  const hubProtocol = wireProtocolAt((path) => show(hub, path));
+  const breaks = wireBreaks(
+    JSON.parse(show(app, APP_SCHEMA)),
+    JSON.parse(show(hub, APP_SCHEMA)),
+    {
+      frames: Object.values(FRAMES).flat(),
+      sent: SENT,
+      openBefore: openEnumNames(show(app, GENERATOR_CONFIG)),
+    }
+  );
+  return {
+    breaks,
+    allowed: hubProtocol > appProtocol,
+    app: appProtocol,
+    hub: hubProtocol,
+  };
+};
+
+// `bun wire-compat.ts --app <commit> --hub <commit>`: whether the app built at
+// one reads the hub built at the other (testflight.sh, before an upload).
+if (import.meta.main) {
+  const flag = (name: string): string => {
+    const at = process.argv.indexOf(name);
+    const value = at >= 0 ? process.argv[at + 1] : undefined;
+    if (!value) {
+      throw new Error("Usage: wire-compat.ts --app <commit> --hub <commit>");
+    }
+    return value;
+  };
+  const show = (commit: string, path: string): string => {
+    const run = Bun.spawnSync(["git", "show", `${commit}:${path}`]);
+    if (run.exitCode !== 0) {
+      throw new Error(`git show ${commit}:${path}: ${run.stderr.toString()}`);
+    }
+    return run.stdout.toString();
+  };
+  const app = flag("--app");
+  const hub = flag("--hub");
+  const result = commitBreaks(show, app, hub);
+  const what = `the app at ${app.slice(0, 12)} (WIRE_PROTOCOL ${result.app}) against the hub at ${hub.slice(0, 12)} (WIRE_PROTOCOL ${result.hub})`;
+  if (result.breaks.length && !result.allowed) {
+    console.error(
+      `The wire breaks ${what}, at ${result.breaks.length} place${result.breaks.length === 1 ? "" : "s"}:\n${result.breaks.map((line) => `  ${line}`).join("\n")}`
+    );
+    process.exit(1);
+  }
+  console.log(
+    result.breaks.length
+      ? `WIRE_PROTOCOL allows ${result.breaks.length} break${result.breaks.length === 1 ? "" : "s"}: ${what}`
+      : `The wire holds: ${what}`
+  );
+}
