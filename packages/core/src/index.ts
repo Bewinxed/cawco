@@ -762,6 +762,42 @@ export function machineLabel(hostname: string): string {
   return suffix ? name.slice(0, -suffix.length) : name;
 }
 
+/** What naming a machine reads of it: an agents row, or any row shaped like one. */
+export interface NamedMachine {
+  hostname: string;
+  machineId: string;
+}
+
+/**
+ * A machine as a sentence names it among `fleet`: its {@link machineLabel},
+ * and its machine id after it when another machine of the fleet shows the
+ * same name (machines on one host do, a scratch fleet's all of them), so
+ * the sentence never names two machines alike.
+ */
+export function namedAmong(
+  machine: NamedMachine,
+  fleet: readonly NamedMachine[]
+): string {
+  const name = machineLabel(machine.hostname);
+  const shared = fleet.some(
+    (other) =>
+      other.machineId !== machine.machineId &&
+      machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
+  );
+  return shared ? `${name} (${machine.machineId})` : name;
+}
+
+/** Machines as a sentence lists them, each by {@link namedAmong} among `fleet`, or `none`. */
+export function namesAmong(
+  machines: readonly NamedMachine[],
+  fleet: readonly NamedMachine[],
+  none = "none"
+): string {
+  return (
+    machines.map((machine) => namedAmong(machine, fleet)).join(", ") || none
+  );
+}
+
 /** What a daemon reports about the checkout it was started from. */
 export interface BuildInfo {
   /** Short git SHA, when the checkout is a git one. */

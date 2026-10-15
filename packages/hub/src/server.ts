@@ -212,10 +212,10 @@ import {
   MESSAGES_STORED,
   MOVE_LATER_WAIT_MS,
   MOVED_HERE,
-  machineLabel,
   memoryDocProblem,
   type NeutralSystemMessage,
   namedAccount,
+  namedAmong,
   PLACEMENT_STRATEGIES,
   type PlacementPreview,
   type PlacementStrategy,
@@ -3050,12 +3050,12 @@ export const createServer = (
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
   };
-  /** A machine as a sentence names it. */
-  const machineName = (machineId: string): string =>
-    machineLabel(
-      db.listAgents().find((agent) => agent.machineId === machineId)
-        ?.hostname ?? machineId
-    );
+  /** A machine as a sentence names it (core `namedAmong`); its id when the hub knows none. */
+  const machineName = (machineId: string): string => {
+    const agents = db.listAgents();
+    const agent = agents.find((each) => each.machineId === machineId);
+    return agent ? namedAmong(agent, agents) : machineId;
+  };
   /** A session as a sentence names it. */
   const sessionName = (row: {
     derivedTitle?: string | null;

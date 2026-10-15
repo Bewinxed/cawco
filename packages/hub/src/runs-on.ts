@@ -11,6 +11,7 @@
  * checkout of the project; with none, the start is refused with a sentence
  * saying what it needs, and nothing is placed elsewhere.
  */
+import { namesAmong } from "@cawco/core";
 
 /** Each capability, and the OS prefix (`os`'s part before `-`) whose machines have it. */
 const CAPABILITY_OS = { apple: "darwin", linux: "linux" } as const;
@@ -78,9 +79,11 @@ export const runsOnValue = (
     return { value: trimmed };
   }
   return {
-    problem: `runs_on “${trimmed}” is neither ${RUNS_ON_CAPABILITIES.join(" nor ")} nor a machine this hub knows (${
-      machines.map((machine) => machine.hostname).join(", ") || "none yet"
-    }).`,
+    problem: `runs_on “${trimmed}” is neither ${RUNS_ON_CAPABILITIES.join(" nor ")} nor a machine this hub knows (${namesAmong(
+      machines,
+      machines,
+      "none yet"
+    )}).`,
   };
 };
 

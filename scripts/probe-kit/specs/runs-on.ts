@@ -22,9 +22,13 @@
  *     runs_on: apple, retries in a new workspace on probe-mac, never in
  *     the old Linux one.
  * (f) probe-mac offline: a runs_on: apple task's start is refused, 409, with
- *     the one sentence naming what it needs and that it starts nowhere
- *     else; a task left to the project's apple too; neither files a work
- *     item or a workspace.
+ *     the one sentence naming what it needs, the Mac that is offline and
+ *     that it starts nowhere else; a task left to the project's apple too;
+ *     neither files a work item or a workspace.
+ *
+ * Every machine here reports the host's hostname, so each sentence names a
+ * machine with its id after the name (core `namedAmong`): (c) lists both,
+ * (f) names probe-mac.
  *
  *   bun scripts/probe-kit/run.ts runs-on
  */
@@ -259,11 +263,11 @@ const run = async (kit: Kit) => {
     { title: "Nowhere", runsOn: "nowhere" }
   );
   kit.check(
-    "c: runs_on naming no capability and no known machine is refused at create",
+    "c: runs_on naming no capability and no known machine is refused at create, naming each machine apart (one host's machines by id too)",
     unknown.status === 400 &&
-      unknown.text.includes(
-        "runs_on “nowhere” is neither apple nor linux nor a machine this hub knows"
-      ),
+      new RegExp(
+        `^runs_on “nowhere” is neither apple nor linux nor a machine this hub knows \\((?=.*\\S \\(${MACHINE}\\))(?=.*\\S \\(${MAC}\\)).+\\)\\.$`
+      ).test(unknown.text),
     `${unknown.status} ${unknown.text}`
   );
 
@@ -350,7 +354,7 @@ const run = async (kit: Kit) => {
   const after = probe.filed();
   const sentence = (id: string) =>
     new RegExp(
-      `^409 ${id} runs on a Mac \\(apple\\), and none is online \\([^)]+ is offline\\), so it starts nowhere else: bring one online\\.$`
+      `^409 ${id} runs on a Mac \\(apple\\), and none is online \\([^()]+ \\(${MAC}\\) is offline\\), so it starts nowhere else: bring one online\\.$`
     );
   kit.check(
     "f: with the Mac offline, a runs_on: apple task's start is refused with the one sentence",

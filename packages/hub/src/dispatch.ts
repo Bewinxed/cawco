@@ -77,7 +77,7 @@
  * changing, a machine with a checkout coming online. A slow timer looks
  * again as a safety net and starts nothing when nothing is ready.
  */
-import type { InstanceRow, LandsMode } from "@cawco/core";
+import { type InstanceRow, type LandsMode, namesAmong } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
@@ -690,8 +690,8 @@ export const createDispatcher = ({
       return `${needs}, and no machine this hub knows is one, so it starts nowhere else: join one, or change its runs_on.`;
     }
     const up = fitting.filter((machine) => online(machine.machineId));
-    const hosts = (machines: MachineFacts[]) =>
-      machines.map((machine) => machine.hostname).join(", ");
+    const fleet = db.listAgents();
+    const hosts = (machines: MachineFacts[]) => namesAmong(machines, fleet);
     if (up.length === 0) {
       return `${needs}, and none is online (${hosts(fitting)} ${fitting.length === 1 ? "is" : "are"} offline), so it starts nowhere else: bring one online.`;
     }

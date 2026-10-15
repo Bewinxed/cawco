@@ -21,7 +21,7 @@
  */
 import {
   CONTROL_PLACE_REPO,
-  machineLabel,
+  namedAmong,
   type PlaceLeftOut,
   type PlaceRepo,
   type ThreadNote,
@@ -92,8 +92,9 @@ export const placeHolding = (
 
 export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
   const machineName = (machineId: string): string => {
-    const agent = db.listAgents().find((each) => each.machineId === machineId);
-    return agent ? machineLabel(agent.hostname) : machineId;
+    const agents = db.listAgents();
+    const agent = agents.find((each) => each.machineId === machineId);
+    return agent ? namedAmong(agent, agents) : machineId;
   };
 
   /** The note a made repository leaves in the project's newest conversation. */

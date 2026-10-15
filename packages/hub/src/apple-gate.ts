@@ -21,7 +21,7 @@
  * is every change under `apps/apple`. A core or hub change that leaves them
  * untouched compiles the same Swift main already compiles.
  */
-import { machineLabel } from "@cawco/core";
+import { namedAmong } from "@cawco/core";
 import { capabilitiesOf } from "./runs-on";
 
 /** The gate's check, as an item's check list and its report name it. */
@@ -85,10 +85,9 @@ const seenAt = (machine: {
   machine.lastSeenAt === null ? 0 : new Date(machine.lastSeenAt).getTime();
 
 /**
- * The Mac the gate would have used, named: the darwin machine seen last.
- * Its hostname as the fleet shows it, with its machine id when another
- * machine of the fleet shows the same name (machines on one host do).
- * Undefined when no Mac ever registered.
+ * The Mac the gate would have used, named among the fleet (core
+ * `namedAmong`): the darwin machine seen last. Undefined when no Mac ever
+ * registered.
  */
 export const lastMac = (
   machines: readonly {
@@ -104,12 +103,7 @@ export const lastMac = (
   if (!mac) {
     return;
   }
-  const name = machineLabel(mac.hostname);
-  const shared = machines.some(
-    (other) =>
-      other.machineId !== mac.machineId && machineLabel(other.hostname) === name
-  );
-  return shared ? `${name} (${mac.machineId})` : name;
+  return namedAmong(mac, machines);
 };
 
 /** The machines the gate may run on: online, and a Mac by the OS each reported. */

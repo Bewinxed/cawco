@@ -76,6 +76,8 @@ import {
   holdingWords,
   holdsNothing,
   machineLabel,
+  namedAmong,
+  namesAmong,
   queueWords,
   sizeWords,
   type WorkspaceLanding,
@@ -3243,15 +3245,16 @@ export const createWorkItems = ({
         400,
         matches.length > 1
           ? `check "${check.name}": "${check.machine}" names ${matches.length} machines: ${matches.map((agent) => `${machineLabel(agent.hostname)} (${agent.machineId})`).join(", ")}. Name one by its machineId.`
-          : `check "${check.name}": no machine of the fleet is named "${check.machine}". The fleet: ${agents.map((agent) => machineLabel(agent.hostname)).join(", ") || "none"}.`
+          : `check "${check.name}": no machine of the fleet is named "${check.machine}". The fleet: ${namesAmong(agents, agents)}.`
       );
     });
   };
 
   /** A machine as a check's line names it: its hostname as the fleet shows it. */
   const machineName = (machineId: string): string => {
-    const agent = db.listAgents().find((each) => each.machineId === machineId);
-    return agent ? machineLabel(agent.hostname) : machineId;
+    const agents = db.listAgents();
+    const agent = agents.find((each) => each.machineId === machineId);
+    return agent ? namedAmong(agent, agents) : machineId;
   };
 
   /**

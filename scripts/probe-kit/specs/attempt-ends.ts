@@ -41,6 +41,9 @@ const FINISH = "mcp__cawco__finish_item";
 const START = "mcp__cawco__task_start";
 const STOP = "mcp__cawco__stop_delegate";
 const MOVE = "mcp__cawco__task_update";
+const WAIT = "mcp__cawco__wait_item";
+/** The reason a held attempt's wait gives: once its body holds it, it waited. */
+const HELD = "PROBE-WAIT until the starter stops this attempt";
 /** Only an attempt's brief opens this way. */
 const BRIEF = "Your work item is an attempt at";
 /** A task whose attempt fails at once carries this in its title. */
@@ -94,6 +97,19 @@ const failing = (request: Seen): Reply => {
   return call(request, finish) ?? useTool(finish.name, finish.input);
 };
 
+/**
+ * Any other attempt declares a wait, then says ok, and stays running until
+ * it is stopped: three turns ending without finish_item or a wait fail an
+ * item (hub work-items.ts `QUIET_TURNS`).
+ */
+const holding = (request: Seen): Reply => {
+  if (request.body.includes(HELD)) {
+    return text("ok");
+  }
+  const wait: Call = { name: WAIT, input: { minutes: 60, reason: HELD } };
+  return call(request, wait) ?? useTool(wait.name, wait.input);
+};
+
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
@@ -102,8 +118,7 @@ const respond = (request: Seen): Reply => {
   if (brief >= 0) {
     const end = request.all.indexOf("\n", brief);
     const head = request.all.slice(brief, end < 0 ? undefined : end);
-    // Any other attempt says ok and stays open until it is stopped.
-    return head.includes(FAIL) ? failing(request) : text("ok");
+    return head.includes(FAIL) ? failing(request) : holding(request);
   }
   if (request.all.includes(CAW)) {
     cawHeard.push(request.last);

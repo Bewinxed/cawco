@@ -29,6 +29,8 @@ import {
   handoffMarker,
   IMAGE_GENERATION_TIMEOUT_MS,
   machineLabel,
+  namedAmong,
+  namesAmong,
   QUESTION_DISMISSED,
   relaunchOf,
 } from "@cawco/core";
@@ -176,10 +178,10 @@ export interface Fleet {
 
 /** The machines work can start on now, by the names delegate and start_session take. */
 const onlineNames = (machines: Machine[]): string =>
-  machines
-    .filter((machine) => machine.status === "online")
-    .map((machine) => machineLabel(machine.hostname))
-    .join(", ") || "none";
+  namesAmong(
+    machines.filter((machine) => machine.status === "online"),
+    machines
+  );
 
 /**
  * The one machine `target` names: its machineId, its hostname, or that
@@ -207,7 +209,7 @@ function resolveMachine(machines: Machine[], target: string): Machine {
   const [found] = matches;
   if (found.status !== "online") {
     throw new Error(
-      `${machineLabel(found.hostname)} is offline. Online now: ${onlineNames(machines)}.`
+      `${namedAmong(found, machines)} is offline. Online now: ${onlineNames(machines)}.`
     );
   }
   return found;
@@ -1502,7 +1504,7 @@ export const handoffActions = ({
       },
     };
     emit({ verb: "send", machineId, instanceId: id, payload: opening });
-    const on = target ? ` on ${machineLabel(target.hostname)}` : "";
+    const on = target ? ` on ${namedAmong(target, fleet.machines())}` : "";
     return {
       id,
       title,
@@ -1555,7 +1557,7 @@ export const handoffActions = ({
       queued: started.queued,
       title: started.title,
       text: target
-        ? `${started.text} It runs on ${machineLabel(target.hostname)}.`
+        ? `${started.text} It runs on ${namedAmong(target, fleet.machines())}.`
         : started.text,
       workItemId: started.workItemId,
       workspaceId: started.workspaceId,
