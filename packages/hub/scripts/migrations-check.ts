@@ -18,9 +18,15 @@ const HUB = resolve(import.meta.dir, "..");
 const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
 const scratch = mkdtempSync(join(tmpdir(), "cawco-migrations-"));
 
-/** Rows in every table, and how many migrations the database records. */
+/**
+ * Rows in every table, and how many migrations the database records.
+ * Opened read-write, on the scratch copy only: the fixture is a WAL database
+ * (it was a hub's), and a read-only open of one with no -shm beside it is
+ * refused (SQLITE_CANTOPEN on macOS's SQLite). Read-write also reads what
+ * the hub left in the WAL after it closed, which `immutable` would not.
+ */
 const read = (path: string) => {
-  const sqlite = new Database(path, { readonly: true });
+  const sqlite = new Database(path, { readwrite: true });
   const tables = sqlite
     .query<{ name: string }, []>(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
