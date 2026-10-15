@@ -48,8 +48,9 @@
  * (532f5489). Maestro's runner reads and touches from inside the simulator.
  *
  * The runner is an XCTest bundle kept up by `xcodebuild test-without-building`,
- * which needs testmanagerd, which a CawCo workspace's boundary refuses
- * ("Operation not permitted"): run it from the owner's shell on the Mac.
+ * which dials the simulator's testmanagerd socket: a CawCo workspace's
+ * boundary lets that one socket through (boundary.ts `TEST_MANAGER_SOCKET`)
+ * and gives Maestro its home in the workspace (paths.ts `workspaceMaestroEnv`).
  *
  * It stops only what it started: the fleet's processes by PID, the runner,
  * and the simulator it took (deleted at the end). `--keep` keeps the fleet's sandbox.
@@ -66,11 +67,12 @@ const build = !process.argv.includes("--no-build");
 const root = resolve(import.meta.dir, "..");
 /**
  * Maestro on the Mac, as probe-ios-caw-panel.ts runs it: on the JDK Homebrew
- * keeps for it, its analytics, update check and analysis notice off, and
- * JDK 26's final-field warning answered (MAESTRO_OPTS reaches its `java` line).
+ * keeps for it (its `opt` link, which `brew --prefix openjdk` names; `brew`
+ * itself cannot run in a workspace), its analytics, update check and analysis
+ * notice off, and JDK 26's final-field warning answered after the
+ * workspace's own options (MAESTRO_OPTS reaches its `java` line).
  */
-const MAESTRO =
-  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_OPTS=--enable-final-field-mutation=ALL-UNNAMED MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro';
+const MAESTRO = `JAVA_HOME=/opt/homebrew/opt/openjdk MAESTRO_OPTS="\${MAESTRO_OPTS:-} --enable-final-field-mutation=ALL-UNNAMED" MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro`;
 /** Maestro's runner app in the simulator. */
 const RUNNER = "dev.mobile.maestro-driver-iosUITests.xctrunner";
 /** What Maestro's CLI prints after its error, before the stack. */

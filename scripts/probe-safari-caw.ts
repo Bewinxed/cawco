@@ -124,10 +124,11 @@ const mac = (script: string) => run(["bash", "-c", script]);
  * JDK 26's warning asks for (JEP 500) when Maestro's classes, all on the class
  * path, mutate final fields: without it every call's stderr opens with
  * "WARNING: Final field … has been mutated reflectively", above Maestro's
- * own error.
+ * own error. It follows a CawCo workspace's own options (its Maestro home,
+ * paths.ts `workspaceMaestroEnv`). The JDK is Homebrew's `opt` link, which
+ * `brew --prefix openjdk` names: `brew` itself cannot run in a workspace.
  */
-const MAESTRO =
-  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_OPTS=--enable-final-field-mutation=ALL-UNNAMED MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro';
+const MAESTRO = `JAVA_HOME=/opt/homebrew/opt/openjdk MAESTRO_OPTS="\${MAESTRO_OPTS:-} --enable-final-field-mutation=ALL-UNNAMED" MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro`;
 /** Maestro's runner app: one per simulator, kept up by an `xcodebuild test-without-building` on the Mac. */
 const RUNNER = "dev.mobile.maestro-driver-iosUITests.xctrunner";
 /**

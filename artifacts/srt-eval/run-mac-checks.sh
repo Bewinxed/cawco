@@ -247,23 +247,46 @@ user_tmp=$(getconf DARWIN_USER_TEMP_DIR)mac-check-$short
 user_cache=$(getconf DARWIN_USER_CACHE_DIR)mac-check-$short
 # Where booted simulators' launchd keeps its sockets (syslog, testmanagerd).
 var_tmp=/private/var/tmp/mac-check-$short
-mkdir -p "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache" "$var_tmp"
-for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock" "the per-user temp dir (T):$user_tmp/host.sock" "the per-user cache dir (C):$user_cache/host.sock" "/private/var/tmp (simulators' sockets):$var_tmp/host.sock"; do
-  label="connect a socket in ${place%%:*}" sock=${place#*:}
-  rm -f "$sock"
+# A simulator launchd's own socket dirs, as each boot makes them: iOS 18 under
+# /private/tmp, newer runtimes under /private/var/tmp. Of their sockets only
+# testmanagerd's is reached (boundary.ts TEST_MANAGER_SOCKET).
+sim_tmp=/private/tmp/com.apple.launchd.maccheck$short
+sim_var=/private/var/tmp/com.apple.launchd.maccheck$short
+testmanagerd=com.apple.testmanagerd.unix-domain.socket
+mkdir -p "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache" "$var_tmp" "$sim_tmp" "$sim_var"
+# Listens on the host at $1 for 60 s; its pid in $listener, once the socket is there.
+listen() {
+  rm -f "$1"
   /usr/bin/python3 -c 'import socket, sys, time
-s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(1); time.sleep(60)' "$sock" &
+s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(1); time.sleep(60)' "$1" &
   listener=$!
-  for _ in $(seq 50); do [ -S "$sock" ] && break; sleep 0.1; done
-  if [ ! -S "$sock" ]; then
+  for _ in $(seq 50); do [ -S "$1" ] && break; sleep 0.1; done
+  [ -S "$1" ]
+}
+connect() { r "/usr/bin/python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$1' 2>/dev/null"; }
+for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock" "the per-user temp dir (T):$user_tmp/host.sock" "the per-user cache dir (C):$user_cache/host.sock" "/private/var/tmp (simulators' sockets):$var_tmp/host.sock" "a simulator's webinspectord in /private/var/tmp:$sim_var/com.apple.webinspectord_sim.socket" "testmanagerd's name outside a simulator's dir:$var_tmp/$testmanagerd"; do
+  label="connect a socket in ${place%%:*}" sock=${place#*:}
+  if ! listen "$sock"; then
     works "$label" "FAIL (the host's listener at $sock did not start)"
   else
-    r "/usr/bin/python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$sock' 2>/dev/null" && row "$label" OPEN || row "$label" BLOCKED
+    connect "$sock" && row "$label" OPEN || row "$label" BLOCKED
   fi
   kill "$listener" 2>/dev/null; wait "$listener" 2>/dev/null
   rm -f "$sock"
 done
-rm -rf "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache" "$var_tmp"
+# Working rows: a simulator's testmanagerd, which xcodebuild's UI test runner
+# (XCUITest, Maestro's driver) dials, in both of its dirs.
+for place in "/private/tmp:$sim_tmp/$testmanagerd" "/private/var/tmp:$sim_var/$testmanagerd"; do
+  label="connect a simulator's testmanagerd in ${place%%:*}" sock=${place#*:}
+  if ! listen "$sock"; then
+    works "$label" "FAIL (the host's listener at $sock did not start)"
+  else
+    connect "$sock" && works "$label" PASS || works "$label" "FAIL (refused)"
+  fi
+  kill "$listener" 2>/dev/null; wait "$listener" 2>/dev/null
+  rm -f "$sock"
+done
+rm -rf "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache" "$var_tmp" "$sim_tmp" "$sim_var"
 r "kill -0 $$ 2>/dev/null" && row "signal a process outside" OPEN || row "signal a process outside" BLOCKED
 r '/bin/launchctl print gui/$(id -u) >/dev/null 2>&1' && row "launchctl" OPEN || row "launchctl" BLOCKED
 source_hooks=$(cd "$source_repo" && git rev-parse --path-format=absolute --git-path hooks)

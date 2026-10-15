@@ -855,6 +855,31 @@ export const workspaceXdgEnv = (id: string): Record<string, string> => {
   };
 };
 
+/**
+ * A workspace's own home for Maestro, in its scratch dir: Maestro's JVM takes
+ * it as `user.home` ({@link workspaceMaestroEnv}).
+ */
+export const workspaceMaestroHome = (id: string): string =>
+  join(workspaceScratchDir(id), "maestro");
+
+/**
+ * Maestro's JVM options for every command of workspace `id`: its home in the
+ * workspace ({@link workspaceMaestroHome}) and its temp dir the workspace's
+ * `TMPDIR`. Maestro has no home setting of its own: its deps go to
+ * `Paths.get(System.getProperty("user.home"), ".maestro", "deps", name)`
+ * (maestro-cli Unpacker.kt `binaryDependency`), its logs and sessions under
+ * that home too, and its iOS driver and xcodebuild's output to
+ * `java.io.tmpdir` (on macOS the per-user temp dir, every app's). Its
+ * launcher passes `MAESTRO_OPTS` to `java` ("You can also use JAVA_OPTS and
+ * MAESTRO_OPTS to pass JVM options to this script"), each word through
+ * `xargs`, so a quoted path keeps its spaces. Its state already follows
+ * `XDG_STATE_HOME` (EnvUtils.kt `xdgStateHome`). A caller that sets
+ * `MAESTRO_OPTS` itself appends to this one.
+ */
+export const workspaceMaestroEnv = (id: string): Record<string, string> => ({
+  MAESTRO_OPTS: `"-Duser.home=${workspaceMaestroHome(id)}" "-Djava.io.tmpdir=${workspaceTmpDir(id)}"`,
+});
+
 /** The environment every workspace command runs with, pointing each tool at {@link workspaceCacheDir}. */
 export const workspaceCacheEnv = (): Record<string, string> => {
   const cache = workspaceCacheDir();

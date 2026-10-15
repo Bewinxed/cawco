@@ -96,6 +96,8 @@ import {
   workspaceCacheEnv,
   workspaceCaches,
   workspaceDoorDir,
+  workspaceMaestroEnv,
+  workspaceMaestroHome,
   workspacePolicyFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
@@ -1705,9 +1707,26 @@ const LAUNCHD_SOCKETS = "/private/tmp";
  * testmanagerd's, webinspectord's), beside those in {@link LAUNCHD_SOCKETS}.
  * A workspace writes nothing there, so every socket in it is the host's: a
  * workspace drives a simulator through CoreSimulator's mach services
- * (`simctl`), never these.
+ * (`simctl`), never these, but for {@link TEST_MANAGER_SOCKET}.
  */
 const SIMULATOR_SOCKETS = "/private/var/tmp";
+
+/**
+ * The one host socket in {@link LAUNCHD_SOCKETS} or {@link SIMULATOR_SOCKETS}
+ * a workspace connects to, as a Seatbelt regex over its whole path: a booted
+ * simulator's testmanagerd, which `xcodebuild test-without-building` dials to
+ * run a UI test runner (XCUITest, Maestro's driver). The simulator names it
+ * in its launchd's `TESTMANAGERD_SIM_SOCK` (`xcrun simctl getenv <udid>
+ * TESTMANAGERD_SIM_SOCK`): `/private/tmp/com.apple.launchd.<id>/…` on iOS
+ * 18.5; newer runtimes keep the same names under `/private/var/tmp`. Refused,
+ * the runner fails with "Failed to connect to unix domain socket at path
+ * /private/tmp/com.apple.launchd.lzUhSQrMjS/com.apple.testmanagerd.unix-domain.socket:
+ * 1 Operation not permitted". Its siblings (webinspectord's, testmanagerd's
+ * remote automation, syslog) and every other socket there stay the host's.
+ * testmanagerd starts and drives apps inside its own simulator, as `simctl`
+ * already lets a workspace.
+ */
+const TEST_MANAGER_SOCKET = String.raw`^/private(/var)?/tmp/com\.apple\.launchd\.[A-Za-z0-9]+/com\.apple\.testmanagerd\.unix-domain\.socket$`;
 
 /** Linux: the agent's runtime dir, where its sandbox's proxy socket and the workspace's door go. */
 const runtimeDirOf = (id: string): string => {
@@ -1831,6 +1850,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
           ...(await darwinUserDirs()),
         ].map((path) => realpath(path).catch(() => path))
       ),
+      reachedHostSockets: [TEST_MANAGER_SOCKET],
     });
     const file = join(generationDir(id, gen), "boundary.sb");
     return {
@@ -2778,7 +2798,8 @@ fi`
 /**
  * What every command runs with besides its caller's environment: the
  * workspaces' own cache (`workspaceCacheEnv`), its own XDG config, data and
- * state homes (`workspaceXdgEnv`), the host's CA store (`hostCaEnv`: TLS
+ * state homes (`workspaceXdgEnv`), Maestro's home and temp dir in the
+ * workspace (`workspaceMaestroEnv`), the host's CA store (`hostCaEnv`: TLS
  * verifies against it whatever binary is first on PATH), node's own clients
  * on the boundary's proxy as every other tool is (`NODE_USE_ENV_PROXY`:
  * node's `fetch` and `http`/`https` read `HTTPS_PROXY` and `NO_PROXY` only
@@ -2795,6 +2816,7 @@ const commandEnv = (id: string, clone: string): string[] => [
   ...Object.entries({
     ...workspaceCacheEnv(),
     ...workspaceXdgEnv(id),
+    ...workspaceMaestroEnv(id),
     ...hostCaEnv(),
     // https://nodejs.org/learn/http/enterprise-network-configuration: "This
     // works with node:http and node:https (v22.21.0 or v24.5.0+) methods as
@@ -2958,7 +2980,7 @@ exit "$status"
 /**
  * The folders a boundary needs before it starts: its state dir, the part of
  * it a command reads (with the empty git template), its scratch dir with its
- * XDG homes in it, and the caches it writes. Never nested in one another
+ * XDG homes and Maestro's home in it, and the caches it writes. Never nested in one another
  * (srt #446), but for the XDG homes, which are only the scratch dir's
  * contents. A HOME so long that a browser's socket in the scratch dir cannot
  * fit is said in the log: everything else in the workspace still runs.
@@ -2980,6 +3002,7 @@ const makeDirs = async (id: string): Promise<void> => {
       xdg.config,
       xdg.data,
       xdg.state,
+      workspaceMaestroHome(id),
       ...workspaceCaches(),
     ].map((path) => mkdir(path, { recursive: true }))
   );

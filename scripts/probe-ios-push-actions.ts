@@ -152,10 +152,12 @@ async function mac(script: string): Promise<string> {
  * script adds them to the `java` line and prints nothing of its own);
  * `--enable-final-field-mutation=ALL-UNNAMED` is what JDK 26's "WARNING:
  * Mutating final fields will be blocked" asks for (JEP 500), so Maestro's
- * own lines are what it prints (as probe-ios-caw-panel.ts runs it).
+ * own lines are what it prints (as probe-ios-caw-panel.ts runs it), after a
+ * CawCo workspace's own options (paths.ts `workspaceMaestroEnv`). The JDK is
+ * Homebrew's `opt` link, which `brew --prefix openjdk` names: `brew` itself
+ * cannot run in a workspace.
  */
-const MAESTRO =
-  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_OPTS=--enable-final-field-mutation=ALL-UNNAMED MAESTRO_CLI_NO_ANALYTICS=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true MAESTRO_DISABLE_UPDATE_CHECK=true /opt/homebrew/bin/maestro --no-ansi';
+const MAESTRO = `JAVA_HOME=/opt/homebrew/opt/openjdk MAESTRO_OPTS="\${MAESTRO_OPTS:-} --enable-final-field-mutation=ALL-UNNAMED" MAESTRO_CLI_NO_ANALYTICS=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true MAESTRO_DISABLE_UPDATE_CHECK=true /opt/homebrew/bin/maestro --no-ansi`;
 
 /**
  * A port for Maestro's runner, bound free on the Mac's 127.0.0.1 a moment

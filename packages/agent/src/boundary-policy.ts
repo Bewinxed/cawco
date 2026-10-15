@@ -153,6 +153,12 @@ export interface SeatbeltPlace {
    * workspace writes.
    */
   readonly hostSockets: readonly string[];
+  /**
+   * The host sockets a command still connects to, each a Seatbelt regex over
+   * the socket's whole path, inside a dir of {@link hostSockets}: each booted
+   * simulator's testmanagerd (boundary.ts `TEST_MANAGER_SOCKET`).
+   */
+  readonly reachedHostSockets: readonly string[];
 }
 
 /**
@@ -181,7 +187,8 @@ export interface SeatbeltPlace {
  * but bind no socket there, and Chromium binds its singleton in `$TMPDIR`,
  * the scratch dir. The cache is every workspace's, as on Linux: a socket one binds
  * there another reaches, as it already reaches every file the other writes
- * there. Allows come after denies, as srt writes its `allowUnixSockets`
+ * there. Of the host's sockets, only {@link SeatbeltPlace.reachedHostSockets}
+ * are reached, each by its whole path. Allows come after denies, as srt writes its `allowUnixSockets`
  * (`(allow network-outbound (remote unix-socket (subpath …)))`,
  * macos-sandbox-utils.ts). The network is the host's: Seatbelt cannot judge a
  * destination by the name it resolves.
@@ -249,6 +256,10 @@ export const seatbeltProfile = (
     ...[...place.doors, ...ownSockets].map(
       (path) =>
         `(allow network-outbound (remote unix-socket (subpath ${sbString(path)})))`
+    ),
+    ...place.reachedHostSockets.map(
+      (pattern) =>
+        `(allow network-outbound (remote unix-socket (path-regex #"${pattern}")))`
     ),
     "",
   ].join("\n");
