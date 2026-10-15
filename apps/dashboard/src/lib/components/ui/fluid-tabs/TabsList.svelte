@@ -24,6 +24,7 @@
     useTabs,
   } from "./context.svelte";
   import { type FoldPose, restPose } from "./fold-path";
+  import { lastInput } from "./last-input";
   import { TabRects } from "./rects.svelte";
 
   let {
@@ -112,8 +113,11 @@
      their feet, nothing in between moves). A new switch caught mid-way
      starts its pull from the paths as drawn then. Under a gesture (the
      root's `travel`) the run stands where the gesture's fraction puts it,
-     and plays on, or back, as the gesture lets go. With less motion the
-     choice is instant: the stack ranked for it at once, nothing moves. A
+     and plays on, or back, as the gesture lets go. A choice that scrolls
+     the strip to show its tab whole scrolls it on the same clock and curve
+     (`forward.ride`), never before the motion's first frame. A choice
+     made from the keyboard (`lastInput`), and every choice with less
+     motion, is instant: the stack ranked for it at once, nothing moves. A
      tab lifted by a drag (`data-lifted`, workspace/tab-drag) stands over
      every tab, both its feet drawn. */
   /** The item a tab is laid out as: the tab, or the host's box round it. */
@@ -240,7 +244,21 @@
     frame: number;
     /** Placed by a gesture, not playing on its own. */
     held: boolean;
+    /**
+     * The strip's scroll riding the clock, when the choice scrolls it
+     * (`place`): from where it stood to where it shows the tab whole, over
+     * the clock's progress from `p0`, where the ride began.
+     */
+    ride: { from: number; to: number; p0: number } | null;
   } | null = null;
+  /** How far a come-forward's clock has gone, on its curve, 0 to 1. */
+  const progressOf = (clock: Animation) => {
+    const timing = clock.effect?.getComputedTiming();
+    if (Number(clock.currentTime ?? 0) >= Number(timing?.endTime ?? 0)) {
+      return 1;
+    }
+    return timing?.progress ?? 0;
+  };
   /** A length token on the track in ms (the minifier writes `280ms` as `.28s`). */
   const msOf = (style: CSSStyleDeclaration, name: string) => {
     const value = style.getPropertyValue(name).trim();
@@ -435,13 +453,32 @@
       poseAt,
       frame: 0,
       held: paused,
+      ride: null as { from: number; to: number; p0: number } | null,
     };
     forward = now;
+    /** The strip's scroll where the clock puts it, while it rides. */
+    const scroll = (p: number) => {
+      const on = now.ride;
+      if (!on) {
+        return;
+      }
+      const f = on.p0 >= 1 ? 1 : Math.max(0, (p - on.p0) / (1 - on.p0));
+      track.scrollLeft = on.from + (on.to - on.from) * f;
+    };
     // Ranked by the tabs themselves, in the strip as it stands each frame:
     // a tab that opens or closes meanwhile moves the others' places.
     const rank = (around: HTMLElement) => {
       const fresh = rects.items;
       return { fresh, at: fresh.indexOf(around) };
+    };
+    /** The stack ranked for the side of the flip the clock stands on. */
+    const flipAt = (t: number) => {
+      const flip = t >= now.flipAt;
+      if (flip !== now.flipped) {
+        now.flipped = flip;
+        const { fresh, at } = rank(flip ? mover : leaving);
+        stack(track, fresh, at);
+      }
     };
     const step = () => {
       if (forward !== now) {
@@ -449,14 +486,10 @@
       }
       const t = Number(clock.currentTime ?? 0);
       const back = clock.playbackRate < 0;
-      const flip = t >= now.flipAt;
-      if (flip !== now.flipped) {
-        now.flipped = flip;
-        const { fresh, at } = rank(flip ? mover : leaving);
-        stack(track, fresh, at);
-      }
+      flipAt(t);
       const done =
         !now.held && (back ? clock.playState === "finished" : t >= m.duration);
+      scroll(done ? 1 : progressOf(clock));
       if (done) {
         const { fresh, at } = rank(back ? leaving : mover);
         endForward(track, fresh, at);
@@ -520,8 +553,9 @@
    * on to its tab, or back to where it began), a choice between two tabs
    * the strip already held that comes forward, or the stack ranked for it
    * at once. A tab that has just opened grows in at its place in front
-   * (PaneTabs `entering`), and a choice that moves because its tab closed
-   * moves at once: neither comes forward. The same choice again (the tabs
+   * (PaneTabs `entering`), a choice that moves because its tab closed
+   * moves at once, and a choice made from the keyboard (`lastInput`) is
+   * instant: none of them comes forward. The same choice again (the tabs
    * measured anew) leaves a come-forward under way to run its course.
    */
   function land(
@@ -548,7 +582,8 @@
       from >= 0 &&
       next &&
       held.has(next) &&
-      motionOk.current
+      motionOk.current &&
+      lastInput.current === "pointer"
     ) {
       startForward(track, items, from, chosen, false);
     } else {
@@ -669,7 +704,9 @@
   // scroll is read and written in the next frame's callbacks, never in the
   // task that moved the choice: reading it there lays the page out mid-task,
   // and a swipe's release paid 30ms for it. The callbacks run before that
-  // frame's layout, so it paints already scrolled.
+  // frame's layout, so it paints already scrolled. While a choice comes
+  // forward the scroll rides that clock instead (`forward.ride`): the
+  // strip moves with the motion, on its curve, never ahead of it.
   //
   // Mid-gesture the track stands between where it rests for the chosen
   // item and where it rests for the one the gesture is heading to, by the
@@ -730,7 +767,18 @@
       }
       if (Math.abs(to - at) > 0.5) {
         stopGlide();
-        track.scrollLeft = to;
+        // A choice that comes forward carries the scroll on its own clock
+        // and curve, from where the strip stands now (owner's preview: the
+        // strip had jumped before the motion's first frame).
+        const riding =
+          !travel && forward && !forward.held && forward.clock.playbackRate > 0
+            ? forward
+            : null;
+        if (riding) {
+          riding.ride = { from: at, to, p0: progressOf(riding.clock) };
+        } else {
+          track.scrollLeft = to;
+        }
       }
       capFades();
     };

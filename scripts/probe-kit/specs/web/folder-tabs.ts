@@ -36,7 +36,10 @@
  *    its feet as drawn, at every frame;
  *  - interruption: a switch caught mid-way by another starts from the paths
  *    as drawn (within 0.05px);
- *  - less motion: the choice instant, no run, the stack and paths landed;
+ *  - less motion, and the keyboard (ArrowRight on the chosen tab, Enter on
+ *    the next): the choice instant, no run, the stack and paths landed;
+ *  - scroll: a choice that scrolls the strip to show its tab (the phone's)
+ *    rides the motion, at 0% where it stood, one way only, landed at 100%;
  *  - rims (the session strip): at rest the chosen tab's at its tone's full
  *    strength (tab-rim-mix-chosen; tab-rim-mix-idle idle or done), an
  *    unchosen one's at tab-rim-mix-subtle, an unchosen idle one's at none;
@@ -49,7 +52,9 @@
  *    of the edge fades, but the one a switch leaves where the two are wider
  *    than the track), whole (each tab drawn chosen, its feet too, cut off by
  *    nothing: the track while it clips or masks, nor any box round it) and
- *    titles (none cut).
+ *    titles (none cut), at rest and landed; on the way, the two tabs a
+ *    switch draws chosen taken by an edge no more than at one end of the
+ *    ride or the other (the scroll carries them between).
  * Ink, at rest (what drawing alone decides): one stroke down every shared
  * edge, its front tab's, none where that tab wears no rim (the rims read
  * with each tab's cast edge, `.shade`, taken away); one piece where
@@ -517,6 +522,32 @@ function boundsFaults(L: Layout, kept: number[]): Record<string, string[]> {
   };
 }
 
+/**
+ * How much of the tab at `k` an edge takes in one frame, px: what cuts its
+ * box and feet off (as `whole` reads them), and how far it stands into an
+ * edge's fade (as `fades` reads it, where the strip draws them).
+ */
+function edgesOf(L: Layout, k: number): { cut: number; fade: number } {
+  const tr = L.track;
+  const t = L.tabs[k] as Tab;
+  const { tips } = poseOf(t);
+  const svgLeft = t.svg?.left ?? t.left - t.flare;
+  const left = Math.min(t.left - t.flare, svgLeft + tips[0]);
+  const right = Math.max(t.right + t.flare, svgLeft + tips[1]);
+  const cutLeft = Math.max(tr.hostLeft, tr.cuts ? tr.left : -1e9);
+  const cutRight = Math.min(tr.hostRight, tr.cuts ? tr.right : 1e9);
+  const fadeIn = Math.min(tr.fadeStart * (L.phone ? 1.5 : 1), tr.capStart);
+  const fadeOut = Math.min(tr.fadeEnd, tr.capEnd);
+  return {
+    cut: Math.max(0, cutLeft - left) + Math.max(0, right - cutRight),
+    fade:
+      tr.overflows && tr.masked
+        ? Math.max(0, tr.left + fadeIn - t.left) +
+          Math.max(0, t.right - (tr.right - fadeOut))
+        : 0,
+  };
+}
+
 /** Every engine rule a frame at rest answers to. */
 function restFaults(strip: Strip, L: Layout, kept: number[]) {
   const top = Math.max(...L.tabs.map((t) => t.z));
@@ -944,9 +975,13 @@ const curves = (page: Page, root: string) =>
     };
   }, root);
 
-/** A frame's layout: every tab's box as laid out and drawn, and the strip's scroll. */
+/**
+ * A frame's layout: every tab's box as laid out, and as drawn in the
+ * strip's content (its place on the screen less the strip's scroll, so a
+ * scroll riding the clock is not a tab moving), and the strip's width.
+ */
 const boxesOf = (L: Layout) =>
-  `${L.tabs.map((t) => `${t.laid} ${t.left.toFixed(2)}+${(t.right - t.left).toFixed(2)}`).join(" | ")} || scroll ${L.track.scroll}/${L.track.scrollWidth}`;
+  `${L.tabs.map((t) => `${t.laid} ${(t.left - L.track.left + L.track.scroll).toFixed(1)}+${(t.right - t.left).toFixed(2)}`).join(" | ")} || width ${L.track.scrollWidth}`;
 
 /**
  * One switch from `from` to `to`, caught and read at every fraction:
@@ -1018,21 +1053,29 @@ async function readSwitch(
   };
   const frame = (f: number) => series.find((s) => s.f === f)?.L as Layout;
   const pct = (f: number) => `${Math.round(f * 100)}%`;
-  // boxes: no tab's layout box changes with the choice, and across the run
-  // no tab's box, as laid out or as drawn, nor the strip's scroll, moves
-  // at any frame. (A choice of a tab standing past the strip's edge
-  // scrolls it into view as the choice is made, before the run's first
-  // frame: Edges of a scrolling strip.)
-  const laidOut = (L: Layout) => L.tabs.map((t) => t.laid).join(" | ");
-  if (laidOut(frame(0)) !== laidOut(rest)) {
-    out.boxes.push(`laid out ${laidOut(frame(0))}, at rest ${laidOut(rest)}`);
-  }
-  const still = boxesOf(frame(0));
+  // boxes: no tab's box, as laid out or as drawn in the strip, nor the
+  // strip's width, moves at any frame, from rest on.
+  const still = boxesOf(rest);
   for (const { f, L } of series) {
     if (boxesOf(L) !== still) {
-      out.boxes.push(`${pct(f)}: ${boxesOf(L)} (at 0% ${still})`);
+      out.boxes.push(`${pct(f)}: ${boxesOf(L)} (at rest ${still})`);
     }
   }
+  // scroll: where the choice scrolls the strip to show its tab whole, it
+  // rides the motion: at 0% where it stood, one way only, at 100% where it
+  // lands (never ahead of the motion's first frame).
+  const scrolls = series.map(({ L }) => L.track.scroll);
+  const way = Math.sign(landed.track.scroll - rest.track.scroll);
+  const back = scrolls.findIndex(
+    (s, k) => k > 0 && (s - (scrolls[k - 1] ?? s)) * way < -0.5
+  );
+  kit.check(
+    `${where}: the strip's scroll rides the motion (at rest, 0%, 25%, 50%, 75%, 100%, landed: ${[rest.track.scroll, ...[0, 0.25, 0.5, 0.75, 1].map((f) => frame(f).track.scroll), landed.track.scroll].map((s) => s.toFixed(1)).join(" → ")})`,
+    near(scrolls[0] ?? 0, rest.track.scroll, 0.5) &&
+      near(scrolls.at(-1) ?? 0, landed.track.scroll, 0.5) &&
+      back < 0,
+    back < 0 ? undefined : `turns back at ${pct(series[back]?.f ?? 0)}`
+  );
   // poses: one command structure at every frame; at 0% every path as it
   // stood, at 100% as it stands landed.
   for (const { f, L } of series) {
@@ -1162,12 +1205,39 @@ async function readSwitch(
   for (const f of [0, 1]) {
     out.folds.push(...foldFaults(frame(f)).map((w) => `${pct(f)}: ${w}`));
   }
+  // whole and fades: landed, the tab chosen whole and clear of the fades;
+  // on the way, where the choice scrolls the strip to show it (it stood
+  // past the edge), each of the two tabs drawn chosen is taken by an edge
+  // no more than at one end of the ride or the other: the scroll carries
+  // them between, never further out (1px for a foot's spring past the
+  // flare).
+  const ends = [from, to].map((k) => ({
+    k,
+    a: edgesOf(frame(0), k),
+    b: edgesOf(frame(1), k),
+  }));
   for (const { f, L } of series) {
     const when = `${Math.round(f * 100)}%`;
-    const b = boundsFaults(L, f < 1 ? [from, to] : [to]);
-    out.fades.push(...b.fades.map((w) => `${when}: ${w}`));
-    out.whole.push(...b.whole.map((w) => `${when}: ${w}`));
+    const b = boundsFaults(L, [to]);
     out.titles.push(...b.titles.map((w) => `${when}: ${w}`));
+    if (f === 1) {
+      out.fades.push(...b.fades.map((w) => `${when}: ${w}`));
+      out.whole.push(...b.whole.map((w) => `${when}: ${w}`));
+      continue;
+    }
+    for (const { k, a, b: z } of ends) {
+      const e = edgesOf(L, k);
+      if (e.cut > Math.max(a.cut, z.cut) + 1) {
+        out.whole.push(
+          `${when}: ${k} cut ${e.cut.toFixed(1)}, past its ends' ${a.cut.toFixed(1)} and ${z.cut.toFixed(1)}`
+        );
+      }
+      if (e.fade > Math.max(a.fade, z.fade) + 1) {
+        out.fades.push(
+          `${when}: ${k} ${e.fade.toFixed(1)} into a fade, past its ends' ${a.fade.toFixed(1)} and ${z.fade.toFixed(1)}`
+        );
+      }
+    }
   }
   if (strip.rim) {
     // rims: one way from rest to rest, and no jump across the flip.
@@ -1228,14 +1298,18 @@ async function readInterrupt(
   });
 }
 
-/** less motion: the choice instant, no come-forward run, every path landed and the stack ranked for it. */
+/**
+ * An instant choice (less motion, or the keyboard's): `act` chooses the tab
+ * at `to`, and no come-forward run starts, every path lands and the stack
+ * is ranked for it.
+ */
 async function readCalm(
   page: Page,
   strip: Strip,
   to: number,
-  choose: string
+  act: () => Promise<unknown>
 ): Promise<string[]> {
-  await page.evaluate(choose);
+  await act();
   await frames(page);
   await frames(page);
   const runs = await page.evaluate(
@@ -1559,14 +1633,38 @@ async function readStrip(
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openAt(1, "working");
     add("less motion", {
-      "less motion": await readCalm(
-        page,
-        s,
-        from + 1,
-        `${api}.choose(${JSON.stringify(ids[from + 1])})`
+      "less motion": await readCalm(page, s, from + 1, () =>
+        page.evaluate(`${api}.choose(${JSON.stringify(ids[from + 1])})`)
       ),
     });
     await page.emulateMedia({ reducedMotion: "no-preference" });
+
+    // The keyboard: second to third by ArrowRight on the chosen tab, and by
+    // Enter on the third, each instant (owner's preview: keyboard choices
+    // never come forward).
+    const hits = `${s.root} ${s.tab} .ff-tab > .hit`;
+    const pressOn = (index: number, key: string) => async () => {
+      await page.evaluate(
+        ({ sel, k }) =>
+          (
+            document.querySelectorAll<HTMLElement>(sel)[k] as HTMLElement
+          ).focus(),
+        { sel: hits, k: index }
+      );
+      await page.keyboard.press(key);
+    };
+    await openAt(1, "working");
+    add("keyboard", {
+      keyboard: (
+        await readCalm(page, s, from + 1, pressOn(from, "ArrowRight"))
+      ).map((w) => `ArrowRight: ${w}`),
+    });
+    await openAt(1, "working");
+    add("keyboard", {
+      keyboard: (
+        await readCalm(page, s, from + 1, pressOn(from + 1, "Enter"))
+      ).map((w) => `Enter: ${w}`),
+    });
   }
 
   // At its start: the session strip's first tab chosen; the home's Finished.
@@ -1591,6 +1689,7 @@ async function readStrip(
         "jump",
         "interrupt",
         "less motion",
+        "keyboard",
         "one stroke",
         "corner",
         "3:1",
