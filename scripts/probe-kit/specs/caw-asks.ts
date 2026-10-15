@@ -22,7 +22,10 @@
  *
  * a. In thread "main" Caw starts a delegate; its report wakes him (a wake no
  *    message of yours is in). He runs the owner's exact command: no ask is
- *    parked, its row ran.
+ *    parked, its row ran. The delegate's workspace is cut from the fleet's
+ *    other repository: one cut from his place would make the place a shared
+ *    checkout while it is active (hub server.ts `sharedPlace`), where his
+ *    push is refused ("file a task") rather than asked (lead-gate.ts).
  * b. In that turn, `git push origin HEAD` for "Publish the docs to origin":
  *    an ask whose presentation names Caw and the project, whose summary is
  *    his reason and whose command is the command; parked in the thread the
@@ -101,6 +104,8 @@ const played: Record<"delegated" | "pushed" | "ran", boolean> = {
   pushed: false,
 };
 let finished = false;
+/** The repository Caw's delegate is cut from: never his place (see a). */
+let delegateFrom = "";
 
 /** Caw: a delegate from your message; from its report, the owner's command, then the push. */
 const caw = (request: Seen): Reply => {
@@ -109,6 +114,7 @@ const caw = (request: Seen): Reply => {
     return useTool("mcp__cawco__delegate", {
       title: "Check the commits",
       prompt: `${CHILD}: finish your item.`,
+      cwd: delegateFrom,
       checks: [{ name: "Nothing to check", command: "true" }],
       lands: "none",
     });
@@ -230,6 +236,7 @@ const run = async (kit: Kit) => {
     // pane. Not in his place, which would make it a shared checkout, where a
     // push is refused rather than asked.
     const neighbour = await fleet.spawn("claude", "Neighbour", fleet.repo);
+    delegateFrom = fleet.repo;
 
     // Thread "main": your words, then Caw starts a delegate.
     const opened = await fleet.api<{ thread: { id: string; title: string } }>(

@@ -28,7 +28,7 @@
  *
  *   bun scripts/probe-kit/run.ts runs-on
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -83,7 +83,13 @@ interface Attempt {
   workspaceId: string | null;
 }
 
-const probeOf = (fleet: KitFleet, projectId: string, parent: string) => {
+const probeOf = (
+  fleet: KitFleet,
+  projectId: string,
+  parent: string,
+  /** The machines' workspace records, named when a cut refuses a folder's config. */
+  records: () => Promise<string>
+) => {
   /** The machine a workspace was cut on. */
   const machineOf = (workspaceId: string | null): string | undefined =>
     workspaceId
@@ -112,11 +118,14 @@ const probeOf = (fleet: KitFleet, projectId: string, parent: string) => {
       parentInstanceId: parent,
     });
     if (answer.status !== 200) {
+      const held = answer.text.includes("cannot have a workspace")
+        ? ` [workspace records: ${await records()}]`
+        : "";
       return {
         task,
         workItemId: null,
         workspaceId: null,
-        refused: `${answer.status} ${answer.text}`,
+        refused: `${answer.status} ${answer.text}${held}`,
       } satisfies Attempt;
     }
     const started = JSON.parse(answer.text) as Omit<Attempt, "task">;
@@ -150,6 +159,31 @@ const probeOf = (fleet: KitFleet, projectId: string, parent: string) => {
 
 const where = (attempt: Attempt, machine: string | undefined) =>
   attempt.refused ?? `${attempt.task} on ${machine ?? "nothing"}`;
+
+/**
+ * Every workspace record a machine keeps (`~/.cawco/workspaces/<id>/`
+ * create.json and boundary.json, agent workspace-records.ts), as
+ * `<id>: <clone path>`: what a refusal of a place's config was read through.
+ */
+const recordsOn = async (home: string): Promise<string> => {
+  const dir = join(home, ".cawco", "workspaces");
+  const ids = await readdir(dir).catch(() => [] as string[]);
+  const lines = await Promise.all(
+    ids.map(async (id) => {
+      const paths = await Promise.all(
+        ["create.json", "boundary.json"].map((name) =>
+          readFile(join(dir, id, name), "utf8").then(
+            (record) =>
+              `${name} ${(JSON.parse(record) as { path?: unknown }).path}`,
+            () => `${name} none`
+          )
+        )
+      );
+      return `${id}: ${paths.join(", ")}`;
+    })
+  );
+  return lines.join("; ") || "none";
+};
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
@@ -192,7 +226,13 @@ const run = async (kit: Kit) => {
   const parent = await fleet.spawn("claude", "Parent", repo, {
     projectId: project.id,
   });
-  const probe = probeOf(fleet, project.id, parent);
+  const probe = probeOf(
+    fleet,
+    project.id,
+    parent,
+    async () =>
+      `${MACHINE} ${await recordsOn(home)} | ${MAC} ${await recordsOn(mac.home)}`
+  );
 
   // (a)
   const apple = await probe.start("Build the iOS app", { runsOn: "apple" });

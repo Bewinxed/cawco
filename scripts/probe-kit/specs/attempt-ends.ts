@@ -226,7 +226,7 @@ const run = async (kit: Kit) => {
     const needing = async (projectId: string) =>
       (
         await fleet.api<{ tasks: { id: string }[] }>(
-          `/api/projects/${projectId}/tasks?needsYou=true`
+          `/api/projects/${projectId}/tasks?needsYou=1`
         )
       ).tasks.map((task) => task.id);
     /** The task's newest attempt once it reads `state`. */
