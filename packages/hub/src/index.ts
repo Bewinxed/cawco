@@ -9,6 +9,7 @@ import {
   MAX_REQUEST_BYTES,
 } from "./config";
 import { Db, DbLayer } from "./db";
+import { DatabaseHeld, lockDatabase } from "./db-lock";
 import { HubLifetime, HubLifetimeLayer } from "./lifetime";
 import { advertise } from "./mdns";
 import { migrateLegacyDb } from "./migrate-db";
@@ -59,6 +60,16 @@ const main = Effect.gen(function* () {
 
 /** Boots the hub: what running this file does, and what `cawco hub` calls. */
 export const startHub = async (): Promise<void> => {
+  // Before anything opens or moves the database: one hub to it (db-lock.ts).
+  try {
+    await lockDatabase(DB_PATH);
+  } catch (error) {
+    if (error instanceof DatabaseHeld) {
+      console.error(`[hub] ${error.message}`);
+      process.exit(1);
+    }
+    throw error;
+  }
   migrateLegacyDb(DB_PATH);
   await Effect.runPromise(
     Effect.provide(

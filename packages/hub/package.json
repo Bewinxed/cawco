@@ -7,14 +7,14 @@
   "types": "./src/index.ts",
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push",
-    "dev": "CAWCO_NO_MDNS=1 bun --watch src/index.ts",
+    "db:push": "CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} drizzle-kit push",
+    "dev": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun --watch src/index.ts",
     "fixture-db": "bun scripts/fixture-db.ts",
     "migrations:check": "bun scripts/migrations-check.ts",
     "openapi": "bun scripts/openapi.ts",
     "openapi:check": "bun scripts/openapi.ts --check",
     "roles:check": "bun scripts/role-budgets.ts",
-    "start": "CAWCO_NO_MDNS=1 bun src/index.ts",
+    "start": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
