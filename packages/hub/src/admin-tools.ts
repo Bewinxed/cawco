@@ -424,10 +424,13 @@ export function adminTools() {
           );
         }
         if (action === "enable" || action === "disable") {
+          // The stored skill's flag; nothing is fetched.
           return ok(
-            await api("PUT", `/api/fleet/skills/${encodeURIComponent(name)}`, {
-              enabled: action === "enable",
-            })
+            await api(
+              "PATCH",
+              `/api/fleet/skills/${encodeURIComponent(name)}`,
+              { enabled: action === "enable" }
+            )
           );
         }
         // install
@@ -513,10 +516,12 @@ export function adminTools() {
         if (action === "remove") {
           return ok(await api("DELETE", path));
         }
-        // Each route answers before the bytes are fetched; the row as the
-        // fetch landed it. Install is enable on a row that did not exist yet:
-        // the route stores the id either way and resolves its bytes before the
-        // fan-out, so the two differ only in what the caller already believes.
+        if (action === "enable" || action === "disable") {
+          // The stored plugin's flag; nothing is fetched.
+          return ok(await api("PATCH", path, { enabled: action === "enable" }));
+        }
+        // Install and refresh answer before the bytes are fetched; the row as
+        // the fetch landed it.
         const landed = (ask: () => Promise<unknown>) =>
           landedFetch<FleetPlugin>(
             (news) => (news.plugin?.id === id ? news.plugin : undefined),
@@ -525,11 +530,7 @@ export function adminTools() {
         if (action === "refresh") {
           return ok(await landed(() => api("POST", `${path}/refresh`)));
         }
-        return ok(
-          await landed(() =>
-            api("PUT", path, { enabled: action !== "disable" })
-          )
-        );
+        return ok(await landed(() => api("PUT", path, { enabled: true })));
       },
       " Order matters: 'link' the marketplace first, then 'install' a plugin from it by its `plugin@marketplace` id, with the name link answered; 'refresh' re-fetches one whose upstream moved. The hub resolves the bytes once and distributes them."
     ),

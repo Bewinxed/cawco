@@ -25,6 +25,7 @@
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
   import {
     formatBytes,
+    installPlugin,
     marketplaceCatalog,
     refreshPlugin,
     refreshSkill,
@@ -32,9 +33,9 @@
     removePlugin,
     removeSkill,
     restoreSkillVersion,
-    savePlugin,
-    saveSkill,
     skillHistory,
+    switchPlugin,
+    switchSkill,
   } from "#lib/cawco/fleet.js";
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
@@ -133,13 +134,14 @@
     rowFaults[key] = { reason: message(error), again };
   };
 
-  async function switchSkill(row: FleetSkillMeta, enabled: boolean) {
+  /** On or off: the stored skill's flag, nothing fetched. */
+  async function toggleSkill(row: FleetSkillMeta, enabled: boolean) {
     busy[row.name] = true;
     delete rowFaults[row.name];
     try {
-      landedSkill(await saveSkill(row.name, { source: row.source, enabled }));
+      landedSkill(await switchSkill(row.name, enabled));
     } catch (err) {
-      refusedOn(row.name, err, () => switchSkill(row, enabled));
+      refusedOn(row.name, err, () => toggleSkill(row, enabled));
     } finally {
       delete busy[row.name];
     }
@@ -345,7 +347,7 @@
     delete installFailed[id];
     store.asking(`plugin:${id}`);
     try {
-      landedPlugin(await savePlugin(id, { enabled: true }));
+      landedPlugin(await installPlugin(id));
     } catch (err) {
       installFailed[id] = message(err);
     } finally {
@@ -353,12 +355,12 @@
     }
   }
 
+  /** On or off: the stored plugin's flag, nothing fetched. */
   async function togglePlugin(id: string, enabled: boolean) {
     busy[id] = true;
     delete rowFaults[id];
-    store.asking(`plugin:${id}`);
     try {
-      landedPlugin(await savePlugin(id, { enabled }));
+      landedPlugin(await switchPlugin(id, enabled));
     } catch (err) {
       refusedOn(id, err, () => togglePlugin(id, enabled));
     } finally {
@@ -482,7 +484,7 @@
               ...(row.fetching ? [FETCHING] : sized(row)),
             ].join(" · ")}
             name={row.name}
-            ontoggle={(next) => switchSkill(row, next)}
+            ontoggle={(next) => toggleSkill(row, next)}
             toggling={busy[row.name] === true}
           >
             {#snippet rollout()}

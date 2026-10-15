@@ -20187,6 +20187,25 @@ export const createServer = (
           return pluginRow(row ?? plugin);
         }
       )
+      // On or off: the stored row's flag, its fetched bytes as they are.
+      // Nothing is fetched; every machine is told, and a machine uninstalls a
+      // disabled plugin and installs an enabled one from the stored bytes.
+      // Installing (a row not stored yet) is the PUT above, which fetches.
+      .patch(
+        "/api/fleet/plugins/:id",
+        { body: t.Object({ enabled: t.Boolean() }) },
+        ({ params, body, status }) => {
+          if (!db.listPlugins().some(({ id }) => id === params.id)) {
+            return status(404, `no plugin ${params.id} in this fleet`);
+          }
+          db.putPlugin({ id: params.id, enabled: body.enabled });
+          fanOutFleet();
+          const row = db.listPlugins().find(({ id }) => id === params.id);
+          return row
+            ? pluginRow(row)
+            : status(404, `no plugin ${params.id} in this fleet`);
+        }
+      )
       // Re-fetch one plugin's bytes. The same verb a skill has, and the way a
       // fleet takes a new version of something upstream moved: nothing else
       // re-resolves on its own, because a plugin that resolved once is a plugin
@@ -20304,6 +20323,29 @@ export const createServer = (
           return staged
             ? skillRow(staged)
             : status(404, `no skill ${params.name}`);
+        }
+      )
+      // On or off: the stored row's flag, its source and files as they are.
+      // Nothing is fetched; every machine is told, and a machine takes a
+      // disabled skill away and writes an enabled one from the stored files.
+      .patch(
+        "/api/fleet/skills/:name",
+        { body: t.Object({ enabled: t.Boolean() }) },
+        ({ params, body, status }) => {
+          let row: FleetSkillMeta | undefined;
+          try {
+            row = db.setSkillEnabled(params.name, body.enabled);
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
+          if (!row) {
+            return status(404, `no skill ${params.name}`);
+          }
+          fanOutFleet();
+          return skillRow(row);
         }
       )
       // The same source, fetched again — for a skill whose repo has moved on.

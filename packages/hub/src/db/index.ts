@@ -1786,6 +1786,14 @@ export interface DbShape {
   readonly setProjectTracker: (id: string, tracker: Tracker) => void;
   /** The fleet's session limits, whole: a field absent is no limit. */
   readonly setSessionLimits: (limits: SessionLimits) => void;
+  /**
+   * Switches a stored skill on or off, its source and files as they are: no
+   * fetch. Undefined when there is no such skill.
+   */
+  readonly setSkillEnabled: (
+    name: string,
+    enabled: boolean
+  ) => FleetSkillMeta | undefined;
   /** What reaching a cap does where a project sets nothing. */
   readonly setSpendOnCap: (onCap: OnCap) => void;
   /** Turn composer suggestions on or off. Only meaningful while Jev is on. */
@@ -5411,6 +5419,19 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
       return skillMeta({ ...row, ...placement });
+    },
+    setSkillEnabled: (name, enabled) => {
+      refuseWorkflowSkill(name);
+      const stored = db
+        .select()
+        .from(skills)
+        .where(eq(skills.name, name))
+        .get();
+      if (!stored) {
+        return;
+      }
+      db.update(skills).set({ enabled }).where(eq(skills.name, name)).run();
+      return skillMeta({ ...stored, enabled });
     },
     stageSkill: ({ name, source, enabled, projectId }) => {
       refuseWorkflowSkill(name);

@@ -625,15 +625,47 @@ const untilFetched = <T extends { fetching?: boolean }>(
   });
 
 /**
- * Installs or switches a plugin. The hub fetches its bytes after it answers;
- * the row comes back marked `fetching`, and its `fleet.fetch` frame says how
- * that went.
+ * Installs a plugin. The hub fetches its bytes after it answers; the row
+ * comes back marked `fetching`, and its `fleet.fetch` frame says how that
+ * went.
  */
-export const savePlugin = (
+export const installPlugin = (id: string): Promise<FleetPlugin> =>
+  put(
+    `/api/fleet/plugins/${encodeURIComponent(id)}`,
+    { enabled: true },
+    `install ${id}`
+  );
+
+const switchRow = <T>(path: string, enabled: boolean, what: string) =>
+  send<T>(
+    path,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    },
+    `${enabled ? "turn on" : "turn off"} ${what}`
+  );
+
+/**
+ * Switches an installed plugin on or off: the stored row's flag, nothing
+ * fetched. A disabled plugin is uninstalled from the machines.
+ */
+export const switchPlugin = (
   id: string,
-  patch: { enabled?: boolean }
+  enabled: boolean
 ): Promise<FleetPlugin> =>
-  put(`/api/fleet/plugins/${encodeURIComponent(id)}`, patch, `save ${id}`);
+  switchRow(`/api/fleet/plugins/${encodeURIComponent(id)}`, enabled, id);
+
+/**
+ * Switches a fleet skill on or off: the stored row's flag, its files as
+ * they are, nothing fetched.
+ */
+export const switchSkill = (
+  name: string,
+  enabled: boolean
+): Promise<FleetSkillMeta> =>
+  switchRow(`/api/fleet/skills/${encodeURIComponent(name)}`, enabled, name);
 
 export const removePlugin = (id: string): Promise<void> =>
   erase(`/api/fleet/plugins/${encodeURIComponent(id)}`, `remove ${id}`);
