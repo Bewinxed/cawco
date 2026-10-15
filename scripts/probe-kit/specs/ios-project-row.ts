@@ -317,11 +317,15 @@ async function device(
     /** The name's lines since `from`. */
     const lines = (from: number) =>
       said.slice(from).filter((line) => line.startsWith("name "));
-    /** The first of the name's lines since `from` that `test` passes, waited for. */
+    /**
+     * The first of the name's lines since `from` that `test` passes, waited
+     * for. 30 s: on a loaded Mac the log stream has brought a line more than
+     * 10 s after the app said it.
+     */
     const awaitLine = (
       from: number,
       test: (line: string) => boolean,
-      ms = 10_000
+      ms = 30_000
     ) =>
       until("the name's line", () => lines(from).find(test), Boolean, ms).catch(
         () => undefined
