@@ -1705,7 +1705,8 @@ ws_post() { as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' "http://127.0.0.1:
 # (proof-harnesses.ts toolCalls): a declared wait, which the hub's turn-end rule honours in place of the quiet-turn
 # reminders (work-items.ts waitingTurn), as a real delegate holds an item open on a command it started. Each message the
 # session takes after the wait ended (a busy turn clears a wait at rest, work-items.ts turnState) declares it again.
-WS_WAIT_LINE='cawco tool wait_item {"minutes":60,"reason":"the stage 2 proof holds this item open across an update"}'
+# Exported: each check runs in a shell of its own, which sees only what is exported.
+export WS_WAIT_LINE='cawco tool wait_item {"minutes":60,"reason":"the stage 2 proof holds this item open across an update"}'
 # Its standard input as one JSON string.
 json_string() { bun -e 'process.stdout.write(JSON.stringify(await Bun.stdin.text()))'; }
 # The delegate's work item as the hub has it: its state, and whether it holds a declared wait.
