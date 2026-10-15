@@ -1310,8 +1310,8 @@
       "code-fn": {
         "role": "tertiary",
         "displayName": "Code Fn",
-        "canonical": "light-dark(oklch(0.45 0.1 245), oklch(0.8 0.07 240))",
-        "hex": "#185a89",
+        "canonical": "light-dark(oklch(0.43 0.1 245), oklch(0.8 0.07 240))",
+        "hex": "#105482",
         "hexDark": "#95c4e7",
         "tonalRamp": [
           "#000731",
@@ -1327,8 +1327,8 @@
       "code-string": {
         "role": "tertiary",
         "displayName": "Code String",
-        "canonical": "light-dark(oklch(0.44 0.11 122), oklch(0.84 0.1 118))",
-        "hex": "#495b00",
+        "canonical": "light-dark(oklch(0.42 0.105 122), oklch(0.84 0.1 118))",
+        "hex": "#445500",
         "hexDark": "#c4d488",
         "tonalRamp": [
           "#060f00",
@@ -1344,8 +1344,8 @@
       "code-number": {
         "role": "tertiary",
         "displayName": "Code Number",
-        "canonical": "light-dark(oklch(0.46 0.12 55), oklch(0.84 0.1 70))",
-        "hex": "#894100",
+        "canonical": "light-dark(oklch(0.44 0.115 55), oklch(0.84 0.1 70))",
+        "hex": "#813d00",
         "hexDark": "#f5bf81",
         "tonalRamp": [
           "#2d0000",
@@ -1361,8 +1361,8 @@
       "code-comment": {
         "role": "tertiary",
         "displayName": "Code Comment",
-        "canonical": "light-dark(oklch(0.45 0.014 74), oklab(0.68143 0.00276557 0.0116703))",
-        "hex": "#5a544d",
+        "canonical": "light-dark(oklch(0.43 0.014 74), oklab(0.68143 0.00276557 0.0116703))",
+        "hex": "#554f47",
         "hexDark": "#9d9891"
       },
       "presence-online": {

@@ -498,7 +498,7 @@ final class CellText: UIView, NSTextLayoutManagerDelegate {
     }
 }
 
-/// The one code surface (OutputBlock.svelte): a recessed well, --radius-sm,
+/// The one code surface (OutputBlock.svelte): a well on code-bg, --radius-sm,
 /// 10/12 padding, the mono face at the label size on the body's leading,
 /// scrolling sideways rather than wrapping.
 final class CodeWell: UIView {
@@ -531,7 +531,7 @@ final class CodeWell: UIView {
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        backgroundColor = Palette.surfaceRecess
+        backgroundColor = Palette.codeBg
         layer.cornerRadius = Radius.radiusSm
         layer.cornerCurve = .continuous
         clipsToBounds = true
@@ -557,10 +557,8 @@ final class CodeWell: UIView {
 
     private func paint() {
         guard let source else { return }
-        let dark = traitCollection.userInterfaceStyle == .dark
-        let runs = Highlight.colors(source.text, language: source.language, dark: dark)
-        let ink = runs == nil ? Palette.inkStrong : Highlight.foreground(dark: dark)
-        let text = Self.listing(source.text, ink: ink)
+        let runs = Highlight.colors(source.text, language: source.language)
+        let text = Self.listing(source.text, ink: Palette.codeInk)
         for (range, color) in runs ?? [] where NSMaxRange(range) <= text.length {
             text.addAttribute(.foregroundColor, value: color, range: range)
         }

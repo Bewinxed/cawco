@@ -81,10 +81,10 @@ colors:
   ink-stat: "light-dark(oklab(0.375 0.00359569 0.0110212), oklab(0.89032 0.00170063 0.0104165))"
   ink-subtle: "light-dark(color-mix(in oklab, oklch(0.735 0.017 78) 6%, oklch(0.495 0.014 74)), oklab(0.68143 0.00276557 0.0116703))"
   code-keyword: "light-dark(oklch(0.45 0.15 33), oklch(0.76 0.12 34))"
-  code-fn: "light-dark(oklch(0.45 0.1 245), oklch(0.8 0.07 240))"
-  code-string: "light-dark(oklch(0.44 0.11 122), oklch(0.84 0.1 118))"
-  code-number: "light-dark(oklch(0.46 0.12 55), oklch(0.84 0.1 70))"
-  code-comment: "light-dark(oklch(0.45 0.014 74), oklab(0.68143 0.00276557 0.0116703))"
+  code-fn: "light-dark(oklch(0.43 0.1 245), oklch(0.8 0.07 240))"
+  code-string: "light-dark(oklch(0.42 0.105 122), oklch(0.84 0.1 118))"
+  code-number: "light-dark(oklch(0.44 0.115 55), oklch(0.84 0.1 70))"
+  code-comment: "light-dark(oklch(0.43 0.014 74), oklab(0.68143 0.00276557 0.0116703))"
   presence-online: "light-dark(oklch(0.627 0.17 149), oklch(0.74 0.17 149))"
   presence-away: "light-dark(oklch(0.705 0.187 47.6), oklch(0.76 0.187 47.6))"
   mark-1: "light-dark(oklch(51.00% 0.1680 27.90), oklch(70.00% 0.1700 27.90))"
@@ -559,7 +559,7 @@ Live, done and fail chips are the hue's 3-step mixed 24% toward its 9-step, with
 
 **Data colour** (`data-ok`, `data-warn`, `data-bad`) is each solid hue at a fixed lightness and chroma, so the hue survives in numerals: 46% L by day, 78% to 81% at night. It is used for threshold readings such as context share (warn from 70%, bad from 90%) and spend.
 
-**Syntax** (`code-keyword` coral, `code-fn` blue, `code-string` olive, `code-number` amber, `code-comment` a step under `ink-subtle` by day and `ink-subtle` at night) colours code blocks and diffs, through one theme on every code surface (Shiki's css-variables theme, its roles mapped onto these tokens in app.css). Every syntax token holds 4.5:1 or more on every ground a code surface draws: `code-bg`, a diff's rows (`diff-add-bg`, `diff-del-bg`) and the changed words over them (`diff-add-emphasis`, `diff-del-emphasis`), in both themes.
+**Syntax** (`code-keyword` coral, `code-fn` blue, `code-string` olive, `code-number` amber, `code-comment` a step under `ink-subtle` by day and `ink-subtle` at night) colours code blocks and diffs, through one theme on every code surface: Shiki's css-variables theme on the web (its roles mapped onto these tokens in app.css), and the same roles on iOS (Highlight in Markdown.swift), where a diff's rows, numbers and grounds are the same tokens too (DiffView.swift). Every syntax token holds 4.5:1 or more on every ground a code surface draws: `code-bg`, a diff's rows (`diff-add-bg`, `diff-del-bg`) and the changed words over them (`diff-add-emphasis`, `diff-del-emphasis`), in both themes.
 
 ### Neutral
 - **Paper ramp** (`neutral-1` … `neutral-12`, no step 10): warm paper at hue ~85 by day, roost at hue ~70 by night. The dark ramp is its own set of lightnesses, not an inversion. `neutral-9` is the one step shared by both schemes.

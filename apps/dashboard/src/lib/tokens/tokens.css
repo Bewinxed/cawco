@@ -409,11 +409,11 @@
     /* Syntax (code blocks and diffs). Every syntax token holds 4.5:1 or more on every ground a code surface draws: code-bg, a diff's added and removed rows (diff-add-bg, diff-del-bg) and their word emphasis over them (diff-add-emphasis, diff-del-emphasis), in both themes. */
     --code-ink: var(--ink-strong);
     --code-keyword: light-dark(oklch(45% 0.15 33), oklch(76% 0.12 34));
-    --code-fn: light-dark(oklch(45% 0.1 245), oklch(80% 0.07 240));
-    --code-string: light-dark(oklch(44% 0.11 122), oklch(84% 0.1 118));
-    --code-number: light-dark(oklch(46% 0.12 55), oklch(84% 0.1 70));
+    --code-fn: light-dark(oklch(43% 0.1 245), oklch(80% 0.07 240));
+    --code-string: light-dark(oklch(42% 0.105 122), oklch(84% 0.1 118));
+    --code-number: light-dark(oklch(44% 0.115 55), oklch(84% 0.1 70));
     /* By day a step under ink-subtle's lightness, which reads 4.3:1 on a diff's tinted row; at night ink-subtle itself. */
-    --code-comment: light-dark(oklch(45% 0.014 74), var(--ink-subtle));
+    --code-comment: light-dark(oklch(43% 0.014 74), var(--ink-subtle));
     /* The transcript rail: one flat 2px line down a run of tool rows. An image, not a colour: rows paint it as a sized background layer (2px wide), and a colour would fill the whole row. Head and continuing rows paint the same, so no seam shows between them. */
     --rail: linear-gradient(
       oklch(from var(--neutral-11) l c h / 0.4),

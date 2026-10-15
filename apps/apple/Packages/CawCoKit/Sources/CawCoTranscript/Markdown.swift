@@ -665,11 +665,14 @@ nonisolated enum MarkdownRender {
     }
 }
 
-/// Code colour, as OutputBlock paints it: Vitesse light and dark (shiki's
-/// `vitesse-light` / `vitesse-dark`, @shikijs/themes 4.5.0), here on
-/// highlight.js's grammars: the copy Highlightr 2.3.0 bundles, run here in a
-/// context of our own so each `hljs-*` class takes its Vitesse ink directly
-/// (Highlightr's own themes are its bundled CSS only). One context, shared.
+/// Code colour, as OutputBlock paints it: the house syntax tokens
+/// (`code-ink`, `-keyword`, `-fn`, `-string`, `-number`, `-comment`; DESIGN.md
+/// "Syntax"), each role chosen as Shiki's css-variables theme chooses it on the
+/// web (app.css maps its roles onto the same tokens). Here on highlight.js's
+/// grammars: the copy Highlightr 2.3.0 bundles, run in a context of our own so
+/// each `hljs-*` class takes its token directly. The tokens are dynamic
+/// colours, so a listing repaints with the appearance on its own. One context,
+/// shared.
 @MainActor
 enum Highlight {
     /// Built once, on whichever thread first asks (the launch's own task,
@@ -698,43 +701,23 @@ enum Highlight {
 
     private static var cache: [String: [(NSRange, String)]] = [:]
 
-    /// Vitesse's inks by role: light, dark (shiki vitesse-light / vitesse-dark).
-    private static let inks: [String: (String, String)] = [
-        "comment": ("#a0ada0", "#758575dd"), "keyword": ("#1e754f", "#4d9375"), "storage": ("#ab5959", "#cb7676"),
-        "string": ("#b56959", "#c98a7d"), "number": ("#2f798a", "#4C9A91"), "function": ("#59873a", "#80a665"),
-        "variable": ("#b07d48", "#bd976a"), "type": ("#2e8f82", "#5DA994"), "constant": ("#a65e2b", "#c99076"),
-        "punctuation": ("#999999", "#666666"), "property": ("#998418", "#b8a965"), "regexp": ("#ab5e3f", "#c4704f"),
-        "inserted": ("#22863a", "#85e89d"), "deleted": ("#b31d28", "#fdaeb7"), "namespace": ("#b05a78", "#db889a"),
-    ]
-
-    /// A highlight.js class's Vitesse role, as the TextMate scopes it stands for are inked.
-    private static func role(_ name: String) -> String? {
+    /// A highlight.js class's house token, by the TextMate scopes it stands for
+    /// and the css-variables theme's role for them: `keyword` (keywords,
+    /// operators, storage), `constant` → code-number (numbers, literals,
+    /// built-ins, properties), `function` → code-fn (functions, types,
+    /// attribute names), `string` and `string-expression` → code-string
+    /// (strings, tags, regexps), `comment`. A class it leaves to the foreground
+    /// (variables, parameters, punctuation) takes none, so the listing's ink.
+    private static func ink(_ name: String) -> UIColor? {
         switch name {
-        case "comment", "quote": "comment"
-        case "keyword", "selector-tag", "literal", "tag", "name": "keyword"
-        case "built_in", "operator": "storage"
-        case "string", "doctag", "template-tag": "string"
-        case "number": "number"
-        case "title", "section", "title.function_", "title.function": "function"
-        case "variable", "template-variable", "params", "attr", "attribute": "variable"
-        case "type", "class", "title.class_", "title.class": "type"
-        case "symbol", "bullet", "meta", "link": "constant"
-        case "punctuation": "punctuation"
-        case "property": "property"
-        case "regexp": "regexp"
-        case "addition": "inserted"
-        case "deletion": "deleted"
-        case "selector-id", "selector-class": "namespace"
+        case "comment", "quote": Palette.codeComment
+        case "keyword", "selector-tag", "operator": Palette.codeKeyword
+        case "number", "literal", "built_in", "symbol", "property": Palette.codeNumber
+        case "title", "section", "title.function_", "title.function", "type", "class", "title.class_", "title.class",
+             "attr", "attribute", "selector-id", "selector-class", "link": Palette.codeFn
+        case "string", "doctag", "template-tag", "regexp", "tag", "name": Palette.codeString
         default: nil
         }
-    }
-
-    private static func color(_ hex: String) -> UIColor {
-        var value: UInt64 = 0
-        Scanner(string: String(hex.dropFirst())).scanHexInt64(&value)
-        let rgba = hex.count == 9 ? value : value << 8 | 0xFF
-        return UIColor(red: Double(rgba >> 24 & 0xFF) / 255, green: Double(rgba >> 16 & 0xFF) / 255,
-                       blue: Double(rgba >> 8 & 0xFF) / 255, alpha: Double(rgba & 0xFF) / 255)
     }
 
     /// highlight.js's HTML read back into runs of its innermost class.
@@ -797,9 +780,9 @@ enum Highlight {
         }
     }
 
-    /// The text in its colours under `dark`, or nil where no grammar is
-    /// carried (a plain mono well, as OutputBlock falls back to).
-    static func colors(_ text: String, language: String?, dark isDark: Bool) -> [(NSRange, UIColor)]? {
+    /// The text in its colours, or nil where no grammar is carried (a plain
+    /// mono well, as OutputBlock falls back to).
+    static func colors(_ text: String, language: String?) -> [(NSRange, UIColor)]? {
         guard let grammar = grammar(language), let hljs else { return nil }
         let key = "\(grammar) \(text)"
         let classed: [(NSRange, String)]
@@ -816,14 +799,8 @@ enum Highlight {
         }
         return classed.compactMap { range, name in
             let parts = name.split(separator: ".").map(String.init)
-            guard let role = role(name) ?? parts.lazy.compactMap({ role($0) }).first, let ink = inks[role] else { return nil }
-            return (range, color(isDark ? ink.1 : ink.0))
+            guard let ink = ink(name) ?? parts.lazy.compactMap({ ink($0) }).first else { return nil }
+            return (range, ink)
         }
-    }
-
-    /// The well's plain ink: Vitesse's foreground.
-    static func foreground(dark: Bool) -> UIColor {
-        dark ? UIColor(red: 0xDB / 255, green: 0xD7 / 255, blue: 0xCA / 255, alpha: 0xEE / 255)
-            : UIColor(red: 0x39 / 255, green: 0x3A / 255, blue: 0x34 / 255, alpha: 1)
     }
 }

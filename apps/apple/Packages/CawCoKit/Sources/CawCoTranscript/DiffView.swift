@@ -181,6 +181,7 @@ public final class DiffView: UIView {
         let digit = ("0" as NSString).size(withAttributes: [.font: font]).width
         let gutter = ceil(Double(String(widest).count) * digit) + Space.space2 * 2
         let palette = DiffPalette(dark: dark)
+        rows.backgroundColor = Palette.codeBg
         let language = Self.language(source.path)
         var y = 0.0
         var widestLine = 0.0
@@ -190,39 +191,41 @@ public final class DiffView: UIView {
                 let bar = UILabel(frame: CGRect(x: 0, y: y, width: 0, height: Size.txDiffBar))
                 bar.backgroundColor = palette.separator
                 bar.attributedText = Styled.string("  \(count) unmodified line\(count == 1 ? "" : "s")", TypeScale.typeMeta,
-                                                   color: palette.number, size: TypeScale.textMeta, mono: true)
+                                                   color: Palette.inkMuted, size: TypeScale.textMeta, mono: true)
                 bar.autoresizingMask = [.flexibleWidth]
                 rows.addSubview(bar)
                 y += Size.txDiffBar
             case let .lines(lines):
                 let text = lines.map(\.text).joined(separator: "\n")
-                let runs = Highlight.colors(text, language: language, dark: dark)
+                let runs = Highlight.colors(text, language: language)
                 var offset = 0
                 for line in lines {
-                    let back: UIColor = switch line.kind {
-                    case .addition: palette.addition
-                    case .deletion: palette.deletion
-                    case .context: .clear
+                    // A changed row is one translucent strip over code-bg, the
+                    // gutter included; a context row's gutter is a step off it.
+                    let (back, ink): (UIColor, UIColor) = switch line.kind {
+                    case .addition: (Palette.diffAddBg, Palette.success11)
+                    case .deletion: (Palette.diffDelBg, Palette.error11)
+                    case .context: (.clear, Palette.inkMuted)
                     }
                     let strip = UIView(frame: CGRect(x: 0, y: y, width: 0, height: row))
                     strip.backgroundColor = back
                     strip.autoresizingMask = [.flexibleWidth]
                     rows.addSubview(strip)
-                    let gutterBack = UIView(frame: CGRect(x: 0, y: y, width: gutter, height: row))
-                    gutterBack.backgroundColor = line.kind == .context ? palette.gutter : back
-                    rows.addSubview(gutterBack)
+                    if line.kind == .context {
+                        let gutterBack = UIView(frame: CGRect(x: 0, y: y, width: gutter, height: row))
+                        gutterBack.backgroundColor = palette.gutter
+                        rows.addSubview(gutterBack)
+                    }
                     let number = UILabel(frame: CGRect(x: 0, y: y, width: gutter - Space.space2, height: row))
                     number.textAlignment = .right
                     number.attributedText = Styled.string((line.new ?? line.old).map(String.init) ?? "", TypeScale.typeMeta,
-                                                          color: line.kind == .context ? palette.number : (line.kind == .addition ? palette.added : palette.deleted),
-                                                          size: TypeScale.textMeta, mono: true, tabular: true)
+                                                          color: ink, size: TypeScale.textMeta, mono: true, tabular: true)
                     rows.addSubview(number)
-                    let code = NSMutableAttributedString(string: line.text, attributes: [.font: font, .foregroundColor: Highlight.foreground(dark: dark)])
+                    let code = NSMutableAttributedString(string: line.text, attributes: [.font: font, .foregroundColor: Palette.codeInk])
                     for (range, color) in runs ?? [] {
                         let local = NSIntersectionRange(range, NSRange(location: offset, length: (line.text as NSString).length))
                         if local.length > 0 { code.addAttribute(.foregroundColor, value: color, range: NSRange(location: local.location - offset, length: local.length)) }
                     }
-                    if runs == nil { code.addAttribute(.foregroundColor, value: Palette.inkStrong, range: NSRange(location: 0, length: code.length)) }
                     offset += (line.text as NSString).length + 1
                     let label = UILabel()
                     label.attributedText = code
@@ -250,31 +253,19 @@ public final class DiffView: UIView {
     }
 }
 
-/// The diff's colours, as @pierre/diffs mixes them on its light and dark
-/// grounds: additions and deletions washed into the background, the number
-/// column a step off it.
+/// The diff's two grounds a step off code-bg, as @pierre/diffs mixes its
+/// context gutter and the bar between hunks. Everything else a diff draws is a
+/// shared token, as the web diff's is (app.css): its rows' diff-add-bg and
+/// diff-del-bg over code-bg, the syntax tokens, and line numbers in ink-muted
+/// and each ramp's text step (success-11, error-11).
 struct DiffPalette {
-    let addition: UIColor
-    let deletion: UIColor
-    let added: UIColor
-    let deleted: UIColor
     let gutter: UIColor
-    let number: UIColor
     let separator: UIColor
 
     init(dark: Bool) {
-        // --diffs-added/deleted-light|dark, and their washes: 12% into the
-        // ground by day, 20% at night (color-mix in lab, approximated in sRGB).
-        let ground = dark ? Palette.muted.resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark))
-            : Palette.muted.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
-        added = dark ? UIColor(red: 0x5E / 255, green: 0xCC / 255, blue: 0x71 / 255, alpha: 1) : UIColor(red: 0x0D / 255, green: 0xBE / 255, blue: 0x4E / 255, alpha: 1)
-        deleted = dark ? UIColor(red: 1, green: 0x67 / 255, blue: 0x62 / 255, alpha: 1) : UIColor(red: 1, green: 0x2E / 255, blue: 0x3F / 255, alpha: 1)
-        let share = dark ? 0.2 : 0.12
-        addition = Self.mix(ground, added, share)
-        deletion = Self.mix(ground, deleted, share)
+        let ground = Palette.codeBg.resolvedColor(with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light))
         let mixer: UIColor = dark ? .white : .black
         gutter = Self.mix(ground, mixer, dark ? 0.075 * 0.45 : 0.015 * 0.9)
-        number = Self.mix(dark ? .white : .black, ground, 0.35)
         separator = Self.mix(ground, mixer, dark ? 0.15 : 0.04)
     }
 
