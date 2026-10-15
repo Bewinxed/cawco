@@ -639,15 +639,15 @@ async function captureWith(
 /** The fills, the shelf, and where a fill is read: a tab's middle, clear of its ends and the track's fades. */
 function fills(L: Layout, base: Raster) {
   const tr = L.track;
+  // Each end's fade as the mask runs it: its length, cut short at a tab
+  // drawn chosen (`--fade-cap-*`; the start's runs 1.5 of its length).
+  const runStart = Math.min(tr.fadeStart * 1.5, tr.capStart);
+  const runEnd = Math.min(tr.fadeEnd, tr.capEnd);
   const fillX = (t: Tab) =>
     Math.min(
-      Math.max(
-        (t.left + t.right) / 2,
-        t.left + 16,
-        tr.left + tr.fadeStart * 1.5
-      ),
+      Math.max((t.left + t.right) / 2, t.left + 16, tr.left + runStart),
       t.right - 16,
-      tr.right - tr.fadeEnd
+      tr.right - runEnd
     );
   return {
     fillX,
@@ -655,7 +655,7 @@ function fills(L: Layout, base: Raster) {
     shelfAt: (x: number): Rgb => at(base, x, tr.top - 8),
     inTrack: (x: number) => x > tr.left + 1 && x < tr.right - 1,
     fadedAt: (x: number) =>
-      x < tr.left + tr.fadeStart * 1.5 + 3 || x > tr.right - tr.fadeEnd - 3,
+      x < tr.left + runStart + 3 || x > tr.right - runEnd - 3,
   };
 }
 
