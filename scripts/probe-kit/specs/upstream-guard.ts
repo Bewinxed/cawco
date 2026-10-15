@@ -10,9 +10,12 @@
  * the GitHub token it ran with, in the workspace's TMPDIR; the boundary's
  * guard shim stands before it. On the host it is the agent's gh too, whose
  * `gh auth token` answers `probe-host-token`. The services run with a
- * caller's `GH_TOKEN` (`probe-caller-token`), as a person's shell may. The project
- * is a checkout of a local bare repository (a workspace's clone reads its
- * origin, which no fake GitHub URL answers), with its remote recorded as
+ * caller's `GH_TOKEN` (`probe-caller-token`), as a person's shell may. The
+ * project is a checkout with no origin of its own, so the hub is its remote
+ * and a workspace's push goes through the workspace's git door, as it does
+ * for every project whose remote is the hub. (A clone keeps its source's
+ * own origin, clone.ts, and a local path outside the clone is no origin a
+ * boundary can write, guarded or not.) Its remote is recorded as
  * github.com/probe-owner/probe-repo, as a GitHub checkout's would be.
  *
  * (a) A new fleet has no answer and a new project inherits: GET
@@ -73,7 +76,7 @@ const STEPS = [
   {
     id: "P",
     command:
-      "git -c user.name=Delegate -c user.email=d@probe.test commit -q --allow-empty -m 'Probe push' && git push -q origin HEAD:refs/heads/probe-push",
+      "set -o pipefail; git -c user.name=Delegate -c user.email=d@probe.test commit -q --allow-empty -m 'Probe push' && git push origin HEAD:refs/heads/probe-push 2>&1 | sed 's/^/PUSH-OUT /'",
   },
   // Waits inside the boundary until the project's override reaches the rule.
   {
@@ -86,6 +89,9 @@ const STEPS = [
 type StepId = (typeof STEPS)[number]["id"];
 const marker = (id: StepId) => `STEP-${id}-END`;
 const EXIT = /STEP-([A-Z])-END exit=(\d+)/g;
+/** What step P's push said, each line marked, and the line that says it landed. */
+const PUSH_LINES = /^PUSH-OUT .*$/gm;
+const PUSHED = /^PUSH-OUT .*\[new branch\]\s+HEAD -> probe-push$/m;
 
 /** Whether the probe let the delegate past D: the override is applied. */
 let overridden = false;
@@ -171,9 +177,8 @@ const run = async (kit: Kit) => {
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
   const repo = join(fleet.sandbox, "code");
-  const bare = join(fleet.sandbox, "code.git");
   await mkdir(repo, { recursive: true });
-  await Bun.$`git init -q --bare -b main ${bare} && git init -q -b main && echo code > README.md && git add -A && git commit -qm 'First commit' && git remote add origin ${bare} && git push -q origin main`
+  await Bun.$`git init -q -b main && echo code > README.md && git add -A && git commit -qm 'First commit'`
     .cwd(repo)
     .env({ ...process.env, HOME: home })
     .quiet();
@@ -322,9 +327,9 @@ const run = async (kit: Kit) => {
     `exit ${exitOf("X")}`
   );
   check(
-    "b: P git push to the clone's origin lands",
-    exitOf("P") === 0,
-    `exit ${exitOf("P")}`
+    "b: P git push to the clone's origin (the hub, through the git door) lands",
+    exitOf("P") === 0 && PUSHED.test(text),
+    `exit ${exitOf("P")}; git said:\n${(text.match(PUSH_LINES) ?? []).join("\n")}`
   );
 
   // (c)
