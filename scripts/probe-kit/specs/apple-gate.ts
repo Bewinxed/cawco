@@ -25,8 +25,9 @@
  * (d) probe-mac offline, a delegate that commits apps/apple/Other.swift:
  *     finish_item answers the one sentence (it changes that file, so it
  *     lands only once the iOS build compiles on a Mac, and no apple-capable
- *     machine is online, naming the Mac offline), and the item is not done:
- *     still running, nothing landed.
+ *     machine is online, naming the Mac offline, and to wait for one with
+ *     wait_item); the delegate does, and the item is not done: still
+ *     running and waiting, nothing landed or reported.
  *
  *   bun scripts/probe-kit/run.ts apple-gate
  */
@@ -34,7 +35,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 
 const MAC = "probe-mac";
 const FINISH = "mcp__cawco__finish_item";
@@ -55,10 +56,20 @@ echo "$*" > ${MARK}
 `;
 /** The refusal as finish_item answers it with no Mac online. */
 const REFUSAL =
-  /This item changes apps\/apple\/Other\.swift, so it lands only once the iOS build compiles on a Mac, and no apple-capable machine is online \([^)]+ is offline\): call finish_item again once one is, or with blocked\./;
+  /This item changes apps\/apple\/Other\.swift, so it lands only once the iOS build compiles on a Mac, and no apple-capable machine is online \([^)]+ is offline\): wait for one with wait_item and call finish_item again, or call it with blocked\./;
+const WAIT = "mcp__cawco__wait_item";
 
-const steps: Partial<Record<Tag, { finish?: boolean; searched?: boolean }>> =
-  {};
+const steps: Partial<
+  Record<
+    Tag,
+    {
+      finish?: boolean;
+      searched?: boolean;
+      waitSearched?: boolean;
+      waited?: boolean;
+    }
+  >
+> = {};
 /** What finish_item answered C, once the mock model has read it. */
 let refusedC: string | undefined;
 
@@ -105,6 +116,20 @@ const respond = (request: Seen): Reply => {
   }
   if (tag === "C" && step.finish) {
     refusedC ??= REFUSAL.exec(request.all)?.[0];
+  }
+  // As the sentence says: C waits for a Mac with wait_item.
+  if (tag === "C" && refusedC && !step.waited) {
+    if (request.toolNames.includes(WAIT)) {
+      step.waited = true;
+      return tool(WAIT, {
+        minutes: 30,
+        reason: "waiting for a Mac to come online",
+      });
+    }
+    if (!step.waitSearched && request.toolNames.includes("ToolSearch")) {
+      step.waitSearched = true;
+      return tool("ToolSearch", { query: `select:${WAIT}`, max_results: 1 });
+    }
   }
   return text("done");
 };
@@ -265,16 +290,49 @@ const run = async (kit: Kit) => {
     (said) => said !== undefined,
     300_000
   );
-  const cRow = itemOf(c.workItemId);
   check(
     "d: with the Mac offline, finish_item answers the one sentence",
     refusedC !== undefined,
     refusedC ?? "no refusal read"
   );
-  check(
-    "d: the item is not done: still running, nothing landed or reported",
-    cRow?.state === "running" && cRow.result === null,
-    `${cRow?.state} ${cRow?.result?.slice(0, 400) ?? ""}`
+  await afterWait(kit, fleet, c.workItemId);
+};
+
+/**
+ * (d) The item, checked once its delegate declared its wait and 20 s more: past the
+ * turns that would end it quietly (three "still open" nudges answered at
+ * once took seconds when nothing waited).
+ */
+const afterWait = async (
+  kit: Kit,
+  fleet: KitFleet,
+  itemId: string
+): Promise<void> => {
+  await until(
+    "C declared its wait",
+    () =>
+      fleet.query<{ wait_reason: string | null }>(
+        "SELECT wait_reason FROM work_items WHERE id = ?",
+        itemId
+      )[0]?.wait_reason ?? undefined,
+    (reason) => reason !== undefined,
+    300_000
+  );
+  const waited = Date.now();
+  await until(
+    "20 s past C's wait",
+    () => Date.now(),
+    (now) => now - waited > 20_000,
+    30_000
+  );
+  const [row] = fleet.query<ItemRow>(
+    "SELECT state, error, result, workspace_id FROM work_items WHERE id = ?",
+    itemId
+  );
+  kit.check(
+    "d: the item is not done: still running, waiting for a Mac, nothing landed or reported",
+    row?.state === "running" && row.result === null,
+    `${row?.state} ${row?.error ?? ""} ${row?.result?.slice(0, 400) ?? ""}`
   );
 };
 

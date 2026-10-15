@@ -76,7 +76,7 @@ export const appleGateRefusal = (
   if (offline.length > 0) {
     macs = `${offline.join(", ")} ${offline.length === 1 ? "is" : "are"} offline`;
   }
-  return `This item changes ${changed}, so it lands only once the iOS build compiles on a Mac, and no apple-capable machine is online (${macs}): call finish_item again once one is, or with blocked.`;
+  return `This item changes ${changed}, so it lands only once the iOS build compiles on a Mac, and no apple-capable machine is online (${macs}): wait for one with wait_item and call finish_item again, or call it with blocked.`;
 };
 
 /** The machines the gate may run on: online, and a Mac by the OS each reported. */
