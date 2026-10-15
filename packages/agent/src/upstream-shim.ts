@@ -9,14 +9,22 @@
  * judged by `upstream-guard.ts`, the copy beside this script: a refused call
  * exits 1 with the reason on stderr, which is what the session reads. A rule
  * it cannot read refuses too, saying so: a call is never let through
- * unjudged.
+ * unjudged. A file the call names for its body (a GraphQL query's
+ * `-F query=@file`, `--input`, curl's `-d @file`) is read here, as the
+ * program would read it.
+ *
+ * In a guarded workspace no command holds a GitHub token (boundary.ts
+ * `guardedEnv`). An allowed `gh` or `hub` call then asks the workspace's git
+ * door for it (hub-git.ts `TOKEN_ASK`), which judges the call again on the
+ * host, and this prints it on stdout for the shim to hand that one run.
  *
  * A plain Bun script, as the workspace's judge is (boundary-judge.ts): it
  * imports only node's built-ins and the guard beside it.
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { connect } from "node:net";
+import { isAbsolute, join } from "node:path";
 
 /** The guard's module; only its type is imported here, which Bun erases. */
 type Guard = typeof import("@cawco/core/upstream-guard");
@@ -88,12 +96,73 @@ const ruleOrRefuse = (): UpstreamRule => {
   }
 };
 
-const refusal = upstreamRefusal(ruleOrRefuse(), {
+/** A file the call names, relative to the cwd as the program reads it; none when it cannot be read. */
+const readFile = (path: string): string | undefined => {
+  try {
+    return readFileSync(
+      isAbsolute(path) ? path : join(process.cwd(), path),
+      "utf8"
+    );
+  } catch {
+    // What the program could not read either: the guard calls it unread.
+    return undefined;
+  }
+};
+
+/** The line the git door reads in place of a URL (hub-git.ts `TOKEN_ASK`). */
+const TOKEN_ASK = "cawco-upstream-token";
+
+/** GitHub's token for this call, from the workspace's git door; empty when it gives none. */
+const askToken = (known: readonly GitRemote[]): Promise<string> =>
+  new Promise((done, fail) => {
+    const door = process.env.CAWCO_GIT_SOCKET;
+    if (!door) {
+      fail(new Error("this command names no git door (CAWCO_GIT_SOCKET)"));
+      return;
+    }
+    let answer = "";
+    const socket = connect(door, () => {
+      socket.write(
+        `${TOKEN_ASK}\n${JSON.stringify({
+          program,
+          args,
+          env: { GH_REPO: process.env.GH_REPO, GH_HOST: process.env.GH_HOST },
+          remotes: known,
+        })}\n`
+      );
+    });
+    socket.on("data", (chunk) => {
+      answer += chunk.toString();
+    });
+    socket.on("end", () => done(answer.trim()));
+    socket.on("error", fail);
+  });
+
+const rule = ruleOrRefuse();
+let remotes: readonly GitRemote[] | undefined;
+const refusal = upstreamRefusal(rule, {
   program: program as string,
   args,
   env: process.env,
-  cwdRemotes,
+  cwdRemotes: () => {
+    remotes ??= cwdRemotes();
+    return remotes;
+  },
+  readFile,
 });
 if (refusal) {
   refuse(refusal, 1);
+}
+
+// Guarded, the command holds no token: an allowed gh or hub call gets one
+// for itself alone. gh with no token answers as gh does when signed out.
+if (rule.guarded && (program === "gh" || program === "hub")) {
+  try {
+    process.stdout.write(await askToken(remotes ?? cwdRemotes()));
+  } catch (error) {
+    refuse(
+      `cawco: \`${program}\` did not run: it was allowed, but the workspace's git door could not give it GitHub's token (${error instanceof Error ? error.message : String(error)}).`,
+      2
+    );
+  }
 }

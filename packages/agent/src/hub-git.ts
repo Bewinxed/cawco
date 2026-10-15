@@ -24,6 +24,15 @@
  *   `workspaceAt`'s fetch and a session's own `git fetch`/`git push` all run
  *   inside the boundary, so all take this one path.
  *
+ * A workspace the upstream guard keeps off other people's repositories
+ * (core upstream-guard.ts) holds no GitHub token: its executor gives none
+ * to its commands. Its GitHub `origin` takes this same path ({@link
+ * githubGitEnv}): the clone's own origin alone, fetched and pushed on the
+ * host with the host's own gh credential, so a session's push to its
+ * project's repository works and a push anywhere else has nothing to sign
+ * in with. The door also answers one allowed `gh` call's ask for the token
+ * ({@link TOKEN_ASK}), judging the call again here by the workspace's rule.
+ *
  * A checkout outside any workspace whose `origin` is the hub (one a project
  * got the hub as its remote in, or one a move made) pulls and pushes from a
  * terminal through `cawco git-credential`, which its own config names for
@@ -31,6 +40,7 @@
  * helper asks the agent's credential socket ({@link serveHubCredential}).
  */
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
@@ -39,13 +49,21 @@ import {
   hubCredentialSocket,
   workspaceDoorDir,
   workspaceReadOnlyDir,
+  workspaceUpstreamRuleFile,
 } from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,
   safeGitArgv,
 } from "@cawco/core/safe-git";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import {
+  type GitRemote,
+  type UpstreamRule,
+  upstreamRefusal,
+} from "@cawco/core/upstream-guard";
+import { hostGh, hostGhToken } from "./host-gh";
 import { hubGitEnv, hubGitLogin, isHubRemote, withoutCredential } from "./move";
 import { noRepositoryAt } from "./stand-ins";
 import { prepareDoor, socketPlace } from "./tool-door";
@@ -126,7 +144,8 @@ const refspecOf = (line: string): { dst: string; src: string } => {
  */
 const pushLfs = async (
   ref: WorkspaceRef,
-  sources: string[]
+  sources: string[],
+  env: Record<string, string>
 ): Promise<string | undefined> => {
   if (sources.length === 0 || !Bun.which("git-lfs")) {
     return;
@@ -137,7 +156,7 @@ const pushLfs = async (
   }
   const child = Bun.spawn(safeGitArgv(["lfs", "push", "origin", ...sources]), {
     cwd: ref.path,
-    env: { ...hubGitEnv(), ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
+    env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -201,7 +220,11 @@ const movedRefs = (
  * rebase there onto a fetched commit (landing onto a newer default branch,
  * a session's own `git pull`) smudges from what is already here.
  */
-const fetchLfs = async (ref: WorkspaceRef, refs: string[]): Promise<void> => {
+const fetchLfs = async (
+  ref: WorkspaceRef,
+  refs: string[],
+  env: Record<string, string>
+): Promise<void> => {
   if (refs.length === 0 || !Bun.which("git-lfs")) {
     return;
   }
@@ -211,7 +234,7 @@ const fetchLfs = async (ref: WorkspaceRef, refs: string[]): Promise<void> => {
   }
   const child = Bun.spawn(safeGitArgv(["lfs", "fetch", "origin", ...refs]), {
     cwd: ref.path,
-    env: { ...hubGitEnv(), ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
+    env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
     stdin: "ignore",
     stdout: "ignore",
     stderr: "pipe",
@@ -238,7 +261,8 @@ const fetchLfs = async (ref: WorkspaceRef, refs: string[]): Promise<void> => {
 const protocolFeed = (
   ref: WorkspaceRef,
   socket: Socket,
-  write: (bytes: Buffer | string) => void
+  write: (bytes: Buffer | string) => void,
+  env: Record<string, string>
 ) => {
   let raw = false;
   let pending = Buffer.alloc(0);
@@ -248,7 +272,8 @@ const protocolFeed = (
     batch = [];
     const refused = await pushLfs(
       ref,
-      lines.map((line) => refspecOf(line).src).filter(Boolean)
+      lines.map((line) => refspecOf(line).src).filter(Boolean),
+      env
     );
     if (refused) {
       socket.write(
@@ -286,6 +311,127 @@ const protocolFeed = (
   };
 };
 
+/** A GitHub origin the door takes for a guarded workspace: an https URL on github.com. */
+const isGithubHttps = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.hostname === "github.com";
+  } catch {
+    return false;
+  }
+};
+
+/** Workspace `id`'s upstream rule as the agent last wrote it (boundary.ts `takeUpstreamRules`); none when it has none. */
+const upstreamRule = (id: string): UpstreamRule | undefined => {
+  try {
+    const rule = JSON.parse(
+      readFileSync(workspaceUpstreamRuleFile(id), "utf8")
+    ) as Partial<UpstreamRule>;
+    return typeof rule.guarded === "boolean" && Array.isArray(rule.remotes)
+      ? (rule as UpstreamRule)
+      : undefined;
+  } catch {
+    // No rule written yet, or not one: the workspace is not guarded here.
+    return undefined;
+  }
+};
+
+/**
+ * git's environment for a guarded workspace's GitHub origin, on the host:
+ * the host's own gh as GitHub's only credential helper (`helper =` clears
+ * what came before, git-config(1) `credential.helper`), env-only as
+ * {@link hubGitEnv} is.
+ */
+const githubGitEnv = async (): Promise<Record<string, string>> => {
+  const gh = await hostGh();
+  if (!gh) {
+    throw new Error(
+      "this machine has no gh to sign in to GitHub with, so the guarded workspace's origin cannot be reached"
+    );
+  }
+  const first = Number.parseInt(process.env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
+  const key = "credential.https://github.com.helper";
+  return {
+    ...(hostEnvironment() as Record<string, string>),
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: String(first + 2),
+    [`GIT_CONFIG_KEY_${first}`]: key,
+    [`GIT_CONFIG_VALUE_${first}`]: "",
+    [`GIT_CONFIG_KEY_${first + 1}`]: key,
+    [`GIT_CONFIG_VALUE_${first + 1}`]: `!${shellWord(gh)} auth git-credential`,
+  };
+};
+
+/**
+ * The first line of a door connection that asks for GitHub's token for one
+ * `gh` call (agent upstream-shim.ts), in place of a URL; the next line is
+ * the call as JSON: its program, arguments, `GH_REPO`/`GH_HOST` and the
+ * cwd's remotes.
+ */
+export const TOKEN_ASK = "cawco-upstream-token";
+
+/** The call a token ask names. */
+interface TokenAsk {
+  args: string[];
+  env: Record<string, string | undefined>;
+  program: string;
+  remotes: GitRemote[];
+}
+
+/**
+ * Answers a token ask: the host's GitHub token, on one line, when workspace
+ * `ref` is guarded and its rule lets the call (judged here again: what the
+ * shim inside said is not taken on its word); else an empty answer, and the
+ * call runs with no token.
+ */
+const answerTokenAsk = (
+  ref: WorkspaceRef,
+  socket: Socket,
+  first: Buffer
+): void => {
+  let body = first;
+  const answer = async (): Promise<string> => {
+    const ask = JSON.parse(body.toString()) as Partial<TokenAsk>;
+    const rule = upstreamRule(ref.id);
+    // Only for the programs a shim hands the token to (upstream-shim.ts).
+    if (!(
+      rule?.guarded &&
+      (ask.program === "gh" || ask.program === "hub") &&
+      Array.isArray(ask.args)
+    )) {
+      return "";
+    }
+    const refused = upstreamRefusal(rule, {
+      program: ask.program,
+      args: ask.args.filter((arg): arg is string => typeof arg === "string"),
+      env: { GH_REPO: ask.env?.GH_REPO, GH_HOST: ask.env?.GH_HOST },
+      cwdRemotes: () => (Array.isArray(ask.remotes) ? ask.remotes : []),
+    });
+    if (refused) {
+      console.warn(`[hub-git] ${ref.id}: a token ask was refused: ${refused}`);
+      return "";
+    }
+    return (await hostGhToken()) ?? "";
+  };
+  const done = () => {
+    socket.off("data", more);
+    answer()
+      .catch(() => "")
+      .then((token) => socket.end(`${token}\n`));
+  };
+  const more = (chunk: Buffer) => {
+    body = Buffer.concat([body, chunk]);
+    if (body.includes(LINE_END)) {
+      done();
+    }
+  };
+  if (body.includes(LINE_END)) {
+    done();
+    return;
+  }
+  socket.on("data", more);
+};
+
 /** One door connection: the URL line, then git's remote helper on the host, piped both ways. */
 const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
   let head = Buffer.alloc(0);
@@ -306,6 +452,11 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     socket.pause();
     const url = head.subarray(0, end).toString().trim();
     const rest = head.subarray(end + 1);
+    if (url === TOKEN_ASK) {
+      socket.resume();
+      answerTokenAsk(ref, socket, rest);
+      return;
+    }
     start(url, rest).catch((error: unknown) =>
       fail(error instanceof Error ? error.message : String(error))
     );
@@ -324,22 +475,20 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
       { cwd: ref.path, env: { ...process.env, ...SAFE_GIT_ENV } }
     );
     const origin = read.stdout.toString().trim();
-    if (!(origin && origin === url && isHubRemote(origin))) {
+    const github = isGithubHttps(origin) && upstreamRule(ref.id)?.guarded;
+    if (!(origin && origin === url && (isHubRemote(origin) || github))) {
       throw new Error(
-        `${url} is not this workspace's origin on the hub, so the door does not take it`
+        `${url} is not this workspace's origin on the hub, nor its guarded GitHub origin, so the door does not take it`
       );
     }
+    const env = github ? await githubGitEnv() : hubGitEnv();
     const scheme = new URL(url).protocol === "https:" ? "https" : "http";
     const child = spawn(
       "git",
       safeGitArgv([`remote-${scheme}`, "origin", url]).slice(1),
       {
         cwd: ref.path,
-        env: {
-          ...hubGitEnv(),
-          ...SAFE_GIT_ENV,
-          GIT_DIR: join(ref.path, ".git"),
-        },
+        env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
         stdio: ["pipe", "pipe", "pipe"],
       }
     );
@@ -357,7 +506,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
       // git waits on the helper as it disconnects, after it has written the
       // refs it fetched: the door closes once their large files are here.
       const moved = code === 0 ? movedRefs(before, remoteRefs(ref.path)) : [];
-      fetchLfs(ref, moved)
+      fetchLfs(ref, moved, env)
         .catch((error: unknown) =>
           console.warn(
             `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
@@ -374,7 +523,12 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
       }
     });
     child.stdout.pipe(socket, { end: false });
-    const feed = protocolFeed(ref, socket, (bytes) => child.stdin.write(bytes));
+    const feed = protocolFeed(
+      ref,
+      socket,
+      (bytes) => child.stdin.write(bytes),
+      env
+    );
     let chain = feed(rest);
     socket.on("data", (chunk: Buffer) => {
       socket.pause();
@@ -447,6 +601,35 @@ export const closeGitDoor = async (id: string): Promise<void> => {
 const shellWord = (word: string): string =>
   `'${word.replaceAll("'", "'\\''")}'`;
 
+/** The clone's `origin` URL as its own config names it; empty when it names none. */
+const originOf = (clone: string): string =>
+  Bun.spawnSync(
+    safeGitArgv([
+      "config",
+      "--file",
+      join(clone, ".git", "config"),
+      "--get",
+      "remote.origin.url",
+    ]),
+    { env: { ...process.env, ...SAFE_GIT_ENV } }
+  )
+    .stdout.toString()
+    .trim();
+
+/**
+ * For a clone whose origin is on GitHub: the git config, as
+ * `CAWCO_GIT_PARAMETERS` words, that sends that origin, and it alone, through
+ * the door's `cawco::` helper, which a guarded workspace's commands run with
+ * (boundary.ts `execScript`): they hold no GitHub token, and the door signs
+ * in on the host. None for any other origin.
+ */
+export const guardedGitParameters = (clone: string): string | undefined => {
+  const origin = originOf(clone);
+  return isGithubHttps(origin)
+    ? `${shellWord(`url.cawco::${origin}.insteadOf`)}=${shellWord(origin)}`
+    : undefined;
+};
+
 /**
  * The variables every command in workspace `id` runs with: the door, and in
  * `CAWCO_GIT_PARAMETERS` the git config the runner appends to
@@ -470,18 +653,7 @@ export const gitDoorEnv = (
   const url = new URL(hub);
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
   const prefix = `${url.origin}/git/`;
-  const origin = Bun.spawnSync(
-    safeGitArgv([
-      "config",
-      "--file",
-      join(clone, ".git", "config"),
-      "--get",
-      "remote.origin.url",
-    ]),
-    { env: { ...process.env, ...SAFE_GIT_ENV } }
-  )
-    .stdout.toString()
-    .trim();
+  const origin = originOf(clone);
   return {
     CAWCO_GIT_SOCKET: gitDoorOf(id),
     CAWCO_GIT_PARAMETERS: [

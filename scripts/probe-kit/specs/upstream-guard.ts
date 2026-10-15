@@ -6,8 +6,11 @@
  * mock model), boundaries included: run it where a workspace boundary can
  * start (not inside another one).
  *
- * A fake `gh` first on the services' PATH records each call it runs in the
- * workspace's TMPDIR; the boundary's guard shim stands before it. The project
+ * A fake `gh` first on the services' PATH records each call it runs, with
+ * the GitHub token it ran with, in the workspace's TMPDIR; the boundary's
+ * guard shim stands before it. On the host it is the agent's gh too, whose
+ * `gh auth token` answers `probe-host-token`. The services run with a
+ * caller's `GH_TOKEN` (`probe-caller-token`), as a person's shell may. The project
  * is a checkout of a local bare repository (a workspace's clone reads its
  * origin, which no fake GitHub URL answers), with its remote recorded as
  * github.com/probe-owner/probe-repo, as a GitHub checkout's would be.
@@ -22,10 +25,18 @@
  *       and the fake gh never ran;
  *     B `gh issue create -R probe-owner/probe-repo`: runs;
  *     C `gh api repos/x/y/issues -f title=t`: refused, fake gh never ran;
- *     D `gh api repos/x/y/issues` (a GET): runs.
+ *     D `gh api repos/x/y/issues` (a GET): runs;
+ *     T no GitHub token variable is in a command's environment;
+ *     G a `gh api graphql` mutation naming no repository: refused, fake gh
+ *       never ran;
+ *     H a mutation naming the project's own repository: runs;
+ *     X the real gh by its absolute path, `api repos/x/y/issues -f title=t`:
+ *       fails signed out, with no token to post with;
+ *     P `git commit` and `git push` to the clone's origin: lands;
+ *     and B's fake gh ran with the host's token, handed to it alone.
  * (c) PATCH the project `upstreamPosts: true` (its own answer over the
  *     fleet's): the workspace's rule turns unguarded within a beat, and
- *     E, A again, runs.
+ *     E, A again, runs; U its commands carry the caller's token again.
  *
  *   bun scripts/probe-kit/run.ts upstream-guard
  */
@@ -42,17 +53,35 @@ const REFUSED = (what: string, repo: string) =>
 const DRAFT = "Put what you would have posted";
 
 /** Each step's command, in order; each ends by echoing its marker and the exit. */
+/** The real gh on this host, found before the fake goes first on PATH: what step X runs by its path. */
+const REAL_GH = Bun.which("gh") ?? "/usr/bin/gh";
+const TOKEN_VARS = (id: string) =>
+  `echo "TOKENVARS-${id}=$(env | grep -cE '^(GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)=')"`;
+const TOKEN_COUNT = (id: string) => new RegExp(`TOKENVARS-${id}=(\\d+)`);
+const MUTATION_NO_REPO = `gh api graphql -f 'query=mutation { addComment(input: {subjectId: "X", body: "hi"}) { clientMutationId } }'`;
+const MUTATION_OWN = `gh api graphql -F owner=probe-owner -F name=probe-repo -f 'query=mutation($owner: String!, $name: String!) { r: repository(owner: $owner, name: $name) { id } }'`;
+
 const STEPS = [
   { id: "A", command: "gh issue create -R someone/else --title t --body b" },
   { id: "B", command: `gh issue create -R ${OWN} --title t --body b` },
   { id: "C", command: "gh api repos/x/y/issues -f title=t" },
   { id: "D", command: "gh api repos/x/y/issues" },
+  { id: "T", command: TOKEN_VARS("T") },
+  { id: "G", command: MUTATION_NO_REPO },
+  { id: "H", command: MUTATION_OWN },
+  { id: "X", command: `${REAL_GH} api repos/x/y/issues -f title=t 2>&1` },
+  {
+    id: "P",
+    command:
+      "git -c user.name=Delegate -c user.email=d@probe.test commit -q --allow-empty -m 'Probe push' && git push -q origin HEAD:refs/heads/probe-push",
+  },
   // Waits inside the boundary until the project's override reaches the rule.
   {
     id: "W",
     command: `until grep -q '"guarded":false' "$HOME/.cawco/workspaces/$CAWCO_WORKSPACE/ro/upstream.json"; do sleep 1; done`,
   },
   { id: "E", command: "gh issue create -R someone/else --title t --body b" },
+  { id: "U", command: TOKEN_VARS("U") },
 ] as const;
 type StepId = (typeof STEPS)[number]["id"];
 const marker = (id: StepId) => `STEP-${id}-END`;
@@ -99,7 +128,9 @@ const respond = (request: Seen): Reply => {
 
 /** The exit each step's marker reported, from the transcript as the mock last read it. */
 const exitOf = (id: StepId): number | undefined => {
-  for (const match of (outputs.E ?? outputs[id] ?? "").matchAll(EXIT)) {
+  for (const match of (outputs.U ?? outputs.E ?? outputs[id] ?? "").matchAll(
+    EXIT
+  )) {
     if (match[1] === id) {
       return Number(match[2]);
     }
@@ -107,8 +138,10 @@ const exitOf = (id: StepId): number | undefined => {
 };
 
 const FAKE_GH = `#!/bin/sh
-# The probe's stand-in for gh: records the call where the probe reads it, and answers.
-printf '%s\\n' "$*" >> "$TMPDIR/fake-gh.log"
+# The probe's stand-in for gh: the host's token, or the call recorded with the
+# token it ran with where the probe reads it.
+if [ "$1 $2" = "auth token" ]; then echo probe-host-token; exit 0; fi
+printf '%s token=%s\\n' "$*" "\${GH_TOKEN:-none}" >> "$TMPDIR/fake-gh.log"
 echo "FAKE-GH-RAN $*"
 `;
 
@@ -122,6 +155,7 @@ const run = async (kit: Kit) => {
   await writeFile(join(fakeBin, "gh"), FAKE_GH);
   await chmod(join(fakeBin, "gh"), 0o755);
   fleet.env.PATH = `${fakeBin}:${fleet.env.PATH}`;
+  fleet.env.GH_TOKEN = "probe-caller-token";
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -215,8 +249,8 @@ const run = async (kit: Kit) => {
 
   // (b)
   await until(
-    "steps A to D ran",
-    () => outputs.D,
+    "steps A to P ran",
+    () => outputs.P,
     (said) => said !== undefined,
     600_000
   );
@@ -227,7 +261,8 @@ const run = async (kit: Kit) => {
     rule
   );
   const calls = await logged();
-  const text = outputs.D ?? "";
+  const text = outputs.P ?? "";
+  const lines = calls.split("\n");
   check(
     "b: A `gh issue create -R someone/else` is refused with the reason, and the fake gh never ran",
     text.includes(REFUSED("gh issue create", "github.com/someone/else")) &&
@@ -237,8 +272,13 @@ const run = async (kit: Kit) => {
     `exit ${exitOf("A")}; fake gh calls:\n${calls}`
   );
   check(
-    "b: B `gh issue create` against the project's own remote runs",
-    exitOf("B") === 0 && calls.includes(`issue create -R ${OWN}`),
+    "b: B `gh issue create` against the project's own remote runs, with the host's token handed to it alone",
+    exitOf("B") === 0 &&
+      lines.some(
+        (line) =>
+          line.startsWith(`issue create -R ${OWN}`) &&
+          line.endsWith("token=probe-host-token")
+      ),
     `exit ${exitOf("B")}; fake gh calls:\n${calls}`
   );
   check(
@@ -250,8 +290,41 @@ const run = async (kit: Kit) => {
   );
   check(
     "b: D `gh api repos/x/y/issues` (a GET) runs",
-    exitOf("D") === 0 && calls.split("\n").includes("api repos/x/y/issues"),
+    exitOf("D") === 0 &&
+      lines.some((line) => line.startsWith("api repos/x/y/issues token=")),
     `exit ${exitOf("D")}; fake gh calls:\n${calls}`
+  );
+  const guardedCount = TOKEN_COUNT("T").exec(text)?.[1];
+  check(
+    "b: T with the guard on, no GitHub token variable is in a command's environment (the caller's GH_TOKEN included)",
+    guardedCount === "0",
+    `TOKENVARS-T=${guardedCount}`
+  );
+  check(
+    "b: G a `gh api graphql` mutation naming no repository is refused, and the fake gh never ran",
+    text.includes(
+      "cawco: `gh api graphql mutation` did not run: it names no repository the guard can check"
+    ) &&
+      exitOf("G") === 1 &&
+      !calls.includes("addComment"),
+    `exit ${exitOf("G")}; fake gh calls:\n${calls}`
+  );
+  check(
+    "b: H a mutation naming the project's own repository runs",
+    exitOf("H") === 0 && calls.includes("owner=probe-owner"),
+    `exit ${exitOf("H")}; fake gh calls:\n${calls}`
+  );
+  check(
+    `b: X ${REAL_GH} by its path, api repos/x/y/issues -f title=t, fails signed out`,
+    exitOf("X") !== 0 &&
+      exitOf("X") !== undefined &&
+      text.includes("gh auth login"),
+    `exit ${exitOf("X")}`
+  );
+  check(
+    "b: P git push to the clone's origin lands",
+    exitOf("P") === 0,
+    `exit ${exitOf("P")}`
   );
 
   // (c)
@@ -268,8 +341,8 @@ const run = async (kit: Kit) => {
     `${flipped.status} ${JSON.stringify(own.upstreamPosts)}`
   );
   await until(
-    "step E ran",
-    () => outputs.E,
+    "step U ran",
+    () => outputs.U,
     (said) => said !== undefined,
     300_000
   );
@@ -278,6 +351,12 @@ const run = async (kit: Kit) => {
     "c: with the project's override, E `gh issue create -R someone/else` runs",
     exitOf("E") === 0 && finalCalls.includes("issue create -R someone/else"),
     `exit ${exitOf("E")}; fake gh calls:\n${finalCalls}`
+  );
+  const openCount = TOKEN_COUNT("U").exec(outputs.U ?? "")?.[1];
+  check(
+    "c: U unguarded, commands carry the caller's GH_TOKEN as before",
+    openCount === "1",
+    `TOKENVARS-U=${openCount}`
   );
 };
 

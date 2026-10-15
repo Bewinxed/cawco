@@ -77,11 +77,25 @@ export interface UpstreamCall {
   readonly cwdRemotes: () => readonly GitRemote[];
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly program: string;
+  /**
+   * A file the call names for its body (`-F query=@file`, `--input file`,
+   * curl's `-d @file`), read as the program would read it, relative to the
+   * cwd; undefined when it cannot be read, or by a caller that reads no
+   * files (Caw's gate, on the hub). `-` is the call's stdin, which no caller
+   * reads.
+   */
+  readonly readFile?: (path: string) => string | undefined;
 }
 
-/** What a call writes to: the repository, `host/owner/repo`, and the call in a few words. */
+/**
+ * What a call writes to: the repository, `host/owner/repo`, and the call in
+ * a few words. A GraphQL mutation that names no repository has none: it acts
+ * on node ids, which name none the guard can check. One whose query the
+ * guard could not read is `unread`.
+ */
 export interface UpstreamWrite {
-  readonly repo: string;
+  readonly repo?: string;
+  readonly unread?: boolean;
   readonly what: string;
 }
 
@@ -474,6 +488,173 @@ const commandWords = (
   };
 };
 
+/** A GraphQL document that changes something: an operation of type `mutation` (the GraphQL spec's OperationType). */
+const MUTATION = /(^|[^A-Za-z0-9_])mutation\b/;
+/** `repository(owner: "O", name: "R")`, in either order, with a literal or a `$variable` for each. */
+const REPOSITORY_ARGS =
+  /repository\s*\(\s*(owner|name)\s*:\s*("[^"]*"|\$[A-Za-z_][A-Za-z0-9_]*)\s*,?\s*(owner|name)\s*:\s*("[^"]*"|\$[A-Za-z_][A-Za-z0-9_]*)/;
+
+/** A GraphQL request as an API call sends it: its query, and its variables; `unread` when part of it came from where the guard reads nothing. */
+interface GraphqlBody {
+  query?: string;
+  unread: boolean;
+  variables: Partial<Record<string, string>>;
+}
+
+/** The text a `@file` (or `@-`) value names, read through the call; undefined when it cannot be read. */
+const fileText = (call: UpstreamCall, at: string): string | undefined =>
+  at === "-" ? undefined : call.readFile?.(at);
+
+/** One `key=value` field of `gh api`/`hub api` into `body`; `-F`'s `@file` value is that file's text. */
+const takeField = (
+  call: UpstreamCall,
+  body: GraphqlBody,
+  field: string,
+  typed: boolean
+): void => {
+  const at = field.indexOf("=");
+  if (at < 0) {
+    return;
+  }
+  const key = field.slice(0, at);
+  let value: string | undefined = field.slice(at + 1);
+  if (typed && value.startsWith("@")) {
+    value = fileText(call, value.slice(1));
+  }
+  if (value === undefined) {
+    body.unread ||= key === "query";
+    return;
+  }
+  if (key === "query") {
+    body.query = value;
+  } else {
+    body.variables[key] = value;
+  }
+};
+
+/** A JSON request body (`--input`, curl's data) into `body`: its `query` and string `variables`. */
+const takeJson = (body: GraphqlBody, text: string | undefined): void => {
+  if (text === undefined) {
+    body.unread = true;
+    return;
+  }
+  try {
+    const parsed = JSON.parse(text) as {
+      query?: unknown;
+      variables?: Record<string, unknown>;
+    };
+    if (typeof parsed.query === "string") {
+      body.query = parsed.query;
+    }
+    for (const [key, value] of Object.entries(parsed.variables ?? {})) {
+      if (typeof value === "string") {
+        body.variables[key] = value;
+      }
+    }
+  } catch {
+    // Not JSON: what it says is searched as it is.
+    body.query = text;
+  }
+};
+
+/** The short and long options of `gh api`/`hub api` that carry a field, raw or typed. */
+const API_FIELDS: readonly { long: string; short: string; typed: boolean }[] = [
+  { short: "-f", long: "--raw-field", typed: false },
+  { short: "-F", long: "--field", typed: true },
+];
+
+/** `gh api graphql`'s or `hub api graphql`'s request, from its fields and its `--input`. */
+const apiGraphqlBody = (
+  call: UpstreamCall,
+  rest: readonly string[]
+): GraphqlBody => {
+  const body: GraphqlBody = { unread: false, variables: {} };
+  for (let index = 0; index < rest.length; index += 1) {
+    index += takeApiArg(call, body, rest[index] as string, rest[index + 1]);
+  }
+  return body;
+};
+
+/** One argument of `gh api graphql` into `body`: how many more words it took. */
+const takeApiArg = (
+  call: UpstreamCall,
+  body: GraphqlBody,
+  arg: string,
+  next: string | undefined
+): number => {
+  if (arg === "--input" || arg.startsWith("--input=")) {
+    const file = arg === "--input" ? next : arg.slice("--input=".length);
+    takeJson(body, file === undefined ? undefined : fileText(call, file));
+    return arg === "--input" ? 1 : 0;
+  }
+  for (const { short, long, typed } of API_FIELDS) {
+    if (arg === short || arg === long) {
+      takeField(call, body, next ?? "", typed);
+      return 1;
+    }
+    if (arg.startsWith(`${long}=`)) {
+      takeField(call, body, arg.slice(long.length + 1), typed);
+      return 0;
+    }
+    if (arg.startsWith(short) && !arg.startsWith("--")) {
+      takeField(call, body, arg.slice(short.length), typed);
+      return 0;
+    }
+  }
+  return 0;
+};
+
+/** A literal (`"x"`) or a variable (`$x`) of a GraphQL argument, as its value. */
+const argumentValue = (
+  raw: string,
+  variables: Partial<Record<string, string>>
+): string | undefined =>
+  raw.startsWith("$") ? variables[raw.slice(1)] : raw.slice(1, -1);
+
+/**
+ * What a GraphQL request writes: nothing unless its query is a mutation (or
+ * could not be read); then the repository its `repository(owner:, name:)`
+ * names, or none.
+ */
+const graphqlWrite = (
+  body: GraphqlBody,
+  host: string,
+  what: string
+): UpstreamWrite | undefined => {
+  if (body.query === undefined || !MUTATION.test(body.query)) {
+    return body.unread ? { what, unread: true } : undefined;
+  }
+  const named = REPOSITORY_ARGS.exec(body.query);
+  if (named) {
+    const values: Record<string, string | undefined> = {
+      [named[1] as string]: argumentValue(named[2] as string, body.variables),
+      [named[3] as string]: argumentValue(named[4] as string, body.variables),
+    };
+    if (values.owner && values.name) {
+      return { repo: `${host}/${values.owner}/${values.name}`, what };
+    }
+  }
+  const { owner } = body.variables;
+  const repoWord = body.variables.name ?? body.variables.repo;
+  return owner && repoWord
+    ? { repo: `${host}/${owner}/${repoWord}`, what }
+    : { what };
+};
+
+/** Whether an API endpoint is GitHub's GraphQL one: `graphql`, or a URL whose path is `/graphql` (`/api/graphql` on Enterprise). */
+const isGraphql = (endpoint: string): boolean => {
+  if (!SCHEME.test(endpoint)) {
+    return endpoint.replace(EDGE_SLASHES, "") === "graphql";
+  }
+  try {
+    return new URL(endpoint).pathname
+      .replace(EDGE_SLASHES, "")
+      .endsWith("graphql");
+  } catch {
+    return false;
+  }
+};
+
 const gh = (call: UpstreamCall): UpstreamWrite | undefined => {
   const host = (call.env.GH_HOST || GITHUB).toLowerCase();
   const { command, sub, rest: after } = commandWords(call.args);
@@ -488,6 +669,13 @@ const gh = (call: UpstreamCall): UpstreamWrite | undefined => {
       }
     );
     const endpoint = endpointOf(rest, GH_API_VALUED);
+    if (endpoint && isGraphql(endpoint)) {
+      return graphqlWrite(
+        apiGraphqlBody(call, rest),
+        host,
+        "gh api graphql mutation"
+      );
+    }
     if (!(WRITE_METHODS.has(method) && endpoint)) {
       return;
     }
@@ -521,6 +709,13 @@ const hub = (call: UpstreamCall): UpstreamWrite | undefined => {
       }
     );
     const endpoint = endpointOf(rest, GH_API_VALUED);
+    if (endpoint && isGraphql(endpoint)) {
+      return graphqlWrite(
+        apiGraphqlBody(call, rest),
+        GITHUB,
+        "hub api graphql mutation"
+      );
+    }
     if (!(WRITE_METHODS.has(method) && endpoint)) {
       return;
     }
@@ -657,6 +852,8 @@ const CURL_DATA_LONG: ReadonlySet<string> = new Set([
 /** What a curl command line asks, as it is read: its URLs, its named method, and whether it sends data, uploads, asks for a head or a GET. */
 interface CurlLine {
   data: boolean;
+  /** Each data value as written (`-d`, `--data*`, `--json`): a GraphQL body is read from them. */
+  datas: string[];
   get: boolean;
   head: boolean;
   method: string | undefined;
@@ -674,6 +871,9 @@ const curlTake = (
     line.method = value?.toUpperCase();
   } else if (option === "d" || option === "F" || CURL_DATA_LONG.has(option)) {
     line.data = true;
+    if (value !== undefined && option !== "F" && !option.startsWith("--form")) {
+      line.datas.push(value);
+    }
   } else if (option === "T" || option === "--upload-file") {
     line.upload = true;
   } else if (option === "--url" && value) {
@@ -723,6 +923,7 @@ const curlLine = (args: readonly string[]): CurlLine => {
     urls: [],
     method: undefined,
     data: false,
+    datas: [],
     upload: false,
     head: false,
     get: false,
@@ -772,6 +973,20 @@ const curl = (call: UpstreamCall): UpstreamWrite | undefined => {
     if (!GITHUB_API_HOSTS.has(parsed.hostname)) {
       continue;
     }
+    if (isGraphql(url)) {
+      const body: GraphqlBody = { unread: false, variables: {} };
+      for (const data of line.datas) {
+        takeJson(
+          body,
+          data.startsWith("@") ? fileText(call, data.slice(1)) : data
+        );
+      }
+      return graphqlWrite(
+        body,
+        GITHUB,
+        "curl POST api.github.com/graphql mutation"
+      );
+    }
     const repo = githubApiRepo(url, GITHUB, () => undefined);
     if (repo) {
       return {
@@ -814,12 +1029,23 @@ export const upstreamRefusal = (
     return;
   }
   const write = upstreamWrite(call);
-  if (!write || owns(rule.remotes, write.repo)) {
+  if (!write || (write.repo !== undefined && owns(rule.remotes, write.repo))) {
     return;
   }
   const own =
     rule.remotes.length > 0
       ? `this project's repository is ${rule.remotes.join(", ")}`
       : "this session has no repository of its own";
-  return `cawco: \`${write.what}\` did not run: it writes to ${write.repo}, and ${own}. Sessions here are kept off other people's repositories (the owner's choice), so nothing is posted under their account. Put what you would have posted (the title and body, or the comment) in your report as a draft instead; the owner decides whether to post it.`;
+  return `cawco: \`${write.what}\` did not run: ${targetWords(write, rule)}, and ${own}. Sessions here are kept off other people's repositories (the owner's choice), so nothing is posted under their account. Put what you would have posted (the title and body, or the comment) in your report as a draft instead; the owner decides whether to post it.`;
+};
+
+/** Where a refused call writes, in the refusal's words. */
+const targetWords = (write: UpstreamWrite, rule: UpstreamRule): string => {
+  if (write.unread) {
+    return "the guard could not read its query (it comes from stdin or a file it cannot open), so where it writes is unknown";
+  }
+  if (write.repo === undefined) {
+    return `it names no repository the guard can check (a mutation acts on node ids), so it is taken as writing to another one. To change ${rule.remotes[0] ?? "this project's repository"}, name it in the query as repository(owner: "…", name: "…"), or use gh's own commands`;
+  }
+  return `it writes to ${write.repo}`;
 };

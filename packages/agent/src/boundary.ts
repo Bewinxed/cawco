@@ -109,10 +109,10 @@ import {
   workspaceProjectFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
-  workspaceScratchRoot,
   workspaceStateDir,
   workspacesDir,
   workspaceTmpDir,
+  workspaceUpstreamRuleFile,
   workspaceXdgDirs,
   workspaceXdgEnv,
 } from "@cawco/core/paths";
@@ -150,11 +150,13 @@ import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
+import { hostGh } from "./host-gh";
 import {
   closeGitDoor,
   gitDoorEnv,
   gitDoorOf,
   gitHelperDirOf,
+  guardedGitParameters,
   openGitDoor,
 } from "./hub-git";
 import { type HeldProc, KeeperPool } from "./keepers";
@@ -899,8 +901,8 @@ ${standalone ? "export BUN_BE_BUN=1\n" : ""}exec ${[runtime, client, String(port
  */
 const guardShimsOf = (id: string): string => join(roOf(id), "guard");
 
-/** The workspace's upstream rule (`UpstreamRule`), as its shims read it: in the part of the state dir a command reads, written only here. */
-const upstreamRuleOf = (id: string): string => join(roOf(id), "upstream.json");
+/** The workspace's upstream rule (`UpstreamRule`), written only here ({@link workspaceUpstreamRuleFile}). */
+const upstreamRuleOf = workspaceUpstreamRuleFile;
 
 /** The rules the hub last handed this machine (register and heartbeat acks); none until it has. */
 let upstreamRules: UpstreamRules | undefined;
@@ -965,7 +967,10 @@ export const takeUpstreamRules = async (
  * of the state dir a command reads. Each shim finds the program it stands in
  * for on the rest of the caller's PATH, has `upstream-shim.ts` judge the call
  * by the workspace's rule ({@link upstreamRuleOf}), and runs the program only
- * when the judge lets it; a refusal's reason is what the session reads. A
+ * when the judge lets it; a refusal's reason is what the session reads. In
+ * a guarded workspace, whose commands hold no GitHub token ({@link
+ * guardedEnv}), the judge hands an allowed call the token from the git door
+ * for that run alone. A
  * `curl` naming none of GitHub's API hosts runs without asking, so a dev
  * server's poll costs nothing.
  */
@@ -986,7 +991,9 @@ const writeGuardShims = async (id: string, runtime: string): Promise<void> => {
   const judge = `${standalone ? "BUN_BE_BUN=1 " : ""}${[runtime, shim, upstreamRuleOf(id)].map(shellQuote).join(" ")}`;
   await Promise.all(
     GUARDED_PROGRAMS.map((program) => {
-      const asks = `${judge} ${shellQuote(program)} "$@" < /dev/null || exit $?`;
+      // The judge prints GitHub's token for this one call when the workspace
+      // is guarded and the call allowed (upstream-shim.ts); nothing else.
+      const asks = `token=$(${judge} ${shellQuote(program)} "$@" < /dev/null) || exit $?`;
       return writeWhole(
         join(dir, program),
         `#!/bin/bash
@@ -1005,6 +1012,7 @@ ${
 esac`
     : asks
 }
+if [ -n "\${token:-}" ]; then export GH_TOKEN=$token GITHUB_TOKEN=$token; fi
 exec "$real" "$@"
 `,
         0o755
@@ -3537,34 +3545,6 @@ const ready = (
     );
   });
 
-/** Where a workspace writes, so nothing the executor runs on the host is found there. */
-const writableInside = (): string[] => [
-  workspaceCacheDir(),
-  workspacesDir(),
-  workspaceScratchRoot(),
-  join(homedir(), ".worktrees"),
-  "/tmp",
-  "/private/tmp",
-  "/var/folders",
-  "/private/var/folders",
-];
-
-/**
- * `gh` as the executor runs it on the host, by its real path; none when the
- * agent finds none, or finds it where a workspace writes.
- */
-const hostGh = async (): Promise<string | undefined> => {
-  const found = Bun.which("gh");
-  const real = found ? await realpath(found).catch(() => undefined) : undefined;
-  if (
-    !real ||
-    writableInside().some((dir) => real === dir || real.startsWith(`${dir}/`))
-  ) {
-    return;
-  }
-  return real;
-};
-
 /**
  * Where the executor keeps `gh`'s token for workspace `id`: its state dir,
  * which no workspace reads (`workspacePolicy` gives back only its `ro`
@@ -3634,6 +3614,39 @@ const commandEnv = (id: string, clone: string): string[] => [
     ...gitDoorEnv(id, clone),
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
 ];
+
+/** The variables a GitHub token travels in: gh's (`GH_TOKEN`, `GH_ENTERPRISE_TOKEN`), hub's and the Actions convention's (`GITHUB_TOKEN`, `GITHUB_ENTERPRISE_TOKEN`). */
+const GITHUB_TOKEN_ENV = [
+  "GH_TOKEN",
+  "GITHUB_TOKEN",
+  "GH_ENTERPRISE_TOKEN",
+  "GITHUB_ENTERPRISE_TOKEN",
+];
+
+/**
+ * What a command of a workspace the upstream guard keeps off other
+ * people's repositories runs with on top of {@link commandEnv}: no GitHub
+ * token, its caller's included, so neither `/usr/bin/gh` by its path nor
+ * curl nor any HTTP client has one to post with; and, when the clone's
+ * origin is on GitHub, that origin sent through the git door
+ * (hub-git.ts `guardedGitParameters`), which fetches and pushes it on the
+ * host with the host's gh credential, its large files with it
+ * (`GIT_LFS_SKIP_PUSH`: the door sends them). An allowed `gh` call gets
+ * the token for itself alone, through its shim ({@link writeGuardShims}).
+ */
+const guardedEnv = (id: string, clone: string): string[] => {
+  const github = guardedGitParameters(clone);
+  const base = gitDoorEnv(id, clone).CAWCO_GIT_PARAMETERS;
+  return [
+    `unset ${GITHUB_TOKEN_ENV.join(" ")}`,
+    ...(github
+      ? [
+          `export CAWCO_GIT_PARAMETERS=${shellQuote(base ? `${base} ${github}` : github)}`,
+          "export GIT_LFS_SKIP_PUSH=1",
+        ]
+      : []),
+  ];
+};
 
 const stoppedLine = (id: string): string =>
   `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
@@ -3747,7 +3760,12 @@ fi
 ${linux ? mountCheck(id, held) : ""}
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
+# Kept off other people's repositories (upstreamGuarded): no GitHub token.
+guarded=
+if grep -q '"guarded":true' ${shellQuote(upstreamRuleOf(id))} 2>/dev/null; then guarded=1; fi
+if [ -z "$guarded" ]; then
 ${ghToken(id, gh)}
+fi
 req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
@@ -3756,6 +3774,11 @@ pwd -P > "$req/cwd"
 ${commandEnv(id, held.path)
   .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
+  if [ -n "$guarded" ]; then
+${guardedEnv(id, held.path)
+  .map((line) => `    echo ${shellQuote(line)}`)
+  .join("\n")}
+  fi
   ${path}
 } > "$req/env"
 mkfifo "$req/out" "$req/err"

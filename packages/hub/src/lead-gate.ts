@@ -62,6 +62,7 @@ import {
   GUARDED_PROGRAMS,
   type UpstreamRule,
   upstreamRefusal,
+  upstreamWrite,
 } from "@cawco/core/upstream-guard";
 import type { DbShape, LeadCallRow } from "./db";
 import type { WebContext } from "./web-reads";
@@ -928,12 +929,13 @@ export const upstreamDenial = (
     if (!GUARDED_PROGRAMS.includes(baseName(program))) {
       continue;
     }
-    const refused = upstreamRefusal(rule, {
-      program,
-      args,
-      env,
-      cwdRemotes: () => [],
-    });
+    const call = { program, args, env, cwdRemotes: () => [] };
+    // A query the hub cannot read (a file on the place's machine) is the
+    // place's shims' to read as the call runs.
+    if (upstreamWrite(call)?.unread) {
+      continue;
+    }
+    const refused = upstreamRefusal(rule, call);
     if (refused) {
       return refused;
     }
