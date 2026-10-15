@@ -122,6 +122,8 @@ type Frame = [number, number, string];
 
 /** One attribute change on the page, as its observer heard it: when, which, on what, from what. */
 interface Changed {
+  /** The nodes put into `target`, for a change to what it holds. */
+  added: Node[];
   at: number;
   name: string | null;
   target: Node;
@@ -535,17 +537,25 @@ async function measure(
   // inherited style changing on one restyles all it holds, so this names
   // the box and the attribute behind a switch's restyle. The observer only
   // keeps the records, in the switch's own task; they are read, and the
-  // boxes counted, after it (`Changed`).
+  // boxes counted, after it (`Changed`). And the elements each switch put
+  // into the page, by where: each is styled whole as it goes in.
   await page.evaluate(() => {
     const kept: Changed[] = [];
     new MutationObserver((records) => {
       const at = performance.now();
-      for (const { target, attributeName, oldValue } of records) {
-        kept.push({ at, name: attributeName, target, was: oldValue });
+      for (const { addedNodes, target, attributeName, oldValue } of records) {
+        kept.push({
+          added: [...addedNodes],
+          at,
+          name: attributeName,
+          target,
+          was: oldValue,
+        });
       }
     }).observe(document.body, {
       attributeOldValue: true,
       attributes: true,
+      childList: true,
       subtree: true,
     });
     (window as unknown as { __changed: Changed[] }).__changed = kept;
@@ -573,9 +583,34 @@ async function measure(
               .__changed;
             const clip = (value: string | null) => (value ?? "").slice(0, 80);
             const ours: string[] = [];
-            for (const { at, name, target, was } of kept) {
+            const regions: [string, string][] = [
+              ["[data-pane]:not(.pane-hidden)", "a pane drawn"],
+              ["[data-pane].pane-hidden", "a pane put away"],
+              [".dock", "the composer"],
+              [".session-tabs, [data-session-tab]", "the tabs"],
+            ];
+            const regionOf = (box: Element) =>
+              `inserted into ${
+                regions.find(([where]) => box.closest(where))?.[1] ??
+                [box.tagName.toLowerCase(), ...box.classList]
+                  .slice(0, 3)
+                  .join(".")
+              }`;
+            for (const { added, at, name, target, was } of kept) {
               if (!(at >= since && at < since + within)) {
                 continue;
+              }
+              if (target instanceof Element && added.length > 0) {
+                const elements = added.reduce(
+                  (sum, node) =>
+                    node instanceof Element
+                      ? sum + 1 + node.getElementsByTagName("*").length
+                      : sum,
+                  0
+                );
+                for (let i = 0; i < elements; i += 1) {
+                  ours.push(regionOf(target));
+                }
               }
               if (!(target instanceof Element && name)) {
                 continue;
