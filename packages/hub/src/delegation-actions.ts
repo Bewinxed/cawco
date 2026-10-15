@@ -163,6 +163,8 @@ export interface Machine {
   machineId: string;
   /** Paused by the owner until this time, epoch ms (machine-pause.ts); null or absent when not. */
   pausedUntil?: number | null;
+  /** What its pause stopped as it began: "stopped 1 running check"; null or absent when nothing. */
+  pauseStopped?: string | null;
   /** `online` while its daemon holds a socket to the hub. */
   status: string;
 }
@@ -1837,10 +1839,13 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    const row = (await response.json()) as { pausedUntil: number | null };
+    const row = (await response.json()) as {
+      pausedUntil: number | null;
+      pauseStopped: string | null;
+    };
     return row.pausedUntil === null
       ? `${name} is not paused: what was kept for it goes now.`
-      : `Paused ${name} until ${pauseClock(row.pausedUntil)}: its running turns were stopped, and nothing starts there until then. Work for it waits and goes when the pause ends.`;
+      : `Paused ${name} until ${pauseClock(row.pausedUntil)}: its running turns were stopped${row.pauseStopped ? `, it ${row.pauseStopped}` : ""}, and nothing starts there until then. Work for it waits and runs when the pause ends.`;
   },
 
   answerDelegate(

@@ -20,8 +20,40 @@ const OUTPUT_LIMIT = 8 * 1024 * 1024;
 /** How long a command runs when its caller names no limit. */
 const DEFAULT_TIMEOUT_MS = 300_000;
 
-/** The process group of every command still running, by its leader's pid. */
-const live = new Set<number>();
+/** How long a stopped command's process group has between SIGTERM and SIGKILL. */
+const KILL_GRACE_MS = 5000;
+
+/** How long a cancel for a run not running yet is kept for that run to come up. */
+const EARLY_CANCEL_KEPT_MS = 24 * 60 * 60 * 1000;
+
+/** Why the runner ended a command itself. */
+type Stop = "expired" | "overflowed" | "cancelled" | "abandoned";
+
+/** A command still running: the run the hub named it, and how it is ended. */
+interface Running {
+  readonly runId: string | undefined;
+  readonly stop: (why: Stop) => void;
+}
+
+/** Every command still running. */
+const live = new Set<Running>();
+
+/**
+ * Runs cancelled before they ran (queued behind another command in their
+ * directory, or starting their boundary), by id, with when the cancel came.
+ */
+const cancelledEarly = new Map<string, number>();
+
+/** Signals a process group; one already gone is no error. */
+const signalGroup = (pid: number, signal: NodeJS.Signals): void => {
+  try {
+    process.kill(-pid, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+      throw error;
+    }
+  }
+};
 
 /** Where queue frames go: the daemon's socket. */
 let sendQueue: (frame: CommandQueueFrame) => void = () => undefined;
@@ -34,7 +66,7 @@ export const setCommandQueue = (
 /**
  * The hub connection ended: nobody is left to receive what the running
  * commands answer, and the hub runs a check again from the first when it is
- * back. Every live command is killed with its process group; each resolves
+ * back. Every live command is stopped with its process group; each resolves
  * through its own `close`, as a timed-out one does.
  */
 export function abandonCommands(): void {
@@ -42,10 +74,35 @@ export function abandonCommands(): void {
     return;
   }
   const count = live.size;
-  for (const pid of live) {
-    process.kill(-pid, "SIGKILL");
+  for (const running of live) {
+    running.stop("abandoned");
   }
   console.log(`abandoned ${count} command(s): hub connection ended`);
+}
+
+/**
+ * `CONTROL_CANCEL_COMMAND`: stops the run the hub named `runId`, which then
+ * answers `cancelled`. A run not running yet is kept cancelled: it answers
+ * `cancelled` as it comes up, without starting. Answers whether it was running.
+ */
+export function cancelCommand(runId: unknown): boolean {
+  if (typeof runId !== "string" || !runId) {
+    throw new Error("cancelCommand requires the run's id.");
+  }
+  for (const running of live) {
+    if (running.runId === runId) {
+      running.stop("cancelled");
+      return true;
+    }
+  }
+  const now = Date.now();
+  for (const [id, at] of cancelledEarly) {
+    if (now - at > EARLY_CANCEL_KEPT_MS) {
+      cancelledEarly.delete(id);
+    }
+  }
+  cancelledEarly.set(runId, now);
+  return false;
 }
 
 /** Whether `value` names a delegation workspace: an id and an absolute clone path. */
@@ -167,7 +224,14 @@ const lines = (each: (line: string) => void) => {
  * run's `id`.
  * Answers complete stdout and complete stderr; a command that writes more
  * than {@link OUTPUT_LIMIT} bytes across both is killed the same way and
- * rejects.
+ * rejects. A run the hub cancels ({@link cancelCommand}) is ended the same
+ * way and answers `cancelled`.
+ *
+ * Every command the runner ends itself ends one way: SIGTERM to its process
+ * group, then SIGKILL to what is left of it {@link KILL_GRACE_MS} later. The
+ * TERM comes first because a workspace's executor passes it on to the
+ * command's own group inside the boundary (its trap), which a KILL to the
+ * executor never reaches.
  *
  * Given a `workspace`, the command runs inside that workspace's boundary,
  * through the executor its sessions' shell commands run through: the same
@@ -200,6 +264,10 @@ export async function runWorkflowCommand(
   const [file, args] = isWorkspaceRef(workspace)
     ? [(await ensureBoundary(workspace)).exec, [cmd]]
     : ["/bin/sh", ["-c", cmd]];
+  // Cancelled while it waited its turn or its boundary: it never starts.
+  if (named && cancelledEarly.delete(named.id)) {
+    return { cancelled: true, exitCode: 143, stdout: "", stderr: "" };
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
       cwd,
@@ -208,33 +276,46 @@ export async function runWorkflowCommand(
       env: { ...hostEnvironment(), PWD: cwd },
       stdio: ["ignore", "pipe", "pipe"],
     });
-    const { pid } = child;
-    if (pid) {
-      live.add(pid);
-    }
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let written = 0;
-    let expired = false;
-    let overflowed = false;
+    /** Why the runner ended the command, once it has. */
+    let stopped: Stop | undefined;
     /** What the runner adds to stderr when it ends the command itself. */
     let said = "";
-    const killGroup = () => {
-      if (child.pid) {
+    const running: Running = {
+      runId: named?.id,
+      stop: (why) => {
+        const { pid } = child;
+        if (stopped || !pid) {
+          return;
+        }
+        stopped = why;
+        clock.stop();
         try {
-          process.kill(-child.pid, "SIGKILL");
+          signalGroup(pid, "SIGTERM");
         } catch (error) {
           reject(error);
+          return;
         }
-      }
+        setTimeout(() => {
+          try {
+            signalGroup(pid, "SIGKILL");
+          } catch (error) {
+            console.warn(`could not kill command group ${pid}: ${error}`);
+          }
+        }, KILL_GRACE_MS).unref();
+      },
     };
+    if (child.pid) {
+      live.add(running);
+    }
     const clock = commandClock(
       typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS,
       named?.queueMaxMs ?? QUEUE_WAIT_MAX_MS,
       (why) => {
-        expired = true;
         said = why;
-        killGroup();
+        running.stop("expired");
       },
       (queue) => {
         if (named) {
@@ -245,16 +326,14 @@ export async function runWorkflowCommand(
     const collect = (into: Buffer[]) => {
       const scan = lines((line) => clock.line(line));
       return (chunk: Buffer) => {
-        if (overflowed) {
+        if (stopped === "overflowed") {
           return;
         }
         written += chunk.length;
         if (written > OUTPUT_LIMIT) {
-          overflowed = true;
           stdout.length = 0;
           stderr.length = 0;
-          clock.stop();
-          killGroup();
+          running.stop("overflowed");
           reject(
             new Error(
               `Command output passed ${OUTPUT_LIMIT} bytes: ${cmd.slice(0, 200)}`
@@ -270,21 +349,20 @@ export async function runWorkflowCommand(
     child.stderr.on("data", collect(stderr));
     child.on("error", (error) => {
       clock.stop();
-      if (pid) {
-        live.delete(pid);
-      }
+      live.delete(running);
       reject(error);
     });
+    // A stopped command's KILL still comes after its leader closes: what is
+    // left of its group (a child that let go of the pipes) goes with it.
     child.on("close", (code) => {
       clock.stop();
-      if (pid) {
-        live.delete(pid);
-      }
-      if (overflowed) {
+      live.delete(running);
+      if (stopped === "overflowed") {
         return;
       }
       resolve({
-        exitCode: expired ? 124 : (code ?? 1),
+        ...(stopped === "cancelled" ? { cancelled: true as const } : {}),
+        exitCode: stopped === "expired" ? 124 : (code ?? 1),
         stdout: Buffer.concat(stdout).toString("utf8"),
         stderr: Buffer.concat(stderr).toString("utf8") + said,
       });

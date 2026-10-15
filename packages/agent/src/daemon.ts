@@ -27,6 +27,7 @@ import {
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
+  CONTROL_CANCEL_COMMAND,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
@@ -178,6 +179,7 @@ import { onToolsMoved, probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
 import {
   abandonCommands,
+  cancelCommand,
   runWorkflowCommand,
   setCommandQueue,
 } from "./workflow-command";
@@ -2462,6 +2464,10 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
           : runWorkflowCommand(cwd, cmd, timeoutMs, workspace, run)
+    );
+    // A cancel ends a command already running, so it is taken behind a raised fence too.
+    supervisor.registerDaemonFunction(CONTROL_CANCEL_COMMAND, async (runId) =>
+      cancelCommand(runId)
     );
     // A workspace is cut in this process, so a restart would cut it too: none starts behind a raised fence.
     supervisor.registerDaemonFunction(

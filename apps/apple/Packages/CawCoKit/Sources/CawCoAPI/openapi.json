@@ -34749,6 +34749,13 @@
               "number"
             ]
           },
+          "pauseStopped": {
+            "description": "What the pause stopped as it began, as said ({@link stoppedWords}):\n\"stopped 1 running check\". Null when it stopped nothing, or is not paused.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "status": {
             "type": "string"
           },
@@ -34763,6 +34770,7 @@
           "lastSeenAt",
           "machineId",
           "os",
+          "pauseStopped",
           "pausedUntil",
           "status"
         ]

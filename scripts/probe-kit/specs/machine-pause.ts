@@ -36,6 +36,12 @@
  * p6. At the end everything proceeds: the interrupted delegate carries on
  *     and reads the handoff, the queued delegate starts on B, the check runs
  *     and the item lands; B is no longer paused.
+ * p7. A check already running on B as a second pause begins (`sleep 600`
+ *     there): within 10 s its process is gone from the process table and the
+ *     check says it waits for the pause; the item is not failed, its check
+ *     run is the same one, and its delegate is told nothing; B's row says it
+ *     stopped 1 running check. After the pause the check runs again and the
+ *     item lands.
  *
  *   bun scripts/probe-kit/run.ts machine-pause
  */
@@ -56,6 +62,10 @@ type Command = keyof typeof TOOLS;
 const SLEEP = /PROBE-SLEEP-([A-Z])/;
 const HELLO = "PROBE-HELLO-Q";
 const FINISH_C = "PROBE-FINISH-C";
+const FINISH_D = "PROBE-FINISH-D";
+/** p7's check on B: its first run marks its scratch dir and sleeps; the run after the pause finds the mark and ends. */
+const LONG_CHECK = `if [ -e "$TMPDIR/p7-ran" ]; then echo ran-p7; else touch "$TMPDIR/p7-ran"; sleep 600; fi`;
+const P7_PAUSE_MS = 60_000;
 const CMD = /PROBE-CMD (\d+) (interrupt|handoff) (\S+)(?: (.*))?/g;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -74,6 +84,8 @@ const commands = new Map<string, "searched" | "called" | "done">();
 let paused = false;
 let finishSearched = false;
 let finishCalled = false;
+let dSearched = false;
+let dCalled = false;
 
 const parentReply = (request: Seen): Reply => {
   const matches = [...request.all.matchAll(CMD)];
@@ -128,6 +140,21 @@ const delegateReply = (tag: string, request: Seen): Reply => {
 };
 
 const delegateAnswer = (tag: string, request: Seen): Reply => {
+  if (tag === "D") {
+    // Finishes at once: its check on B is what p7 pauses.
+    if (!dCalled && request.toolNames.includes(FINISH)) {
+      dCalled = true;
+      return useTool(FINISH, { headline: "Checked.", summary: "Checked." });
+    }
+    if (!(dCalled || dSearched)) {
+      dSearched = true;
+      return useTool("ToolSearch", {
+        query: `select:${FINISH}`,
+        max_results: 1,
+      });
+    }
+    return text("done D");
+  }
   if (tag === "C") {
     // Spins on short sleeps, a delegate at work on A, until B is paused.
     if (!paused) {
@@ -167,7 +194,8 @@ const respond = (request: Seen): Reply => {
   const tag =
     SLEEP.exec(request.all)?.[1] ??
     (request.all.includes(HELLO) ? "Q" : undefined) ??
-    (request.all.includes(FINISH_C) ? "C" : undefined);
+    (request.all.includes(FINISH_C) ? "C" : undefined) ??
+    (request.all.includes(FINISH_D) ? "D" : undefined);
   return tag ? delegateReply(tag, request) : text("ok");
 };
 
@@ -600,6 +628,116 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
   );
   const after = await pausedUntil(fleet);
   check("p6: B is no longer paused", after === null, String(after));
+
+  await runningCheck(kit, fleet, probe, tray);
+};
+
+/** Every `sleep 600` in this host's process table (every machine of the fleet runs here). */
+const longSleeps = async (): Promise<Set<string>> =>
+  new Set(
+    (await Bun.$`pgrep -fx ${"sleep 600"}`.nothrow().quiet().text())
+      .split("\n")
+      .map((pid) => pid.trim())
+      .filter(Boolean)
+  );
+
+/** p7: a check already running on B as a pause begins. */
+const runningCheck = async (
+  kit: Kit,
+  fleet: KitFleet,
+  probe: Probe,
+  tray: () => Promise<{ id: string; checkQueue: { words: string } | null }[]>
+) => {
+  const { check } = kit;
+  const before = await longSleeps();
+  const d = await probe.delegate("Long check", `${FINISH_D}: finish now.`, {
+    checks: [
+      {
+        name: "Long on B",
+        command: LONG_CHECK,
+        machine: B,
+        timeoutSec: 900,
+      },
+    ],
+  });
+  const dItem = d.workItemId as string;
+  const ours = await until(
+    "D's check sleeping on B",
+    async () => [...(await longSleeps())].filter((pid) => !before.has(pid)),
+    (pids) => pids.length > 0,
+    300_000
+  );
+  const row = () =>
+    fleet.query<{ state: string; checking_since: number | null }>(
+      "SELECT state, checking_since FROM work_items WHERE id = ?",
+      dItem
+    )[0];
+  const checking = row();
+  const pausedAt = Date.now();
+  const until_ = pausedAt + P7_PAUSE_MS;
+  const answer = await fetch(`${fleet.base}/api/machines/${B}/pause`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ until: new Date(until_).toISOString() }),
+  });
+  const view = (await answer.json().catch(() => ({}))) as {
+    pauseStopped?: string | null;
+  };
+  const gone = await until(
+    "D's sleep gone",
+    async () => {
+      const now = await longSleeps();
+      return ours.every((pid) => !now.has(pid));
+    },
+    Boolean,
+    10_000
+  ).catch(() => false);
+  check(
+    "p7: within 10 s of the pause the running check's process is gone from B's process table",
+    gone === true && Date.now() - pausedAt <= 12_000,
+    `pids ${ours.join(" ")}; still there: ${[...(await longSleeps())].filter((pid) => ours.includes(pid)).join(" ") || "none"}`
+  );
+  const words = `paused until ${clock(until_)}`;
+  const waiting = await until(
+    "D's check waiting on the pause",
+    async () =>
+      (await tray()).find((item) => item.id === dItem)?.checkQueue?.words,
+    (status) => status.includes("paused"),
+    10_000
+  ).catch(() => undefined);
+  check(
+    "p7: the stopped check reads waiting: … paused until",
+    waiting?.startsWith("waiting:") === true && waiting.includes(words),
+    waiting ?? "no wait said"
+  );
+  const during = row();
+  const toldD = (heard.get("D") ?? []).filter((seen) => seen.at > pausedAt);
+  check(
+    "p7: the item is not failed, its check run is the same one, and its delegate is told nothing",
+    during?.state === "running" &&
+      during.checking_since !== null &&
+      during.checking_since === checking?.checking_since &&
+      toldD.length === 0,
+    `before ${JSON.stringify(checking)}, during ${JSON.stringify(during)}; D's requests since the pause:\n  ${story("D", pausedAt)}`
+  );
+  check(
+    "p7: the pause's answer says it stopped 1 running check",
+    view.pauseStopped === "stopped 1 running check",
+    `${answer.status} ${JSON.stringify(view)}`
+  );
+  const done = await until(
+    "D's item landed",
+    () => probe.itemOf(dItem),
+    (item) => item.state !== "running" && item.state !== "starting",
+    P7_PAUSE_MS + 300_000
+  ).catch(() => probe.itemOf(dItem));
+  check(
+    "p7: after the pause the check runs again and the item lands",
+    done?.state === "done" &&
+      (done.result ?? "").includes("- Long on B: pass (") &&
+      Date.now() > until_,
+    `${done?.state}: ${(done?.result ?? "").slice(0, 600)}`
+  );
 };
 
 export default { name: "machine-pause", run } satisfies Spec;

@@ -133,6 +133,7 @@ import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
+  CONTROL_CANCEL_COMMAND,
   CONTROL_CARRY_SESSIONS,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
@@ -244,6 +245,7 @@ import {
   QUESTION_DISMISSED,
   QUEUE_WAIT_MAX_MS,
   questionsOf,
+  queueWords,
   RATE_LIMIT_READ,
   READ_FLEET_HOLDINGS,
   READ_HOOK_SCRIPT,
@@ -254,6 +256,7 @@ import {
   type RebalanceNotice,
   type Relaunch,
   RULE_TEMPLATES,
+  type RunKind,
   readProvenance,
   readSent,
   rebalanceWords,
@@ -264,6 +267,7 @@ import {
   SERVER_STOPPED_MID_TURN,
   SESSION_DIR_READ,
   STREAM_SO_FAR,
+  type StoppedCommands,
   type StreamHeartbeat,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
@@ -443,7 +447,11 @@ import { type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { createLeadGate, reviewProblem } from "./lead-gate";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
-import { createMachinePause, PAUSE_ORIGIN } from "./machine-pause";
+import {
+  type CommandOptions,
+  createMachinePause,
+  PAUSE_ORIGIN,
+} from "./machine-pause";
 import { MeaningJudge } from "./meaning";
 import {
   externalizeImages,
@@ -15668,7 +15676,13 @@ export const createServer = (
    * runs inside that workspace's boundary, as its delegate's commands do.
    * The machine's clock stands while the command waits for a shared slot,
    * up to QUEUE_WAIT_MAX_MS, so the hub waits that much longer; each change
-   * of that wait reaches `onQueue`.
+   * of that wait reaches `how.onWait`.
+   *
+   * On a paused machine (machine-pause.ts) it waits for the pause's end
+   * before it starts, `onWait` saying so. One running as a pause begins is
+   * cancelled there ({@link stopCommands}) and runs again from the start
+   * once the pause is over; a `movable` one answers `cancelled` instead, for
+   * its caller to run again where it chooses.
    */
   const runOnMachine = async (
     machineId: string,
@@ -15676,15 +15690,107 @@ export const createServer = (
     cmd: string,
     timeoutMs?: number,
     workspace?: WorkspaceRef,
-    onQueue?: (queue: CommandQueue | null) => void
+    how: CommandOptions = {}
+  ): Promise<CommandResult> => {
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: a run cancelled by a pause runs again once it is over
+      await pauseOver(machineId, how.onWait);
+      const result = await runOnce(
+        machineId,
+        cwd,
+        cmd,
+        timeoutMs,
+        workspace,
+        how
+      );
+      if (!result.cancelled || how.movable) {
+        return result;
+      }
+      console.log(
+        `[pause] ${machineId}: a ${how.what ?? "command"} it stopped waits for the pause's end, then runs again`
+      );
+    }
+  };
+
+  /** Waits out `machineId`'s pause, `onWait` saying it; at once when it is not paused. */
+  const pauseOver = async (
+    machineId: string,
+    onWait: ((words: string | null) => void) | undefined
+  ): Promise<void> => {
+    const words = machinePause.words(machineId);
+    if (!words) {
+      return;
+    }
+    onWait?.(`waiting: ${words}`);
+    await machinePause.free(machineId);
+    onWait?.(null);
+  };
+
+  /** Each command the hub has running on a machine, by its run's id. */
+  const commandsInFlight = new Map<
+    string,
+    { machineId: string; what: RunKind }
+  >();
+
+  /**
+   * A pause began: every command the hub has running on the machine is
+   * cancelled there, each to run again once the pause is over
+   * ({@link runOnMachine}). Answers how many of each kind the machine says
+   * were running; one still queued there is cancelled before it starts, and
+   * is not counted.
+   */
+  const stopCommands = async (machineId: string): Promise<StoppedCommands> => {
+    const runs = [...commandsInFlight].filter(
+      ([, run]) => run.machineId === machineId
+    );
+    const answers = await Promise.all(
+      runs.map(async ([runId, run]) => {
+        const answer = await callAgent(
+          machineId,
+          CONTROL_CANCEL_COMMAND,
+          [runId],
+          15_000
+        ).catch((error: unknown) =>
+          error instanceof Error ? error.message : String(error)
+        );
+        if (typeof answer === "string" || answer.error) {
+          console.warn(
+            `[pause] ${machineId}: could not cancel ${run.what} ${runId}: ${typeof answer === "string" ? answer : String(answer.error)}`
+          );
+          return;
+        }
+        return answer.result === true ? run.what : undefined;
+      })
+    );
+    const stopped: StoppedCommands = {};
+    for (const what of answers) {
+      if (what) {
+        stopped[what] = (stopped[what] ?? 0) + 1;
+      }
+    }
+    return stopped;
+  };
+
+  /** One run of a command on a machine ({@link runOnMachine}). */
+  const runOnce = async (
+    machineId: string,
+    cwd: string,
+    cmd: string,
+    timeoutMs: number | undefined,
+    workspace: WorkspaceRef | undefined,
+    how: CommandOptions
   ): Promise<CommandResult> => {
     const run: CommandRun = {
       id: crypto.randomUUID(),
       queueMaxMs: QUEUE_WAIT_MAX_MS,
     };
-    if (onQueue) {
-      commandQueues.set(run.id, onQueue);
+    const { onWait } = how;
+    if (onWait) {
+      commandQueues.set(run.id, (queue) =>
+        onWait(queue ? queueWords(queue) : null)
+      );
     }
+    commandsInFlight.set(run.id, { machineId, what: how.what ?? "command" });
     try {
       const response = await callAgent(
         machineId,
@@ -15701,6 +15807,7 @@ export const createServer = (
       return response.result as CommandResult;
     } finally {
       commandQueues.delete(run.id);
+      commandsInFlight.delete(run.id);
     }
   };
 
@@ -15794,6 +15901,17 @@ export const createServer = (
    * Caw is woken to set it up, on or off (caw.ts `setup`). The dashboard's "New
    * project" and "Create project" and an accepted project offer all come here.
    */
+  /** A paused machine's folder is read nothing: the person is told now, not kept waiting for the pause's end. */
+  const folderReadable = (machineId: string | undefined): void => {
+    const paused = machineId && machinePause.words(machineId);
+    if (paused) {
+      throw new FolderRefusal(
+        409,
+        `${paused}, so its folder is not read until then. Add it after the pause, or resume the machine first.`
+      );
+    }
+  };
+
   const createOrJoinProject = async (asked: {
     name: string;
     checkout?: { machineId: string; cwd: string };
@@ -15821,6 +15939,7 @@ export const createServer = (
         (message, cause) => new FolderRefusal(400, message, { cause })
       ),
     };
+    folderReadable(checkout?.machineId);
     const remote = checkout
       ? await readRemote(runOnMachine, checkout.machineId, checkout.path)
       : null;
@@ -16121,10 +16240,10 @@ export const createServer = (
         observe();
       }),
     // A workflow's command on a paused machine waits for the pause's end.
-    command: async (machineId, ...rest) => {
-      await machinePause.free(machineId);
-      return runOnMachine(machineId, ...rest);
-    },
+    command: (machineId, cwd, cmd, timeoutMs) =>
+      runOnMachine(machineId, cwd, cmd, timeoutMs, undefined, {
+        what: "workflow command",
+      }),
     park: parkForPerson,
     settle: (id) => {
       pending.resolve(id);
@@ -16336,8 +16455,14 @@ export const createServer = (
    * interrupted, and its session is sent word to carry on, which the pause
    * keeps at the hub until it ends ({@link deliverToSession}). The cut holds
    * no delegated work ({@link noteInterrupt}): that word is what wakes it.
+   * Every command the hub runs there is cancelled, to run again once the
+   * pause is over ({@link stopCommands}); answers how many of each kind.
    */
-  const pauseBegan = (machineId: string, until: Date): void => {
+  const pauseBegan = (
+    machineId: string,
+    until: Date
+  ): Promise<StoppedCommands> => {
+    const stopped = stopCommands(machineId);
     for (const row of db.listInstances()) {
       if (
         row.machineId !== machineId ||
@@ -16368,6 +16493,7 @@ export const createServer = (
     }
     workItems.pauseChanged(machineId);
     publishInstances(machineId);
+    return stopped;
   };
 
   /**
@@ -19402,11 +19528,12 @@ export const createServer = (
       })
       // The owner pauses a machine until a time (machine-pause.ts): nothing
       // CawCo starts runs there until then, its agent connected throughout.
-      // Answers the machine's row as it stands, its pause on it.
+      // Answers the machine's row as it stands, its pause on it, once what
+      // ran there has stopped: the row says how many commands that was.
       .post(
         "/api/machines/:machineId/pause",
         { body: t.Object({ until: t.String() }) },
-        ({ params, body, status }) => {
+        async ({ params, body, status }) => {
           const until = new Date(body.until);
           if (Number.isNaN(until.getTime())) {
             return status(
@@ -19417,7 +19544,7 @@ export const createServer = (
           if (until.getTime() <= Date.now()) {
             return status(400, `until: ${body.until} has already passed.`);
           }
-          const row = machinePause.pause(params.machineId, until)
+          const row = (await machinePause.pause(params.machineId, until))
             ? machineRow(params.machineId)
             : undefined;
           if (!row) {

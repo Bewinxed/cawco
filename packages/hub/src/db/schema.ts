@@ -46,6 +46,7 @@ import type {
   SessionTooling,
   SigninState,
   SkillFile,
+  StoppedCommands,
   StrategyChoice,
   ThreadAnswer,
   ThreadEvent,
@@ -317,6 +318,14 @@ export const agents = sqliteTable("agents", {
    * when it is not paused; cleared as the time comes.
    */
   pausedUntil: timestamp("paused_until"),
+  /**
+   * How many of each kind of command the pause stopped as it began
+   * (machine-pause.ts): the machine's row says it. Null when it stopped
+   * nothing; cleared with the pause.
+   */
+  pauseStopped: text("pause_stopped", {
+    mode: "json",
+  }).$type<StoppedCommands>(),
   lastSeenAt: timestamp("last_seen_at"),
   createdAt: timestamp("created_at")
     .notNull()

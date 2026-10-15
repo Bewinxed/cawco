@@ -35,7 +35,6 @@
  * to-dos still open, and steps left open become `(proposed)` to-dos.
  */
 import type {
-  CommandQueue,
   CommandResult,
   DelegateType,
   EndedBy,
@@ -77,7 +76,6 @@ import {
   machineLabel,
   namedAmong,
   namesAmong,
-  queueWords,
   sizeWords,
   type WorkspaceLanding,
   withLandingLine,
@@ -125,6 +123,7 @@ import {
   type Refusal,
 } from "./landing";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { CommandOptions } from "./machine-pause";
 import {
   FOLDER_FILE_LIMIT,
   FolderRefusal,
@@ -633,8 +632,9 @@ export interface WorkItemDeps {
   /**
    * Runs a command on a machine, in a directory — inside `workspace`'s
    * boundary when one is named; throws when the machine cannot. Its limit
-   * stands while it waits for a shared machine slot; `onQueue` hears each
-   * change of that wait.
+   * stands while it waits for a shared machine slot; on a paused machine it
+   * waits for the pause's end, and one a pause cancels runs again after it
+   * (or answers `cancelled`, `how.movable`); `how.onWait` hears each wait.
    */
   readonly command: (
     machineId: string,
@@ -642,7 +642,7 @@ export interface WorkItemDeps {
     cmd: string,
     timeoutMs?: number,
     workspace?: WorkspaceRef,
-    onQueue?: (queue: CommandQueue | null) => void
+    how?: CommandOptions
   ) => Promise<CommandResult>;
   readonly db: DbShape;
   /**
@@ -1218,6 +1218,19 @@ interface InstallOutcome {
 interface CheckRun {
   installs: InstallOutcome[];
   outcomes: CheckOutcome[];
+}
+
+/** One check that ran to its end, and where, when on another machine. */
+interface Ran {
+  complete: CommandResult;
+  where: string | undefined;
+}
+
+/** A check's install a machine's pause cancelled: it runs again with its check. */
+class PausedRun extends Error {
+  constructor() {
+    super("cancelled by its machine's pause");
+  }
 }
 
 /** Whether a run fails: an install that failed, or a check. */
@@ -2885,6 +2898,8 @@ export const createWorkItems = ({
       }
     };
     busy();
+    // Before anything reaches the machine, as a new clone is refused.
+    notPaused(workspace.machineId);
     try {
       const there = await command(
         workspace.machineId,
@@ -3600,11 +3615,16 @@ export const createWorkItems = ({
     checks: WorkItemCheck[]
   ): Promise<CheckRun> => {
     let commit: Promise<WorkspaceCommit> | undefined;
-    /** A check's slot wait, as the item's status says it (WorkItemSummary `checkQueue`). */
-    const queued = (queue: CommandQueue | null): void => {
-      if (queue) {
+    /**
+     * What a check waits for, as the item's status says it (WorkItemSummary
+     * `checkQueue`): a shared slot ("queued for …") or its machine's pause
+     * ("waiting: Omars-MacBook-Pro is paused until 00:57"); null once it
+     * waits no more.
+     */
+    const queued = (words: string | null): void => {
+      if (words) {
         checkQueues.set(item.id, {
-          words: queueWords(queue),
+          words,
           since: checkQueues.get(item.id)?.since ?? Date.now(),
         });
       } else if (!checkQueues.delete(item.id)) {
@@ -3612,24 +3632,20 @@ export const createWorkItems = ({
       }
       published(db.workItem(item.id));
     };
+    /** How a check's commands run: a pause that cancels one hands it back here. */
+    const asCheck = { onWait: queued, what: "check", movable: true } as const;
     /**
      * Waits out a pause of the machine a check runs on, the item's status
-     * saying it ("waiting: Omars-MacBook-Pro is paused until 00:57"); at once
-     * when it is not paused.
+     * saying it; at once when it is not paused.
      */
     const unpaused = async (machineId: string): Promise<void> => {
       const words = machinePaused(machineId);
       if (!words) {
         return;
       }
-      checkQueues.set(item.id, {
-        words: `waiting: ${words}`,
-        since: Date.now(),
-      });
-      published(db.workItem(item.id));
+      queued(`waiting: ${words}`);
       await machineFree(machineId);
-      checkQueues.delete(item.id);
-      published(db.workItem(item.id));
+      queued(null);
     };
     /** The installs this run made, each a line of the check log ahead of the checks. */
     const installs: InstallOutcome[] = [];
@@ -3638,6 +3654,7 @@ export const createWorkItems = ({
      * its lockfile moved since they were installed ({@link depsScript}).
      * Answers whether the checkout can be checked: false once its install
      * failed. An install that ran is logged in {@link installs}, with `where`.
+     * One a pause cancels throws {@link PausedRun}: it runs again with its check.
      */
     const install = async (
       machineId: string,
@@ -3650,8 +3667,12 @@ export const createWorkItems = ({
         at.path,
         `${SAFE_GIT_SHELL}${depsScript()}`,
         CHECK_TIMEOUT_SEC * 1000,
-        refOf(at)
+        refOf(at),
+        asCheck
       );
+      if (complete.cancelled) {
+        throw new PausedRun();
+      }
       if (
         complete.exitCode === 0 &&
         !complete.stdout.startsWith(DEPS_INSTALLING)
@@ -3704,27 +3725,35 @@ export const createWorkItems = ({
       placed.set(machineId, ready);
       return ready;
     };
-    /** One check on another machine; a machine that cannot run it fails the check in its words. */
+    /**
+     * One check on another machine; a machine that cannot run it fails the
+     * check in its words. Undefined when a pause cancelled it, to run again.
+     */
     const runElsewhere = async (
       machineId: string,
       check: WorkItemCheck,
       limit: number
-    ): Promise<{ complete: CommandResult; where: string }> => {
+    ): Promise<Ran | undefined> => {
       const on = `on ${machineName(machineId)}`;
       try {
         const { at, head } = await elsewhere(machineId);
-        return {
-          where: `${on} at ${head.slice(0, 9)}`,
-          complete: await command(
-            machineId,
-            at.path,
-            check.command,
-            limit,
-            refOf(at),
-            queued
-          ),
-        };
+        const complete = await command(
+          machineId,
+          at.path,
+          check.command,
+          limit,
+          refOf(at),
+          asCheck
+        );
+        return complete.cancelled
+          ? undefined
+          : { where: `${on} at ${head.slice(0, 9)}`, complete };
       } catch (error) {
+        if (error instanceof PausedRun) {
+          // Its install was cut: the next run there starts the install again.
+          placed.delete(machineId);
+          return;
+        }
         return {
           where: on,
           complete: {
@@ -3735,36 +3764,78 @@ export const createWorkItems = ({
         };
       }
     };
+    /** The workspace's own install, run again from the start while a pause cuts it. */
+    const installHere = async (): Promise<boolean> => {
+      for (;;) {
+        // biome-ignore lint/performance/noAwaitInLoops: an install a pause cut runs again once it is over
+        await unpaused(workspace.machineId);
+        try {
+          return await install(workspace.machineId, workspace);
+        } catch (error) {
+          if (!(error instanceof PausedRun)) {
+            throw error;
+          }
+        }
+      }
+    };
+    /**
+     * Where a check runs: the machine it names, else the workspace's. The
+     * Apple build gate whose Mac is paused moves to a Mac that is not, when
+     * one is online ({@link gateMac}).
+     */
+    const machineFor = (check: WorkItemCheck): string => {
+      const named = check.machine ?? workspace.machineId;
+      return check.name === APPLE_GATE_CHECK &&
+        item.projectId &&
+        machinePaused(named)
+        ? (gateMac(workspace, item.projectId)?.machineId ?? named)
+        : named;
+    };
+    /** One run of a check where `machineId` is; undefined when a pause cancelled it. */
+    const runCheck = async (
+      machineId: string,
+      check: WorkItemCheck,
+      limit: number
+    ): Promise<Ran | undefined> => {
+      if (machineId !== workspace.machineId) {
+        return await runElsewhere(machineId, check, limit);
+      }
+      const complete = await command(
+        workspace.machineId,
+        workspace.path,
+        check.command,
+        limit,
+        refOf(workspace),
+        asCheck
+      );
+      return complete.cancelled ? undefined : { complete, where: undefined };
+    };
     const local = checks.some(
       (check) => !check.machine || check.machine === workspace.machineId
     );
-    if (local) {
-      await unpaused(workspace.machineId);
-    }
     // A failed install is the run's one line: no check can pass without it.
-    if (local && !(await install(workspace.machineId, workspace))) {
+    if (local && !(await installHere())) {
       return { installs, outcomes: [] };
     }
     const outcomes: CheckOutcome[] = [];
     for (const check of checks) {
-      // biome-ignore lint/performance/noAwaitInLoops: checks run in order, each once its machine runs work
-      await unpaused(check.machine ?? workspace.machineId);
-      const started = Date.now();
       const limit = (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000;
-      // A check that ends while waiting (killed, past the most a wait may
-      // last, or a machine that could not run it) leaves no wait behind it.
-      const { complete, where } = await (
-        check.machine && check.machine !== workspace.machineId
-          ? runElsewhere(check.machine, check, limit)
-          : command(
-              workspace.machineId,
-              workspace.path,
-              check.command,
-              limit,
-              refOf(workspace),
-              queued
-            ).then((done) => ({ complete: done, where: undefined }))
-      ).finally(() => queued(null));
+      let started = 0;
+      // A check a pause cancels is no outcome and no attempt: it waits the
+      // pause out (or moves, the Apple gate), then runs again from the start.
+      let ran: Ran | undefined;
+      while (!ran) {
+        const machineId = machineFor(check);
+        // biome-ignore lint/performance/noAwaitInLoops: checks run in order, each once its machine runs work
+        await unpaused(machineId);
+        started = Date.now();
+        // A check that ends while waiting (killed, past the most a wait may
+        // last, or a machine that could not run it) leaves no wait behind it.
+        ran = await runCheck(machineId, check, limit).finally(() =>
+          queued(null)
+        );
+      }
+      const { complete, where } = ran;
       const result = checkTails(complete);
       outcomes.push({
         check,

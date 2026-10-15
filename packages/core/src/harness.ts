@@ -1941,6 +1941,17 @@ export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
 export const CONTROL_RUN_COMMAND = "runCommand";
 
 /**
+ * Stops a {@link CONTROL_RUN_COMMAND} run by its {@link CommandRun} id, args
+ * `[runId]`: the machine ends its whole process group the way it ends every
+ * command it stops (SIGTERM, then SIGKILL 5 s later), and the run answers
+ * `cancelled`. A run still queued behind another command in its directory
+ * answers `cancelled` as it comes up, without starting. Answers whether the
+ * run was running. The hub sends it as a machine's pause begins
+ * (machine-pause.ts), then runs the command again once the pause is over.
+ */
+export const CONTROL_CANCEL_COMMAND = "cancelCommand";
+
+/**
  * The line a command prints, on stdout or stderr, as it starts and stops
  * waiting for a shared machine slot (apps/apple/scripts/mac-slot.sh,
  * build-both.sh and scripts/lib/heavy-run.ts print it):
@@ -2004,6 +2015,11 @@ export interface CommandQueueFrame {
  * across the two, the call fails instead.
  */
 export interface CommandResult {
+  /**
+   * The hub stopped the run ({@link CONTROL_CANCEL_COMMAND}): not a failure,
+   * and its exit code and output say nothing about the command.
+   */
+  cancelled?: true;
   exitCode: number;
   /** Everything the command wrote to stderr. */
   stderr: string;

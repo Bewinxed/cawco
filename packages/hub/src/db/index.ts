@@ -30,11 +30,13 @@ import type {
   Rule,
   RuleState,
   RuleStats,
+  RunKind,
   SessionEffort,
   SessionEndIntent,
   SessionLimits,
   SessionTooling,
   SkillFile,
+  StoppedCommands,
   ToolPolicy,
   ToolStatus,
   UsageBucket,
@@ -50,6 +52,7 @@ import {
   REMOVED_MACHINE,
   RESTART_LOST,
   resolveRates,
+  stoppedWords,
 } from "@cawco/core";
 import { hashFiles } from "@cawco/core/file-hash";
 import {
@@ -1764,8 +1767,15 @@ export interface DbShape {
 
   /** Puts sessions in a project: a session made a project, and its delegates. */
   readonly setInstancesProject: (ids: string[], projectId: string) => void;
-  /** Pauses a machine until `until`, or ends its pause (null); false when no such machine (machine-pause.ts). */
-  readonly setMachinePause: (machineId: string, until: Date | null) => boolean;
+  /**
+   * Pauses a machine until `until`, with what the pause stopped as it began,
+   * or ends its pause (null, null); false when no such machine (machine-pause.ts).
+   */
+  readonly setMachinePause: (
+    machineId: string,
+    until: Date | null,
+    stopped: StoppedCommands | null
+  ) => boolean;
   readonly setMcpAuth: (
     name: string,
     mode: "direct" | "oauth",
@@ -5854,13 +5864,33 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
-    setMachinePause: (machineId, until) =>
-      db
-        .update(agents)
-        .set({ pausedUntil: until })
+    // A pause moved while it lasts keeps what it stopped already, and adds
+    // what it stopped this time.
+    setMachinePause: (machineId, until, stopped) => {
+      const row = db
+        .select({ pauseStopped: agents.pauseStopped })
+        .from(agents)
         .where(eq(agents.machineId, machineId))
-        .returning({ machineId: agents.machineId })
-        .get() !== undefined,
+        .get();
+      if (!row) {
+        return false;
+      }
+      const kept: StoppedCommands = until ? { ...row.pauseStopped } : {};
+      for (const [kind, count] of Object.entries(stopped ?? {}) as [
+        RunKind,
+        number,
+      ][]) {
+        kept[kind] = (kept[kind] ?? 0) + count;
+      }
+      db.update(agents)
+        .set({
+          pausedUntil: until,
+          pauseStopped: Object.keys(kept).length > 0 ? kept : null,
+        })
+        .where(eq(agents.machineId, machineId))
+        .run();
+      return true;
+    },
     listAgents: () =>
       db
         .select()
@@ -5875,10 +5905,12 @@ const make = async (path: string): Promise<DbShape> => {
             home,
             machineCapabilities,
             pausedUntil,
+            pauseStopped,
             ...agent
           }) => ({
             ...agent,
             pausedUntil: pausedUntil?.getTime() ?? null,
+            pauseStopped: (pauseStopped && stoppedWords(pauseStopped)) || null,
             ...(fleet ? { fleet } : {}),
             ...(build ? { build } : {}),
             ...(harnesses ? { harnesses } : {}),

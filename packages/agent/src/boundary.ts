@@ -1735,7 +1735,10 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
  * The runner: reads request directories off its FIFO and runs each in its
  * own process group, inside the sandbox. A request carries the command, the
  * caller's directory and environment; the runner leaves the exit status and
- * the directory the command ended in beside them. The FIFO is opened
+ * the directory the command ended in beside them. A `cancel <pid>` line is
+ * the executor's cut-off: the runner sends TERM to that command's group, and
+ * KILL 4 s later, from inside, where the pid it wrote names it (on Linux the
+ * executor, outside the sandbox's pid namespace, cannot). The FIFO is opened
  * read-only (it lies where a command cannot write) and reopened after each
  * writer closes it. Linux: srt's own plumbing for the sandbox (its proxy, the
  * proxy credential git presents) is read once as the runner starts and set
@@ -1786,6 +1789,14 @@ launch='${LAUNCH}'
 echo ${READY}
 while :; do
   while IFS= read -r req; do
+    case $req in
+      "cancel "*)
+        pid=\${req#cancel }
+        case $pid in ''|*[!0-9]*) continue ;; esac
+        kill -TERM -- "-$pid" 2>/dev/null
+        ( sleep 4; kill -KILL -- "-$pid" 2>/dev/null ) &
+        continue ;;
+    esac
     (
       printf '%s\\n' "$sandbox" > "$req/sandbox"
       /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
@@ -3566,7 +3577,9 @@ ${commandEnv(id, held.path)
   ${path}
 } > "$req/env"
 mkfifo "$req/out" "$req/err"
-trap 'kill -TERM -- "-$(cat "$req/pid" 2>/dev/null)" 2>/dev/null; rm -rf "$req"; exit 143' TERM INT HUP
+# Cut off: the runner ends the command's group, in the sandbox's own pid
+# space, where the pid it wrote means that group (RUNNER's "cancel").
+trap 'p=$(cat "$req/pid" 2>/dev/null); [ -n "$p" ] && printf "cancel %s\\n" "$p" > "$fifo"; rm -rf "$req"; exit 143' TERM INT HUP
 ${guardBefore(id, held)}printf '%s\\n' "$req" > "$fifo"
 cat "$req/out" & out=$!
 cat "$req/err" >&2 & err=$!

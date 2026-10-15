@@ -127,7 +127,7 @@
               icon={machineIcon(machine.os ?? "")}
               meta={[
                 `${live} live`,
-                pausedWords(machine.pausedUntil),
+                pausedWords(machine),
                 fault,
                 update && !update.fail ? update.text : undefined,
               ]

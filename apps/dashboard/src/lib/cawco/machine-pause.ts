@@ -2,7 +2,7 @@
  * A machine's pause as the dashboard offers and says it (hub
  * machine-pause.ts): the menu's few ends, and the row's "paused until 00:57".
  */
-import { pauseClock } from "@cawco/core";
+import { type AgentRow, pauseClock } from "@cawco/core";
 
 /** The hour a morning pause ends at, on this browser's clock. */
 const MORNING_HOUR = 8;
@@ -39,8 +39,14 @@ export const pauseChoices = (now: Date): PauseChoice[] => {
   ];
 };
 
-/** "paused until 00:57" for a paused machine's row; undefined when it is not. */
+/**
+ * "paused until 00:57" for a paused machine's row, with what the pause
+ * stopped as it began ("paused until 00:57, stopped 1 running check");
+ * undefined when it is not paused.
+ */
 export const pausedWords = (
-  pausedUntil: number | null | undefined
+  machine: Pick<AgentRow, "pausedUntil" | "pauseStopped">
 ): string | undefined =>
-  pausedUntil ? `paused until ${pauseClock(pausedUntil)}` : undefined;
+  machine.pausedUntil
+    ? `paused until ${pauseClock(machine.pausedUntil)}${machine.pauseStopped ? `, ${machine.pauseStopped}` : ""}`
+    : undefined;

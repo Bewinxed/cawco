@@ -744,6 +744,11 @@ export interface AgentRow {
    * is not paused.
    */
   pausedUntil: number | null;
+  /**
+   * What the pause stopped as it began, as said ({@link stoppedWords}):
+   * "stopped 1 running check". Null when it stopped nothing, or is not paused.
+   */
+  pauseStopped: string | null;
   status: string;
   /**
    * Last-known workflow-tool status by tool id (NEW.md §10).
@@ -795,6 +800,39 @@ export function pauseClock(at: number, now = Date.now()): string {
   return end.toDateString() === new Date(now).toDateString()
     ? time
     : `${end.toLocaleDateString("en-GB", { weekday: "short" })} ${time}`;
+}
+
+/**
+ * What a command the hub runs on a machine is, as a pause that stops it
+ * counts it: an item's acceptance check (the Apple build gate among them), a
+ * workflow's `w.exec`, or any other.
+ */
+export type RunKind = "check" | "workflow command" | "command";
+
+const COMMAND_NOUNS: Record<RunKind, [string, string]> = {
+  check: ["check", "checks"],
+  "workflow command": ["workflow command", "workflow commands"],
+  command: ["command", "commands"],
+};
+
+/** How many of each kind a machine's pause stopped as it began. */
+export type StoppedCommands = Partial<Record<RunKind, number>>;
+
+/**
+ * "stopped 1 running check", "stopped 2 running checks and 1 running
+ * command"; undefined when the pause stopped nothing.
+ */
+export function stoppedWords(stopped: StoppedCommands): string | undefined {
+  const parts = (Object.keys(COMMAND_NOUNS) as RunKind[]).flatMap((kind) => {
+    const count = stopped[kind] ?? 0;
+    const [one, many] = COMMAND_NOUNS[kind];
+    return count > 0 ? [`${count} running ${count === 1 ? one : many}`] : [];
+  });
+  if (parts.length === 0) {
+    return;
+  }
+  const last = parts.pop();
+  return `stopped ${parts.length > 0 ? `${parts.join(", ")} and ${last}` : last}`;
 }
 
 /**
