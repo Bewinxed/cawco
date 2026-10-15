@@ -462,6 +462,13 @@ export const queuedTaskStarts = sqliteTable(
      * attempt's workspace briefed with its failure (dispatch.ts).
      */
     retry: integer("retry", { mode: "boolean" }).notNull().default(false),
+    /**
+     * Whose start it is, as it was asked (work_items.origin): `you` for your
+     * dashboard start or retry or your own move into the stage, `event` for
+     * the dispatcher's or a routine's. It starts as that, so a start of yours
+     * that waited is still yours (work_items.by_person). Null: its parent's.
+     */
+    origin: text("origin").$type<Origin>(),
     queuedAt: timestamp("queued_at")
       .notNull()
       .$defaultFn(() => new Date()),

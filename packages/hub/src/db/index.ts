@@ -6219,6 +6219,7 @@ const make = async (path: string): Promise<DbShape> => {
             parentInstanceId: row.parentInstanceId,
             why: row.why ?? "cap",
             retry: row.retry ?? false,
+            origin: row.origin,
             queuedAt: new Date(),
           },
         })

@@ -1123,7 +1123,10 @@ export const createDispatcher = ({
         if (!(error instanceof OwnsOverlap)) {
           throw error;
         }
-        return queuedForOwns(project, task, parent, stage, error, retry);
+        return queuedForOwns(project, task, parent, stage, error, {
+          retry,
+          origin,
+        });
       }
       // Asked for now: a hook's start that waited for a slot is not needed.
       db.dropQueuedTaskStart(projectId, task.id);
@@ -1152,7 +1155,8 @@ export const createDispatcher = ({
    * An attempt that waits for files a live item owns: queued, why `owns`,
    * under the stage the task is in (a hook's own), to start as items end
    * ({@link drainQueued}) while it is still there; the task stays put. A
-   * retry stays a retry: it starts as one, in the last attempt's workspace.
+   * retry stays a retry: it starts as one, in the last attempt's workspace;
+   * and a start keeps whose it is (`origin`), so yours that waited is yours.
    */
   const queuedForOwns = (
     project: ProjectRow,
@@ -1160,7 +1164,7 @@ export const createDispatcher = ({
     parent: InstanceRow,
     active: Stage | undefined,
     overlap: OwnsOverlap,
-    retry: boolean
+    { retry, origin }: { origin: Origin | undefined; retry: boolean }
   ): AttemptStart => {
     db.queueTaskStart({
       projectId: project.id,
@@ -1169,6 +1173,7 @@ export const createDispatcher = ({
       parentInstanceId: parent.id,
       why: "owns",
       retry,
+      origin: origin ?? null,
     });
     console.log(
       `[dispatch] ${project.name}: ${task.id}${retry ? "'s retry" : ""} waits for owned files: ${overlap.message}`
@@ -1363,8 +1368,8 @@ export const createDispatcher = ({
    * One queued start, taken off the queue: run when its task is still in the
    * stage it waited in, with no live attempt, and someone to report to — a
    * hook's from its `runs:` stage, one that waited for owned files from
-   * wherever it was asked, a retry as a retry. Still overlapping, it queues
-   * again.
+   * wherever it was asked, a retry as a retry, and each as whose it was
+   * (`origin`). Still overlapping, it queues again.
    */
   const runQueued = async (
     project: ProjectRow,
@@ -1395,7 +1400,8 @@ export const createDispatcher = ({
       task.id,
       parent,
       stage?.kind === "active" ? stage : undefined,
-      queued.retry
+      queued.retry,
+      queued.origin ?? undefined
     );
   };
 
@@ -1468,6 +1474,7 @@ export const createDispatcher = ({
         taskId: id,
         stage: to,
         parentInstanceId: parent.id === actor.instanceId ? parent.id : null,
+        origin: HOOK_ORIGIN[actor.mover] ?? null,
       });
       console.log(
         `[dispatch] ${project.name}: ${id} entered ${to}, which runs ${stage.hooks.runs}; ${counted(live, "attempt is", "attempts are")} live, the cap is ${project.maxAttempts}, so its start waits for a slot.`

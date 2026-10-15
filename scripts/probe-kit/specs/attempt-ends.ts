@@ -25,6 +25,10 @@
  * d. The starter moves a task into `review`: needsYou, and pushed.
  * e. An attempt the owner started from the dashboard fails: not needsYou,
  *    and its failure is pushed (kind `attempt`).
+ * f. The owner's dashboard start queues behind a live attempt that owns the
+ *    same files (`owns`); that attempt ends (its starter stops it), the
+ *    queued start runs as the owner's (origin `you`, by_person), fails, and
+ *    its failure is pushed.
  *
  *   bun scripts/probe-kit/run.ts attempt-ends
  */
@@ -468,6 +472,17 @@ const run = async (kit: Kit) => {
         ? `${ePush.body.collapseId} ${ePush.body.payload.cawco?.kind}`
         : "none"
     );
+    await quiet();
+
+    await queuedOwnStart(kit, fleet, {
+      projectId: ends.id,
+      starter,
+      read,
+      file,
+      command,
+      ended,
+      pushedAbout,
+    });
 
     await writeFile(
       join(kit.out, "pushes.json"),
@@ -496,6 +511,85 @@ const run = async (kit: Kit) => {
     clearInterval(beating);
     cawrier.stop(true);
   }
+};
+
+/** What case f needs of the run: its project, starter, and the run's helpers. */
+interface CaseTools {
+  command: (marker: string, calls: Call[]) => Promise<void>;
+  ended: (
+    projectId: string,
+    id: string,
+    state: string
+  ) => Promise<{ attempt: TaskRead["attempts"][number]; task: TaskRead }>;
+  file: (projectId: string, title: string, fields?: object) => Promise<string>;
+  projectId: string;
+  pushedAbout: (projectId: string, id: string, title: string) => Pushed[];
+  read: (projectId: string, id: string) => Promise<TaskRead>;
+  starter: string;
+}
+
+/**
+ * f. The owner's dashboard start waits behind a live attempt that owns the
+ * same files; that attempt is stopped, the queued start runs as the owner's,
+ * fails, and is pushed.
+ */
+const queuedOwnStart = async (
+  kit: Kit,
+  fleet: KitFleet,
+  { projectId, starter, read, file, command, ended, pushedAbout }: CaseTools
+) => {
+  const owns = { owns: ["src/**"] };
+  const holderId = await file(projectId, "PROBE-HOLD refactor src", owns);
+  await command("F1", [{ name: START, input: { id: holderId } }]);
+  const holder = await until(
+    `${holderId}'s attempt running`,
+    () => read(projectId, holderId),
+    (task) => task.attempts[0]?.state === "running",
+    300_000
+  );
+  const holderSession = holder?.attempts[0]?.instanceId;
+  if (!holderSession) {
+    throw new Error(`${holderId}'s attempt never ran`);
+  }
+  const title = `${FAIL} rename src`;
+  const id = await file(projectId, title, owns);
+  const queued = await fleet.api<{ queued: boolean; text: string }>(
+    `/api/projects/${projectId}/tasks/${id}/attempts`,
+    { parentInstanceId: starter }
+  );
+  const [waiting] = fleet.query<{ origin: string | null }>(
+    "SELECT origin FROM queued_task_starts WHERE project_id = ? AND task_id = ?",
+    projectId,
+    id
+  );
+  kit.check(
+    "f: the owner's start waits for the files a live attempt owns",
+    queued.queued && waiting?.origin === "you",
+    `${queued.text} (queued origin ${waiting?.origin ?? "none"})`
+  );
+  const from = Date.now();
+  await command("F2", [{ name: STOP, input: { target: holderSession } }]);
+  const f = await ended(projectId, id, "failed");
+  const [item] = fleet.query<{ by_person: number; origin: string }>(
+    "SELECT origin, by_person FROM work_items WHERE id = ?",
+    f.attempt.workItemId
+  );
+  const push = await until(
+    "f: the queued start's failure push",
+    () => pushedAbout(projectId, id, title).find((one) => one.at >= from),
+    Boolean,
+    60_000
+  );
+  kit.check(
+    "f: the queued start ran as the owner's",
+    item?.origin === "you" && item.by_person === 1 && !f.task.needsYou,
+    JSON.stringify({ item, needsYou: f.task.needsYou })
+  );
+  kit.check(
+    "f: its failure is pushed to the owner",
+    Boolean(push),
+    push ? `${push.body.collapseId} ${push.body.payload.cawco?.kind}` : "none"
+  );
 };
 
 /** A project on the fleet's machine at `repo`, with the probe's stages. */
