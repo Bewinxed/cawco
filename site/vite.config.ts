@@ -109,11 +109,12 @@ function pageMarkup(): Plugin {
       order: 'pre',
       handler(html) {
         const page = html
-          .replace(/<i data-icon="([^"]+)"><\/i>/g, (_, name: string) => icon(name))
-          .replace(/<i data-mark="([^"]+)"><\/i>/g, (_, name: string) => mark(name))
-          .replace(/<i data-device="([^"]+)"><\/i>/g, (_, name: string) => device(name))
+          // The formatter can also break a closing tag as `</i` + newline + `>`, so space may sit before its `>`.
+          .replace(/<i data-icon="([^"]+)"><\/i\s*>/g, (_, name: string) => icon(name))
+          .replace(/<i data-mark="([^"]+)"><\/i\s*>/g, (_, name: string) => mark(name))
+          .replace(/<i data-device="([^"]+)"><\/i\s*>/g, (_, name: string) => device(name))
           // The formatter breaks a Caw's attributes onto lines of their own, so any space leads them.
-          .replace(/<i\s+data-caw="([^"]+)"([^>]*)><\/i>/g, (_, name: string, rest: string) => {
+          .replace(/<i\s+data-caw="([^"]+)"([^>]*)><\/i\s*>/g, (_, name: string, rest: string) => {
             const made = clips.get(name) ?? clip(name);
             clips.set(name, made);
             return made.svg.replace('__REST__', rest.replace(/\s+/g, ' ').trimEnd());
