@@ -144,13 +144,14 @@
       instanceId: `ds-tray-${i}`,
       parentInstanceId: ID,
       leadInstanceId: null,
+      machinePaused: null,
       title: work.title,
       state: work.state,
       createdAt: now - (60 - i) * 60_000,
       endedAt: null,
       dismissedAt: null,
       firstLines: { brief: work.title, result: "", error: "" },
-      queued: work.owns ? { owns: work.owns } : null,
+      queued: work.owns ? { owns: work.owns, paused: null } : null,
       checkQueue: work.slot
         ? {
             words: "queued for a heavy-run slot behind 2 checks",

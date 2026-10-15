@@ -68,9 +68,15 @@ import type { Tasks } from "./tasks";
  * measured). `artifact_delete` (a superseded artifact leaves the panel) fits
  * the same budgets: the artifact and comment tools' words were cut to pay
  * for it (worker 23,877, delegate 6,440, lead 15,641 measured).
+ * 2026-10-15: `machine_pause` (machine-pause.ts), the orchestrator's way to
+ * pause a machine for some minutes; with the Mac's agent stopped by hand, an
+ * interrupted delegate there still ran the iOS build on battery. About 115
+ * tokens for the worker alone (a leaf never has it), its words cut to a
+ * line; interrupt_delegate now says its delegate stays idle, about 12 more
+ * for the worker and the lead (worker 24,006, lead 15,654 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 23_880,
+  worker: 24_010,
   delegate: 6500,
   lead: 15_660,
   overseer: 770,

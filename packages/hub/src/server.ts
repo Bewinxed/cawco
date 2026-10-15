@@ -236,6 +236,7 @@ import {
   parseAgentFrontMatter,
   parseArtifactComments,
   parseArtifactResponses,
+  pauseClock,
   providerChoices,
   providerLimitRefused,
   QUESTION_DISMISSED,
@@ -441,6 +442,7 @@ import { type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { createLeadGate, reviewProblem } from "./lead-gate";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
+import { createMachinePause, PAUSE_ORIGIN } from "./machine-pause";
 import { MeaningJudge } from "./meaning";
 import {
   externalizeImages,
@@ -2911,9 +2913,25 @@ export const createServer = (
   const agentProtocols = new Map<string, BuildInfo["protocol"]>();
 
   /**
+   * Machines the owner paused until a time (machine-pause.ts). As a pause
+   * begins every turn in flight there is cut, without the hold an interrupt
+   * puts on delegated work ({@link pauseBegan}); as it ends, what was kept
+   * for the machine goes, in order ({@link pauseEnded}). Its timers are armed
+   * once the hub's send path is up (`machinePause.start`, beside
+   * `resumeWaits`).
+   */
+  const machinePause = createMachinePause({
+    db,
+    lifetime,
+    paused: (machineId, until) => pauseBegan(machineId, until),
+    resumed: (machineId) => pauseEnded(machineId),
+  });
+
+  /**
    * Why a machine takes no new session start now, or nothing when it does.
-   * One installing an update: its agent is about to restart, and a start held
-   * there would go with it. One whose agent does not speak this hub's
+   * One the owner paused: nothing starts there until its pause ends
+   * (machine-pause.ts). One installing an update: its agent is about to
+   * restart, and a start held there would go with it. One whose agent does not speak this hub's
    * contract ({@link protocolRange}): a launch there would ask for no
    * credential, and its agent would stop it before its first turn. That
    * machine is offered this hub's build, and registers on it once installed.
@@ -2922,7 +2940,11 @@ export const createServer = (
    */
   const startHold = (
     machineId: string
-  ): { kind: "update" | "build"; words: string } | undefined => {
+  ): { kind: "paused" | "update" | "build"; words: string } | undefined => {
+    const paused = machinePause.words(machineId);
+    if (paused) {
+      return { kind: "paused", words: paused };
+    }
     if (binaryUpdateStates.get(machineId)?.phase === "installing") {
       return {
         kind: "update",
@@ -4346,12 +4368,28 @@ export const createServer = (
   };
 
   /**
-   * The session's turn was cut into by an interrupt, so the error that closes
-   * it is the cut, not a failure of what it had read.
+   * Sessions whose turn in flight an interrupt cut: its end is the cut's, so
+   * nothing is handed back for it and no rule answers it, on every harness.
+   * OpenCode says so itself (`aborted`); a Claude turn cut by an interrupt
+   * ends as a plain turn, and was handed back as a quiet one, whose "still
+   * open" reminder started the turn the interrupt was meant to stop. Only a
+   * turn under way is marked: an idle session's next turn is its own.
    */
-  const noteInterrupt = (instanceId: string): void => {
+  const interruptedTurns = new Set<string>();
+
+  /**
+   * The session's turn was cut into by an interrupt, so the error that closes
+   * it is the cut, not a failure of what it had read. `hold`: the
+   * interrupt holds its delegated work until its parent, its lead or the
+   * reader writes to it (work-items.ts `interrupted`); a pause's own cut
+   * does not ({@link pauseBegan}).
+   */
+  const noteInterrupt = (instanceId: string, hold = true): void => {
     unanswered.delete(instanceId);
-    workItems.interrupted(instanceId);
+    if (turnsWritten.has(instanceId) || pulses.get(instanceId)?.busy === true) {
+      interruptedTurns.add(instanceId);
+    }
+    workItems.interrupted(instanceId, hold);
     // A turn its owner stopped is not one that waits on them: no push.
     push.interrupted(instanceId);
   };
@@ -6768,6 +6806,12 @@ export const createServer = (
       throw new WorkItemRefusal(409, refused.reason);
     }
     const [target] = db.getInstancesByIds([instanceId]);
+    // The parent's, the lead's or the reader's word ends an interrupt's hold
+    // on the session's item, before anything below asks about it: what the
+    // hold kept goes right behind this send.
+    if (!(refused || keepAlive)) {
+      workItems.unhold(instanceId, message.origin);
+    }
     // Kept, not woken: the session has no process and this sender may not
     // start a turn in it ({@link startsTurnIn}).
     const kept =
@@ -6779,10 +6823,16 @@ export const createServer = (
     const limited =
       !(refused || keepAlive || ahead) &&
       heldAtLimit(instanceId, message.origin);
+    // Kept while the owner has its machine paused (machine-pause.ts), and
+    // while an interrupt holds its item and this sender may not wake it.
+    const paused =
+      !(refused || keepAlive) && machinePause.until(machineId) !== undefined;
+    const held =
+      !(refused || keepAlive) && workItems.heldFor(instanceId, message.origin);
     const agent = refused ? undefined : registry.agent(machineId);
     const away =
       !(refused || agent || keepAlive) && awaitingMachine.has(machineId);
-    const accepted = Boolean(agent) || away || kept;
+    const accepted = Boolean(agent) || away || kept || paused || held;
     const from =
       message.origin.kind === "peer" ? message.origin.fromSession : undefined;
     const waitSummary =
@@ -6794,7 +6844,7 @@ export const createServer = (
           ? `${content}${waitSummary}`
           : [...content, { type: "text", text: waitSummary }];
     }
-    if (agent && !(kept || limited)) {
+    if (agent && !(kept || limited || paused || held)) {
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
@@ -6804,6 +6854,8 @@ export const createServer = (
     const owed =
       away ||
       kept ||
+      paused ||
+      held ||
       (agent !== undefined &&
         !keepAlive &&
         (limited || (!ahead && sendWaits(instanceId))));
@@ -6854,7 +6906,7 @@ export const createServer = (
     }
     publishSend(record);
     // A send that woke its session goes out behind what was kept for it.
-    if (agent && owed && !(kept || away || limited)) {
+    if (agent && owed && !(kept || away || limited || paused || held)) {
       releaseOwed({ instanceId });
     }
     // Kept at its account's limit: the move it owes, or one another account
@@ -6975,6 +7027,20 @@ export const createServer = (
    * update, or a build older than the hub's), else sends
    * owed before it. Undefined for a send its machine has.
    */
+  /**
+   * A send kept for its machine's pause, or for an interrupt's hold on its
+   * session's item against this sender ({@link deliverToSession}).
+   */
+  const pausedOrHeld = (
+    row: InstanceRow,
+    origin: SentMessage["origin"] | undefined
+  ): "paused" | "held" | undefined => {
+    if (machinePause.until(row.machineId) !== undefined) {
+      return "paused";
+    }
+    return origin && workItems.heldFor(row.id, origin) ? "held" : undefined;
+  };
+
   const holdOf = (record: SentMessageRow): SendHold | undefined => {
     if (!record.owed) {
       return;
@@ -6990,6 +7056,14 @@ export const createServer = (
         ? "signin"
         : "limit";
     }
+    return (row && pausedOrHeld(row, origin)) ?? machineHold(record, row);
+  };
+
+  /** {@link holdOf}'s last word: its machine away, its start held, or sends before it. */
+  const machineHold = (
+    record: SentMessageRow,
+    row: InstanceRow | undefined
+  ): SendHold => {
     const away = row ? awaitingMachine.get(row.machineId) : undefined;
     if (row && away && !registry.agent(row.machineId)) {
       return away.why;
@@ -7033,10 +7107,23 @@ export const createServer = (
     const plan =
       !hold && before && wakesForSend(before) ? relaunchOf(before) : undefined;
     return {
-      ...(hold ? { hold } : {}),
+      ...holdWords(hold, before),
       ...(plan && plan.kind !== "refused" ? { woke: plan.kind } : {}),
       busy: pulses.get(instanceId)?.busy === true,
     };
+  };
+
+  /** A send's hold as its sender is told it: a pause says which machine, until when. */
+  const holdWords = (
+    hold: SendHold | undefined,
+    row: InstanceRow | undefined
+  ): Pick<SendDelivery, "hold" | "pause"> => {
+    if (!hold) {
+      return {};
+    }
+    const pause =
+      hold === "paused" && row ? machinePause.words(row.machineId) : undefined;
+    return pause ? { hold, pause } : { hold };
   };
 
   /**
@@ -7075,13 +7162,18 @@ export const createServer = (
     }
     const envelope = JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>;
     // Kept while its account is at its limit: it goes once that is over.
-    if (heldAtLimit(send.instanceId, envelope.payload.message.origin)) {
+    // Kept while its machine is paused, or an interrupt holds its item
+    // against this sender: it goes once the pause ends, or one who may wake
+    // it writes to it.
+    const { origin } = envelope.payload.message;
+    if (
+      heldAtLimit(send.instanceId, origin) ||
+      machinePause.until(row.machineId) !== undefined ||
+      workItems.heldFor(send.instanceId, origin)
+    ) {
       return;
     }
-    const refused = inputRefusal(
-      send.instanceId,
-      envelope.payload.message.origin
-    );
+    const refused = inputRefusal(send.instanceId, origin);
     if (refused) {
       db.takeOwedSend(send.uuid);
       failSend(send, refused.reason, refused.refusal);
@@ -7106,6 +7198,11 @@ export const createServer = (
 
   /** A machine past its grace: what it was owed fails as any send to an absent machine does, but for a start an update still holds. */
   const failOwedAway = (machineId: string): void => {
+    // What a paused machine was owed waits for the pause's end, its agent
+    // away or not: the end hands it over once the agent is back.
+    if (machinePause.until(machineId) !== undefined) {
+      return;
+    }
     for (const send of db.owedSends({ machineId })) {
       const [row] = db.getInstancesByIds([send.instanceId]);
       // A send kept for a session at rest never waited on its machine, nor
@@ -8456,6 +8553,12 @@ export const createServer = (
     source: PreviewSource,
     generation: number
   ): Promise<ListenerStart> => {
+    // A paused machine starts no preview: the pane says why, and the
+    // preview's next request after the pause asks again.
+    const paused = machinePause.words(machineId);
+    if (paused) {
+      return { ok: false, code: 503, down: "machine", error: paused };
+    }
     const token = crypto.randomUUID();
     const stopLate = () => {
       // Not when a register has since pointed the target at this very listener.
@@ -12467,6 +12570,10 @@ export const createServer = (
    * `db.listAgents()` callers are fleet/config lookups that never read `status`,
    * and are deliberately left alone.
    */
+  /** One machine's row as `GET /api/agents` answers it; undefined when the hub knows none. */
+  const machineRow = (machineId: string): AgentRow | undefined =>
+    withPresence(db.listAgents()).find((row) => row.machineId === machineId);
+
   const withPresence = (rows: AgentRow[]): AgentRow[] =>
     rows.map((row) => {
       const custody = machineCustody.get(row.machineId);
@@ -15877,6 +15984,8 @@ export const createServer = (
         routines.itemEnded(item);
       }),
     command: runOnMachine,
+    machinePaused: (machineId) => machinePause.words(machineId),
+    machineFree: (machineId) => machinePause.free(machineId),
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     report: (row, body, failed, notice, headline) => {
       reportToParent(row, body, failed, { notice, headline });
@@ -15987,7 +16096,11 @@ export const createServer = (
         };
         observe();
       }),
-    command: runOnMachine,
+    // A workflow's command on a paused machine waits for the pause's end.
+    command: async (machineId, ...rest) => {
+      await machinePause.free(machineId);
+      return runOnMachine(machineId, ...rest);
+    },
     park: parkForPerson,
     settle: (id) => {
       pending.resolve(id);
@@ -16171,8 +16284,11 @@ export const createServer = (
   });
   // Open proposals are the person's asks again as the hub starts.
   detach(projectMemory.start(), "memory proposals");
-  /** The control interrupt_delegate sends: the turn stops, the session keeps its state. */
-  const interruptTurn = (instanceId: string): void => {
+  /**
+   * The control interrupt_delegate sends: the turn stops, the session keeps
+   * its state. `hold`: as {@link noteInterrupt} says.
+   */
+  const interruptTurn = (instanceId: string, hold = true): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row && agent)) {
@@ -16191,8 +16307,61 @@ export const createServer = (
         args: [],
       },
     } satisfies Envelope<ControlPayload>);
-    noteInterrupt(instanceId);
+    noteInterrupt(instanceId, hold);
     transcripts.noteInterrupt(instanceId);
+  };
+
+  /**
+   * A pause began (machine-pause.ts): every turn in flight on the machine is
+   * interrupted, and its session is sent word to carry on, which the pause
+   * keeps at the hub until it ends ({@link deliverToSession}). The cut holds
+   * no delegated work ({@link noteInterrupt}): that word is what wakes it.
+   */
+  const pauseBegan = (machineId: string, until: Date): void => {
+    for (const row of db.listInstances()) {
+      if (
+        row.machineId !== machineId ||
+        !(turnsWritten.has(row.id) || pulses.get(row.id)?.busy === true)
+      ) {
+        continue;
+      }
+      interruptTurn(row.id, false);
+      deliverSend({
+        verb: "send",
+        machineId,
+        instanceId: row.id,
+        payload: {
+          instanceId: row.id,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: {
+              role: "user",
+              content: `Your machine was paused until ${pauseClock(until.getTime())}, which stopped your turn. The pause is over: carry on from where you stopped.`,
+            },
+            parent_tool_use_id: null,
+            origin: { kind: "system", name: PAUSE_ORIGIN },
+          },
+        },
+      });
+      console.log(`[pause] ${row.id}: its turn was cut by its machine's pause`);
+    }
+    workItems.pauseChanged(machineId);
+    publishInstances(machineId);
+  };
+
+  /**
+   * A pause ended: what the machine was kept goes, in the order taken.
+   * Starts first, then the sends behind them, then the delegates queued for
+   * it ({@link flushOwedStarts}, {@link releaseOwed}, work-items.ts
+   * `resumeQueued`).
+   */
+  const pauseEnded = (machineId: string): void => {
+    flushOwedStarts(machineId);
+    releaseOwed({ machineId });
+    workItems.resumeQueued();
+    workItems.pauseChanged(machineId);
+    publishInstances(machineId);
   };
   // Each project's Caw: its lead session, woken by events only (caw.ts).
   const caw = createCaw({
@@ -16572,6 +16741,7 @@ export const createServer = (
     db,
     checkQueue: (itemId) => workItems.checkQueueOf(itemId),
     machineName,
+    machinePaused: (machineId) => machinePause.words(machineId),
     activity: (row) => {
       const state = followupState(row);
       // The same test the cold check makes: warm mid-turn, unmeasured, or unexpired.
@@ -17190,7 +17360,11 @@ export const createServer = (
 
   const keepAliveScheduler = createKeepAliveScheduler({
     lifetime,
-    rows: db.keepAliveInstances,
+    // A paused machine's sessions are sent no ping: a ping is a turn.
+    rows: () =>
+      db
+        .keepAliveInstances()
+        .filter((row) => machinePause.until(row.machineId) === undefined),
     row: (id) => db.listedInstancesByIds([id])[0],
     limits: () => sessionLimitsReader(db),
     idle: sessionIdle,
@@ -18380,6 +18554,9 @@ export const createServer = (
   };
 
   workItems.resumeWaits();
+  // Every stored pause armed again; one whose time came while the hub was
+  // down ends now, and what it kept goes as its machine registers.
+  machinePause.start();
 
   /**
    * A dashboard's start of a session by a former id (a tab or link from
@@ -19315,6 +19492,42 @@ export const createServer = (
         forgetInstances([row.id]);
         publishInstances(row.machineId);
         return { ok: true };
+      })
+      // The owner pauses a machine until a time (machine-pause.ts): nothing
+      // CawCo starts runs there until then, its agent connected throughout.
+      // Answers the machine's row as it stands, its pause on it.
+      .post(
+        "/api/machines/:machineId/pause",
+        { body: t.Object({ until: t.String() }) },
+        ({ params, body, status }) => {
+          const until = new Date(body.until);
+          if (Number.isNaN(until.getTime())) {
+            return status(
+              400,
+              `until: "${body.until}" is not a time; send an ISO 8601 time, such as 2026-10-15T21:00:00Z.`
+            );
+          }
+          if (until.getTime() <= Date.now()) {
+            return status(400, `until: ${body.until} has already passed.`);
+          }
+          const row = machinePause.pause(params.machineId, until)
+            ? machineRow(params.machineId)
+            : undefined;
+          if (!row) {
+            return status(404, "No machine with that id on this hub.");
+          }
+          publishInstances(params.machineId);
+          return row;
+        }
+      )
+      // Ends a machine's pause now: what it was kept goes, in order.
+      .post("/api/machines/:machineId/resume", ({ params, status }) => {
+        if (!machineRow(params.machineId)) {
+          return status(404, "No machine with that id on this hub.");
+        }
+        machinePause.resume(params.machineId);
+        const row = machineRow(params.machineId);
+        return row ?? status(404, "No machine with that id on this hub.");
       })
       .get("/api/agents/:machineId/busy", async ({ params, status }) => {
         const answer = await callAgent(
@@ -24002,6 +24215,7 @@ export const createServer = (
                     // A launch's own word: what it has open is written anew,
                     // and a turn a restart cut goes back to it now it is up.
                     turnsWritten.delete(message.instanceId);
+                    interruptedTurns.delete(message.instanceId);
                     resumeCutTurn(message.instanceId);
                   }
                   publishInstances(message.machineId);
@@ -24621,8 +24835,16 @@ export const createServer = (
                   // Every turn's end: its own row, by its key.
                   const [row] = db.listedInstancesByIds([message.instanceId]);
                   const parentId = row?.parentInstanceId;
+                  // A turn an interrupt cut ({@link interruptedTurns}), on
+                  // any harness: nothing is handed back for it, no rule
+                  // answers it and no push says it ended.
+                  const cut =
+                    interruptedTurns.delete(message.instanceId) ||
+                    neutral.subtype === "aborted";
                   if (row && neutral.subtype === "aborted") {
-                    workItems.interrupted(row.id);
+                    // OpenCode's own word: its wait is over; whether it is
+                    // held was the interrupt's to say ({@link noteInterrupt}).
+                    workItems.interrupted(row.id, false);
                   }
                   if (row?.workflowStepId) {
                     const workflowFailure = neutral.errors?.length
@@ -24657,10 +24879,7 @@ export const createServer = (
                   // session started (`start_session`) has a parent and no
                   // item, and its turns are its own.
                   const delegate =
-                    row?.workItemId &&
-                    parentId &&
-                    parentId !== turnId &&
-                    neutral.subtype !== "aborted"
+                    row?.workItemId && parentId && parentId !== turnId && !cut
                       ? row
                       : undefined;
                   // A failed turn's report carries the harness's own error
@@ -24744,17 +24963,23 @@ export const createServer = (
                     }
                     // Nothing waits on whether a rule answered a turn that is
                     // not held, but the owner's push does: a turn a rule
-                    // answered goes on, and waits on no one.
-                    const owners =
-                      row && !parentId && neutral.subtype !== "aborted";
-                    detach(
-                      answered().then((replied) => {
-                        if (owners && !replied) {
-                          push.turnEnded(turnId, text || harnessError, endedAt);
-                        }
-                      }),
-                      "rule answer"
-                    );
+                    // answered goes on, and waits on no one. A turn an
+                    // interrupt cut is answered by nothing.
+                    const owners = row && !parentId;
+                    if (!cut) {
+                      detach(
+                        answered().then((replied) => {
+                          if (owners && !replied) {
+                            push.turnEnded(
+                              turnId,
+                              text || harnessError,
+                              endedAt
+                            );
+                          }
+                        }),
+                        "rule answer"
+                      );
+                    }
                   }
                   // A plain session past one conversation is offered a project, once.
                   if (row && !failed) {

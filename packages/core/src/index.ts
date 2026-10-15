@@ -722,6 +722,12 @@ export interface AgentRow {
   machineCapabilities?: import("./capabilities").MachineCapabilities;
   machineId: string;
   os: string;
+  /**
+   * The owner paused the machine until this time (epoch ms): CawCo starts
+   * nothing on it until then, though its agent stays connected. Null when it
+   * is not paused.
+   */
+  pausedUntil: number | null;
   status: string;
   /**
    * Last-known workflow-tool status by tool id (NEW.md §10).
@@ -758,6 +764,22 @@ export interface ScratchWorktree {
 
 /** mDNS and router suffixes: they say "same network", which the fleet already implies. */
 const LOCAL_SUFFIXES = [".local", ".lan", ".home"];
+
+/**
+ * A machine pause's end as the fleet says it (hub machine-pause.ts): the
+ * local clock, "00:57", and the weekday too when it is not today ("Fri 08:00").
+ */
+export function pauseClock(at: number, now = Date.now()): string {
+  const end = new Date(at);
+  const time = end.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return end.toDateString() === new Date(now).toDateString()
+    ? time
+    : `${end.toLocaleDateString("en-GB", { weekday: "short" })} ${time}`;
+}
 
 /**
  * How the fleet names a machine out loud: its hostname without a local-network
@@ -1145,12 +1167,19 @@ export interface WorkItemSummary {
    * or its own session.
    */
   leadInstanceId: string | null;
+  /**
+   * While the machine its workspace is on is paused: "Omars-MacBook-Pro is
+   * paused until 00:57". Its session runs no turn until then. Null otherwise.
+   */
+  machinePaused: string | null;
   parentInstanceId: string;
   /**
    * While it waits to start: the files it owns, which a live item owns too
-   * (`src/theme/**`); null once it has started.
+   * (`src/theme/**`), and the pause of the machine it starts on ("obelisk is
+   * paused until 00:57"), when that is what it waits for; null once it has
+   * started.
    */
-  queued: { owns: string[] } | null;
+  queued: { owns: string[]; paused: string | null } | null;
   state: "starting" | "running" | "done" | "failed" | "cancelled";
   title: string;
   waitReason: string | null;

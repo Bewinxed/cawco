@@ -5852,6 +5852,33 @@ export async function removeMachine(machineId: string): Promise<void> {
 }
 
 /**
+ * Pauses a machine until `until` (hub machine-pause.ts): its turns stop and
+ * nothing starts there until then; or, with `until` null, ends its pause
+ * now. The hub's refusal is thrown in its words.
+ */
+export async function pauseMachine(
+  machineId: string,
+  until: Date | null
+): Promise<void> {
+  const id = encodeURIComponent(machineId);
+  const response = await fetch(
+    `/api/machines/${id}/${until ? "pause" : "resume"}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(until ? { until: until.toISOString() } : {}),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the machine's pause did not change. Try again.`
+    );
+  }
+  await refresh();
+}
+
+/**
  * Deletes a session's transcript on its machine — the one way a transcript is
  * deleted, from a stored row or a sleeping one. The hub sees the delete go
  * past and, once the machine confirms it, drops every row that named it; the

@@ -295,6 +295,7 @@ const DELEGATION_TOOLS = [
   "interrupt_delegate",
   "answer_delegate",
   "set_item_checks",
+  "machine_pause",
   "run_workflow",
   "steer_workflow",
   "workflow_read",

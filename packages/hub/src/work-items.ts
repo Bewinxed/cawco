@@ -283,6 +283,22 @@ export class OwnsOverlap extends WorkItemRefusal {
   }
 }
 
+/**
+ * A start turned down because the machine it runs on is paused
+ * (machine-pause.ts), `words` saying which and until when: `delegate`
+ * queues it, and it starts once the pause ends; anything else is refused.
+ */
+export class MachinePaused extends WorkItemRefusal {
+  readonly words: string;
+  constructor(words: string) {
+    super(
+      409,
+      `${words}, and nothing starts on it until then. Wait for it, or start this on another machine.`
+    );
+    this.words = words;
+  }
+}
+
 // --- file ownership ------------------------------------------------------------
 
 /** Globs one work item may own, and how long one may run. */
@@ -642,6 +658,13 @@ export interface WorkItemDeps {
   readonly leadTurn?: (instanceId: string) => WorkOrigin | undefined;
   /** Runs the budget sweep and every wait's timer until the hub closes. */
   readonly lifetime: HubLifetimeShape;
+  /** Resolves once `machineId`'s pause is over; at once when it is not paused. */
+  readonly machineFree: (machineId: string) => Promise<void>;
+  /**
+   * "Omars-MacBook-Pro is paused until 00:57" while the owner has paused
+   * `machineId` (machine-pause.ts); undefined when it is not paused.
+   */
+  readonly machinePaused: (machineId: string) => string | undefined;
   /**
    * Why `machineId` would not run `model` on `harness`, in words naming the
    * models it does offer from that provider; undefined when it offers it, or
@@ -1384,6 +1407,8 @@ export const createWorkItems = ({
   report,
   inTurn,
   leadTurn,
+  machineFree,
+  machinePaused,
   modelRefusal,
   online,
   send,
@@ -1506,6 +1531,12 @@ export const createWorkItems = ({
       ? undefined
       : projectLead(item.projectId, item.instanceId);
 
+  /** The pause of the machine a workspace is on, in words; undefined when it is not paused. */
+  const pausedWorkspace = (workspaceId: string): string | undefined => {
+    const [workspace] = db.workspacesNamed(workspaceId);
+    return workspace ? machinePaused(workspace.machineId) : undefined;
+  };
+
   /**
    * An item as its parent's delegate tray reads it, and its lead's: the lead
    * named when it co-parents the item from another session.
@@ -1520,6 +1551,9 @@ export const createWorkItems = ({
     instanceId: item.instanceId,
     title: item.title,
     state: item.state,
+    machinePaused: LIVE.has(item.state)
+      ? (pausedWorkspace(item.workspaceId) ?? null)
+      : null,
     queued: null,
     createdAt: item.createdAt.getTime(),
     endedAt: item.endedAt?.getTime() ?? null,
@@ -1545,6 +1579,9 @@ export const createWorkItems = ({
   ): WorkItemSummary => {
     const request = queued.request as QueuedRequest;
     const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
+    const machineId = request.workspace
+      ? db.workspacesNamed(request.workspace)[0]?.machineId
+      : (request.machineId ?? parent?.machineId);
     return {
       id: queued.id,
       parentInstanceId: queued.parentInstanceId,
@@ -1556,7 +1593,11 @@ export const createWorkItems = ({
       instanceId: request.queuedAs.instanceId,
       title: queued.title,
       state: "starting",
-      queued: { owns: [...new Set((request.owns ?? []).map(globOf))] },
+      machinePaused: null,
+      queued: {
+        owns: [...new Set((request.owns ?? []).map(globOf))],
+        paused: (machineId && machinePaused(machineId)) || null,
+      },
       createdAt: queued.queuedAt.getTime(),
       endedAt: null,
       dismissedAt: dismissedAt?.getTime() ?? null,
@@ -2168,7 +2209,7 @@ export const createWorkItems = ({
       await start(request);
       db.dropQueuedWorkItem(queued.id);
     } catch (error) {
-      if (error instanceof OwnsOverlap) {
+      if (error instanceof OwnsOverlap || error instanceof MachinePaused) {
         return;
       }
       unqueue(queued);
@@ -2819,6 +2860,14 @@ export const createWorkItems = ({
     }
   };
 
+  /** Refuses a start on a machine the owner paused ({@link MachinePaused}). */
+  const notPaused = (machineId: string): void => {
+    const paused = machinePaused(machineId);
+    if (paused) {
+      throw new MachinePaused(paused);
+    }
+  };
+
   /** Refuses settings whose model the machine does not run ({@link WorkItemDeps.modelRefusal}). */
   const modelOffered = (machineId: string, settings: Settings): void => {
     const refusal = modelRefusal(machineId, settings.harness, settings.model);
@@ -2850,6 +2899,8 @@ export const createWorkItems = ({
     }
     if (!request.workspace) {
       const machineId = targetMachine(request, parent);
+      // Before anything reaches the machine: a paused one cuts no clone.
+      notPaused(machineId);
       const settings = settingsOf(request, parent);
       // Before the clone is cut: a model the machine does not run starts nothing.
       modelOffered(machineId, settings);
@@ -2888,6 +2939,7 @@ export const createWorkItems = ({
         placement,
       });
     }
+    notPaused(namedWorkspace(request.workspace).machineId);
     // Awaited before the claim, which files the item in the same step as
     // its one-writer check.
     await boundaryUp(request.workspace);
@@ -2973,6 +3025,7 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     ahead?: { instanceId: string; placement: ItemPlacement }
   ): WorkItemStart => {
+    notPaused(workspace.machineId);
     modelOffered(workspace.machineId, settings);
     const { harness, canDelegate } = settings;
     // A queued delegate's session and item take the ids its chip stood under.
@@ -3421,6 +3474,25 @@ export const createWorkItems = ({
       }
       published(db.workItem(item.id));
     };
+    /**
+     * Waits out a pause of the machine a check runs on, the item's status
+     * saying it ("waiting: Omars-MacBook-Pro is paused until 00:57"); at once
+     * when it is not paused.
+     */
+    const unpaused = async (machineId: string): Promise<void> => {
+      const words = machinePaused(machineId);
+      if (!words) {
+        return;
+      }
+      checkQueues.set(item.id, {
+        words: `waiting: ${words}`,
+        since: Date.now(),
+      });
+      published(db.workItem(item.id));
+      await machineFree(machineId);
+      checkQueues.delete(item.id);
+      published(db.workItem(item.id));
+    };
     /** The installs this run made, each a line of the check log ahead of the checks. */
     const installs: InstallOutcome[] = [];
     /**
@@ -3528,17 +3600,21 @@ export const createWorkItems = ({
     const local = checks.some(
       (check) => !check.machine || check.machine === workspace.machineId
     );
+    if (local) {
+      await unpaused(workspace.machineId);
+    }
     // A failed install is the run's one line: no check can pass without it.
     if (local && !(await install(workspace.machineId, workspace))) {
       return { installs, outcomes: [] };
     }
     const outcomes: CheckOutcome[] = [];
     for (const check of checks) {
+      // biome-ignore lint/performance/noAwaitInLoops: checks run in order, each once its machine runs work
+      await unpaused(check.machine ?? workspace.machineId);
       const started = Date.now();
       const limit = (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000;
       // A check that ends while waiting (killed, past the most a wait may
       // last, or a machine that could not run it) leaves no wait behind it.
-      // biome-ignore lint/performance/noAwaitInLoops: checks run in order, one at a time
       const { complete, where } = await (
         check.machine && check.machine !== workspace.machineId
           ? runElsewhere(check.machine, check, limit)
@@ -3996,17 +4072,21 @@ export const createWorkItems = ({
 
   /**
    * The online Mac the gate runs on: one holding the workspace's check
-   * workspace already, else one with the project's repository, else any.
+   * workspace already, else one with the project's repository, else any;
+   * among the Macs not paused first. With every Mac paused, a paused one: its
+   * check waits for the pause's end, its item's status saying so.
    */
   const gateMac = (workspace: WorkspaceRow, projectId: string) => {
     const macs = appleMachines(db.listAgents(), online);
     const held = new Set(
       db.checkWorkspacesOf(workspace.id).map((each) => each.machineId)
     );
+    const pick = (among: typeof macs) =>
+      among.find((each) => held.has(each.machineId)) ??
+      among.find((each) => repositoryOn(projectId, each.machineId)) ??
+      among[0];
     return (
-      macs.find((each) => held.has(each.machineId)) ??
-      macs.find((each) => repositoryOn(projectId, each.machineId)) ??
-      macs[0]
+      pick(macs.filter((each) => !machinePaused(each.machineId))) ?? pick(macs)
     );
   };
 
@@ -4153,7 +4233,7 @@ export const createWorkItems = ({
       try {
         return await start(asked);
       } catch (error) {
-        if (!(error instanceof OwnsOverlap)) {
+        if (!(error instanceof OwnsOverlap || error instanceof MachinePaused)) {
           throw error;
         }
         const id = crypto.randomUUID();
@@ -4168,10 +4248,33 @@ export const createWorkItems = ({
           title: asked.title.trim(),
         });
         publish(queuedSummaryOf(queued));
+        const until =
+          error instanceof MachinePaused
+            ? `${error.words}. It waits in your delegate tray and starts there when the pause ends`
+            : `${error.message} It waits in your delegate tray and starts when no live item owns its files any more`;
         return {
           queued: queued.id,
-          text: `Queued “${queued.title}” (${queued.id}): ${error.message} It waits in your delegate tray and starts when no live item owns its files any more; its report reaches you as any delegate's does.`,
+          text: `Queued “${queued.title}” (${queued.id}): ${until}; its report reaches you as any delegate's does.`,
         };
+      }
+    },
+
+    /**
+     * A machine's pause began or ended: the trays say so again, for every
+     * live item on it and every delegate still queued.
+     */
+    pauseChanged(machineId: string): void {
+      for (const workspace of db.activeWorkspacesOn(machineId)) {
+        for (const item of db.workItemsIn(workspace.id)) {
+          if (LIVE.has(item.state)) {
+            published(item);
+          }
+        }
+      }
+      for (const queued of db.queuedWorkItems()) {
+        if (!db.workItem(queued.id)) {
+          publish(queuedSummaryOf(queued));
+        }
       }
     },
 
@@ -4360,13 +4463,53 @@ export const createWorkItems = ({
       return `${line}\n\nEnd your turn. The hub will wake you when the wait ends.`;
     },
 
-    /** An interrupt cancels the declared wait without starting another turn. */
-    interrupted(instanceId: string): void {
+    /**
+     * An interrupt cut the session's turn: its declared wait is cancelled,
+     * and, when `hold`, its live item is held ({@link heldFor}): the turn's
+     * end hands nothing back and starts nothing, and nothing the hub sends
+     * on its own wakes it until its parent, its lead or the reader writes to
+     * it ({@link unhold}). A pause's interrupt does not hold: the pause sends
+     * the session its own word to carry on when it ends.
+     */
+    interrupted(instanceId: string, hold: boolean): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
       if (item?.waitUntil || item?.waitResumeBy) {
         clearWait(item);
       }
+      if (hold && item && LIVE.has(item.state) && !item.heldAt) {
+        quiet.delete(item.id);
+        update(item.id, { heldAt: new Date() });
+        console.log(`[work-items] ${item.id}: held by an interrupt`);
+      }
+    },
+
+    /**
+     * Whether a send from `origin` waits at the hub because an interrupt
+     * holds the session's item ({@link interrupted}): anything but its
+     * parent's, its lead's or the reader's words. Such a send is kept owed
+     * and goes, in order, once one of them wakes it.
+     */
+    heldFor(instanceId: string, origin: NeutralOrigin): boolean {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      return !!item?.heldAt && LIVE.has(item.state) && !mayReopen(item, origin);
+    },
+
+    /**
+     * A send from `origin` reached the session: its parent's, its lead's or
+     * the reader's ends the interrupt's hold on its item. Answers whether it
+     * did, so what the hold kept goes right behind it.
+     */
+    unhold(instanceId: string, origin: NeutralOrigin): boolean {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (!(item?.heldAt && mayReopen(item, origin))) {
+        return false;
+      }
+      update(item.id, { heldAt: null });
+      console.log(`[work-items] ${item.id}: woken from its interrupt's hold`);
+      return true;
     },
 
     /** Replays durable discards, including creates whose reply a previous hub never received. */
@@ -4464,6 +4607,7 @@ export const createWorkItems = ({
           error: null,
           endedAt: null,
           dismissedAt: null,
+          heldAt: null,
         });
       }
     },
@@ -4504,6 +4648,14 @@ export const createWorkItems = ({
       }
       // The plan's completed to-do ids tick their to-dos, off the turn's path.
       syncSoon(item);
+      // The turn an interrupt cut: nothing goes back and nothing nudges it.
+      // A Claude turn cut this way ends as a plain turn, so once it was
+      // answered as a quiet one ("Your work item is still open"), which
+      // started the next turn the interrupt was meant to stop.
+      if (item.heldAt) {
+        quiet.delete(item.id);
+        return undefined;
+      }
       if (turn.error === undefined && waitingTurn(item)) {
         return undefined;
       }

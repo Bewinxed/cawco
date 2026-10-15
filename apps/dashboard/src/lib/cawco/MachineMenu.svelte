@@ -17,6 +17,8 @@
   import {
     IconDownload,
     IconKey,
+    IconPause,
+    IconPlay,
     IconPlus,
     IconRefresh,
     IconTrash,
@@ -27,9 +29,11 @@
     cawco,
     loadCatalog,
     type Machine,
+    pauseMachine,
     removeMachine,
   } from "./client.svelte";
   import { resolveSessionTitle } from "./links";
+  import { pauseChoices } from "./machine-pause";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
   import UnlockKeychain from "./UnlockKeychain.svelte";
   import { updates } from "./updates/updates.svelte";
@@ -157,6 +161,35 @@
         Install update now
       </ContextMenu.Item>
     {/if}
+    <!-- Nothing CawCo starts runs there until the time: turns stop, work
+         for it waits, and it resumes by itself (hub machine-pause.ts). -->
+    {#if machine.pausedUntil}
+      <ContextMenu.PendingItem
+        icon={IconPlay}
+        label="Resume now"
+        pendingLabel="Resuming…"
+        run={() => pauseMachine(machine.machineId, null)}
+      />
+    {/if}
+    <ContextMenu.Sub>
+      <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
+      <ContextMenu.SubTrigger class="gap-2.5">
+        <IconPause class="size-4" />
+        Pause until…
+      </ContextMenu.SubTrigger>
+      <!-- Each end says its clock beside it: no sums before choosing. -->
+      <ContextMenu.SubContent class="min-w-52">
+        {#each pauseChoices(new Date()) as choice (choice.label)}
+          <ContextMenu.PendingItem
+            label={choice.label}
+            pendingLabel="Pausing…"
+            run={() => pauseMachine(machine.machineId, choice.until)}
+          >
+            <ContextMenu.Shortcut>{choice.clock}</ContextMenu.Shortcut>
+          </ContextMenu.PendingItem>
+        {/each}
+      </ContextMenu.SubContent>
+    </ContextMenu.Sub>
 
     <ContextMenu.Separator />
 

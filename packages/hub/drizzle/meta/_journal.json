@@ -1219,6 +1219,13 @@
       "when": 1792080053383,
       "tag": "0173_fleet_mcp_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "6",
+      "when": 1792091917400,
+      "tag": "0174_machine_pause",
+      "breakpoints": true
     }
   ]
 }

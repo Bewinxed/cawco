@@ -18,6 +18,7 @@
   import { home } from "./home/home-state.svelte";
   import { addMachine, JOIN_WAYS } from "./join/join.svelte";
   import MachineMenu from "./MachineMenu.svelte";
+  import { pausedWords } from "./machine-pause";
   import RowFault from "./RowFault.svelte";
   import { cellFor } from "./updates/model";
   import { updates } from "./updates/updates.svelte";
@@ -126,6 +127,7 @@
               icon={machineIcon(machine.os ?? "")}
               meta={[
                 `${live} live`,
+                pausedWords(machine.pausedUntil),
                 fault,
                 update && !update.fail ? update.text : undefined,
               ]

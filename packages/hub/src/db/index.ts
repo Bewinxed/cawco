@@ -1734,6 +1734,8 @@ export interface DbShape {
 
   /** Puts sessions in a project: a session made a project, and its delegates. */
   readonly setInstancesProject: (ids: string[], projectId: string) => void;
+  /** Pauses a machine until `until`, or ends its pause (null); false when no such machine (machine-pause.ts). */
+  readonly setMachinePause: (machineId: string, until: Date | null) => boolean;
   readonly setMcpAuth: (
     name: string,
     mode: "direct" | "oauth",
@@ -2038,6 +2040,7 @@ export interface DbShape {
         | "waitReason"
         | "waitResumeBy"
         | "waitHistory"
+        | "heldAt"
         | "prUrl"
         | "groupReportedAt"
         | "digest"
@@ -5767,6 +5770,13 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
+    setMachinePause: (machineId, until) =>
+      db
+        .update(agents)
+        .set({ pausedUntil: until })
+        .where(eq(agents.machineId, machineId))
+        .returning({ machineId: agents.machineId })
+        .get() !== undefined,
     listAgents: () =>
       db
         .select()
@@ -5780,9 +5790,11 @@ const make = async (path: string): Promise<DbShape> => {
             harnesses,
             home,
             machineCapabilities,
+            pausedUntil,
             ...agent
           }) => ({
             ...agent,
+            pausedUntil: pausedUntil?.getTime() ?? null,
             ...(fleet ? { fleet } : {}),
             ...(build ? { build } : {}),
             ...(harnesses ? { harnesses } : {}),

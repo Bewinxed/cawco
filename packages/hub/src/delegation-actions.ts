@@ -31,6 +31,7 @@ import {
   machineLabel,
   namedAmong,
   namesAmong,
+  pauseClock,
   QUESTION_DISMISSED,
   relaunchOf,
 } from "@cawco/core";
@@ -160,6 +161,8 @@ const ageOf = (at: InstanceRow["updatedAt"]): string => {
 export interface Machine {
   hostname: string;
   machineId: string;
+  /** Paused by the owner until this time, epoch ms (machine-pause.ts); null or absent when not. */
+  pausedUntil?: number | null;
   /** `online` while its daemon holds a socket to the hub. */
   status: string;
 }
@@ -186,9 +189,14 @@ const onlineNames = (machines: Machine[]): string =>
 /**
  * The one machine `target` names: its machineId, its hostname, or that
  * hostname as the fleet shows it (without `.local`), case aside. An unknown,
- * ambiguous or offline name is refused with the machines online now.
+ * ambiguous or (unless `offline`) offline name is refused with the machines
+ * online now.
  */
-function resolveMachine(machines: Machine[], target: string): Machine {
+function resolveMachine(
+  machines: Machine[],
+  target: string,
+  offline = false
+): Machine {
   const needle = target.trim().toLowerCase();
   const matches = machines.filter(
     (machine) =>
@@ -207,7 +215,7 @@ function resolveMachine(machines: Machine[], target: string): Machine {
     );
   }
   const [found] = matches;
-  if (found.status !== "online") {
+  if (!offline && found.status !== "online") {
     throw new Error(
       `${namedAmong(found, machines)} is offline. Online now: ${onlineNames(machines)}.`
     );
@@ -490,6 +498,8 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   "interrupt_delegate",
   "answer_delegate",
   "set_item_checks",
+  // It stops every turn on a machine: an orchestrator's, never a leaf's.
+  "machine_pause",
 ]);
 
 /**
@@ -506,14 +516,19 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * its account is at its limit, where a turn would only be refused, and it
  * waits for the reset, a move, or its continuation from a summary (`limit`);
  * or Claude Code refused its account's credential and no other account can
- * take it, so it waits for a sign-in or a free account (`signin`).
+ * take it, so it waits for a sign-in or a free account (`signin`); or the
+ * owner paused its machine until a time (`paused`, machine-pause.ts); or an
+ * interrupt holds its work item and only its parent, its lead or the person
+ * wakes it (`held`).
  */
 export type SendHold =
   | "agent"
   | "behind"
   | "build"
+  | "held"
   | "hub"
   | "limit"
+  | "paused"
   | "resting"
   | "signin"
   | "update";
@@ -524,6 +539,8 @@ export interface SendDelivery {
   busy: boolean;
   /** Queued at the hub, and why; absent when the session has it. */
   hold?: SendHold;
+  /** With `hold: "paused"`: "Omars-MacBook-Pro is paused until 00:57". */
+  pause?: string;
   /**
    * It had no process, and the send started one (core `relaunchOf`): on its
    * conversation (`resume`), or fresh under its id because it never began
@@ -533,7 +550,8 @@ export interface SendDelivery {
 }
 
 /** Each hold, in the words `handoff` answers with: queued at the hub, and until when. */
-const HOLD_WORDS: Record<SendHold, string> = {
+const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
+  held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
   update:
     "Its machine is installing an update and restarting, so the message is queued at the hub and goes to the session as soon as the update is done.",
   build:
@@ -553,6 +571,9 @@ const HOLD_WORDS: Record<SendHold, string> = {
 
 /** What the hub did with a hand-off, as its sender is told. */
 const deliveryWords = (delivery: SendDelivery): string => {
+  if (delivery.hold === "paused") {
+    return `${delivery.pause ?? "Its machine is paused"}, so the message is queued at the hub and goes to the session when the pause ends.`;
+  }
   if (delivery.hold) {
     return HOLD_WORDS[delivery.hold];
   }
@@ -769,6 +790,15 @@ export interface HandoffActions {
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   listSessions(): string;
   readonly listWorkflows: () => Promise<unknown>;
+  /**
+   * Pauses the machine `machine` names for `minutes` (machine-pause.ts), or
+   * ends its pause (`resume`). Answers what the hub did, in a sentence.
+   */
+  readonly machinePause: (
+    machine: string,
+    minutes?: number,
+    resume?: boolean
+  ) => Promise<string>;
   /** A window into one result of a run this session supervises. */
   readonly readWorkflow: (
     runId: string,
@@ -1395,7 +1425,29 @@ export const handoffActions = ({
   listSessions(): string {
     const { peers, own } = roster(fleet, instanceId);
     const machines = fleet.machines();
-    const where = `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`;
+    /** "paused until 00:57" for a paused machine, by id. */
+    const pauses = new Map(
+      machines.flatMap((machine) =>
+        machine.pausedUntil
+          ? [
+              [
+                machine.machineId,
+                `paused until ${pauseClock(machine.pausedUntil)}`,
+              ] as const,
+            ]
+          : []
+      )
+    );
+    const paused = machines
+      .filter((machine) => pauses.has(machine.machineId))
+      .map(
+        (machine) =>
+          `${namedAmong(machine, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
+      );
+    const where = [
+      `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`,
+      ...paused,
+    ].join(" ");
     if (peers.length === 0) {
       return `No other sessions are running.\n\n${where}`;
     }
@@ -1406,6 +1458,9 @@ export const handoffActions = ({
           peer.row.model ?? "default model",
           ageOf(peer.row.updatedAt),
           ...(peer.row.kind === "scratch" ? ["spin-off"] : []),
+          ...(pauses.has(peer.row.machineId)
+            ? [pauses.get(peer.row.machineId) as string]
+            : []),
           ...(peer.row.parentInstanceId === instanceId
             ? [peer.row.workItemId ? "your delegate" : "you started it"]
             : []),
@@ -1755,9 +1810,44 @@ export const handoffActions = ({
       },
     });
     return (
-      `Interrupted your delegate ${peer.label}${continuesWords(followed)}. Its current turn stopped; it keeps all state. ` +
-      `Resume or redirect it with handoff("${peer.row.id}", ...).`
+      `Interrupted your delegate ${peer.label}${continuesWords(followed)}. Its current turn stopped; it keeps all state, ` +
+      `and stays idle: no reminder, wait or check wakes it. Resume or redirect it with handoff("${peer.row.id}", ...).`
     );
+  },
+
+  async machinePause(machine, minutes, resume = false) {
+    const machines = fleet.machines();
+    const found = resolveMachine(machines, machine, true);
+    const name = namedAmong(found, machines);
+    if (resume === (minutes !== undefined)) {
+      throw new Error(
+        "Pass minutes to pause the machine, or resume: true to end its pause."
+      );
+    }
+    const path = `${hubHttpUrl()}/api/machines/${encodeURIComponent(found.machineId)}/${resume ? "resume" : "pause"}`;
+    const response = await fetch(path, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
+      body: JSON.stringify(
+        resume
+          ? {}
+          : {
+              until: new Date(
+                Date.now() + (minutes ?? 0) * 60_000
+              ).toISOString(),
+            }
+      ),
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    const row = (await response.json()) as { pausedUntil: number | null };
+    return row.pausedUntil === null
+      ? `${name} is not paused: what was kept for it goes now.`
+      : `Paused ${name} until ${pauseClock(row.pausedUntil)}: its running turns were stopped, and nothing starts there until then. Work for it waits and goes when the pause ends.`;
   },
 
   answerDelegate(

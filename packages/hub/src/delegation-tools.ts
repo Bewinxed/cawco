@@ -913,8 +913,8 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "interrupt_delegate",
-      "Interrupt one of YOUR delegates mid-turn without ending it — the fleet's pause. It keeps " +
-        "its state; resume it with handoff.",
+      "Interrupt one of YOUR delegates mid-turn without ending it. It keeps its state and stays idle: " +
+        "nothing automatic wakes it, only your handoff or the person's message.",
       {
         target: z
           .string()
@@ -927,6 +927,23 @@ export function handoffTools(deps: HandoffDeps) {
           {
             type: "text" as const,
             text: actions.interruptDelegate(target),
+          },
+        ],
+      })
+    ),
+    tool(
+      "machine_pause",
+      "Pause a machine for some minutes: its turns stop and nothing starts there until then; work for it waits. resume: true ends it.",
+      {
+        machine: z.string(),
+        minutes: z.number().int().min(1).max(1440).optional(),
+        resume: z.boolean().optional(),
+      },
+      async ({ machine, minutes, resume }) => ({
+        content: [
+          {
+            type: "text" as const,
+            text: await actions.machinePause(machine, minutes, resume),
           },
         ],
       })

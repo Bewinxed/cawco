@@ -309,6 +309,12 @@ export const agents = sqliteTable("agents", {
   build: text("build", { mode: "json" }).$type<BuildInfo>(),
   /** What each harness adapter on the machine can do, as reported at register. */
   harnesses: text("harnesses", { mode: "json" }).$type<HarnessReport[]>(),
+  /**
+   * The owner paused the machine until this time (machine-pause.ts): the hub
+   * starts nothing on it until then, its agent connected all the while. Null
+   * when it is not paused; cleared as the time comes.
+   */
+  pausedUntil: timestamp("paused_until"),
   lastSeenAt: timestamp("last_seen_at"),
   createdAt: timestamp("created_at")
     .notNull()
@@ -1198,6 +1204,13 @@ export const workItems = sqliteTable(
     waitReason: text("wait_reason"),
     /** Deadline plus grace while awaiting the harness's next turn read. */
     waitResumeBy: timestamp("wait_resume_by"),
+    /**
+     * When an interrupt stopped its turn, while that holds it: nothing the
+     * hub sends on its own (a quiet turn's reminder, a wait's end, a check's
+     * outcome, a rule's reply, another session's report) wakes it until its
+     * parent, its project's lead or the reader sends it something.
+     */
+    heldAt: timestamp("held_at"),
     /** Routine waits since the last message handed to the parent. */
     waitHistory: text("wait_history", { mode: "json" }).$type<{
       count: number;

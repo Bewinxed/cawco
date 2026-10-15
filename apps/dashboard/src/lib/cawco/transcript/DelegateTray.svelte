@@ -473,9 +473,15 @@
     }
     return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
   };
-  /** Why a queued delegate waits, as its chip says it: the files it owns. */
-  const queuedWords = (item: WorkItemSummary): string =>
-    item.queued ? `queued: owns ${item.queued.owns.join(", ")}` : "";
+  /** Why a queued delegate waits, as its chip says it: its machine's pause, or the files it owns. */
+  const queuedWords = (item: WorkItemSummary): string => {
+    if (!item.queued) {
+      return "";
+    }
+    return item.queued.paused
+      ? `queued: ${item.queued.paused}`
+      : `queued: owns ${item.queued.owns.join(", ")}`;
+  };
   /** A check waiting for a shared machine slot, as its chip says it, with how long. */
   const checkQueueWords = (item: WorkItemSummary): string =>
     item.checkQueue
@@ -487,6 +493,10 @@
     }
     if (chip.item.checkQueue) {
       return checkQueueWords(chip.item);
+    }
+    // Its machine is paused: it runs no turn until the pause ends.
+    if (chip.item.machinePaused) {
+      return chip.item.machinePaused;
     }
     switch (chip.tone) {
       case "needs":

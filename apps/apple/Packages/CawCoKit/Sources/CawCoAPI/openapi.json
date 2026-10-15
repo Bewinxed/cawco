@@ -14562,6 +14562,118 @@
         }
       }
     },
+    "/api/machines/{machineId}/pause": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "until": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "until"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiMachinesByMachineIdPause",
+        "responses": {
+          "200": {
+            "description": "postApiMachinesByMachineIdPause 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiMachinesByMachineIdPause 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiMachinesByMachineIdPause 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiMachinesByMachineIdPause 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/resume": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiMachinesByMachineIdResume",
+        "responses": {
+          "200": {
+            "description": "postApiMachinesByMachineIdResume 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRow"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiMachinesByMachineIdResume 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{machineId}/busy": {
       "get": {
         "parameters": [
@@ -34569,6 +34681,13 @@
           "os": {
             "type": "string"
           },
+          "pausedUntil": {
+            "description": "The owner paused the machine until this time (epoch ms): CawCo starts\nnothing on it until then, though its agent stays connected. Null when it\nis not paused.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "status": {
             "type": "string"
           },
@@ -34583,6 +34702,7 @@
           "lastSeenAt",
           "machineId",
           "os",
+          "pausedUntil",
           "status"
         ]
       },
@@ -37787,11 +37907,18 @@
               "string"
             ]
           },
+          "machinePaused": {
+            "description": "While the machine its workspace is on is paused: \"Omars-MacBook-Pro is\npaused until 00:57\". Its session runs no turn until then. Null otherwise.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "parentInstanceId": {
             "type": "string"
           },
           "queued": {
-            "description": "While it waits to start: the files it owns, which a live item owns too\n(`src/theme/**`); null once it has started.",
+            "description": "While it waits to start: the files it owns, which a live item owns too\n(`src/theme/**`), and the pause of the machine it starts on (\"obelisk is\npaused until 00:57\"), when that is what it waits for; null once it has\nstarted.",
             "type": "object",
             "properties": {
               "owns": {
@@ -37799,10 +37926,17 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "paused": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               }
             },
             "required": [
-              "owns"
+              "owns",
+              "paused"
             ]
           },
           "state": {
@@ -37833,6 +37967,7 @@
           "id",
           "instanceId",
           "leadInstanceId",
+          "machinePaused",
           "parentInstanceId",
           "state",
           "title",

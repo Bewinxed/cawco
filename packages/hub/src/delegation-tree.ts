@@ -28,6 +28,8 @@ export interface DelegateNode {
   machine: string;
   /** The session's directory name, as `list_sessions` shows it. */
   name: string;
+  /** While its machine is paused: "Omars-MacBook-Pro is paused until 00:57"; it runs no turn until then. */
+  paused?: string;
   plan?: { done: number; total: number };
   /** Messages handed to it that it has not read yet. */
   queued: number;
@@ -57,6 +59,8 @@ export interface DelegationTreeDeps {
   >;
   /** A machine's name as the fleet shows it. */
   machineName: (machineId: string) => string;
+  /** A paused machine's pause in words (machine-pause.ts); undefined when it is not paused. */
+  machinePaused: (machineId: string) => string | undefined;
   /** The session's plan progress, when it has steps (plans.ts). */
   plan: (
     instanceId: string
@@ -102,6 +106,18 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       ? row.projectId
       : undefined;
 
+  /** A live item's machine pause, in words; nothing when it is not paused or the item is over. */
+  const pausedOf = (
+    item: WorkItemRow,
+    row: KeepAliveRow | undefined
+  ): Pick<DelegateNode, "paused"> => {
+    const paused =
+      row && (item.state === "starting" || item.state === "running")
+        ? deps.machinePaused(row.machineId)
+        : undefined;
+    return paused ? { paused } : {};
+  };
+
   const nodeOf = async (
     item: WorkItemRow,
     row: KeepAliveRow | undefined,
@@ -143,6 +159,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
             },
           }
         : {}),
+      ...pausedOf(item, row),
       ...(plan && plan.total > 0 ? { plan } : {}),
       ...(report ? { report } : {}),
       children,
