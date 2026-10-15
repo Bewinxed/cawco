@@ -17,7 +17,7 @@
   import { cn } from "#lib/utils.js";
   import { restRank, useList, useTabs } from "./context.svelte";
   import { type FoldMeasure, rememberFoldBox } from "./fold-memory";
-  import { foldPath, taperStops } from "./fold-path";
+  import { type FoldPose, foldPath, restPose, taperStops } from "./fold-path";
 
   /** How long a box holds still before its measure is kept, ms (a resize settling). */
   const KEEP_AFTER = 400;
@@ -175,7 +175,25 @@
       Boolean(end) || flush === "end",
     ];
   });
-  const outline = $derived(shape ? foldPath(shape.box, fold) : "");
+  /**
+   * How it stands: the pose a come-forward has it in (TabsList, `list.poses`)
+   * while one moves the stack, else at rest on its folds. A side the host
+   * stands flush is square in either.
+   */
+  const pose = $derived.by((): FoldPose => {
+    const moving = node ? list.poses.get(node) : undefined;
+    if (!moving) {
+      return restPose(fold);
+    }
+    return {
+      ...moving,
+      spread: [
+        flush === "start" ? 0 : moving.spread[0],
+        flush === "end" ? 0 : moving.spread[1],
+      ],
+    };
+  });
+  const outline = $derived(shape ? foldPath(shape.box, pose) : "");
   const stops = $derived(
     shape
       ? taperStops(shape.box, shape.ink.stroke, shape.ink.taper, shape.ink.ease)

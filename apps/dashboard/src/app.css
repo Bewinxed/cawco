@@ -1155,16 +1155,19 @@
       pointer-events: none;
     }
     /* The cut: across the neck, the edge's top row is the card's own
-       surface again, drawn over it. A flare's stroke meets the top edge
-       along it, its last few pixels in the edge's own row (`--neck-tail-*`,
-       √(2·flare + 1) each side with a flare, written by every card through
-       HangCard through hang's `setNeck`): the edge fades out across them as the stroke's
-       coverage does, rather than stopping short of them. Under that row is
-       the card's surface, so covering the edge with it by a ramp draws
-       what masking the edge out by the same ramp drew, with no mask: a
-       mask drew the whole card's edge through a buffer of its own on every
-       paint, which was most of what was left of the frame Caw's panel
-       started its slide in. */
+       surface again, drawn over it. A flare's stroke (a band between radii
+       f and f + 1) meets the top edge along it, its last √(2f + 1) px in
+       the edge's own row: the cut starts on that band's outer circle
+       (`--neck-cut`, a shape written by every card through HangCard
+       through hang's `setNeck`), so the edge shows under it exactly where
+       the stroke crosses the row, antialiased as the anchor's own curve
+       is, and the curve runs on into the card's edge as one stroke. A
+       linear fade across the run drew the edge out too soon (0.27 where
+       the band still covers 0.49), a soft smear where the curve met the
+       card (owner: "has a blur or alias"). A clip, not a mask: a mask drew
+       the whole card's edge through a buffer of its own on every paint,
+       which was most of what was left of the frame Caw's panel started its
+       slide in. */
     /* The cut stops short of a flush side's edge: there the anchor's
        flank runs straight on down into the card's side, and its first
        pixel is that side's edge, not the cut. */
@@ -1185,13 +1188,8 @@
       z-index: 2;
       inline-size: calc(var(--gap-to) - var(--gap-from));
       block-size: 1px;
-      background: linear-gradient(
-        to right,
-        transparent,
-        var(--hang-neck) var(--neck-tail-start, 0px)
-          calc(100% - var(--neck-tail-end, 0px)),
-        transparent
-      );
+      background: var(--hang-neck);
+      clip-path: var(--neck-cut, none);
       pointer-events: none;
     }
   }

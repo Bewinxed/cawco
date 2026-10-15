@@ -8,6 +8,7 @@
 import { getContext, setContext } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import type { FoldMeasure } from "./fold-memory";
+import type { FoldPose } from "./fold-path";
 import type { TabRects } from "./rects.svelte";
 
 export type TabsSize = "default" | "compact";
@@ -110,6 +111,11 @@ export class TabsListState {
    * foot (TabItem).
    */
   folds = new SvelteMap<HTMLElement, readonly [boolean, boolean]>();
+  /**
+   * Each folder tab's pose while a come-forward moves the stack (TabsList),
+   * by its item: TabItem draws it in place of its folds' rest. Empty at rest.
+   */
+  poses = new SvelteMap<HTMLElement, FoldPose>();
 
   constructor(rects: TabRects) {
     this.rects = rects;

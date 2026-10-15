@@ -798,6 +798,12 @@ public enum Motion {
     /// How far Caw shrinks as he fades out, from any drawing, over dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms.
     public static let leaveScale: Double = 0.97
     public static let popScale: Double = 0.92
+    /// The bounce of the spring a folder tab snaps forward on (Apple's perceptual duration and bounce: damping ratio 1 − bounce, its response the second half of dur-settle, the choice's length), released with the speed the press stored, so the tab coming forward and the tabs it pushed past each go a little past rest and settle. The house spring (motion/spring.ts) has none: this one is a release, the one place a bounce is the gesture's own (Apple, Designing Fluid Interfaces: bounce where the motion carries momentum; Emil Kowalski: subtle, 0.1–0.3).
+    public static let bounceSnap: Double = 0.3
+    /// How far a folder tab's side bows out over the tab pulled forward from behind it, at the side's middle, as the pull builds (the first half of dur-settle, the choice's length, on ease-in-out), before that tab snaps through.
+    public static let tabPress: Double = 3
+    /// How far a folder tab pulled forward rises above its row as it presses up from behind, its feet on the shelf; it snaps back down as it comes through. Inside the strip's 4px top pad, so the strip never clips it.
+    public static let tabRise: Double = 2
     /// How far each card of a session mark's deck shows below the one in front (SessionMark).
     public static let deckStep: Double = 1.25
     /// How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i.

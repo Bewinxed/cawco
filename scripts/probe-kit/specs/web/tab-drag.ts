@@ -13,11 +13,8 @@
  *   outline, every free foot the chosen tab's own quarter turn, and a side
  *   is folded exactly where a tab ranked above covers its foot as the two
  *   are drawn: at rest, under the lift, through a neighbour's slide and the
- *   release's settle, and at every 5% of a switch (DESIGN.md, Folder tabs).
- * - shuffle: a switch parts the tab being chosen and the tab it leaves,
- *   half the clearance each, and brings them back, a run of translate on
- *   each on one clock, the stack swapping at the furthest point with no
- *   foot changing there; with less motion, at once.
+ *   release's settle (DESIGN.md, Folder tabs; a switch, the come-forward,
+ *   is folder-tabs.ts's).
  * - follow: every pointermove puts the dragged tab's left edge where the
  *   pointer's travel says, within 1px, clamped to the strip's ends.
  * - no capture: nothing is added to the page during a drag that is an img,
@@ -45,8 +42,8 @@ import { emulateMotion } from "../../motion";
 
 const TITLES = ["Alpha", "Bravo", "Charlie", "Delta"];
 const SLOW = "Keep working slowly";
-/** Where an arc lands, at the end of its command. */
-const LANDS = / \S+ \S+$/;
+/** A path's numbers. */
+const NUMBERS = /-?\d*\.?\d+/g;
 const STRIPS = "[data-strip]";
 const near = (a: number, b: number, px = 1) => Math.abs(a - b) <= px;
 
@@ -290,9 +287,10 @@ type Shape = Awaited<ReturnType<typeof shapes>>[number];
 
 /**
  * A tab's path read against the geometry: its view box the tab's box one
- * flare wider each side, its feet the flare's quarter turn (radius
- * `--flare`) to the shelf at the box's outer edge, or a fold straight down
- * the tab's edge, its shoulders at `--radius`. Answers what is wrong.
+ * flare wider each side, its feet the flare's quarter turn (a cubic, its
+ * handles 0.5523 of `--flare` along each tangent: fold-path.ts) to the
+ * shelf at the box's outer edge, or a fold straight down the tab's edge,
+ * its shoulders at `--radius`. Answers what is wrong.
  */
 function geometry(s: Shape, fold: readonly [boolean, boolean]): string[] {
   const out: string[] = [];
@@ -309,12 +307,13 @@ function geometry(s: Shape, fold: readonly [boolean, boolean]): string[] {
   ) {
     out.push(`view box ${s.viewBox}, not 0 0 ${w + 2 * f} ${h}`);
   }
+  const q = 0.5523 * f;
   const start = fold[0]
-    ? `M ${n(f)} ${n(h)} L ${n(f)} ${n(h - f)}`
-    : `M 0 ${n(h)} A ${n(f)} ${n(f)} 0 0 0 ${n(f)} ${n(h - f)}`;
+    ? `M ${n(f)} ${n(h)} C ${n(f)} ${n(h)} ${n(f)} ${n(h - f)} ${n(f)} ${n(h - f)}`
+    : `M 0 ${n(h)} C ${n(q)} ${n(h)} ${n(f)} ${n(h - f + q)} ${n(f)} ${n(h - f)}`;
   const end = fold[1]
-    ? `L ${n(f + w)} ${n(h)}`
-    : `A ${n(f)} ${n(f)} 0 0 0 ${n(2 * f + w)} ${n(h)}`;
+    ? `C ${n(f + w)} ${n(h - f)} ${n(f + w)} ${n(h)} ${n(f + w)} ${n(h)}`
+    : `C ${n(f + w)} ${n(h - f + q)} ${n(2 * f + w - q)} ${n(h)} ${n(2 * f + w)} ${n(h)}`;
   if (!s.d.startsWith(start)) {
     out.push(`start ${s.d.slice(0, 40)}, not ${start}`);
   }
@@ -343,14 +342,19 @@ const covers = (page: Page) =>
       const ff = tab.querySelector(".ff-tab") as HTMLElement;
       const box = ff.getBoundingClientRect();
       const d = ff.querySelector("svg.fold defs path")?.getAttribute("d") ?? "";
+      // Each foot's tip: on the tab's edge folded, a flare out flared.
+      const nums = (d.match(/-?\d*\.?\d+/g) ?? []).map(Number);
+      const f = Number.parseFloat(
+        getComputedStyle(ff).getPropertyValue("--flare")
+      );
       return {
         name: tab.querySelector(".label .text")?.textContent ?? "?",
         left: box.left,
         right: box.right,
         z: Number(getComputedStyle(tab).zIndex),
         flush: ff.dataset.flush ?? "",
-        start: !d.startsWith("M 0"),
-        end: d.lastIndexOf("A") < d.lastIndexOf("L"),
+        start: (nums[0] ?? 0) > f / 2,
+        end: (nums.at(-2) ?? 0) < f + ff.offsetWidth + f / 2,
       };
     });
     return tabs.flatMap((t) => {
@@ -390,9 +394,18 @@ async function feet(kit: Kit, page: Page, ids: string[]) {
     );
   });
   const front = read.find((s) => s.chosen);
-  /** A path's end foot: its last arc, and the same less where it lands. */
-  const endArc = (d: string) => d.slice(d.lastIndexOf("A"));
-  const turn = (s: Shape) => endArc(s.d).replace(LANDS, "");
+  /** A path's end foot: its last cubic, and its points from where it leaves the tab's edge. */
+  const endArc = (d: string) => d.slice(d.lastIndexOf("C"));
+  const turn = (s: Shape) =>
+    (endArc(s.d).match(NUMBERS) ?? [])
+      .map((v, k) =>
+        String(
+          Math.round(
+            (Number(v) - (k % 2 === 0 ? s.flare + s.width : 0)) * 100
+          ) / 100
+        )
+      )
+      .join(" ");
   kit.check(
     "feet: every inactive tab's free foot is the chosen tab's curve (the same radius and turn)",
     read
@@ -836,165 +849,6 @@ async function off(kit: Kit, base: string, ids: string[]) {
 
 /* ── Less motion, and a strip that scrolls ──────────────────────────── */
 
-/* ── A switch: the shuffle ──────────────────────────────────────────── */
-
-/** Each tab's left edge as drawn (its slide in it), rank and folds. */
-const drawn = (page: Page) =>
-  page.evaluate(
-    (sel) =>
-      [...document.querySelectorAll<HTMLElement>(sel)].map((tab) => {
-        const d =
-          tab.querySelector("svg.fold defs path")?.getAttribute("d") ?? "";
-        return {
-          left: tab.getBoundingClientRect().left,
-          z: Number(getComputedStyle(tab).zIndex),
-          foldStart: d.startsWith("M 0") ? 0 : 1,
-          // A flared end is the path's last arc; a folded one a line.
-          foldEnd: d.lastIndexOf("A") > d.lastIndexOf("L") ? 0 : 1,
-          pick: Number(
-            getComputedStyle(tab.querySelector(".ff-tab") as Element)
-              .getPropertyValue("--pick")
-              .trim()
-          ),
-        };
-      }),
-    `${STRIPS} .tab`
-  );
-
-/**
- * Alpha chosen, Bravo clicked: the two part by the clearance (the overlap,
- * the flare and --space-1 between them, each clear of the other's foot),
- * Bravo away from Alpha and Alpha the other way as far as its room goes
- * (none: its foot stands on the pane's edge); Bravo comes in front at the
- * furthest point and both slide back. A run of translate on each, scrubbed
- * over the Animation domain. With less motion the swap is instant.
- */
-async function shuffled(kit: Kit, base: string, ids: string[]) {
-  const [alpha, bravo] = ids as [string, string];
-  const page = await strip(kit, base, ids, alpha);
-  const rest = await drawn(page);
-  const clear = await page.evaluate(() => {
-    const s = getComputedStyle(
-      document.querySelector(".ff-tabs-list") as Element
-    );
-    const px = (n: string) => Number.parseFloat(s.getPropertyValue(n)) || 0;
-    return px("--overlap") + px("--flare") + px("--space-1");
-  });
-  const clock = await Clock.on(page);
-  const at = await grip(page, bravo);
-  await clock.catchRuns(() => page.mouse.click(at.x, at.y), STRIPS);
-  const slides = clock.runs.filter((run) => run.name === "tab-shuffle");
-  const [shuffle] = slides;
-  const picks = clock.runs.filter((run) => run.name === "--pick");
-  kit.check(
-    "shuffle: the switch is a run of translate on each of Bravo and Alpha (tab-shuffle) with the tabs' --pick on their clock (one start, one length)",
-    slides.length === 2 &&
-      picks.length >= 2 &&
-      [...slides, ...picks].every(
-        (run) =>
-          run.start !== null &&
-          shuffle?.start !== null &&
-          Math.abs((run.start ?? 0) - (shuffle?.start ?? 0)) <= 0.5 &&
-          run.end === shuffle?.end
-      ),
-    `${clock.runs.map((run) => `${run.type} ${run.name} ${run.start}+${run.end}`).join(", ")}`
-  );
-  const frames: string[] = [];
-  const bare: string[] = [];
-  const rows: Record<number, Awaited<ReturnType<typeof drawn>>> = {};
-  const fractions = [
-    ...Array.from({ length: 21 }, (_, k) => k / 20),
-    0.49,
-    0.51,
-  ].sort((p, q) => p - q);
-  for (const f of fractions) {
-    await clock.seek(f, "tab-shuffle");
-    const now = await drawn(page);
-    rows[f] = now;
-    bare.push(...(await covers(page)).map((w) => `${f * 100}%: ${w}`));
-    const [a, b] = now as [(typeof now)[number], (typeof now)[number]];
-    frames.push(
-      `${Math.round(f * 100)}%: Bravo +${(b.left - (rest[1]?.left ?? 0)).toFixed(1)}px, Alpha ${(a.left - (rest[0]?.left ?? 0)).toFixed(1)}px, z Alpha ${a.z} Bravo ${b.z}, Bravo start ${b.foldStart ? "folded" : "flared"}, Alpha end ${a.foldEnd ? "folded" : "flared"}, pick ${a.pick.toFixed(2)}/${b.pick.toFixed(2)}`
-    );
-  }
-  await clock.release();
-  /** How far tab `k` stands out at `f`, away from the other (Bravo right, Alpha left). */
-  const offset = (k: 0 | 1, f: number) =>
-    ((rows[f]?.[k]?.left ?? 0) - (rest[k]?.left ?? 0)) * (k === 1 ? 1 : -1);
-  /** Tab `k` out to its furthest at 50% and back, never past it. */
-  const parts = (k: 0 | 1) => {
-    const peak = offset(k, 0.5);
-    return (
-      near(offset(k, 0), 0, 0.5) &&
-      [0.25, 0.75].every(
-        (f) => offset(k, f) > -0.5 && offset(k, f) < peak + 0.5
-      ) &&
-      near(offset(k, 1), 0, 0.5)
-    );
-  };
-  // Alpha, the strip's first tab, stands with its foot on the pane's edge,
-  // which clips: it has no room to go, and Bravo goes the whole way.
-  const front = (f: number) => (rows[f]?.[1]?.z ?? 0) > (rows[f]?.[0]?.z ?? 0);
-  kit.check(
-    `shuffle: Bravo and Alpha part by ${clear}px at 50% (the overlap, the flare and --space-1), Alpha at the pane's edge staying and Bravo going the whole of it, and back to their slots`,
-    parts(1) &&
-      parts(0) &&
-      near(offset(1, 0.5) + offset(0, 0.5), clear, 0.5) &&
-      near(offset(0, 0.5), 0, 0.5),
-    frames.join(" | ")
-  );
-  kit.check(
-    "shuffle: the stack swaps at the furthest point, Bravo behind Alpha to 49% and in front from 50%, and no foot changes there (Bravo's start and Alpha's end both on their feet, clear of each other's body)",
-    !(front(0) || front(0.25) || front(0.49)) &&
-      front(0.5) &&
-      front(0.51) &&
-      front(1) &&
-      [0.49, 0.5, 0.51].every(
-        (f) => rows[f]?.[1]?.foldStart === 0 && rows[f]?.[0]?.foldEnd === 0
-      ),
-    frames.join(" | ")
-  );
-  kit.check(
-    "shuffle: at every 5% (and 49, 51%) every side is folded exactly where a tab above covers it as drawn: Bravo's start folded only while under Alpha, Alpha's end only once Bravo is back over it",
-    bare.length === 0 &&
-      rows[0]?.[1]?.foldStart === 1 &&
-      rows[1]?.[0]?.foldEnd === 1,
-    bare.join("; ") || frames.join(" | ")
-  );
-  await settle(page);
-  const after = await shapes(page);
-  const wrong = after.flatMap((s, i) =>
-    geometry(s, [i > 1, i === 0]).map((w) => `${s.name}: ${w}`)
-  );
-  kit.check(
-    "shuffle: landed, every path is its box's outline: Alpha's end folded under Bravo, Bravo both flared, the rest folded toward Bravo",
-    wrong.length === 0 && (await leftovers(page)).length === 0,
-    wrong.join("; ") || "all on the geometry"
-  );
-  await page.close();
-
-  const calm = await strip(kit, base, ids, alpha, true);
-  const g = await grip(calm, bravo);
-  await calm.mouse.click(g.x, g.y);
-  await calm.waitForTimeout(100);
-  const runs = await calm.evaluate(
-    (sel) =>
-      [...document.querySelectorAll(sel)]
-        .flatMap((el) => el.getAnimations({ subtree: true }))
-        .filter((run) => run.id === "tab-shuffle").length,
-    STRIPS
-  );
-  const now = await drawn(calm);
-  kit.check(
-    "shuffle, less motion: an instant swap, no slide, Bravo in front",
-    runs === 0 &&
-      (now[1]?.z ?? 0) > (now[0]?.z ?? 0) &&
-      near(now[1]?.left ?? 0, rest[1]?.left ?? 0, 0.5),
-    `${runs} tab-shuffle runs; z Alpha ${now[0]?.z} Bravo ${now[1]?.z}`
-  );
-  await calm.close();
-}
-
 async function still(kit: Kit, base: string, ids: string[]) {
   const [alpha, bravo, charlie] = ids as [string, string, string];
   const page = await strip(kit, base, ids, alpha, true);
@@ -1096,7 +950,6 @@ const spec: Spec = {
     const base = await fleet.dashboard();
     await along(kit, base, ids);
     await off(kit, base, ids);
-    await shuffled(kit, base, ids);
     await still(kit, base, ids);
     await scrolls(kit, base, ids, more);
   },

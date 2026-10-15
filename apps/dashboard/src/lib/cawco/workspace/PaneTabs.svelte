@@ -2143,13 +2143,27 @@
      each side's `box-shadow`. A `drop-shadow()` filter on the shape drew
      it too, but WebKit drew it again offscreen every frame of a switch,
      and the switch's frames grew half as long again; these are painted,
-     never filtered. */
+     never filtered.
+
+     The boxes' sides are the tab's straight flanks, so their cast would
+     run on down past where the foot curves away from the flank, into the
+     foot's concave corner, and stop flat on the shelf's line: a soft band
+     beside the curve, cut square by the card that hangs from it (owner:
+     "the curve beteween the left of the tab's foot and the hover menu has
+     a blur or alias"). The cast fades out over the flare above the foot
+     instead, gone where the foot begins, so the corner shows only what
+     lies under it and the foot's curve is the one edge there. */
   .shade {
     position: absolute;
     inset: 0;
     z-index: 0;
     pointer-events: none;
     clip-path: inset(0 -12px 0);
+    mask-image: linear-gradient(
+      to bottom,
+      #000 calc(100% - 2 * var(--flare)),
+      transparent calc(100% - var(--flare))
+    );
 
     & > span {
       position: absolute;

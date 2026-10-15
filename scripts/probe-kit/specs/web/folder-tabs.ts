@@ -3,31 +3,45 @@
  * PaneTabs (six tabs: needs you, working, idle, done, failed, idle) and the
  * real WorkTabs (Working and Finished), on the desk and the phone, light and
  * dark. Each tab is one SVG path, its sheet filled and its rim stroked
- * inside it (TabItem, fold-path.ts); a switch is a shuffle (TabsList). The
- * session strip switches from its second tab to its third and jumps from
- * its second to its fourth, past the rimless idle third; the home's from
- * Working to Finished. Each switch is caught on the clock (anim.ts) and read
- * at every 5% and either side of the stack's swap.
+ * inside it (TabItem, fold-path.ts); a switch is a come-forward (TabsList).
+ * The session strip switches from its second tab to its third and jumps
+ * from its second to its fourth, past the rimless idle third; the home's
+ * from Working to Finished. Each switch is caught on the clock (anim.ts) and
+ * read at every 5% and either side of the stack's flip.
  *
  * Engine (every frame read), from the DOM and computed values:
  *  - shape: each tab's path is its box's outline drawn at scale 1 (its view
  *    box the box one flare wider each side, the svg drawn at that size one
- *    flare out), every free foot the flare's quarter turn, both shoulders
- *    at the radius;
+ *    flare out), written in one command structure (M C C A L A C C) in
+ *    every pose, at rest every free foot the flare's quarter turn, a
+ *    folded one straight down, both shoulders at the radius, no bow, no
+ *    rise;
  *  - folds: a side is folded exactly where a tab ranked above covers its
  *    foot as the two are drawn now (or the host stands it flush);
  *  - stack: at rest the chosen tab on top, each tab above those farther;
- *  - shuffle: a run of translate on the tab being chosen and on the tab it
- *    leaves, parting them (half the clearance each side by side, the whole
- *    of it each on a jump: the overlap, the flare and --space-1) to 50% and
- *    back to their slots, the stack swapping there with no foot anywhere
- *    changing; every other run in the strip (the tabs' --pick) on their
- *    start and length, all on --choose-ease;
+ *  - come-forward (owner: "u know in folder tabs when u pull one forward and
+ *    it bends the others before it snaps forward and releases the
+ *    pressure"): one run on the track (`tab-come-forward`) with the tabs'
+ *    --pick on its start and length, all on --choose-ease; no run in the
+ *    strip on a box's size or place, every tab's layout box as at rest, and
+ *    across the run every tab's box and the strip's scroll the same at
+ *    every frame (no layout shift); the pull to the
+ *    flip at 50% (read at 20% and 40%): the tab being chosen still under
+ *    each neighbour ranked above it, risen and rising, each such
+ *    neighbour's side over it bowed out and bowing, every other path as at
+ *    rest; at 51% the stack flipped, the chosen tab on top and its feet
+ *    spreading; after it the chosen tab's foot going past the flare and
+ *    a bowed side past straight before both settle; at 0% every path as it
+ *    stood and at 100% as it stands landed; every tab drawn chosen whole,
+ *    its feet as drawn, at every frame;
+ *  - interruption: a switch caught mid-way by another starts from the paths
+ *    as drawn (within 0.05px);
+ *  - less motion: the choice instant, no run, the stack and paths landed;
  *  - rims (the session strip): at rest the chosen tab's at its tone's full
  *    strength (tab-rim-mix-chosen; tab-rim-mix-idle idle or done), an
  *    unchosen one's at tab-rim-mix-subtle, an unchosen idle one's at none;
  *    on a switch each moves one way from rest to rest and by 0.08 at most
- *    across the swap; a jump passes a tab wearing none;
+ *    across the flip; a jump passes a tab wearing none;
  *  - taper: each tab's gradient is no ink on the shelf, rises and never
  *    falls, 90% whole by 40% of the taper along a flared foot and whole by
  *    the shoulder;
@@ -42,6 +56,21 @@
  * two tops meet; the chosen rim at 3:1 against the shelf and the fills
  * either side of it; on the rimless strip, each seam's edge on its front
  * tab's side.
+ *
+ * The seam where the session card hangs from its tab (owner: "the curve
+ * beteween the left of the tab's foot and the hover menu has a blur or
+ * alias"), at 1x, 2x and 3x, light and dark, on the tab a come-forward has
+ * just landed on, hovered: the card's top edge on the tab's foot (engine);
+ * and each foot's joint (ink): along the card's top row, from before the
+ * foot's tip to past the flare, the edge's ink area within 0.45 px² of the
+ * flare's 1px stroke's own (`JOINT_AREA`: measured on this bench, the
+ * clip on the stroke's circle draws 0.15 to 0.29 px² short of it at every
+ * scale, Chromium's antialiasing; the linear fade it replaced drew 0.67 to
+ * 0.85 short), each device px within 0.35 of the stroke's coverage of it, and
+ * the ink never rising again going in (one antialiased curve running into
+ * the card's edge: no early fade, no gap, no second edge),
+ * and the foot's concave corner above the card, in the flare's lower half,
+ * the plain backdrop beside it (4 of 255 at most: nothing blurred in).
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each rule is read case by case, as the drawing has them.
 import type { Page } from "playwright-core";
@@ -60,11 +89,13 @@ import {
   strokes,
 } from "../../ink";
 import {
+  frames,
   type Kit,
   open,
   type Spec,
   settle,
   THEMES,
+  type Theme,
   type View,
 } from "../../kit";
 
@@ -77,10 +108,18 @@ const FRACTIONS = [
 ].sort((a, b) => a - b);
 /** Room round the strip in every capture, css px. */
 const ROOM = 24;
-/** How far a strength may move across the stack's swap (49% to 51%). */
+/** How far a strength may move across the stack's flip (49% to 51%). */
 const SWAP_STEP = 0.08;
-/** The shuffle's run (TabsList `SHUFFLE`). */
-const SHUFFLE = "tab-shuffle";
+/** The come-forward's clock (TabsList `FORWARD`). */
+const FORWARD = "tab-come-forward";
+/** Where the stack flips, of the clock: the pull's end (TabsList `measures`). */
+const FLIP = 0.5;
+/**
+ * What a run in the strip may never drive: a box's size or place. (A
+ * composited move of a tab is caught by its box as drawn, `boxes`.)
+ */
+const LAYOUT =
+  /^(width|height|min-|max-|inset|top|left|right|bottom|margin|padding|flex|gap|grid|font|letter-spacing|line-height|border-width|scroll)/;
 
 interface Strip {
   api: "session" | "work";
@@ -171,6 +210,10 @@ function layoutOf({ root, tab }: { root: string; tab: string }) {
       bottom: box.bottom,
       width: ff.offsetWidth,
       height: ff.offsetHeight,
+      // Its layout box, as the track lays it out: no transform in it.
+      laid: `${laid(el).offsetLeft}+${laid(el).offsetWidth} ${ff.offsetLeft}+${ff.offsetWidth}`,
+      slopeStart: num(fs, "--slope-start"),
+      slopeEnd: num(fs, "--slope-end"),
       tone: el.dataset.tone ?? "",
       chosen:
         el.hasAttribute("data-chosen") || el.classList.contains("selected"),
@@ -203,6 +246,7 @@ function layoutOf({ root, tab }: { root: string; tab: string }) {
       top: tr.top,
       bottom: tr.bottom,
       scroll: track.scrollLeft,
+      scrollWidth: track.scrollWidth,
       overflows: track.scrollWidth > track.clientWidth + 0.5,
       masked: ts.maskImage !== "none",
       cuts: cuts(ts),
@@ -233,16 +277,66 @@ type Tab = Layout["tabs"][number];
 
 const near = (a: number, b: number, by = 0.5) => Math.abs(a - b) <= by;
 const r2 = (n: number) => String(Math.round(n * 100) / 100);
-/** Whether a path's start side is folded (no arc from the shelf), and its end. */
-const foldsOf = (d: string): [boolean, boolean] => [
-  !d.startsWith("M 0"),
-  d.lastIndexOf("A") < d.lastIndexOf("L"),
-];
+/** The one command structure every pose of a tab's path is written in (fold-path.ts). */
+const STRUCTURE = "MCCALACC";
+/**
+ * How far the card's top row's edge ink may stand from the flare's stroke's
+ * own, css px², at a foot's joint: between the clip on the stroke's circle
+ * (0.15 to 0.29 short at 1x to 3x, light and dark) and the linear fade it
+ * replaced (0.67 to 0.85 short), both measured on this bench.
+ */
+const JOINT_AREA = 0.45;
+const COMMAND = /([A-Z])([^A-Z]*)/g;
+const SPACES = /\s+/;
+/** A card's cut as hang writes it: an arc off each flare's stroke. */
+const FLARED_CUT =
+  /^shape\(from 0 100%, arc to [\d.]+px 0 of [\d.]+px ccw, .*arc to 100% 100% of [\d.]+px ccw, close\)$/;
+/** A path's commands, each with its numbers. */
+const commandsOf = (d: string) =>
+  [...d.matchAll(COMMAND)].map((m) => ({
+    c: m[1] as string,
+    n: (m[2] ?? "").trim().split(SPACES).filter(Boolean).map(Number),
+  }));
 
 /**
- * shape: the path is the box's outline at scale 1, a free foot the flare's
- * quarter turn to the shelf one flare out, a folded one straight down the
- * box's edge, both shoulders at the radius.
+ * The pose a path is drawn in, read back from its points: each foot's
+ * spread (its tip's way out past the tab's edge, of the flare), each side's
+ * bow (its first handle's way out past the straight run's third, 3/4 of
+ * it), its top's rise; and its command structure.
+ */
+function poseOf(t: Tab) {
+  const cs = commandsOf(t.d);
+  const { width: w, flare: f } = t;
+  const left = f;
+  const right = f + w;
+  const n = (k: number, i: number) => cs[k]?.n[i] ?? Number.NaN;
+  const top = -n(4, 1);
+  const startRun = left + (left + t.slopeStart - left) / 3;
+  const endRun = right - t.slopeEnd + (right - (right - t.slopeEnd)) / 3;
+  return {
+    structure: cs.map((x) => x.c).join(""),
+    spread: [(left - n(0, 0)) / f, (n(7, 4) - right) / f] as [number, number],
+    tips: [n(0, 0), n(7, 4)] as [number, number],
+    bow: [-(n(2, 0) - startRun) * 0.75, (n(6, 0) - endRun) * 0.75] as [
+      number,
+      number,
+    ],
+    rise: top,
+  };
+}
+
+/** Whether a path's start side is folded (its foot straight down), and its end: at rest, 0 or 1. */
+const foldsOf = (t: Tab): [boolean, boolean] => {
+  const { spread } = poseOf(t);
+  return [spread[0] < 0.5, spread[1] < 0.5];
+};
+
+/**
+ * shape: the path is the box's outline at scale 1 in the one command
+ * structure, a free foot the flare's quarter turn to the shelf one flare
+ * out (its handles 0.5523 of the flare along each tangent), a folded one
+ * straight down the box's edge, both sides straight, both shoulders at the
+ * radius, its top on the box's.
  */
 function shapeFaults(t: Tab): string[] {
   const out: string[] = [];
@@ -263,18 +357,29 @@ function shapeFaults(t: Tab): string[] {
       `drawn ${t.svg ? `${t.svg.width.toFixed(1)}×${t.svg.height.toFixed(1)} at ${(t.svg.left - t.left).toFixed(1)}` : "nothing"}, not its view box one flare out`
     );
   }
-  const [foldStart, foldEnd] = foldsOf(t.d);
+  const pose = poseOf(t);
+  if (pose.structure !== STRUCTURE) {
+    out.push(`commands ${pose.structure}, not ${STRUCTURE}`);
+  }
+  const q = 0.5523 * f;
+  const [foldStart, foldEnd] = foldsOf(t);
   const start = foldStart
-    ? `M ${r2(f)} ${r2(h)} L ${r2(f)} ${r2(h - f)}`
-    : `M 0 ${r2(h)} A ${r2(f)} ${r2(f)} 0 0 0 ${r2(f)} ${r2(h - f)}`;
+    ? `M ${r2(f)} ${r2(h)} C ${r2(f)} ${r2(h)} ${r2(f)} ${r2(h - f)} ${r2(f)} ${r2(h - f)}`
+    : `M 0 ${r2(h)} C ${r2(q)} ${r2(h)} ${r2(f)} ${r2(h - f + q)} ${r2(f)} ${r2(h - f)}`;
   const end = foldEnd
-    ? `L ${r2(f + w)} ${r2(h)}`
-    : `A ${r2(f)} ${r2(f)} 0 0 0 ${r2(2 * f + w)} ${r2(h)}`;
+    ? `C ${r2(f + w)} ${r2(h - f)} ${r2(f + w)} ${r2(h)} ${r2(f + w)} ${r2(h)}`
+    : `C ${r2(f + w)} ${r2(h - f + q)} ${r2(2 * f + w - q)} ${r2(h)} ${r2(2 * f + w)} ${r2(h)}`;
   if (!t.d.startsWith(start)) {
-    out.push(`start ${t.d.slice(0, 40)}, not ${start}`);
+    out.push(`start ${t.d.slice(0, 60)}, not ${start}`);
   }
   if (!t.d.endsWith(end)) {
-    out.push(`end …${t.d.slice(-40)}, not ${end}`);
+    out.push(`end …${t.d.slice(-60)}, not ${end}`);
+  }
+  if (!(near(pose.bow[0], 0, 0.01) && near(pose.bow[1], 0, 0.01))) {
+    out.push(`sides bowed ${pose.bow.map((b) => b.toFixed(2)).join("/")}`);
+  }
+  if (!near(pose.rise, 0, 0.01)) {
+    out.push(`top risen ${pose.rise.toFixed(2)}`);
   }
   const shoulders = t.d.match(/A (\S+) \S+ 0 0 1/g) ?? [];
   if (
@@ -296,7 +401,7 @@ function foldFaults(L: Layout): string[] {
       t.flush === "end" ||
         over.some((u) => u.right >= t.right - 0.5 && u.left <= t.right + 0.5),
     ];
-    const has = foldsOf(t.d);
+    const has = foldsOf(t);
     return (["start", "end"] as const).flatMap((side, k) =>
       has[k] === want[k]
         ? []
@@ -391,11 +496,14 @@ function boundsFaults(L: Layout, kept: number[]): Record<string, string[]> {
                 ];
           })
         : [],
-    // whole: each tab drawn chosen, its feet too, cut off by nothing.
+    // whole: each tab drawn chosen, its feet too (where their tips stand
+    // as drawn, a spread past the flare included), cut off by nothing.
     whole: kept.flatMap((k, nth) => {
       const t = L.tabs[k] as Tab;
-      const left = t.left - t.flare;
-      const right = t.right + t.flare;
+      const { tips } = poseOf(t);
+      const svgLeft = t.svg?.left ?? t.left - t.flare;
+      const left = Math.min(t.left - t.flare, svgLeft + tips[0]);
+      const right = Math.max(t.right + t.flare, svgLeft + tips[1]);
       return (left >= cutLeft - 0.5 && right <= cutRight + 0.5) ||
         (tight && nth === 0)
         ? []
@@ -786,7 +894,11 @@ async function inkFaults(page: Page, strip: Strip, L: Layout) {
 
 /* ── A switch ───────────────────────────────────────────────────────── */
 
-/** The shuffle's curve and the --pick runs' curves, as the page holds them, and the choice's own. */
+/**
+ * The come-forward's clock's curve and the --pick runs' curves, as the page
+ * holds them, the choice's own, and every property any run in the strip
+ * drives.
+ */
 const curves = (page: Page, root: string) =>
   page.evaluate((sel) => {
     const track = document.querySelector(`${sel} .ff-tabs-list`) as Element;
@@ -798,22 +910,45 @@ const curves = (page: Page, root: string) =>
     });
     return {
       want,
-      // Each half of each slide.
-      shuffle: runs
-        .filter((run) => run.id === "tab-shuffle")
-        .flatMap((run) =>
-          ((run.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
-            .slice(0, -1)
-            .map((frame) => frame.easing ?? "")
-        ),
+      forward: runs
+        .filter((run) => run.id === "tab-come-forward")
+        .map((run) => String(run.effect?.getTiming().easing ?? "")),
       picks: runs
         .filter(
           (run) =>
             run instanceof CSSTransition && run.transitionProperty === "--pick"
         )
         .map((run) => String(run.effect?.getTiming().easing ?? "")),
+      driven: [
+        ...new Set(
+          runs.flatMap((run) =>
+            run instanceof CSSTransition
+              ? [run.transitionProperty]
+              : ((run.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
+                  .flatMap((frame) => Object.keys(frame))
+                  .filter(
+                    (k) =>
+                      ![
+                        "offset",
+                        "easing",
+                        "composite",
+                        "computedOffset",
+                      ].includes(k)
+                  )
+                  .map((k) =>
+                    k.startsWith("--")
+                      ? k
+                      : k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)
+                  )
+          )
+        ),
+      ],
     };
   }, root);
+
+/** A frame's layout: every tab's box as laid out and drawn, and the strip's scroll. */
+const boxesOf = (L: Layout) =>
+  `${L.tabs.map((t) => `${t.laid} ${t.left.toFixed(2)}+${(t.right - t.left).toFixed(2)}`).join(" | ")} || scroll ${L.track.scroll}/${L.track.scrollWidth}`;
 
 /**
  * One switch from `from` to `to`, caught and read at every fraction:
@@ -837,34 +972,46 @@ async function readSwitch(
     strip.api === "work" ? `${strip.root} .ff-tabs-list` : strip.root;
   await clock.catchRuns(() => page.evaluate(choose), within);
   const timed = clock.runs.filter((run) => !(run.loop || run.scroll));
-  const shuffle = timed.find((run) => run.name === SHUFFLE);
+  const lead = timed.find((run) => run.name === FORWARD);
   const astray = timed.filter(
     (run) =>
       run.start === null ||
-      shuffle?.start === null ||
-      Math.abs((run.start ?? 0) - (shuffle?.start ?? 0)) > 0.5 ||
-      Math.abs(run.end - (shuffle?.end ?? 0)) > 0.5
+      lead?.start === null ||
+      Math.abs((run.start ?? 0) - (lead?.start ?? 0)) > 0.5 ||
+      Math.abs(run.end - (lead?.end ?? 0)) > 0.5
   );
   const curve = await curves(page, strip.root);
   kit.check(
-    `${where}: the switch is a slide (translate) on each of the two tabs with every run in the strip on their start and length, all on --choose-ease`,
-    Boolean(shuffle) &&
-      timed.filter((run) => run.name === SHUFFLE).length === 2 &&
+    `${where}: the switch is one come-forward run on the track (${FORWARD}) with every run in the strip on its start and length, all on --choose-ease`,
+    Boolean(lead) &&
+      timed.filter((run) => run.name === FORWARD).length === 1 &&
       astray.length === 0 &&
-      curve.shuffle.length === 4 &&
-      [...curve.shuffle, ...curve.picks].every((e) => e === curve.want),
-    `${timed.map((run) => `${run.type} ${run.name} ${run.start}+${run.end}`).join(", ")}; curves ${[...curve.shuffle, ...curve.picks].join(" ")} against ${curve.want}${astray.length ? `; off: ${astray.map((run) => run.name).join(", ")}` : ""}`
+      curve.forward.length === 1 &&
+      curve.picks.length >= 2 &&
+      [...curve.forward, ...curve.picks].every((e) => e === curve.want),
+    `${timed.map((run) => `${run.type} ${run.name} ${run.start}+${run.end}`).join(", ")}; curves ${[...curve.forward, ...curve.picks].join(" ")} against ${curve.want}${astray.length ? `; off: ${astray.map((run) => run.name).join(", ")}` : ""}`
+  );
+  const layoutDriven = curve.driven.filter((p) => LAYOUT.test(p));
+  kit.check(
+    `${where}: no run in the strip drives a box's size or place (it drives ${curve.driven.join(", ")})`,
+    layoutDriven.length === 0,
+    layoutDriven.join(", ") || undefined
   );
   const series: { f: number; L: Layout }[] = [];
   for (const f of FRACTIONS) {
     // biome-ignore lint/performance/noAwaitInLoops: one frame of the switch at a time
-    await clock.seek(f, SHUFFLE);
+    await clock.seek(f, FORWARD);
     series.push({ f, L: await layout() });
   }
   await clock.release();
+  await settle(page, 300);
+  const landed = await layout();
   const out: Record<string, string[]> = {
-    slide: [],
-    swap: [],
+    boxes: [],
+    poses: [],
+    pull: [],
+    flip: [],
+    snap: [],
     folds: [],
     rims: [],
     fades: [],
@@ -872,74 +1019,162 @@ async function readSwitch(
     titles: [],
   };
   const frame = (f: number) => series.find((s) => s.f === f)?.L as Layout;
-  // slide: the tab being chosen away from the tab it leaves and that tab the
-  // other way, out to their furthest at 50% and back; read in the track's
-  // content, which a choice may scroll. Side by side the two part by the
-  // clearance between them (half each where both have the room: tab-drag),
-  // on a jump each by the whole of it; nothing cuts them off (`whole`).
-  const way = Math.sign(to - from);
-  const clear = rest.track.clearance;
-  const movers = [
-    { k: to, sign: way, name: "chosen" },
-    { k: from, sign: -way, name: "left" },
-  ];
-  const outAt = (k: number, sign: number, L: Layout) =>
-    ((L.tabs[k] as Tab).left +
-      L.track.scroll -
-      ((frame(0).tabs[k] as Tab).left + frame(0).track.scroll)) *
-    sign;
-  const furthest = movers.map(({ k, sign }) => outAt(k, sign, frame(0.5)));
-  // Two tabs in the strip's middle both have the room: half each.
-  const middle =
-    Math.min(from, to) > 0 && Math.max(from, to) < rest.tabs.length - 1;
-  let parted = furthest.every((o) => near(o, clear));
-  if (Math.abs(to - from) === 1) {
-    parted = middle
-      ? furthest.every((o) => near(o, clear / 2))
-      : near((furthest[0] ?? 0) + (furthest[1] ?? 0), clear);
+  const pct = (f: number) => `${Math.round(f * 100)}%`;
+  // boxes: no tab's layout box changes with the choice, and across the run
+  // no tab's box, as laid out or as drawn, nor the strip's scroll, moves
+  // at any frame. (A choice of a tab standing past the strip's edge
+  // scrolls it into view as the choice is made, before the run's first
+  // frame: Edges of a scrolling strip.)
+  const laidOut = (L: Layout) => L.tabs.map((t) => t.laid).join(" | ");
+  if (laidOut(frame(0)) !== laidOut(rest)) {
+    out.boxes.push(`laid out ${laidOut(frame(0))}, at rest ${laidOut(rest)}`);
   }
-  if (!parted) {
-    out.slide.push(
-      `at 50% out ${furthest.map((o) => o.toFixed(2)).join(" + ")}, not parted by ${clear}${Math.abs(to - from) === 1 ? "" : " each"}`
+  const still = boxesOf(frame(0));
+  for (const { f, L } of series) {
+    if (boxesOf(L) !== still) {
+      out.boxes.push(`${pct(f)}: ${boxesOf(L)} (at 0% ${still})`);
+    }
+  }
+  // poses: one command structure at every frame; at 0% every path as it
+  // stood, at 100% as it stands landed.
+  for (const { f, L } of series) {
+    for (const [i, t] of L.tabs.entries()) {
+      const s = poseOf(t).structure;
+      if (s !== STRUCTURE) {
+        out.poses.push(`${pct(f)}: ${i} ${s}`);
+      }
+    }
+  }
+  const ds = (L: Layout) => L.tabs.map((t) => t.d);
+  const differs = (a: Layout, b: Layout) =>
+    ds(a).flatMap((d, i) => (d === ds(b)[i] ? [] : [i]));
+  if (differs(frame(0), rest).length > 0) {
+    out.poses.push(`0%: tabs ${differs(frame(0), rest)} off where they stood`);
+  }
+  if (differs(frame(1), landed).length > 0) {
+    out.poses.push(
+      `100%: tabs ${differs(frame(1), landed)} off where they land (${frame(1)
+        .tabs.map((t) => t.d)
+        .join(" | ")} against ${landed.tabs.map((t) => t.d).join(" | ")})`
     );
   }
-  movers.forEach(({ k, sign, name }, m) => {
-    const peak = furthest[m] ?? 0;
-    for (const { f, L } of series) {
-      const o = outAt(k, sign, L);
-      const home = f === 0 || f === 1;
-      if (home ? !near(o, 0) : !(o > -0.5 && o < peak + 0.5)) {
-        out.slide.push(
-          `${name} ${k} ${Math.round(f * 100)}%: ${o.toFixed(2)}px ${home ? "off its slot" : `outside its slide to ${peak.toFixed(2)}`}`
+  // pull: to the flip, the tab being chosen under each neighbour ranked
+  // above it, risen and rising, each such neighbour's side over it bowed
+  // out and bowing, its own covered sides still folded, every other path
+  // as at rest.
+  const fronts = [to - 1, to + 1].filter(
+    (i) =>
+      i >= 0 &&
+      i < rest.tabs.length &&
+      (rest.tabs[i] as Tab).z > (rest.tabs[to] as Tab).z
+  );
+  const facing = (i: number) => (i < to ? 1 : 0);
+  const restFolds = foldsOf(rest.tabs[to] as Tab);
+  const pulled = [0.2, 0.4].map((f) => {
+    const L = frame(f);
+    const mover = poseOf(L.tabs[to] as Tab);
+    const bows = fronts.map((i) => poseOf(L.tabs[i] as Tab).bow[facing(i)]);
+    for (const i of fronts) {
+      if ((L.tabs[to] as Tab).z >= (L.tabs[i] as Tab).z) {
+        out.pull.push(`${pct(f)}: ${to} not under ${i}`);
+      }
+    }
+    if (mover.rise <= 0.05) {
+      out.pull.push(`${pct(f)}: ${to} risen ${mover.rise.toFixed(2)}`);
+    }
+    for (const [k, b] of bows.entries()) {
+      if (b <= 0.05) {
+        out.pull.push(
+          `${pct(f)}: ${fronts[k]}'s side over ${to} bowed ${b.toFixed(2)}`
         );
       }
     }
+    restFolds.forEach((folded, side) => {
+      if (folded && mover.spread[side] > 0.01) {
+        out.pull.push(
+          `${pct(f)}: ${to}'s covered ${side ? "end" : "start"} spread ${mover.spread[side].toFixed(2)}`
+        );
+      }
+    });
+    const moved = differs(L, rest).filter(
+      (i) => i !== to && !fronts.includes(i)
+    );
+    if (moved.length > 0) {
+      out.pull.push(`${pct(f)}: tabs ${moved} moved`);
+    }
+    return { rise: mover.rise, bows };
   });
-  // swap: the tab being chosen behind its neighbour toward the tab it
-  // leaves to 49%, in front from 50%, and no foot anywhere changing across it.
+  const [early, late] = pulled as [(typeof pulled)[0], (typeof pulled)[0]];
+  if (
+    !(
+      late.rise > early.rise &&
+      late.bows.every((b, k) => b > (early.bows[k] ?? 0))
+    )
+  ) {
+    out.pull.push(
+      `not building: rise ${early.rise.toFixed(2)}→${late.rise.toFixed(2)}, bows ${early.bows.map((b) => b.toFixed(2))}→${late.bows.map((b) => b.toFixed(2))}`
+    );
+  }
+  if (fronts.length === 0) {
+    out.pull.push("no neighbour ranked above the tab being chosen");
+  }
+  // flip: the tab being chosen on top from the pull's end, not before.
   for (const { f, L } of series) {
-    const ahead = (L.tabs[to] as Tab).z > (L.tabs[to - way] as Tab).z;
-    if (ahead !== f >= 0.5) {
-      out.swap.push(
-        `${Math.round(f * 100)}%: ${ahead ? "in front" : "behind"}`
+    const top = Math.max(...L.tabs.map((t) => t.z));
+    if (((L.tabs[to] as Tab).z === top) !== f >= FLIP) {
+      out.flip.push(
+        `${pct(f)}: ${(L.tabs[to] as Tab).z === top ? "on top" : "under"}`
       );
     }
   }
-  const footing = (L: Layout) =>
-    L.tabs.map((t) => foldsOf(t.d).join("/")).join(" ");
-  if (footing(frame(0.49)) !== footing(frame(0.51))) {
-    out.swap.push(`feet ${footing(frame(0.49))} → ${footing(frame(0.51))}`);
+  // snap: from the flip the chosen tab's sides it lands flared spread out,
+  // and go past the flare before they settle; each bowed side springs back
+  // past straight before it settles.
+  const opening = foldsOf(landed.tabs[to] as Tab).flatMap((folded, side) =>
+    restFolds[side] && !folded ? [side] : []
+  );
+  for (const side of opening) {
+    const s = poseOf(frame(0.51).tabs[to] as Tab).spread[side];
+    if (!(s > 0.01 && s < 1)) {
+      out.snap.push(
+        `51%: ${to}'s ${side ? "end" : "start"} spread ${s.toFixed(2)}, not spreading`
+      );
+    }
+    const most = Math.max(
+      ...series
+        .filter(({ f }) => f > FLIP)
+        .map(({ L }) => poseOf(L.tabs[to] as Tab).spread[side])
+    );
+    if (most <= 1.02) {
+      out.snap.push(
+        `${to}'s ${side ? "end" : "start"} spread at most ${most.toFixed(3)}: no overshoot`
+      );
+    }
+  }
+  for (const i of fronts) {
+    const least = Math.min(
+      ...series
+        .filter(({ f }) => f > FLIP)
+        .map(({ L }) => poseOf(L.tabs[i] as Tab).bow[facing(i)])
+    );
+    if (least >= -0.02) {
+      out.snap.push(
+        `${i}'s side bowed at least ${least.toFixed(3)}: no spring past straight`
+      );
+    }
+  }
+  for (const f of [0, 1]) {
+    out.folds.push(...foldFaults(frame(f)).map((w) => `${pct(f)}: ${w}`));
   }
   for (const { f, L } of series) {
     const when = `${Math.round(f * 100)}%`;
-    out.folds.push(...foldFaults(L).map((w) => `${when}: ${w}`));
     const b = boundsFaults(L, f < 1 ? [from, to] : [to]);
     out.fades.push(...b.fades.map((w) => `${when}: ${w}`));
     out.whole.push(...b.whole.map((w) => `${when}: ${w}`));
     out.titles.push(...b.titles.map((w) => `${when}: ${w}`));
   }
   if (strip.rim) {
-    // rims: one way from rest to rest, and no jump across the swap.
+    // rims: one way from rest to rest, and no jump across the flip.
     rest.tabs.forEach((_, i) => {
       const s = series.map(({ L }) => (L.tabs[i] as Tab).rim);
       const dir = Math.sign((s.at(-1) ?? 0) - (s[0] ?? 0));
@@ -954,11 +1189,279 @@ async function readSwitch(
         (frame(0.51).tabs[i] as Tab).rim - (frame(0.49).tabs[i] as Tab).rim
       );
       if (across > SWAP_STEP) {
-        out.rims.push(`${i} jumps ${across.toFixed(3)} across the swap`);
+        out.rims.push(`${i} jumps ${across.toFixed(3)} across the flip`);
       }
     });
   }
   return out;
+}
+
+/**
+ * interruption: `first` caught and held at 70%, then `second` chosen:
+ * every path at the second's first frame is where the first had it (within
+ * 0.05px a point): the pull starts from the paths as drawn, never a jump.
+ */
+async function readInterrupt(
+  page: Page,
+  strip: Strip,
+  first: string,
+  second: string
+): Promise<string[]> {
+  const layout = () =>
+    page.evaluate(layoutOf, { root: strip.root, tab: strip.tab });
+  const clock = await Clock.on(page);
+  await clock.catchRuns(() => page.evaluate(first), strip.root);
+  await clock.seek(0.7, FORWARD);
+  const before = await layout();
+  await clock.catchRuns(() => page.evaluate(second), strip.root);
+  // Its first frame, drawn.
+  await clock.seek(0, FORWARD);
+  const after = await layout();
+  await clock.release();
+  await settle(page, 300);
+  const nums = (d: string) => (d.match(/-?\d*\.?\d+/g) ?? []).map(Number);
+  return before.tabs.flatMap((t, i) => {
+    const a = nums(t.d);
+    const b = nums(after.tabs[i]?.d ?? "");
+    const off = Math.max(0, ...a.map((x, k) => Math.abs(x - (b[k] ?? 1e9))));
+    return a.length === b.length && off <= 0.05
+      ? []
+      : [
+          `${i} moved ${off.toFixed(2)}px as the second switch began (${t.d} → ${after.tabs[i]?.d})`,
+        ];
+  });
+}
+
+/** less motion: the choice instant, no come-forward run, every path landed and the stack ranked for it. */
+async function readCalm(
+  page: Page,
+  strip: Strip,
+  to: number,
+  choose: string
+): Promise<string[]> {
+  await page.evaluate(choose);
+  await frames(page);
+  await frames(page);
+  const runs = await page.evaluate(
+    (sel) =>
+      (document.querySelector(sel) as Element)
+        .getAnimations({ subtree: true })
+        .filter((run) => run.id === "tab-come-forward").length,
+    strip.root
+  );
+  const L = await page.evaluate(layoutOf, {
+    root: strip.root,
+    tab: strip.tab,
+  });
+  const rest = restFaults(strip, L, [to]);
+  return [
+    ...(runs > 0 ? [`${runs} come-forward run(s)`] : []),
+    ...(L.tabs[to]?.chosen ? [] : [`${to} not chosen`]),
+    ...rest.shape,
+    ...rest.folds,
+    ...rest.stack,
+  ];
+}
+
+/**
+ * The seam where the session card hangs from its tab, at `scale` in
+ * `theme`, on the tab a come-forward has just landed on (the second to the
+ * third), hovered. Engine: the card's top edge on the tab's foot. Ink, at
+ * each foot: the joint row and the corner (the spec's head).
+ */
+async function readSeam(kit: Kit, scale: number, theme: Theme) {
+  const page = await kit.page("desk", { theme, scale });
+  const base = await kit.bench();
+  await open(
+    page,
+    `${base}/motion/folder-proof?theme=${theme}&at=1&work=working`,
+    () => "__ft" in window,
+    120_000
+  );
+  await settle(page, 300);
+  const ids = (await page.evaluate("window.__ft.ids")) as string[];
+  await page.evaluate(`window.__ft.choose(${JSON.stringify(ids[2])})`);
+  await settle(page, 300);
+  const tabAt = () =>
+    page.evaluate(() => {
+      const ff = document
+        .querySelectorAll<HTMLElement>('[data-strip="session"] .tab')[2]
+        ?.querySelector<HTMLElement>(".ff-tab") as HTMLElement;
+      const b = ff.getBoundingClientRect();
+      return { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
+    });
+  const hovered = await tabAt();
+  await page.mouse.move(
+    (hovered.left + hovered.right) / 2,
+    (hovered.top + hovered.bottom) / 2
+  );
+  await page.waitForSelector(".session-details-popover[data-shown]", {
+    timeout: 5000,
+  });
+  await settle(page, 300);
+  const g = await page.evaluate(() => {
+    const ff = document
+      .querySelectorAll<HTMLElement>('[data-strip="session"] .tab')[2]
+      ?.querySelector<HTMLElement>(".ff-tab") as HTMLElement;
+    const card = document.querySelector<HTMLElement>(
+      ".session-details-popover"
+    ) as HTMLElement;
+    const b = ff.getBoundingClientRect();
+    const c = card.getBoundingClientRect();
+    return {
+      left: b.left,
+      right: b.right,
+      bottom: b.bottom,
+      flare: Number.parseFloat(
+        getComputedStyle(ff).getPropertyValue("--flare")
+      ),
+      card: { left: c.left, top: c.top, right: c.right },
+      cut: card.style.getPropertyValue("--neck-cut"),
+    };
+  });
+  const where = `seam ${scale}x ${theme}`;
+  kit.check(
+    `${where}: the card's top edge stands on the tab's foot, its cut starting on each flare's stroke`,
+    near(g.card.top, g.bottom, 0.001) && FLARED_CUT.test(g.cut),
+    `card top ${g.card.top}, tab foot ${g.bottom}; cut ${g.cut}`
+  );
+  const f = g.flare;
+  const top = g.bottom;
+  const clip = {
+    x: Math.floor(g.left - f - 12),
+    y: Math.floor(top - f - 3),
+    width: Math.ceil(g.right - g.left + 2 * f + 24),
+    height: Math.ceil(f + 6),
+  };
+  const r = await capture(page, clip);
+  const S = 6;
+  for (const side of ["start", "end"] as const) {
+    const way = side === "start" ? -1 : 1;
+    const tip = side === "start" ? g.left - f : g.right + f;
+    const cy = top - f;
+    // The device px holding a page point (not the nearest edge's).
+    const holding = (x: number, y: number) =>
+      px(r, Math.floor(dx(r, x)), Math.floor(dy(r, y)));
+    const row = top + 0.5 / r.scale;
+    // `way` points outward from the tab: the card's edge run lies past the tip.
+    const border = holding(tip + way * 3, row);
+    const neck = holding((g.left + g.right) / 2, row);
+    const span = border.map((v, k) => v - (neck[k] ?? 0));
+    const len2 = span.reduce((sum, v) => sum + v * v, 0);
+    const edgeInk = (c: Rgb) =>
+      c.reduce((sum, v, k) => sum + (v - (neck[k] ?? 0)) * (span[k] ?? 0), 0) /
+      Math.max(1, len2);
+    /** A device px's samples, in page css px. */
+    const samples = (X: number, Y: number) =>
+      Array.from({ length: S * S }, (_, k) => ({
+        x: r.x + (X + ((k % S) + 0.5) / S) / r.scale,
+        y: r.y + (Y + (Math.floor(k / S) + 0.5) / S) / r.scale,
+      }));
+    // The joint row: past the tip the card's own edge run; in from it the
+    // flare's stroke, the band between radii f and f + 1.
+    const coverage = (X: number, Y: number) =>
+      samples(X, Y).filter(({ x, y }) => {
+        if ((x - tip) * way > 0) {
+          return true;
+        }
+        const d = Math.hypot(x - tip, y - cy);
+        return d >= f && d <= f + 1;
+      }).length /
+      (S * S);
+    // Read from 2px past the tip to a px in past the flare, outward first.
+    // The row's ink area against the stroke's (css px², the robust
+    // reading: where the stroke runs tangent to the row a hair's rounding
+    // moves its edge sideways a lot, so a px alone is held only loosely),
+    // every px within 0.35 of it (no gap, no second edge), and each device
+    // row's ink never rising again going in (one antialiased step).
+    const joint: string[] = [];
+    const outer = tip + way * 2;
+    const inner = tip - way * (f + 1);
+    const xs = Array.from(
+      {
+        length:
+          Math.round(dx(r, Math.max(outer, inner))) -
+          Math.round(dx(r, Math.min(outer, inner))) +
+          1,
+      },
+      (_, k) => Math.round(dx(r, Math.min(outer, inner))) + k
+    );
+    if (way > 0) {
+      xs.reverse();
+    }
+    let got = 0;
+    let want = 0;
+    let worst = 0;
+    for (
+      let Y = Math.round(dy(r, top));
+      Y < Math.round(dy(r, top + 1));
+      Y += 1
+    ) {
+      let last = Number.POSITIVE_INFINITY;
+      for (const X of xs) {
+        const w = coverage(X, Y);
+        const g1 = edgeInk(px(r, X, Y));
+        got += g1 / r.scale ** 2;
+        want += w / r.scale ** 2;
+        worst = Math.max(worst, Math.abs(g1 - w));
+        const at1 = `(${(r.x + X / r.scale).toFixed(2)}, ${(r.y + Y / r.scale).toFixed(2)})`;
+        if (Math.abs(g1 - w) > 0.35) {
+          joint.push(`${at1} ${g1.toFixed(2)} for ${w.toFixed(2)}`);
+        }
+        if (g1 > last + 0.08) {
+          joint.push(`${at1} rises again ${last.toFixed(2)}→${g1.toFixed(2)}`);
+        }
+        last = Math.min(last, g1);
+      }
+    }
+    if (Math.abs(got - want) > JOINT_AREA) {
+      joint.push(
+        `ink ${got.toFixed(2)} px² for the stroke's ${want.toFixed(2)}`
+      );
+    }
+    kit.check(
+      `${where}: the ${side} foot's curve runs into the card's edge as one stroke (the card's top row's ink ${got.toFixed(2)} px² for the stroke's ${want.toFixed(2)}, within ${JOINT_AREA}; each px within 0.35, worst ${worst.toFixed(2)}; one step)`,
+      joint.length === 0 && len2 > 100,
+      joint.slice(0, 6).join("; ") || `edge ${border} over ${neck}`
+    );
+    // The corner: in the flare's lower half, the px wholly inside the
+    // foot's turn (clear of its stroke by a quarter px) against the
+    // backdrop beside the foot on that row.
+    const corner: string[] = [];
+    const cx0 = Math.round(dx(r, Math.min(tip, tip - way * f)));
+    const cx1 = Math.round(dx(r, Math.max(tip, tip - way * f)));
+    for (
+      let Y = Math.round(dy(r, top - f / 2));
+      Y < Math.round(dy(r, top));
+      Y += 1
+    ) {
+      const backdrop = px(r, dx(r, tip + way * 6), Y);
+      for (let X = cx0; X <= cx1; X += 1) {
+        const inside = samples(X, Y).every(
+          ({ x, y }) =>
+            (x - tip) * way < 0 && Math.hypot(x - tip, y - cy) < f - 0.25
+        );
+        if (!inside) {
+          continue;
+        }
+        const c = px(r, X, Y);
+        const off = Math.max(
+          ...c.map((v, k) => Math.abs(v - (backdrop[k] ?? 0)))
+        );
+        if (off > 4) {
+          corner.push(
+            `(${(r.x + X / r.scale).toFixed(2)}, ${(r.y + Y / r.scale).toFixed(2)}) ${c} against ${backdrop}`
+          );
+        }
+      }
+    }
+    kit.check(
+      `${where}: the ${side} foot's corner above the card is the backdrop beside it, nothing blurred in`,
+      corner.length === 0,
+      corner.slice(0, 6).join("; ") || undefined
+    );
+  }
+  await page.close();
 }
 
 async function readStrip(
@@ -1044,6 +1547,30 @@ async function readStrip(
         `${api}.choose(${JSON.stringify(ids[from + 2])})`
       )
     );
+
+    // Caught mid-way: second to third held at 70%, then the fourth chosen.
+    await openAt(1, "working");
+    add("interrupt", {
+      interrupt: await readInterrupt(
+        page,
+        s,
+        `${api}.choose(${JSON.stringify(ids[from + 1])})`,
+        `${api}.choose(${JSON.stringify(ids[from + 2])})`
+      ),
+    });
+
+    // Less motion: second to third at once.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openAt(1, "working");
+    add("less motion", {
+      "less motion": await readCalm(
+        page,
+        s,
+        from + 1,
+        `${api}.choose(${JSON.stringify(ids[from + 1])})`
+      ),
+    });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
   }
 
   // At its start: the session strip's first tab chosen; the home's Finished.
@@ -1060,9 +1587,14 @@ async function readStrip(
         "stack",
         "rims",
         "taper",
-        "slide",
-        "swap",
+        "boxes",
+        "poses",
+        "pull",
+        "flip",
+        "snap",
         "jump",
+        "interrupt",
+        "less motion",
         "one stroke",
         "corner",
         "3:1",
@@ -1074,8 +1606,11 @@ async function readStrip(
         "shape",
         "folds",
         "stack",
-        "slide",
-        "swap",
+        "boxes",
+        "poses",
+        "pull",
+        "flip",
+        "snap",
         "sheet edge",
         "fades",
         "whole",
@@ -1101,6 +1636,12 @@ const spec: Spec = {
           // biome-ignore lint/performance/noAwaitInLoops: one strip, width and theme at a time
           await readStrip(kit, view, theme, s);
         }
+      }
+    }
+    for (const scale of [1, 2, 3]) {
+      for (const theme of THEMES) {
+        // biome-ignore lint/performance/noAwaitInLoops: one scale and theme at a time
+        await readSeam(kit, scale, theme);
       }
     }
   },

@@ -89,24 +89,43 @@ export const sameNeck = (a: Neck, b: Neck): boolean =>
 
 /**
  * How far a flare's 1px stroke lies along the card's top edge row before it
- * rises off it, px: the stroke is a band between radii f and f + 1 tangent
- * to that row, which it leaves √(2f + 1) px out. None without a flare.
+ * rises off it, px: the stroke is a band between radii f and f + 1 about a
+ * centre f above the foot's tip, tangent to that row, which its outer edge
+ * leaves √(2f + 1) px out. None without a flare.
  */
 const flareTail = (flare: number): number =>
   flare > 0 ? Math.sqrt(2 * flare + 1) : 0;
 
 /**
- * The neck as the card's style (`kit-hang`): its span, its flares, and the
- * run each side over which the top edge fades out under the flare's stroke
- * (`--neck-tail-*`), so the two strokes meet with no break.
+ * The cut across the card's top edge row (`kit-hang::before`, a 1px row from
+ * one foot's tip to the other's), as a `shape()` in its own box: on a flared
+ * side it starts on the flare's stroke's outer edge, the circle of radius
+ * f + 1 from the row's foot at the tip to the row's top √(2f + 1) px in, so
+ * the edge shows under the cut exactly where the stroke crosses the row and
+ * the anchor's curve runs on into the card's edge as one stroke; a side with
+ * no flare starts square.
  */
+function neckCut(neck: Neck): string {
+  const tailStart = flareTail(neck.flareStart);
+  const tailEnd = flareTail(neck.flareEnd);
+  const start =
+    neck.flareStart > 0
+      ? `arc to ${tailStart}px 0 of ${neck.flareStart + 1}px ccw`
+      : "line to 0 0";
+  const end =
+    neck.flareEnd > 0
+      ? `arc to 100% 100% of ${neck.flareEnd + 1}px ccw`
+      : "line to 100% 100%";
+  return `shape(from 0 100%, ${start}, line to calc(100% - ${tailEnd}px) 0, ${end}, close)`;
+}
+
+/** The neck as the card's style (`kit-hang`): its span, its flares, and the cut's shape. */
 const neckProperties = (neck: Neck): [string, string][] => [
   ["--neck-start", `${neck.start}px`],
   ["--neck-end", `${neck.end}px`],
   ["--neck-flare-start", `${neck.flareStart}px`],
   ["--neck-flare-end", `${neck.flareEnd}px`],
-  ["--neck-tail-start", `${flareTail(neck.flareStart)}px`],
-  ["--neck-tail-end", `${flareTail(neck.flareEnd)}px`],
+  ["--neck-cut", neckCut(neck)],
 ];
 
 /**
