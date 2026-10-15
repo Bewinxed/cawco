@@ -5,7 +5,9 @@
  * iPhone and one on an iPad, each reading the app's DEBUG log lines:
  *
  * 1. Opened at `thread:<id>`, the app lists the thread's messages in the
- *    hub's order (`probe thread … messages N [author:words | …]`).
+ *    hub's order (`probe thread … messages N [author:words | …]`), an event
+ *    that woke him (its note's title) and his words naming a file among them
+ *    (rows written into the hub's store: no turn here makes them).
  * 2. Words sent from the app's composer land in the hub's thread
  *    (a `thread_messages` row by you) and the web's thread shows them.
  * 3. Caw's reply appears in the app's thread.
@@ -200,6 +202,25 @@ async function sh(script: string): Promise<string> {
 const appPath = () => freshApp(ROOT);
 
 /** How the app's probe line writes a message: its author, then its first 40 characters on one line. */
+/** The thread's rows of the kinds no turn here writes: an event's note, and Caw's words naming a file. */
+const SEEDED: {
+  author: string;
+  body: string;
+  files?: string[];
+  noteTitle?: string;
+}[] = [
+  {
+    author: "event",
+    body: "Three issues opened since this morning.",
+    noteTitle: "Routine · 3 new GitHub issues",
+  },
+  {
+    author: "caw",
+    body: "I wrote down the **plain voice** we agreed on and set the stages.",
+    files: ["stages.md"],
+  },
+];
+
 const shown = (row: Row) =>
   `${row.author}:${(row.body ?? "").slice(0, 40).replaceAll("\n", " ")}`;
 
@@ -275,6 +296,22 @@ const run = async (kit: Kit) => {
     project.id
   )[0]?.lead_instance_id;
   kit.check("Caw started and answered the first thread", Boolean(lead));
+  // The rows no live turn here writes, put in the hub's store as the hub
+  // keeps them, so step 1's listing holds every kind: an event that woke him
+  // (its note's title) and his reply naming a file.
+  const seededAt = Date.now();
+  for (const [i, m] of SEEDED.entries()) {
+    fleet.write(
+      "INSERT INTO thread_messages (id, thread_id, author, body, note_title, files, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      crypto.randomUUID(),
+      threadId,
+      m.author,
+      m.body,
+      m.noteTitle ?? null,
+      m.files ? JSON.stringify(m.files) : null,
+      seededAt + i
+    );
+  }
 
   const base = await fleet.dashboard();
   /**

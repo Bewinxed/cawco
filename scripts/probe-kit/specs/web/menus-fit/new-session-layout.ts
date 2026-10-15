@@ -10,9 +10,9 @@
  * styled the bare `.picker` class globally, and the dialog's model panel is
  * ModelSection's `.picker`. So each size here opens the built dashboard on
  * Config's skills page (which draws PickerChip) and starts New session from
- * there with Ctrl+Shift+N, on a scratch fleet (real hub, agent and sessiond,
- * two Claude accounts), at 1055×567, 1280×720 and 1440×900, DPR 2. Read from
- * the engine:
+ * there with Ctrl+Shift+N, on menus-fit's scratch fleet (real hub, agent and
+ * sessiond, two Claude accounts, the fleet this part once stood up for
+ * itself), at 1055×567, 1280×720 and 1440×900, DPR 2. Read from the engine:
  *  - the card's box lies inside the viewport, and the head and Start stand
  *    whole in it;
  *  - the prompt and model sections are reachable: in the body's scrollport,
@@ -34,14 +34,12 @@
  *    transform, scale, zoom or running animation (the body's scroll-driven
  *    edge fade aside, which runs on its scroll, not on time).
  *
- *   bun scripts/probe-kit/run.ts web new-session-layout
+ *   bun scripts/probe-kit/run.ts web menus-fit
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one viewport, one step at a time.
 import type { Page } from "playwright-core";
-import { until } from "../../../scratch-fleet";
-import type { Box } from "../../geom";
-import { type Kit, open, type Spec, settle } from "../../kit";
-import { B, furnishAccount } from "../account-move";
+import type { Box } from "../../../geom";
+import { type Kit, open, settle } from "../../../kit";
 
 const CARD = ".session-card[data-ns-dialog]";
 /** Every chip whose menu must move nothing: the chosen model's two, the model heading's account (the fleet signs two in), the composer's location. */
@@ -485,40 +483,16 @@ async function size(kit: Kit, page: Page, base: string, at: Size) {
   }
 }
 
-const spec: Spec = {
-  name: "new-session-layout",
-  async run(kit) {
-    const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["Ready."] }));
-    await furnishAccount(fleet.home, B);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.write(
-      "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Probe B', 'green', 1, 0, ?)",
-      B,
-      Date.now()
-    );
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
-    // Two accounts signed in: the model heading draws its account chip.
-    await until(
-      "account B signed in",
-      () =>
-        fleet.query<{ state: string }>(
-          "SELECT state FROM account_signins WHERE account_id = ?",
-          B
-        )[0],
-      (row) => row?.state === "signed-in"
-    );
-    const base = await fleet.dashboard();
-    const page = await kit.page("desk");
-    page.setDefaultTimeout(60_000);
-    for (const at of SIZES) {
-      await size(kit, page, base, at);
-    }
-  },
-};
-export default spec;
+/**
+ * The New session dialog at each desktop size, on the built dashboard at
+ * `base`, served against a fleet with two accounts signed in (the model
+ * heading draws its account chip only then).
+ */
+export async function newSessionLayout(kit: Kit, base: string): Promise<void> {
+  const page = await kit.page("desk");
+  page.setDefaultTimeout(60_000);
+  for (const at of SIZES) {
+    await size(kit, page, base, at);
+  }
+  await page.close();
+}

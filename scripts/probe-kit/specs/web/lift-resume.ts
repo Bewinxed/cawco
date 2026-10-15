@@ -3,7 +3,7 @@
  * it down when Svelte brings it back mid-leave: in the flow, pressable, its
  * inline style as it was. The next leave lifts it again.
  *
- * Found live on a Mac (keychain-unlock, unlock-reachable): a refusal answered
+ * Found live on a Mac (keychain-unlock): a refusal answered
  * sooner than the form's fade brought the same form back (Svelte 5 resumes a
  * branch still leaving, branches.js `resume_effect`) with `crossOut`'s lift
  * still on it, out of the flow and `pointer-events: none`, so the retry's

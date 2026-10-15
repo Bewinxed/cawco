@@ -21,7 +21,10 @@
  *    hub's row for the session lands on it);
  *  - New session (Ctrl+Shift+N), a model picked: the chosen row's name and
  *    the Effort and Permission chips share no area; the hit test at each
- *    chip's centre is that chip, and at the name's centre the chosen row.
+ *    chip's centre is that chip, and at the name's centre the chosen row;
+ *  - then, on the same fleet, the New session dialog whole at each desktop
+ *    size with every chip's menu moving nothing in it
+ *    (menus-fit/new-session-layout.ts).
  *
  *   bun scripts/probe-kit/run.ts web menus-fit
  */
@@ -32,6 +35,7 @@ import { Clock } from "../../anim";
 import { type Box, overlap } from "../../geom";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 import { B, furnishAccount } from "../account-move";
+import { newSessionLayout } from "./menus-fit/new-session-layout";
 
 const TITLE = "Menu fit";
 const OPEN_MENU = "[data-slot='context-menu-content'][data-state='open']";
@@ -614,6 +618,7 @@ const spec: Spec = {
       await newSession(kit, page, hand, view);
       await page.close();
     }
+    await newSessionLayout(kit, base);
   },
 };
 export default spec;

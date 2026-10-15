@@ -75,7 +75,7 @@ export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
  * How Claude Code opens the words a person sent while a turn ran, which it
  * delivers mid-turn one of two ways: in a `<system-reminder>` block of the
  * next user message, beside a tool's result (the scratch fleet's Claude
- * Code, probe-kit spec `mid-turn`, 2026-10-14), or as a `role: "system"`
+ * Code, 2026-10-14), or as a `role: "system"`
  * message of their own (its `api_system` message, `{type:"api_system",
  * message:{role:"system",content:e}}` in Claude Code 2.1.299; Caw's
  * session, probe-kit spec `caw-threads`).

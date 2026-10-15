@@ -36,8 +36,8 @@ const { sweepDeadFleets } = await import("../scratch-fleet");
 const { Run } = await import("./kit");
 
 const args = process.argv.slice(2);
-// A web spec named on its own (`run.ts new-session-layout`) runs as
-// `run.ts web new-session-layout`.
+// A web spec named on its own (`run.ts menus-fit`) runs as
+// `run.ts web menus-fit`.
 if (
   args[0] &&
   args[0] !== "web" &&
