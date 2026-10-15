@@ -17,9 +17,9 @@
  * `attribute` (installed after `watch`, for an engine with no performance
  * trace of its own: WebKit through Playwright has none) keeps, while
  * `cadence` is on, every callback of the page's own a millisecond or more
- * (frame callbacks, timers, microtasks, event listeners, observers): what
- * its code did inside a frame (`ourWork`). An async function resumed after
- * an `await` is no callback and is not seen.
+ * (frame callbacks, timers and intervals, microtasks, event listeners and
+ * `on…` handlers, observers): what its code did inside a frame (`ourWork`).
+ * An async function resumed after an `await` is no callback and is not seen.
  *
  * The readers below turn those series into the probes' checks.
  *
@@ -227,6 +227,15 @@ export function attribute(): void {
       ms,
       ...rest
     )) as typeof window.setTimeout;
+  const interval = window.setInterval.bind(window);
+  window.setInterval = ((cb: TimerHandler, ms?: number, ...rest: unknown[]) =>
+    interval(
+      typeof cb === "function"
+        ? timed("interval", cb as (...a: unknown[]) => unknown)
+        : cb,
+      ms,
+      ...rest
+    )) as typeof window.setInterval;
   const micro = window.queueMicrotask.bind(window);
   window.queueMicrotask = (cb) => micro(timed("microtask", cb));
   const wrapped = new WeakMap<object, EventListener>();
@@ -252,6 +261,58 @@ export function attribute(): void {
       typeof listener === "function" ? wrapped.get(listener) : undefined;
     return remove.call(this, type, one ?? listener, options);
   };
+  // `socket.onmessage = …` and its kin: a handler property is no listener
+  // added. Read back, it is the function the page set. The watcher's own
+  // port was set before this ran, and stays untimed.
+  const setBy = new WeakMap<object, unknown>();
+  for (const owner of [
+    "WebSocket",
+    "EventSource",
+    "MessagePort",
+    "BroadcastChannel",
+    "Worker",
+    "XMLHttpRequestEventTarget",
+    "XMLHttpRequest",
+    "FileReader",
+    "IDBRequest",
+    "IDBOpenDBRequest",
+    "IDBTransaction",
+    "IDBDatabase",
+  ]) {
+    const proto = (
+      window as unknown as Record<string, { prototype?: object } | undefined>
+    )[owner]?.prototype;
+    if (!proto) {
+      continue;
+    }
+    for (const key of Object.getOwnPropertyNames(proto)) {
+      const real = Object.getOwnPropertyDescriptor(proto, key);
+      if (!(key.startsWith("on") && real?.get && real.set)) {
+        continue;
+      }
+      const { get, set } = real;
+      Object.defineProperty(proto, key, {
+        configurable: true,
+        enumerable: real.enumerable,
+        get(this: unknown) {
+          const one = get.call(this) as object | null;
+          return one ? (setBy.get(one) ?? one) : one;
+        },
+        set(this: unknown, fn: unknown) {
+          if (typeof fn !== "function") {
+            set.call(this, fn);
+            return;
+          }
+          const one = timed(
+            `${owner}.${key}`,
+            fn as (...a: unknown[]) => unknown
+          );
+          setBy.set(one, fn);
+          set.call(this, one);
+        },
+      });
+    }
+  }
   for (const name of [
     "MutationObserver",
     "ResizeObserver",

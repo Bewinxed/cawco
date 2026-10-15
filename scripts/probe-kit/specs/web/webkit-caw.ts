@@ -5,17 +5,35 @@
  * its notes open; the built dashboard against its hub in Playwright's WebKit
  * at 390×844, touch, 3x, a tapped button taking no focus (an iPhone's
  * shape). Twenty taps, each watched for 2.6s from the press (the open, his
- * smile in and back out), each closed and let rest before the next. Runtime
- * cadence (frames.ts, requestAnimationFrame from the frame before the tap):
+ * smile in and back out), each closed and let rest before the next. Each
+ * frame interval of an open (frames.ts, requestAnimationFrame from the frame
+ * before the tap) with the CPU the page's main thread ran in it (cpu.ts, the
+ * kernel's run time: its script, style, layout and the paint's recording):
  *
  *  - the panel opens on every tap;
- *  - no interval in any open is over 25ms (a 60Hz frame and a half: a
- *    dropped frame), the press's own frame included. The longest four are
- *    named with what the page's own code did inside each (`attribute`):
- *    WebKit through Playwright has no performance trace.
+ *  - in no interval of any open, the press's own included, does the main
+ *    thread run over 25ms (a 60Hz frame and a half: a frame the page
+ *    drops). The heaviest four are named with what the page's own code did
+ *    inside each (`attribute`: WebKit through Playwright has no performance
+ *    trace).
+ *
+ * WHAT IS BOUND IS THE PAGE'S CPU, NOT THE ENGINE'S CADENCE. The interval
+ * itself was the bound before (no interval over 25ms), and on obelisk it
+ * failed with 0ms of the page's code inside: headless WPE composites each
+ * frame of the open in software GL, Mesa's llvmpipe on one thread per core,
+ * and a frame waits for the slowest of them, so intervals stretch with the
+ * machine's load (four over 25ms in eight opens on a quiet machine; a blank
+ * page's frames up to 225ms apart with every core busy). The page at rest
+ * composites nothing and keeps time. Wall time of the page's own work
+ * stretches with load too (a 10ms Svelte flush took 67 with every core
+ * busy); its CPU does not (30ms of fixed work read 31.4ms quiet, 33.2 with
+ * every core busy). The longest interval, and the raster's and the
+ * compositing's CPU, which run on threads of their own, are reported beside
+ * the bound.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pageCpu } from "../../cpu";
 import { attribute, ourWork, tell, watch, watched } from "../../frames";
 import { open, type Spec } from "../../kit";
 
@@ -123,12 +141,21 @@ const spec: Spec = {
     const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     // Fonts, the first snapshot, his face drawn ahead.
     await page.waitForTimeout(3000);
+    const cpu = await pageCpu(page);
     const opened: boolean[] = [];
-    /** Each open's frame intervals, with what our own code did inside each. */
-    const runs: { at: number; ms: number; ours: number; heaviest: string }[][] =
-      [];
+    /** Each open's frame intervals, with the page's main-thread CPU and its own code inside each. */
+    const runs: {
+      at: number;
+      cpu: number;
+      heaviest: string;
+      ms: number;
+      ours: number;
+    }[][] = [];
+    /** Each open's raster and compositing, CPU ms. */
+    const beside: { compositing: number; paint: number }[] = [];
     for (let n = 0; n < RUNS; n += 1) {
       // biome-ignore lint/performance/noAwaitInLoops: one open at a time, each from rest
+      const recording = await cpu.record();
       await tell(page, { rafs: [], calls: [], tap: -1, cadence: true });
       // Frames drawn before the tap too, so the one it lands in is measured.
       await page.waitForTimeout(150);
@@ -136,6 +163,8 @@ const spec: Spec = {
       await page.waitForTimeout(WATCH_MS);
       const seen = await watched(page);
       await tell(page, { cadence: false });
+      const ran = await recording.stop();
+      beside.push({ compositing: ran.compositing, paint: ran.paint });
       const before = seen.rafs.findLastIndex((t) => t <= seen.tap);
       const frames = seen.rafs.slice(Math.max(0, before));
       const intervals = frames.slice(1).map((t, k) => {
@@ -144,6 +173,7 @@ const spec: Spec = {
         return {
           at: from - seen.tap,
           ms: t - from,
+          cpu: ran.between(from, t),
           ours: work.ms,
           heaviest: work.heaviest,
         };
@@ -165,22 +195,23 @@ const spec: Spec = {
       opened.every(Boolean),
       `${opened.filter(Boolean).length} of ${RUNS} opened`
     );
-    // The longest intervals, each with what our code did inside it, so a
-    // dropped frame says whose it was.
-    const longest = runs
-      .flatMap((intervals, n) => intervals.map((one) => ({ ...one, n })))
-      .sort((a, b) => b.ms - a.ms)
-      .slice(0, 4);
-    const worst = longest[0]?.ms ?? 0;
+    // The heaviest intervals, each with what our code did inside it, so a
+    // dropped frame says whose it was; the longest, the raster and the
+    // compositing, so the engine's own time stands beside the page's.
+    const all = runs.flatMap((intervals, n) =>
+      intervals.map((one) => ({ ...one, n }))
+    );
+    const heaviest = [...all].sort((a, b) => b.cpu - a.cpu).slice(0, 4);
+    const [longest] = [...all].sort((a, b) => b.ms - a.ms);
+    const worst = heaviest[0]?.cpu ?? 0;
+    const said = (one: (typeof all)[number]) =>
+      `${one.cpu.toFixed(0)}ms of CPU in ${one.ms.toFixed(0)}ms at +${one.at.toFixed(0)} in open ${one.n} (our code ${one.ours.toFixed(0)}ms${one.ours > 0 ? `, ${one.heaviest}` : ""})`;
+    const median = (values: number[]) =>
+      [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
     kit.check(
-      `no interval over ${DROPPED_MS}ms in any of ${RUNS} opens`,
+      `no interval with over ${DROPPED_MS}ms of the page's main-thread CPU in any of ${RUNS} opens`,
       worst <= DROPPED_MS,
-      `longest: ${longest
-        .map(
-          (one) =>
-            `${one.ms.toFixed(0)}ms at +${one.at.toFixed(0)} in open ${one.n} (our code ${one.ours.toFixed(0)}ms${one.ours > 0 ? `, ${one.heaviest}` : ""})`
-        )
-        .join("; ")}`
+      `heaviest: ${heaviest.map(said).join("; ")}. Longest interval: ${longest ? said(longest) : "none"}. An open's raster ${median(beside.map((one) => one.paint)).toFixed(0)}ms and compositing ${median(beside.map((one) => one.compositing)).toFixed(0)}ms of CPU (medians), on threads of their own, not counted`
     );
   },
 };
