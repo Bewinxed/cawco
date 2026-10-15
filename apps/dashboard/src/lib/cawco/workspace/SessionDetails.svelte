@@ -5,7 +5,7 @@
 <script lang="ts">
   import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
   import { EFFORT_NONE, isEffortLevel } from "@cawco/core";
-  import { onDestroy, untrack } from "svelte";
+  import { onDestroy, type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { TextMorph } from "torph/svelte";
@@ -58,6 +58,7 @@
     href,
     onclose,
     dir,
+    kept = null,
   }: {
     sessionId: string;
     title: string;
@@ -65,6 +66,28 @@
     onclose: () => void;
     /** Which way the card moved to reach this session: 1 rightward, -1 leftward. */
     dir: 1 | -1;
+    /**
+     * The harness and model are a setting kept off the session, as a
+     * project's Caw keeps his lead's (CawView): the model chip opens whether
+     * or not the session runs, and its picker's harness rail offers each of
+     * `harnesses` this machine has. A harness on the rail is browsed, as New
+     * session browses one; picking a model there chooses the two together
+     * (`onchoose`), never the running session's. The change is `pending`
+     * until the keeper answers, and `refused` says why it did not take.
+     * The keeper's own settings stand first in the settings row
+     * (`setting`: a project's Caw's on/off), and what they ask stands under
+     * the row (`asks`: what turning him off asks first).
+     */
+    kept?: {
+      harness: HarnessKind;
+      model: string | null;
+      harnesses: HarnessKind[];
+      onchoose: (choice: { harness: HarnessKind; model: string }) => void;
+      pending: boolean;
+      refused: string | null;
+      setting?: Snippet;
+      asks?: Snippet;
+    } | null;
   } = $props();
   const reduceMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
   const morphMs = $derived(reduceMotion.current ? 0 : morphDuration());
@@ -90,7 +113,7 @@
     cawco.machines.find((item) => item.machineId === machineId)
   );
   const harness = $derived(
-    (session?.harness || row?.harness || context?.harness) as
+    (kept?.harness || session?.harness || row?.harness || context?.harness) as
       HarnessKind | undefined
   );
   const report = $derived(
@@ -98,7 +121,7 @@
   );
   const cwd = $derived(session?.cwd || row?.cwd || context?.cwd || "");
   const stats = $derived(cawco.statsOf(sessionId));
-  const model = $derived(session?.model ?? null);
+  const model = $derived(kept?.model ?? session?.model ?? null);
 
   /**
    * This session's provider limit (owner pick h): the window that stops its
@@ -281,6 +304,21 @@
     effort: "set-effort",
   } as const;
   let modelOpen = $state(false);
+  /**
+   * A kept setting's harness the picker shows: the kept one each time the
+   * picker opens, then the one browsed on its rail.
+   */
+  let browsing = $state<HarnessKind | undefined>();
+  /** The kept setting's harnesses this machine has (all of them until its report is read). */
+  const keptHarnesses = $derived(
+    kept
+      ? kept.harnesses.filter(
+          (each) =>
+            !machine?.harnesses ||
+            machine.harnesses.some((reported) => reported.harness === each)
+        )
+      : []
+  );
   let relaunching = $state(false);
   let relaunchFailure = $state<string | null>(null);
   let permissionBeforeRelaunch = $state<PermissionMode | null>(null);
@@ -342,6 +380,9 @@
     if (slot === "permission" && relaunching) {
       return true;
     }
+    if (slot === "model" && kept) {
+      return kept.pending;
+    }
     const record = latestCommandFor(sessionId, kinds[slot]);
     return record?.stage === "submitted" || record?.stage === "accepted";
   }
@@ -353,6 +394,9 @@
     }
     if (slot === "permission" && relaunchFailure) {
       return relaunchFailure;
+    }
+    if (slot === "model" && kept) {
+      return kept.refused;
     }
     const record = latestCommandFor(sessionId, kinds[slot]);
     return record?.stage === "failed"
@@ -585,15 +629,19 @@
     </div>
 
     {#if harness}
+      <!-- The harness the picker lists: a kept setting's browsed one, else the session's. -->
+      {@const shownHarness = kept ? (browsing ?? harness) : harness}
       <div class="configuration">
         <div class="settings">
-          {#if editable}
+          {@render kept?.setting?.()}
+          {#if editable || kept}
             <NsPopover
               aria-label="Models"
               haspopup="listbox"
               id="details-model"
               onchange={(value) => {
                 modelOpen = value;
+                browsing = undefined;
               }}
               open={modelOpen}
               triggerClass="ns-chip-btn tool model-chip"
@@ -605,19 +653,26 @@
               {/snippet}
               <div class="model-pop">
                 <ModelSection
-                  {harness}
-                  installed={[harness]}
+                  harness={shownHarness}
+                  installed={kept ? keptHarnesses : [harness]}
                   machineIds={machineId ? [machineId] : []}
                   machineName={machine?.hostname ?? ""}
-                  model={model ?? ""}
-                  onharness={() => {
-                    /* Running sessions retain their harness. */
+                  model={shownHarness === harness ? (model ?? "") : ""}
+                  onharness={(next) => {
+                    // A running session keeps its harness; a kept one's
+                    // rail is browsed, and a model picked there chooses both.
+                    browsing = next;
                   }}
                   onmodel={(id) => {
-                    changeModel(id);
+                    if (kept) {
+                      kept.onchoose({ harness: shownHarness, model: id });
+                    } else {
+                      changeModel(id);
+                    }
                     modelOpen = false;
+                    browsing = undefined;
                   }}
-                  runtime
+                  runtime={!kept}
                 />
               </div>
             </NsPopover>
@@ -651,6 +706,7 @@
             <AccountSwitch instance={row} readonly={!editable} />
           {/if}
         </div>
+        {@render kept?.asks?.()}
         <!-- One line is always held for what a change says, so its pending,
              done and failed lines arriving or leaving never resize the card. -->
         <div class="feedback-slot">
@@ -660,7 +716,9 @@
           {@render feedback("account")}
           {#if !editable}
             <p class="feedback">
-              Controls unlock while the session is running.
+              {kept
+                ? "Effort and permission unlock while the session is running."
+                : "Controls unlock while the session is running."}
             </p>
           {/if}
         </div>

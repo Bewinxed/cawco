@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * New project (design §5, PRD §5.6): Caw at 80px asks "What are we working
-   * on?"; one field and `Start`, four starter chips that fly their words into
+   * on?"; the session Composer, four starter chips that put their words in
    * it, and six template cards with Caw peeking over the one the words fit.
    *
    * One live Caw at a time: the first fit sends the 80px Caw away and he
@@ -9,7 +9,7 @@
    * the peek away and the 80px Caw comes back. A tap on a card picks it
    * whatever fits; until one is tapped the fitting card is the pick.
    *
-   * Start makes the project with Caw (its folder on the hub its place until
+   * The send makes the project with Caw (its folder on the hub its place until
    * setup picks the checkout), with the picked template's stages, and opens
    * its Setup thread with the words as its first message: they fly into
    * that row, and Caw from where he stands into the thread's seat.
@@ -18,8 +18,12 @@
   import { barGlass } from "#lib/cawco/bar-glass.svelte.js";
   import { cawco, createProject } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
+  import {
+    failureWords,
+    THREAD_SEND_UNREACHED,
+    unreachable,
+  } from "#lib/cawco/hub-read.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import CawField from "#lib/cawco/project/CawField.svelte";
   import {
     fitOf,
     nameFrom,
@@ -30,6 +34,8 @@
   } from "#lib/cawco/project/new-project.js";
   import TemplateCards from "#lib/cawco/project/TemplateCards.svelte";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
+  import Composer from "#lib/cawco/transcript/Composer.svelte";
+  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { goto } from "$app/navigation";
 
   /** Caw's side here, on the page and over a card. */
@@ -37,7 +43,10 @@
   /** How long typing rests before the fit runs. */
   const FIT_AFTER_MS = 300;
 
-  let words = $state("");
+  /** The words, in the session Composer: its field takes the caret on arrival. */
+  const draft = new ComposerDraft();
+  draft.focusWanted = true;
+  const words = $derived(draft.text);
   let fit = $state<TemplateName | null>(null);
   /**
    * The card the person tapped: it is the pick until the prompt fits
@@ -84,11 +93,10 @@
     caw = fit ? "peek" : "page";
   }
 
-  /** Each chip's words fly into the field under a key of their own. */
-  let flights = $state(0);
+  /** A chip's words into the composer, the caret after them. */
   function starter(text: string) {
-    flights += 1;
-    words = text;
+    draft.text = text;
+    draft.focusWanted = true;
     // A chip is a new prompt, never a pick: the frame goes to its fit.
     tapped = null;
     // A press runs the fit at once: there is no typing to wait for.
@@ -101,16 +109,40 @@
       ? "Needs a machine online"
       : card.meta;
 
-  /** The project Start made: Caw departs under its key as the page goes. */
+  /** The project the send made: Caw departs under its key as the page goes. */
   let made = $state<string | null>(null);
 
+  /** The send is out; it stays so through the navigation it ends in. */
+  let starting = $state(false);
+  let refused = $state("");
+  /** The send never reached the hub: its line offers Send again. */
+  let again = $state(false);
+  /** What the Composer stands over its foot: its box holds that much room. */
+  let footHeight = $state(0);
+
+  /**
+   * The words go as a thread tab's send does (ThreadPane): a refusal puts
+   * them back in the composer with the reason over them.
+   */
   async function start(text: string, id: string) {
-    const created = await createProject({
-      name: nameFrom(text) || text.trim().slice(0, 60),
-      prompt: text,
-      promptId: id,
-      ...(selected ? { template: selected } : {}),
-    });
+    starting = true;
+    refused = "";
+    again = false;
+    let created: Awaited<ReturnType<typeof createProject>>;
+    try {
+      created = await createProject({
+        name: nameFrom(text) || text.trim().slice(0, 60),
+        prompt: text,
+        promptId: id,
+        ...(selected ? { template: selected } : {}),
+      });
+    } catch (error) {
+      draft.restore(text);
+      again = unreachable(error);
+      refused = again ? THREAD_SEND_UNREACHED : failureWords(error);
+      starting = false;
+      return;
+    }
     made = created.id;
     // His box carries the project's key before the navigation departs it.
     await tick();
@@ -136,27 +168,29 @@
       </div>
     {/if}
     <h1 class="title">What are we working on?</h1>
-    <div class="field">
-      <CawField
-        action={{
-          label: "Start",
-          pendingLabel: "Starting…",
-          empty: "Say what the project is, then Start.",
+    <div class="field" style:block-size="calc({footHeight}px + var(--space-4))">
+      <Composer
+        agentName="Caw"
+        attach={false}
+        {draft}
+        onfoot={(foot) => {
+          footHeight = foot.stack;
         }}
-        autofocus
-        flies
-        label="What are we working on?"
-        lands={flights ? `starter:${flights}` : undefined}
-        onsend={start}
+        onstop={() => undefined}
+        onsubmit={(text, _extras, id) => {
+          // biome-ignore lint/complexity/noVoid: the start's own state is the composer's sending and its refusal
+          void start(text, id);
+        }}
         placeholder="A repo, a launch, a brand…"
-        bind:text={words}
+        sendAgain={again}
+        sendError={refused}
+        sending={starting}
       />
     </div>
     <div class="chips kit-chips">
       {#each STARTERS as text (text)}
         <button
           class="kit-chip touch-hit"
-          data-share="starter:{flights + 1}"
           onclick={() => starter(text)}
           type="button"
         >
@@ -218,9 +252,11 @@
     color: var(--ink-strong);
     text-align: center;
   }
+  /* The session Composer stands on this box's foot (Composer .dock). */
   .field {
+    position: relative;
     inline-size: 100%;
-    max-inline-size: 520px;
+    max-inline-size: 570px;
   }
   /* The starters are the kit option chip (.kit-chips / .kit-chip in
      app.css), centred under the field. */

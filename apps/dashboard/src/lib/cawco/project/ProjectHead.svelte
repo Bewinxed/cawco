@@ -29,6 +29,7 @@
   import { handOver } from "#lib/cawco/motion/share.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { unpickedMode } from "#lib/cawco/permission-modes.js";
+  import type { Starter } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
@@ -53,10 +54,13 @@
     onnewtask,
     onask,
     onstages,
+    starters,
   }: {
     project: ProjectRow;
     machine: Machine | null;
     lead: CawLead;
+    /** The project's starters, offered in Caw's panel. */
+    starters: Starter[];
     /** Caw sits here; off while he stands over the empty board. */
     seated: boolean;
     onnewtask: () => void;
@@ -238,7 +242,12 @@
   <div class="who">
     {#if seated}
       <div class="seat" transition:slot>
-        <CawSeat {lead} projectId={project.id} projectName={project.name} />
+        <CawSeat
+          {lead}
+          projectId={project.id}
+          projectName={project.name}
+          {starters}
+        />
       </div>
     {/if}
     <div class="txt">
@@ -524,7 +533,10 @@
      nothing. Under a pointer the name takes the hover wash. */
   .name {
     display: block;
-    max-inline-size: 100%;
+    /* Its box reaches past the column by the margins it pulls back, and the
+       column is sized without them: capped at 100%, a name longer than the
+       line under it ("Working…") lost those 8px and broke. */
+    max-inline-size: calc(100% + var(--space-1) * 2);
     margin-inline: calc(var(--space-1) * -1);
     padding-inline: var(--space-1);
     border: 1px solid transparent;
@@ -535,6 +547,13 @@
     text-align: start;
     cursor: text;
     transition: background-color var(--dur-control) var(--ease-out);
+  }
+  /* The name never breaks across lines: a column too narrow for it ends it
+     in an ellipsis, as the line under it does (`.place`, `.said`). */
+  button.name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   @media (hover: hover) {
     button.name:hover {

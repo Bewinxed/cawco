@@ -41,13 +41,8 @@ import {
 import type { CawStatus } from "../home/Caw.svelte";
 import { dur } from "../motion/curves.svelte";
 import { isRetry, type TaskSummary } from "../project-tasks";
+import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";
-
-/** What each harness Caw runs on is called. */
-export const CAW_HARNESS_LABEL: Record<CawHarness, string> = {
-  claude: "Claude Code",
-  opencode: "OpenCode",
-};
 
 /** The statuses the head Caw changes between, fetched once he is on screen. */
 export const HEAD_NEXT: CawStatus[] = [
@@ -89,6 +84,10 @@ export class CawLead {
    * nothing of its own.
    */
   waited = $state(false);
+  /** Your half-written words to him, in his panel's composer (CawThread). */
+  readonly draft = new ComposerDraft();
+  /** Counts the asks to open his panel from outside it (`ask`); his seat opens on each. */
+  asked = $state(0);
   #landedTimer: ReturnType<typeof setTimeout> | undefined;
 
   readonly #projectId: () => string;
@@ -123,6 +122,16 @@ export class CawLead {
     }, dur("--dur-wait-grace"));
   }
 
+  /**
+   * A starter's words into his panel's composer and the panel open, the
+   * caret after them: nothing is sent (The Empty Starts Work Rule).
+   */
+  ask(text: string): void {
+    this.draft.text = text;
+    this.draft.focusWanted = true;
+    this.asked += 1;
+  }
+
   /** Reads his view; the page calls it on arrival and after a reconnect. */
   async read(): Promise<void> {
     const id = this.#projectId();
@@ -132,6 +141,10 @@ export class CawLead {
       // A wait already past its grace (the page still connecting) stands.
       this.waited = this.waited || this.view !== null || this.#reading();
       this.view = null;
+      // Words half-written to the last project's Caw are not to this one.
+      if (this.#viewFor !== null) {
+        this.draft.text = "";
+      }
     }
     const grace = this.view
       ? undefined
@@ -267,18 +280,24 @@ export class CawLead {
       : null
   );
 
-  /** What Caw says on the head's line; null gives the line back to the place. */
-  readonly words = $derived.by((): CawWords | null => {
+  /**
+   * The cap's line while it is what he has to say: past the cap, with
+   * nothing more pressing (the hub away, his board unread, an ask of yours,
+   * a turn under way). His head's line and his panel's both say it.
+   */
+  readonly capSays = $derived.by((): string | null => {
     const pressing =
       this.status === "reconnecting" ||
       this.status === "loading" ||
       this.status === "needs-you" ||
       this.status === "working";
-    if (this.capLine && !pressing) {
-      return { kind: "say", text: this.capLine };
-    }
-    return this.#said;
+    return pressing ? null : this.capLine;
   });
+
+  /** What Caw says on the head's line; null gives the line back to the place. */
+  readonly words = $derived.by((): CawWords | null =>
+    this.capSays ? { kind: "say", text: this.capSays } : this.#said
+  );
 
   readonly #said = $derived.by((): CawWords | null => {
     switch (this.status) {

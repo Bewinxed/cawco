@@ -1,32 +1,38 @@
 <script lang="ts">
   /**
    * Caw in the project's head: the page's one live Caw, at 48px, as a
-   * button. A press opens his panel and keeps it; a pointer resting on him
-   * for 350ms opens it too, and it closes 250ms after the pointer leaves
-   * both him and the panel, as a session tab's details card does
-   * (PaneTabs). On touch the panel is a bottom sheet. Off, he sleeps between
-   * your words: no event wakes him, and the panel holds the switch.
+   * button. A press opens his panel, the conversation with him (CawThread),
+   * floating over the page in the kit popover, and a second press puts it
+   * away; on touch it is the kit's bottom sheet. A press outside, or
+   * Escape, closes it too. A starter pressed on the empty board opens it
+   * with the starter's words in its composer (`lead.ask`). Off, he sleeps
+   * between your words: no event wakes him.
    */
+  import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import { land } from "#lib/cawco/motion/share.svelte.js";
+  import type { Starter } from "#lib/cawco/project-tasks.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import CawPanel from "./CawPanel.svelte";
+  import CawThread from "./CawThread.svelte";
   import { type CawLead, HEAD_NEXT } from "./caw-lead.svelte";
 
   let {
     lead,
     projectId,
     projectName,
+    starters,
     size = 48,
   }: {
     lead: CawLead;
     projectId: string;
     projectName: string;
+    /** The project's starters, offered under him in his panel. */
+    starters: Starter[];
     size?: number;
   } = $props();
 
@@ -34,9 +40,7 @@
     "(hover: none), (pointer: coarse), (max-width: 640px)"
   );
   let open = $state(false);
-  let pinned = $state(false);
   let anchor = $state<HTMLButtonElement | null>(null);
-  let timer: ReturnType<typeof setTimeout> | undefined;
 
   /** He holds his still: idle, the done hold, and working when his loop is off. */
   const still = $derived(
@@ -44,45 +48,28 @@
   );
 
   /**
-   * The panel was opened by the pointer (a press or a rest). Closing it
-   * gives focus back to Caw without the focus ring: a ring is for a reader
-   * on the keyboard, and one left on him at rest reads as a state he is in.
+   * The panel was opened by the pointer. Closing it gives focus back to Caw
+   * without the focus ring: a ring is for a reader on the keyboard, and one
+   * left on him at rest reads as a state he is in.
    */
   let byPointer = false;
 
-  function close() {
-    clearTimeout(timer);
-    open = false;
-    pinned = false;
-  }
-  function rest(event: PointerEvent) {
-    if (touch.current || event.pointerType !== "mouse" || pinned) {
-      return;
-    }
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      byPointer = true;
-      open = true;
-    }, 350);
-  }
-  function leave() {
-    clearTimeout(timer);
-    if (!pinned) {
-      timer = setTimeout(close, 250);
-    }
-  }
   function press(event: MouseEvent) {
-    clearTimeout(timer);
-    if (open && pinned) {
-      close();
-      return;
-    }
     // A click from Enter or Space has no pointer behind it (detail 0).
     byPointer = event.detail > 0;
-    open = true;
-    pinned = true;
+    open = !open;
   }
-  $effect(() => () => clearTimeout(timer));
+
+  // Asked open from outside (a starter on the empty board).
+  let askedSeen = untrack(() => lead.asked);
+  $effect(() => {
+    const { asked } = lead;
+    if (asked !== askedSeen) {
+      askedSeen = asked;
+      byPointer = true;
+      open = true;
+    }
+  });
 </script>
 
 <button
@@ -92,8 +79,6 @@
   class="caw-seat press-tint"
   data-share="caw:{projectId}"
   onclick={press}
-  onpointerenter={rest}
-  onpointerleave={leave}
   type="button"
   bind:this={anchor}
   style:--seat="{size}px"
@@ -107,30 +92,26 @@
 {#if touch.current}
   <Drawer.Root
     onOpenChange={(next) => {
-      if (!next) {
-        close();
-      }
+      open = next;
     }}
     {open}
   >
-    <Drawer.Content class="caw-sheet">
+    <Drawer.Content class="caw-thread-sheet">
       <Drawer.Title class="sr-only">Caw, lead of {projectName}</Drawer.Title>
-      <CawPanel {lead} {projectId} {projectName} />
+      <CawThread {lead} {projectId} {projectName} {starters} />
     </Drawer.Content>
   </Drawer.Root>
 {:else}
   <Popover.Root
     onOpenChange={(next) => {
-      if (!next) {
-        close();
-      }
+      open = next;
     }}
     {open}
   >
     <Popover.Content
       align="start"
       aria-label="Caw, lead of {projectName}"
-      class="caw-pop"
+      class="caw-thread-pop"
       collisionPadding={12}
       customAnchor={anchor}
       onCloseAutoFocus={(event) => {
@@ -138,10 +119,6 @@
           event.preventDefault();
           anchor?.focus({ focusVisible: false } as FocusOptions);
         }
-      }}
-      onfocusin={() => {
-        clearTimeout(timer);
-        pinned = true;
       }}
       onInteractOutside={(event) => {
         if (
@@ -151,22 +128,10 @@
           event.preventDefault();
         }
       }}
-      onOpenAutoFocus={(event) => {
-        if (!pinned) {
-          event.preventDefault();
-        }
-      }}
-      onpointerdowncapture={() => {
-        clearTimeout(timer);
-        pinned = true;
-      }}
-      onpointerenter={() => clearTimeout(timer)}
-      onpointerleave={leave}
       side="bottom"
       sideOffset={4}
-      trapFocus={pinned}
     >
-      <CawPanel {lead} {projectId} {projectName} />
+      <CawThread {lead} {projectId} {projectName} {starters} />
     </Popover.Content>
   </Popover.Root>
 {/if}
@@ -186,11 +151,24 @@
     background: transparent;
     cursor: pointer;
   }
-  :global(.caw-pop) {
-    inline-size: auto;
+  /* His panel floats over the page at Caw's panel's width (c-panel-w),
+     as tall as the room under him allows up to a conversation's height;
+     its content runs edge to edge. */
+  :global(.kit-pop.caw-thread-pop) {
+    display: flex;
+    inline-size: var(--c-panel-w);
+    block-size: min(
+      40rem,
+      calc(var(--bits-popover-content-available-height, 85dvh) - 2px)
+    );
     padding: 0;
+    overflow: hidden;
   }
-  :global(.caw-sheet) {
+  /* In the sheet: the sheet's height, less its grab. */
+  :global(.caw-thread-sheet) {
+    display: flex;
+    flex-direction: column;
+    block-size: 85dvh;
     padding-block-end: var(--safe-bottom);
   }
 </style>

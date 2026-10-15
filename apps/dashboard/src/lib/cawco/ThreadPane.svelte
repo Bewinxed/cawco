@@ -31,12 +31,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { browser } from "$app/env";
   import { barGlass } from "./bar-glass.svelte";
-  import { failureWords, unreachable } from "./hub-read";
-
-  /** A thread send that got no answer, in the error formula: what, why, what is kept, the way back. */
-  const THREAD_SEND_UNREACHED =
-    "Message not sent: the dashboard couldn't reach the hub. Your words are back in the field. Send again once the hub answers.";
-
   import {
     type BlockedRequest,
     blankSession,
@@ -57,6 +51,7 @@
   } from "./client.svelte";
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
+  import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
@@ -74,19 +69,15 @@
   import SideSplit from "./side/SideSplit.svelte";
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskSheet from "./tasks/TaskSheet.svelte";
-  import {
-    newThreadProjectOf,
-    routineMadeOf,
-    threadIdOf,
-    threadTabId,
-  } from "./thread-tabs";
+  import { threadBlockOf } from "./thread-blocks";
+  import { newThreadProjectOf, threadIdOf, threadTabId } from "./thread-tabs";
   import type { ComposerAsk, ComposerFoot } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
-  import { CAW_EVENT, setVoice } from "./transcript/voice";
+  import { setVoice } from "./transcript/voice";
   import type { Message } from "./types";
   import {
     type ComposerBinding,
@@ -147,95 +138,9 @@
     });
   });
 
-  /** What rode with your words, as a send's row carries it (MessageRow); none when nothing did. */
-  function carriedOn(message: ThreadMessage): Message["metadata"] {
-    if (message.author !== "you") {
-      return;
-    }
-    const { images, attachments } = message;
-    return images?.length || attachments?.length
-      ? {
-          ...(images?.length ? { images } : {}),
-          ...(attachments?.length ? { attachments } : {}),
-        }
-      : undefined;
-  }
-
   /** One message as the transcript's block (`Message`). */
-  function blockOf(message: ThreadMessage): Message {
-    const base = {
-      id: message.id,
-      instanceId: viewId,
-      timestamp: new Date(message.createdAt).toISOString(),
-    };
-    if (message.author === "caw") {
-      const metadata = {
-        ...(message.tasks?.length ? { tasks: message.tasks } : {}),
-        ...(message.files?.length ? { files: message.files } : {}),
-      };
-      return {
-        ...base,
-        type: "assistant",
-        content: message.body,
-        metadata: Object.keys(metadata).length ? metadata : undefined,
-      };
-    }
-    if (message.author === "event") {
-      const made = routineMadeOf(message);
-      return {
-        ...base,
-        type: "ui.system_note",
-        content: message.body ?? "",
-        metadata: {
-          noteTitle: message.noteTitle,
-          noteKind: CAW_EVENT,
-          ...(made
-            ? {
-                routineMade: {
-                  expiresAt: made.expiresAt,
-                  routineId: made.routineId,
-                  threadId: message.threadId,
-                },
-              }
-            : {}),
-        },
-      };
-    }
-    if (message.question && message.answer) {
-      // Your answer to his question: the call that asked it, answered, which
-      // the transcript draws as the settled QuestionCard.
-      const call = message.question.toolUseId ?? message.id;
-      return {
-        ...base,
-        type: "tool.use",
-        content: "",
-        toolCallId: call,
-        metadata: {
-          toolName: "AskUserQuestion",
-          toolId: call,
-          toolInput: { questions: message.question.questions },
-          toolStatus: "success",
-          toolUseResult:
-            message.answer.outcome === "answered"
-              ? {
-                  outcome: "answered",
-                  answers: message.answer.answers,
-                  questions: message.question.questions,
-                  ...(message.answer.annotations
-                    ? { annotations: message.answer.annotations }
-                    : {}),
-                }
-              : { outcome: "dismissed", questions: message.question.questions },
-        },
-      };
-    }
-    return {
-      ...base,
-      type: "user",
-      content: message.body,
-      metadata: carriedOn(message),
-    };
-  }
+  const blockOf = (message: ThreadMessage): Message =>
+    threadBlockOf(message, viewId);
 
   /**
    * His questions withdrawn before they were answered (his turn

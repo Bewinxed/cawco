@@ -20,15 +20,12 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { barStrip } from "#lib/cawco/bar-strip.svelte.js";
-  import {
-    cawco,
-    requestView,
-    startThread,
-    threadsOf,
-  } from "#lib/cawco/client.svelte.js";
+  import { cawco, requestView, threadsOf } from "#lib/cawco/client.svelte.js";
   import {
     type HubRead,
     failureWords as message,
+    THREAD_SEND_UNREACHED,
+    unreachable,
   } from "#lib/cawco/hub-read.js";
   import {
     crossIn,
@@ -38,7 +35,6 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
-  import CawField from "#lib/cawco/project/CawField.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
@@ -63,8 +59,9 @@
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import TaskSheet from "#lib/cawco/tasks/TaskSheet.svelte";
   import TaskTable from "#lib/cawco/tasks/TaskTable.svelte";
-  import { threadHref } from "#lib/cawco/thread-tabs.js";
   import { toast } from "#lib/cawco/toasts.js";
+  import Composer from "#lib/cawco/transcript/Composer.svelte";
+  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
   import { taskEdges } from "#lib/cawco/views/task-graph.js";
   import ViewCalendar, {
@@ -583,9 +580,37 @@
   let stagesAnchor = $state<HTMLElement | null>(null);
   let askOpen = $state(false);
   let askAnchor = $state<HTMLElement | null>(null);
+  /** The ask's words, in the session Composer the popover holds. */
+  const viewDraft = new ComposerDraft();
+  let viewSending = $state(false);
+  let viewRefused = $state("");
+  /** The ask never reached the hub: its line offers Send again. */
+  let viewAgain = $state(false);
+  /** What the Composer stands over its foot: the popover holds that much room. */
+  let viewFoot = $state(0);
   function ask(anchor: HTMLElement) {
     askAnchor = anchor;
     askOpen = true;
+    viewDraft.focusWanted = true;
+  }
+  /**
+   * The view is asked for, as a thread tab sends (ThreadPane): a refusal
+   * puts the words back in the composer with the reason over them.
+   */
+  async function askView(text: string) {
+    viewSending = true;
+    viewRefused = "";
+    viewAgain = false;
+    try {
+      await requestView(projectId, text);
+      askOpen = false;
+    } catch (error) {
+      viewDraft.restore(text);
+      viewAgain = unreachable(error);
+      viewRefused = viewAgain ? THREAD_SEND_UNREACHED : message(error);
+    } finally {
+      viewSending = false;
+    }
   }
 
   // --- what keeps the page live -------------------------------------------------
@@ -723,16 +748,6 @@
   function sitDown(node: HTMLElement): TransitionConfig {
     depart(node);
     return { duration: 0 };
-  }
-
-  /**
-   * The empty board's first words to Caw start a thread and open it: the
-   * words fly into its first row, and the standing Caw into its composer's
-   * seat (the navigation departs him).
-   */
-  async function firstWords(text: string, id: string) {
-    const said = await startThread(projectId, text, id);
-    await goto(threadHref(said.thread.id));
   }
 </script>
 
@@ -882,23 +897,21 @@
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
             <!-- He stands here instead of sitting in the head, and is the
-                 same seat at 80: a press opens his panel, the switch in it,
-                 so turning him off is in reach on an empty board too. -->
+                 same seat at 80: a press opens his panel. -->
             <div class="caw-80" data-share="caw:{projectId}" out:sitDown|global>
               <CawSeat
                 {lead}
                 {projectId}
                 projectName={project?.name ?? ""}
                 size={80}
+                starters={stages?.starters ?? []}
               />
             </div>
           {/snippet}
           {#snippet action()}
+            <!-- A starter opens his panel with its words in his composer. -->
             <CawStarters
-              flies
-              label="Message the project"
-              onsend={firstWords}
-              placeholder="Message the project…"
+              onpick={(text) => lead.ask(text)}
               starters={stages?.starters ?? []}
             />
           {/snippet}
@@ -1000,6 +1013,7 @@
         : null}
       {project}
       seated={!standing}
+      starters={stages?.starters ?? []}
     />
 
     {#if lead.view?.problem}
@@ -1082,19 +1096,32 @@
   <Popover.Root bind:open={askOpen}>
     <Popover.Content
       align="end"
-      class="w-96"
+      class="view-ask-pop"
       customAnchor={askAnchor}
       side="bottom"
     >
-      <CawField
-        autofocus
-        label="Ask Caw for a view"
-        onsend={async (text) => {
-          await requestView(projectId, text);
-          askOpen = false;
-        }}
-        placeholder="A view of what is scheduled this week…"
-      />
+      <div
+        class="view-ask"
+        style:block-size="calc({viewFoot}px + var(--space-4))"
+      >
+        <Composer
+          agentName="Caw"
+          attach={false}
+          draft={viewDraft}
+          onfoot={(foot) => {
+            viewFoot = foot.stack;
+          }}
+          onstop={() => undefined}
+          onsubmit={(text) => {
+            // biome-ignore lint/complexity/noVoid: the ask's own state is the composer's sending and its refusal
+            void askView(text);
+          }}
+          placeholder="A view of what is scheduled this week…"
+          sendAgain={viewAgain}
+          sendError={viewRefused}
+          sending={viewSending}
+        />
+      </div>
     </Popover.Content>
   </Popover.Root>
 
@@ -1303,6 +1330,21 @@
   }
   .caw-empty :global(.kit-empty-action) {
     align-self: stretch;
+  }
+  /* The ask is the session Composer floating under the menu: the composer
+     is the surface (its pill, edge and shadow), so the popover draws none
+     of its own, and its box is as tall as what the Composer stands
+     (Composer .dock stands on its foot). */
+  :global(.kit-pop.view-ask-pop) {
+    inline-size: min(30rem, calc(100vw - 24px));
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+  .view-ask {
+    position: relative;
+    inline-size: 100%;
   }
   .caw-80 {
     display: grid;

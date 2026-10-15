@@ -132,7 +132,7 @@ final class ProjectCawSeat: UIControl {
     }
 }
 
-/// Caw's panel (project/CawPanel.svelte): who he is and what he is doing in
+/// Caw's panel: who he is and what he is doing in
 /// one sentence, the lead switch, the harness he runs on and his model, and
 /// the way to talk to him, on or off. Off, he acts only when you write to
 /// him (WORDS.md, Caw on and off).
@@ -257,7 +257,7 @@ final class ProjectCawPanel: KitPopoverController {
         }
         stack.addArrangedSubview(row([talk, UIView(), last]))
 
-        // His field (CawField): your words start a thread, Caw woken with them.
+        // His field: your words start a thread, Caw woken with them.
         field.accessibilityLabel = "Message Caw"
         field.returnKeyType = .send
         field.addAction(UIAction { [weak self] _ in self?.startThread() }, for: .editingDidEndOnExit)
