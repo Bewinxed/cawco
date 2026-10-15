@@ -31,6 +31,12 @@
  * 16. With that header taken off in the browser, the third origin's frame
  *     loads the page, and a hello it forges is ignored: the overlay answers
  *     no `cawco:ready`.
+ * 15b. The dashboard reached through a proxy (as the owner's tunnel gate is:
+ *     the dashboard's Host, the browser's in `X-Forwarded-Host`/`-Proto`, a
+ *     WebSocket relayed over a client socket of its own with the browser's
+ *     Origin and cookies), with no `CAWCO_DASHBOARD_URL` set: the proxy's
+ *     origin joins the preview's `frame-ancestors`, and the panel opened
+ *     through it shows the page.
  *
  * Every app's server refuses a WebSocket whose Origin is not `http://<its
  * Host>`, as a dashboard's `/ws` gate and Vite's HMR do: the agent rewrites
@@ -152,6 +158,92 @@ const appOf = (title: string) => {
   return { cookies, server };
 };
 
+/** A WebSocket opened with headers of its own (Bun's client takes them). */
+const SocketWith = WebSocket as unknown as new (
+  url: string,
+  options: { headers: Record<string, string> }
+) => WebSocket;
+
+/**
+ * A proxy in front of the dashboard at `dashboard`, as the owner's tunnel
+ * gate is: it answers on an origin of its own, sends each request on with the
+ * dashboard's Host and the browser's scheme and host in `X-Forwarded-Proto`
+ * and `X-Forwarded-Host`, and relays a WebSocket over a client socket of its
+ * own that carries the browser's Origin and cookies with the same two.
+ */
+const proxyOf = (dashboard: string) => {
+  const behind = new URL(dashboard);
+  return Bun.serve<{
+    backend: WebSocket;
+    queue: (string | Uint8Array<ArrayBuffer>)[];
+  }>({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request, bun) {
+      const url = new URL(request.url);
+      const forwarded: Record<string, string> = {
+        "x-forwarded-host": url.host,
+        "x-forwarded-proto": url.protocol.slice(0, -1),
+      };
+      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+        const headers = { ...forwarded };
+        for (const name of ["origin", "cookie"]) {
+          const value = request.headers.get(name);
+          if (value) {
+            headers[name] = value;
+          }
+        }
+        const backend = new SocketWith(
+          `ws://${behind.host}${url.pathname}${url.search}`,
+          { headers }
+        );
+        if (bun.upgrade(request, { data: { backend, queue: [] } })) {
+          return;
+        }
+        backend.close();
+        return new Response("upgrade failed", { status: 500 });
+      }
+      const headers = new Headers(request.headers);
+      for (const [name, value] of Object.entries(forwarded)) {
+        headers.set(name, value);
+      }
+      headers.set("host", behind.host);
+      return fetch(`${behind.origin}${url.pathname}${url.search}`, {
+        method: request.method,
+        headers,
+        body: request.body,
+        redirect: "manual",
+        decompress: false,
+      } as RequestInit);
+    },
+    websocket: {
+      open(ws) {
+        const { backend } = ws.data;
+        backend.addEventListener("message", (event) => ws.send(event.data));
+        backend.addEventListener("close", () => ws.close());
+        backend.addEventListener("open", () => {
+          for (const held of ws.data.queue) {
+            backend.send(held);
+          }
+          ws.data.queue.length = 0;
+        });
+      },
+      message(ws, said) {
+        const { backend, queue } = ws.data;
+        const message = typeof said === "string" ? said : new Uint8Array(said);
+        if (backend.readyState === WebSocket.OPEN) {
+          backend.send(message);
+        } else if (backend.readyState === WebSocket.CONNECTING) {
+          queue.push(message);
+        }
+      },
+      close(ws) {
+        ws.data.backend.close();
+      },
+    },
+  });
+};
+
 /** `text` as one single-quoted shell word. */
 const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
 
@@ -269,12 +361,9 @@ const paneFrame = async (
 /** What a WebSocket from `origin` to its own `/hmr` heard first: its server's word, or why it said nothing. */
 const socketSays = (origin: string): Promise<string> =>
   new Promise((done) => {
-    const ws = new (
-      WebSocket as unknown as new (
-        url: string,
-        options: { headers: Record<string, string> }
-      ) => WebSocket
-    )(`${origin.replace(HTTP, "ws")}/hmr`, { headers: { origin } });
+    const ws = new SocketWith(`${origin.replace(HTTP, "ws")}/hmr`, {
+      headers: { origin },
+    });
     const timer = setTimeout(() => {
       ws.close();
       done("nothing in 5 s");
@@ -565,6 +654,37 @@ const run = async (kit: Kit) => {
   );
   await forged.context().close();
   third.stop(true);
+
+  // 15b. Through a proxy, the dashboard's origin is learned, never configured.
+  const proxy = proxyOf(base);
+  const proxiedOrigin = `http://localhost:${proxy.port}`;
+  const viaProxy = await kit.page("desk");
+  await viaProxy.goto(`${proxiedOrigin}/session/${session}`, {
+    waitUntil: "domcontentloaded",
+  });
+  const policyNow = async () =>
+    (await fetch(`${firstOrigin}/`)).headers.get("content-security-policy") ??
+    "";
+  const learned =
+    (await until(
+      "the proxied origin among the preview's frame-ancestors",
+      async () => ((await policyNow()).includes(proxiedOrigin) ? true : null),
+      Boolean,
+      30_000
+    ).catch(() => null)) === true;
+  // Loaded again now that the hub knows it: the frame's first load may have
+  // been answered before the page's socket opened.
+  await viaProxy.reload({ waitUntil: "domcontentloaded" });
+  const proxiedShown = await paneFrame(viaProxy, TITLE);
+  kit.check(
+    "15b: the dashboard reached through a proxy (X-Forwarded-Host/-Proto, its socket relayed with the browser's Origin), with no CAWCO_DASHBOARD_URL, becomes a preview parent: frame-ancestors names its origin and its panel shows the page",
+    fleet.env.CAWCO_DASHBOARD_URL === undefined &&
+      learned &&
+      !!proxiedShown.frame,
+    `CAWCO_DASHBOARD_URL ${fleet.env.CAWCO_DASHBOARD_URL ?? "unset"}; policy ${JSON.stringify(await policyNow())}; the panel: ${proxiedShown.last}`
+  );
+  await viaProxy.context().close();
+  proxy.stop(true);
 
   // 11. Two sessions at once, each with its own page and socket.
   const other = await fleet.spawn("claude", "Other", fleet.repo);

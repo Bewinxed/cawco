@@ -40,6 +40,7 @@ import net from "node:net";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import sockets from "socket-activation";
+import { publicOrigin } from "./public-origin.js";
 
 const standalone = typeof Bun !== "undefined" && Bun.isStandaloneExecutable;
 const resources = standalone ? await import("@cawco/core/runtime") : undefined;
@@ -49,13 +50,10 @@ const relayRuntime = standalone
 
 /**
  * adapter-node needs the browser's scheme and host for SvelteKit's CSRF check,
- * including mutating requests with no body (preview Close and other deletes).
- * Direct access is plain HTTP; a TLS-terminating proxy forwards the browser's
- * scheme and may forward its host separately. publicOrigin reads Forwarded,
- * then X-Forwarded-* and defaults to http and Host for direct requests. The
- * adapter reads these header names once when its handler loads. Trusting them
- * preserves CSRF protection: a cross-site browser form cannot set Forwarded or
- * X-Forwarded-* headers, and its Origin still differs from the dashboard's origin.
+ * including mutating requests with no body (preview Close and other deletes),
+ * and for the hooks gate's `event.url.origin`: the request's
+ * {@link publicOrigin}, stamped on these headers. The adapter reads their
+ * names once when its handler loads.
  */
 const PROTOCOL_HEADER = "x-cawco-protocol";
 const HOST_HEADER = "x-cawco-host";
@@ -80,59 +78,32 @@ const runningVersion = readFileSync(
 const target = new URL(process.env.CAWCO_HUB_URL || "http://localhost:3456");
 const targetPort = Number(target.port || 80);
 
-// RFC 7239 permits quoted values and case-insensitive parameter names. Commas
-// inside quoted extension values belong to the first element, not the next hop.
-const FIRST_FORWARDED_ELEMENT = /^(?:[^",]|"(?:\\.|[^"\\])*")*/;
-const FORWARDED_PARAMETER =
-  /(?:^|;)\s*([!#$%&'*+.^_`|~0-9a-z-]+)\s*=\s*("(?:\\.|[^"\\])*"|[^;\s]+)\s*(?=;|$)/gi;
-const QUOTED_PAIR = /\\(.)/g;
-
-function publicOrigin(req) {
-  const first =
-    req.headers.forwarded?.match(FIRST_FORWARDED_ELEMENT)?.[0] ?? "";
-  const forwarded = new Map(
-    [...first.matchAll(FORWARDED_PARAMETER)].map(([, name, value]) => [
-      name.toLowerCase(),
-      value.startsWith('"')
-        ? value.slice(1, -1).replace(QUOTED_PAIR, "$1")
-        : value,
-    ])
-  );
-  const protocol = (
-    forwarded.get("proto") ??
-    req.headers["x-forwarded-proto"]?.split(",")[0] ??
-    "http"
-  )
-    .trim()
-    .toLowerCase();
-  const host =
-    forwarded.get("host") ?? req.headers["x-forwarded-host"]?.split(",")[0];
-  return {
-    protocol: protocol === "https" || protocol === "http" ? protocol : "http",
-    host: host?.trim() || req.headers.host,
-  };
-}
-
 /**
  * Why a socket to the hub is refused, or null: core `browser-gate.ts`
- * `crossSiteRefusal`, for a WebSocket handshake (never a navigation). A page
- * of another origin, a previewed app on its own port of this host above all,
- * may not open the dashboard's socket with the browser's cookies.
+ * `crossSiteRefusal`, for a WebSocket handshake (never a navigation), against
+ * `own`, the request's {@link publicOrigin}. A page of another origin, a
+ * previewed app on its own port of this host above all, may not open the
+ * dashboard's socket with the browser's cookies.
  */
-function crossSiteRefusal(req) {
+function crossSiteRefusal(req, own) {
   const site = req.headers["sec-fetch-site"];
   if (site && site !== "same-origin" && site !== "none") {
     return `a ${site} request`;
   }
   const { origin } = req.headers;
-  const own = publicOrigin(req);
-  if (origin && origin !== `${own.protocol}://${own.host}`) {
+  if (origin && origin !== own) {
     return `a request from ${origin}`;
   }
   return null;
 }
 
-/** What the relay tells the hub the page's origin was, once the gate passed it (core `PAGE_ORIGIN_HEADER`). */
+/**
+ * What the relay tells the hub the page's origin was, once the gate passed it
+ * (core `PAGE_ORIGIN_HEADER`): the request's {@link publicOrigin}, which the
+ * gate just found the page's `Origin` to be. Only a socket that carries an
+ * `Origin` came from a page: one with none passed the gate as a client that
+ * is no browser, and what its forwarded headers say vouches for no page.
+ */
 const PAGE_ORIGIN_HEADER = "x-cawco-page-origin";
 
 /** What a relay that passed the gate leaves out: the hub behind it is not the page's origin (core `BROWSER_HEADERS`). */
@@ -354,9 +325,9 @@ const server = http.createServer((req, res) => {
   if (standalone) {
     relayRuntime.applyRelayPeer(req);
   }
-  const origin = publicOrigin(req);
-  req.headers[PROTOCOL_HEADER] = origin.protocol;
-  req.headers[HOST_HEADER] = origin.host;
+  const own = publicOrigin(req.headers);
+  req.headers[PROTOCOL_HEADER] = own.protocol;
+  req.headers[HOST_HEADER] = own.host;
   serveApp(req, res);
 });
 
@@ -381,7 +352,8 @@ server.on("upgrade", (req, socket, head) => {
   if (!req.url?.startsWith("/ws")) {
     return socket.destroy();
   }
-  const refused = crossSiteRefusal(req);
+  const own = publicOrigin(req.headers).origin;
+  const refused = crossSiteRefusal(req, own);
   if (refused) {
     console.warn(`[cawco] refused ${refused} to open ${req.url}`);
     socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
@@ -406,10 +378,10 @@ server.on("upgrade", (req, socket, head) => {
       lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
     }
     lines.push(`Host: ${target.host}`);
-    // The page's origin, which the gate read and found its own: where the
-    // hub's dashboard is reached, and its previews may be framed from.
+    // A page's socket: where the hub's dashboard is reached, and its
+    // previews may be framed from.
     if (req.headers.origin) {
-      lines.push(`${PAGE_ORIGIN_HEADER}: ${req.headers.origin}`);
+      lines.push(`${PAGE_ORIGIN_HEADER}: ${own}`);
     }
     upstream.write(`${lines.join("\r\n")}\r\n\r\n`);
     if (head?.length) {

@@ -18,6 +18,7 @@ import {
   type PreviewServer,
   type ViteDevServer,
 } from "vite";
+import { publicOrigin } from "./public-origin.js";
 
 /**
  * The hub a vite server (`vite dev`, `vite preview`) talks to: the one named in
@@ -112,13 +113,14 @@ const gateHubSocket = (proxy: {
   ) => void;
 }) => {
   proxy.on("proxyReqWs", (proxyReq, req, socket) => {
+    const own = publicOrigin(req.headers).origin;
     const refused = crossSiteRefusal(
       req.method ?? "GET",
       (name) => {
         const value = req.headers[name];
         return Array.isArray(value) ? value[0] : value;
       },
-      `${req.headers["x-forwarded-proto"] ?? "http"}://${req.headers.host}`
+      own
     );
     if (refused) {
       console.warn(`[cawco] refused ${refused} to open ${req.url}`);
@@ -128,11 +130,12 @@ const gateHubSocket = (proxy: {
     for (const name of BROWSER_HEADERS) {
       proxyReq.removeHeader(name);
     }
-    // The page's origin, which the gate read and found its own: where the
-    // hub's dashboard is reached, and its previews may be framed from.
+    // A page's socket (one with an Origin, which the gate found its own):
+    // where the hub's dashboard is reached, and its previews may be framed
+    // from. One with none came from no page (serve.js says why).
     proxyReq.removeHeader(PAGE_ORIGIN_HEADER);
     if (req.headers.origin) {
-      proxyReq.setHeader(PAGE_ORIGIN_HEADER, req.headers.origin);
+      proxyReq.setHeader(PAGE_ORIGIN_HEADER, own);
     }
   });
 };
