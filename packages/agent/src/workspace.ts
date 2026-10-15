@@ -57,8 +57,15 @@ import {
   ensureBoundary,
   shellQuote,
 } from "./boundary";
-import { carryFolder, carryReadme, carrySteps, ownFilesOnly } from "./carry";
+import {
+  carryFolder,
+  carryReadme,
+  carrySteps,
+  copyStrays,
+  ownFilesOnly,
+} from "./carry";
 import { prepareClone } from "./clone";
+import { placedSkillsAsMade } from "./fleet";
 import { expandHome } from "./fs";
 import { useHubCredentialHelper } from "./git-credential";
 import {
@@ -518,6 +525,14 @@ const createdPath = async (id: string): Promise<string | undefined> => {
 };
 
 /**
+ * The entries of a workspace's folder that is no git clone that are not
+ * CawCo's (stand-ins.ts `straysIn`), the project's skills it placed there as
+ * they were placed among CawCo's (fleet.ts `placedSkillsAsMade`).
+ */
+const strayEntries = async (path: string): Promise<string[]> =>
+  straysIn(path, await placedSkillsAsMade(path));
+
+/**
  * What the workspace holds that is nowhere else ({@link CONTROL_WORKSPACE_LANDED}),
  * read by git inside its boundary; `skip` are paths `git status` passes over.
  */
@@ -539,14 +554,14 @@ const holding = async (
     return { ahead: 0, dirty: 0, stashes: 0 };
   }
   // No git clone any more, so no boundary to read it in (boundary.ts
-  // `placeReady`): what is there besides CawCo's stand-ins is counted. A
+  // `placeReady`): what is there besides what CawCo wrote is counted. A
   // husk has nothing besides, holds nothing, and goes.
   if (await noRepositoryAt(workspace.path)) {
     return {
       ahead: 0,
       dirty: 0,
       stashes: 0,
-      strays: await straysIn(workspace.path),
+      strays: (await strayEntries(workspace.path)).length,
     };
   }
   const git = insideGit(workspace);
@@ -703,6 +718,32 @@ const writeCarryInside = async (
 };
 
 /**
+ * The carry of workspace `id`'s folder at `path`, which is no git clone: its
+ * own entries ({@link strayEntries}) copied into a new carry folder on this
+ * host (carry.ts `copyStrays`), and those not copied. One that could not be
+ * written whole is taken away again, and nothing is deleted.
+ */
+const carryStrays = async (
+  id: string,
+  path: string
+): Promise<{ carry: string; left: string[] }> => {
+  const carry = carryFolder(id);
+  await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
+  try {
+    return {
+      carry,
+      left: await copyStrays(path, await strayEntries(path), carry),
+    };
+  } catch (error) {
+    await rm(carry, { recursive: true, force: true });
+    throw new Error(
+      `Workspace ${id} was not archived: its carry could not be written, so nothing was deleted. ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
+  }
+};
+
+/**
  * {@link CONTROL_WORKSPACE_ARCHIVE}: the boundary killed with everything in
  * it, then the clone deleted with what it owns in the workspaces' cache
  * ({@link cacheOfClone}); `closeBoundary` takes its state and scratch dirs.
@@ -717,7 +758,8 @@ export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
  * {@link CONTROL_WORKSPACE_DISCARD}: as {@link archiveWorkspace}, but what
  * the clone holds that is nowhere else is written to a carry in
  * `~/.cawco/carries` (carry.ts), which must be whole before anything is
- * deleted.
+ * deleted. A folder that is no git clone any more has its own entries
+ * copied there as they are (carry.ts `copyStrays`), with no boundary.
  */
 export const discardWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
   closeClone({ ...(ref as WorkspaceArchive), unlanded: "keep" }, true);
@@ -750,13 +792,21 @@ const closeClone = async (
       `Workspace ${request.id} was not archived: its clone ${path} holds ${words}, and nothing was deleted.`
     );
   }
+  // `strays` is read only in a folder that is no git clone: no git writes
+  // its carry and no boundary starts there; its own entries are copied.
+  const folder = held.strays !== undefined;
   let carry: string | null = null;
   let inScratch: string | undefined;
+  let left: string[] = [];
   if (!holdsNothing({ ...held, bytes: 0 })) {
-    inScratch = join(
-      (await ensureBoundary(workspace)).scratch,
-      await writeCarryInside(workspace, held, skip)
-    );
+    if (folder) {
+      ({ carry, left } = await carryStrays(request.id, path));
+    } else {
+      inScratch = join(
+        (await ensureBoundary(workspace)).scratch,
+        await writeCarryInside(workspace, held, skip)
+      );
+    }
   }
   const cached = await cacheOfClone(path);
   if (inScratch) {
@@ -781,10 +831,11 @@ const closeClone = async (
       join(carry, "README.md"),
       await carryReadme({
         title: `Workspace ${request.id}, saved before it was archived`,
-        checkout: "clone",
+        checkout: folder ? "folder" : "clone",
         path,
         words,
         folder: carry,
+        left,
       })
     );
     console.info(
@@ -795,14 +846,22 @@ const closeClone = async (
   await Promise.all(
     cached.map((dir) => rm(dir, { recursive: true, force: true }))
   );
-  // `strays` is read only in a folder that is no git clone; none there is a
-  // husk (stand-ins.ts).
-  const clone =
-    held.strays === 0
-      ? `husk ${path} (a deleted clone refilled with stand-ins)`
-      : `clone ${path}`;
   console.info(
-    `[workspace] ${request.id}: archived; its ${clone}, state, scratch dir and ${cached.length} cache folders of its own are gone`
+    `[workspace] ${request.id}: archived; its ${goneFolder(path, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone`
   );
   return { carry };
+};
+
+/**
+ * What an archive deleted, in its log line: a clone, or a folder that was no
+ * git clone any more (`strays` read): a husk when none of its entries was
+ * anyone's (stand-ins.ts `straysIn`).
+ */
+const goneFolder = (path: string, strays: number | undefined): string => {
+  if (strays === undefined) {
+    return `clone ${path}`;
+  }
+  return strays === 0
+    ? `husk ${path} (a deleted clone holding only what CawCo wrote there)`
+    : `folder ${path} (a deleted clone, its own entries saved to the carry)`;
 };

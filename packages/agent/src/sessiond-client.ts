@@ -37,6 +37,7 @@ import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
 import { standalone } from "@cawco/core/runtime";
 import {
+  notAliveReason,
   type ProcSpec,
   SESSIOND_V1,
   type SessiondAck,
@@ -706,15 +707,31 @@ export class SessiondClient {
     );
   }
 
+  /**
+   * Signals a child and its tree. A child the keeper holds no live process
+   * for ({@link notAliveReason}) has nothing left for the signal to reach,
+   * which is what every signal here is for (each one ends a process): done,
+   * not refused. Every caller reads `alive` from a listing first, and the
+   * child may die between that listing and this.
+   */
   async signal(
     procId: string,
     sig: NodeJS.Signals,
     commandId = crypto.randomUUID()
   ): Promise<void> {
-    assertApplied(
-      await this.#command({ type: "signal", commandId, procId, sig }),
-      "signal"
-    );
+    const settled = await this.#command({
+      type: "signal",
+      commandId,
+      procId,
+      sig,
+    });
+    if (
+      settled.stage === "failed" &&
+      settled.reason === notAliveReason("signal", procId)
+    ) {
+      return;
+    }
+    assertApplied(settled, "signal");
   }
 
   async stdinEnd(
@@ -821,8 +838,9 @@ export const endProc = async (
   if (!held) {
     return;
   }
-  // Each step on a child already gone is refused, which is the end this
-  // asks for: said, and the next step goes on.
+  // Ending stdin on a child already gone is refused, which is the end this
+  // asks for (a signal to one is done, `signal`): said, and the next step
+  // goes on.
   const quietly = (step: Promise<void>): Promise<void> =>
     step.catch((error: unknown) => {
       console.warn(
@@ -1159,8 +1177,8 @@ export const sessiondBridge = (
       try {
         await client.signal(procId, sig);
       } catch (error) {
-        // A child that already died cannot be signaled, and its exit event is
-        // the truth of it; the refusal is still said.
+        // A child that already died is no refusal (`signal`), and its exit
+        // event is the truth of it; any other refusal is said.
         console.warn(
           `[sessiond] ${procId}: ${sig} refused: ${error instanceof Error ? error.message : String(error)}`
         );

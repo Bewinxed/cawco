@@ -254,6 +254,14 @@ export const SESSIOND_DRAINING =
  */
 export const SESSIOND_PROCESS_LIMIT = "process-limit";
 
+/**
+ * The `reason` a `write`, `signal` or `stdin_end` naming a child the keeper
+ * holds no live process for is refused with: `<verb>: <procId> is not
+ * alive`. A keeper already running answers in these same words.
+ */
+export const notAliveReason = (verb: string, procId: string): string =>
+  `${verb}: ${procId} is not alive`;
+
 /** What a person reads for a session the keeper refused at the process limit. */
 export const processLimitSentence = (
   machine: string,

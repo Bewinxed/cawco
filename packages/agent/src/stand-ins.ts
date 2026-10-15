@@ -24,10 +24,12 @@
  *
  * Stand-ins are made only inside a clone that is there, a repository (the
  * host's `goneReason`, boundary.ts `placeReady`). A folder at a clone's path
- * whose `.git` is no repository and that holds nothing but stand-ins as made
- * and mount points a sandbox left is a husk: a clone deleted under a running
- * sandbox and refilled by an earlier build. Its workspace's retirement takes
- * it away whole; anything else in such a folder keeps it ({@link straysIn}).
+ * whose `.git` is no repository and that holds nothing but what CawCo wrote
+ * there (stand-ins as made, mount points a sandbox left, git-lfs's format
+ * marker, a project's skills as placed) is a husk: a clone deleted under a
+ * running sandbox, or deleted by hand and written into since. Its
+ * workspace's archive takes it away whole; anything else in such a folder
+ * is saved to a carry first, or keeps it ({@link straysIn}).
  */
 import type { Stats } from "node:fs";
 import {
@@ -272,41 +274,65 @@ export const noRepositoryAt = async (path: string): Promise<boolean> => {
 };
 
 /**
- * The entries in a folder with no repository ({@link noRepositoryAt}) that
- * are not CawCo's, counted down its tree: every one but a deny path's
- * stand-in as made ({@link asMade}), a mount point a sandbox left there, and
- * a dir above deny paths (`.git`, `.claude`) holding only those. A husk has
- * none: nothing of anyone's is lost when it goes.
+ * The `.git/config` the boundary's host leaves when the clone is deleted as
+ * it writes git-lfs's format marker (boundary-host.ts `markLfs`): `git config
+ * --file` makes the file it names, holding that one stanza.
  */
-export const straysIn = async (path: string): Promise<number> => {
-  const denies = cloneDenies(await realpath(path));
-  const count = async (dir: string): Promise<number> => {
-    let strays = 0;
+const LFS_MARKER = "[lfs]\n\trepositoryformatversion = 0\n";
+
+/** Whether `found` at `path` is the {@link LFS_MARKER} config and nothing else. */
+const lfsMarker = async (path: string, found: Stats): Promise<boolean> =>
+  path.endsWith("/.git/config") &&
+  found.isFile() &&
+  (await readFile(path, "utf8").catch(() => undefined)) === LFS_MARKER;
+
+/**
+ * The entries in a folder with no repository ({@link noRepositoryAt}) that
+ * are not CawCo's, down its tree, each by its path in the folder: every one
+ * but a deny path's stand-in as made ({@link asMade}), a mount point a
+ * sandbox left there, the `.git/config` of git-lfs's marker alone
+ * ({@link LFS_MARKER}), a project's skill exactly as CawCo placed it
+ * (`placed`, the dirs fleet.ts `placedSkillsAsMade` answers for the folder),
+ * and a dir above any of those (`.git`, `.claude`) holding only them. A husk
+ * has none: nothing of anyone's is lost when it goes.
+ */
+export const straysIn = async (
+  path: string,
+  placed: readonly string[]
+): Promise<string[]> => {
+  const folder = await realpath(path);
+  const denies = cloneDenies(folder);
+  const known = [...denies.map((one) => one.path), ...placed];
+  const walk = async (dir: string): Promise<string[]> => {
+    const strays: string[] = [];
     for (const name of await readdir(dir)) {
       const entry = join(dir, name);
       // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, a husk holds a handful
       const found = await statOf(entry);
       const deny = denies.find((one) => one.path === entry);
-      if (!found) {
+      if (!found || placed.includes(entry)) {
         continue;
       }
       if (deny) {
         const ours =
           leftMountPoint(found) ||
-          (await asMade({ path: entry, empty: deny.empty, found }));
-        strays += ours ? 0 : 1;
+          (await asMade({ path: entry, empty: deny.empty, found })) ||
+          (await lfsMarker(entry, found));
+        if (!ours) {
+          strays.push(relative(folder, entry));
+        }
       } else if (
         found.isDirectory() &&
-        denies.some((one) => one.path.startsWith(`${entry}/`))
+        known.some((one) => one.startsWith(`${entry}/`))
       ) {
-        strays += await count(entry);
+        strays.push(...(await walk(entry)));
       } else {
-        strays += 1;
+        strays.push(relative(folder, entry));
       }
     }
     return strays;
   };
-  return await count(await realpath(path));
+  return await walk(folder);
 };
 
 /**

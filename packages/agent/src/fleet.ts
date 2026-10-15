@@ -64,11 +64,13 @@ import {
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
 import { promptWrite } from "./prompt-writes";
+import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, resolveBin, toolEnv, toolPath } from "./tools";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
 } from "./workflow-skills";
+import { cloneHolding } from "./workspace-records";
 
 /**
  * User-scope MCP servers live at the top level of this file — not in
@@ -1788,10 +1790,26 @@ const placedSkillsDir = (cwd: string): string =>
   projectClaudeDir(cwd, "skills");
 
 /**
+ * Whether `cwd` is a delegate workspace's clone that is no git clone any
+ * more (stand-ins.ts `noRepositoryAt`): one deleted by hand, whose
+ * workspace's archive takes the folder away. A project lead's place is a
+ * plain folder by design and no delegate's (`cloneHolding` passes over it).
+ * A folder inside a workspace whose records are damaged is a workspace's too.
+ */
+const deletedClone = async (cwd: string): Promise<boolean> =>
+  (await noRepositoryAt(cwd)) &&
+  (await cloneHolding(cwd).then(
+    (ref) => ref !== undefined,
+    () => true
+  ));
+
+/**
  * One placed copy of a project's skill: written into its folder's
  * `.claude/skills/<name>/` and kept out of the checkout's status, unless the
  * folder holds a copy cawco did not write (the project's own, or one edited
- * there), which stays as it is and is reported.
+ * there), which stays as it is and is reported. Nothing is written into a
+ * delegate workspace's deleted clone ({@link deletedClone}): its record stays,
+ * so the copy already there still reads as cawco's (stand-ins.ts `straysIn`).
  */
 const placeSkill = async (
   skill: FleetSkillPayload,
@@ -1804,6 +1822,13 @@ const placeSkill = async (
     report[key] = {
       state: "failed",
       detail: `${cwd} is not on this machine`,
+    };
+    return recorded;
+  }
+  if (await deletedClone(cwd)) {
+    report[key] = {
+      state: "failed",
+      detail: `${cwd} is a delegate workspace whose clone was deleted, so nothing is placed there; archiving the workspace takes the folder away`,
     };
     return recorded;
   }
@@ -1888,6 +1913,32 @@ const syncPlacedSkills = async (
     }
   }
   return placed;
+};
+
+/**
+ * The copies of a project's skills in the folder `cwd` that are still
+ * exactly what cawco placed there: each `<cwd>/.claude/skills/<name>/` the
+ * sidecar records for that folder (`placedSkills`) whose tree has the hash
+ * recorded for it. A copy edited since is someone's. Answered at the
+ * folder's real path, as `cwd` is given or as the record names it.
+ */
+export const placedSkillsAsMade = async (cwd: string): Promise<string[]> => {
+  const real = (path: string): Promise<string> =>
+    realpath(path).catch(() => path);
+  const folder = await real(cwd);
+  const { placedSkills } = await readSidecar();
+  const made: string[] = [];
+  for (const record of Object.values(placedSkills)) {
+    // biome-ignore lint/performance/noAwaitInLoops: one record at a time, a folder holds a few
+    if (!record.hash || (await real(record.cwd)) !== folder) {
+      continue;
+    }
+    const dir = join(placedSkillsDir(folder), record.name);
+    if ((await treeHash(dir)) === record.hash) {
+      made.push(dir);
+    }
+  }
+  return made;
 };
 
 /** The same hash the hub took of the same document: sha256 of its UTF-8 bytes. */

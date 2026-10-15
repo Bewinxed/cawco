@@ -371,11 +371,15 @@ const makeStandIn = (
  * guard stops the sandbox and the push or fetch that set it off is cut off,
  * having landed (exit 137, "the boundary stopped while this command ran").
  * Written only while no mount namespace holds the file: an older boundary
- * still running beside this one keeps its bind.
+ * still running beside this one keeps its bind. `git config --file` makes
+ * the file it names, so it runs only while the clone is one
+ * ({@link goneReason}), looked at again just before: a clone deleted under
+ * it is otherwise left a `.git/config` of this one stanza (stand-ins.ts
+ * `LFS_MARKER`).
  */
 const markLfs = (): void => {
   const config = join(clone, ".git", "config");
-  if (!lstatOf(config)?.isFile() || mountedAnywhere(config)) {
+  if (!lstatOf(config)?.isFile() || mountedAnywhere(config) || goneReason()) {
     return;
   }
   const has = Bun.spawnSync(
@@ -388,7 +392,7 @@ const markLfs = (): void => {
     ]),
     { env: { ...process.env, ...SAFE_GIT_ENV }, stdout: "ignore" }
   );
-  if (has.exitCode === 0) {
+  if (has.exitCode === 0 || goneReason()) {
     return;
   }
   const set = Bun.spawnSync(

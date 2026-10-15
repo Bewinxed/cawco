@@ -41,6 +41,7 @@ import { serverEnvironment, sessionEnvironment } from "@cawco/core/session-env";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
+  notAliveReason,
   type ProcSpec,
   SESSIOND_DRAINING,
   SESSIOND_PROCESS_LIMIT,
@@ -809,7 +810,7 @@ export class SessiondServer {
   #write(commandId: string, procId: string, data: string): SessiondAck {
     const proc = this.#procs.get(procId);
     if (!proc?.alive) {
-      return ack(commandId, "failed", `write: ${procId} is not alive`);
+      return ack(commandId, "failed", notAliveReason("write", procId));
     }
     // Bytes, unread. Whatever this is — a user turn, a control_response, an
     // image — sessiond's only opinion is that it reaches stdin intact.
@@ -824,7 +825,7 @@ export class SessiondServer {
   ): SessiondAck | Promise<SessiondAck> {
     const proc = this.#procs.get(procId);
     if (!proc?.alive) {
-      return ack(commandId, "failed", `signal: ${procId} is not alive`);
+      return ack(commandId, "failed", notAliveReason("signal", procId));
     }
     return this.#signalTree(proc, sig).then(() => ack(commandId, "applied"));
   }
@@ -835,7 +836,7 @@ export class SessiondServer {
   ): SessiondAck | Promise<SessiondAck> {
     const proc = this.#procs.get(procId);
     if (!proc?.alive) {
-      return ack(commandId, "failed", `stdin_end: ${procId} is not alive`);
+      return ack(commandId, "failed", notAliveReason("stdin_end", procId));
     }
     // Read before the child starts to go: what it started is its own only
     // while it is still there to be their ancestor. The end waits for the

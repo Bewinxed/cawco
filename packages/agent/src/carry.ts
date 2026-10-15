@@ -17,9 +17,24 @@
  *   clone's; a worktree shares its repository's stash, which outlives it);
  * - `head` and `branch`: the commit and branch it was on;
  * - `README.md`: what it is and how to take each part back.
+ *
+ * A workspace whose folder is no git clone any more (its clone deleted by
+ * hand) has no git to read and no boundary to read it in: archived with
+ * `discard`, its own entries are copied into its carry as they are, on this
+ * host ({@link copyStrays}), beside the README.
  */
-import { lstat, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { constants } from "node:fs";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  rm,
+  stat,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { holdingWords } from "@cawco/core";
 import { workspaceCarriesDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -40,6 +55,54 @@ export interface CarryHeld {
  * what HEAD has past every branch and remote is lost.
  */
 export type CarryCheckout = "clone" | "worktree";
+
+/**
+ * What a carry was saved from: a checkout, or a workspace's folder that is
+ * no git clone any more (stand-ins.ts `noRepositoryAt`), whose own entries
+ * are copied as they are ({@link copyStrays}).
+ */
+export type CarrySource = CarryCheckout | "folder";
+
+/**
+ * Copies `entries` (paths in the folder `from`, which is no git clone) into
+ * the new carry folder `folder`, each at the path it had there, on this host:
+ * no git and no boundary run in a folder that is no clone. A dir is walked
+ * and a regular file copied; anything else (a link, a socket) is not, being
+ * no file of the carry's own ({@link ownFilesOnly}), and is answered by its
+ * path and what it is, for the README.
+ */
+export const copyStrays = async (
+  from: string,
+  entries: readonly string[],
+  folder: string
+): Promise<string[]> => {
+  const left: string[] = [];
+  const copy = async (entry: string): Promise<void> => {
+    const source = join(from, entry);
+    const target = join(folder, entry);
+    const found = await lstat(source);
+    if (found.isDirectory()) {
+      await mkdir(target, { recursive: true, mode: 0o700 });
+      for (const name of await readdir(source)) {
+        // biome-ignore lint/performance/noAwaitInLoops: a stray holds a handful of files
+        await copy(join(entry, name));
+      }
+    } else if (found.isFile()) {
+      await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+      await copyFile(source, target, constants.COPYFILE_EXCL);
+    } else if (found.isSymbolicLink()) {
+      left.push(`${entry}: a link to ${await readlink(source)}`);
+    } else {
+      left.push(`${entry}: neither a file nor a folder`);
+    }
+  };
+  await mkdir(folder, { mode: 0o700 });
+  for (const entry of entries) {
+    // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, a folder that is no clone holds a handful
+    await copy(entry);
+  }
+  return left;
+};
 
 /** The rev-list arguments naming the commits a checkout alone has. */
 export const LOST_COMMITS: Record<CarryCheckout, string> = {
@@ -130,14 +193,28 @@ export const carryReadme = async ({
   path,
   words,
   folder,
+  left = [],
 }: {
   /** "Workspace <id>, saved before it was archived". */
   title: string;
-  checkout: CarryCheckout;
+  checkout: CarrySource;
   path: string;
   words: string;
   folder: string;
+  /** A folder's entries not copied ({@link copyStrays}). */
+  left?: readonly string[];
 }): Promise<string> => {
+  if (checkout === "folder") {
+    return [
+      `# ${title}`,
+      "",
+      `Its folder ${path}, which was no git clone any more, held ${words} when a person let it go, on ${new Date().toISOString()}. Each of them is in this folder at the path it had there; the folder is gone.`,
+      ...(left.length > 0
+        ? ["", "Not copied:", ...left.map((one) => `- ${one}`)]
+        : []),
+      "",
+    ].join("\n");
+  }
   const [head, branch] = await Promise.all([
     carried(folder, "head"),
     carried(folder, "branch"),

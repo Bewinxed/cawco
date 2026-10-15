@@ -47,6 +47,7 @@ import {
 } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { hubGitEnv, hubGitLogin, isHubRemote, withoutCredential } from "./move";
+import { noRepositoryAt } from "./stand-ins";
 import { prepareDoor, socketPlace } from "./tool-door";
 
 /** A workspace's git door. */
@@ -88,6 +89,18 @@ waitpid($writer, 0);
 exit 0;
 `;
 
+/**
+ * Why git does not run in the workspace's clone, when its `.git` is no
+ * repository (stand-ins.ts `noRepositoryAt`: a clone deleted by hand). Every
+ * git the door runs names that `.git` as its `GIT_DIR`, and git-lfs writes
+ * its format marker into the config of the dir it is given, so a run in a
+ * deleted clone would leave a file there that nobody's work made.
+ */
+const noClone = async (ref: WorkspaceRef): Promise<string | undefined> =>
+  (await noRepositoryAt(ref.path))
+    ? `${ref.path} is not a git clone any more: its .git is no repository`
+    : undefined;
+
 const LINE_END = 10;
 
 /** A command after which the helper protocol carries git's own packets, not lines. */
@@ -117,6 +130,10 @@ const pushLfs = async (
 ): Promise<string | undefined> => {
   if (sources.length === 0 || !Bun.which("git-lfs")) {
     return;
+  }
+  const gone = await noClone(ref);
+  if (gone) {
+    return gone;
   }
   const child = Bun.spawn(safeGitArgv(["lfs", "push", "origin", ...sources]), {
     cwd: ref.path,
@@ -187,6 +204,10 @@ const movedRefs = (
 const fetchLfs = async (ref: WorkspaceRef, refs: string[]): Promise<void> => {
   if (refs.length === 0 || !Bun.which("git-lfs")) {
     return;
+  }
+  const gone = await noClone(ref);
+  if (gone) {
+    throw new Error(`git lfs fetch of ${refs.join(" ")} did not run: ${gone}`);
   }
   const child = Bun.spawn(safeGitArgv(["lfs", "fetch", "origin", ...refs]), {
     cwd: ref.path,
@@ -290,6 +311,10 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     );
   };
   const start = async (url: string, rest: Buffer): Promise<void> => {
+    const gone = await noClone(ref);
+    if (gone) {
+      throw new Error(`git did not run in ${ref.path}: ${gone}`);
+    }
     const problem = await repositoryConfigProblem(join(ref.path, ".git"));
     if (problem) {
       throw new Error(`git did not run in ${ref.path}: ${problem}`);
