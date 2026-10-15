@@ -1972,7 +1972,7 @@ workspace_archive_ends_all() {
   [[ -z $left ]] || { echo "ASSERTION FAILED: these processes of the archived workspace's sandbox still run:$left"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ns_of ws_listener_start ws_listener_pid ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ns_of ws_listener_start ws_listener_pid ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
 export WS_LISTENER_PORT
 rig_workspace() {
   local across="a workspace open across an update keeps its job and a setsid listener running, a preview reaching the listener in the older generation by port and by host behind the lock, its next command runs in the new build's boundary, and once the listener is started again on its port in the new generation the old boundary closes with it and the preview reaches the new one in both modes"
