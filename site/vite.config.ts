@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { IconifyJSON } from '@iconify/types';
 import { getIconData, iconToHTML, iconToSVG } from '@iconify/utils';
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite';
+import { applyTheme, THEME_KEY } from './src/scheme';
 
 const require = createRequire(import.meta.url);
 const solar = require('@iconify-json/solar/icons.json') as IconifyJSON;
@@ -212,13 +213,34 @@ function oklchHex(colour: string): string {
 }
 
 /**
- * The page ground is the design tokens' paper by day and the product's page at
- * night. The stylesheet and the browser's theme colours each write those values
- * out, so the build checks them against the tokens and stops if any has drifted.
+ * The page ground is the design tokens' paper by day and, at night, the
+ * product's neutral ramp one step above its page (neutral-2; `color.background`
+ * is neutral-1), the lift the whole night page takes. The stylesheet and the
+ * browser's theme colours each write those values out, so the build checks them
+ * against the tokens and stops if any has drifted.
  */
 const PAPER = tokenColour('paper', false).toLowerCase();
-const NIGHT_PAGE = tokenColour('background', true);
+const NIGHT_PAGE = tokenColour('neutral-2', true);
 const NIGHT_THEME = oklchHex(NIGHT_PAGE);
+
+/**
+ * Applies the reader's kept colour scheme pick (src/theme.ts) from the page's head, before the
+ * stylesheet, so the first paint is already in it. It is `applyTheme` itself, written out.
+ */
+const THEME_BOOT = `(${applyTheme.toString()})((() => {
+  try {
+    return localStorage.getItem(${JSON.stringify(THEME_KEY)}) ?? 'system';
+  } catch {
+    return 'system';
+  }
+})());`;
+
+/** Every `<meta name="theme-color">` tag, with its attributes. */
+const themeColours = (html: string) =>
+  [...html.matchAll(/<meta\s[^>]*name="theme-color"[^>]*>/g)].map(([tag]) => ({
+    tag,
+    attrs: Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, k, v]) => [k, v])),
+  }));
 
 function mustBe(where: string, found: string | undefined, token: string, value: string): void {
   if (found?.toLowerCase() !== value.toLowerCase()) {
@@ -239,28 +261,36 @@ const paperGround: Plugin = {
     mustBe(
       'The night side of --paper in src/styles.css',
       styles.match(/--paper:\s*light-dark\(var\(--brand-paper\),\s*(oklch\([^)]*\))\)/)?.[1],
-      'color.background at night',
+      'color.neutral-2 at night',
       NIGHT_PAGE,
     );
   },
   transformIndexHtml(html, { path }) {
-    const theme = (scheme: string) =>
-      html.match(
-        new RegExp(
-          `<meta name="theme-color" media="\\(prefers-color-scheme: ${scheme}\\)" content="(#[0-9a-f]{6})"`,
-          'i',
-        ),
-      )?.[1];
+    const metas = themeColours(html);
+    const theme = (scheme: string) => {
+      const meta = metas.find(({ attrs }) => attrs['data-scheme'] === scheme);
+      if (meta?.attrs.media !== `(prefers-color-scheme: ${scheme})`) {
+        throw new Error(
+          `${path} needs a theme-color for ${scheme} with media="(prefers-color-scheme: ${scheme})" and data-scheme="${scheme}".`,
+        );
+      }
+      return meta.attrs.content;
+    };
     mustBe(`The light theme-color in ${path}`, theme('light'), 'color.paper', PAPER);
     mustBe(
       `The dark theme-color in ${path}`,
       theme('dark'),
-      `color.background at night (${NIGHT_PAGE})`,
+      `color.neutral-2 at night (${NIGHT_PAGE})`,
       NIGHT_THEME,
     );
     if (!html.includes('<meta name="color-scheme" content="light dark"')) {
       throw new Error(`${path} does not declare <meta name="color-scheme" content="light dark">.`);
     }
+    const last = metas.at(-1)?.tag ?? '';
+    if (html.indexOf(last) > html.indexOf('rel="stylesheet"')) {
+      throw new Error(`${path} names its theme colours after its stylesheet.`);
+    }
+    return html.replace(last, `${last}\n    <script>${THEME_BOOT}</script>`);
   },
 };
 

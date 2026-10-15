@@ -25,16 +25,18 @@
 
 :root {
   /*
-   * The page follows the reader's system scheme. By day it is the brand board:
-   * paper, crow ink and vermilion, and everything else is mixed from those
-   * three. At night it is the product's own night theme, roost-dark
-   * (DESIGN.md): each colour's second value is the night side of the token
-   * named beside it in design/tokens/cawco.tokens.json.
+   * The page follows the reader's system scheme, or the one they pick in the
+   * header's theme switch (`data-theme` on the root, src/theme.ts). By day it
+   * is the brand board: paper, crow ink and vermilion, and everything else is
+   * mixed from those three. At night it is the product's own night theme,
+   * roost-dark (DESIGN.md), lifted one step up its neutral ramp so the page
+   * and the panels on it separate: each colour's second value is the night
+   * side of the token named beside it in design/tokens/cawco.tokens.json.
    *
-   * Paper is the page ground: `color.paper` by day and `color.background` at
-   * night, and the build stops if either differs from its token. Spark yellow
-   * belongs to the wordmark, the mascot and brand art: here that is Caw's app
-   * icon and his own drawings.
+   * Paper is the page ground: `color.paper` by day and `color.neutral-2` at
+   * night, one step above `color.background`, and the build stops if either
+   * differs from its token. Spark yellow belongs to the wordmark, the mascot
+   * and brand art: here that is Caw's app icon and his own drawings.
    */
   color-scheme: light dark;
 
@@ -42,7 +44,7 @@
   --crow-ink: #171715;
 
   /* The page: its ground, its type and lines, and their quieter step. */
-  --paper: light-dark(var(--brand-paper), oklch(18.4% 0.004 70));
+  --paper: light-dark(var(--brand-paper), oklch(21% 0.005 70));
   /* color.ink-strong */
   --ink: light-dark(var(--crow-ink), oklch(93.4% 0.01 82));
   /* color.ink-muted */
@@ -66,16 +68,22 @@
 
   /*
    * The slabs: the feature stage, the command bar and the free card. Ink by
-   * day; at night a raised surface (color.surface-raised) with the product's
-   * night ring, its type in ink-strong and ink-muted, and a step inside it
-   * (the chosen tab, the card's command bar) in color.surface-fill.
+   * day; at night two steps above the page (color.neutral-4) with the
+   * product's night ring, its type in ink-strong and ink-muted, and a step
+   * inside it (the chosen tab, the card's command bar) two steps higher again
+   * (color.neutral-6).
    */
-  --slab: light-dark(var(--crow-ink), oklch(24.8% 0.006 70));
+  --slab: light-dark(var(--crow-ink), oklch(28.2% 0.007 70));
   --slab-2: light-dark(
     color-mix(in oklab, var(--brand-paper) 14%, var(--crow-ink)),
-    oklch(31.4% 0.008 70)
+    oklch(35.2% 0.009 70)
   );
   --on-slab: light-dark(var(--brand-paper), oklch(93.4% 0.01 82));
+  /*
+   * At night a slab is told from the page by a 1px inner ring of ink as well as
+   * its tone (DESIGN.md, The Night Ring Rule: `color.night-ring`, transparent by day).
+   */
+  --night-ring: light-dark(transparent, oklch(93.4% 0.01 82 / 0.07));
   --soft-on-slab: light-dark(
     color-mix(in oklab, var(--brand-paper) 66%, var(--crow-ink)),
     oklch(77.8% 0.012 78)
@@ -99,6 +107,15 @@
 
   /* The box Caw's ledge clips are drawn in: the same on the stage and the price cards. */
   --ledge-caw: clamp(120px, 72px + 10vw, 220px);
+}
+
+/* The reader's pick in the theme switch outranks the system's scheme. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 *,
@@ -241,21 +258,20 @@ code {
 
 /*
  * On a dark page Caw wears the cream rim his files draw in `dark`
- * (assets/mascot/README.md): his black silhouette's own stroke in Ivory
- * (`color.paper`), round-joined and drawn under its fill, so its outer half
+ * (assets/mascot/README.md), and by day none: his black silhouette's own
+ * stroke, Ivory (`color.paper`) in the dark scheme and transparent in the light
+ * one, round-joined and drawn under its fill, so its outer half
  * shows. That half is the wider of the kit's 5.31 units of his 512 box
  * (`KIT_RIM` in assets/mascot/scripts/scene.mjs) and one device pixel,
  * `--caw-pixel`, which src/caw.ts sets from the size he is drawn at. The build
  * gives each drawing `--caw-unit`, the scale that places it on the box, since
  * the stroke is drawn in the drawing's own units.
  */
-@media (prefers-color-scheme: dark) {
-  .caw [data-silhouette] {
-    stroke: var(--brand-paper);
-    stroke-width: calc(2 * max(5.3126, var(--caw-pixel, 0)) / var(--caw-unit));
-    stroke-linejoin: round;
-    paint-order: stroke;
-  }
+.caw [data-silhouette] {
+  stroke: light-dark(transparent, var(--brand-paper));
+  stroke-width: calc(2 * max(5.3126, var(--caw-pixel, 0)) / var(--caw-unit));
+  stroke-linejoin: round;
+  paint-order: stroke;
 }
 
 /* Top bar */
@@ -407,6 +423,7 @@ h1 {
   border-radius: var(--radius-control);
   background: var(--slab);
   color: var(--on-slab);
+  box-shadow: inset 0 0 0 1px var(--night-ring);
 }
 
 .cmd code {
@@ -536,6 +553,7 @@ h1 {
   border-radius: var(--radius-container);
   background: var(--slab);
   color: var(--on-slab);
+  box-shadow: inset 0 0 0 1px var(--night-ring);
 }
 
 /*
@@ -590,7 +608,7 @@ h1 {
 }
 
 .tab .icon {
-  font-size: 1.55rem;
+  font-size: var(--tab-icon, 1.55rem);
 }
 
 .tab[aria-selected='true'] {
@@ -615,23 +633,27 @@ h1 {
 }
 
 /*
- * The channel switch is the page's tabs on paper: the chosen tab is ink, the others are ink text.
- * Its tabs are as tall as the label's line, so the row adds no height; the pseudo-element keeps the touch target.
+ * A segmented switch (the release channel, the colour scheme) is the page's tabs on paper: the
+ * chosen tab is ink, the others are ink text. Its tabs are as tall as a label's line, so the row
+ * adds no height; the pseudo-element keeps the touch target.
  */
-.tabs.tabs-channel {
+.tabs.segmented {
   position: relative;
   grid-area: auto;
   flex-direction: row;
   gap: 2px;
-  margin-left: auto;
   margin-block: -4px;
 }
 
-.tabs-channel[hidden] {
+.install-head .segmented {
+  margin-left: auto;
+}
+
+.segmented[hidden] {
   display: none;
 }
 
-.tabs-channel .tab {
+.segmented .tab {
   flex: none;
   flex-direction: row;
   justify-content: center;
@@ -645,18 +667,27 @@ h1 {
   line-height: 1;
 }
 
-.tabs-channel .tab::before {
+.segmented .tab::before {
   content: '';
   position: absolute;
   inset: -7px -1px;
 }
 
-.tabs-channel .tab[aria-selected='true'] {
+.segmented .tab:is([aria-selected='true'], [aria-checked='true']) {
   background: var(--ink);
   color: var(--paper);
 }
 
-/* One bar for the pair: it slides under the chosen tab. channel.ts sets its width and transform. */
+/* The colour scheme switch shows each scheme by its icon alone; each radio carries its name. */
+.segmented-icons {
+  --tab-icon: 1.15rem;
+}
+
+.segmented-icons .tab {
+  padding: 0 8px;
+}
+
+/* One bar for the group: it slides under the chosen tab. tabs.ts sets its width and transform. */
 .tab-slider {
   position: absolute;
   bottom: 5px;
@@ -705,26 +736,29 @@ h1 {
  * Each line names its token in design/tokens/cawco.tokens.json.
  */
 .scene-frame {
-  /* color.background */
-  --app-page: light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70));
-  /* color.surface-raised */
-  --app-raised: light-dark(oklch(99.3% 0.004 85), oklch(24.8% 0.006 70));
-  /* color.surface-recess at night: the ground of a chip, a button or a message on a raised card */
-  --app-recess: light-dark(oklch(94.4% 0.01 84), oklch(22.2% 0.006 70));
-  /* color.border-control */
-  --app-line: light-dark(oklch(89% 0.013 82), oklch(35.2% 0.009 70));
+  /*
+   * The surfaces and lines take the app's day values and, at night, the app's
+   * night values lifted one step up the neutral ramp, as the page around them
+   * is: the page color.neutral-2 (background is neutral-1), a raised card
+   * neutral-4 (surface-raised is neutral-3), the ground of a chip, a button or
+   * a message on it neutral-3 (surface-recess sits between the page and the
+   * card), a control's edge neutral-7 (border-control is neutral-6).
+   */
+  --app-page: light-dark(oklch(96.6% 0.008 85), oklch(21% 0.005 70));
+  --app-raised: light-dark(oklch(99.3% 0.004 85), oklch(28.2% 0.007 70));
+  --app-recess: light-dark(oklch(94.4% 0.01 84), oklch(24.8% 0.006 70));
+  --app-line: light-dark(oklch(89% 0.013 82), oklch(40.2% 0.01 72));
   /* color.ink-strong, and color.on-ink on it */
   --app-ink: light-dark(oklch(29.5% 0.01 70), oklch(93.4% 0.01 82));
   --app-on-ink: light-dark(oklch(99.3% 0.004 85), oklch(18.4% 0.004 70));
   /* color.ink-muted */
   --app-muted: light-dark(oklch(49.5% 0.014 74), oklch(77.8% 0.012 78));
-  /* color.nest-ink */
+  /* color.nest-ink (night: neutral-7 and -8 halved), and a machine drawing's faint line (neutral-7), each a step up at night */
   --app-nest: light-dark(
     oklch(70% 0.017 78),
-    color-mix(in oklch, oklch(40.2% 0.01 72) 50%, oklch(48.8% 0.012 74))
+    color-mix(in oklch, oklch(48.8% 0.012 74) 50%, oklch(52% 0.016 76))
   );
-  /* color.neutral-7 */
-  --app-faint: light-dark(oklch(81% 0.016 80), oklch(40.2% 0.01 72));
+  --app-faint: light-dark(oklch(81% 0.016 80), oklch(48.8% 0.012 74));
   /* color.brand-solid */
   --app-brand: light-dark(oklch(64.5% 0.175 33), oklch(66.5% 0.17 33));
   /* color.status-attn-bg, -ink and -glyph; status-live-glyph; status-done-glyph */
@@ -738,8 +772,10 @@ h1 {
   --mark-5: light-dark(oklch(51% 0.093 186.7), oklch(70% 0.095 186.7));
   --mark-8: light-dark(oklch(51% 0.165 349.8), oklch(70% 0.17 349.8));
   --mark-glyph: light-dark(oklch(99% 0 0), oklch(18.4% 0.004 70));
-  /* shadow.shadow-tile's drop (its night value, with its ring, is set under the dark scheme) */
-  --app-shadow: 0 1px 2px oklch(29.5% 0.01 70 / 0.07);
+  /* shadow.shadow-tile: a warm drop by day; at night a black drop under a ring of ink */
+  --app-shadow:
+    0 1px 2px light-dark(oklch(29.5% 0.01 70 / 0.07), oklch(0% 0 0 / 0.3)),
+    0 0 0 1px light-dark(transparent, oklch(93.4% 0.01 82 / 0.06));
 
   grid-area: 1 / 2 / 3 / 3;
   position: relative;
@@ -1990,6 +2026,7 @@ mark {
 .card-ink {
   background: var(--slab);
   color: var(--on-slab);
+  box-shadow: inset 0 0 0 1px var(--night-ring);
 }
 
 .card-ink > p:not(.price) {
@@ -2003,10 +2040,11 @@ mark {
 
 /*
  * Paper on a paper ground: an ink line marks its edge. At night the line is a
- * card's edge (`color.border-card`), so the raised free card still leads.
+ * card's edge (`color.border-card`, neutral-7, lifted a step with the page to
+ * neutral-8), so the raised free card still leads.
  */
 .card-paper {
-  border: 2px solid light-dark(var(--crow-ink), oklch(40.2% 0.01 72));
+  border: 2px solid light-dark(var(--crow-ink), oklch(48.8% 0.012 74));
   background: var(--paper);
 }
 
@@ -2080,24 +2118,6 @@ mark {
   font-weight: 800;
 }
 
-/*
- * At night a raised surface is told from the page by a 1px inner ring of ink
- * as well as its tone (DESIGN.md, The Night Ring Rule: `color.night-ring`), and
- * a scene's tiles take the product's night tile shadow (`shadow.shadow-tile`).
- */
-
-@media (prefers-color-scheme: dark) {
-  .stage,
-  .cmd,
-  .card-ink {
-    box-shadow: inset 0 0 0 1px oklch(93.4% 0.01 82 / 0.07);
-  }
-
-  .scene-frame {
-    --app-shadow: 0 1px 2px oklch(0% 0 0 / 0.3), 0 0 0 1px oklch(93.4% 0.01 82 / 0.06);
-  }
-}
-
 /* Pointer hover, only where there is a pointer that hovers. */
 
 @media (hover: hover) and (pointer: fine) {
@@ -2114,7 +2134,7 @@ mark {
     color: var(--on-slab);
   }
 
-  .tabs-channel .tab:not([aria-selected='true']):hover {
+  .segmented .tab:not([aria-selected='true'], [aria-checked='true']):hover {
     color: var(--ink);
   }
 
@@ -2167,7 +2187,7 @@ mark {
   }
 
   .tab .icon {
-    font-size: 1.45rem;
+    font-size: var(--tab-icon, 1.45rem);
   }
 
   .tab-bar {
@@ -2251,6 +2271,42 @@ mark {
   /* The wordmark now carries the icon: the tagline must still fit beside it on one line. */
   .foot {
     column-gap: 16px;
+  }
+}
+
+/*
+ * A phone's top bar holds the wordmark, the scheme switch, GitHub and Install on one line:
+ * GitHub shows its mark alone (its name stays for screen readers), and the gaps and the
+ * switch's and the button's sides come in.
+ */
+@media (max-width: 480px) {
+  .top {
+    gap: 8px;
+  }
+
+  .top-nav {
+    gap: 6px;
+  }
+
+  .top-link-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .segmented-icons {
+    --tab-icon: 1.05rem;
+  }
+
+  .segmented-icons .tab {
+    padding: 0 5px;
+  }
+
+  .top .btn {
+    padding: 0 12px;
   }
 }
 

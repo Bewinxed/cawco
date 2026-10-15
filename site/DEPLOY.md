@@ -31,11 +31,16 @@ that folder on `cawco.dev/*` (see `wrangler.jsonc`).
   it by its full `https://cawco.dev/og.png` address.
 - `/version.txt` is the short commit the deploy was built from.
 
-The pages follow the visitor's colour scheme. By day they are the brand board's
-paper and ink; at night every colour in `src/styles.css` takes the night side of
-its product token (`light-dark()`, each named beside it), and the scenes draw in
-the product's night theme. The build stops if the page ground or either
-`theme-color` differs from `design/tokens/cawco.tokens.json`.
+The pages follow the visitor's colour scheme, or the one picked in the landing
+header's switch (System, Light, Dark; kept in `localStorage`). By day they are
+the brand board's paper and ink; at night every colour in `src/styles.css` takes
+the night side of its product token (`light-dark()`, each named beside it),
+lifted one step up the product's neutral ramp, and the scenes draw in the
+product's night theme. Everything keys off the root's `color-scheme`, which
+`data-theme` sets: `src/scheme.ts` applies a pick, and the build writes that same
+function into each page's head, before the stylesheet, so a kept pick is there
+on the first paint. The build stops if the page ground or either `theme-color`
+differs from `design/tokens/cawco.tokens.json`.
 
 ## Work on it
 

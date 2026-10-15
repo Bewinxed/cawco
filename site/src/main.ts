@@ -3,7 +3,9 @@ import { sizeCawRims } from './caw';
 import { initChannel } from './channel';
 import { all, one } from './dom';
 import { initStage } from './stage';
+import { initTheme } from './theme';
 
+initTheme(one(document, '[data-theme-switch]'));
 const stage = initStage(one(document, '[data-stage]'));
 initChannel(one(document, '[data-channel]'));
 sizeCawRims(document);
