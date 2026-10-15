@@ -77,7 +77,7 @@ export function pillOf(
   if (page.state === "decided") {
     return { tone: "done", word: "Decided", who: null, title: "Decided" };
   }
-  const writer = page.writer;
+  const { writer } = page;
   if (!writer || writer.ended) {
     return { tone: "live", word: "Sent", who: "Caw", title: "Sent · Caw" };
   }

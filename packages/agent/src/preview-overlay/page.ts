@@ -359,8 +359,7 @@ function takeTheme(said: unknown) {
  */
 function takeInset(said: unknown) {
   const inset = said as
-    | { bottom?: unknown; side?: unknown; top?: unknown }
-    | undefined;
+    { bottom?: unknown; side?: unknown; top?: unknown } | undefined;
   if (!inset) {
     return;
   }

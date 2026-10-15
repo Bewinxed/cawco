@@ -18,10 +18,10 @@
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
-  import type { StageKind } from "#lib/cawco/project-tasks.js";
   import CawField from "#lib/cawco/project/CawField.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import type { StageKind } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -66,8 +66,14 @@
     lead: CawLead;
     now: number;
     /** This tab's address for a page, card and mode. */
-    hrefOf: (to: { card?: string | null; mode?: DecisionsMode; page?: string | null }) => string;
-    taskOf: (id: string) => { kind: StageKind | null; title: string } | undefined;
+    hrefOf: (to: {
+      card?: string | null;
+      mode?: DecisionsMode;
+      page?: string | null;
+    }) => string;
+    taskOf: (
+      id: string
+    ) => { kind: StageKind | null; title: string } | undefined;
     taskHref: (id: string) => string;
     onopentask: (id: string) => void;
     /** The empty tab's first words to Caw: a thread, opened. */
@@ -75,7 +81,11 @@
     /** Caw standing here departs into the head's seat as he leaves. */
     sitDown: (node: HTMLElement) => TransitionConfig;
     /** Where the pane goes: a page (at a card), the list or the graph, kept in the URL. */
-    go: (to: { card?: string | null; mode?: DecisionsMode; page?: string | null }) => void;
+    go: (to: {
+      card?: string | null;
+      mode?: DecisionsMode;
+      page?: string | null;
+    }) => void;
   } = $props();
 
   const list = $derived(decisions.list);
@@ -224,7 +234,9 @@
               title="Decisions are not available"
             >
               {#snippet action()}
-                <Button onclick={() => decisions.read()} variant="outline">Retry</Button>
+                <Button onclick={() => decisions.read()} variant="outline"
+                  >Retry</Button
+                >
               {/snippet}
             </EmptyState>
           </div>
@@ -235,7 +247,11 @@
               title="No decisions yet"
             >
               {#snippet mark()}
-                <div class="caw-80" data-share="caw:{projectId}" out:sitDown|global>
+                <div
+                  class="caw-80"
+                  data-share="caw:{projectId}"
+                  out:sitDown|global
+                >
                   <CawSeat {lead} {projectId} {projectName} size={80} />
                 </div>
               {/snippet}
@@ -258,8 +274,9 @@
               title="No decisions yet"
             >
               {#snippet action()}
-                <Button onclick={() => newSession({ projectId })} variant="outline"
-                  >New session</Button
+                <Button
+                  onclick={() => newSession({ projectId })}
+                  variant="outline">New session</Button
                 >
               {/snippet}
             </EmptyState>

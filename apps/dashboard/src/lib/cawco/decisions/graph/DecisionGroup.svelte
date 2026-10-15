@@ -10,7 +10,11 @@
   const group = $derived(data as { name: string });
 </script>
 
-<div class="decision-group" style:block-size="{height}px" style:inline-size="{width}px">
+<div
+  class="decision-group"
+  style:block-size="{height}px"
+  style:inline-size="{width}px"
+>
   <span class="label">{group.name}</span>
 </div>
 

@@ -90,10 +90,16 @@
         return;
       }
       if (!answer?.ok) {
-        problem = await said(answer, "The hub didn't say where this page is served.");
+        problem = await said(
+          answer,
+          "The hub didn't say where this page is served."
+        );
         return;
       }
-      const route = previewRoute((await answer.json()) as PreviewAddress, location);
+      const route = previewRoute(
+        (await answer.json()) as PreviewAddress,
+        location
+      );
       if (!route) {
         problem = "The hub named no address for this page.";
         return;
@@ -112,7 +118,7 @@
         problem = `Pages are served at ${new URL(route.origin).host}, which this browser can't reach.`;
         return;
       }
-      origin = route.origin;
+      ({ origin } = route);
       await enter(route.origin, route.byHost, wanted);
     })();
     return () => {
@@ -158,7 +164,11 @@
   // Only its own frame, from its own origin, is heard.
   $effect(() => {
     const heard = (event: MessageEvent) => {
-      if (!(origin && event.source === frame?.contentWindow && event.origin === origin)) {
+      if (!(
+        origin &&
+        event.source === frame?.contentWindow &&
+        event.origin === origin
+      )) {
         return;
       }
       const type = (event.data as { type?: unknown } | null)?.type;
@@ -183,6 +193,7 @@
 {#if problem}
   <p class="problem" role="alert">{problem}</p>
 {:else if src}
+  <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
   <iframe
     class="kit-page"
     onload={hello}
@@ -192,7 +203,8 @@
   ></iframe>
 {:else}
   <div aria-hidden="true" class="opening">
-    <span class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"></span>
+    <span class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+    ></span>
   </div>
 {/if}
 

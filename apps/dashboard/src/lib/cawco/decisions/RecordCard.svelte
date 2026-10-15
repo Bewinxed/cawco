@@ -24,7 +24,9 @@
   }: {
     card: RecordCard;
     /** A task the card made, as the board has it; undefined until the list holds it. */
-    taskOf: (id: string) => { kind: StageKind | null; title: string } | undefined;
+    taskOf: (
+      id: string
+    ) => { kind: StageKind | null; title: string } | undefined;
     hrefOf: (taskId: string) => string;
     onopentask: (taskId: string) => void;
   } = $props();
@@ -33,7 +35,9 @@
   let open = $state(false);
 
   const chosen = $derived(
-    card.chosen.flatMap((id) => card.options.filter((option) => option.id === id))
+    card.chosen.flatMap((id) =>
+      card.options.filter((option) => option.id === id)
+    )
   );
   const others = $derived(
     card.options.filter((option) => !card.chosen.includes(option.id))
@@ -62,7 +66,9 @@
       {#each chosen as option (option.id)}
         <p class="chosen">
           <span class="kit-chip sel picked">
-            <span class="kit-keycap">{option.keycap}</span>{option.label}
+            <span class="kit-keycap">{option.keycap}</span><span class="label"
+              >{option.label}</span
+            >
           </span>
           {#if option.line}
             <span class="line">{option.line}</span>
@@ -75,9 +81,11 @@
     {#if card.dials.length > 0}
       <p class="dials">
         {#each card.dials as [name, value], index (name)}
-          {#if index > 0}<span class="sep"> · </span>{/if}<span class="dial"
-            >{name}</span
-          > <span class="figure">{value}</span>
+          <span class="dial"
+            >{index > 0 ? " · " : ""}{name}{" "}<span class="figure"
+              >{value}</span
+            ></span
+          >
         {/each}
       </p>
     {/if}
@@ -124,10 +132,19 @@
           variant="ghost"
         >
           {foldWords}
-          <IconChevronDown aria-hidden="true" class="chev" data-icon="inline-end" />
+          <IconChevronDown
+            aria-hidden="true"
+            class="chev"
+            data-icon="inline-end"
+          />
         </Button>
       </div>
-      <div class="fold" data-open={open || undefined} id="{fid}-others" inert={!open}>
+      <div
+        class="fold"
+        data-open={open || undefined}
+        id="{fid}-others"
+        inert={!open}
+      >
         <div class="fold-inner">
           <div class="fold-body">
             {#if card.why}
@@ -136,7 +153,9 @@
             {#each others as option (option.id)}
               <p class="other">
                 <span class="kit-chip turned">
-                  <span class="kit-keycap">{option.keycap}</span>{option.label}
+                  <span class="kit-keycap">{option.keycap}</span><span
+                    class="label">{option.label}</span
+                  >
                 </span>
                 {#if option.recommended}
                   <span class="tag">Recommended</span>
@@ -236,7 +255,9 @@
     justify-content: center;
     inline-size: var(--row-mark);
     block-size: var(--row-mark);
-    margin-block-start: calc((var(--text-body) * var(--leading-body) - var(--row-mark)) / 2);
+    margin-block-start: calc(
+      (var(--text-body) * var(--leading-body) - var(--row-mark)) / 2
+    );
     border-radius: var(--row-mark-r);
     background: var(--action-surface);
     color: var(--on-action);

@@ -66,8 +66,10 @@
       }
       const x = Math.min(...placed.map((p) => p.x)) - FRAME;
       const y = Math.min(...placed.map((p) => p.y)) - FRAME;
-      const width = Math.max(...placed.map((p) => p.x + CARD.width)) + FRAME - x;
-      const height = Math.max(...placed.map((p) => p.y + CARD.height)) + FRAME - y;
+      const width =
+        Math.max(...placed.map((p) => p.x + CARD.width)) + FRAME - x;
+      const height =
+        Math.max(...placed.map((p) => p.y + CARD.height)) + FRAME - y;
       return [
         {
           id: `group:${group.id}`,
@@ -87,7 +89,9 @@
 
   // The file's cards and edges, drawn where it places them.
   $effect(() => {
-    const at = new Map(graph.cards.map((card) => [card.id, { x: card.x, y: card.y }]));
+    const at = new Map(
+      graph.cards.map((card) => [card.id, { x: card.x, y: card.y }])
+    );
     nodes = [
       ...framesOf(at),
       ...graph.cards.map((card) => ({
@@ -96,7 +100,11 @@
         position: { x: card.x, y: card.y },
         connectable: false,
         selectable: false,
-        data: { name: card.name, picked: card.picked === true, page: card.page },
+        data: {
+          name: card.name,
+          picked: card.picked === true,
+          page: card.page,
+        },
       })),
     ];
     edges = graph.edges.map(([from, to]) => {
@@ -125,7 +133,10 @@
         .filter((node) => node.type === "decision")
         .map((node) => [node.id, node.position])
     );
-    nodes = [...framesOf(at), ...nodes.filter((node) => node.type === "decision")];
+    nodes = [
+      ...framesOf(at),
+      ...nodes.filter((node) => node.type === "decision"),
+    ];
   }
 </script>
 
@@ -169,7 +180,11 @@
         onplace(
           moved
             .filter((node) => node.type === "decision")
-            .map((node) => ({ id: node.id, x: node.position.x, y: node.position.y }))
+            .map((node) => ({
+              id: node.id,
+              x: node.position.x,
+              y: node.position.y,
+            }))
         );
       }}
       panOnDrag
@@ -183,7 +198,11 @@
         }}
       />
       <Panel position="bottom-center">
-        <WorkflowCanvasTools onfit={() => undefined} onzoom={() => undefined} {zoom} />
+        <WorkflowCanvasTools
+          onfit={() => undefined}
+          onzoom={() => undefined}
+          {zoom}
+        />
       </Panel>
     </SvelteFlow>
   {/if}

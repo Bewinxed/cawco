@@ -34,8 +34,8 @@ import {
   type DecisionPageSummary,
   type DecisionRecord,
   type DecisionSent,
-  type DecisionsList,
   type DecisionState,
+  type DecisionsList,
   type DecisionWriter,
   decidedOf,
   GRAPH_FILE,
@@ -143,6 +143,7 @@ export const readPage = async (html: string): Promise<ReadPage> => {
     }
     option = null;
   };
+  // biome-ignore lint/correctness/noUndeclaredVariables: HTMLRewriter is Bun's own global (bun-types)
   await new HTMLRewriter()
     .on("title", {
       text(chunk) {
@@ -193,7 +194,10 @@ export const readPage = async (html: string): Promise<ReadPage> => {
         const open: OpenArticle | null = article;
         const next: DecisionCard = {
           id,
-          question: shown(open?.question ?? "") || shown(element.getAttribute("aria-label") ?? "") || id,
+          question:
+            shown(open?.question ?? "") ||
+            shown(element.getAttribute("aria-label") ?? "") ||
+            id,
           why: shown(open?.why ?? ""),
           multiple: element.hasAttribute("data-cawco-multiple"),
           mockup: open?.mockup ?? null,
@@ -202,7 +206,10 @@ export const readPage = async (html: string): Promise<ReadPage> => {
         card = next;
         element.onEndTag(() => {
           closeOption();
-          if (next.options.length > 0 && !cards.some((each) => each.id === next.id)) {
+          if (
+            next.options.length > 0 &&
+            !cards.some((each) => each.id === next.id)
+          ) {
             cards.push(next);
           }
           card = null;
@@ -297,10 +304,10 @@ export interface DecisionsDeps {
     },
     message: string
   ) => Promise<void>;
-  /** A project's folder file, or undefined when it is not there. */
-  folderText: (projectId: string, path: string) => Promise<string | undefined>;
   /** The names of the entries in one folder of the project's. */
   folderNames: (projectId: string, path: string) => Promise<string[]>;
+  /** A project's folder file, or undefined when it is not there. */
+  folderText: (projectId: string, path: string) => Promise<string | undefined>;
   instance: (id: string) => InstanceRow | undefined;
   /** An artifact's doc as the page reads it: its picks and its last send. */
   page: (artifactId: string) => {
@@ -321,12 +328,12 @@ export interface DecisionsDeps {
   tasks: (projectId: string) => Promise<DecidedTask[]>;
   /** The person's own words to a session, through the one send path. */
   tell: (instance: InstanceRow, text: string) => void;
+  /** Whether Caw's turn is on a thread now. */
+  threadWorking: (threadId: string) => boolean;
   /** Wakes the project's Caw with the person's words, in a new thread; its id. */
   wakeCaw: (projectId: string, text: string) => Promise<string>;
   /** Whether a session is on a turn now. */
   working: (instance: InstanceRow) => boolean;
-  /** Whether Caw's turn is on a thread now. */
-  threadWorking: (threadId: string) => boolean;
 }
 
 /** The record as written: what the hub reads back, with who it asked. */
@@ -354,7 +361,7 @@ const dialsOf = (
   state: Record<string, ChoiceEntry>,
   card: string
 ): [string, string][] => {
-  const panels = state.dials?.value;
+  const panels = (state.dials as ChoiceEntry | undefined)?.value;
   if (!panels || typeof panels !== "object") {
     return [];
   }
@@ -375,8 +382,7 @@ const dialsOf = (
  * output. A mockup takes no pick today (CONTRACT.md), so there is none; the
  * one place a bake that draws the chosen state fills.
  */
-const stillOf = (_name: string, _mockup: string | null): string | null =>
-  null;
+const stillOf = (_name: string, _mockup: string | null): string | null => null;
 
 export const createDecisions = (deps: DecisionsDeps) => {
   const known = (projectId: string) => {
@@ -397,6 +403,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     }
     for (const name of await deps.folderNames(projectId, "decisions")) {
       if (NAME.test(name) && !byName.has(name)) {
+        // biome-ignore lint/performance/noAwaitInLoops: a project holds a handful of pages; read one at a time
         const built = await deps.folderText(projectId, builtPath(name));
         if (built !== undefined) {
           byName.set(name, null);
@@ -527,14 +534,21 @@ export const createDecisions = (deps: DecisionsDeps) => {
         `This project has no decision page ${name}.`
       );
     }
-    return readOne(projectId, name, found.artifact, await deps.tasks(projectId));
+    return readOne(
+      projectId,
+      name,
+      found.artifact,
+      await deps.tasks(projectId)
+    );
   };
 
   /** Who hears a page's send or its Make tasks: its session while it stands, else Caw. */
   const heardBy = (
     read: DecisionPageRead
   ): { instance: InstanceRow } | { caw: true } => {
-    const instance = read.writer ? deps.instance(read.writer.instanceId) : undefined;
+    const instance = read.writer
+      ? deps.instance(read.writer.instanceId)
+      : undefined;
     return instance && !ENDED_STATUSES.has(instance.status)
       ? { instance }
       : { caw: true };
@@ -548,7 +562,9 @@ export const createDecisions = (deps: DecisionsDeps) => {
   /** Records whose cards' tasks moved, written again with them (and their log). */
   const syncRecords = async (projectId: string): Promise<void> => {
     const tasks = await deps.tasks(projectId);
-    const titles = Object.fromEntries(tasks.map((task) => [task.id, task.title]));
+    const titles = Object.fromEntries(
+      tasks.map((task) => [task.id, task.title])
+    );
     const writes: { content: string; path: string }[] = [];
     for (const name of await deps.folderNames(projectId, "decisions")) {
       if (!NAME.test(name)) {
@@ -655,7 +671,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
      * session (or Caw) asked to run to-tasks over them. A refused ask takes
      * the record back out and is thrown on.
      */
-    async makeTasks(projectId: string, name: string): Promise<DecisionPageRead> {
+    async makeTasks(
+      projectId: string,
+      name: string
+    ): Promise<DecisionPageRead> {
       const { read, page } = await find(projectId, name);
       if (read.record) {
         throw new DecisionRefusal(409, `${read.title} has its tasks already.`);
@@ -705,10 +724,12 @@ export const createDecisions = (deps: DecisionsDeps) => {
         },
         `decisions: ${name} decided`
       );
-      try {
-        if ("instance" in to) {
-          deps.tell(to.instance, ask);
-        } else {
+      const refused = await (async () => {
+        try {
+          if ("instance" in to) {
+            deps.tell(to.instance, ask);
+            return null;
+          }
           const askedIn = await deps.wakeCaw(projectId, ask);
           await deps.commit(
             projectId,
@@ -723,13 +744,18 @@ export const createDecisions = (deps: DecisionsDeps) => {
             },
             `decisions: ${name} asked of Caw`
           );
+          return null;
+        } catch (error) {
+          return { error };
         }
-      } catch (error) {
+      })();
+      if (refused) {
         await deps.commit(
           projectId,
           { writes: [], deletes: [recordPath(name), logPath(name)] },
           `decisions: ${name}'s tasks were not asked for`
         );
+        const { error } = refused;
         throw new DecisionRefusal(
           503,
           `Couldn't make tasks: ${error instanceof Error ? error.message : String(error)}`,
@@ -758,8 +784,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
         ...graph,
         cards: graph.cards.map((card) => ({
           ...card,
-          picked:
-            (states.get(card.page)?.[card.id]?.options ?? []).length > 0,
+          picked: (states.get(card.page)?.[card.id]?.options ?? []).length > 0,
         })),
       };
     },
@@ -774,7 +799,13 @@ export const createDecisions = (deps: DecisionsDeps) => {
       if (text === undefined) {
         throw new DecisionRefusal(404, `${GRAPH_FILE} is not in the folder.`);
       }
-      const raw = JSON.parse(text) as { cards?: Partial<GraphCard>[] };
+      const raw = jsonOf(text) as { cards?: Partial<GraphCard>[] } | null;
+      if (!raw || typeof raw !== "object") {
+        throw new DecisionRefusal(
+          422,
+          `${GRAPH_FILE} is not JSON, so its places weren't saved.`
+        );
+      }
       const at = new Map(places.map((place) => [place.id, place]));
       const cards = (raw.cards ?? []).map((card) => {
         const moved = card.id ? at.get(card.id) : undefined;
@@ -811,12 +842,19 @@ export const createDecisions = (deps: DecisionsDeps) => {
   };
 };
 
+/** A file's JSON, or null when it is not JSON. */
+const jsonOf = (text: string): unknown => {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+};
+
 /** `decisions.json` read leniently: what is not a card, edge or group is left out. */
 export const graphOf = (text: string): DecisionGraph => {
-  let raw: Partial<DecisionGraph>;
-  try {
-    raw = JSON.parse(text) as Partial<DecisionGraph>;
-  } catch {
+  const raw = jsonOf(text) as Partial<DecisionGraph> | null;
+  if (!raw || typeof raw !== "object") {
     throw new DecisionRefusal(
       422,
       `${GRAPH_FILE} is not JSON; Caw writes it as { cards, edges, groups }.`
@@ -846,9 +884,7 @@ export const graphOf = (text: string): DecisionGraph => {
     groups: (Array.isArray(raw.groups) ? raw.groups : [])
       .filter(
         (group) =>
-          !!group &&
-          typeof group.id === "string" &&
-          Array.isArray(group.cards)
+          !!group && typeof group.id === "string" && Array.isArray(group.cards)
       )
       .map((group) => ({
         id: group.id,
@@ -890,7 +926,10 @@ export const decisionRoutes = (decisions: Decisions) =>
     })
     .get("/api/projects/:id/decisions/graph", async ({ params }) => {
       try {
-        return (await decisions.graph(params.id)) ?? status(404, `${GRAPH_FILE} is not in the folder.`);
+        return (
+          (await decisions.graph(params.id)) ??
+          status(404, `${GRAPH_FILE} is not in the folder.`)
+        );
       } catch (error) {
         return refused(error);
       }
