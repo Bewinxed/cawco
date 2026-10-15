@@ -97,6 +97,7 @@ import {
   appleMachines,
   appPaths,
   diffPaths,
+  lastMac,
 } from "./apple-gate";
 import type {
   DbShape,
@@ -3993,10 +3994,7 @@ export const createWorkItems = ({
     }
     const mac = gateMac(workspace, item.projectId);
     if (!mac) {
-      const offline = appleMachines(db.listAgents(), () => true).map((each) =>
-        machineLabel(each.hostname)
-      );
-      return { refusal: appleGateRefusal(touched, offline) };
+      return { refusal: appleGateRefusal(touched, lastMac(db.listAgents())) };
     }
     return {
       checks: [

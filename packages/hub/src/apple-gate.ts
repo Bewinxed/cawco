@@ -21,6 +21,7 @@
  * is every change under `apps/apple`. A core or hub change that leaves them
  * untouched compiles the same Swift main already compiles.
  */
+import { machineLabel } from "@cawco/core";
 import { capabilitiesOf } from "./runs-on";
 
 /** The gate's check, as an item's check list and its report name it. */
@@ -62,21 +63,53 @@ export const diffPaths = (stdout: string): string[] =>
 
 /**
  * Why an item that changes the app's sources does not land with no Mac
- * online, in one sentence: what it changed, and the Macs the fleet has.
+ * online, in one sentence: what it changed, and the Mac the gate would have
+ * used, by name ({@link lastMac}), or that the hub knows none.
  */
 export const appleGateRefusal = (
   touched: readonly string[],
-  offline: readonly string[]
+  mac: string | undefined
 ): string => {
   const changed =
     touched.length === 1
       ? touched[0]
       : `${touched.length} files the iOS app is built from (${touched[0]} first)`;
-  let macs = "the fleet has none";
-  if (offline.length > 0) {
-    macs = `${offline.join(", ")} ${offline.length === 1 ? "is" : "are"} offline`;
-  }
+  const macs = mac ? `${mac} is offline` : "no Mac is known";
   return `This item changes ${changed}, so it lands only once the iOS build compiles on a Mac, and no apple-capable machine is online (${macs}): wait for one with wait_item and call finish_item again, or call it with blocked.`;
+};
+
+/** When a machine was last seen, in ms; 0 when never. */
+const seenAt = (machine: {
+  lastSeenAt: Date | number | string | null;
+}): number =>
+  machine.lastSeenAt === null ? 0 : new Date(machine.lastSeenAt).getTime();
+
+/**
+ * The Mac the gate would have used, named: the darwin machine seen last.
+ * Its hostname as the fleet shows it, with its machine id when another
+ * machine of the fleet shows the same name (machines on one host do).
+ * Undefined when no Mac ever registered.
+ */
+export const lastMac = (
+  machines: readonly {
+    hostname: string;
+    lastSeenAt: Date | number | string | null;
+    machineId: string;
+    os: string;
+  }[]
+): string | undefined => {
+  const [mac] = appleMachines(machines, () => true).sort(
+    (a, b) => seenAt(b) - seenAt(a)
+  );
+  if (!mac) {
+    return;
+  }
+  const name = machineLabel(mac.hostname);
+  const shared = machines.some(
+    (other) =>
+      other.machineId !== mac.machineId && machineLabel(other.hostname) === name
+  );
+  return shared ? `${name} (${mac.machineId})` : name;
 };
 
 /** The machines the gate may run on: online, and a Mac by the OS each reported. */

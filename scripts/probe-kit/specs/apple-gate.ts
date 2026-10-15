@@ -25,7 +25,9 @@
  * (d) probe-mac offline, a delegate that commits apps/apple/Other.swift:
  *     finish_item answers the one sentence (it changes that file, so it
  *     lands only once the iOS build compiles on a Mac, and no apple-capable
- *     machine is online, naming the Mac offline, and to wait for one with
+ *     machine is online, naming probe-mac as offline: its hostname is the
+ *     host's, which every scratch machine shares, so its id follows; and to
+ *     wait for one with
  *     wait_item); the delegate does, and the item is not done: still
  *     running and waiting, nothing landed or reported.
  *
@@ -56,7 +58,7 @@ echo "$*" > ${MARK}
 `;
 /** The refusal as finish_item answers it with no Mac online. */
 const REFUSAL =
-  /This item changes apps\/apple\/Other\.swift, so it lands only once the iOS build compiles on a Mac, and no apple-capable machine is online \([^)]+ is offline\): wait for one with wait_item and call finish_item again, or call it with blocked\./;
+  /This item changes apps\/apple\/Other\.swift, so it lands only once the iOS build compiles on a Mac, and no apple-capable machine is online \((?:\S+ \(probe-mac\)|probe-mac) is offline\): wait for one with wait_item and call finish_item again, or call it with blocked\./;
 const WAIT = "mcp__cawco__wait_item";
 
 const steps: Partial<
@@ -291,7 +293,7 @@ const run = async (kit: Kit) => {
     300_000
   );
   check(
-    "d: with the Mac offline, finish_item answers the one sentence",
+    "d: with the Mac offline, finish_item answers the one sentence, naming probe-mac",
     refusedC !== undefined,
     refusedC ?? "no refusal read"
   );
