@@ -607,6 +607,8 @@ export interface CawDeps {
    * session itself is over.
    */
   readonly turnEnded: (instanceId: string, why?: string, gone?: string) => void;
+  /** Whether the fleet's upstream choice was ever answered (the setup page asks it until it is). */
+  readonly upstreamAnswered: () => boolean;
   /** Writes Caw's draft views, and answers the view tools he tries (views.ts). */
   readonly views: Pick<Views, "draft" | "query">;
   /**
@@ -623,6 +625,7 @@ export const createCaw = ({
   db,
   end,
   fleetChoicesSet,
+  upstreamAnswered,
   folderChanged,
   inTurn,
   interrupt,
@@ -1913,6 +1916,7 @@ export const createCaw = ({
       threadId,
       text: setupEvent({
         askFleet: !fleetChoicesSet(),
+        askUpstream: !upstreamAnswered(),
         from,
         projectName: project.name,
         template,

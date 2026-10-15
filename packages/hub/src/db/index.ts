@@ -167,6 +167,7 @@ import {
   type Tracker,
   threadMessages,
   tools,
+  upstreamSettings,
   usageBuckets,
   usageLimits,
   workflowAttempts,
@@ -1809,10 +1810,12 @@ export interface DbShape {
       >
     >
   ) => void;
-  /** The project's name and its Review before done, as project-edit.ts checked them. */
+  /** The project's name, its Review before done, its Apple build gate and its upstream choice, as project-edit.ts checked them. */
   readonly setProjectDetails: (
     id: string,
-    change: Partial<Pick<ProjectRow, "appleGate" | "name" | "review">>
+    change: Partial<
+      Pick<ProjectRow, "appleGate" | "name" | "review" | "upstreamPosts">
+    >
   ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
   readonly setProjectDispatch: (
@@ -1889,6 +1892,7 @@ export interface DbShape {
   ) => boolean;
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
+  readonly setUpstreamPosts: (posts: boolean) => void;
   /** Names of fleet skills installed at or after `since`. */
   readonly skillsInstalledSince: (since: Date) => string[];
   /**
@@ -2116,6 +2120,8 @@ export interface DbShape {
     home?: string;
     machineCapabilities?: import("@cawco/core/capabilities").MachineCapabilities;
   }) => void;
+  /** The fleet's upstream answer (schema `upstreamSettings`): null while nobody has answered. */
+  readonly upstreamPosts: () => boolean | null;
   /**
    * One harness's recorded cost since each boundary and in all, in one SQL
    * pass. A bucket counts toward a boundary when it starts at or after it;
@@ -2350,6 +2356,8 @@ const SUPERVISOR_CONFIG_ID = "supervisor";
 const OPENROUTER_CONNECTION_ID = "openrouter";
 const JEV_SETTINGS_ID = "jev";
 const FLEET_WATCH_ID = "fleet-watch";
+/** The one {@link upstreamSettings} row's key. */
+const UPSTREAM_ID = "upstream";
 
 /**
  * How far back a memory document, a hook or a skill can be taken, each within
@@ -7991,6 +7999,22 @@ const make = async (path: string): Promise<DbShape> => {
         .from(fleetWatchSettings)
         .where(eq(fleetWatchSettings.id, FLEET_WATCH_ID))
         .get()?.on ?? true,
+    upstreamPosts: () =>
+      db
+        .select({ posts: upstreamSettings.posts })
+        .from(upstreamSettings)
+        .where(eq(upstreamSettings.id, UPSTREAM_ID))
+        .get()?.posts ?? null,
+    setUpstreamPosts: (posts) => {
+      const answeredAt = new Date();
+      db.insert(upstreamSettings)
+        .values({ id: UPSTREAM_ID, posts, answeredAt })
+        .onConflictDoUpdate({
+          target: upstreamSettings.id,
+          set: { posts, answeredAt },
+        })
+        .run();
+    },
     setFleetWatchOn: (on) => {
       db.insert(fleetWatchSettings)
         .values({ id: FLEET_WATCH_ID, on })

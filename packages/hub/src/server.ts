@@ -307,6 +307,7 @@ import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
+import type { UpstreamRules } from "@cawco/core/upstream-guard";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
@@ -602,6 +603,7 @@ import {
 } from "./transcripts";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
+import { upstreamRules } from "./upstream";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
@@ -1299,7 +1301,8 @@ const registerAck = (
   unknownAccounts: string[] | undefined,
   sessions: CarrySessionRequest[],
   machineCredential: string,
-  sessionLimits: SessionLimits
+  sessionLimits: SessionLimits,
+  upstream: UpstreamRules
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -1311,6 +1314,7 @@ const registerAck = (
     hubEpoch: HUB_EPOCH,
     machineCredential,
     sessionLimits,
+    upstream,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
   },
@@ -2651,6 +2655,10 @@ export const createServer = (
     note: (instanceId, note) => lead?.noteCall(instanceId, note),
     shared: (row) => sharedPlace(row),
     thread: (row) => lead?.askThread(row),
+    upstream: (row) => {
+      const rules = upstreamRules(db);
+      return (row.projectId && rules.projects[row.projectId]) || rules.fleet;
+    },
     webContext: () => ({
       fleet: new Set(
         [
@@ -9063,7 +9071,7 @@ export const createServer = (
     declare readonly status: 400 | 404;
   }
 
-  /** The fleet's two choices as their row keeps them (fleet-choices.ts). */
+  /** The fleet's onboarding choices as their rows keep them (fleet-choices.ts). */
   const fleetChoices: FleetChoicesStore = {
     read: () => {
       const config = db.getSupervisorConfig();
@@ -9071,8 +9079,10 @@ export const createServer = (
         deniedTools: config?.deniedTools ?? null,
         cawcoTodos: config?.cawcoTodos ?? false,
         choicesSetAt: config?.choicesSetAt ?? null,
+        upstreamPosts: db.upstreamPosts(),
       };
     },
+    setUpstream: (posts) => db.setUpstreamPosts(posts),
     write: (choices) => db.putSupervisorConfig(choices),
     synced: () => fanOutFleet(),
   };
@@ -16583,6 +16593,7 @@ export const createServer = (
     leadHome,
     folderChanged: (projectId) => tasks.touched(projectId),
     fleetChoicesSet: () => Boolean(db.getSupervisorConfig()?.choicesSetAt),
+    upstreamAnswered: () => db.upstreamPosts() !== null,
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
@@ -21925,8 +21936,9 @@ export const createServer = (
           return { ok: true };
         }
       )
-      // The person's own edit of a project: its name, and whether it reviews
-      // before done (project-edit.ts). Every dashboard and the app hear it at
+      // The person's own edit of a project: its name, whether it reviews
+      // before done, its Apple build gate and its upstream choice
+      // (project-edit.ts). Every dashboard and the app hear it at
       // once (`projects.changed`; a review change, `tasks.changed` too).
       .patch(
         "/api/projects/:id",
@@ -21935,6 +21947,8 @@ export const createServer = (
             name: t.Optional(t.String({ maxLength: 2000 })),
             review: t.Optional(t.Boolean()),
             appleGate: t.Optional(t.Boolean()),
+            // Null: the fleet's answer (upstream.ts).
+            upstreamPosts: t.Optional(t.Union([t.Boolean(), t.Null()])),
           }),
         },
         ({ params, body, status }) => {
@@ -23547,7 +23561,8 @@ export const createServer = (
                   // This connection's credential for the hub's git remote;
                   // the one its last connection held stops working.
                   machineCredentials.mint(message.machineId),
-                  db.sessionLimits()
+                  db.sessionLimits(),
+                  upstreamRules(db)
                 )
               );
               for (const row of toEnd) {
@@ -23812,6 +23827,8 @@ export const createServer = (
                   // Each keeps its boundary up there, whatever else holds it.
                   liveWorkspaces: db.liveWorkspacesOn(message.machineId),
                   sessionLimits: db.sessionLimits(),
+                  // Each workspace's shims judge by the choice as it stands.
+                  upstream: upstreamRules(db),
                 } satisfies HeartbeatAckPayload,
               });
               break;

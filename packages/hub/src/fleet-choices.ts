@@ -1,5 +1,5 @@
 /**
- * The fleet's two onboarding choices (Projects spec §5.2, §5.6):
+ * The fleet's onboarding choices (Projects spec §5.2, §5.6):
  *
  * - **delegates**: use CawCo's delegates instead of each harness's own
  *   subagents — kept on the denied-tools baseline
@@ -14,6 +14,11 @@
  *   session's spec replaces; a delegate
  *   type can turn it on for its own sessions (`cawcoTodos`). pi has neither,
  *   so neither choice changes it.
+ * - **upstream**: whether sessions may post to repositories that are not
+ *   their project's (core upstream-guard.ts), where a project sets nothing
+ *   (`upstream_settings`, upstream.ts). Asked once, on its own: never
+ *   answered (null) is today's behaviour, sessions may, and the dashboard
+ *   asks on its next load.
  *
  * Names are Claude Code's, the list every daemon already writes into
  * `~/.claude/settings.json` (Claude Code refuses a rule whose tool name is
@@ -48,6 +53,8 @@ export interface FleetChoices {
   todos: boolean;
   /** What each choice denies, per harness. */
   tools: Record<"delegates" | "todos", Record<string, readonly string[]>>;
+  /** Sessions may post to other people's repositories; null while nobody has answered. */
+  upstream: boolean | null;
 }
 
 /** What the fleet's choices are stored as. */
@@ -58,6 +65,8 @@ export interface StoredChoices {
   choicesSetAt: Date | null;
   /** The baseline; null before anyone set it. */
   deniedTools: string[] | null;
+  /** The upstream answer; null while nobody has given it. */
+  upstreamPosts: boolean | null;
 }
 
 /** The baseline with "delegates" turned on or off; every other name stays where it was. */
@@ -74,6 +83,7 @@ export const readChoices = ({
   deniedTools,
   cawcoTodos,
   choicesSetAt,
+  upstreamPosts,
 }: StoredChoices): FleetChoices => {
   const list = [...(deniedTools ?? DEFAULT_DENIED_TOOLS)];
   return {
@@ -84,12 +94,15 @@ export const readChoices = ({
     setAt: choicesSetAt?.getTime() ?? null,
     deniedTools: list,
     tools: { delegates: NATIVE_TOOLS.subagents, todos: NATIVE_TOOLS.todos },
+    upstream: upstreamPosts,
   };
 };
 
 /** Where the fleet's choices are kept, and how every machine hears them. */
 export interface FleetChoicesStore {
   read: () => StoredChoices;
+  /** Keeps the upstream answer; every machine hears it with its next beat (upstream.ts). */
+  setUpstream: (posts: boolean) => void;
   synced: () => void;
   write: (choices: {
     deniedTools?: string[];
@@ -102,12 +115,20 @@ export interface FleetChoicesStore {
  * Sets the choices named, stores them and sends every machine them
  * (`synced`), so the next session on each starts under them and each
  * machine's own harness config follows at once: the PUT, and a new
- * project's setup page when the person sends it (setup.ts).
+ * project's setup page when the person sends it (setup.ts). The upstream
+ * answer is kept on its own: naming only it leaves the other two unasked
+ * where nobody set them.
  */
 export const setFleetChoices = (
   store: FleetChoicesStore,
-  choices: { delegates?: boolean; todos?: boolean }
+  choices: { delegates?: boolean; todos?: boolean; upstream?: boolean }
 ): FleetChoices => {
+  if (choices.upstream !== undefined) {
+    store.setUpstream(choices.upstream);
+  }
+  if (choices.delegates === undefined && choices.todos === undefined) {
+    return readChoices(store.read());
+  }
   const stored = store.read();
   store.write({
     ...(choices.delegates === undefined
@@ -135,6 +156,7 @@ export const fleetChoicesRoutes = (store: FleetChoicesStore) =>
         body: t.Object({
           delegates: t.Optional(t.Boolean()),
           todos: t.Optional(t.Boolean()),
+          upstream: t.Optional(t.Boolean()),
         }),
       },
       ({ body }) => setFleetChoices(store, body)

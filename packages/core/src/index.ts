@@ -579,6 +579,12 @@ export interface HeartbeatAckPayload {
    * its keeper starts runs under them.
    */
   sessionLimits?: SessionLimits;
+  /**
+   * The upstream guard's rules as the hub holds them now (upstream-guard.ts
+   * `UpstreamRules`), on every beat: each workspace's shims judge the next
+   * call by them (agent boundary.ts `takeUpstreamRules`).
+   */
+  upstream?: import("./upstream-guard").UpstreamRules;
 }
 
 /**

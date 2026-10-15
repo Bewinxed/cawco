@@ -186,6 +186,12 @@ export async function buildBinary(options: {
     join(work, "workspace-judge.ts"),
     await Bun.file(join(ROOT, "packages/core/src/workspace-judge.ts")).bytes()
   );
+  // And the upstream guard: the hub imports it as a module, and each
+  // workspace's shims run its copy.
+  await writeFile(
+    join(work, "upstream-guard.ts"),
+    await Bun.file(join(ROOT, "packages/core/src/upstream-guard.ts")).bytes()
+  );
   // A Linux workspace's boundary host, srt inside, run as plain Bun by sessiond
   // (boundary.ts), and the ripgrep srt scans a clone with: a fresh machine has
   // none (REPORT.md §1). macOS boundaries run on Seatbelt and need neither.
@@ -247,6 +253,12 @@ export async function buildBinary(options: {
     ["boundary/log-protocol.ts", join(work, "boundary-log-protocol.ts")],
     // Run as plain Bun beside the judge, and imported by OpenCode's plugin (boundary.ts).
     ["boundary/workspace-judge.ts", join(work, "workspace-judge.ts")],
+    // Run as plain Bun by each workspace's upstream guard shims (boundary.ts).
+    [
+      "boundary/upstream-shim.ts",
+      join(ROOT, "packages/agent/src/upstream-shim.ts"),
+    ],
+    ["boundary/upstream-guard.ts", join(work, "upstream-guard.ts")],
     ["native/claude", await nativeClaude(options.target, work)],
   ] as [string, string][];
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;

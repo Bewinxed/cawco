@@ -135,6 +135,11 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import {
+  GUARDED_PROGRAMS,
+  type UpstreamRule,
+  type UpstreamRules,
+} from "@cawco/core/upstream-guard";
 import { PROTECTED_NAMES, PROTECTED_UNDER } from "@cawco/core/workspace-judge";
 import {
   isLeadPlace,
@@ -887,6 +892,127 @@ ${standalone ? "export BUN_BE_BUN=1\n" : ""}exec ${[runtime, client, String(port
   ]);
 };
 
+/**
+ * The upstream guard's shims (core upstream-guard.ts), first on the PATH of
+ * every command in the workspace's boundary on both OSes, after the hub's
+ * git helper: read-only inside.
+ */
+const guardShimsOf = (id: string): string => join(roOf(id), "guard");
+
+/** The workspace's upstream rule (`UpstreamRule`), as its shims read it: in the part of the state dir a command reads, written only here. */
+const upstreamRuleOf = (id: string): string => join(roOf(id), "upstream.json");
+
+/** The rules the hub last handed this machine (register and heartbeat acks); none until it has. */
+let upstreamRules: UpstreamRules | undefined;
+
+/** Workspace `id`'s rule under `rules`: its project's, or the fleet's for a workspace in none. */
+const ruleFor = async (
+  id: string,
+  rules: UpstreamRules
+): Promise<UpstreamRule> => {
+  const project = await readRecord<unknown>(workspaceProjectFile(id)).catch(
+    () => undefined
+  );
+  return (
+    (typeof project === "string" && rules.projects[project]) || rules.fleet
+  );
+};
+
+/** Writes workspace `id`'s upstream rule under the rules held, when it changed; nothing while none is held. */
+const writeUpstreamRule = async (id: string): Promise<void> => {
+  const rules = upstreamRules;
+  if (!rules) {
+    return;
+  }
+  const text = `${JSON.stringify(await ruleFor(id, rules))}\n`;
+  const file = upstreamRuleOf(id);
+  if ((await readFile(file, "utf8").catch(() => "")) === text) {
+    return;
+  }
+  await writeWhole(file, text, 0o644);
+};
+
+/**
+ * Takes the upstream rules the hub hands this machine with each register
+ * and heartbeat ack, and writes each workspace's here (one with a `ro` dir:
+ * one whose boundary was armed), so its shims judge the next call by the
+ * choice as it stands: a change reaches a running session within a beat.
+ */
+export const takeUpstreamRules = async (
+  rules: UpstreamRules | undefined
+): Promise<void> => {
+  if (!rules) {
+    return;
+  }
+  upstreamRules = rules;
+  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  await Promise.all(
+    ids
+      .filter((id) => existsSync(roOf(id)))
+      .map((id) =>
+        writeUpstreamRule(id).catch((error: unknown) => {
+          console.warn(
+            `[workspace] ${id}: its upstream rule could not be written: ${error instanceof Error ? error.message : String(error)}`
+          );
+        })
+      )
+  );
+};
+
+/**
+ * The upstream guard's shims, one for each program it reads
+ * (`GUARDED_PROGRAMS`), and the two scripts they run, written into the part
+ * of the state dir a command reads. Each shim finds the program it stands in
+ * for on the rest of the caller's PATH, has `upstream-shim.ts` judge the call
+ * by the workspace's rule ({@link upstreamRuleOf}), and runs the program only
+ * when the judge lets it; a refusal's reason is what the session reads. A
+ * `curl` naming none of GitHub's API hosts runs without asking, so a dev
+ * server's poll costs nothing.
+ */
+const writeGuardShims = async (id: string, runtime: string): Promise<void> => {
+  const dir = guardShimsOf(id);
+  await mkdir(dir, { recursive: true });
+  await writeScript(
+    roOf(id),
+    "upstream-guard.ts",
+    "boundary/upstream-guard.ts",
+    join(import.meta.dir, "..", "..", "core", "src", "upstream-guard.ts")
+  );
+  const shim = await writeScript(
+    roOf(id),
+    "upstream-shim.ts",
+    "boundary/upstream-shim.ts"
+  );
+  const judge = `${standalone ? "BUN_BE_BUN=1 " : ""}${[runtime, shim, upstreamRuleOf(id)].map(shellQuote).join(" ")}`;
+  await Promise.all(
+    GUARDED_PROGRAMS.map((program) => {
+      const asks = `${judge} ${shellQuote(program)} "$@" < /dev/null || exit $?`;
+      return writeWhole(
+        join(dir, program),
+        `#!/bin/bash
+# CawCo workspace ${id}: ${program}, run once the upstream guard lets the call (upstream-shim.ts).
+real=
+IFS=: read -ra dirs <<< "$PATH"
+for dir in "\${dirs[@]}"; do
+  [ -z "$dir" ] || [ "$dir" = ${shellQuote(dir)} ] && continue
+  if [ -x "$dir/${program}" ] && [ ! -d "$dir/${program}" ]; then real=$dir/${program}; break; fi
+done
+if [ -z "$real" ]; then echo "${program}: command not found" >&2; exit 127; fi
+${
+  program === "curl"
+    ? `case " $* " in
+  *api.github.com* | *uploads.github.com*) ${asks} ;;
+esac`
+    : asks
+}
+exec "$real" "$@"
+`,
+        0o755
+      );
+    })
+  );
+};
+
 /** Writes `path` whole or not at all, at exactly `mode`: a reader never sees it half written. */
 const writeWhole = (
   path: string,
@@ -924,9 +1050,12 @@ const armHook = async (
   await writeWhole(hook, hookScript(id, hook, judge), 0o755);
   // What the hook ran before it asked a judge.
   await rm(join(stateDir(id), "boundary-hook.ts"), { force: true });
+  const runtime = await bunRuntime(id);
   if (process.platform === "darwin") {
-    await writeShims(id, await bunRuntime(id));
+    await writeShims(id, runtime);
   }
+  await writeGuardShims(id, runtime);
+  await writeUpstreamRule(id);
   if (!held.identity) {
     // A boundary started before gh had a config dir of its own gets it here;
     // the system gitconfig names the host's gh as it is now.
@@ -3562,7 +3691,8 @@ take() {
  * The executor: hands a command, the caller's directory and environment to
  * the workspace's runner over its FIFO, streams the output back and exits
  * with the command's status. It finds its own tools on {@link SYSTEM_PATH};
- * the command runs with its caller's PATH, behind the shims on macOS.
+ * the command runs with its caller's PATH, behind the upstream guard's
+ * shims ({@link writeGuardShims}) and, on macOS, the toolchain shims.
  */
 /** A lead's place's guard, looking before its command ({@link PLACE_GUARD}): a place it cannot look at runs no command. Nothing for a clone. */
 const guardBefore = (id: string, held: Pick<Held, "gen" | "path">): string =>
@@ -3593,8 +3723,9 @@ const execScript = (
   gh: string | undefined
 ): string => {
   const linux = process.platform === "linux";
-  // The hub's git helper (`hub-git.ts`) first, then on macOS the shims.
-  const helpers = `${gitHelperDirOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
+  // The hub's git helper (`hub-git.ts`) first, then the upstream guard's
+  // shims ({@link writeGuardShims}), then on macOS the toolchain shims.
+  const helpers = `${gitHelperDirOf(id)}:${guardShimsOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
   const path = `printf 'export PATH=%q\\n' ${shellQuote(helpers)}"$caller_path"`;
   return `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.

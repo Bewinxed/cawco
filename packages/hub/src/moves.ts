@@ -59,10 +59,10 @@ import {
   MachinePathRefused,
   machinePath,
 } from "@cawco/core/machine-path";
+import { hubRemoteIdentity, normaliseRemote } from "@cawco/core/upstream-guard";
 import { checkoutOf, type DbShape, type MoveRow, type ProjectRow } from "./db";
 import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
-import { hubRemoteIdentity, normaliseRemote } from "./projects";
 
 /** A machine a step needs is away: the job waits for its next register. */
 export class MoveAway extends Error {

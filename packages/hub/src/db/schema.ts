@@ -453,6 +453,13 @@ export const projects = sqliteTable("projects", {
   appleGate: integer("apple_gate", { mode: "boolean" })
     .notNull()
     .default(false),
+  /**
+   * Whether its sessions may post to repositories that are not its own
+   * (core upstream-guard.ts): off keeps them off, and a write to another
+   * repository does not run. Null: the fleet's answer
+   * ({@link upstreamSettings}).
+   */
+  upstreamPosts: integer("upstream_posts", { mode: "boolean" }),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2335,6 +2342,20 @@ export const fleetWatchSettings = sqliteTable("fleet_watch_settings", {
   /** Always `'fleet-watch'`. */
   id: text("id").primaryKey(),
   on: integer("on", { mode: "boolean" }).notNull().default(true),
+});
+
+/**
+ * The fleet's upstream choice (core upstream-guard.ts), asked once in
+ * onboarding — one row, keyed `'upstream'`, following the
+ * {@link spendSettings} precedent: whether sessions may post to repositories
+ * that are not their project's, where the project sets nothing. No row, or a
+ * null `posts`, is never answered: sessions may, and the dashboard asks.
+ */
+export const upstreamSettings = sqliteTable("upstream_settings", {
+  /** Always `'upstream'`. */
+  id: text("id").primaryKey(),
+  posts: integer("posts", { mode: "boolean" }),
+  answeredAt: timestamp("answered_at"),
 });
 
 /**

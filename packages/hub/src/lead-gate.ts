@@ -14,7 +14,12 @@
  *    commits to): `git checkout|reset|stash|clean|rebase|push`, `git add -A`
  *    and `git add .`, wherever they sit in the command (after `&&`, in a
  *    pipe, under `sh -c`, `eval`, `xargs`, `env`, a substitution). Refused:
- *    "file a task".
+ *    "file a task". And anywhere, while the project keeps its sessions off
+ *    other people's repositories (upstream.ts): a `gh`, `hub`, `glab` or
+ *    `curl` that names another repository as the one it writes to (core
+ *    upstream-guard.ts), refused with the guard's reason rather than put on
+ *    your card. One whose target only the place's git remotes name is left
+ *    to the place's shims, which read them as it runs.
  * 3. **Size**: an edit that would take the wake past {@link FILES_PER_WAKE}
  *    files, or touches a file that is not docs, config or assets by its path,
  *    is refused: "file a task".
@@ -53,6 +58,11 @@ import {
   type ThreadNote,
   unboundedCommand,
 } from "@cawco/core";
+import {
+  GUARDED_PROGRAMS,
+  type UpstreamRule,
+  upstreamRefusal,
+} from "@cawco/core/upstream-guard";
 import type { DbShape, LeadCallRow } from "./db";
 import type { WebContext } from "./web-reads";
 import { readsWeb } from "./web-reads";
@@ -901,6 +911,35 @@ export const allowlisted = (command: string, shared: boolean): boolean =>
 export const sharedRefusal = (command: string): string | undefined =>
   sharedDenial(commandsOf(command).argvs);
 
+/**
+ * Why a shell line does not run under the project's upstream rule: the
+ * guard's reason for the first `gh`, `hub`, `glab` or `curl` it runs that
+ * names another repository; none when none does. The place's remotes are
+ * not read here (it is on its machine): what only they name is the place's
+ * shims' to judge.
+ */
+export const upstreamDenial = (
+  command: string,
+  rule: UpstreamRule,
+  env: Readonly<Record<string, string | undefined>> = {}
+): string | undefined => {
+  for (const argv of commandsOf(command).argvs) {
+    const [program = "", ...args] = argv;
+    if (!GUARDED_PROGRAMS.includes(baseName(program))) {
+      continue;
+    }
+    const refused = upstreamRefusal(rule, {
+      program,
+      args,
+      env,
+      cwdRemotes: () => [],
+    });
+    if (refused) {
+      return refused;
+    }
+  }
+};
+
 /** The programs whose path arguments are files a shell line changes. */
 const CHANGERS: ReadonlySet<string> = new Set([
   "rm",
@@ -1031,6 +1070,8 @@ export interface LeadGateDeps {
   readonly shared: (lead: InstanceRow) => boolean;
   /** The thread the lead's turn answers now (caw.ts `askThread`). */
   readonly thread: (lead: InstanceRow) => string | undefined;
+  /** The lead's project's upstream rule (upstream.ts). */
+  readonly upstream: (lead: InstanceRow) => UpstreamRule;
   /** What a web read is judged by (web-reads.ts). */
   readonly webContext: () => WebContext;
 }
@@ -1181,6 +1222,7 @@ export const createLeadGate = ({
   note,
   shared,
   thread,
+  upstream,
   webContext,
 }: LeadGateDeps) => {
   /** Each lead's wake under way, by session. */
@@ -1209,14 +1251,17 @@ export const createLeadGate = ({
     return { shell, command: files.join(", "), files };
   };
 
-  /** The verdict on one of a lead's calls, from the rules in order: budget, shared checkout, size, wake source. */
+  /** The verdict on one of a lead's calls, from the rules in order: budget, shared checkout and upstream, size, wake source. */
   const judge = (lead: InstanceRow, call: Call): GateVerdict => {
     const wake = wakeOf(lead.id);
     wake.calls += 1;
     const isShared = shared(lead);
     const refused =
       overBudget(wake) ??
-      (call.shell ? sharedDenied(call, isShared) : editDenied(call, wake));
+      (call.shell
+        ? (sharedDenied(call, isShared) ??
+          upstreamDenial(call.command, upstream(lead)))
+        : editDenied(call, wake));
     if (refused) {
       return { kind: "deny", message: refused };
     }

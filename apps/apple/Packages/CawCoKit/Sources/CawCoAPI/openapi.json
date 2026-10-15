@@ -480,6 +480,9 @@
                   },
                   "todos": {
                     "type": "boolean"
+                  },
+                  "upstream": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -19200,6 +19203,12 @@
                   },
                   "appleGate": {
                     "type": "boolean"
+                  },
+                  "upstreamPosts": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
                   }
                 }
               }
@@ -24397,6 +24406,12 @@
             "appleGate": {
               "type": "boolean"
             },
+            "upstreamPosts": {
+              "type": [
+                "null",
+                "boolean"
+              ]
+            },
             "createdAt": {
               "type": "string",
               "format": "date-time"
@@ -24461,7 +24476,8 @@
             "review",
             "reviewLimit",
             "runsOn",
-            "tracker"
+            "tracker",
+            "upstreamPosts"
           ]
         }
       },
@@ -24604,6 +24620,12 @@
           "appleGate": {
             "type": "boolean"
           },
+          "upstreamPosts": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -24670,7 +24692,8 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker"
+          "tracker",
+          "upstreamPosts"
         ]
       },
       "getApiProjectsByIdRunning200": {
@@ -24798,6 +24821,12 @@
           "appleGate": {
             "type": "boolean"
           },
+          "upstreamPosts": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -24862,7 +24891,8 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker"
+          "tracker",
+          "upstreamPosts"
         ]
       },
       "deleteApiProjectsById200": {
@@ -25012,6 +25042,12 @@
           "appleGate": {
             "type": "boolean"
           },
+          "upstreamPosts": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -25078,7 +25114,8 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker"
+          "tracker",
+          "upstreamPosts"
         ]
       },
       "putApiProjectsByIdAccounts200": {
@@ -25178,6 +25215,12 @@
           "appleGate": {
             "type": "boolean"
           },
+          "upstreamPosts": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -25242,7 +25285,8 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker"
+          "tracker",
+          "upstreamPosts"
         ]
       },
       "deleteApiProjectsByIdPlacesByPlaceId200": {
@@ -27812,6 +27856,13 @@
               "todos"
             ],
             "description": "What each choice denies, per harness."
+          },
+          "upstream": {
+            "description": "Sessions may post to other people's repositories; null while nobody has answered.",
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
         "required": [
@@ -27819,7 +27870,8 @@
           "deniedTools",
           "setAt",
           "todos",
-          "tools"
+          "tools",
+          "upstream"
         ]
       },
       "FolderListing": {

@@ -314,6 +314,12 @@ export interface RegisterAckPayload {
    * wiped or restored from an older copy has never heard of real accounts).
    */
   unknownAccounts?: string[];
+  /**
+   * The upstream guard's rules (upstream-guard.ts `UpstreamRules`), so a
+   * workspace's first command after the machine connects is judged by the
+   * choice as it stands. Every heartbeat's ack carries them again.
+   */
+  upstream?: import("./upstream-guard").UpstreamRules;
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined =>

@@ -1,8 +1,11 @@
 /**
- * A project's name, its Review before done and its Apple build gate
- * (apple-gate.ts), changed by the person (`PATCH /api/projects/:id`) or by
- * its Caw (`project_settings` `rename`, `set_review`, `set_apple_gate`): one
- * check and one write for all three. The change reaches every
+ * A project's name, its Review before done, its Apple build gate
+ * (apple-gate.ts) and its upstream choice (upstream.ts), changed by the
+ * person (`PATCH /api/projects/:id`) or, but for the upstream choice, by its
+ * Caw (`project_settings` `rename`, `set_review`, `set_apple_gate`): one
+ * check and one write for all four. The upstream choice is the person's
+ * alone: it is what keeps sessions, Caw among them, off other people's
+ * repositories. The change reaches every
  * dashboard and the app at once: `projects.changed` makes each read the
  * projects again, and a review change is a change to the stages the hub
  * applies, so the project's boards read its tasks and stages again too.
@@ -21,6 +24,8 @@ export interface ProjectEdit {
   appleGate?: boolean;
   name?: string;
   review?: boolean;
+  /** Its sessions may post to other repositories; null: the fleet's answer. */
+  upstreamPosts?: boolean | null;
 }
 
 /** A change the hub refuses, in a sentence the person reads under the field. */
@@ -73,6 +78,12 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
   if (asked.appleGate !== undefined && asked.appleGate !== project.appleGate) {
     change.appleGate = asked.appleGate;
   }
+  if (
+    asked.upstreamPosts !== undefined &&
+    asked.upstreamPosts !== project.upstreamPosts
+  ) {
+    change.upstreamPosts = asked.upstreamPosts;
+  }
   return change;
 };
 
@@ -82,7 +93,7 @@ export const createProjectEdits = ({
   stagesChanged,
 }: ProjectEditsDeps) => ({
   /**
-   * Checks and applies a change to a project's name, Review before done and Apple build gate;
+   * Checks and applies a change to a project's name, Review before done, Apple build gate and upstream choice;
    * answers the project as it is now. Nothing asked is refused.
    */
   edit(projectId: string, asked: ProjectEdit): ProjectRow {
@@ -96,11 +107,12 @@ export const createProjectEdits = ({
     if (
       asked.name === undefined &&
       asked.review === undefined &&
-      asked.appleGate === undefined
+      asked.appleGate === undefined &&
+      asked.upstreamPosts === undefined
     ) {
       throw new ProjectEditRefusal(
         400,
-        "Name what changes: the project's name, whether it reviews before done, or whether its work waits for the iOS build."
+        "Name what changes: the project's name, whether it reviews before done, whether its work waits for the iOS build, or whether its agents may post to other repositories."
       );
     }
     const change = changeOf(project, asked);

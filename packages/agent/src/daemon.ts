@@ -86,6 +86,7 @@ import {
   checkBoundaryHost,
   liveWorkItems,
   rearmHooks,
+  takeUpstreamRules,
   watchQuietBoundaries,
 } from "./boundary";
 import { buildInfo } from "./build";
@@ -163,6 +164,17 @@ import {
   SessionSupervisor,
 } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
+
+/** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */
+const takeUpstream = (
+  rules: import("@cawco/core/upstream-guard").UpstreamRules | undefined
+): void => {
+  takeUpstreamRules(rules).catch((error: unknown) => {
+    console.warn(
+      `[workspace] the hub's upstream rules could not be written: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+};
 
 /** The hub's session limits, said to every keeper, which starts each child under them from here; said in the log once each time they change. */
 const takeSessionLimits = (
@@ -2035,6 +2047,7 @@ const attach = (
         takeSessionLimits(
           (envelope.payload as RegisterAckPayload).sessionLimits
         );
+        takeUpstream((envelope.payload as RegisterAckPayload).upstream);
         // This connection's credential for the hub's git remote, in memory only.
         setHubCredential(
           identity.machineId,
@@ -2114,6 +2127,7 @@ const attach = (
         supervisor.keepAwake(beat?.keepAwake);
         liveWorkItems(beat?.liveWorkspaces);
         takeSessionLimits(beat?.sessionLimits);
+        takeUpstream(beat?.upstream);
         supervisor.acknowledged(beat);
         return;
       }

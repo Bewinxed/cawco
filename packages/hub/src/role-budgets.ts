@@ -186,6 +186,7 @@ export const measureRoles = (): RoleSize[] => {
         inTurn: () => false,
         interrupt: () => undefined,
         fleetChoicesSet: () => false,
+        upstreamAnswered: () => false,
         folderChanged: () => undefined,
         leadHome: () => Promise.resolve(undefined),
         makeNote: () => Promise.reject(new Error("measuring")),
