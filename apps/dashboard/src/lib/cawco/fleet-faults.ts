@@ -174,10 +174,14 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
     fix: "Fix the write on that machine, then sync it again.",
     action: "resync",
   },
+  // agent/fleet.ts runs (`timed out after`), Claude Code's own MCP connect
+  // timeout (`MCP server "x" connection timed out after 30000ms`), OpenCode's
+  // MCP request timeout (`Request timed out`), and agent/mcp-status.ts when
+  // Claude Code itself never settled a server (`had not settled`).
   "timed-out": {
-    title: "The command never finished",
-    why: "A clone or an install ran past the time a sync will hold open for it, and was killed rather than left running.",
-    fix: "Usually a slow or blocked network on that machine. Sync it again once it can reach the source.",
+    title: "It did not answer in time",
+    why: "An MCP server, a clone or an install ran past the time allowed for it, and was given up on rather than waited for.",
+    fix: "Usually a slow or blocked network on that machine, or a server that is down. Sync it again once it can reach the source.",
     action: "resync",
   },
   // agent/fleet.ts syncHooks: 'bound to a project this machine has no checkout for'.
@@ -231,7 +235,7 @@ const DRIFTED = /edited on this machine/i;
 const MISSING_BYTES = /the hub sent no files/i;
 const UNSAFE_PATH = /^unsafe path/i;
 const NO_CHECKOUT = /no checkout|has no checkout for/i;
-const TIMED_OUT = /timed out after/i;
+const TIMED_OUT = /timed out after|request timed out|had not settled/i;
 const UNPARSABLE = /could not parse/i;
 const UNWRITABLE = /could not write/i;
 const ABSENT = /^not in |^not on disk|is not in known_marketplaces/i;

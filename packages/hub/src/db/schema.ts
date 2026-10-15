@@ -25,6 +25,7 @@ import type {
   HookHandler,
   LandsMode,
   LimitWindow,
+  McpPlatform,
   ModelInfo,
   MoveRequest,
   MoveStage,
@@ -1460,6 +1461,11 @@ export const mcpServers = sqliteTable("mcp_servers", {
    */
   scope: text("scope").$type<FleetScope>(),
   projectId: text("project_id"),
+  /**
+   * The machine platforms it runs on (`FleetMcpServer.platforms`): a machine
+   * of any other is never sent it. Null: every machine.
+   */
+  platforms: text("platforms", { mode: "json" }).$type<McpPlatform[]>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

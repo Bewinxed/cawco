@@ -18,6 +18,7 @@ const seen = (row: FleetMcpServer): Seen => ({
   shape: JSON.stringify([
     row.config,
     (row as { projectId?: string }).projectId ?? null,
+    row.platforms ?? null,
     row.auth?.mode ?? null,
   ]),
   signedIn: row.auth?.mode !== "oauth" || row.auth.state === "signed-in",

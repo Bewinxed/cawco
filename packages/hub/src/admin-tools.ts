@@ -7,7 +7,12 @@
  * validation, fan-out and persistence the dashboard uses. The tools are
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
-import type { FleetPlugin, FleetSkillMeta, MarketplaceLink } from "@cawco/core";
+import {
+  type FleetPlugin,
+  type FleetSkillMeta,
+  type MarketplaceLink,
+  MCP_PLATFORMS,
+} from "@cawco/core";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { z } from "zod";
 import { hubHttpUrl } from "./delegation-actions";
@@ -546,15 +551,14 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            `The MCP server name (as it appears in ${CLAUDE_JSON_LABEL}). Required for put and remove.`
+            `The server name, as in ${CLAUDE_JSON_LABEL}. Required for put and remove.`
           ),
         config: z
           .record(z.string(), z.unknown())
           .optional()
           .describe(
-            "The server configuration object. Required for put. A stdio server needs " +
-              "{ command: string, args?: string[] }. A remote server needs " +
-              '{ type: "http"|"sse", url: string }.'
+            "Required for put. stdio: { command, args? }; remote: " +
+              '{ type: "http"|"sse", url }.'
           ),
         enabled: z
           .boolean()
@@ -567,8 +571,13 @@ export function adminTools() {
           .describe(
             "For one project only: placed in every checkout and workspace of it. null: every machine."
           ),
+        platforms: z
+          .array(z.enum(MCP_PLATFORMS))
+          .nullable()
+          .optional()
+          .describe("Only machines of these platforms get it. null: all."),
       },
-      async ({ action, name, config, enabled, projectId }) => {
+      async ({ action, name, config, enabled, projectId, platforms }) => {
         if (action === "list") {
           const fleet = (await api("GET", "/api/fleet")) as {
             config?: { mcp?: unknown[] };
@@ -592,11 +601,11 @@ export function adminTools() {
             config,
             ...(enabled === undefined ? {} : { enabled }),
             ...(projectId === undefined ? {} : { projectId }),
+            ...(platforms === undefined ? {} : { platforms }),
           })
         );
       },
-      " A stdio server needs a 'command' in its config; a remote server needs 'type' and 'url'." +
-        " A change reaches sessions already running within seconds: a server put, enabled or signed in" +
+      " A change reaches sessions already running within seconds: a server put, enabled or signed in" +
         " connects in them, and one removed, disabled or signed out leaves them. No new session is needed."
     ),
 

@@ -78,9 +78,30 @@ export interface FleetMcpServer extends FleetPlacement {
   /** Disabled rows stay in the hub but are removed from the machines. */
   enabled: boolean;
   name: string;
+  /**
+   * The machine platforms it can run on, by the name each machine reports in
+   * its capabilities (`MachineCapabilities.platform`, Node's
+   * `process.platform`: "darwin", "linux", "win32"). A machine of another
+   * platform is never sent it, so it is neither installed nor probed there.
+   * Absent: every machine.
+   */
+  platforms?: McpPlatform[];
   /** The config points at the hub's authenticated forwarder. */
   proxied?: boolean;
 }
+
+/** The platforms an MCP server can be scoped to ({@link FleetMcpServer.platforms}). */
+export const MCP_PLATFORMS = ["darwin", "linux", "win32"] as const;
+export type McpPlatform = (typeof MCP_PLATFORMS)[number];
+
+/** Whether a machine reporting `platform` is sent `server`: unscoped, or scoped to that platform. */
+export const mcpRunsOn = (
+  server: Pick<FleetMcpServer, "platforms">,
+  platform: string | undefined
+): boolean =>
+  !server.platforms ||
+  (platform !== undefined &&
+    (server.platforms as readonly string[]).includes(platform));
 
 /**
  * The port an agent serves its MCP gateway on when `CAWCO_MCP_PORT` names

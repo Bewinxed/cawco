@@ -676,10 +676,15 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (buildConvergence(machine.build, cawco.hubBuild) === "behind") {
     return "behind hub";
   }
-  if (machineFaults(machine.machineId, machine.fleet).length > 0) {
-    return "sync failed";
+  const faults = machineFaults(machine.machineId, machine.fleet);
+  if (faults.length === 0) {
+    return null;
   }
-  return null;
+  // Something that did not answer in time is slow, not broken: said so only
+  // while that is all there is.
+  return faults.every((fault) => fault.cause === "timed-out")
+    ? "sync slow"
+    : "sync failed";
 }
 
 /* ── The model ─────────────────────────────────────────────────────── */

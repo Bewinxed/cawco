@@ -96,6 +96,7 @@ import {
 } from "../harness";
 import { KeeperPool } from "../keepers";
 import { isMachineAgent } from "../machine-agent";
+import { MCP_CONNECT_MS } from "../mcp-status";
 import { gaugeTables } from "../memory";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
 import {
@@ -122,7 +123,6 @@ import {
   assertPluginLoaded,
   at,
   errorText,
-  MCP_CONNECT_TIMEOUT_MS,
   type McpNotConnected,
   notFound,
   OPENCODE_BIN,
@@ -560,20 +560,32 @@ const announceOpencodeServer = async (
   });
 };
 
-/** A fleet MCP definition, in 2.0's `mcp.servers.<name>` shape. */
-const toOpencodeMcp = (config: FleetMcpConfig): Record<string, unknown> =>
-  "url" in config
+/**
+ * A fleet MCP definition, in 2.0's `mcp.servers.<name>` shape. Its `timeout`
+ * object overrides OpenCode's own (opencode.ai/v2/docs/mcp-servers
+ * "Timeouts": `startup` "Transport connection and server initialization" and
+ * `catalog` "Listing tools, prompts, resources…", 30 s each by default): a
+ * fleet server slower than that read `Request timed out` on every sync. Both
+ * get the fleet's connect window ({@link MCP_CONNECT_MS}), the one Claude
+ * Code gets, so a slow server reads the same in either harness.
+ */
+const toOpencodeMcp = (config: FleetMcpConfig): Record<string, unknown> => {
+  const timeout = { startup: MCP_CONNECT_MS, catalog: MCP_CONNECT_MS };
+  return "url" in config
     ? {
         type: "remote",
         url: config.url,
         oauth: false,
+        timeout,
         ...(config.headers ? { headers: config.headers } : {}),
       }
     : {
         type: "local",
         command: [config.command, ...(config.args ?? [])],
+        timeout,
         ...(config.env ? { environment: config.env } : {}),
       };
+};
 
 const recordOf = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -4960,12 +4972,13 @@ export class OpencodeHarness implements Harness {
   /**
    * The server's MCP list once none of `names` is still `pending`: 2.0
    * connects a location's servers after it answers, so a read right after a
-   * boot names them connecting. Bounded by OpenCode's own startup timeout
-   * ({@link MCP_CONNECT_TIMEOUT_MS}); a server the list does not name is not
-   * waited for, since the config it runs is already the one written.
+   * boot names them connecting. Bounded by the startup timeout each fleet
+   * server is written with ({@link MCP_CONNECT_MS}, toOpencodeMcp) and 30 s
+   * more for a cold machine (CawCo's own margin), so OpenCode's own verdict
+   * on a server is what is read, never a cut-off of ours.
    */
   async #settledMcpList(client: OpencodeClient, names: string[]) {
-    const deadline = Date.now() + MCP_CONNECT_TIMEOUT_MS;
+    const deadline = Date.now() + MCP_CONNECT_MS + 30_000;
     for (;;) {
       // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
       const listed = await client.mcp.list(

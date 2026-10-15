@@ -4,40 +4,88 @@ import { type FleetSyncReport, mcpFleetState } from "@cawco/core";
 import { claudeExecutableOptions, idle } from "./auth";
 import { claudeHomeEnv } from "./tools";
 
-const CONNECT_TIMEOUT_MS = 30_000;
+/**
+ * The connect window every harness gives a fleet MCP server. A proxied
+ * server's first handshake after a hub reset is two upstream requests of up
+ * to 30 s each (hub fleet-mcp-relay.ts `LISTER_TIMEOUT_MS`), and OpenCode's
+ * own startup read is bounded the same (opencode-client.ts
+ * `MCP_CONNECT_TIMEOUT_MS`).
+ */
+export const MCP_CONNECT_MS = 60_000;
 
-/** Read connection outcomes before closing the SDK process that establishes them. */
+/**
+ * Claude Code takes its connect window from `MCP_TIMEOUT`. Measured on
+ * 2.1.299 through this SDK: unset, a server answering `initialize` in 24 s
+ * connected and one answering in 25 s read `failed: Request timed out`; with
+ * `MCP_TIMEOUT=60000` the 25 s one connected. Every Claude Code CawCo starts,
+ * sessions and the status read alike, gets {@link MCP_CONNECT_MS}, so the
+ * read judges a server as a session will meet it. An operator's own
+ * `MCP_TIMEOUT` is laid over it and stands.
+ */
+export const CLAUDE_MCP_ENV = { MCP_TIMEOUT: String(MCP_CONNECT_MS) };
+
+/**
+ * How long Claude Code gives one MCP server to connect under `env`:
+ * `MCP_TIMEOUT`, else 30 s, read off its own code (2.1.299):
+ * `function Ka(){let _=a.MCP_TIMEOUT;return _&&_>0?Math.min(_,2147483647):30000}`.
+ * A server it has not connected by then it marks `failed` with its own words,
+ * so that verdict, not a clock of ours, is what a slow server is judged by.
+ */
+export const claudeMcpConnectMs = (env: Record<string, string | undefined>) => {
+  const set = Number(env.MCP_TIMEOUT);
+  return set > 0 ? Math.min(set, 2_147_483_647) : 30_000;
+};
+/** CawCo's own bound on the CLI starting and answering its first status read. */
+const START_TIMEOUT_MS = 30_000;
+/** CawCo's own margin past Claude Code's connect timeout for its verdict to land. */
+const VERDICT_MARGIN_MS = 5000;
+
+/**
+ * Read connection outcomes before closing the SDK process that establishes
+ * them. Each server is judged by Claude Code's own verdict: `connected`,
+ * `failed` with what it said, `needs-auth`. A server is waited for until its
+ * connect timeout ({@link claudeMcpConnectMs}) has passed from the moment the
+ * CLI answered, so one that takes 25 s of a 30 s window reads connected, and
+ * one that never answers reads as Claude Code's own failure. Only a CLI that
+ * never starts, or never settles a server past its own timeout, is CawCo's
+ * failure to report, and says so.
+ */
 export const readMcpRuntime = async (
   names: string[]
 ): Promise<FleetSyncReport["mcp"]> => {
   if (names.length === 0) {
     return {};
   }
+  const env = { ...CLAUDE_MCP_ENV, ...claudeHomeEnv() };
+  const connectMs = claudeMcpConnectMs(env);
   const handle = query({
     prompt: idle,
     options: {
       persistSession: false,
-      env: claudeHomeEnv(),
+      env,
       ...claudeExecutableOptions(),
     },
   });
-  let statuses: McpServerStatus[] = [];
+  let statuses: McpServerStatus[] | undefined;
   let expired = false;
-  const timer = setTimeout(() => {
-    expired = true;
-    handle.close();
-  }, CONNECT_TIMEOUT_MS);
+  const expire = (ms: number) =>
+    setTimeout(() => {
+      expired = true;
+      handle.close();
+    }, ms);
+  let timer = expire(START_TIMEOUT_MS);
+  const unsettled = (): string =>
+    statuses === undefined
+      ? `Claude Code did not start within ${START_TIMEOUT_MS / 1000} seconds, so no MCP server was read.`
+      : `Claude Code had not settled this server ${(connectMs + VERDICT_MARGIN_MS) / 1000} seconds after it started, past its own ${connectMs / 1000} second connect timeout.`;
   const report = (): FleetSyncReport["mcp"] =>
     Object.fromEntries(
       names.map((name) => {
-        const status = statuses.find((row) => row.name === name);
+        const status = statuses?.find((row) => row.name === name);
         return [
           name,
           status?.status === "pending" || (!status && expired)
-            ? {
-                state: "failed",
-                detail: `The MCP server did not finish connecting within ${CONNECT_TIMEOUT_MS / 1000} seconds.`,
-              }
+            ? { state: "failed", detail: unsettled() }
             : mcpFleetState(status),
         ];
       })
@@ -45,9 +93,15 @@ export const readMcpRuntime = async (
   try {
     while (!expired) {
       // biome-ignore lint/performance/noAwaitInLoops: wait on the same connection attempt until its status settles; no reconnect or retry is issued
-      statuses = await handle.mcpServerStatus();
+      const read = await handle.mcpServerStatus();
+      if (statuses === undefined) {
+        // The CLI is up and connecting: from here its own timeout runs.
+        clearTimeout(timer);
+        timer = expire(connectMs + VERDICT_MARGIN_MS);
+      }
+      statuses = read;
       if (
-        !statuses.some(
+        !read.some(
           (row) => names.includes(row.name) && row.status === "pending"
         )
       ) {

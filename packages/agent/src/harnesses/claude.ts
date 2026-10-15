@@ -170,6 +170,7 @@ import {
   completeAccountLogin,
   forgetAccount,
 } from "../login";
+import { CLAUDE_MCP_ENV } from "../mcp-status";
 import {
   homeLoginMovedInto,
   joinAccountLogin,
@@ -1111,6 +1112,8 @@ const sessionEnv = (
   model: string | undefined,
   ctx: HarnessContext
 ): Record<string, string | undefined> => ({
+  // The fleet's MCP connect window (mcp-status.ts), under the agent's own env.
+  ...CLAUDE_MCP_ENV,
   ...sessionEnvironment(process.env),
   CLAUDE_CHROME_CLASSIFIER_FLOOR: "0",
   ...specEnv,

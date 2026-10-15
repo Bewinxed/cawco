@@ -22,6 +22,7 @@ import type {
   HarnessReport,
   HookEvent,
   HookHandler,
+  McpPlatform,
   OnCap,
   OpenCodeGoLimits,
   PlanStep,
@@ -1398,13 +1399,15 @@ export interface DbShape {
   /**
    * Upsert. `projectId` binds it to one project (placed at each of its
    * checkouts and workspaces), null makes it every machine's, and left out
-   * keeps what it was.
+   * keeps what it was. `platforms` the same way: the platforms it runs on,
+   * null every platform, left out as it was.
    */
   readonly putMcpServer: (server: {
     name: string;
     config: FleetMcpServer["config"];
     enabled?: boolean;
     projectId?: string | null;
+    platforms?: McpPlatform[] | null;
   }) => FleetMcpServer;
   /** A fleet MCP relay session opened: its `initialize` params, kept across hub restarts. */
   readonly putMcpSession: (row: {
@@ -5020,34 +5023,45 @@ const make = async (path: string): Promise<DbShape> => {
           .flatMap((row) =>
             row.config ? [{ ...row, config: row.config }] : []
           )
-          .map(({ name, config, enabled, authMode, authError, projectId }) => {
-            const signedIn =
-              authMode === "direct" ||
-              Boolean(
-                db
-                  .select({ tokens: fleetMcpOauth.tokens })
-                  .from(fleetMcpOauth)
-                  .where(eq(fleetMcpOauth.name, name))
-                  .get()?.tokens
-              );
-            let state: "failed" | "signed-in" | "needs-auth" = signedIn
-              ? "signed-in"
-              : "needs-auth";
-            if (authError) {
-              state = "failed";
-            }
-            return {
+          .map(
+            ({
               name,
               config,
               enabled,
-              ...(projectId ? { projectId, scope: "local" as const } : {}),
-              auth: {
-                mode: authMode,
-                state,
-                ...(authError ? { detail: authError } : {}),
-              },
-            };
-          }),
+              authMode,
+              authError,
+              projectId,
+              platforms,
+            }) => {
+              const signedIn =
+                authMode === "direct" ||
+                Boolean(
+                  db
+                    .select({ tokens: fleetMcpOauth.tokens })
+                    .from(fleetMcpOauth)
+                    .where(eq(fleetMcpOauth.name, name))
+                    .get()?.tokens
+                );
+              let state: "failed" | "signed-in" | "needs-auth" = signedIn
+                ? "signed-in"
+                : "needs-auth";
+              if (authError) {
+                state = "failed";
+              }
+              return {
+                name,
+                config,
+                enabled,
+                ...(projectId ? { projectId, scope: "local" as const } : {}),
+                ...(platforms ? { platforms } : {}),
+                auth: {
+                  mode: authMode,
+                  state,
+                  ...(authError ? { detail: authError } : {}),
+                },
+              };
+            }
+          ),
         marketplaces: db
           .select()
           .from(marketplaces)
@@ -5193,7 +5207,7 @@ const make = async (path: string): Promise<DbShape> => {
         })(),
       };
     },
-    putMcpServer: ({ name, config, enabled, projectId }) => {
+    putMcpServer: ({ name, config, enabled, projectId, platforms }) => {
       const previous = db
         .select()
         .from(mcpServers)
@@ -5206,6 +5220,9 @@ const make = async (path: string): Promise<DbShape> => {
       }
       const placement = placementOf(projectId, previous?.projectId, "local");
       const bound = placement.projectId;
+      const asked = platforms?.length ? platforms : null;
+      const runsOn =
+        platforms === undefined ? (previous?.platforms ?? null) : asked;
       // A new or changed config is unsettled — failed, so never synced — until
       // the hub hears from the server (fleet-mcp.ts `#probe`).
       const unsettled = {
@@ -5217,6 +5234,7 @@ const make = async (path: string): Promise<DbShape> => {
           name,
           config,
           enabled: enabled ?? true,
+          platforms: runsOn,
           ...placement,
           ...unsettled,
         })
@@ -5225,6 +5243,7 @@ const make = async (path: string): Promise<DbShape> => {
           set: {
             config,
             enabled: enabled ?? true,
+            platforms: runsOn,
             ...placement,
             ...(changed ? unsettled : {}),
           },
@@ -5235,6 +5254,7 @@ const make = async (path: string): Promise<DbShape> => {
         config,
         enabled: enabled ?? true,
         ...(bound ? { projectId: bound, scope: "local" as const } : {}),
+        ...(runsOn ? { platforms: runsOn } : {}),
       };
     },
     deleteMcpServer: (name) => {

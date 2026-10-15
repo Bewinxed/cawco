@@ -223,7 +223,11 @@ export class FleetMcp {
 
   async #probe(name: string): Promise<void> {
     const { config } = this.#server(name);
+    // A stdio server runs on each machine and has nothing for the hub to
+    // reach: settled at once, or the "not reached yet" a put leaves on it
+    // (db `putMcpServer`) keeps it off every machine.
     if (!("url" in config)) {
+      this.#db.setMcpAuth(name, "direct");
       return;
     }
     const key = JSON.stringify(config);

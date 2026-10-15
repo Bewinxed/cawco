@@ -15755,6 +15755,20 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "platforms": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "darwin",
+                        "linux",
+                        "win32"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -38222,6 +38236,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "platforms": {
+            "description": "The machine platforms it can run on, by the name each machine reports in\nits capabilities (`MachineCapabilities.platform`, Node's\n`process.platform`: \"darwin\", \"linux\", \"win32\"). A machine of another\nplatform is never sent it, so it is neither installed nor probed there.\nAbsent: every machine.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolPlatform"
+            }
           },
           "proxied": {
             "description": "The config points at the hub's authenticated forwarder.",

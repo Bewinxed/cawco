@@ -211,11 +211,13 @@ import {
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
   type MachineProviderLists,
+  MCP_PLATFORMS,
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
   MOVE_LATER_WAIT_MS,
   MOVED_HERE,
+  mcpRunsOn,
   memoryDocProblem,
   type NeutralSystemMessage,
   namedAccount,
@@ -13420,9 +13422,17 @@ export const createServer = (
         // nothing, so every byte goes — heavier, never wrong.
         const held = await readHoldings(machineId);
         const places = db.listProjects().flatMap((project) => project.places);
-        const mcpRows = config.mcp.flatMap((row) =>
-          current.has(row.name) ? [current.get(row.name) as typeof row] : []
-        );
+        // A server scoped to platforms reaches only a machine whose register
+        // reported one of them (`machine_capabilities.platform`); any other
+        // is not sent it, so its agent removes what it had and probes nothing.
+        const platform = db
+          .listAgents()
+          .find((row) => row.machineId === machineId)
+          ?.machineCapabilities?.platform;
+        const mcpRows = config.mcp.flatMap((row) => {
+          const latest = current.get(row.name);
+          return latest && mcpRunsOn(latest, platform) ? [latest] : [];
+        });
         const outbound = fleetMcp.syncConfig(
           {
             ...config,
@@ -20358,6 +20368,17 @@ export const createServer = (
              * delegate workspaces. Null: every machine. Left out: as it was.
              */
             projectId: t.Optional(t.Union([t.String(), t.Null()])),
+            /**
+             * The machine platforms it runs on (`machine_capabilities.platform`):
+             * any other machine is never sent it. Null or empty: every
+             * machine. Left out: as it was.
+             */
+            platforms: t.Optional(
+              t.Union([
+                t.Array(t.Union(MCP_PLATFORMS.map((one) => t.Literal(one)))),
+                t.Null(),
+              ])
+            ),
           }),
         },
         async ({ params, body, status }) => {
@@ -20373,6 +20394,7 @@ export const createServer = (
             config: body.config as unknown as FleetMcpConfig,
             enabled: body.enabled,
             projectId: body.projectId,
+            platforms: body.platforms,
           });
           await fleetMcp.probe(params.name);
           announceMcp();
