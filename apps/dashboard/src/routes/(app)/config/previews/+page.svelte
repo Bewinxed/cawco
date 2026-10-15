@@ -49,6 +49,9 @@
 
   /** The range's first port: where host mode's names have to reach. */
   const firstPort = $derived(settings?.ports.split("–")[0] ?? "");
+  const lastPort = $derived(settings?.ports.split("–")[1] ?? "");
+  /** The pattern names sessions by their kept port: a fixed name per port, not a wildcard. */
+  const byPort = $derived(pattern.includes("{port}"));
 
   const changed = $derived(
     !!settings &&
@@ -121,7 +124,7 @@
     </Field>
     {#if mode === "host"}
       <Field
-        hint={"{session} stands for the session's id, e.g. p-{session}.example.com. The hub checks one name resolves before it keeps the pattern."}
+        hint={"Use one of {session} or {port}. {session} stands for the session's id, e.g. p-{session}.example.com, and needs a wildcard name. {port} stands for the preview port the session keeps, e.g. p-{port}.example.com, so one name per port of the range serves every session. The hub checks one name resolves before it keeps the pattern."}
         id="preview-pattern"
         label="Host pattern"
         problem={refused}
@@ -143,31 +146,57 @@
           Behind Cloudflare, with the dashboard on a tunnel already:
         </p>
         <ol class="note">
-          <li>
-            In DNS, add a proxied CNAME record named <code>*</code> whose target
-            is your tunnel, <code>&lt;tunnel-id&gt;.cfargotunnel.com</code>.
-            Records you already have keep their own targets.
-          </li>
-          <li>
-            In Networking › Tunnels › your tunnel › Routes, add a published
-            application: hostname <code>*.example.com</code>, service
-            <code>http://localhost:{firstPort}</code>
-            on the hub's machine.
-          </li>
-          <li>
-            In Zero Trust › Access, add <code>*.example.com</code> to the
-            application that guards the dashboard, so one sign-in covers both.
-          </li>
-          <li>
-            Set the pattern to <code>p-{"{session}"}.example.com</code> and
-            save. Keep {"{session}"} in the first label: Cloudflare's free
-            certificate covers one level of subdomain, not
-            <code>*.previews.example.com</code>.
-          </li>
+          {#if byPort}
+            <li>
+              In DNS, add a proxied CNAME record for each port of the range,
+              <code>p-{firstPort}</code>
+              to <code>p-{lastPort}</code>, whose target is your tunnel,
+              <code>&lt;tunnel-id&gt;.cfargotunnel.com</code>. No wildcard is
+              needed, so one you already use elsewhere stays as it is.
+            </li>
+            <li>
+              In Networking › Tunnels › your tunnel › Routes, add a published
+              application for each of those names, service
+              <code>http://localhost:{firstPort}</code>
+              on the hub's machine.
+            </li>
+            <li>
+              In Zero Trust › Access, add those names to the application that
+              guards the dashboard, so one sign-in covers both.
+            </li>
+            <li>
+              Set the pattern to <code>p-{"{port}"}.example.com</code> and save.
+            </li>
+          {:else}
+            <li>
+              In DNS, add a proxied CNAME record named <code>*</code> whose
+              target is your tunnel,
+              <code>&lt;tunnel-id&gt;.cfargotunnel.com</code>. Records you
+              already have keep their own targets.
+            </li>
+            <li>
+              In Networking › Tunnels › your tunnel › Routes, add a published
+              application: hostname <code>*.example.com</code>, service
+              <code>http://localhost:{firstPort}</code>
+              on the hub's machine.
+            </li>
+            <li>
+              In Zero Trust › Access, add <code>*.example.com</code> to the
+              application that guards the dashboard, so one sign-in covers both.
+            </li>
+            <li>
+              Set the pattern to <code>p-{"{session}"}.example.com</code> and
+              save. Keep {"{session}"} in the first label: Cloudflare's free
+              certificate covers one level of subdomain, not
+              <code>*.previews.example.com</code>.
+            </li>
+          {/if}
         </ol>
         <p class="note">
-          Without Cloudflare: point a wildcard DNS name at the hub, or at a
-          proxy that sends those names to port {firstPort}, then save.
+          Without Cloudflare: point the pattern's names ({byPort
+            ? "one per port"
+            : "a wildcard"}) at the hub, or at a proxy that sends them to port
+          {firstPort}, then save.
         </p>
       </div>
     {/if}

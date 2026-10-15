@@ -18,7 +18,7 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
-import { type PreviewAddress, previewOrigin } from "@cawco/core";
+import { type PreviewAddress, previewEntry, previewOrigin } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
@@ -71,8 +71,11 @@ const boxOf = (el: Element): Box => {
   return { left: r.left, top: r.top, width: r.width, height: r.height };
 };
 
-/** Each session's preview origin, as the hub last named it (`Stage.#reach`). */
-const sessionOrigins = new Map<string, string>();
+/** Each session's preview origin and address, as the hub last named them (`Stage.#reach`). */
+const sessionOrigins = new Map<
+  string,
+  { address: PreviewAddress; origin: string }
+>();
 
 export class Stage {
   readonly id: string;
@@ -222,9 +225,14 @@ export class Stage {
     // The origin its session's canvases already stand on: a stage made anew
     // for the same canvas (its holder let go and took it again) keeps its
     // iframe, never reloaded for a moment with no address.
-    this.origin = sessionOrigins.get(instanceId) ?? null;
+    const named = sessionOrigins.get(instanceId);
+    this.#address = named?.address ?? null;
+    this.origin = named?.origin ?? null;
     this.#reach();
   }
+
+  /** What the hub named: a port, or a host name (host mode, where the frame opens through the gate). */
+  #address: PreviewAddress | null = null;
 
   /**
    * Its session's preview origin, never the dashboard's: the hub names it
@@ -246,13 +254,12 @@ export class Stage {
       this.changed();
       return;
     }
-    const origin = previewOrigin(
-      (await answer.json()) as PreviewAddress,
-      location
-    );
+    const address = (await answer.json()) as PreviewAddress;
+    const origin = previewOrigin(address, location);
     if (origin) {
-      sessionOrigins.set(this.instanceId, origin);
+      sessionOrigins.set(this.instanceId, { address, origin });
     }
+    this.#address = address;
     // Asked again each time: the fleet's preview mode may have moved it.
     if (origin !== this.origin) {
       this.origin = origin;
@@ -260,9 +267,11 @@ export class Stage {
     this.changed();
   }
 
-  /** The host page's address: the canvas by id, at its session's preview origin. */
+  /** The host page's address: the canvas by id, at its session's preview origin (through the gate in host mode). */
   get src(): string {
-    return this.origin ? `${this.origin}/__cawco/canvas/${this.id}/` : "";
+    return this.origin && this.#address
+      ? previewEntry(this.#address, this.origin, `/__cawco/canvas/${this.id}/`)
+      : "";
   }
 
   /** To the page, on its own origin alone. */

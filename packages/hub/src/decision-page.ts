@@ -69,6 +69,9 @@ const kitText = (path: string): string => {
   return file.toString("utf8");
 };
 
+/** The fleet's tokens (`bun run tokens`), for a page the hub serves on its own (preview-gate.ts). */
+export const kitTokens = (): string => kitText("tokens.css");
+
 /** Where the build reads what page.html names: its mockups and images, beside it. */
 export interface PageSources {
   /** An image beside page.html, by its relative path; undefined when it is not there. */

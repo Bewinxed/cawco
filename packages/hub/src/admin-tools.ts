@@ -876,8 +876,10 @@ export function adminTools() {
       "how every session's previews are reached, fleet-wide: 'port' (the default, " +
         "no setup) gives each session a port of the hub's preview range on the hub's " +
         "host; 'host' gives each session a host name from `pattern`, `{session}` " +
-        "standing for its id, for a fleet whose DNS or proxy sends those names to " +
-        "the range's first port. Every preview is an origin of its own either way. " +
+        "standing for its id or `{port}` for the preview port it keeps (one DNS " +
+        "name per port of the range then serves every session), for a fleet whose " +
+        "DNS or proxy sends those names to the range's first port. Every preview " +
+        "is an origin of its own either way. " +
         "'get' answers the mode, the pattern and the range.",
       ["get"],
       ["set"],
@@ -890,8 +892,10 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            "Host mode's names, e.g. 'p-{session}.example.com', a port after it or not. " +
-              "Required when mode is 'host'; the hub refuses one whose generated name doesn't resolve."
+            "Host mode's names, with exactly one of {session} or {port}, e.g. " +
+              "'p-{session}.example.com' or 'p-{port}.example.com', a port after it or not. " +
+              "Required when mode is 'host'; the hub refuses one whose generated name doesn't resolve " +
+              "(for {port}, the range's first port's name)."
           ),
       },
       async ({ action, mode, pattern }) => {

@@ -4,6 +4,7 @@
     PREVIEW_PING_PATH,
     type PreviewDown,
     type PreviewSettings,
+    previewEntry,
     previewOrigin,
     type ShownFailure,
   } from "@cawco/core";
@@ -150,8 +151,9 @@
       return kept?.revision === preview?.revision &&
         typeof kept?.at === "string" &&
         paneOrigin &&
+        preview &&
         kept.at.startsWith("/")
-        ? `${paneOrigin}${kept.at}`
+        ? previewEntry(preview, paneOrigin, kept.at)
         : null;
     } catch {
       return null;
@@ -168,13 +170,18 @@
       JSON.stringify({ revision: preview.revision, at: place })
     );
   }
-  /** Where a show starts: the page the agent named (`path`), else the root. */
+  /**
+   * Where a show starts: the page the agent named (`path`), else the root.
+   * In host mode the frame opens it through the origin's sign-in gate (core
+   * `previewEntry`), which goes on to it at once once the proxy in front of
+   * the names lets the frame through.
+   */
   const startAt = $derived.by(() => {
-    if (!paneOrigin) {
+    if (!(paneOrigin && preview)) {
       return "";
     }
     const path = source && "path" in source ? source.path : undefined;
-    return `${paneOrigin}${path ?? "/"}`;
+    return previewEntry(preview, paneOrigin, path ?? "/");
   });
   /**
    * The frame opens at the start page, or where the reader was in this show;

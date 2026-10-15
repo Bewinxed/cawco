@@ -80,6 +80,27 @@ export const previewOrigin = (
 export const PREVIEW_PING_PATH = "/__cawco/ping";
 
 /**
+ * Host mode's sign-in gate (hub preview-gate.ts): a frame opens a preview at
+ * `<GATE>?next=<path>`, which goes on to that path when the proxy in front
+ * of the names (Cloudflare Access) lets the frame through, and otherwise
+ * offers a sign-in in a window of its own, whose page at
+ * {@link PREVIEW_GATE_DONE_PATH} closes itself. The gate is the one path
+ * the proxy leaves public; the done page stays behind it.
+ */
+export const PREVIEW_GATE_PATH = "/__cawco/gate";
+export const PREVIEW_GATE_DONE_PATH = "/__cawco/gate-done";
+
+/** Where a frame opens `place` (a path on the preview's origin): through the gate in host mode, straight there in port mode. */
+export const previewEntry = (
+  address: { host?: string } | PreviewAddress,
+  origin: string,
+  place: string
+): string =>
+  "host" in address && address.host
+    ? `${origin}${PREVIEW_GATE_PATH}?next=${encodeURIComponent(place)}`
+    : `${origin}${place}`;
+
+/**
  * The dashboard's own cookies, by name: every one it sets is `cawco-…`,
  * `__Host-`-prefixed where the scheme allows. A preview listener shares the
  * dashboard's host in port mode, and cookies are not isolated by port (RFC
@@ -92,8 +113,10 @@ export const DASHBOARD_COOKIE = /^(?:__Host-)?cawco-/;
  * How previews are reached, fleet-wide (Settings › Previews, Caw's
  * `admin_previews_write`): `port`, one port per session from the hub's range,
  * which needs no setup; or `host`, a host name per session from `pattern`
- * (`{session}` stands for the session's id), for a fleet behind DNS or a
- * proxy that routes them to the hub's first preview port.
+ * (`{session}` stands for the session's id, or `{port}` for the preview port
+ * it keeps, so one name per port of the range serves every session), for a
+ * fleet behind DNS or a proxy that routes them to the hub's first preview
+ * port.
  */
 export type PreviewSettings =
   | { mode: "port"; ports: string }

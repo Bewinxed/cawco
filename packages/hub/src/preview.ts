@@ -4,6 +4,8 @@ import {
   type ArtifactKind,
   CAWCO_ENV,
   DASHBOARD_COOKIE,
+  PREVIEW_GATE_DONE_PATH,
+  PREVIEW_GATE_PATH,
   PREVIEW_PING_PATH,
   type PreviewAddress,
   type PreviewDown,
@@ -40,6 +42,7 @@ import {
   PREVIEW_PORTS_TEXT,
 } from "./config";
 import type { PreviewsDb } from "./db/previews";
+import { gateDoneResponse, gateResponse } from "./preview-gate";
 import { FolderRefusal, folderPath } from "./project-folder";
 
 /**
@@ -439,31 +442,62 @@ export class PreviewRefusal extends Error {
   }
 }
 
-/** `{session}`, and a host name around it, with a port after it or not. */
-const PATTERN_SHAPE = /^[a-z0-9.-]*\{session\}[a-z0-9.-]*(?::\d{1,5})?$/;
-const SESSION_ID = "[0-9a-f-]{36}";
+/**
+ * Exactly one placeholder, `{session}` or `{port}`, and a host name around
+ * it, with a port after it or not. The characters around it hold no brace,
+ * so a second placeholder never fits.
+ */
+const PATTERN_SHAPE =
+  /^([a-z0-9.-]*)\{(session|port)\}([a-z0-9.-]*(?::\d{1,5})?)$/;
+const PATTERN_REFUSAL =
+  "A host pattern is a host name with one of {session} or {port} in it, like p-{session}.example.com or p-{port}.example.com, and a port after it or not.";
 
-/** The host name a pattern gives session `instanceId`. */
-const hostFor = (pattern: string, instanceId: string): string =>
-  pattern.replace("{session}", instanceId);
+/**
+ * Host mode's names, parsed once: what stands for a session in them, its id
+ * (`{session}`) or the preview port it keeps (`{port}`), and the text before
+ * and after it.
+ */
+interface HostPattern {
+  after: string;
+  before: string;
+  key: "session" | "port";
+  /** A Host header's name for one session: the placeholder's value at group 1. */
+  shape: RegExp;
+}
 
-/** The session a Host header names under `pattern`; undefined when it names none. */
-const sessionOfHost = (
-  pattern: string,
-  host: string | null
-): string | undefined => {
-  if (!host) {
-    return;
+const VALUE_OF = {
+  session: "[0-9a-f-]{36}",
+  port: "\\d{1,5}",
+} as const;
+
+/** `pattern` parsed, or refused in one sentence. */
+const parsePattern = (pattern: string): HostPattern => {
+  const parts = pattern.match(PATTERN_SHAPE);
+  if (!parts) {
+    throw new PreviewRefusal(422, PATTERN_REFUSAL);
   }
-  const [before, after] = pattern.split("{session}") as [string, string];
+  const [, before, key, after] = parts as [
+    string,
+    string,
+    HostPattern["key"],
+    string,
+  ];
   // The Host header names the port only when it is not the scheme's own.
   const withoutPort = after.replace(PORT_SUFFIX, "");
-  const shape = new RegExp(
-    `^${literal(before)}(${SESSION_ID})(?:${literal(after)}|${literal(withoutPort)})$`,
-    "i"
-  );
-  return host.match(shape)?.[1]?.toLowerCase();
+  return {
+    before,
+    key,
+    after,
+    shape: new RegExp(
+      `^${literal(before)}(${VALUE_OF[key]})(?:${literal(after)}|${literal(withoutPort)})$`,
+      "i"
+    ),
+  };
 };
+
+/** The host name `pattern` gives a session whose placeholder value is `value`. */
+const hostFor = (pattern: HostPattern, value: string | number): string =>
+  `${pattern.before}${value}${pattern.after}`;
 
 const PORT_SUFFIX = /:\d+$/;
 const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
@@ -473,14 +507,18 @@ const literal = (text: string): string =>
 
 /**
  * Whether a host pattern's names reach anything: one generated name has to
- * resolve. `.localhost` names always do (RFC 6761); any other has to be in
- * the DNS, its wildcard pointing at the hub or the proxy in front of it.
+ * resolve, a made-up session's or the range's first port's. `.localhost`
+ * names always do (RFC 6761); any other has to be in the DNS, its record
+ * (a wildcard for `{session}`, one per port for `{port}`) pointing at the hub
+ * or the proxy in front of it.
  */
-const probePattern = async (pattern: string): Promise<string | null> => {
-  const name = hostFor(pattern, "00000000-0000-4000-8000-000000000000").replace(
-    PORT_SUFFIX,
-    ""
-  );
+const probePattern = async (pattern: HostPattern): Promise<string | null> => {
+  const name = hostFor(
+    pattern,
+    pattern.key === "port"
+      ? PREVIEW_PORTS.first
+      : "00000000-0000-4000-8000-000000000000"
+  ).replace(PORT_SUFFIX, "");
   if (name === "localhost" || name.endsWith(".localhost")) {
     return null;
   }
@@ -498,8 +536,10 @@ const probePattern = async (pattern: string): Promise<string | null> => {
  * listener on it, on the hub's own bind address; its port is kept, so the
  * previewed app keeps its storage across restarts. Host mode: one listener
  * on the range's first port routes each request by its Host, a name per
- * session from the fleet's pattern (`{session}` its id) that DNS or a proxy
- * brings there. (The hub's own server is Elysia's, whose sockets run its
+ * session from the fleet's pattern that DNS or a proxy brings there:
+ * `{session}` its id, or `{port}` the preview port it keeps (taken as port
+ * mode takes it, never listened on), so a fixed pool of names, one per port
+ * of the range, serves every session. (The hub's own server is Elysia's, whose sockets run its
  * lifecycle: a previewed app's HMR socket cannot be upgraded there.)
  */
 export function createPreviewListeners(
@@ -524,9 +564,15 @@ export function createPreviewListeners(
     previewFailed(HOP, null, causeOf(thrown));
     return downResponse("machine");
   };
+  /**
+   * A listener on `port`, each request's session from `route`. `gated`
+   * (host mode): a held name also answers the sign-in gate and its done page
+   * (preview-gate.ts), for names behind a proxy that signs the person in.
+   */
   const listen = (
     port: number,
-    route: (request: Request) => string | undefined
+    route: (request: Request) => string | undefined,
+    gated = false
   ): Server<ListenerSocket> =>
     Bun.serve<ListenerSocket>({
       hostname,
@@ -542,6 +588,15 @@ export function createPreviewListeners(
             `no session's preview at ${request.headers.get("host")}`
           );
           return framedBy(downResponse("closed", 404));
+        }
+        if (gated) {
+          const { pathname } = new URL(request.url);
+          if (pathname === PREVIEW_GATE_PATH) {
+            return framedBy(gateResponse(request));
+          }
+          if (pathname === PREVIEW_GATE_DONE_PATH) {
+            return framedBy(gateDoneResponse());
+          }
         }
         const answer = await serveSession(request, server, instanceId, deps);
         return answer && framedBy(answer);
@@ -592,19 +647,23 @@ export function createPreviewListeners(
   };
 
   /**
-   * The one way a session's listener gets its port, at the hub's start and
-   * on demand: the port it keeps while that is still a preview port and
-   * opens; else the lowest of the range that is not the fleet's own, not
-   * another session's, and opens. A move is saved, so a collision heals
-   * itself, and said in one line.
+   * The one way a session gets its port, at the hub's start and on demand:
+   * the port it keeps while that is still a preview port and `opens`; else
+   * the lowest of the range that is not the fleet's own, not another
+   * session's, and opens. A move is saved, so a collision heals itself, and
+   * said in one line. Port mode opens a listener on it (`bind`); host mode's
+   * `{port}` names it and opens nothing.
    */
-  const bind = (instanceId: string): number => {
+  const portFor = (
+    instanceId: string,
+    opens: (port: number) => boolean
+  ): number => {
     const held = db.ports();
     const kept = held.find((row) => row.instanceId === instanceId)?.port;
     let why = "";
     if (kept !== undefined) {
       const refused = barred(kept);
-      if (!refused && serveOn(instanceId, kept)) {
+      if (!refused && opens(kept)) {
         return kept;
       }
       why = refused ?? "another process holds it";
@@ -615,7 +674,7 @@ export function createPreviewListeners(
       port <= PREVIEW_PORTS.last;
       port += 1
     ) {
-      if (!(taken.has(port) || barred(port)) && serveOn(instanceId, port)) {
+      if (!(taken.has(port) || barred(port)) && opens(port)) {
         db.keepPort(instanceId, port);
         if (kept !== undefined) {
           console.warn(
@@ -631,9 +690,33 @@ export function createPreviewListeners(
     );
   };
 
+  /** Port mode: session `instanceId`'s listener on its port. */
+  const bind = (instanceId: string): number =>
+    portFor(instanceId, (port) => serveOn(instanceId, port));
+
+  /** The session a Host header names under `pattern`; undefined when it names none, or a port no session holds. */
+  const sessionOfHost = (
+    pattern: HostPattern,
+    host: string | null
+  ): string | undefined => {
+    const value = host?.match(pattern.shape)?.[1]?.toLowerCase();
+    if (!value || pattern.key === "session") {
+      return value;
+    }
+    const port = Number(value);
+    return db.ports().find((row) => row.port === port)?.instanceId;
+  };
+
   /** Host mode's listener on the range's first port; why it didn't open, or null. */
   const startHostMode = (): string | null => {
-    const pattern = settings.pattern ?? "";
+    let pattern: HostPattern;
+    try {
+      pattern = parsePattern(settings.pattern ?? "");
+    } catch (thrown) {
+      const why = `The stored host pattern ${JSON.stringify(settings.pattern)} isn't one: ${causeOf(thrown)}`;
+      previewFailed(HOP, null, why);
+      return why;
+    }
     const fleet = FLEET_PORTS.get(PREVIEW_PORTS.first);
     if (fleet) {
       const why = `Port ${PREVIEW_PORTS.first} is ${fleet} port, so host-mode previews can't take it: set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
@@ -641,8 +724,10 @@ export function createPreviewListeners(
       return why;
     }
     try {
-      byHost = listen(PREVIEW_PORTS.first, (request) =>
-        sessionOfHost(pattern, request.headers.get("host"))
+      byHost = listen(
+        PREVIEW_PORTS.first,
+        (request) => sessionOfHost(pattern, request.headers.get("host")),
+        true
       );
       return null;
     } catch (thrown) {
@@ -685,10 +770,22 @@ export function createPreviewListeners(
       }
     },
 
-    /** Session `instanceId`'s preview origin, its listener started (port mode) when it has none. */
+    /**
+     * Session `instanceId`'s preview origin: its listener started (port
+     * mode) when it has none; in host mode its name, by its id or by the
+     * port it keeps, taken now when it has none.
+     */
     address(instanceId: string): PreviewAddress {
       if (settings.mode === "host") {
-        return { host: hostFor(settings.pattern ?? "", instanceId) };
+        const pattern = parsePattern(settings.pattern ?? "");
+        return {
+          host: hostFor(
+            pattern,
+            pattern.key === "port"
+              ? portFor(instanceId, () => true)
+              : instanceId
+          ),
+        };
       }
       const running = sessions.get(instanceId);
       return { port: running?.port ?? bind(instanceId) };
@@ -713,8 +810,9 @@ export function createPreviewListeners(
 
     /**
      * The fleet's mode, from the person's Settings or Caw's approved write.
-     * Host mode takes a pattern with `{session}` in a host name whose
-     * generated name resolves; a refusal says why and changes nothing.
+     * Host mode takes a pattern with one of `{session}` or `{port}` in a
+     * host name whose generated name resolves; a refusal says why and
+     * changes nothing.
      */
     async set(next: {
       mode: "port" | "host";
@@ -722,13 +820,7 @@ export function createPreviewListeners(
     }): Promise<PreviewSettings> {
       if (next.mode === "host") {
         const pattern = (next.pattern ?? "").trim().toLowerCase();
-        if (!PATTERN_SHAPE.test(pattern)) {
-          throw new PreviewRefusal(
-            422,
-            "A host pattern is a host name with {session} in it, like p-{session}.example.com, and a port after it or not."
-          );
-        }
-        const unreachable = await probePattern(pattern);
+        const unreachable = await probePattern(parsePattern(pattern));
         if (unreachable) {
           throw new PreviewRefusal(422, unreachable);
         }

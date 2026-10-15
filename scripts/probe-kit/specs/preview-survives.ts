@@ -26,6 +26,15 @@
  *     with the way to the setting.
  * 14. Host mode set through Settings › Previews with `p-{session}.localhost`:
  *     the panel loads the page from `p-<session>.localhost`, routed by Host.
+ * 14b. A `p-{port}.localhost` pattern: each session's name is the port it
+ *     keeps, both sessions' previews answer 200 with the overlay on their
+ *     own names, an unheld port's name answers the closed page, and a
+ *     pattern with both placeholders or neither is refused.
+ * 14c. Host mode's sign-in gate: signed in (its done page answers 200) it
+ *     goes straight on to `next`; behind a stand-in 302 for the proxy it
+ *     shows "Sign in to show this preview"; the window that opens closes
+ *     itself and the gate goes on to the page.
+ * 14d. The panel frames the preview through the gate, on its port name.
  * 15. A page on a third origin that frames the preview's port gets nothing:
  *     the preview names the dashboards in `frame-ancestors`, not it.
  * 16. With that header taken off in the browser, the third origin's frame
@@ -94,7 +103,11 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the checks are read in order, one after another.
 import type { Frame, Page } from "playwright-core";
 import { INSPECT_CONFIG } from "../../../packages/core/src/fleet";
-import { PREVIEW_PING_PATH } from "../../../packages/core/src/frames";
+import {
+  PREVIEW_GATE_DONE_PATH,
+  PREVIEW_GATE_PATH,
+  PREVIEW_PING_PATH,
+} from "../../../packages/core/src/frames";
 import { OVERLAY_PATH } from "../../../packages/core/src/preview-proxy";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
@@ -948,6 +961,152 @@ const run = async (kit: Kit) => {
         pattern.replace("{session}", session),
     `${JSON.stringify(saved)}; ${byHost.last}`
   );
+
+  // 14b. A `{port}` pattern: a fixed name per port of the range.
+  /** The port session `sid` keeps (preview_ports). */
+  const portOf = (sid: string): number | undefined =>
+    fleet.query<{ port: number }>(
+      "SELECT port FROM preview_ports WHERE instance_id = ?",
+      sid
+    )[0]?.port;
+  const [firstRangePort] = range.ports.split("–");
+  const putPattern = (next: string) =>
+    fetch(`${fleet.base}/api/preview-settings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "host", pattern: next }),
+    });
+  const both = await putPattern("p-{session}-{port}.localhost");
+  const neither = await putPattern("previews.localhost");
+  const refusals = `both ${both.status} ${await both.text()}; neither ${neither.status} ${await neither.text()}`;
+  const portPattern = `p-{port}.localhost:${firstRangePort}`;
+  const kept = await putPattern(portPattern);
+  const keptText = await kept.text();
+  const hostOf = async (sid: string) => (await address(sid)).host ?? "none";
+  const [firstHost, otherHost] = [await hostOf(session), await hostOf(other)];
+  const heldPorts = new Set(
+    fleet
+      .query<{ port: number }>("SELECT port FROM preview_ports")
+      .map((row) => row.port)
+  );
+  const unheldPort = (() => {
+    let port = Number(firstRangePort);
+    while (heldPorts.has(port)) {
+      port += 1;
+    }
+    return port;
+  })();
+  const loader = await kit.page("desk");
+  /** 1 once the loader shows the first session's page; null before. */
+  const onPage = () =>
+    loader.title().then(
+      (title) => (title === TITLE ? 1 : null),
+      () => null
+    );
+  /** One load of `url` in the browser (which takes every `.localhost` name to loopback): its status and body. */
+  const loadOf = async (url: string) => {
+    const response = await loader.goto(url, { waitUntil: "domcontentloaded" });
+    return {
+      status: response?.status() ?? 0,
+      body: (await response?.text().catch(() => "")) ?? "",
+    };
+  };
+  const answersAs = async (host: string, title: string) => {
+    const { status, body } = await loadOf(`http://${host}/`);
+    return {
+      ok:
+        status === 200 &&
+        body.includes(`src="${OVERLAY_PATH}"`) &&
+        body.includes(`<title>${title}</title>`),
+      said: `${host} ${status}${body.includes(OVERLAY_PATH) ? " with the overlay" : ""}`,
+    };
+  };
+  const firstByPort = await answersAs(firstHost, TITLE);
+  const otherByPort = await answersAs(otherHost, OTHER);
+  const unheld = await loadOf(
+    `http://p-${unheldPort}.localhost:${firstRangePort}/`
+  );
+  kit.check(
+    "14b: a {port} pattern gives each session the name of the port it keeps; both sessions' previews answer 200 with the overlay on their own names, an unheld port's name answers the closed page, and a pattern with both placeholders or neither is refused",
+    both.status === 422 &&
+      neither.status === 422 &&
+      kept.ok &&
+      firstHost === `p-${portOf(session)}.localhost:${firstRangePort}` &&
+      otherHost === `p-${portOf(other)}.localhost:${firstRangePort}` &&
+      firstHost !== otherHost &&
+      firstByPort.ok &&
+      otherByPort.ok &&
+      unheld.status === 404 &&
+      unheld.body.includes('<meta name="cawco-preview-down" content="closed">'),
+    `${refusals}; kept ${kept.status} ${keptText.slice(0, 120)}; ${firstByPort.said}; ${otherByPort.said}; p-${unheldPort} ${unheld.status}`
+  );
+
+  // 14c. The sign-in gate, host mode's frame entry.
+  const gateOf = (host: string) =>
+    `http://${host}${PREVIEW_GATE_PATH}?next=${encodeURIComponent("/")}`;
+  // Signed in (the done page answers 200): straight on to `next`.
+  await loader.goto(gateOf(firstHost), { waitUntil: "domcontentloaded" });
+  const through = await until(
+    "the gate going on to the page",
+    onPage,
+    Boolean,
+    15_000
+  ).catch(() => null);
+  const throughAt = new URL(loader.url()).pathname;
+  // Signed out: a stand-in for the proxy answers the done page with its redirect.
+  await loader.route(`**${PREVIEW_GATE_DONE_PATH}`, (route) =>
+    route.fulfill({
+      status: 302,
+      headers: { location: "https://team.cloudflareaccess.com/login" },
+    })
+  );
+  await loader.goto(gateOf(firstHost), { waitUntil: "domcontentloaded" });
+  const button = loader.getByRole("button", {
+    name: "Sign in to show this preview",
+  });
+  const offered = await button
+    .waitFor({ state: "visible", timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  const stayed = new URL(loader.url()).pathname;
+  // The proxy lets the window through now: the done page closes itself, and the gate goes on.
+  await loader.unroute(`**${PREVIEW_GATE_DONE_PATH}`);
+  const opened = loader.waitForEvent("popup", { timeout: 15_000 });
+  await button.click();
+  const popup = await opened.catch(() => null);
+  const closedItself = popup
+    ? await popup
+        .waitForEvent("close", { timeout: 15_000 })
+        .then(() => true)
+        .catch(() => false)
+    : false;
+  const signedOn = await until(
+    "the gate going on after the sign-in",
+    onPage,
+    Boolean,
+    15_000
+  ).catch(() => null);
+  kit.check(
+    "14c: the gate goes straight on to the page when signed in; behind a stand-in 302 it shows the Sign in button; its window's done page closes itself and the gate then loads the page",
+    !!through &&
+      throughAt === "/" &&
+      offered &&
+      stayed === PREVIEW_GATE_PATH &&
+      !!popup &&
+      closedItself &&
+      !!signedOn,
+    `signed in: ${through ? "went on" : "stayed"} at ${throughAt}; signed out: button ${offered ? "shown" : "not shown"} at ${stayed}; window ${popup ? popup.url() : "not opened"} ${closedItself ? "closed itself" : "stayed open"}; then ${signedOn ? "the page" : await loader.title().catch(() => "?")}`
+  );
+  await loader.context().close();
+
+  // 14d. The panel frames the preview through the gate on its `{port}` name.
+  await tab.reload({ waitUntil: "domcontentloaded" });
+  const byPortPane = await paneFrame(tab, TITLE);
+  kit.check(
+    "14d: with a {port} pattern the panel loads the page from the session's port name, through the gate",
+    !!byPortPane.frame && new URL(byPortPane.frame.url()).host === firstHost,
+    byPortPane.last
+  );
   await fetch(`${fleet.base}/api/preview-settings`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -1125,11 +1284,6 @@ const run = async (kit: Kit) => {
   );
 
   // 19–21. A preview port is never the fleet's own, nor one another process holds.
-  const portOf = (sid: string): number | undefined =>
-    fleet.query<{ port: number }>(
-      "SELECT port FROM preview_ports WHERE instance_id = ?",
-      sid
-    )[0]?.port;
   const [rangeFirst, rangeLast] = range.ports.split("–").map(Number) as [
     number,
     number,

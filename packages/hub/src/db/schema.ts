@@ -2490,10 +2490,11 @@ export const shownPreviews = sqliteTable("shown_previews", {
 });
 
 /**
- * The port each session's previews are served on in port mode (preview.ts):
- * its own origin, kept across restarts so the previewed app keeps its
- * storage. Taken when the session first shows a preview or a canvas, given
- * back when the session ends.
+ * The port each session's previews are served on in port mode (preview.ts),
+ * and the port its host name says under a `{port}` host pattern: its own
+ * origin, kept across restarts so the previewed app keeps its storage.
+ * Taken when the session first shows a preview or a canvas, given back when
+ * the session ends.
  */
 export const previewPorts = sqliteTable("preview_ports", {
   instanceId: text("instance_id")
@@ -2511,7 +2512,7 @@ export const previewSettings = sqliteTable("preview_settings", {
   /** Always `'preview'`. */
   id: text("id").primaryKey(),
   mode: text("mode").$type<"port" | "host">().notNull().default("port"),
-  /** Host mode's names, `{session}` standing for the session's id; null in port mode. */
+  /** Host mode's names, `{session}` standing for the session's id or `{port}` for its kept preview port; null in port mode. */
   pattern: text("pattern"),
 });
 
