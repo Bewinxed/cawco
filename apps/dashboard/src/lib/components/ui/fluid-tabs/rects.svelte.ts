@@ -17,6 +17,20 @@
 
 import { untrack } from "svelte";
 
+/**
+ * What the track writes on a tab's box to draw its stack and seams on the
+ * switch's clock (TabsList's `rank` and `placeSeams`), every frame of a
+ * switch: none of it moves a tab, and each write had the tabs measured
+ * again, their offsets laying the page out once a frame for the length of
+ * every switch.
+ */
+const DRAWN =
+  /--(?:z|depth|depth-prev|depth-next|cut-start|cut-end|glide-start|glide-end|under-start|under-end)\s*:[^;]*;?/g;
+
+/** An inline style less what the track draws with: what can place a tab. */
+const placedBy = (style: string | null): string =>
+  (style ?? "").replace(DRAWN, "").trim();
+
 export interface ItemRect {
   height: number;
   left: number;
@@ -68,6 +82,7 @@ export class TabRects {
       childList: true,
       subtree: true,
       attributes: true,
+      attributeOldValue: true,
       attributeFilter: ["style", "class", "inert"],
     });
     this.#schedule();
@@ -125,6 +140,13 @@ export class TabRects {
       return [...record.addedNodes, ...record.removedNodes].some(
         (node) => this.#values.has(node as HTMLElement) || holds(node)
       );
+    }
+    if (
+      record.attributeName === "style" &&
+      placedBy(record.oldValue) ===
+        placedBy((record.target as Element).getAttribute("style"))
+    ) {
+      return false;
     }
     return holds(record.target);
   }

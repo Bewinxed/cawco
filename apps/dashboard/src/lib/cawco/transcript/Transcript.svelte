@@ -367,7 +367,7 @@
       `${arrayOf(session.messages)}:${session.messages.length}:${settled}:${last?.id ?? ""}:${session.streaming.length}:` +
       `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.map((ask) => `${ask.requestId}${ask.routedTo ?? ""}`).join(",")}:` +
       `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:${session.lastCompaction?.at ?? ""}:` +
-      `${last?.metadata?.sendFailed ?? ""}`
+      `${last?.metadata?.sendFailed ?? ""}:${session.rev}`
     );
   };
   /** Dev-only: the gate that catches an accidentally tracked session read. */
@@ -408,7 +408,14 @@
       void rebuildTick;
       return untrack(rebuild);
     }
-    return rebuild();
+    // The print is the whole of what a focused build depends on: the live
+    // tail's fields and the store's revision of the rows (`session.rev`),
+    // which moves whenever a row is placed, moved or takes the hub's word.
+    // The fold itself reads every row of the conversation, and tracked, each
+    // build of a long transcript registered (and the next one compared) a
+    // dependency per field per row, on every streamed frame.
+    printOf();
+    return untrack(rebuild);
   });
 
   /**
@@ -949,6 +956,9 @@
    * measured a viewport's worth it renders no buffer at all.
    */
   const ROW_ESTIMATE = 21;
+  /** What every list item carries: the name its drawn rule finds it by (the style's `[data-item]`). */
+  const ITEM_ATTRS = { "data-item": "" };
+  const itemAttrs = () => ITEM_ATTRS;
 
   /**
    * ROWS LEAVE WHERE THEY STAND; THEY DO NOT VANISH.
@@ -1022,10 +1032,18 @@
     );
   }
 
+  // What it reads of the rows' messages (a send's state, a call's id) is the
+  // build's to depend on (`session.rev`): untracked, it is invalidated by a
+  // new build and a fold ending alone, not by every row it reads.
   const presentation = $derived.by(() => {
     // biome-ignore lint/complexity/noVoid: a row finishing its fold re-draws the list without it.
     void leftTick;
     const { rows: next, ended } = built;
+    return untrack(() => withLeaving(next, ended));
+  });
+
+  /** The rows as drawn: `next`, with the rows folding shut where they stood. */
+  function withLeaving(next: Row[], ended: Fold["ended"]) {
     const present = new Set(next.map((row) => row.key));
     const folding = new Set(leaving.map(({ row }) => row.key));
     const handed = new Map<string, Handoff>();
@@ -1073,7 +1091,7 @@
       leaving: new Set(leaving.map(({ row }) => row.key)),
       handed,
     };
-  });
+  }
 
   /**
    * The row drawn as `node` hands its place to `taker`: the height the taker
@@ -1266,9 +1284,11 @@
    * The reader's rows whose well runs on into the next. A row folding away is
    * already out of its run: the rows either side close or join over its fold.
    */
-  const runsOn = $derived(
-    wellRuns(renderedRows, (key) => presentation.leaving.has(key))
-  );
+  const runsOn = $derived.by(() => {
+    const drawn = renderedRows;
+    const { leaving: gone } = presentation;
+    return untrack(() => wellRuns(drawn, (key) => gone.has(key)));
+  });
 
   /**
    * THE TAIL STAYS MOUNTED.
@@ -1403,23 +1423,22 @@
    * store, exact, where the height it writes to its container's style reads
    * back in Chromium cut to six significant digits, 2129.05 for 2129.046875),
    * the parked room and the foot. None of them is read off the layout: this
-   * runs in whatever task virtua's write landed in, and the two rooms are
-   * their computed styles.
+   * runs in whatever task virtua's write landed in. The two rooms are the
+   * sizes their observer last delivered (`rooms`): read here as their
+   * computed styles, the foot's resolved block size laid the page out in the
+   * microtask behind every height virtua wrote, a whole layout per row a
+   * streamed reply grew.
    */
   function keepWhole(): boolean {
     const height = list?.getScrollSize() ?? 0;
     const viewport = list?.getViewportSize() ?? 0;
-    if (!(viewport > 0 && parkedRoom && foot)) {
+    if (!(viewport > 0 && rooms.measured)) {
       return false;
     }
-    const clear = Number.parseFloat(getComputedStyle(foot).blockSize) || 0;
+    const { foot: clear, parked } = rooms;
     if (height + clear <= viewport) {
       return false;
     }
-    const parked =
-      Number.parseFloat(
-        getComputedStyle(parkedRoom).getPropertyValue("--parked-room")
-      ) || 0;
     const over =
       (((viewport - olderRoom - height - parked - clear) % 1) + 1) % 1;
     const next = over < 0.001 || over > 0.999 ? 0 : over;
@@ -1454,6 +1473,43 @@
    * reply after it and no longer followed the tail (the page's CPU
    * throttled 4x or 6x, 3 runs of 6).
    */
+  /**
+   * The parked room's and the foot's heights, as their observer last
+   * delivered them: after a layout, never by asking for one. Each comes as
+   * the room is first laid out and whenever it resizes (the composer's
+   * clearance changing), and the list is made whole again for it.
+   */
+  const rooms = { foot: 0, parked: 0, measured: false };
+  $effect(() => {
+    const footNode = foot;
+    const parkedNode = parkedRoom;
+    if (!(footNode && parkedNode)) {
+      return;
+    }
+    const seen = new Set<Element>();
+    const sizes = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const size = entry.borderBoxSize[0]?.blockSize ?? 0;
+        seen.add(entry.target);
+        if (entry.target === footNode) {
+          rooms.foot = size;
+        } else {
+          rooms.parked = size;
+        }
+      }
+      rooms.measured = seen.size === 2;
+      if (keepWhole() && pinned()) {
+        pinBottom();
+      }
+    });
+    sizes.observe(footNode);
+    sizes.observe(parkedNode);
+    return () => {
+      sizes.disconnect();
+      rooms.measured = false;
+    };
+  });
+
   function wholeHeight(node: HTMLElement) {
     const inner = node.firstElementChild;
     if (!inner) {
@@ -2331,8 +2387,12 @@
    * rows around it theirs, until it is gone.
    */
   const continued = $derived.by(() => {
-    const keys = new Set<string>();
     const rowList = renderedRows;
+    return untrack(() => continuesAbove(rowList));
+  });
+
+  function continuesAbove(rowList: Row[]): Set<string> {
+    const keys = new Set<string>();
     for (let i = 1; i < rowList.length; i += 1) {
       if (!railLed(rowList[i])) {
         continue;
@@ -2346,7 +2406,7 @@
       }
     }
     return keys;
-  });
+  }
 
   // ── Arrivals ────────────────────────────────────────────────────────────
   // The rule and why it is read from data live in `arrivals.svelte.ts`. This
@@ -2398,10 +2458,22 @@
     );
   }
 
+  /**
+   * The rows whose ids are all in `known`. A build keeps every row it did
+   * not fold again as the same object, and a row's ids never change, so a
+   * row seen once is never read for its ids again: a long transcript's every
+   * row was, on every streamed frame.
+   */
+  const recorded = new WeakSet<Row>();
+
   /** The ids this build holds that this view never has — recorded as held now. */
   function unheld(candidates: Row[]): { id: string; row: Row }[] {
     const fresh: { id: string; row: Row }[] = [];
     for (const row of candidates) {
+      if (recorded.has(row)) {
+        continue;
+      }
+      recorded.add(row);
       for (const id of idsOf(row)) {
         if (!known.has(id)) {
           known.add(id);
@@ -2845,6 +2917,7 @@
       {cache}
       data={renderedRows}
       getKey={(r) => r.key}
+      itemProps={itemAttrs}
       itemSize={ROW_ESTIMATE}
       {keepMounted}
       {onresize}
@@ -2981,8 +3054,14 @@
      `visible` paints through every hidden ancestor (the page parked under
      another spoke, a tab behind another, a deck card, the pen), and the
      transcript's rows were drawn over Workflows. A row virtua has never
-     measured keeps virtua's hiding. */
-  .listing :global(:has(> [data-row][data-drawn])) {
+     measured keeps virtua's hiding.
+     The item is named (`data-item`, virtua's `itemProps`) ahead of the
+     `:has()`: with the pseudo-class alone as the subject, every element on
+     the page was one the engine had to test it on, so every node put in
+     anywhere (each word of a streamed reply, each row virtua mounted)
+     restyled its parent, and a tab switch restyled the transcripts whole
+     ("Affected by :has()", 1,406 of them across five switches). */
+  .listing :global([data-item]:has(> [data-row][data-drawn])) {
     visibility: inherit !important;
   }
   /* virtua writes `pointer-events: none` on its container while it scrolls

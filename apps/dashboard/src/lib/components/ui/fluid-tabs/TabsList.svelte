@@ -100,8 +100,8 @@
     }
     return laid;
   }
-  /** The eased progress of a switch under way, read off the sheets' fade: 1 when none runs. */
-  function switchProgress(items: HTMLElement[]): number {
+  /** The sheets' fade a switch runs on, when one is under way. */
+  function sheetsFade(items: HTMLElement[]): CSSTransition | null {
     for (const item of items) {
       for (const run of item.getAnimations({ subtree: true })) {
         if (
@@ -109,16 +109,29 @@
           run.transitionProperty === "opacity" &&
           run.effect instanceof KeyframeEffect &&
           run.effect.target === item &&
-          run.effect.pseudoElement === "::after"
+          run.effect.pseudoElement === "::after" &&
+          typeof run.effect.getComputedTiming().progress === "number"
         ) {
-          const { progress } = run.effect.getComputedTiming();
-          if (typeof progress === "number") {
-            return progress;
-          }
+          return run;
         }
       }
     }
-    return 1;
+    return null;
+  }
+  /**
+   * One switch's clock: the eased progress of the sheets' fade, 1 when none
+   * runs or once it has run. The fade is found on the first reading and
+   * read alone after it: asking every tab for its animations restyled the
+   * page, and asked on every frame of a switch, it restyled the page on
+   * every frame (two loops ask, every switch).
+   */
+  function switchClock(items: HTMLElement[]): () => number {
+    let fade: CSSTransition | null | undefined;
+    return () => {
+      fade ??= sheetsFade(items);
+      const progress = fade?.effect?.getComputedTiming().progress;
+      return typeof progress === "number" ? progress : 1;
+    };
   }
   /**
    * The stack's ranks for the tabs standing at these depths, farthest back
@@ -319,8 +332,9 @@
     track.toggleAttribute("data-switching", true);
     // Read in the next frame's callbacks, where the frame lays the page out
     // anyway, once the switch's transitions have started.
+    const progress = switchClock(items);
     let frame = requestAnimationFrame(function step() {
-      const p = switchProgress(items);
+      const p = progress();
       items.forEach((item, i) => {
         depthNow.set(item, from[i] + (target(i) - from[i]) * p);
       });
@@ -558,7 +572,7 @@
     });
   });
   /* A switch lands, on every track, once the sheets' fade has run its
-     course (`switchProgress`; 1 at once on a track that draws no sheets):
+     course (`switchClock`; 1 at once on a track that draws no sheets):
      the tab it left is no longer drawn chosen, so the edges' fades stop
      standing aside for it. Not under a gesture, whose landing is the
      gesture's release. */
@@ -568,8 +582,9 @@
     if (list.optimisticIndex === null || travel) {
       return;
     }
+    const progress = switchClock(items);
     let frame = requestAnimationFrame(function step() {
-      if (switchProgress(items) < 1) {
+      if (progress() < 1) {
         frame = requestAnimationFrame(step);
         return;
       }

@@ -594,6 +594,15 @@ export interface SessionState {
   records: Record<string, SendRecord>;
   /** Started again in place for a mode it could not switch into; ends at the next init. */
   relaunching: boolean;
+  /**
+   * How many times what this session shows has changed: bumped whenever
+   * {@link messages} moves, a row on it takes the hub's word in place, or a
+   * branch is opened or replaced. A reader that folds the rows (the
+   * transcript's build) depends on this and on the live tail alone, never on
+   * every field of every row: tracking each one made every build of a long
+   * transcript register, and later compare, a dependency per field per row.
+   */
+  rev: number;
   /** A spin-off (NEW.md §1) — kept visually apart until it is kept or discarded. */
   scratch: boolean;
   /**
@@ -1069,6 +1078,7 @@ export function blankSession(instanceId: string): SessionState {
     harness: "claude",
     blocks: [],
     queued: [],
+    rev: 0,
     cursor: null,
     records: {},
     local: [],
@@ -1138,32 +1148,51 @@ function session(instanceId: string): SessionState {
  * The list itself is kept wherever it changed only past its first row: the
  * transcript reads a kept list that changed as the conversation arriving, and
  * a new one as history.
+ *
+ * `kept`: how many blocks at the front the caller left as they were last
+ * placed, so the list is compared and written from there on. A batch of live
+ * changes moves rows at the end, and comparing every row of a long
+ * transcript on each one read the whole list through the store, row by row,
+ * on every batch a session streamed. With failure lines among the blocks, a
+ * block's index is not its place in the list, and every row is compared.
  */
-function place(target: SessionState): void {
+function place(target: SessionState, kept = 0): void {
   const current = target.messages;
-  const next = [
-    ...withNotes(target.blocks, target.notes),
-    ...target.queued,
-    ...target.local,
-  ];
+  const from =
+    target.notes.length === 0
+      ? Math.min(kept, target.blocks.length, current.length)
+      : 0;
+  const next =
+    from === 0
+      ? [
+          ...withNotes(target.blocks, target.notes),
+          ...target.queued,
+          ...target.local,
+        ]
+      : [...target.blocks.slice(from), ...target.queued, ...target.local];
   let same = 0;
   while (
-    same < current.length &&
+    from + same < current.length &&
     same < next.length &&
-    current[same] === next[same]
+    current[from + same] === next[same]
   ) {
     same += 1;
   }
-  if (same === current.length && same === next.length) {
+  if (from + same === current.length && same === next.length) {
     return;
   }
+  target.rev += 1;
   // A change at the very first row is a different transcript — a read, a
   // page in front, a rewind to nothing — and takes a list of its own.
-  if (same === 0 && current.length > 0) {
+  if (from + same === 0 && current.length > 0) {
     target.messages = next;
     return;
   }
-  current.splice(same, current.length - same, ...next.slice(same));
+  current.splice(
+    from + same,
+    current.length - from - same,
+    ...next.slice(same)
+  );
 }
 
 /** Whether two plain values say the same thing, field for field. */
@@ -1193,29 +1222,37 @@ function equal(a: unknown, b: unknown): boolean {
  * call taking its result, a send moving from waiting to read. A row this tab
  * drew from its own send keeps the pictures it sent: the hub names the same
  * ones by its media references, and trading one for the other would load
- * them all again.
+ * them all again. Says whether anything on the row moved.
  */
-function adopt(held: Message, fresh: Message): void {
+function adopt(held: Message, fresh: Message): boolean {
+  let moved = false;
   if (held.type !== fresh.type) {
     held.type = fresh.type;
+    moved = true;
   }
   if (held.content !== fresh.content) {
     held.content = fresh.content;
+    moved = true;
   }
   if (held.state !== fresh.state) {
     held.state = fresh.state;
+    moved = true;
   }
   if (held.queued !== fresh.queued) {
     held.queued = fresh.queued;
+    moved = true;
   }
   if (held.sdkUuid !== fresh.sdkUuid) {
     held.sdkUuid = fresh.sdkUuid;
+    moved = true;
   }
   if (held.timestamp !== fresh.timestamp) {
     held.timestamp = fresh.timestamp;
+    moved = true;
   }
   if (held.toolCallId !== fresh.toolCallId) {
     held.toolCallId = fresh.toolCallId;
+    moved = true;
   }
   const drawn = held.metadata?.images;
   const pictures =
@@ -1226,7 +1263,9 @@ function adopt(held: Message, fresh: Message): void {
   const metadata = fresh.metadata && { ...fresh.metadata, ...pictures };
   if (!equal(held.metadata, metadata)) {
     held.metadata = metadata;
+    moved = true;
   }
+  return moved;
 }
 
 /** The blocks with this tab's failure lines after the block each followed. */
@@ -1298,7 +1337,9 @@ function take(
   if (!held) {
     return fresh;
   }
-  adopt(held, fresh);
+  if (adopt(held, fresh)) {
+    target.rev += 1;
+  }
   return held;
 }
 
@@ -1313,6 +1354,9 @@ function branchState(
 
 /** The branch a block names, created on first sight as the hub created it. */
 function branchOf(target: SessionState, toolUseId: string): SubagentState {
+  if (!target.subagents[toolUseId]) {
+    target.rev += 1;
+  }
   target.subagents[toolUseId] ??= branchState(
     {
       toolUseId,
@@ -1462,7 +1506,9 @@ function updateBlock(target: SessionState, block: TranscriptBlock): void {
   if (!held) {
     return;
   }
-  adopt(held, block as Message);
+  if (adopt(held, block as Message) && !block.parentToolUseId) {
+    target.rev += 1;
+  }
   // The ledger on disk just moved: what it now says is read back from the
   // files, never parsed out of here.
   if (TASK_LEDGER_TOOLS.has(block.metadata?.toolName ?? "")) {
@@ -1474,11 +1520,17 @@ function updateBlock(target: SessionState, block: TranscriptBlock): void {
  * One batch of the hub's changes to a session's transcript, applied in the
  * order it made them. A `reset` ends the batch: the transcript was read again
  * from its machine, and the newest page carries everything after it.
+ *
+ * Most batches are the live tail alone (a few words streamed, the tool in
+ * flight): those leave the list as it is, and nothing is placed. One that
+ * moves rows places the list from the first block it touched (`kept`).
  */
 function applyTranscript(
   target: SessionState,
   events: TranscriptEvent[]
 ): void {
+  /** The blocks at the front this batch has left as they were placed; none moved yet. */
+  let kept = Number.POSITIVE_INFINITY;
   for (const event of events) {
     switch (event.type) {
       case "reset":
@@ -1493,6 +1545,7 @@ function applyTranscript(
             event.block as Message
           );
         } else {
+          kept = Math.min(kept, target.blocks.length);
           target.blocks.push(take(target, event.block, "blocks"));
         }
         break;
@@ -1503,6 +1556,7 @@ function applyTranscript(
             : target.blocks.findLastIndex(
                 (message) => message.id === event.after
               ) + 1;
+        kept = Math.min(kept, at);
         target.blocks.splice(at, 0, take(target, event.block, "blocks"));
         break;
       }
@@ -1514,11 +1568,13 @@ function applyTranscript(
           (message) => message.id === event.id
         );
         if (at >= 0) {
+          kept = Math.min(kept, at);
           target.blocks.splice(at, 1);
         }
         break;
       }
       case "queue":
+        kept = Math.min(kept, target.blocks.length);
         target.queued = event.blocks.map((block) =>
           take(target, block, "queued")
         );
@@ -1530,6 +1586,7 @@ function applyTranscript(
           known?.messages ?? [],
           known?.streaming ?? ""
         );
+        target.rev += 1;
         break;
       }
       case "tail":
@@ -1557,7 +1614,9 @@ function applyTranscript(
         break;
     }
   }
-  place(target);
+  if (kept !== Number.POSITIVE_INFINITY) {
+    place(target, kept);
+  }
 }
 
 /**
@@ -3127,10 +3186,9 @@ const failureNotice = (record: CommandRecord): string => {
  * failed send, which draws no row of its own until the hub takes it.
  */
 function markUnreached(record: CommandRecord): void {
-  const row = state.sessions[record.sessionId]?.local.find(
-    (message) => message.id === record.commandId
-  );
-  if (!row) {
+  const target = state.sessions[record.sessionId];
+  const row = target?.local.find((message) => message.id === record.commandId);
+  if (!(target && row)) {
     return;
   }
   row.state = "unreached";
@@ -3138,6 +3196,7 @@ function markUnreached(record: CommandRecord): void {
     ...row.metadata,
     sendFailed: record.reason ?? "The hub never took it.",
   };
+  target.rev += 1;
 }
 
 /**

@@ -609,17 +609,19 @@ const settledOf = (messages: Message[]): Message[] => {
  */
 const drawnOf = (session: SessionState): Message[] => {
   const settled = settledOf(session.messages);
-  const gated = new Set(
-    parkedAsks(session.pending).flatMap((ask) =>
-      ask.toolUseId ? [ask.toolUseId] : []
-    )
-  );
+  const gated = new Set(gatedCalls(session));
   const waiting = (m: Message): boolean =>
     isQuestionMsg(m) && (m.metadata?.toolStatus ?? "pending") === "pending";
   return settled.filter(
     (m) => !((m.toolCallId && gated.has(m.toolCallId)) || waiting(m))
   );
 };
+
+/** The calls whose asks are parked on the composer, which the transcript leaves out. */
+const gatedCalls = (session: SessionState): string[] =>
+  parkedAsks(session.pending).flatMap((ask) =>
+    ask.toolUseId ? [ask.toolUseId] : []
+  );
 
 /**
  * The row grammar itself: a list of messages folded into rows, with no live tail
@@ -859,6 +861,23 @@ export interface FoldMemo {
   branches: number;
   /** How many messages those rows cover, and the first and last of them. */
   count: number;
+  /**
+   * The settled rows as drawn (the echoes and ended waits left out), and
+   * what they were folded from: the store's list, at its revision (`rev`),
+   * with these calls gated (`gate`), as these drawn messages. A build that
+   * finds the same list at the same revision with the same calls gated draws
+   * these again and folds only the live tail: a streamed frame moves the
+   * tail alone, and filtering and walking every row of a long transcript
+   * again for it was the build's whole cost.
+   */
+  drawn: {
+    gate: string;
+    list: Message[];
+    messages: Message[];
+    rev: number;
+    rows: Row[];
+    voices: Voices;
+  };
   first: Message | undefined;
   last: Message | undefined;
   /** The live row this fold ended on. */
@@ -1360,19 +1379,21 @@ function cutFor(messages: Message[], memo: FoldMemo, branches: number): number {
  * that cut it, an older chunk prepended in front, or a subagent branch that
  * has since opened (which turns a call row into a fold). All of those change
  * rows BEFORE the old end, which an append cannot express.
+ *
+ * And when no row has moved since `memo` (the same list at the same
+ * revision, the same calls gated: `FoldMemo.drawn`), the settled rows are
+ * the memo's as drawn, and only the live tail is derived again.
  */
 export function buildRowsFrom(
   session: SessionState,
   memo: FoldMemo | null
 ): Fold {
-  const messages = drawnOf(session);
+  const gate = gatedCalls(session).join(",");
+  const still = stillDrawn(session, memo, gate);
+  const { messages, folded, appended } = still
+    ? { messages: still.drawn.messages, folded: still, appended: true }
+    : foldAgain(session, memo);
   const branches = Object.keys(session.subagents).length;
-  const cut = memo ? cutFor(messages, memo, branches) : -1;
-  const appended = memo !== null && cut >= 0;
-  const folded =
-    memo && appended
-      ? foldOnto(messages, session.subagents, memo, cut)
-      : foldAll(messages, session.subagents, memo?.said ?? NO_SAID);
   const { starts, voices } = folded;
   const { rows, told, ...toldSaid } = tell(
     session,
@@ -1390,7 +1411,7 @@ export function buildRowsFrom(
   const gen = same ? prior.gen : prior.gen + 1;
   const ended = prior.on && !same ? endOf(prior, rows, memo) : null;
   const said = keepLive(ended, rows, toldSaid.said);
-  const drawn = presentTold(
+  const presented = presentTold(
     rows,
     starts,
     told,
@@ -1398,6 +1419,13 @@ export function buildRowsFrom(
     session.instanceId,
     voices
   );
+  const drawn =
+    still && said === still.said
+      ? still.drawn
+      : {
+          rows: withoutEndedWaits(withoutEchoes(presented.rows)),
+          voices: presented.voices,
+        };
   const tool =
     session.currentTool && !called(session, session.currentTool.toolId)
       ? session.currentTool
@@ -1417,7 +1445,7 @@ export function buildRowsFrom(
   );
   return {
     rows: [
-      ...withoutEndedWaits(withoutEchoes(drawn.rows)),
+      ...drawn.rows,
       ...tailRows(session, content, tool, gen, new Set(ahead), {
         ...drawn.voices,
       }),
@@ -1428,6 +1456,14 @@ export function buildRowsFrom(
       said,
       told,
       count: messages.length,
+      drawn: {
+        gate,
+        list: session.messages,
+        messages,
+        rev: session.rev,
+        rows: drawn.rows,
+        voices: drawn.voices,
+      },
       first: messages[0],
       last: messages.at(-1),
       branches,
@@ -1444,6 +1480,48 @@ export function buildRowsFrom(
     },
     appended,
     ended,
+  };
+}
+
+/**
+ * The memo, when nothing it was folded from has moved: the store's list at
+ * the same revision, the same calls gated, no compaction being told. Null
+ * when the rows have to be folded again.
+ */
+function stillDrawn(
+  session: SessionState,
+  memo: FoldMemo | null,
+  gate: string
+): FoldMemo | null {
+  return memo !== null &&
+    memo.drawn.list === session.messages &&
+    memo.drawn.rev === session.rev &&
+    memo.drawn.gate === gate &&
+    memo.told.length === 0 &&
+    session.sdkStatus !== "compacting"
+    ? memo
+    : null;
+}
+
+/** The drawn messages folded again: on from the memo's cut where it holds, else whole. */
+function foldAgain(
+  session: SessionState,
+  memo: FoldMemo | null
+): { appended: boolean; folded: Settled; messages: Message[] } {
+  const messages = drawnOf(session);
+  const branches = Object.keys(session.subagents).length;
+  const cut = memo ? cutFor(messages, memo, branches) : -1;
+  if (memo && cut >= 0) {
+    return {
+      messages,
+      appended: true,
+      folded: foldOnto(messages, session.subagents, memo, cut),
+    };
+  }
+  return {
+    messages,
+    appended: false,
+    folded: foldAll(messages, session.subagents, memo?.said ?? NO_SAID),
   };
 }
 
@@ -1777,11 +1855,14 @@ function tailRows(
   // HAS happened. Keyed by the message itself: once read, the same key is its
   // row in the conversation, where it was read.
   const { messages } = session;
-  const receiptAt = receiptsOf(messages);
+  const from = queuedFrom(messages);
+  // Read over the whole transcript, and asked of the waiting sends alone:
+  // with none waiting, there is nothing to ask it of.
+  const receiptAt = from < messages.length ? receiptsOf(messages) : null;
   const waiting: Row[] = [];
-  for (let i = queuedFrom(messages); i < messages.length; i += 1) {
+  for (let i = from; i < messages.length; i += 1) {
     // A run's receipt waiting to be read is already told by its block.
-    if (receiptAt(messages[i], i)?.fold) {
+    if (receiptAt?.(messages[i], i)?.fold) {
       continue;
     }
     waiting.push({
