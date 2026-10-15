@@ -450,6 +450,17 @@ function carry(
   frame = requestAnimationFrame(scroll);
 }
 
+/**
+ * A tab's only drag is the pointer's. A native one from it (a text
+ * selection pressed on the tab) would carry the page's text, and a field
+ * let go over would type it (internal-drag.ts): it never starts.
+ */
+export function noNativeDrag(node: HTMLElement): () => void {
+  const refuse = (event: DragEvent) => event.preventDefault();
+  node.addEventListener("dragstart", refuse);
+  return () => node.removeEventListener("dragstart", refuse);
+}
+
 /** The click a drag's release would send the tab is not one. */
 function swallowClick(node: HTMLElement) {
   const swallow = (event: MouseEvent) => {

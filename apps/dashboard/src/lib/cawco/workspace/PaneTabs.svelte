@@ -93,7 +93,7 @@
   import SessionStatus from "./SessionStatus.svelte";
   import { rebuildScheduler } from "./scheduler.svelte";
   import { type StatusTone, sessionStatus } from "./session-status";
-  import { pressTab } from "./tab-drag.svelte";
+  import { noNativeDrag, pressTab } from "./tab-drag.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
   let {
@@ -1475,6 +1475,7 @@
         out:leavingTab={tab.id}
         {@attach attachmentsOf(tab.id).enter}
         {@attach attachmentsOf(tab.id).land}
+        {@attach noNativeDrag}
       >
         <!-- Its shadow on the tab behind it, first so its own card covers
              what casts it. -->

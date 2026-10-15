@@ -28,6 +28,7 @@ import {
 // biome-ignore lint/style/noExportedImports: export-from here would make this a single-export barrel file, flagged by noBarrelFile instead
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
 import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
+import { bareDrag, internalData } from "../internal-drag";
 import { depart } from "../motion/share.svelte";
 import { workingSet } from "../working-set.svelte";
 import { workspace } from "./workspace.svelte";
@@ -260,25 +261,31 @@ export function dragSession(
     };
   }
 
-  const cleanup = draggable({
-    element: node,
-    getInitialData: (): Record<string, unknown> => ({
-      kind: "cawco/session",
-      sessionId: current.sessionId,
-      from: null,
-    }),
-    onDragStart: () => {
-      // A conversation dragged in from the board is not open yet, and the
-      // machine and folder it is addressed by have to be recorded BEFORE it
-      // lands — a stored session without them resolves to a different
-      // conversation that happens to share an id.
-      const ctx = current.ctx?.();
-      if (ctx) {
-        workingSet.visit(current.sessionId, ctx);
-      }
-    },
-    onDrop: clearHints,
-  });
+  // A row is a link: the browser would carry its address as text, and a
+  // field let go over would type it (internal-drag.ts).
+  const cleanup = combine(
+    bareDrag(node),
+    draggable({
+      element: node,
+      getInitialData: (): Record<string, unknown> => ({
+        kind: "cawco/session",
+        sessionId: current.sessionId,
+        from: null,
+      }),
+      getInitialDataForExternal: internalData,
+      onDragStart: () => {
+        // A conversation dragged in from the board is not open yet, and the
+        // machine and folder it is addressed by have to be recorded BEFORE it
+        // lands — a stored session without them resolves to a different
+        // conversation that happens to share an id.
+        const ctx = current.ctx?.();
+        if (ctx) {
+          workingSet.visit(current.sessionId, ctx);
+        }
+      },
+      onDrop: clearHints,
+    })
+  );
 
   return {
     update: (next: typeof params) => {
