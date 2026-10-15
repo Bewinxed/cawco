@@ -46,6 +46,8 @@ final class ProjectViewController: ObservedViewController {
     private let acts = UIStackView()
     private let actsGap = UIView()
     private let name = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
+    /// The name, edited where it stands: a tap on it puts this field in its place.
+    private let nameEditor = ProjectNameEditor()
     private let osGlyph = GlyphView(.server, size: Size.iconSm, tint: Palette.inkMuted)
     private let place = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
     private var places: UIButton!
@@ -174,9 +176,28 @@ final class ProjectViewController: ObservedViewController {
         line.spacing = Space.space2
         line.alignment = .center
         name.wrap = .balance
-        name.accessibilityTraits = .header
+        name.accessibilityTraits = [.header, .button]
+        name.accessibilityHint = "Renames the project"
+        name.isUserInteractionEnabled = true
+        name.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(editName)))
+        name.addInteraction(UIPointerInteraction(delegate: nil))
+        nameEditor.isHidden = true
+        nameEditor.save = { [weak self] next in
+            guard let self else { return }
+            try await context.hub.editProject(id: projectId, name: next)
+        }
+        nameEditor.onEnd = { [weak self] in
+            guard let self else { return }
+            name.isHidden = false
+            UIAccessibility.post(notification: .layoutChanged, argument: name)
+        }
         who.addArrangedSubview(name)
+        who.addArrangedSubview(nameEditor)
         who.addArrangedSubview(line)
+        nameEditor.widthAnchor.constraint(equalTo: who.widthAnchor).isActive = true
+        let room = nameEditor.widthAnchor.constraint(greaterThanOrEqualToConstant: 280)
+        room.priority = .defaultHigh
+        room.isActive = true
         who.axis = .vertical
         who.spacing = Space.space1
         who.alignment = .leading
@@ -626,6 +647,13 @@ final class ProjectViewController: ObservedViewController {
         context.openTask(projectId, taskId)
     }
 
+    /// A tap on the name: the field takes its place, holding it, selected (ProjectHead.svelte).
+    @objc private func editName() {
+        guard let project, nameEditor.isHidden else { return }
+        name.isHidden = true
+        nameEditor.begin(project.name)
+    }
+
     /// A drop or a Move to…: the card stands where it was put, in a column the
     /// board brings into view, saying it moves, until the hub answers. A
     /// refusal puts it back where it was, in view, with the hub's sentence
@@ -883,5 +911,173 @@ private final class PlacesList: KitPopoverController {
         let height = list.systemLayoutSizeFitting(CGSize(width: width - inset * 2, height: 0), withHorizontalFittingPriority: .required,
                                                   verticalFittingPriority: .fittingSizeLevel).height + inset * 2
         preferredContentSize = CGSize(width: width, height: height)
+    }
+}
+
+/// The project's name edited where it stands (ProjectHead.svelte): a field
+/// in the title's type, its words where the name's were (a space-1 inset
+/// pulled back by a space-1 overhang, as the web's), holding the name,
+/// selected. Return, or leaving it, sends it; it stays, read-only, until the
+/// hub has the name, then gives way to it. Escape puts the name back. A
+/// refusal keeps what was typed, the hub's words under it, the field
+/// focused; leaving it then puts the name back, the one way back a touch
+/// screen with no Escape has.
+@MainActor
+final class ProjectNameEditor: UIView, UITextFieldDelegate {
+    /// Sends the name; throws the hub's refusal.
+    var save: ((String) async throws -> Void)?
+    /// The editor has gone: the name stands again.
+    var onEnd: (() -> Void)?
+
+    private let field = NameField()
+    private let problem = TaskSheetController.problemLabel()
+    private var current = ""
+    private var busy = false
+    private var refused = false
+    private var closing = false
+
+    init() {
+        super.init(frame: .zero)
+        field.delegate = self
+        field.accessibilityLabel = "Project name"
+        field.accessibilityIdentifier = "project-name-field"
+        field.returnKeyType = .done
+        field.escape = { [weak self] in self?.close() }
+        problem.accessibilityIdentifier = "project-name-problem"
+        let column = UIStackView(arrangedSubviews: [field, problem])
+        column.axis = .vertical
+        column.spacing = Space.space1
+        column.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(column)
+        NSLayoutConstraint.activate([
+            column.topAnchor.constraint(equalTo: topAnchor),
+            column.bottomAnchor.constraint(equalTo: bottomAnchor),
+            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: -Space.space1),
+            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: Space.space1),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("ProjectNameEditor is built in code")
+    }
+
+    func begin(_ name: String) {
+        current = name
+        busy = false
+        refused = false
+        closing = false
+        field.text = name
+        field.isEnabled = true
+        field.textColor = Palette.inkStrong
+        problem.isHidden = true
+        isHidden = false
+        field.becomeFirstResponder()
+        field.selectAll(nil)
+    }
+
+    func textFieldShouldReturn(_: UITextField) -> Bool {
+        commit()
+        return false
+    }
+
+    func textFieldDidEndEditing(_: UITextField) {
+        // Left after a refusal it puts the name back; otherwise leaving sends it.
+        guard !busy, !closing else { return }
+        if refused {
+            close()
+        } else {
+            commit()
+        }
+    }
+
+    private func commit() {
+        guard !busy, !closing else { return }
+        let next = (field.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard next != current else {
+            close()
+            return
+        }
+        busy = true
+        field.isEnabled = false
+        field.textColor = Palette.inkMuted
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await save?(next)
+                close()
+            } catch {
+                busy = false
+                refused = true
+                field.isEnabled = true
+                field.textColor = Palette.inkStrong
+                problem.text = error.localizedDescription
+                Motion.easeDrawer.animator(Motion.durMorph) { [self] in
+                    problem.isHidden = false
+                    superview?.layoutIfNeeded()
+                }.startAnimation()
+                UIAccessibility.post(notification: .announcement, argument: problem.text)
+                field.becomeFirstResponder()
+            }
+        }
+    }
+
+    private func close() {
+        guard !closing else { return }
+        closing = true
+        if field.isFirstResponder { field.resignFirstResponder() }
+        problem.isHidden = true
+        isHidden = true
+        onEnd?()
+    }
+
+    /// The title's type in a field: the raised surface, the control's edge
+    /// (the focus ring while it has the caret), `radius-xs`.
+    private final class NameField: UITextField {
+        var escape: (() -> Void)?
+
+        init() {
+            super.init(frame: .zero)
+            font = TypeScale.typeTitle.font
+            textColor = Palette.inkStrong
+            backgroundColor = Palette.surfaceRaised
+            layer.cornerRadius = Radius.radiusXs
+            layer.cornerCurve = .continuous
+            autocorrectionType = .no
+            spellCheckingType = .no
+            registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (field: NameField, _: UITraitCollection) in field.paint() }
+            paint()
+        }
+
+        @available(*, unavailable)
+        required init?(coder _: NSCoder) {
+            fatalError("NameField is built in code")
+        }
+
+        override func textRect(forBounds bounds: CGRect) -> CGRect { bounds.insetBy(dx: Space.space1, dy: 0) }
+        override func editingRect(forBounds bounds: CGRect) -> CGRect { bounds.insetBy(dx: Space.space1, dy: 0) }
+
+        override var keyCommands: [UIKeyCommand]? {
+            [UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escaped))]
+        }
+
+        @objc private func escaped() { escape?() }
+
+        @discardableResult
+        override func becomeFirstResponder() -> Bool {
+            defer { paint() }
+            return super.becomeFirstResponder()
+        }
+
+        @discardableResult
+        override func resignFirstResponder() -> Bool {
+            defer { paint() }
+            return super.resignFirstResponder()
+        }
+
+        private func paint() {
+            layer.borderColor = (isFirstResponder ? Palette.focusRing : Palette.borderControl).resolvedColor(with: traitCollection).cgColor
+            layer.borderWidth = isFirstResponder ? Size.focusRingWidth : 1
+        }
     }
 }

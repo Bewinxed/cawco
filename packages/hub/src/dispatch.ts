@@ -1496,6 +1496,15 @@ export const createDispatcher = ({
   };
 
   /**
+   * Review before done (stages.ts `ruledStages`): its done stage is entered
+   * by you alone, and a `you` stage stands before it, so a task whose
+   * attempt landed waits there for you.
+   */
+  const reviewsFirst = (stages: { stages: readonly Stage[] }): boolean =>
+    stages.stages.find((each) => each.kind === "done")?.hooks.by === "you" &&
+    stages.stages.some((each) => each.kind === "you");
+
+  /**
    * The hub's move of a task after its attempt ended: done to the first done
    * stage, a pull request to the first `you` stage (staying put without one),
    * otherwise back to the first todo stage.
@@ -1525,11 +1534,12 @@ export const createDispatcher = ({
       return;
     }
     const criteria = criteriaOf(task.acceptance);
-    const kind = await kindAfterJudged(projectId, task, criteria, item);
+    const judged = await kindAfterJudged(projectId, task, criteria, item);
     // The lead judges: the task stays where it is until he moves it.
-    if (kind === "lead") {
+    if (judged === "lead") {
       return;
     }
+    const kind = judged === "done" && reviewsFirst(stages) ? "you" : judged;
     const target = stages.stages.find((each) => each.kind === kind);
     // Only an approved action enters a `by: action` stage (§5.2): the task stays.
     if (target?.hooks.by === "action") {
@@ -1543,7 +1553,7 @@ export const createDispatcher = ({
         projectId,
         taskId,
         target.name,
-        hubActor(movedBecause(item, kind, criteria.length))
+        hubActor(movedBecause(item, judged, kind, criteria.length))
       );
     }
   };
@@ -1565,12 +1575,20 @@ export const createDispatcher = ({
       : kind;
   };
 
-  /** Why the hub moved a task after its attempt ended, as its commit says. */
+  /**
+   * Why the hub moved a task after its attempt ended, as its commit says:
+   * `judged` is where its attempt sent it, `kind` where it went (review, for
+   * a done in a project that reviews before done).
+   */
   const movedBecause = (
     item: WorkItemRow,
+    judged: "done" | "todo" | "you",
     kind: "done" | "todo" | "you",
     criteria: number
   ): string => {
+    if (judged === "done" && kind === "you") {
+      return `attempt ${short(item.id)} ${item.state}; this project reviews before done, so it waits for you`;
+    }
     if (kind === "you" && item.prUrl && item.lands === "pr") {
       return `attempt ${short(item.id)} opened ${item.prUrl}`;
     }

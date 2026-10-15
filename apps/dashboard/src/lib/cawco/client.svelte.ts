@@ -267,6 +267,8 @@ export interface ProjectRow {
   primaryPlaceId: string | null;
   /** The repository its checkouts are of, `host/owner/repo`; null when unknown. */
   remote: string | null;
+  /** Review before done: only you move a task to done, and landed work waits in review. */
+  review: boolean;
 }
 
 /**
@@ -5058,6 +5060,36 @@ export async function renameInstance(
       `Not renamed: the hub answered ${response.status}.`
     );
   }
+}
+
+/**
+ * The person's own edit of a project: its name, or its Review before done
+ * (`PATCH /api/projects/:id`). The answer lands in the projects at once; the
+ * hub's `projects.changed` brings it to every other dashboard and the app.
+ * Throws the refusal, in the hub's words.
+ */
+export async function editProject(
+  projectId: string,
+  change: { name?: string; review?: boolean }
+): Promise<ProjectRow> {
+  const response = await fetch(`/api/projects/${projectId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(change),
+  });
+  if (!response.ok) {
+    throw await refusalOf(
+      response,
+      `Not changed: the hub answered ${response.status}.`
+    );
+  }
+  const row = (await response.json()) as ProjectRow;
+  state.projects = reconcileRows(
+    state.projects,
+    state.projects.map((each) => (each.id === row.id ? row : each)),
+    (each) => each.id
+  );
+  return row;
 }
 
 /**

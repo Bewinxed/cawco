@@ -541,7 +541,7 @@ const TEMPLATE_TEXT: Record<StagesTemplate, { block: string; about: string }> =
   {
     code: {
       about:
-        "Stages for code: a task waits in ready, is worked on, waits for your\nreview, and lands.",
+        "Stages for code: a task waits in ready, is worked on, and lands in done.\nReview is for the tasks you want a look at; turn on Review before done\nand every task waits there for you.",
       block: `ready      todo
 working    active
 review     you
@@ -551,9 +551,12 @@ moves
   * → *                you
   ready → working      lead, session
   ready → review       lead, session
+  ready → done         lead, session
   working → review     lead, session
+  working → done       lead, session
   review → working     lead
   review → ready       lead, session
+  review → done        lead, session
   * → dropped          lead
 views
   board      by stage
@@ -868,6 +871,82 @@ export const templateOf = (
   return best > 0 && winners.length === 1
     ? { template: winners[0] as StagesTemplate }
     : { candidates };
+};
+
+/**
+ * A project's stages as the hub applies them: its stages.md (or the code
+ * template) with the project's Review before done on top. On, every stage of
+ * kind done is entered by you alone (`by: you`), so lead and sessions reach
+ * no further than review; a done stage whose own `by:` names someone keeps
+ * it. Off, the stages are as written.
+ */
+export const ruledStages = (stages: Stages, review: boolean): Stages =>
+  review
+    ? {
+        ...stages,
+        stages: stages.stages.map((stage) =>
+          stage.kind === "done" && !stage.hooks.by
+            ? { ...stage, hooks: { ...stage.hooks, by: "you" } }
+            : stage
+        ),
+      }
+    : stages;
+
+/**
+ * The code template's block before review became a project's choice: every
+ * task waited for your review, and only you moved one to done. A stages.md
+ * that reads as this (or as today's code template) is the template the
+ * project was made with, not one of its own (`isCodeTemplate`).
+ */
+const FORMER_CODE = `---
+ready      todo
+working    active
+review     you
+done       done
+dropped    dropped
+moves
+  * → *                you
+  ready → working      lead, session
+  ready → review       lead, session
+  working → review     lead, session
+  review → working     lead
+  review → ready       lead, session
+  * → dropped          lead
+views
+  board      by stage
+  table      by rank
+---
+`;
+
+/** Stages as one comparable line each: moves and their movers in any order are the same rules. */
+const shapeOf = (stages: Stages): string =>
+  JSON.stringify({
+    stages: stages.stages.map(
+      (stage) => `${stage.name} ${stage.kind} ${JSON.stringify(stage.hooks)}`
+    ),
+    moves: stages.moves
+      .map((move) => `${move.from}>${move.to} ${[...move.who].sort().join()}`)
+      .sort(),
+    views: stages.views.map((view) => `${view.name} ${view.by ?? ""}`),
+  });
+
+/**
+ * Whether a stages.md says nothing the code template (as it is, or as it
+ * was before review became a choice) does not: the same stages, moves and
+ * views, whatever its notes. Such a file is dropped, and the project reads
+ * the hub's code template.
+ */
+export const isCodeTemplate = (content: string): boolean => {
+  const reading = readStages(content);
+  if (!reading.ok) {
+    return false;
+  }
+  const shape = shapeOf(reading.stages);
+  const former = readStages(FORMER_CODE);
+  return (
+    shape === shapeOf(templateStages("code")) ||
+    (former.ok && shape === shapeOf(former.stages))
+  );
 };
 
 /** A template, read: every template reads cleanly, or the hub would not start. */

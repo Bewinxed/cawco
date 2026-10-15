@@ -483,6 +483,7 @@ import {
   makeProjectDelegateTypes,
   projectDelegateTypesRoutes,
 } from "./project-delegate-types";
+import { createProjectEdits, ProjectEditRefusal } from "./project-edit";
 import {
   FolderRefusal,
   listFolder,
@@ -14926,18 +14927,24 @@ export const createServer = (
     };
   };
 
-  /** A new project's template as its stages.md, and its Setup thread when it is made with Caw. */
+  /**
+   * A new project's template as its stages.md (the code template is the
+   * hub's own, read with no file), and its Setup thread when it is made
+   * with Caw.
+   */
   const startProject = async (
     created: ProjectRow,
     asked: Parameters<typeof createOrJoinProject>[0]
   ): Promise<ThreadSummary | undefined> => {
     if (asked.template) {
-      await writeFolderFile(
-        created.id,
-        "stages.md",
-        templateText(asked.template),
-        { message: `stages: the ${asked.template} template` }
-      );
+      if (asked.template !== "code") {
+        await writeFolderFile(
+          created.id,
+          "stages.md",
+          templateText(asked.template),
+          { message: `stages: the ${asked.template} template` }
+        );
+      }
       tasks.touched(created.id);
       // Its template's starter skills reach the checkout it was made from.
       fanOutFleet();
@@ -15868,6 +15875,13 @@ export const createServer = (
   });
   // The stage engine's one door for a `by: action` move (tasks.ts).
   actionMoves = actions.actionMove;
+  // A project's name and Review before done: the person's PATCH and Caw's
+  // project_settings both change them here (project-edit.ts).
+  const projectEdits = createProjectEdits({
+    db,
+    projectsChanged,
+    stagesChanged: (projectId) => tasks.touched(projectId),
+  });
   // Caw's own project settings, applied through the settings' own paths, or
   // asked about as an admin write is (project-settings.ts).
   const settings = createProjectSettings({
@@ -15875,6 +15889,7 @@ export const createServer = (
       adminAsks.ask(actor, PROJECT_SETTINGS, input, toolUseId),
     connections,
     db,
+    edit: (projectId, change) => projectEdits.edit(projectId, change),
     lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
     runsOn: (projectId, runsOn) => dispatcher.configure(projectId, { runsOn }),
     publish: createRepoPublish({
@@ -20697,6 +20712,29 @@ export const createServer = (
             );
           }
           return { ok: true };
+        }
+      )
+      // The person's own edit of a project: its name, and whether it reviews
+      // before done (project-edit.ts). Every dashboard and the app hear it at
+      // once (`projects.changed`; a review change, `tasks.changed` too).
+      .patch(
+        "/api/projects/:id",
+        {
+          body: t.Object({
+            name: t.Optional(t.String({ maxLength: 2000 })),
+            review: t.Optional(t.Boolean()),
+          }),
+        },
+        ({ params, body, status }) => {
+          try {
+            const project = projectEdits.edit(params.id, body);
+            return { ...projectOut(project), cap: caps.capOf(project) };
+          } catch (error) {
+            if (error instanceof ProjectEditRefusal) {
+              return status(error.status, error.message);
+            }
+            throw error;
+          }
         }
       )
       .delete("/api/projects/:id", async ({ params, status }) => {

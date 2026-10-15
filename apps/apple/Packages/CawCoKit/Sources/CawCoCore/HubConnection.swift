@@ -685,6 +685,51 @@ public final class HubConnection {
         Task { [weak self] in await self?.reloadAccounts() }
     }
 
+    /// The hub said the projects changed (`projects.changed`): one read at a
+    /// time, and one more after it for whatever a burst said meanwhile
+    /// (client.svelte.ts `rereadProjects`).
+    private var projectsReading = false
+    private var projectsAgain = false
+    func readProjects() {
+        guard !projectsReading else {
+            projectsAgain = true
+            return
+        }
+        projectsReading = true
+        Task { [weak self] in
+            guard let self else { return }
+            if let read = try? await client?.getApiProjects().ok.body.json { fleet.projects = read }
+            projectsReading = false
+            if projectsAgain {
+                projectsAgain = false
+                readProjects()
+            }
+        }
+    }
+
+    /// The person's own edit of a project: its name, or its Review before
+    /// done (`PATCH /api/projects/:id`). The projects are read again before
+    /// it returns; `projects.changed` brings it to every other client. A
+    /// refusal throws the hub's words ("A project needs a name.").
+    public func editProject(id: String, name: String? = nil, review: Bool? = nil) async throws {
+        let api = try self.api
+        let response = try await api.projects.update(.init(path: .init(id: id), body: .json(.init(name: name, review: review))))
+        switch response {
+        case .ok:
+            break
+        case let .badRequest(refused):
+            throw ControlError(message: await Wire.words(try? refused.body.plainText) ?? "Not changed: the hub answered 400.")
+        case let .notFound(refused):
+            throw ControlError(message: await Wire.words(try? refused.body.plainText) ?? "Not changed: the hub answered 404.")
+        case let .unprocessableContent(refused):
+            let said = (try? refused.body.applicationProblemJson).flatMap { Wire.words(problem: $0) }
+            throw ControlError(message: said ?? "Not changed: the hub answered 422.")
+        case let .undocumented(statusCode, payload):
+            throw ControlError(message: await Wire.words(payload.body) ?? "Not changed: the hub answered \(statusCode).")
+        }
+        fleet.projects = try await api.projects.list().ok.body.json
+    }
+
     /// `readAccounts`, awaited: a write to the accounts routes reads them again
     /// before it returns (client.svelte.ts `accountsWrite`), since only a
     /// sign-in makes the hub say they moved.
@@ -1274,6 +1319,8 @@ public final class HubConnection {
             fleet.moves = jobs
         case let .tasksChanged(projectId):
             tasksChanged[projectId, default: 0] += 1
+        case .projectsChanged:
+            readProjects()
         case let .projectStop(frame):
             for listener in projectStopListeners.values { listener(frame) }
         case let .watchNotices(notices):

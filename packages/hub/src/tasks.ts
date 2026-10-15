@@ -44,6 +44,7 @@ import {
   type FolderAuthor,
   FolderRefusal,
   FolderTaken,
+  type FolderWriteOptions,
   folderFileNames,
   folderFileTimes,
   folderHistory,
@@ -63,10 +64,12 @@ import {
 import { type MachineFacts, runsOnValue } from "./runs-on";
 import {
   firstStage,
+  isCodeTemplate,
   type Mover,
   moveProblem,
   passesReview,
   readStages,
+  ruledStages,
   STAGE_NAME,
   type Stage,
   type StageKind,
@@ -283,10 +286,14 @@ export interface TaskStore {
   ) => string | undefined;
   /** Every machine the hub has seen: what a `runs_on` may name (runs-on.ts). */
   readonly machines: () => MachineFacts[];
-  readonly project: (
-    id: string
-  ) =>
-    | { id: string; template: StagesTemplate | null; tracker: Tracker }
+  readonly project: (id: string) =>
+    | {
+        id: string;
+        /** Review before done: only you move a task to a done stage (stages.ts `ruledStages`). */
+        review: boolean;
+        template: StagesTemplate | null;
+        tracker: Tracker;
+      }
     | undefined;
   readonly projectIds: () => string[];
   readonly put: (rows: TaskIndexRow[]) => void;
@@ -548,6 +555,20 @@ const LINE_BREAK = /[\r\n]/;
 /** A project's stages, in its folder (§5.2). */
 export const STAGES_FILE = "stages.md";
 const DEFAULT_TEMPLATE: StagesTemplate = "code";
+
+/** Takes stages.md away, so the project reads the code template; one without it has nothing to take. */
+const removeStages = async (
+  projectId: string,
+  options: FolderWriteOptions
+): Promise<void> => {
+  try {
+    await deleteFolderFile(projectId, STAGES_FILE, options);
+  } catch (error) {
+    if (!(error instanceof FolderRefusal && error.status === 404)) {
+      throw error;
+    }
+  }
+};
 
 const refuse = (code: 400 | 403 | 404 | 409 | 422, message: string): never => {
   throw new FolderRefusal(code, message);
@@ -2070,7 +2091,26 @@ export const createTasks = (store: TaskStore) => {
     return highest + 1;
   };
 
-  /** stages.md as it reads, or the code template while the project has none. */
+  /**
+   * A reading with the project's Review before done applied: the one place
+   * the rules the hub checks moves against are made (stages.ts `ruledStages`).
+   */
+  const ruled = (projectId: string, reading: StagesReading): StagesReading =>
+    reading.ok
+      ? {
+          ok: true,
+          stages: ruledStages(
+            reading.stages,
+            store.project(projectId)?.review ?? false
+          ),
+        }
+      : reading;
+
+  /**
+   * The project's stages as the hub applies them: stages.md as it reads, or
+   * the code template while the project has none, with its Review before
+   * done on top.
+   */
   const stagesOf = async (
     projectId: string
   ): Promise<{
@@ -2080,17 +2120,52 @@ export const createTasks = (store: TaskStore) => {
   }> => {
     try {
       const { content } = await readFolderFile(projectId, STAGES_FILE);
-      return { source: "file", content, reading: readStages(content) };
+      return {
+        source: "file",
+        content,
+        reading: ruled(projectId, readStages(content)),
+      };
     } catch (error) {
       if (error instanceof FolderRefusal && error.status === 404) {
         return {
           source: "template",
           content: templateText(DEFAULT_TEMPLATE),
-          reading: { ok: true, stages: templateStages(DEFAULT_TEMPLATE) },
+          reading: ruled(projectId, {
+            ok: true,
+            stages: templateStages(DEFAULT_TEMPLATE),
+          }),
         };
       }
       throw error;
     }
+  };
+
+  /**
+   * A stages.md that is the code template, now or as it was before review
+   * was a project's choice, goes: the project reads the hub's code template,
+   * so it follows the template and its Review before done. A project's own
+   * stages stay.
+   */
+  const dropTemplateCopy = async (projectId: string): Promise<void> => {
+    let content: string;
+    try {
+      ({ content } = await readFolderFile(projectId, STAGES_FILE));
+    } catch (error) {
+      if (error instanceof FolderRefusal && error.status === 404) {
+        return;
+      }
+      throw error;
+    }
+    if (!isCodeTemplate(content)) {
+      return;
+    }
+    await deleteFolderFile(projectId, STAGES_FILE, {
+      message:
+        "stages: the code template, as the hub has it; Review before done is the project's own setting",
+    });
+    console.info(
+      `[tasks] project ${projectId}'s stages.md was the code template word for word; it reads the hub's code template now.`
+    );
   };
 
   /** The project's stages; undefined while stages.md does not read. */
@@ -3035,16 +3110,17 @@ export const createTasks = (store: TaskStore) => {
         return stagesView(
           "file",
           content,
-          reading,
+          ruled(projectId, reading),
           store.project(projectId)?.template ?? null
         );
       }).then((written) => told({ kind: "changed", projectId }, written));
     },
 
     /**
-     * Writes a template as the project's stages.md. Answers the stages, and
-     * the tasks whose stage the template does not have (they stay where they
-     * are until moved).
+     * Writes a template as the project's stages.md; the code template is
+     * the hub's own, so applying it takes stages.md away and the project
+     * reads the template. Answers the stages, and the tasks whose stage the
+     * template does not have (they stay where they are until moved).
      */
     applyTemplate(
       projectId: string,
@@ -3054,15 +3130,25 @@ export const createTasks = (store: TaskStore) => {
       return inTurn(projectId, async () => {
         writable(projectId);
         const content = templateText(template);
-        await writeFolderFile(projectId, STAGES_FILE, content, {
-          author: actor.author,
-          message: `stages: apply the ${template} template ${byWhom(actor)}`,
-        });
+        const message = `stages: apply the ${template} template ${byWhom(actor)}`;
+        if (template === DEFAULT_TEMPLATE) {
+          await removeStages(projectId, { author: actor.author, message });
+        } else {
+          await writeFolderFile(projectId, STAGES_FILE, content, {
+            author: actor.author,
+            message,
+          });
+        }
         store.setTemplate(projectId, template);
         const stages = templateStages(template);
         const { rows } = await sync(projectId);
         return {
-          ...stagesView("file", content, { ok: true, stages }, template),
+          ...stagesView(
+            template === DEFAULT_TEMPLATE ? "template" : "file",
+            content,
+            ruled(projectId, { ok: true, stages }),
+            template
+          ),
           stranded: rows
             .filter((row) => !stageNamed(stages, row.stage))
             .map((row) => row.id),
@@ -3103,12 +3189,17 @@ export const createTasks = (store: TaskStore) => {
       return { tracker };
     },
 
-    /** Catches up the index of every project that has a folder: what the hub does as it starts. */
+    /**
+     * Catches up the index of every project that has a folder: what the hub
+     * does as it starts. A stages.md that is only the code template goes
+     * first, so the project reads the template as the hub has it.
+     */
     async syncAll(): Promise<void> {
       for (const projectId of store.projectIds()) {
         // biome-ignore lint/performance/noAwaitInLoops: one project at a time keeps a start from reading every folder at once
         if (await hasProjectFolder(projectId)) {
           try {
+            await inTurn(projectId, () => dropTemplateCopy(projectId));
             await sync(projectId);
           } catch (error) {
             console.warn(

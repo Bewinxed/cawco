@@ -658,6 +658,9 @@ export type ProjectSettingChange =
   | { kind: "set_lands"; lands: ProjectLands }
   /** Where its attempts run (hub runs-on.ts): a machine or a capability; null: any machine. */
   | { kind: "set_runs_on"; runsOn: string | null }
+  | { kind: "rename"; name: string }
+  /** Review before done: on, only you move a task to done. */
+  | { kind: "set_review"; review: boolean }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -695,6 +698,12 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return change.runsOn
         ? `Run this project's attempts only on ${change.runsOn}`
         : "Run this project's attempts on any machine with a checkout";
+    case "rename":
+      return `Rename this project to ${change.name}`;
+    case "set_review":
+      return change.review
+        ? "Review every task before done: only you close one"
+        : "Stop reviewing before done: the lead and sessions close finished tasks";
     default:
       return LANDS_WORDS[change.lands];
   }
@@ -727,6 +736,8 @@ const settingChanges = (input: Record<string, unknown>) =>
         "set_lands",
         "set_runs_on",
         "create_repo",
+        "rename",
+        "set_review",
       ].includes((one as { kind?: unknown }).kind as string)
   );
 

@@ -229,6 +229,9 @@ export const measureRoles = (): RoleSize[] => {
       ask: () => Promise.reject(new Error("measuring")),
       connections: {} as never,
       db: {} as never,
+      edit: () => {
+        throw new Error("measuring");
+      },
       lands: () => Promise.reject(new Error("measuring")),
       note: () => undefined,
       publish: {} as never,

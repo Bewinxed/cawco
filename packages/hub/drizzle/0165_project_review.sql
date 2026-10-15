@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `review` integer DEFAULT false NOT NULL;

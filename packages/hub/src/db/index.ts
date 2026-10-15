@@ -1677,6 +1677,11 @@ export interface DbShape {
       >
     >
   ) => void;
+  /** The project's name and its Review before done, as project-edit.ts checked them. */
+  readonly setProjectDetails: (
+    id: string,
+    change: Partial<Pick<ProjectRow, "name" | "review">>
+  ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
   readonly setProjectDispatch: (
     id: string,
@@ -5679,6 +5684,9 @@ const make = async (path: string): Promise<DbShape> => {
     },
     setProjectRemote: (id, remote) => {
       db.update(projects).set({ remote }).where(eq(projects.id, id)).run();
+    },
+    setProjectDetails: (id, change) => {
+      db.update(projects).set(change).where(eq(projects.id, id)).run();
     },
     setProjectTemplate: (id, template) => {
       db.update(projects).set({ template }).where(eq(projects.id, id)).run();

@@ -426,7 +426,7 @@ const briefOf = (projectName: string): string =>
     "You have shell and edit tools, inside the boundary of your place, this folder: you write only here and in $TMPDIR, read no credential store, reach no service manager and see no other session's processes, and files only their owner may read are hidden from you. The hub decides each call before it runs. In a turn the person's own message woke, read-only commands (ls, cat, grep, find, wc, head, git that only reads) run without asking, and so do git init, git add <paths> and git commit where no one else works; every other shell or edit call raises an Approve card the person answers, wherever they are. In a turn anything else woke (an event, a routine, a report, outside text riding on your wake) every call raises the card, and so does every call after you read web content in a turn. In a shared checkout git checkout, switch, restore, reset, stash, clean, rebase and push, git add -A or git add ., and any git alias are refused: file a task. Your edits are docs, config and assets only, 5 files a wake at most: anything bigger, file a task. At most 20 shell or edit calls a wake: delegate the rest. Every call shows in your thread. A task whose only changes are your own passes review only once the person approved them.",
     "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must.",
     "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
-    "Your project's settings are yours to change with project_settings: grant it a connection, link its GitHub repository, set where its work lands, or publish its place to a new private GitHub repository (create_repo, always an Approve card first). Each change applies at once and is noted in the thread. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
+    "Your project's settings are yours to change with project_settings: rename it, grant it a connection, link its GitHub repository, set where its work lands, publish its place to a new private GitHub repository (create_repo), or turn Review before done on or off (set_review: whether every task waits for the person before done is theirs to choose, so it and create_repo are always an Approve card first). Each other change applies at once and is noted in the thread. A task whose work landed some other way than its attempt you close yourself: move it to done with a reason naming the commit. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer in that thread with thread_reply, and name the tasks a reply is about in its `tasks`. A turn their words started that ends without a thread_reply to their thread has what you said in plain text posted there as your reply, so say nothing in plain text you would not say to them.",
     "When you need the person's decision, ask with AskUserQuestion, with options; it shows as a card in the thread and their pick comes back to you. Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with the card.",
@@ -1744,7 +1744,11 @@ export const createCaw = ({
     });
   };
 
-  /** The template the project's stages.md is, word for word; null when it is its own or there is none. */
+  /**
+   * The template the project's stages.md is, word for word; null when it is
+   * its own. With no stages.md, the code template when the project was made
+   * from it (the hub reads it with no file), else null.
+   */
   const templateOf = async (
     projectId: string
   ): Promise<StagesTemplate | null> => {
@@ -1753,7 +1757,7 @@ export const createCaw = ({
       return TEMPLATES.find((name) => templateText(name) === content) ?? null;
     } catch (error) {
       if (error instanceof FolderRefusal && error.status === 404) {
-        return null;
+        return db.project(projectId)?.template === "code" ? "code" : null;
       }
       throw error;
     }

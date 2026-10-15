@@ -16,7 +16,11 @@
   import { machineLabel } from "@cawco/core";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
-  import { cawco, spawnSession } from "#lib/cawco/client.svelte.js";
+  import {
+    cawco,
+    editProject,
+    spawnSession,
+  } from "#lib/cawco/client.svelte.js";
   import ForgetProjectTray from "#lib/cawco/ForgetProjectTray.svelte";
   import { forgetHost, forgetProject } from "#lib/cawco/forget.svelte.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
@@ -118,6 +122,63 @@
   let startFault = $state<string | null>(null);
   let spinFault = $state<string | null>(null);
 
+  /**
+   * The name is edited where it stands: a press on it turns it into a field
+   * of the same type, size and place, holding the name. Enter, or leaving
+   * it, sends it; the field stays, read-only, until the project is named by
+   * it, and Escape puts the name back. A refusal leaves what was typed in
+   * the field and the hub's words under it.
+   */
+  let draft = $state<string | null>(null);
+  let renaming = $state<string | null>(null);
+  let renameFault = $state<string | null>(null);
+
+  function editName(): void {
+    draft = project.name;
+    renameFault = null;
+  }
+
+  function stopEditing(): void {
+    draft = null;
+    renaming = null;
+    renameFault = null;
+  }
+
+  async function commitName(): Promise<void> {
+    if (draft === null || renaming !== null) {
+      return;
+    }
+    const next = draft.trim();
+    if (next === project.name) {
+      stopEditing();
+      return;
+    }
+    renaming = next;
+    renameFault = null;
+    try {
+      await editProject(project.id, { name: next });
+    } catch (error) {
+      renaming = null;
+      renameFault = message(error);
+    }
+  }
+
+  // Named: the field gives way to the name it sent.
+  $effect.pre(() => {
+    if (renaming !== null && project.name === renaming) {
+      stopEditing();
+    }
+  });
+
+  // Another project's page: its name is not this one's draft.
+  let editedId: string | undefined;
+  $effect.pre(() => {
+    if (editedId !== undefined && project.id !== editedId) {
+      stopEditing();
+    }
+    editedId = project.id;
+  });
+
   async function startSession(way: "start" | "empty" | "spin") {
     if (!primary || starting) {
       return;
@@ -181,7 +242,49 @@
       </div>
     {/if}
     <div class="txt">
-      <h1 class="title">{project.name}</h1>
+      <h1 class="title">
+        {#if draft !== null}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            aria-label="Project name"
+            autocomplete="off"
+            autofocus
+            class="name field focus-inset"
+            onblur={() => {
+              // Left after a refusal, it stays as typed, the reason under
+              // it; Enter or Try again sends it.
+              if (renameFault === null) {
+                commitName();
+              }
+            }}
+            onkeydown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitName();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                stopEditing();
+              }
+            }}
+            readonly={renaming !== null}
+            spellcheck="false"
+            bind:value={draft}
+            {@attach (node) => node.select()}
+          >
+        {:else}
+          <button
+            class="name press-tint"
+            onclick={editName}
+            title="Rename"
+            type="button"
+          >
+            {project.name}
+          </button>
+        {/if}
+      </h1>
+      <!-- A rename the hub refused, under the name, in its words. -->
+      <RowFault again={commitName} reason={renameFault} />
       <!-- Words change by TextMorph. The line is one ellipsized line as wide
            as its column, with nothing standing after it on its row: its box
            neither grows nor narrows, so there is no size for morph() to
@@ -421,6 +524,42 @@
     font: var(--type-title);
     color: var(--ink-strong);
     overflow-wrap: anywhere;
+  }
+  /* The name and the field it becomes are one box: the same type, the same
+     inset (a space-1 pad pulled back by a space-1 margin, so the words stand
+     where the line's do) and a 1px edge, clear at rest, so pressing it moves
+     nothing. Under a pointer the name takes the hover wash. */
+  .name {
+    display: block;
+    max-inline-size: 100%;
+    margin-inline: calc(var(--space-1) * -1);
+    padding-inline: var(--space-1);
+    border: 1px solid transparent;
+    border-radius: var(--radius-xs);
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: start;
+    cursor: text;
+    transition: background-color var(--dur-control) var(--ease-out);
+  }
+  @media (hover: hover) {
+    button.name:hover {
+      background: var(--surface-hover);
+    }
+  }
+  /* Editing, the words' column takes the row's room, so a long name has the
+     field's whole width to be typed in. */
+  .txt:has(.field) {
+    flex: 1 1 auto;
+  }
+  .field {
+    inline-size: 100%;
+    border-color: var(--border-control);
+    background: var(--surface-raised);
+  }
+  .field[readonly] {
+    color: var(--ink-muted);
   }
   .line {
     display: flex;

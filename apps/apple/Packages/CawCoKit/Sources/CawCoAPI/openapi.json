@@ -18044,6 +18044,80 @@
       }
     },
     "/api/projects/{id}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "review": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiProjectsById",
+        "responses": {
+          "200": {
+            "description": "patchApiProjectsById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiProjectsById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiProjectsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiProjectsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiProjectsById 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "parameters": [
           {
@@ -23235,6 +23309,9 @@
             "template": {
               "$ref": "#/components/schemas/StagesTemplate"
             },
+            "review": {
+              "type": "boolean"
+            },
             "createdAt": {
               "type": "string",
               "format": "date-time"
@@ -23295,6 +23372,7 @@
             "places",
             "primaryPlaceId",
             "remote",
+            "review",
             "reviewLimit",
             "runsOn",
             "tracker"
@@ -23434,6 +23512,9 @@
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
+          "review": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -23496,6 +23577,7 @@
           "places",
           "primaryPlaceId",
           "remote",
+          "review",
           "reviewLimit",
           "runsOn",
           "tracker"
@@ -23524,6 +23606,169 @@
         },
         "required": [
           "ok"
+        ]
+      },
+      "patchApiProjectsById200": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "$ref": "#/components/schemas/ProjectCap"
+          },
+          "primaryPlaceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "remote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          },
+          "leadInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "caw": {
+            "type": "boolean"
+          },
+          "cawHarness": {
+            "$ref": "#/components/schemas/CawHarness"
+          },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leadCostSeen": {
+            "type": "number"
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "reviewLimit": {
+            "type": "number"
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
+          "runsOn": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
+          },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "capPeriod": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "moveDeclinedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "template": {
+            "$ref": "#/components/schemas/StagesTemplate"
+          },
+          "review": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "createdAt",
+                "id",
+                "isPrimary",
+                "kind",
+                "machineId",
+                "path",
+                "projectId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "capUsd",
+          "caw",
+          "cawHarness",
+          "cawModel",
+          "createdAt",
+          "dispatch",
+          "id",
+          "lands",
+          "leadCostSeen",
+          "leadInstanceId",
+          "maxAttempts",
+          "name",
+          "places",
+          "primaryPlaceId",
+          "remote",
+          "review",
+          "reviewLimit",
+          "runsOn",
+          "tracker"
         ]
       },
       "deleteApiProjectsById200": {
@@ -23667,6 +23912,9 @@
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
+          "review": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -23729,6 +23977,7 @@
           "places",
           "primaryPlaceId",
           "remote",
+          "review",
           "reviewLimit",
           "runsOn",
           "tracker"
@@ -23825,6 +24074,9 @@
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
+          "review": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -23885,6 +24137,7 @@
           "places",
           "primaryPlaceId",
           "remote",
+          "review",
           "reviewLimit",
           "runsOn",
           "tracker"

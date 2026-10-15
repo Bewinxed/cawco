@@ -54,6 +54,7 @@ public struct HubAPI: Sendable {
         public func list(_ input: Operations.GetApiProjects.Input = .init()) async throws -> Operations.GetApiProjects.Output { try await client.getApiProjects(input) }
         public func create(_ input: Operations.PostApiProjects.Input) async throws -> Operations.PostApiProjects.Output { try await client.postApiProjects(input) }
         public func delete(_ input: Operations.DeleteApiProjectsById.Input) async throws -> Operations.DeleteApiProjectsById.Output { try await client.deleteApiProjectsById(input) }
+        public func update(_ input: Operations.PatchApiProjectsById.Input) async throws -> Operations.PatchApiProjectsById.Output { try await client.patchApiProjectsById(input) }
     }
     public struct Machines: Sendable {
         let client: Client

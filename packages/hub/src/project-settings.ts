@@ -25,6 +25,13 @@
  * - `create_repo`: the project's place published to a new GitHub
  *   repository, then linked (repo-publish.ts). It reaches outside, so it is
  *   always asked, `ask` or not.
+ * - `rename`: the project's name, checked and written as the person's own
+ *   edit is (project-edit.ts). A name is a label the person can change back
+ *   in a click, so it applies at once like the others.
+ * - `set_review`: Review before done on or off (project-edit.ts). Whether
+ *   every task waits for the person before done is the person's choice
+ *   either way (on routes work through them, off takes away a look they
+ *   chose), so it is always asked, `ask` or not.
  * Only Caw's own project: naming another is refused.
  */
 import {
@@ -40,6 +47,7 @@ import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { Connections } from "./connections";
 import type { DbShape, ProjectRow } from "./db";
+import { type ProjectEdit, projectName } from "./project-edit";
 import type { RepoPublish } from "./repo-publish";
 import { roleOf } from "./roles";
 import { runsOnValue } from "./runs-on";
@@ -56,6 +64,33 @@ const refuse = (message: string): never => {
   throw new Error(message);
 };
 
+/** A rename, checked as the person's own is (project-edit.ts `projectName`). */
+const renamed = (
+  project: ProjectRow,
+  asked: { name?: string }
+): ProjectSettingChange => {
+  const name = projectName(asked.name ?? "");
+  if (name === project.name) {
+    refuse(`This project is called ${name} already.`);
+  }
+  return { kind: "rename", name };
+};
+
+/** Review before done turned on or off, refused when it is that already. */
+const reviewSet = (
+  project: ProjectRow,
+  asked: { review?: boolean }
+): ProjectSettingChange => {
+  const review =
+    asked.review ?? refuse("set_review says on (true) or off (false).");
+  if (review === project.review) {
+    refuse(
+      `Review before done is ${review ? "on" : "off"} for this project already.`
+    );
+  }
+  return { kind: "set_review", review };
+};
+
 /** What the tool takes: changes, flat, each read by its `kind`. */
 const ASKED_CHANGE = z.object({
   kind: z.enum([
@@ -64,6 +99,8 @@ const ASKED_CHANGE = z.object({
     "set_lands",
     "set_runs_on",
     "create_repo",
+    "rename",
+    "set_review",
   ]),
   connection: z.string().optional(),
   github: z.string().optional().describe("owner/name"),
@@ -71,6 +108,7 @@ const ASKED_CHANGE = z.object({
   runs_on: z.string().nullable().optional(),
   name: z.string().optional(),
   private: z.boolean().optional(),
+  review: z.boolean().optional(),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
@@ -84,7 +122,7 @@ const definition = z.object({
 /** The tool as `tools/list` answers it (the call itself runs through {@link createProjectSettings}). */
 const listing = tool(
   PROJECT_SETTINGS,
-  "Change your project's settings now, noted in the thread; ask: true puts an Approve/Deny card to the person first (create_repo always does).",
+  "Change your project's settings, noted in the thread; ask: true asks the person first (create_repo and set_review always do).",
   definition.shape,
   () => Promise.reject(new Error("project_settings runs through its own call"))
 );
@@ -101,6 +139,8 @@ export interface ProjectSettingsDeps {
     DbShape,
     "listAgents" | "project" | "projectByRemote" | "setProjectRemote"
   >;
+  /** The project's name and Review before done, through the person's own edit (project-edit.ts). */
+  readonly edit: (projectId: string, change: ProjectEdit) => ProjectRow;
   /** The project's default landing, through the dispatch settings' own path. */
   readonly lands: (projectId: string, lands: ProjectLands) => Promise<unknown>;
   /** Notes what happened in the thread Caw's turn answers (caw.ts `askThread`, `notice`). */
@@ -118,6 +158,7 @@ export const createProjectSettings = ({
   ask,
   connections,
   db,
+  edit,
   lands,
   note,
   publish,
@@ -216,6 +257,10 @@ export const createProjectSettings = ({
         return await publish.read(project, asked);
       case "set_runs_on":
         return runsOnChange(project, asked.runs_on);
+      case "rename":
+        return renamed(project, asked);
+      case "set_review":
+        return reviewSet(project, asked);
       default: {
         const to = asked.lands ?? refuse("set_lands names main, branch or pr.");
         if (project.lands === to) {
@@ -245,36 +290,56 @@ export const createProjectSettings = ({
     return out;
   };
 
-  /** Applies checked changes through the settings' own code paths; a publish links what it made. */
+  /** Applies one checked change through its setting's own code path; answers what the thread says of it. */
+  const applyOne = async (
+    project: ProjectRow,
+    change: ProjectSettingChange
+  ): Promise<string[]> => {
+    switch (change.kind) {
+      case "grant_connection": {
+        const view = connections.get(change.connection);
+        await connections.update(change.connection, {
+          projects: [...view.projects, project.id],
+        });
+        break;
+      }
+      case "link_repo":
+        db.setProjectRemote(project.id, `github.com/${change.github}`);
+        break;
+      case "rename":
+        edit(project.id, { name: change.name });
+        break;
+      case "set_review":
+        edit(project.id, { review: change.review });
+        break;
+      case "create_repo": {
+        // A publish links what it made.
+        const full = await publish.publish(project, change);
+        linkable(project, `github.com/${full}`);
+        db.setProjectRemote(project.id, `github.com/${full}`);
+        return [
+          projectSettingWords(change),
+          `Link this project to github.com/${full}`,
+        ];
+      }
+      case "set_runs_on":
+        await runsOn(project.id, change.runsOn);
+        break;
+      default:
+        await lands(project.id, change.lands);
+    }
+    return [projectSettingWords(change)];
+  };
+
+  /** Applies checked changes, each before the next. */
   const apply = async (
     project: ProjectRow,
     changes: ProjectSettingChange[]
   ): Promise<string[]> => {
     const said: string[] = [];
     for (const change of changes) {
-      if (change.kind === "grant_connection") {
-        const view = connections.get(change.connection);
-        // biome-ignore lint/performance/noAwaitInLoops: at most three changes, each applied before the next
-        await connections.update(change.connection, {
-          projects: [...view.projects, project.id],
-        });
-      } else if (change.kind === "link_repo") {
-        db.setProjectRemote(project.id, `github.com/${change.github}`);
-      } else if (change.kind === "create_repo") {
-        const full = await publish.publish(project, change);
-        linkable(project, `github.com/${full}`);
-        db.setProjectRemote(project.id, `github.com/${full}`);
-        said.push(
-          projectSettingWords(change),
-          `Link this project to github.com/${full}`
-        );
-        continue;
-      } else if (change.kind === "set_runs_on") {
-        await runsOn(project.id, change.runsOn);
-      } else {
-        await lands(project.id, change.lands);
-      }
-      said.push(projectSettingWords(change));
+      // biome-ignore lint/performance/noAwaitInLoops: at most three changes, each applied before the next
+      said.push(...(await applyOne(project, change)));
     }
     console.log(`[project-settings] ${project.name}: ${said.join("; ")}`);
     return said;
@@ -345,9 +410,13 @@ export const createProjectSettings = ({
       const project = ownProject(actor, input.project);
       const reason = reasonOf(input.reason);
       const changes = await checkAll(project, input.changes);
-      // Creating a remote and pushing reach outside: always the person's.
+      // Creating a remote and pushing reach outside, and whether work waits
+      // for the person's review is theirs to choose: always the person's.
       const asking =
-        input.ask === true || changes.some((one) => one.kind === "create_repo");
+        input.ask === true ||
+        changes.some(
+          (one) => one.kind === "create_repo" || one.kind === "set_review"
+        );
       if (!asking) {
         const said = await apply(project, changes);
         note(actor, {
@@ -381,7 +450,7 @@ export const createProjectSettings = ({
       let text = String(error);
       if (error instanceof z.ZodError) {
         text =
-          "changes is a list of grant_connection, link_repo, set_lands, set_runs_on or create_repo, and reason one sentence.";
+          "changes is a list of grant_connection, link_repo, set_lands, set_runs_on, create_repo, rename or set_review, and reason one sentence.";
       } else if (error instanceof Error) {
         text = error.message;
       }

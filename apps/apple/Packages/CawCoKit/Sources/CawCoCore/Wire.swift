@@ -248,6 +248,8 @@ enum Frame {
     case moves([Components.Schemas.MoveJob])
     /// A project's tasks changed, by anyone: whatever shows them reads them again.
     case tasksChanged(projectId: String)
+    /// The projects changed (one made, renamed or forgotten, a place come or gone): read them again.
+    case projectsChanged
     /// One session a forget asked to stop: stopped as its machine confirmed, refused, or owed to its machine's return.
     case projectStop(Components.Schemas.ProjectStopFrame)
     /// Every open fleet-watch notice, whole, on each change: a session fleet watch tells you about.
@@ -293,6 +295,8 @@ enum Frame {
             self = .moves(frame.moves)
         case .tasks_changed(let frame):
             self = .tasksChanged(projectId: frame.projectId)
+        case .projects_changed:
+            self = .projectsChanged
         case .project_stop(let frame):
             self = .projectStop(frame)
         case .fleetWatch_notices(let frame):

@@ -410,6 +410,12 @@ export const projects = sqliteTable("projects", {
    * Null: none.
    */
   template: text("template").$type<import("../stages").StagesTemplate>(),
+  /**
+   * Review before done: only you move a task into a done stage, and an
+   * attempt that lands sends its task to review (stages.ts `ruledStages`).
+   * Off: the lead and sessions close tasks as the project's stages allow.
+   */
+  review: integer("review", { mode: "boolean" }).notNull().default(false),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
