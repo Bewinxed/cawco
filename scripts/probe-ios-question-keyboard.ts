@@ -62,6 +62,20 @@ if (beforeFlag >= 0 && !beforeRef) {
   );
   process.exit(2);
 }
+// A CawCo workspace's boundary denies what this probe drives the simulator
+// and the scratch fleet with: axe reaches the simulator through
+// testmanagerd's launchd socket ("Failed to connect to unix domain socket at
+// path /private/var/tmp/com.apple.launchd.…/com.apple.testmanagerd.remote-automation.uds:
+// 1 Operation not permitted"), and the scratch agent cuts the tray row's
+// delegate a TMPDIR link under /private/tmp/cawco-<uid> ("EPERM: operation
+// not permitted, symlink …"). Run there, it would wait out a slot and a
+// build and then read no card.
+if (process.env.CAWCO_WORKSPACE) {
+  console.error(
+    "probe-ios-question-keyboard.ts drives the simulator with axe (testmanagerd's launchd socket) and has the scratch agent link a delegate's TMPDIR under /private/tmp, both of which a CawCo workspace's boundary denies. Run it from the orchestrator's shell on the Mac, or a person's."
+  );
+  process.exit(2);
+}
 const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 const onMac = process.platform === "darwin";
@@ -534,9 +548,13 @@ async function checkFingers(
 // ── One build, on a simulator of its own ─────────────────────────────────
 /** Compiles `dir` on the Mac; the app's path there, or none when it failed. */
 async function compile(run: Run, dir: string): Promise<string | undefined> {
+  // `env: process.env`: the scratch fleet holds this process's heavy-run slot
+  // and says so in process.env (heavy-run.ts CAWCO_HEAVY_RUN_HELD). Without
+  // it Bun hands the build the environment this process started with, and
+  // build-both.sh waits forever on the slot its own caller holds.
   const build = Bun.spawn(
     ["bash", "apps/apple/scripts/build-both.sh", "ios", "--compile-only"],
-    { cwd: dir, stdout: "pipe", stderr: "inherit" }
+    { cwd: dir, stdout: "pipe", stderr: "inherit", env: process.env }
   );
   const text = await new Response(build.stdout).text();
   process.stdout.write(text);
