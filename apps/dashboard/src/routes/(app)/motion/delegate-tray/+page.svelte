@@ -213,7 +213,7 @@
           commands={lent.commands}
           delegatesOf={lent.delegatesOf}
           draft={lent.draft}
-          mentions={lent.mentions}
+          mentionsFrom={lent.mentionsFrom}
           onfoot={lent.onfoot}
           oninterruptsend={lent.oninterruptsend}
           onmenu={lent.onmenu}

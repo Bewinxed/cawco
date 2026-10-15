@@ -5,12 +5,13 @@ import Observation
 import OSLog
 import UIKit
 
-// Jump to (JumpPalette.svelte, jump-index.ts, jump-search.svelte.ts): one
-// field over the fleet's projects, machines, running and stored sessions,
-// ranked as you type, and the transcripts' full text under them, scoped to
-// what you or the agent wrote with `@me` / `@agent`.
+// Jump to (JumpPalette.svelte, find-names.svelte.ts, jump-search.svelte.ts):
+// one field over the fleet's projects, threads, machines, running and stored
+// sessions, found by name at the hub (`GET /api/find`, the one ranking the
+// composer's `@` reads too), and the transcripts' full text under them,
+// scoped to what you or the agent wrote with `@me` / `@agent`.
 
-// MARK: Index
+// MARK: Names
 
 /// Which group a row belongs to: its mark and its cap.
 enum JumpKind { case project, thread, machine, live, stored }
@@ -22,147 +23,122 @@ enum JumpTarget {
     case conversation(String)
 }
 
+/// A row as the palette draws it, with where the query's words sit in it.
 struct JumpRow {
     let id: String
     let kind: JumpKind
     let label: String
     let detail: String
     let target: JumpTarget
-    let labelLower: String
-    let detailLower: String
-    let hay: String
-
-    init(id: String, kind: JumpKind, label: String, detail: String, target: JumpTarget) {
-        self.id = id
-        self.kind = kind
-        self.label = label
-        self.detail = detail
-        self.target = target
-        labelLower = label.lowercased()
-        detailLower = detail.lowercased()
-        hay = "\(labelLower) \(detailLower)"
-    }
-}
-
-/// A row that survived the query, with where it matched.
-struct RankedRow {
-    let row: JumpRow
     let labelRanges: [Range<Int>]
     let detailRanges: [Range<Int>]
 }
 
 struct JumpGroup {
     let name: String
-    let rows: [RankedRow]
+    let rows: [JumpRow]
 }
 
-struct JumpIndex {
-    var groups: [(name: String, rows: [JumpRow])] = []
-    var recent: [JumpGroup] = []
-    /// sessionId → its title, so a transcript hit can name its conversation.
-    var sessionTitles: [String: String] = [:]
+/// One thing the hub found by name, as much of it as a row reads.
+enum JumpFound {
+    case project(id: String, title: String)
+    case thread(id: String, title: String, project: String?, lastActivity: Double?)
+    case machine(id: String, title: String, online: Bool)
+    case conversation(instanceId: String?, sessionId: String?, title: String, dir: String?, machineId: String, machineName: String, running: Bool)
+}
 
-    static let names = ["Projects", "Threads", "Machines", "Running sessions", "Recent sessions"]
-    static let caps: [String: Int] = ["Projects": 8, "Threads": 8, "Machines": 8, "Running sessions": 10, "Recent sessions": 16]
+/// What the hub finds by name (`GET /api/find?transcripts=0`), ranked there
+/// (the hub's find.ts): on every keystroke, as it answers in milliseconds;
+/// a new query drops the one in flight, and the last answer stands until
+/// the next lands, so the list never blanks between keys. No words: what
+/// moved last.
+@MainActor
+@Observable
+final class JumpNames {
+    private(set) var found: [JumpFound] = []
+    /// Why the last query got no answer; nil when it did.
+    private(set) var failure: String?
+    @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var asked: String?
+    private let hub: HubConnection
+
+    /// The groups, in order, and how many rows each shows with a query.
+    static let groups: [(name: String, kind: JumpKind, cap: Int)] = [
+        ("Projects", .project, 8), ("Threads", .thread, 8), ("Machines", .machine, 8),
+        ("Running sessions", .live, 10), ("Recent sessions", .stored, 16),
+    ]
     /// The empty query is a preview, not a listing.
     static let previewCap = 8
-    static let recentPerMachine = 8
 
-    @MainActor
-    static func build(hub: HubConnection, home: HomeModel) -> JumpIndex {
-        let fleet = hub.fleet
-        let leaf = { (path: String) in path.split(separator: "/").last.map(String.init) ?? path }
-        var lists: [[JumpRow]] = [[], [], [], [], []]
-        for project in fleet.projects {
-            lists[0].append(JumpRow(id: "project:\(project.id)", kind: .project, label: project.name, detail: project.primaryPlace?.path ?? "", target: .project(project.id)))
-        }
-        let words: [Activity: String] = [.working: "Working", .blocked: "Needs you", .idle: "Idle"]
-        // Every thread with a project's Caw (jump-index.ts `threads`): its project, what it is doing, when it last moved.
-        let projectNames = Dictionary(fleet.projects.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        for row in fleet.threadRows {
-            let when = Date(timeIntervalSince1970: fleet.lastAt(row) / 1000).formatted(.relative(presentation: .named))
-            lists[1].append(JumpRow(id: row.id, kind: .thread, label: row.title ?? "Thread",
-                                    detail: "\(row.projectId.flatMap { projectNames[$0] } ?? "") · \(words[home.activity(row.id)] ?? "") · \(when)",
-                                    target: .conversation(row.id)))
-        }
-        for machine in fleet.machines where machine.status == "online" {
-            lists[2].append(JumpRow(id: "machine:\(machine.machineId)", kind: .machine, label: machine.name,
-                                    detail: "\(machine.os) · start a session here", target: .machine(machine.machineId)))
-        }
-        let running = fleet.rows.filter(\.isLive)
-        for row in running {
-            lists[3].append(JumpRow(id: "live:\(row.id)", kind: .live, label: leaf(row.cwd).isEmpty ? row.id : leaf(row.cwd),
-                                    detail: "\(row.cwd.isEmpty ? "—" : row.cwd) · \(words[home.activity(row.id)] ?? "")", target: .conversation(row.id)))
-        }
-        var destinations = Set(running.map(\.id))
-        var recentStored: [JumpRow] = []
-        var titles: [String: String] = [:]
-        for machine in fleet.machines {
-            for (i, info) in fleet.catalog(machine.machineId).enumerated() {
-                let title = fleet.storedTitle(info, machineId: machine.machineId)
-                titles[info.sessionId] = title
-                let to = fleet.conversationId(sessionKey: info.sessionId, machineId: machine.machineId, cwd: info.cwd)
-                // A project's Caw is his threads: his own transcript is no row (`hidden: leadSessions`).
-                guard !destinations.contains(to), fleet.byId[to]?.role != .lead else { continue }
-                destinations.insert(to)
-                let row = JumpRow(id: "stored:\(machine.machineId):\(info.sessionId)", kind: .stored, label: title,
-                                  detail: "\(machine.name) · \(info.cwd ?? "")", target: .conversation(to))
-                lists[4].append(row)
-                if i < recentPerMachine { recentStored.append(row) }
+    init(hub: HubConnection) {
+        self.hub = hub
+    }
+
+    func update(_ text: String) {
+        let words = text.trimmingCharacters(in: .whitespaces)
+        guard words != asked else { return }
+        asked = words
+        task?.cancel()
+        task = Task { @MainActor [weak self, hub] in
+            do {
+                let response = try await hub.api.search.find(.init(query: .init(q: words, limit: "50", kinds: "project,thread,machine,conversation",
+                                                                                transcripts: .init(rawValue: "0"))))
+                guard !Task.isCancelled, let self else { return }
+                let body = try response.ok.body.json
+                found = body.results.compactMap { result -> JumpFound? in
+                    if let conversation = result.value1 {
+                        let running = switch conversation.state {
+                        case .working, .needsYou, .idle: true
+                        default: false
+                        }
+                        return .conversation(instanceId: conversation.instanceId, sessionId: conversation.sessionId, title: conversation.title,
+                                             dir: conversation.dir, machineId: conversation.machine.id, machineName: conversation.machine.name,
+                                             running: running)
+                    }
+                    if let thread = result.value2 {
+                        return .thread(id: thread.id, title: thread.title, project: thread.project?.name, lastActivity: thread.lastActivity)
+                    }
+                    if let project = result.value5 { return .project(id: project.id, title: project.title) }
+                    if let machine = result.value6 { return .machine(id: machine.id, title: machine.title, online: machine.online) }
+                    return nil
+                }
+                failure = nil
+            } catch {
+                guard !Task.isCancelled, let self else { return }
+                found = []
+                failure = "Couldn't find names: \(error.localizedDescription)"
+                // The same words asked again try again.
+                asked = nil
             }
         }
-        var index = JumpIndex()
-        index.sessionTitles = titles
-        index.groups = zip(names, lists).filter { !$0.1.isEmpty }.map { (name: $0.0, rows: $0.1) }
-        let preview = { (rows: [JumpRow]) in rows.prefix(previewCap).map { RankedRow(row: $0, labelRanges: [], detailRanges: []) } }
-        index.recent = (zip(Self.names.prefix(4), lists.prefix(4)).map { JumpGroup(name: $0.0, rows: preview($0.1)) }
-            + [JumpGroup(name: Self.names[4], rows: preview(recentStored))]).filter { !$0.rows.isEmpty }
-        return index
     }
 
-    /// Whether every character of `needle` appears in order in `hay`.
-    private static func matches(_ hay: String, _ needle: String) -> Bool {
-        var at = hay.startIndex
-        for char in needle {
-            guard let found = hay[at...].firstIndex(of: char) else { return false }
-            at = hay.index(after: found)
-        }
-        return true
-    }
-
-    /// Where `needle` sits inside `lower`: one run when it is there outright,
-    /// else the characters a subsequence match walked through, merged into runs.
-    static func ranges(_ lower: String, _ needle: String) -> [Range<Int>] {
-        let chars = Array(lower)
-        let want = Array(needle)
-        if let start = (0 ... max(0, chars.count - want.count)).first(where: { chars.count >= want.count && Array(chars[$0 ..< $0 + want.count]) == want }) {
-            return [start ..< start + want.count]
-        }
-        var out: [Range<Int>] = []
-        var cursor = 0
-        for char in want {
-            guard let found = chars[cursor...].firstIndex(of: char) else { return [] }
-            if let last = out.last, last.upperBound == found { out[out.count - 1] = last.lowerBound ..< found + 1 } else { out.append(found ..< found + 1) }
-            cursor = found + 1
-        }
-        return out
-    }
-
-    func filter(_ query: String) -> [JumpGroup] {
-        let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else { return recent }
-        return groups.compactMap { group in
-            var ranked: [(row: JumpRow, tier: Int)] = []
-            for row in group.rows {
-                let tier: Int
-                if row.labelLower.hasPrefix(needle) { tier = 0 } else if row.labelLower.contains(needle) { tier = 1 } else if row.hay.contains(needle) { tier = 2 } else if Self.matches(row.hay, needle) { tier = 3 } else { continue }
-                ranked.append((row, tier))
+    /// Where the query's words sit in `text`, merged into runs: why the row is
+    /// there, shown. The hub ranked the row; this only marks it.
+    static func ranges(_ text: String, _ query: String) -> [Range<Int>] {
+        let chars = Array(text.lowercased())
+        var found: [Range<Int>] = []
+        for word in query.lowercased().split(whereSeparator: \.isWhitespace) {
+            let want = Array(word)
+            var at = 0
+            while at + want.count <= chars.count {
+                if chars[at ..< at + want.count].elementsEqual(want) {
+                    found.append(at ..< at + want.count)
+                    at += want.count
+                } else {
+                    at += 1
+                }
             }
-            let rows = ranked.enumerated().sorted { $0.element.tier != $1.element.tier ? $0.element.tier < $1.element.tier : $0.offset < $1.offset }
-                .prefix(Self.caps[group.name] ?? 8)
-                .map { RankedRow(row: $0.element.row, labelRanges: Self.ranges($0.element.row.labelLower, needle), detailRanges: Self.ranges($0.element.row.detailLower, needle)) }
-            return rows.isEmpty ? nil : JumpGroup(name: group.name, rows: Array(rows))
         }
+        var merged: [Range<Int>] = []
+        for range in found.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+            if let last = merged.last, range.lowerBound <= last.upperBound {
+                merged[merged.count - 1] = last.lowerBound ..< max(last.upperBound, range.upperBound)
+            } else {
+                merged.append(range)
+            }
+        }
+        return merged
     }
 }
 
@@ -205,10 +181,12 @@ struct TranscriptHit: Equatable {
     let docId: String
     let sessionId: String
     let machineId: String
-    /// Its launch folder's name, which names the row when the index holds no title.
+    /// Its launch folder's name, which finds the conversation it opens.
     let cwd: String?
     let role: String
     let snippet: String
+    /// The conversation it is in, as the hub names it.
+    let title: String
 }
 
 /// A machine that couldn't answer, in the hub's own sentence (shown as it is).
@@ -256,7 +234,7 @@ final class JumpSearch {
                 let next = Array(body.results.compactMap(\.value1).compactMap { conversation -> TranscriptHit? in
                     guard let sessionId = conversation.sessionId, let moment = conversation.moments.first else { return nil }
                     return TranscriptHit(docId: moment.docId, sessionId: sessionId, machineId: conversation.machine.id, cwd: conversation.dir,
-                                         role: moment.author == .owner ? "user" : "assistant", snippet: moment.excerpt)
+                                         role: moment.author == .owner ? "user" : "assistant", snippet: moment.excerpt, title: conversation.title)
                 }.prefix(10))
                 let missing = body.coverage.machines.filter { !$0.answered }.map {
                     SearchFailure(machineId: $0.machineId,
@@ -301,7 +279,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
     private let hub: HubConnection
     private let home: HomeModel
     private let search: JumpSearch
-    private var index: JumpIndex
+    private let names: JumpNames
     private let column = UIStackView()
     private let footer = UIStackView()
     private let field = UITextField()
@@ -327,7 +305,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
         self.hub = hub
         self.home = home
         search = JumpSearch(hub: hub)
-        index = JumpIndex.build(hub: hub, home: home)
+        names = JumpNames(hub: hub)
         super.init(name: "jump", widest: 672, log: Self.log, label: "Jump to", identifier: "jump-card")
 
         // The search line: the glyph, the author chip, the field, flex siblings.
@@ -388,6 +366,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
             list.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -Self.listInset),
         ])
         placeholder()
+        names.update("")
         render(animated: false)
         watchFleet()
     }
@@ -481,21 +460,62 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
         field.attributedPlaceholder = NSAttributedString(string: text, attributes: [.font: fieldFont, .foregroundColor: Palette.inkMuted])
     }
 
-    /// Follows the fleet and the search while the palette is up.
+    /// Follows what the hub found and the fleet the rows read their state
+    /// from, and the search, while the palette is up.
     private func watchFleet() {
         withObservationTracking {
+            _ = names.found
+            _ = names.failure
             _ = search.hits
             _ = search.failures
             _ = search.pending
             _ = hub.fleet.rows
-            _ = hub.fleet.catalogs
+            _ = hub.fleet.threadRows
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                self.index = JumpIndex.build(hub: self.hub, home: self.home)
                 self.render(animated: true)
                 self.watchFleet()
             }
+        }
+    }
+
+    /// What the hub found, in the palette's groups, each in the hub's order:
+    /// a row's place and state in the palette's own words.
+    private func groups() -> [JumpGroup] {
+        let words = JumpAuthor.parse(query).text
+        let fleet = hub.fleet
+        let activity: [Activity: String] = [.working: "Working", .blocked: "Needs you", .idle: "Idle"]
+        let rows: [JumpRow] = names.found.compactMap { found in
+            let row: (id: String, kind: JumpKind, label: String, detail: String, target: JumpTarget)
+            switch found {
+            case let .project(id, title):
+                row = ("project:\(id)", .project, title, fleet.projects.first { $0.id == id }?.primaryPlace?.path ?? "", .project(id))
+            case let .thread(id, title, project, lastActivity):
+                let tab = ThreadTabs.tabId(id)
+                let when = Date(timeIntervalSince1970: (lastActivity ?? Date().timeIntervalSince1970 * 1000) / 1000).formatted(.relative(presentation: .named))
+                row = ("thread:\(id)", .thread, title, "\(project ?? "") · \(activity[home.activity(tab)] ?? "") · \(when)", .conversation(tab))
+            case let .machine(id, title, online):
+                // A machine is offered to start a session on: only one that is up.
+                guard online else { return nil }
+                let os = fleet.machines.first { $0.machineId == id }?.os ?? ""
+                row = ("machine:\(id)", .machine, title, "\(os) · start a session here", .machine(id))
+            case let .conversation(instanceId, sessionId, title, dir, machineId, machineName, running):
+                if let instanceId, running {
+                    let cwd = fleet.byId[instanceId]?.cwd ?? dir ?? ""
+                    row = ("live:\(instanceId)", .live, title, "\(cwd.isEmpty ? "—" : cwd) · \(activity[home.activity(instanceId)] ?? "")", .conversation(instanceId))
+                } else if let to = instanceId ?? sessionId.map({ fleet.conversationId(sessionKey: $0, machineId: machineId, cwd: nil) }) {
+                    row = ("stored:\(machineId):\(instanceId ?? sessionId ?? to)", .stored, title, "\(machineName) · \(dir ?? "")", .conversation(to))
+                } else {
+                    return nil
+                }
+            }
+            return JumpRow(id: row.id, kind: row.kind, label: row.label, detail: row.detail, target: row.target,
+                           labelRanges: JumpNames.ranges(row.label, words), detailRanges: JumpNames.ranges(row.detail, words))
+        }
+        return JumpNames.groups.compactMap { group in
+            let mine = rows.filter { $0.kind == group.kind }.prefix(words.isEmpty ? JumpNames.previewCap : group.cap)
+            return mine.isEmpty ? nil : JumpGroup(name: group.name, rows: Array(mine))
         }
     }
 
@@ -511,12 +531,15 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
             field.text = parsed.text
         }
         selected = 0
+        names.update(JumpAuthor.parse(query).text)
         search.update(query, author: author)
         render(animated: true)
     }
 
     private func setAuthor(_ next: JumpAuthor?) {
         author = next
+        // The field's words may have just been set from code (a chosen author), which says nothing.
+        names.update(JumpAuthor.parse(query).text)
         chip.arrangedSubviews.forEach { $0.removeFromSuperview() }
         placeholder()
         guard let next else {
@@ -650,14 +673,14 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
                 })
             }))
         } else {
-            for group in index.filter(query) {
-                sections.append((key: "group:\(group.name)", heading: group.name, items: group.rows.map { ranked in
-                    (id: ranked.row.id, make: { [weak self] in
+            for group in groups() {
+                sections.append((key: "group:\(group.name)", heading: group.name, items: group.rows.map { row in
+                    (id: row.id, make: { [weak self] in
                         guard let self else { return UIView() }
-                        return item(glyph: Self.mark(ranked.row.kind),
-                                    name: Self.marked(ranked.row.label, ranked.labelRanges, role: TypeScale.typeLabel, ink: Palette.inkStrong),
-                                    trail: Self.marked(ranked.row.detail, ranked.detailRanges, role: TypeScale.typeMeta, ink: Palette.inkMuted, tracking: TypeScale.trackCaps))
-                    }, action: { [weak self] in self?.go(ranked.row.target) })
+                        return item(glyph: Self.mark(row.kind),
+                                    name: Self.marked(row.label, row.labelRanges, role: TypeScale.typeLabel, ink: Palette.inkStrong),
+                                    trail: Self.marked(row.detail, row.detailRanges, role: TypeScale.typeMeta, ink: Palette.inkMuted, tracking: TypeScale.trackCaps))
+                    }, action: { [weak self] in self?.go(row.target) })
                 }))
             }
         }
@@ -719,6 +742,14 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
             let empty = rowViews["empty"] ?? Self.empty()
             built["empty"] = empty
             arranged.append(empty)
+        }
+        // Names the hub could not find are said, so an empty list is never
+        // mistaken for nothing there.
+        if let failure = names.failure {
+            let key = "failure:names:\(failure)"
+            let line = rowViews[key] ?? Self.failure(failure)
+            built[key] = line
+            arranged.append(line)
         }
         // A machine that couldn't answer is named under the results, in the
         // hub's own words, so a short list is never mistaken for the fleet's.
@@ -896,8 +927,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
     /// A transcript row: which conversation the line came out of, in meta,
     /// then the line itself in body type with the matched terms strong.
     private func hitItem(_ hit: TranscriptHit) -> UIView {
-        let leaf = hit.cwd.flatMap { $0.split(separator: "/").last.map(String.init) }
-        let title = index.sessionTitles[hit.sessionId] ?? leaf ?? String(hit.sessionId.prefix(8))
+        let title = hit.title
         let host = hub.fleet.machineName(hit.machineId)
         let head = item(glyph: .document, name: NSAttributedString(string: title, attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted)),
                         trail: NSAttributedString(string: "\(host) · \(hit.role)", attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted, tracking: TypeScale.trackCaps)))

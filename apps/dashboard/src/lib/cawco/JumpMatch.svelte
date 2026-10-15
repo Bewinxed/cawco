@@ -12,7 +12,7 @@
   background is cleared so it never fights the selected-row fill.
 -->
 <script lang="ts">
-  import type { Range } from "./jump-index";
+  import type { Range } from "./find-names.svelte";
 
   let {
     text,

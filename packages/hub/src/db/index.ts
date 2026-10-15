@@ -700,7 +700,7 @@ export interface DbShape {
   ) => typeof instances.$inferSelect | undefined;
   /** The agent reported the session dead: what killed it, kept for late readers. */
   readonly failInstance: (id: string, error: string) => void;
-  /** What the find engine reads, and the person's seen marks (find.ts). */
+  /** What the find engine reads (find.ts), and when the person last looked at each session. */
   readonly find: FindDb;
   /** Transcript deletion follows confirmed process exit, never precedes it. */
   readonly finishTranscriptDelete: (id: string) => void;

@@ -378,6 +378,32 @@ const insertThread = (db: Database, projectId: string): string => {
   return threadId;
 };
 
+/**
+ * A delegate's report an hour ago to the person's own session (the
+ * orchestrator, `rows[0]`), from one of its children; answers the work
+ * item's id and the session it reported to.
+ */
+const insertReport = (
+  db: Database,
+  rows: Seeded[]
+): { id: string; parent: string } => {
+  const parent = rows[0]?.id ?? "";
+  const child = rows.find((row) => row.parent === parent)?.id ?? "";
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  db.query(
+    `INSERT INTO workspaces (id, machine_id, repo_root, path, branch, state, created_by_instance_id, created_at)
+     VALUES (?, ?, '/work/repo', '/work/ws-report', 'ws/report', 'archived', ?, ?)`
+  ).run(id, MACHINE, parent, now - 2 * HOUR);
+  db.query(
+    `INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, harness, state,
+       headline, result, created_at, ended_at)
+     VALUES (?, ?, ?, ?, 'Probe the report path', 'Probe the report path', 'claude', 'done',
+       'The report path holds', 'Done.', ?, ?)`
+  ).run(id, id, parent, child, now - 2 * HOUR, now - HOUR);
+  return { id, parent };
+};
+
 /** The live fleet's scale: more sessions, and ended work items with commits and changed files. */
 const insertScale = (db: Database, under: string) => {
   const rows = Array.from({ length: SCALE_SESSIONS }, (_, i) =>
@@ -449,6 +475,8 @@ interface Probe {
   kit: Kit;
   live: string;
   other: Awaited<ReturnType<KitFleet["launchMachine"]>>;
+  /** A report an hour old to the person's own session, not looked at yet. */
+  report: { id: string; parent: string };
   rows: Seeded[];
   sender: string;
   threadId: string;
@@ -468,9 +496,12 @@ const standUp = async (kit: Kit): Promise<Probe> => {
   });
   await fleet.stop("hub");
   const rows = seedFleet();
-  const threadId = withDb(dbPath, (db) => {
+  const { threadId, report } = withDb(dbPath, (db) => {
     insertRows(db, rows, project.id);
-    return insertThread(db, project.id);
+    return {
+      threadId: insertThread(db, project.id),
+      report: insertReport(db, rows),
+    };
   });
   await writeTranscripts(
     rows.filter((row) => row.machine === MACHINE),
@@ -495,6 +526,7 @@ const standUp = async (kit: Kit): Promise<Probe> => {
     kit,
     fleet,
     other,
+    report,
     rows,
     live,
     sender,
@@ -756,9 +788,15 @@ const checkStored = async ({ kit, find, fleet }: Probe) => {
   );
 };
 
-/** e: an artifact waits until opened at its revision; a new revision waits again. */
+/**
+ * e: an artifact waits until a view has it on screen at its revision (the
+ * `shown` ack every pane sends while the person looks); new HTML waits again
+ * until the view says the page morphed to it. A report waits until the
+ * person looks at the session it came to (`/api/seen`, the look every
+ * device sends).
+ */
 const checkWaiting = async (
-  { kit, fleet }: Probe,
+  { kit, fleet, sender, report }: Probe,
   call: (name: string, input: object) => Promise<string>
 ) => {
   const created = await call(CREATE, {
@@ -767,22 +805,53 @@ const checkWaiting = async (
     html: "<h1>First</h1>",
   });
   const artifactId = created.match(ANSWERED_ID)?.[1] ?? "";
-  const waiting = async () =>
+  const listed = async (id: string) =>
     (await fleet.api<WaitingAnswer>("/api/find/waiting")).items.find(
-      (item) => item.id === artifactId
+      (item) => item.id === id
     );
-  const before = await waiting();
-  await fleet.api("/api/find/seen", { kind: "artifact", id: artifactId });
-  const opened = await waiting();
+  const shown = (page: number) =>
+    fleet.api(`/api/instances/${sender}/artifacts/${artifactId}/shown`, {
+      client: "find-engine-probe",
+      revision: "probe-frame",
+      page,
+      ok: true,
+    });
+  const before = await listed(artifactId);
+  await shown(1);
+  const opened = await listed(artifactId);
   await call(UPDATE, { id: artifactId, html: "<h1>Second</h1>" });
-  const revised = await waiting();
+  const revised = await listed(artifactId);
+  // A view still on the first page has not shown the second.
+  await shown(1);
+  const stillOld = await listed(artifactId);
+  await shown(2);
+  const morphed = await listed(artifactId);
   kit.check(
-    "e. unseen, gone once opened, back at its new revision",
+    "e. unseen, gone once on screen, back at its new revision until the page morphs to it in view",
     before?.why === "unseen" &&
       opened === undefined &&
       revised?.why === "new revision" &&
-      revised.revision === 2,
-    JSON.stringify([before?.why, opened?.why, revised?.why, revised?.revision])
+      revised.revision === 2 &&
+      stillOld?.why === "new revision" &&
+      morphed === undefined,
+    JSON.stringify([
+      before?.why,
+      opened?.why,
+      revised?.why,
+      revised?.revision,
+      stillOld?.why,
+      morphed?.why,
+    ])
+  );
+  const unread = await listed(report.id);
+  await fleet.api("/api/seen", { ids: [report.parent], kind: "look" });
+  const looked = await listed(report.id);
+  kit.check(
+    "e. a report waits unread until the session it came to is looked at",
+    unread?.kind === "report" &&
+      unread.why === "unread" &&
+      looked === undefined,
+    JSON.stringify([unread?.kind, unread?.why, looked?.why])
   );
 };
 

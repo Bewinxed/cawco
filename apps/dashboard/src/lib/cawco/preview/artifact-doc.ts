@@ -32,6 +32,8 @@ export interface ArtifactView extends ArtifactChoices {
   looseInk: number;
   /** The pins, by number. */
   pins: Pin[];
+  /** The artifact's own revision (`meta.revision`): moved by each new HTML, the page morphing to it. Null until the hub stamps it. */
+  revision: number | null;
 }
 
 export interface ArtifactDoc {
@@ -64,6 +66,7 @@ const viewOf = (doc: Doc): ArtifactView => {
     sentAt: (meta.get("sentAt") as string | undefined) ?? null,
     pins: pins.sort((a, b) => a.number - b.number),
     looseInk,
+    revision: (meta.get("revision") as number | undefined) ?? null,
   };
 };
 

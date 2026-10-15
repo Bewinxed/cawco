@@ -666,49 +666,6 @@
     HARNESS_LABEL[session?.harness ?? ""] ?? session?.harness ?? "Agent"
   );
 
-  const onePerHandle = (rows: Mention[]): Mention[] => {
-    const handles = new Set<string>();
-    return rows.filter(
-      (row) => !handles.has(row.handle) && Boolean(handles.add(row.handle))
-    );
-  };
-
-  /**
-   * What `@` can name: the other conversations, as lists show them (a
-   * project's lead is never one: his threads are, by title under his face),
-   * and the machines. One row per handle, the first: the handle is what is
-   * inserted and what reaches the agent, and the menu keys its rows by it —
-   * two machines can carry one hostname (a machine registered again).
-   */
-  const mentions = $derived<Mention[]>(
-    onePerHandle([
-      // Threads first: what a person most often points a session at.
-      ...cawco.threadRows.map((row) => ({
-        handle: `thread#${(threadIdOf(row.id) ?? row.id).slice(0, 8)}`,
-        label: row.title?.trim() || "Thread",
-        detail:
-          cawco.projects.find((project) => project.id === row.projectId)
-            ?.name ?? "",
-        thread: row.id,
-      })),
-      // Then sessions by the name every list gives them (an attempt by its
-      // task's title), never their id; the handle is what reaches the agent.
-      ...inLists(cawco.instances)
-        .filter((row) => row.id !== viewId)
-        .slice(0, 40)
-        .map((row) => ({
-          handle: delegateHandle(row),
-          label: instanceTitle(row),
-          detail: projectOfRow(row),
-        })),
-      ...cawco.machines.map((machine) => ({
-        handle: machine.hostname || machine.machineId,
-        label: machine.hostname || machine.machineId,
-        detail: machine.status,
-      })),
-    ])
-  );
-
   const commands = $derived(cawco.commandsOf(viewId));
 
   /**
@@ -995,8 +952,8 @@
     get commands() {
       return commands;
     },
-    get mentions() {
-      return mentions;
+    get mentionsFrom() {
+      return viewId;
     },
     get suggest() {
       return suggest;
@@ -1187,7 +1144,7 @@
             {commands}
             delegatesOf={viewId}
             {draft}
-            {mentions}
+            mentionsFrom={viewId}
             {oninterruptsend}
             onmenu={refreshMenu}
             {onstop}

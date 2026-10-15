@@ -95,6 +95,7 @@
   import { cleanDetail } from "../command-detail";
   import { debugFault } from "../debug-fault";
   import { felt } from "../feel.svelte";
+  import { FindNames } from "../find-names.svelte";
   import { mcpSignInIntent, signInToMcp } from "../fleet";
   import CawFace from "../home/CawFace.svelte";
   import { newId } from "../id";
@@ -106,6 +107,7 @@
     type SuggestCandidate,
     suggestions,
   } from "../suggest.svelte";
+  import { threadTabId } from "../thread-tabs";
   import type { Message } from "../types";
   import AttachButton from "./AttachButton.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
@@ -146,7 +148,7 @@
     held = false,
     paneVisible = true,
     commands = [],
-    mentions = [],
+    mentionsFrom = null,
     onsubmit,
     oninterruptsend,
     onmenu,
@@ -199,8 +201,12 @@
     paneVisible?: boolean;
     /** What this session offers behind `/`. */
     commands?: AvailableCommand[];
-    /** What `@` can name — the sessions and machines in reach. */
-    mentions?: Mention[];
+    /**
+     * The conversation this composer writes to: `@` names what else the
+     * hub finds by name (threads, conversations, machines), ranked there as
+     * the Jump palette is. Null: `@` names nothing here.
+     */
+    mentionsFrom?: string | null;
     /**
      * `id` is the uuid the message is sent under, minted here so the text can
      * fly into the row that carries it before the send has left.
@@ -978,36 +984,91 @@
     }
   });
 
+  /**
+   * What `@` names, as the hub finds it by name for the words after it
+   * (find.ts; no words: what moved last): one ranking with the Jump
+   * palette's. Only what a mention reaches: a result with a handle, never
+   * this conversation itself.
+   */
+  const names = new FindNames(["thread", "conversation", "machine"], 40);
+  $effect(() => {
+    const active = token;
+    if (active?.sigil === "@" && mentionsFrom !== null) {
+      names.update(active.query);
+    }
+  });
+  $effect(() => () => names.stop());
+  const mentions = $derived(
+    names.results.flatMap((result): Mention[] => {
+      if (
+        result.handle === null ||
+        (result.kind === "conversation" && result.instanceId === mentionsFrom)
+      ) {
+        return [];
+      }
+      switch (result.kind) {
+        case "thread":
+          return [
+            {
+              handle: result.handle,
+              label: result.title,
+              detail: result.project?.name ?? "",
+              thread: threadTabId(result.id),
+            },
+          ];
+        case "conversation":
+          return [
+            {
+              handle: result.handle,
+              label: result.title,
+              detail: result.project?.name ?? result.machine.name,
+            },
+          ];
+        case "machine":
+          return [
+            {
+              handle: result.handle,
+              label: result.title,
+              detail: result.online ? "online" : "offline",
+            },
+          ];
+        default:
+          return [];
+      }
+    })
+  );
+
   const entries = $derived.by((): Entry[] => {
     const active = token;
     if (!active) {
       return [];
     }
+    if (active.sigil === "@") {
+      // The hub ranked them for these words: shown in its order, unfiltered.
+      return mentions.map((mention) => ({
+        id: `@${mention.handle}`,
+        insert: `@${mention.handle}`,
+        label: mention.label,
+        detail: mention.detail,
+        thread: mention.thread,
+      }));
+    }
     const needle = active.query.toLowerCase();
-    const rows: Entry[] =
-      active.sigil === "/"
-        ? commands.map((command) => ({
-            id: `/${command.name}`,
-            insert: `/${command.name}`,
-            // The source is the section heading now, so the row shows the short
-            // name, then its prose or argument shape — never the word "builtin"
-            // as a stand-in description.
-            label: displayLabel(command.name, command.source),
-            detail: cleanDetail(
-              command.description,
-              command.argumentHint,
-              command.source
-            ),
-            kind: command.type,
-            source: command.source,
-          }))
-        : mentions.map((mention) => ({
-            id: `@${mention.handle}`,
-            insert: `@${mention.handle}`,
-            label: mention.label,
-            detail: mention.detail,
-            thread: mention.thread,
-          }));
+    const rows: Entry[] = commands.map((command) => ({
+      id: `/${command.name}`,
+      insert: `/${command.name}`,
+      // The source is the section heading now, so the row shows the short
+      // name, then its prose or argument shape — never the word "builtin"
+      // as a stand-in description.
+      label: displayLabel(command.name, command.source),
+      detail: cleanDetail(
+        command.description,
+        command.argumentHint,
+        command.source
+      ),
+      kind: command.type,
+      source: command.source,
+    }));
     return (
       rows
         .filter(

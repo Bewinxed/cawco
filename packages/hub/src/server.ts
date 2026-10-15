@@ -426,8 +426,6 @@ import {
   answerFind,
   createFind,
   FIND_QUERY,
-  markSeen,
-  SEEN_BODY,
   TRANSCRIPT_ANSWER_MS,
 } from "./find";
 import {
@@ -20404,14 +20402,12 @@ export const createServer = (
       .get("/api/handoffs", () => Object.fromEntries(handoffs))
       .get("/api/pending", () => pending.list().map(clientCopy))
       // The fleet's one finding engine (find.ts): names and transcripts under
-      // one ranking, what waits on your eyes, and the reports you opened.
+      // one ranking, and what waits on your eyes: read from the looks
+      // (`/api/seen`) and the `shown` acks the screens already send.
       .get("/api/find", { query: FIND_QUERY }, ({ query }) =>
         answerFind(find, query)
       )
       .get("/api/find/waiting", () => find.waiting())
-      .post("/api/find/seen", { body: SEEN_BODY }, ({ body }) =>
-        markSeen(find, body)
-      )
       // What a delegate and its parent said to each other, oldest first. Broadcast
       // as it happens *and* readable here, for the same reason the hand-offs are:
       // an exchange that finished before this tab opened is still the record.

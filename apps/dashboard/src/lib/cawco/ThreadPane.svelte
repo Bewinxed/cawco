@@ -554,7 +554,7 @@
     agentName: "Caw",
     placeholder: "Message the project…",
     commands: [],
-    mentions: [],
+    mentionsFrom: null,
     suggest: { candidates: [] },
     get busy() {
       return thread?.status === "working";

@@ -301,21 +301,13 @@ export interface WaitingItem {
 
 export interface WaitingAnswer {
   /**
-   * How far back it looks, days: nothing recorded what you opened before seen
-   * marks did, so older things can't be told apart from ones you looked at.
+   * How far back it looks, days: nothing recorded which revision of an
+   * artifact you had on screen before the hub kept it, so older things can't
+   * be told apart from ones you looked at.
    */
   days: number;
   /** Oldest first. */
   items: WaitingItem[];
   /** What could not be read, one sentence each (a project whose tasks did not read): the list may be short by it. */
   missing: string[];
-}
-
-/** What `POST /api/find/seen` marks: an artifact at a revision, or a report. */
-export interface SeenMark {
-  /** An artifact's id, or a work item's for its report. */
-  id: string;
-  kind: "artifact" | "report";
-  /** The artifact's revision the person opened; ignored for a report. */
-  revision?: number;
 }

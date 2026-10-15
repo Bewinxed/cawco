@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   artifacts,
@@ -6,7 +6,6 @@ import {
   projectTasks,
   routineRuns,
   routines,
-  seenMarks,
   sessionPlans,
   threadMessages,
   workItems,
@@ -82,13 +81,12 @@ export interface FindDb {
   readonly idsByPrefix: (prefix: string) => string[];
   /** The conversations find reads ({@link findColumns}): every one, or these ids'. */
   readonly instances: (ids?: string[]) => FindInstanceRow[];
-  /** Records that the person opened `objectId` (at `revision`), now. */
-  readonly markSeen: (
-    person: string,
-    kind: "artifact" | "report",
-    objectId: string,
-    revision: number
-  ) => void;
+  /**
+   * When the person last looked at each session they have looked at (its
+   * tab in front after it ended, or archived off Finished, on any device:
+   * `instances.seen_at`, the one record of it), by session id.
+   */
+  readonly lookedAt: () => Map<string, number>;
   /** Each session's plan step under way, by session. */
   readonly planSteps: () => Map<string, string>;
   /** Every work item's result, for those ended after `after` (ms epoch): the commits and diffstat its report names. */
@@ -97,10 +95,6 @@ export interface FindDb {
   ) => { endedAt: Date; id: string; result: string | null }[];
   /** Every routine, with its newest ended run's outcome. */
   readonly routines: () => FindRoutineRow[];
-  /** What one person has opened, by `kind:objectId`: the revision and when. */
-  readonly seen: (
-    person: string
-  ) => Map<string, { revision: number; seenAt: Date }>;
   /** Every project's task index. */
   readonly tasks: () => (typeof projectTasks.$inferSelect)[];
   /** Every thread message of yours or Caw's: the words a thread is found by. */
@@ -145,16 +139,18 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
       .from(instances)
       .where(ids ? and(findable(), inArray(instances.id, ids)) : findable())
       .all(),
-  markSeen: (person, kind, objectId, revision) => {
-    const row = { person, kind, objectId, revision, seenAt: new Date() };
-    db.insert(seenMarks)
-      .values(row)
-      .onConflictDoUpdate({
-        target: [seenMarks.person, seenMarks.kind, seenMarks.objectId],
-        set: { revision, seenAt: row.seenAt },
-      })
-      .run();
-  },
+  lookedAt: () =>
+    new Map(
+      db
+        .select({
+          id: instances.id,
+          at: sql<number>`${instances.seenAt}`,
+        })
+        .from(instances)
+        .where(isNotNull(instances.seenAt))
+        .all()
+        .map((row) => [row.id, row.at])
+    ),
   planSteps: () => {
     const steps = new Map<string, string>();
     for (const row of db
@@ -209,18 +205,6 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         };
       });
   },
-  seen: (person) =>
-    new Map(
-      db
-        .select()
-        .from(seenMarks)
-        .where(eq(seenMarks.person, person))
-        .all()
-        .map((row) => [
-          `${row.kind}:${row.objectId}`,
-          { revision: row.revision, seenAt: row.seenAt },
-        ])
-    ),
   tasks: () => db.select().from(projectTasks).all(),
   threadWords: () =>
     db

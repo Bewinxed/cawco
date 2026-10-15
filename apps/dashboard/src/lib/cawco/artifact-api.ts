@@ -54,7 +54,7 @@ export async function removeArtifact(
 export async function artifactShown(
   instanceId: string,
   id: string,
-  word: { revision: string } & (
+  word: { page?: number; revision: string } & (
     { ok: true } | { ok: false; error: ShownFailure }
   )
 ): Promise<void> {

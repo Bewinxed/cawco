@@ -12,6 +12,7 @@
 </script>
 
 <script lang="ts">
+  import type { FindResult } from "@cawco/core";
   /**
    * The Jump palette's contents, in the glass's one card (GlassCard): it
    * comes down out of the glass, or the card hanging there changes to it in
@@ -48,10 +49,9 @@
   import { goto } from "$app/navigation";
   import { ACTIVITY_LABEL } from "./activity";
   import { cawco } from "./client.svelte";
+  import { FindNames, type Range, wordRanges } from "./find-names.svelte";
   import CawFace from "./home/CawFace.svelte";
-  import { instanceTitle } from "./home/home-state.svelte";
   import JumpMatch from "./JumpMatch.svelte";
-  import { buildJumpIndex, filterJumpIndex, type JumpKind } from "./jump-index";
   import {
     AUTHORS,
     applyAuthor,
@@ -62,49 +62,148 @@
   } from "./jump-search.svelte";
   import { conversationHref } from "./links";
   import { checkoutOf } from "./projects";
-  import { isThreadTab } from "./thread-tabs";
+  import { threadTabId } from "./thread-tabs";
 
   let { onclose }: { onclose: () => void } = $props();
 
-  const index = $derived.by(() =>
-    buildJumpIndex({
-      instances: cawco.instances,
-      projects: cawco.projects.map((project) => ({
-        id: project.id,
-        name: project.name,
-        folder: checkoutOf(project)?.path ?? "On the hub",
-      })),
-      onlineMachines: cawco.onlineMachines,
-      // Sessions as every list shows them: a project's Caw is his threads,
-      // listed on their own, every one, by title and under his face.
-      running: cawco.runningRows
-        .filter((row) => !isThreadTab(row.id))
-        .map((row) => ({
-          id: row.id,
-          cwd: row.cwd,
-          activityLabel: ACTIVITY_LABEL[cawco.activityOf(row.id)],
-          name: instanceTitle(row),
-        })),
-      threads: cawco.threadRows.map((row) => ({
-        id: row.id,
-        title: row.title ?? "Thread",
-        project:
-          cawco.projects.find((project) => project.id === row.projectId)
-            ?.name ?? "",
-        activityLabel: ACTIVITY_LABEL[cawco.activityOf(row.id)],
-        when: formatDistanceToNow(
-          new Date(cawco.threadOf(row.id)?.lastAt ?? Date.now())
-        ),
-      })),
-      hidden: cawco.leadSessions,
-      stored: cawco.machines.map((machine) => ({
-        machineId: machine.machineId,
-        hostname: machine.hostname,
-        catalog: cawco.catalogOf(machine.machineId),
-      })),
-    })
+  /** Which of the groups a row belongs to: its mark and its cap. */
+  type JumpKind = "project" | "thread" | "machine" | "live" | "stored";
+  interface JumpRow {
+    /** A thread's row: its tab id, for its face's status. */
+    conversation?: string;
+    detail: string;
+    detailRanges: Range[];
+    href: string;
+    id: string;
+    kind: JumpKind;
+    label: string;
+    labelRanges: Range[];
+  }
+  /**
+   * The groups, in order, and how many rows each shows: as many with a
+   * query, a preview of eight without one (uncapped, the empty view mounted
+   * every running session before a key was pressed).
+   */
+  const GROUPS: { name: string; kind: JumpKind; cap: number }[] = [
+    { name: "Projects", kind: "project", cap: 8 },
+    { name: "Threads", kind: "thread", cap: 8 },
+    { name: "Machines", kind: "machine", cap: 8 },
+    { name: "Running sessions", kind: "live", cap: 10 },
+    { name: "Recent sessions", kind: "stored", cap: 16 },
+  ];
+  const PREVIEW_CAP = 8;
+  /** A conversation in one of these states has a process up: it is running. */
+  const RUNNING = new Set(["working", "needs-you", "idle"]);
+
+  /**
+   * What the hub found by name, ranked there (find.ts): the same ranking
+   * the composer's `@` reads. Without words, what moved last.
+   */
+  const names = new FindNames(
+    ["project", "thread", "machine", "conversation"],
+    50
   );
-  const grouped = $derived(filterJumpIndex(index, kept.query));
+  $effect(() => {
+    names.update(parseQuery(kept.query).text);
+  });
+  $effect(() => () => names.stop());
+
+  /** A result as its row reads: the palette's words for where it is and how it stands. */
+  function rowOf(
+    result: FindResult
+  ): Omit<JumpRow, "labelRanges" | "detailRanges"> | null {
+    switch (result.kind) {
+      case "project": {
+        const project = cawco.projects.find((each) => each.id === result.id);
+        return {
+          id: `project:${result.id}`,
+          kind: "project",
+          label: result.title,
+          detail: (project && checkoutOf(project)?.path) ?? "On the hub",
+          href: `/project/${result.id}`,
+        };
+      }
+      case "thread": {
+        const tab = threadTabId(result.id);
+        const activity = ACTIVITY_LABEL[cawco.activityOf(tab)];
+        const when = formatDistanceToNow(
+          new Date(result.lastActivity ?? Date.now())
+        );
+        return {
+          id: `thread:${result.id}`,
+          kind: "thread",
+          conversation: tab,
+          label: result.title,
+          detail: `${result.project?.name ?? ""} · ${activity} · ${when}`,
+          href: conversationHref(tab, cawco.instanceIndex),
+        };
+      }
+      case "machine": {
+        const online = cawco.onlineMachines.find(
+          (machine) => machine.machineId === result.id
+        );
+        // A machine is offered to start a session on: only one that is up.
+        return online
+          ? {
+              id: `machine:${result.id}`,
+              kind: "machine",
+              label: result.title,
+              detail: `${online.os} · start a session here`,
+              href: `/session?spawn=${result.id}`,
+            }
+          : null;
+      }
+      case "conversation": {
+        const href = conversationHref(
+          result.instanceId ?? result.sessionId,
+          cawco.instanceIndex,
+          { machineId: result.machine.id }
+        );
+        if (result.instanceId && RUNNING.has(result.state)) {
+          const row = cawco.instanceIndex.byId.get(result.instanceId);
+          return {
+            id: `live:${result.instanceId}`,
+            kind: "live",
+            label: result.title,
+            detail: `${row?.cwd || result.dir || "—"} · ${ACTIVITY_LABEL[cawco.activityOf(result.instanceId)]}`,
+            href,
+          };
+        }
+        return {
+          id: `stored:${result.machine.id}:${result.instanceId ?? result.sessionId}`,
+          kind: "stored",
+          label: result.title,
+          detail: `${result.machine.name} · ${result.dir ?? ""}`,
+          href,
+        };
+      }
+      default:
+        return null;
+    }
+  }
+
+  /** The hub's results in the palette's groups, each in the hub's order. */
+  const grouped = $derived.by(() => {
+    const words = parseQuery(kept.query).text;
+    const rows = names.results.flatMap((result) => {
+      const row = rowOf(result);
+      return row
+        ? [
+            {
+              ...row,
+              labelRanges: wordRanges(row.label, words),
+              detailRanges: wordRanges(row.detail, words),
+            },
+          ]
+        : [];
+    });
+    return GROUPS.map((group) => ({
+      name: group.name,
+      rows: rows
+        .filter((row) => row.kind === group.kind)
+        .slice(0, words ? group.cap : PREVIEW_CAP),
+    })).filter((group) => group.rows.length > 0);
+  });
   const search = new JumpTranscriptSearch();
   $effect(() => {
     search.update(kept.query, kept.scope ? scoped?.role : undefined);
@@ -131,7 +230,6 @@
   /** FTS5 wraps every matched term in 「…」; odd segments are the matches. */
   const segments = (snippet: string) => snippet.split(snippetMarkers);
   const plain = (snippet: string) => snippet.replaceAll(allSnippetMarkers, "");
-  const leaf = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
   /** Motion is opt-in: without it, the chip lands in place. */
   const still = $derived(!motionOk.current);
@@ -371,10 +469,7 @@
                 <span class="jump-hit-head" data-box>
                   <span class="jump-text mark-line" data-box>
                     <IconDocument class="jump-mark" height={16} width={16} />
-                    <span class="jump-name">
-                      {index.sessionTitles.get(hit.sessionId) ??
-                        (hit.cwd ? leaf(hit.cwd) : hit.sessionId.slice(0, 8))}
-                    </span>
+                    <span class="jump-name">{hit.title}</span>
                     <span class="jump-trail">
                       {hostOf.get(hit.machineId) ?? hit.machineId}
                       · {hit.role}
@@ -399,6 +494,9 @@
 
       <!-- A machine that couldn't answer is named under the results, in the
            hub's own words, so a short list is never mistaken for the fleet's. -->
+      {#if names.failure}
+        <p class="jump-failure" data-flip role="status">{names.failure}</p>
+      {/if}
       {#each search.failures as failure (failure.machineId)}
         <p class="jump-failure" data-flip role="status">{failure.message}</p>
       {/each}

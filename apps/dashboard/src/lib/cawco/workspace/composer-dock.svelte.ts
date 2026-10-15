@@ -14,11 +14,7 @@ import type { Snippet } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import type { SendExtras } from "../client.svelte";
 import type { SuggestCandidate } from "../suggest.svelte";
-import type {
-  ComposerAsk,
-  ComposerFoot,
-  Mention,
-} from "../transcript/Composer.svelte";
+import type { ComposerAsk, ComposerFoot } from "../transcript/Composer.svelte";
 import type { ComposerDraft } from "../transcript/composer-draft.svelte";
 
 /** Everything the composer takes from the conversation it is writing to. */
@@ -32,7 +28,8 @@ export interface ComposerBinding {
   /** The session whose delegates the composer's tray shows. */
   readonly delegatesOf: string;
   readonly draft: ComposerDraft;
-  readonly mentions: Mention[];
+  /** The conversation `@` names others from (Composer `mentionsFrom`); null names nothing. */
+  readonly mentionsFrom: string | null;
   /** What the composer stands over the transcript's foot (Composer `ComposerFoot`). */
   readonly onfoot?: (foot: ComposerFoot) => void;
   oninterruptsend: (text: string, extras: SendExtras, id: string) => void;

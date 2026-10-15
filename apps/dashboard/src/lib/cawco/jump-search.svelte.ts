@@ -13,6 +13,8 @@ export interface TranscriptHit {
   sidechain: boolean;
   snippet: string;
   timestamp: string | null;
+  /** The conversation it is in, as the hub names it. */
+  title: string;
 }
 
 /** A machine that couldn't answer the search, in the hub's own sentence. */
@@ -169,6 +171,7 @@ export class JumpTranscriptSearch {
             snippet: moment.excerpt,
             timestamp:
               moment.at === null ? null : new Date(moment.at).toISOString(),
+            title: result.title,
           },
         ];
       });

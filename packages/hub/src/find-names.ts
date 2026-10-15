@@ -665,8 +665,7 @@ export const machineEntry = (machine: AgentRow, online: boolean): Entry => {
 export const artifactEntry = (
   artifact: ArtifactRow,
   maker: FindInstanceRow,
-  project: { id: string; name: string } | null,
-  opened: number | undefined
+  project: { id: string; name: string } | null
 ): Entry => {
   const decision = artifact.kind === "page" && artifact.projectId !== null;
   const makerTitle = boardTitle(maker);
@@ -692,7 +691,9 @@ export const artifactEntry = (
       project,
       conversation: { id: maker.id, title: makerTitle },
       revision: artifact.revision,
-      seen: opened !== undefined && opened >= artifact.revision,
+      seen:
+        artifact.openedRevision !== null &&
+        artifact.openedRevision >= artifact.revision,
       picksToMake:
         decision &&
         !Object.values(artifact.changes).some(

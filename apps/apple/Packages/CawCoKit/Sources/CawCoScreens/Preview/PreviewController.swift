@@ -134,7 +134,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var live: Set<String> = []
 
     // This view's word to the hub that the artifact is on screen (`shown`).
-    /// The revision the hub has heard about, and what this view has to say of the current one.
+    /// The revision the hub has heard about (with the artifact's own revision
+    /// it had then, `revision:page`), and what this view has to say of the current one.
     private var shownFor: String?
     private var shownWord: (revision: String, failure: ShownFailure?)?
     private var silence: Task<Void, Never>?
@@ -911,7 +912,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // does not hold it yet leaves the card open; only a pin the last read
         // held and this one does not (deleted, erased) closes it.
         let held = openPin.map { open in comments.pins.contains { $0.id == open } } ?? false
+        let morphed = read.revision != comments.revision
         comments = read
+        // New HTML the page morphed to in front of the person: said as seen.
+        if morphed { sayShown() }
         live = read.live(working: sessionWorking)
         paintPins()
         list?.show(read.pins, live: live)
@@ -1443,21 +1447,26 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     /// This view's word on the current revision, once, while the preview is
-    /// on screen and the app in front (PreviewPane.svelte's `artifactShown`).
+    /// on screen and the app in front (PreviewPane.svelte's `artifactShown`);
+    /// said again with the artifact's own revision (`page`) each time a page
+    /// morphs to new HTML in front of the person, which the hub keeps as seen.
     private func sayShown() {
-        guard let word = shownWord, word.revision == revision, shownFor != word.revision, let artifact = artifactId,
+        let page = comments.revision
+        guard let word = shownWord, word.revision == revision, let artifact = artifactId,
               isViewLoaded, view.window?.windowScene?.activationState == .foregroundActive else { return }
-        shownFor = word.revision
+        let said = "\(word.revision):\(page.map(String.init) ?? "")"
+        guard shownFor != said else { return }
+        shownFor = said
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await hub.artifactShown(artifact, in: instanceId, revision: word.revision, failure: word.failure)
+                try await hub.artifactShown(artifact, in: instanceId, revision: word.revision, page: page, failure: word.failure)
                 #if DEBUG
-                PreviewProbe.say("preview shown \(word.failure.map { "failed \($0.rawValue)" } ?? "ok") revision=\(word.revision)")
+                PreviewProbe.say("preview shown \(word.failure.map { "failed \($0.rawValue)" } ?? "ok") revision=\(word.revision) page=\(page.map(String.init) ?? "-")")
                 #endif
             } catch {
                 // Unheard: the next appearance says it again.
-                if shownFor == word.revision { shownFor = nil }
+                if shownFor == said { shownFor = nil }
             }
         }
     }

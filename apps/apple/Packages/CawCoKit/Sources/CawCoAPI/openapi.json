@@ -4671,6 +4671,10 @@
                     "maxLength": 100,
                     "type": "string"
                   },
+                  "page": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
                   "ok": {
                     "type": "boolean"
                   },
@@ -15743,63 +15747,6 @@
         }
       }
     },
-    "/api/find/seen": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "artifact",
-                      "report"
-                    ]
-                  },
-                  "id": {
-                    "type": "string"
-                  },
-                  "revision": {
-                    "minimum": 1,
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "id"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "postApiFindSeen",
-        "responses": {
-          "200": {
-            "description": "postApiFindSeen 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiFindSeen200"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiFindSeen 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/delegate-events": {
       "get": {
         "parameters": [
@@ -23408,20 +23355,6 @@
             "verb"
           ]
         }
-      },
-      "postApiFindSeen200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean",
-            "enum": [
-              true
-            ]
-          }
-        },
-        "required": [
-          "ok"
-        ]
       },
       "getApiDelegateEvents200": {
         "type": "array",
@@ -39219,7 +39152,7 @@
         "type": "object",
         "properties": {
           "days": {
-            "description": "How far back it looks, days: nothing recorded what you opened before seen\nmarks did, so older things can't be told apart from ones you looked at.",
+            "description": "How far back it looks, days: nothing recorded which revision of an\nartifact you had on screen before the hub kept it, so older things can't\nbe told apart from ones you looked at.",
             "type": "number"
           },
           "items": {

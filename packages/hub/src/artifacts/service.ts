@@ -291,6 +291,12 @@ export interface ShownAck {
   /** Why the page didn't load; only with `ok: false`. */
   error?: ShownFailure | undefined;
   ok: boolean;
+  /**
+   * The artifact's own revision the view has on screen (its doc's
+   * `meta.revision`): said again each time a page morphs to new HTML in
+   * view. Absent, the view had it as the hub holds it now.
+   */
+  page?: number | undefined;
   /** The open frame's revision the view loaded. */
   revision: string;
 }
@@ -1382,6 +1388,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       createdAt: now,
       updatedAt: now,
       shownAt: null,
+      openedRevision: null,
     });
     stampMeta(row, null);
     docs.transact(row.id, "hub", (doc) =>
@@ -1434,6 +1441,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         createdAt: now,
         updatedAt: now,
         shownAt: null,
+        openedRevision: null,
       });
     stampMeta(row, null);
     const made = {
@@ -1683,6 +1691,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             createdAt: now,
             updatedAt: now,
             shownAt: null,
+            openedRevision: null,
           });
       if (html !== null) {
         writePage(row.id, html);
@@ -1934,6 +1943,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * revision it was opened at: the show waiting on that revision answers
      * from it. A word on a revision no show waits for is kept for one that
      * starts waiting (a fast page answers before the publish returns).
+     * Every view says it only while the person can see it, so an ok word is
+     * also the person having the artifact in front of them: the revision on
+     * screen is kept (`opened_revision`), never moved back, never past the
+     * artifact's own.
      */
     shown: (instanceId: string, id: string, ack: ShownAck): { heard: true } => {
       const row = own(sessionOf(instanceId), id);

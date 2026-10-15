@@ -2645,6 +2645,13 @@ export const artifacts = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
     shownAt: timestamp("shown_at"),
+    /**
+     * The newest revision a view had on screen while the person looked
+     * (the `shown` ack, artifacts/service.ts): the page's own revision a
+     * pane said it showed, never past `revision`. Null until one has. An
+     * artifact revised past it waits on the person again (find.ts `waiting`).
+     */
+    openedRevision: integer("opened_revision"),
   },
   (table) => [
     index("artifacts_instance").on(table.instanceId, table.createdAt),
@@ -2714,28 +2721,6 @@ export const artifactUpdates = sqliteTable(
     })("update").notNull(),
   },
   (table) => [primaryKey({ columns: [table.artifactId, table.seq] })]
-);
-
-/**
- * When a person last opened something that waits on their eyes (find.ts
- * `waiting`): an artifact, at the revision they opened, or a delegate's
- * report (its work item's id). One row per person and thing, moved by each
- * open. An artifact revised past the revision here waits again.
- */
-export const seenMarks = sqliteTable(
-  "seen_marks",
-  {
-    /** Who opened it; the hub has one person, `owner`. */
-    person: text("person").notNull(),
-    kind: text("kind").$type<"artifact" | "report">().notNull(),
-    objectId: text("object_id").notNull(),
-    /** The artifact's revision when it was opened; 0 for a report. */
-    revision: integer("revision").notNull().default(0),
-    seenAt: timestamp("seen_at").notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.person, table.kind, table.objectId] }),
-  ]
 );
 
 /**

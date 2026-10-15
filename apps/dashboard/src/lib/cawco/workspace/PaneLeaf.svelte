@@ -464,7 +464,7 @@
           draft={lent.draft}
           held={swipe.moving}
           {landing}
-          mentions={lent.mentions}
+          mentionsFrom={lent.mentionsFrom}
           onfoot={lent.onfoot}
           oninterruptsend={lent.oninterruptsend}
           onmenu={lent.onmenu}

@@ -109,14 +109,12 @@ const PAGES_KEPT = 16;
 /** How many moments of one thread an answer carries. */
 const THREAD_MOMENTS = 3;
 
-/** The person every seen mark is kept for: the hub has one. */
-export const PERSON = "owner";
-
 /**
  * How far back the waiting list looks: what was made, revised, reported or
- * moved to a stage of yours in this many days. Nothing recorded what you had
- * opened before seen marks did, so an older artifact can't be told apart
- * from one you looked at; the answer says the window.
+ * moved to a stage of yours in this many days. Nothing recorded which
+ * revision of an artifact you had on screen before `opened_revision` did,
+ * so an older artifact can't be told apart from one you looked at; the
+ * answer says the window.
  */
 export const WAITING_DAYS = 14;
 
@@ -552,7 +550,6 @@ export const createFind = (deps: FindDeps) => {
         threads.set(thread.id, threadEntry(thread, projectOf(projectId)));
       }
     }
-    const opened = openedArtifacts();
     const artifacts = db.find.artifacts().flatMap((artifact) => {
       const maker = held.get(artifact.instanceId);
       return maker && !leads.has(maker.id)
@@ -560,8 +557,7 @@ export const createFind = (deps: FindDeps) => {
             artifactEntry(
               artifact,
               maker,
-              projectOf(artifact.projectId ?? maker.projectId),
-              opened.get(artifact.id)
+              projectOf(artifact.projectId ?? maker.projectId)
             ),
           ]
         : [];
@@ -638,17 +634,6 @@ export const createFind = (deps: FindDeps) => {
       }
     }
     return stored;
-  };
-
-  /** The revision of each artifact the person last opened, by artifact id. */
-  const openedArtifacts = (): Map<string, number> => {
-    const opened = new Map<string, number>();
-    for (const [key, mark] of db.find.seen(PERSON)) {
-      if (key.startsWith("artifact:")) {
-        opened.set(key.slice("artifact:".length), mark.revision);
-      }
-    }
-    return opened;
   };
 
   const namesNow = (now: number): Names => {
@@ -1114,15 +1099,20 @@ export const createFind = (deps: FindDeps) => {
       const now = Date.now();
       const from = now - WAITING_DAYS * 24 * 3_600_000;
       const held = namesNow(now);
-      const seen = db.find.seen(PERSON);
+      // What the person has seen is read as it stands, not as the names
+      // held it: a look or a `shown` ack a moment ago counts at once.
+      const artifactRows = new Map(
+        db.find.artifacts().map((row) => [row.id, row])
+      );
+      const lookedAt = db.find.lookedAt();
       const titleOf = (id: string) => {
         const row = held.conversations.get(id)?.row;
         return row ? { id, title: boardTitle(row) } : null;
       };
       const waitingTasks = await deps.tasksWaiting();
       const items: WaitingItem[] = [
-        ...artifactsWaiting(held, seen, from, titleOf),
-        ...reportsWaiting(db.find.workItems(), held, seen, from, titleOf),
+        ...artifactsWaiting(held, artifactRows, from, titleOf),
+        ...reportsWaiting(db.find.workItems(), held, lookedAt, from, titleOf),
         ...waitingTasks.tasks
           .filter((task) => task.since >= from)
           .map((task): WaitingItem => {
@@ -1144,46 +1134,21 @@ export const createFind = (deps: FindDeps) => {
         missing: waitingTasks.missing,
       };
     },
-
-    /** Records that the person opened an artifact (at `revision`, else its current one) or a report. */
-    seen(mark: {
-      id: string;
-      kind: "artifact" | "report";
-      revision?: number;
-    }): void {
-      if (mark.kind === "artifact") {
-        const row = db.artifacts.get(mark.id);
-        if (!row) {
-          throw new FindRefusal(`No artifact ${mark.id}.`, 404);
-        }
-        db.find.markSeen(
-          PERSON,
-          "artifact",
-          mark.id,
-          mark.revision ?? row.revision
-        );
-      } else {
-        const known = db.find.workItems().some((item) => item.id === mark.id);
-        if (!known) {
-          throw new FindRefusal(`No work item ${mark.id}.`, 404);
-        }
-        db.find.markSeen(PERSON, "report", mark.id, 0);
-      }
-      // What the names hold of an artifact's `seen` is rebuilt.
-      stale = true;
-    },
   };
 };
 
 export type Find = ReturnType<typeof createFind>;
 
-type SeenMarks = ReturnType<DbShape["find"]["seen"]>;
 type TitleOf = (id: string) => { id: string; title: string } | null;
 
-/** Artifacts and decisions not opened at their revision, or with picks to make, made or revised since `from`. */
+/**
+ * Artifacts and decisions no view had on screen at their revision while the
+ * person looked (`artifacts.opened_revision`), or with picks to make, made or
+ * revised since `from`.
+ */
 const artifactsWaiting = (
   held: Names,
-  seen: SeenMarks,
+  rows: Map<string, { openedRevision: number | null; revision: number }>,
   from: number,
   titleOf: TitleOf
 ): WaitingItem[] =>
@@ -1192,17 +1157,18 @@ const artifactsWaiting = (
     if (result.kind !== "artifact" && result.kind !== "decision") {
       return [];
     }
-    if ((result.lastActivity ?? 0) < from) {
+    const row = rows.get(result.id);
+    if (!row || (result.lastActivity ?? 0) < from) {
       return [];
     }
-    const opened = seen.get(`artifact:${result.id}`);
-    const unopened = !opened || opened.revision < result.revision;
+    const opened = row.openedRevision;
+    const unopened = opened === null || opened < row.revision;
     if (!(unopened || result.picksToMake)) {
       return [];
     }
     let why = "picks to make";
     if (unopened) {
-      why = opened ? "new revision" : "unseen";
+      why = opened === null ? "unseen" : "new revision";
     }
     return [
       {
@@ -1212,7 +1178,7 @@ const artifactsWaiting = (
         title: result.title,
         project: result.project,
         conversation: titleOf(result.conversation.id),
-        revision: result.revision,
+        revision: row.revision,
         since: result.lastActivity ?? Date.now(),
         why,
       },
@@ -1220,14 +1186,16 @@ const artifactsWaiting = (
   });
 
 /**
- * Reports to one of the person's own sessions not opened since: a delegate's
- * report to its parent delegate is that parent's to read, and Caw's go to his
- * threads.
+ * Reports to one of the person's own sessions they have not looked at
+ * since: neither the reporting session nor the one it reported to was in
+ * front of them after the report came (`instances.seen_at`, the look every
+ * device marks). A delegate's report to its parent delegate is that
+ * parent's to read, and Caw's go to his threads.
  */
 const reportsWaiting = (
   items: FindWorkItemRow[],
   held: Names,
-  seen: SeenMarks,
+  lookedAt: Map<string, number>,
   from: number,
   titleOf: TitleOf
 ): WaitingItem[] =>
@@ -1239,7 +1207,11 @@ const reportsWaiting = (
       parent !== undefined &&
       parent.parentInstanceId === null &&
       !held.leads.has(parent.id);
-    if (ended < from || !reported || !yours || seen.has(`report:${item.id}`)) {
+    const looked = Math.max(
+      lookedAt.get(item.instanceId) ?? 0,
+      lookedAt.get(item.parentInstanceId) ?? 0
+    );
+    if (ended < from || !reported || !yours || looked >= ended) {
       return [];
     }
     return [
@@ -1303,13 +1275,6 @@ export const FIND_QUERY = t.Object({
   transcripts: t.Optional(t.Union([t.Literal("0"), t.Literal("1")])),
 });
 
-/** `POST /api/find/seen`'s body: you opened an artifact at a revision, or a report. */
-export const SEEN_BODY = t.Object({
-  kind: t.Union([t.Literal("artifact"), t.Literal("report")]),
-  id: t.String(),
-  revision: t.Optional(t.Integer({ minimum: 1 })),
-});
-
 /** `kinds=conversation,task` read into kinds, or the refusal naming the unknown one. */
 export const kindsOf = (raw: string | undefined): FindKind[] | undefined => {
   if (!raw?.trim()) {
@@ -1351,19 +1316,6 @@ export const answerFind = async (
       kinds: kindsOf(query.kinds),
       transcripts: query.transcripts !== "0",
     });
-  } catch (error) {
-    return refused(error);
-  }
-};
-
-/** `POST /api/find/seen`, or its refusal thrown as a status. */
-export const markSeen = (
-  find: Find,
-  body: { id: string; kind: "artifact" | "report"; revision?: number }
-): { ok: true } => {
-  try {
-    find.seen(body);
-    return { ok: true };
   } catch (error) {
     return refused(error);
   }

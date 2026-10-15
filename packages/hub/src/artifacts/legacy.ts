@@ -113,6 +113,7 @@ const importCanvas = (deps: ImportDeps, canvas: LegacyCanvas): void => {
     createdAt: at,
     updatedAt: at,
     shownAt: null,
+    openedRevision: null,
   });
   if (place.projectId) {
     const published = join(
