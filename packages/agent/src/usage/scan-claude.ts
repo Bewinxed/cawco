@@ -1,5 +1,6 @@
 import type { RawClaudeUsage, UsageTokens } from "@cawco/core";
 import { cacheCreationCount, costForUsage } from "@cawco/core";
+import { lineRecords } from "@cawco/jsonl-parser";
 import type { ScannedRecord } from "./types";
 
 /**
@@ -81,19 +82,20 @@ const parseClaudeRecord = (
   };
 };
 
-/** Parses one transcript line into a record, or null when it carries no usage to count. */
+/**
+ * The usage records one transcript line holds, read by the transcript rule
+ * ({@link lineRecords}): a line an unclean stop left NUL bytes in can still
+ * carry a whole record after them.
+ */
 export const parseClaudeLine = (
   line: string,
   project: string
-): ScannedRecord | null => {
+): ScannedRecord[] => {
   if (!line.includes('"usage":{')) {
-    return null;
+    return [];
   }
-  let obj: unknown;
-  try {
-    obj = JSON.parse(line);
-  } catch {
-    return null;
-  }
-  return parseClaudeRecord(obj, project);
+  return lineRecords(line).flatMap((record) => {
+    const scanned = parseClaudeRecord(record, project);
+    return scanned ? [scanned] : [];
+  });
 };

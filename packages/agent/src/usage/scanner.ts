@@ -647,10 +647,7 @@ export class UsageScanner {
   ): Promise<void> {
     const records: ScannedRecord[] = [];
     const next = await eachLine(path, offset, (line) => {
-      const rec = parseClaudeLine(line, project);
-      if (rec) {
-        records.push(rec);
-      }
+      records.push(...parseClaudeLine(line, project));
     });
     for (const rec of records) {
       this.#ingest(rec);

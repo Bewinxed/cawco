@@ -112,6 +112,12 @@ import {
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { isDamagedRecord } from "@cawco/core/state-file";
 import {
+  completeLines,
+  lineRecords,
+  newStats,
+  parseRecords,
+} from "@cawco/jsonl-parser";
+import {
   accountEnv,
   accountReports,
   changingSignins,
@@ -604,16 +610,33 @@ async function launchAccountOf(
     : undefined;
 }
 
-/** The entries in `text` that are whole lines: a live session may be mid-write. */
-const wholeLines = (text: string): SessionStoreEntry[] =>
-  text
-    .slice(0, text.lastIndexOf("\n") + 1)
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as SessionStoreEntry);
+const NEWLINE = 10;
+
+/**
+ * The records in the whole lines of `bytes`, read from `file`, by the one
+ * rule every transcript read here follows ({@link parseRecords}): a live
+ * session may be mid-write, so a last line without its newline is not read
+ * yet, and what an unclean stop left of a record (a range of NUL bytes, a
+ * record's broken end) is counted and skipped, never thrown. Thrown, one
+ * such line in a 45 MB transcript made every read of its session fail with
+ * `JSON Parse error: Unrecognized token`, continue_session included.
+ */
+const wholeLines = (bytes: Uint8Array, file: string): SessionStoreEntry[] => {
+  const stats = newStats();
+  const entries = Array.from(
+    parseRecords(completeLines(bytes), { stats }),
+    ({ record }) => record as unknown as SessionStoreEntry
+  );
+  if (stats.invalid > 0) {
+    console.warn(
+      `[claude] ${file}: skipped ${stats.invalid} damaged record${stats.invalid === 1 ? "" : "s"} in ${stats.lines} lines`
+    );
+  }
+  return entries;
+};
 
 const wholeTranscript = async (file: string): Promise<SessionStoreEntry[]> =>
-  wholeLines(await readFile(file, "utf8"));
+  wholeLines(await readFile(file), file);
 
 /** How much of each end of a transcript a listing reads, as the SDK's own listing does. */
 const LISTING_END_BYTES = 65_536;
@@ -629,17 +652,16 @@ const transcriptEnds = async (file: string): Promise<SessionStoreEntry[]> => {
   try {
     const { size } = await handle.stat();
     if (size <= LISTING_END_BYTES * 2) {
-      return wholeLines(await handle.readFile("utf8"));
+      return wholeLines(await handle.readFile(), file);
     }
     const head = Buffer.alloc(LISTING_END_BYTES);
     const tail = Buffer.alloc(LISTING_END_BYTES);
     await handle.read(head, 0, LISTING_END_BYTES, 0);
     await handle.read(tail, 0, LISTING_END_BYTES, size - LISTING_END_BYTES);
-    const tailText = tail.toString("utf8");
     // The tail starts mid-line: its first whole line follows the first break.
     return [
-      ...wholeLines(head.toString("utf8")),
-      ...wholeLines(tailText.slice(tailText.indexOf("\n") + 1)),
+      ...wholeLines(head, file),
+      ...wholeLines(tail.subarray(tail.indexOf(NEWLINE) + 1), file),
     ];
   } finally {
     await handle.close();
@@ -2507,24 +2529,20 @@ class ClaudeSession implements HarnessSession {
     });
   }
 
-  /** One transcript line that may be a hook's non-blocking failure. */
+  /** One transcript line, whose records may be a hook's non-blocking failure. */
   #transcriptHookFailure(line: string): void {
-    let record: { attachment?: StoredHookFailure };
-    try {
-      record = JSON.parse(line) as { attachment?: StoredHookFailure };
-    } catch {
-      return;
-    }
-    const { attachment } = record;
-    if (attachment?.type === "hook_non_blocking_error") {
-      this.#watchBoundary({
-        type: "system",
-        subtype: "hook_response",
-        hook_event: attachment.hookEvent,
-        outcome: "error",
-        stderr: attachment.stderr,
-        output: attachment.command,
-      });
+    for (const record of lineRecords(line)) {
+      const { attachment } = record as { attachment?: StoredHookFailure };
+      if (attachment?.type === "hook_non_blocking_error") {
+        this.#watchBoundary({
+          type: "system",
+          subtype: "hook_response",
+          hook_event: attachment.hookEvent,
+          outcome: "error",
+          stderr: attachment.stderr,
+          output: attachment.command,
+        });
+      }
     }
   }
 

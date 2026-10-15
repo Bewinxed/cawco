@@ -4,11 +4,13 @@
  * Transcripts are append-only, so a `(size, offset)` checkpoint per file
  * means a re-index only ever parses bytes written since the last pass.
  * A shrunken file (rotation, truncation) invalidates the checkpoint and
- * triggers a full re-read.
+ * triggers a full re-read. Every read takes whole lines only: a record its
+ * writer is still appending is left past the checkpoint's offset and read
+ * whole by the next pass.
  */
 
 import { stat } from "node:fs/promises";
-import { newStats, parseRecords, type ScanOptions } from "./scan.ts";
+import { completeLines, newStats, parseRecords, type ScanOptions } from "./scan.ts";
 import type { LocatedRecord, ParseStats } from "./types.ts";
 
 declare const Bun:
@@ -71,11 +73,12 @@ export async function readTranscript(
 ): Promise<ReadResult> {
   const stats = newStats();
   const buf = await readBytes(path);
-  const records = [...parseRecords(buf, { ...options, stats })];
+  const whole = completeLines(buf);
+  const records = [...parseRecords(whole, { ...options, stats })];
   return {
     records,
     stats,
-    checkpoint: { size: buf.length, offset: buf.length, lines: stats.lines },
+    checkpoint: { size: buf.length, offset: whole.length, lines: stats.lines },
     reset: false,
   };
 }
@@ -104,14 +107,14 @@ export async function readTranscriptTail(
     };
   }
   const stats = newStats();
-  const buf = await readBytes(path, from);
+  const whole = completeLines(await readBytes(path, from));
   const records = [
-    ...parseRecords(buf, { ...options, stats, baseOffset: from, baseLine: lineBase }),
+    ...parseRecords(whole, { ...options, stats, baseOffset: from, baseLine: lineBase }),
   ];
   return {
     records,
     stats,
-    checkpoint: { size: info.size, offset: from + buf.length, lines: lineBase + stats.lines },
+    checkpoint: { size: info.size, offset: from + whole.length, lines: lineBase + stats.lines },
     reset: !valid && checkpoint !== undefined,
   };
 }
@@ -175,7 +178,11 @@ export async function readTranscriptEnd(
     }
     const stats = newStats();
     const records = [
-      ...parseRecords(buf, { prefilter: options.prefilter, stats, baseOffset: startOffset }),
+      ...parseRecords(completeLines(buf), {
+        prefilter: options.prefilter,
+        stats,
+        baseOffset: startOffset,
+      }),
     ];
     const complete = from === 0;
     if (records.length >= want || complete || window >= maxBytes) {

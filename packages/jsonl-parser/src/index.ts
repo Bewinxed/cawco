@@ -20,7 +20,9 @@ export {
 } from "./file.ts";
 export { parseMany, type ParseManyOptions } from "./pool.ts";
 export {
+  completeLines,
   includesAny,
+  lineRecords,
   lineSpans,
   newStats,
   parseRecords,
