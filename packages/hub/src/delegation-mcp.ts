@@ -194,7 +194,10 @@ export function createDelegationMcp(options: {
   /** Caw's own tools (threads, views), for a project's lead (caw.ts). */
   cawTools?: (actor: InstanceRow | undefined) => CawTool[];
   /** The routine tools (routines.ts), for the roles that run a project. */
-  routineTools?: (actor: InstanceRow | undefined) => RoutineTool[];
+  routineTools?: (
+    actor: InstanceRow | undefined,
+    toolUseId?: string
+  ) => RoutineTool[];
   /** The ingress tools (ingress.ts): event routes and connector polls, for the same roles. */
   ingressTools?: (actor: InstanceRow | undefined) => IngressTool[];
   /** The approved-action tools (actions.ts): proposing one exact call for you to approve. */
@@ -644,7 +647,8 @@ export function createDelegationMcp(options: {
     } else if (RELAY_TOOLS.has(name)) {
       group = options.relayTools?.(actor);
     } else if (ROUTINE_TOOLS.has(name)) {
-      group = options.routineTools?.(actor);
+      // The call's id: a routine it makes reads its why off the call's frame.
+      group = options.routineTools?.(actor, toolUseId);
     } else if (INGRESS_TOOLS.has(name)) {
       group = options.ingressTools?.(actor);
     } else if (ACTION_TOOLS.has(name)) {

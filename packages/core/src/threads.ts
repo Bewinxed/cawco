@@ -244,7 +244,41 @@ export type ThreadEvent =
       /** The folder made a repository. */
       root: string;
     }
-  | { kind: "hub"; what: "thread-repaired" };
+  | { kind: "hub"; what: "thread-repaired" }
+  /**
+   * Held back from the wire: an app that reads `event` closed (TestFlight
+   * 20261015) cannot read it, so the hub sends it as
+   * `EventThreadMessage.routineMade` beside a null `event` (hub caw.ts
+   * `wireEvent`; the bridge in hub scripts/wire-compat.ts) until no
+   * installable app needs that. Declared here so the apps built from now on
+   * read it.
+   */
+  | RoutineMadeThreadEvent;
+
+/**
+ * A session made a routine with `routine_create` (routines.ts `announce`):
+ * the notice in the thread its maker's turn was in, or the routine's own
+ * thread when it was in none. Keep, Turn off and Open act on `routineId`
+ * through `/api/routines/:id`.
+ */
+export interface RoutineMadeEvent {
+  /** `caw`: the project's Caw made it; `delegate` or `session`: another session. */
+  by: "caw" | "delegate" | "session";
+  /** When it turns itself off unless kept, ms epoch; null when it was kept as it was made. */
+  expiresAt: number | null;
+  /** The session that made it. */
+  instanceId: string;
+  name: string;
+  routineId: string;
+  schedule: RoutineSchedule;
+  /** What the making turn said just before the call, one paragraph; null when it said nothing. */
+  why: string | null;
+}
+
+/** {@link RoutineMadeEvent} as a ThreadEvent kind. */
+export interface RoutineMadeThreadEvent extends RoutineMadeEvent {
+  kind: "routine-made";
+}
 
 /** A note in a thread as its writers give it: one line, its fold, and what it is. */
 export interface ThreadNote {
@@ -258,13 +292,22 @@ export interface EventThreadMessage extends ThreadMessageBase {
   author: "event";
   /** What happened, opened like a fold; absent when the title says it all. */
   body?: string;
-  /** What happened, as typed data; null only on a note stored before events were typed. */
+  /**
+   * What happened, as typed data; null on a note stored before events were
+   * typed, and on one whose kind is held back from it ({@link routineMade}).
+   */
   event: ThreadEvent | null;
   /**
    * One line: source and what, like "Routine · Triage issues · 09:00". The
    * time is not in it: a reader draws `createdAt` in their own time zone.
    */
   noteTitle: string;
+  /**
+   * A session made a routine, with `event` null: the ThreadEvent kind
+   * `routine-made`, held back while an installable app reads `event` closed
+   * (a bridge, hub scripts/wire-compat.ts BRIDGES).
+   */
+  routineMade?: RoutineMadeEvent;
 }
 
 export type ThreadMessage =

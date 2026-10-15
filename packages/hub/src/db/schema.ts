@@ -31,6 +31,7 @@ import type {
   NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
+  RoutineMadeEvent,
   RuleMatchKind,
   RuleScope,
   RuleTiming,
@@ -2815,6 +2816,26 @@ export const routines = sqliteTable(
     disabledReason: text("disabled_reason"),
     /** `owner`, or the id of the session that made it. */
     createdBy: text("created_by").notNull(),
+    /**
+     * The session whose `routine_create` call made it; null for yours, the
+     * hub's, and routines made before the hub kept where.
+     */
+    madeInInstance: text("made_in_instance"),
+    /** The Caw thread that session's turn was in, when it was in one. */
+    madeInThread: text("made_in_thread"),
+    /**
+     * What the making turn said just before its `routine_create` call, one
+     * paragraph; null when it said nothing, or the routine is not an agent's.
+     */
+    madeWhy: text("made_why"),
+    /** How that session is named in its notice: Caw, a delegate, or another session. */
+    madeBy: text("made_by").$type<RoutineMadeEvent["by"]>(),
+    /**
+     * When its notice went to you (routines.ts `announce`); null while it
+     * waits for its why, and on routines no session made. A hub start
+     * announces a session's routine still waiting.
+     */
+    announcedAt: timestamp("announced_at"),
     /** Kept past its expiry: set by the owner, or an agent on the owner's word. */
     keep: integer("keep", { mode: "boolean" }).notNull().default(false),
     /** When an agent's routine turns itself off unless kept; null for the owner's. */
@@ -2868,6 +2889,8 @@ export const routineRuns = sqliteTable(
      * turn that took it ends the run, with Caw's `routine_result` or failed.
      */
     leadInstanceId: text("lead_instance_id"),
+    /** A lead run's thread: where its slot was noted and Caw was woken. */
+    threadId: text("thread_id"),
     outcome: text("outcome").$type<RoutineOutcome>(),
     /** What its delegate said, when it said more than the contract's words. */
     output: text("output"),

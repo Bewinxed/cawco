@@ -5492,6 +5492,31 @@ export const configureCaw = (
 ): Promise<CawView> =>
   askHub(`${projectPath(projectId)}/caw`, json("PATCH", change));
 
+/**
+ * What a routine's notice reads of it (hub routines.ts `RoutineView`): kept
+ * or not, on or off, and the thread its runs are noted in.
+ */
+export interface RoutineState {
+  enabled: boolean;
+  id: string;
+  keep: boolean;
+  threadId: string | null;
+}
+
+const routinePath = (routineId: string): string =>
+  `/api/routines/${encodeURIComponent(routineId)}`;
+
+/** A routine as it stands now. */
+export const readRoutine = (routineId: string): Promise<RoutineState> =>
+  askHub(routinePath(routineId));
+
+/** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
+export const changeRoutine = (
+  routineId: string,
+  change: { enabled?: boolean; keep?: boolean }
+): Promise<RoutineState> =>
+  askHub(routinePath(routineId), json("PATCH", change));
+
 /** A project's threads as the fleet read and the frames keep them, newest first. */
 export const threadsOf = (projectId: string): ThreadSummary[] =>
   state.threads[projectId] ?? [];

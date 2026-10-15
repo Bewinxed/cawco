@@ -58,6 +58,7 @@ import {
   type CawView,
   CURATOR_DENIED_TOOLS,
   type Envelope,
+  type EventThreadMessage,
   type InstanceRow,
   type ItemEnd,
   type NeutralOrigin,
@@ -280,6 +281,23 @@ const wordsOf = (content: SendPayload["message"]["message"]["content"]) =>
         .flatMap((block) => (block.type === "text" ? [block.text] : []))
         .join("\n");
 
+/**
+ * A note's event as the wire carries it: as `event`, except a kind held
+ * back from it while an installable app reads `event` closed and would
+ * lose the note (core ThreadEvent `routine-made`), which rides beside a null
+ * `event`. The bridge's one place (scripts/wire-compat.ts BRIDGES): once
+ * the guard says no shipped reader needs it, this and `routineMade` go.
+ */
+const wireEvent = (
+  event: ThreadEvent | null
+): Pick<EventThreadMessage, "event" | "routineMade"> => {
+  if (event?.kind === "routine-made") {
+    const { kind: _kind, ...made } = event;
+    return { event: null, routineMade: made };
+  }
+  return { event };
+};
+
 const messageOf = (row: ThreadMessageRow): ThreadMessage => {
   const base = {
     id: row.id,
@@ -292,7 +310,7 @@ const messageOf = (row: ThreadMessageRow): ThreadMessage => {
         ...base,
         author: "event",
         noteTitle: row.noteTitle ?? "",
-        event: row.event,
+        ...wireEvent(row.event),
         ...(row.body ? { body: row.body } : {}),
       };
     case "caw":
@@ -1829,6 +1847,17 @@ export const createCaw = ({
         return;
       }
       return turns.get(instanceId)?.by ?? "event";
+    },
+
+    /**
+     * The thread the project's Caw `instanceId` is in a turn for, for where
+     * what he makes in it was made (routines.ts `madeIn`); undefined for a
+     * session that is no project's lead, or a turn no thread woke.
+     */
+    turnThread(instanceId: string): string | undefined {
+      return leadOf(row(instanceId))
+        ? turns.get(instanceId)?.threadId
+        : undefined;
     },
 
     /**

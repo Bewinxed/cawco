@@ -69,7 +69,12 @@
   import SideSplit from "./side/SideSplit.svelte";
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskSheet from "./tasks/TaskSheet.svelte";
-  import { newThreadProjectOf, threadIdOf, threadTabId } from "./thread-tabs";
+  import {
+    newThreadProjectOf,
+    routineMadeOf,
+    threadIdOf,
+    threadTabId,
+  } from "./thread-tabs";
   import type { ComposerAsk, ComposerFoot } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import FootFade from "./transcript/FootFade.svelte";
@@ -157,11 +162,24 @@
       };
     }
     if (message.author === "event") {
+      const made = routineMadeOf(message);
       return {
         ...base,
         type: "ui.system_note",
         content: message.body ?? "",
-        metadata: { noteTitle: message.noteTitle, noteKind: CAW_EVENT },
+        metadata: {
+          noteTitle: message.noteTitle,
+          noteKind: CAW_EVENT,
+          ...(made
+            ? {
+                routineMade: {
+                  expiresAt: made.expiresAt,
+                  routineId: made.routineId,
+                  threadId: message.threadId,
+                },
+              }
+            : {}),
+        },
       };
     }
     if (message.question && message.answer) {

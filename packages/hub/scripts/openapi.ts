@@ -27,7 +27,9 @@ import { baseRefOf, checkGate, outsideInputs } from "./openapi-inputs";
 import { type Baseline, shippedBaselines } from "./shipped";
 import {
   APP_SCHEMA,
+  asSent,
   BRIDGES,
+  type Bridge,
   FRAMES,
   GENERATOR_CONFIG,
   openEnumNames,
@@ -1320,21 +1322,35 @@ const readers = bases.map((base) => {
   };
 });
 const refused: string[] = [];
+/**
+ * What the hub sends, with every bridge that holds a kind back holding it
+ * (wire-compat.ts `asSent`): what a shipped reader meets. `except` leaves
+ * one bridge out: the document as it would be sent without it.
+ */
+const sentWithout = (except?: Bridge): unknown =>
+  BRIDGES.filter((bridge) => bridge !== except).reduce<unknown>(
+    (sending, bridge) => asSent(sending, bridge),
+    document
+  );
+const sent = sentWithout();
 // A bridge no shipped reader needs any more goes. Each reader is taken as
 // built without it too: one built since reads `beside` and loses nothing,
-// one built before reads only the bridge and breaks without it.
+// one built before reads only the bridge and breaks without it. A bridge
+// that holds a kind back is needed while sending that kind in `beside`
+// breaks a shipped reader.
 for (const bridge of BRIDGES) {
-  const without = withoutBridge(document, bridge);
+  const without = withoutBridge(sentWithout(bridge), bridge);
   const needed = readers.some((reader) => {
     const built = withoutBridge(reader.schema, bridge);
     return (
-      reader.breaks(without, built).length >
-      reader.breaks(document, built).length
+      reader.breaks(without, built).length > reader.breaks(sent, built).length
     );
   });
   if (!needed) {
     refused.push(
-      `\`${bridge.property}\` beside \`${bridge.beside}\` is a bridge no shipped reader needs now (${bridge.until}): remove it, and its entry in BRIDGES (scripts/wire-compat.ts).`
+      bridge.holds
+        ? `\`${bridge.property}\` beside \`${bridge.beside}\` holds back its \`${bridge.holds}\` kind, and no shipped reader needs that now (${bridge.until}): send the kind as \`${bridge.beside}\`, remove \`${bridge.property}\`, and its entry in BRIDGES (scripts/wire-compat.ts).`
+        : `\`${bridge.property}\` beside \`${bridge.beside}\` is a bridge no shipped reader needs now (${bridge.until}): remove it, and its entry in BRIDGES (scripts/wire-compat.ts).`
     );
   }
 }
@@ -1342,7 +1358,7 @@ const places = (breaks: string[]): string =>
   `${breaks.length} place${breaks.length === 1 ? "" : "s"}:\n${breaks.map((line) => `  ${line}`).join("\n")}`;
 let tabsRefused = false;
 for (const { app, label, protocol, breaks: against } of readers) {
-  const breaks = against(document);
+  const breaks = against(sent);
   if (breaks.length === 0) {
     continue;
   }

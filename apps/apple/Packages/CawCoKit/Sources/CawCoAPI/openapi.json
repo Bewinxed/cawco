@@ -29993,7 +29993,7 @@
             "type": "string"
           },
           "event": {
-            "description": "What happened, as typed data; null only on a note stored before events were typed.",
+            "description": "What happened, as typed data; null on a note stored before events were\ntyped, and on one whose kind is held back from it ({@link routineMade}).",
             "anyOf": [
               {
                 "type": "object",
@@ -30393,12 +30393,19 @@
                   "kind",
                   "what"
                 ]
+              },
+              {
+                "$ref": "#/components/schemas/RoutineMadeThreadEvent"
               }
             ]
           },
           "noteTitle": {
             "description": "One line: source and what, like \"Routine · Triage issues · 09:00\". The\ntime is not in it: a reader draws `createdAt` in their own time zone.",
             "type": "string"
+          },
+          "routineMade": {
+            "$ref": "#/components/schemas/RoutineMadeEvent",
+            "description": "A session made a routine, with `event` null: the ThreadEvent kind\n`routine-made`, held back while an installable app reads `event` closed\n(a bridge, hub scripts/wire-compat.ts BRIDGES)."
           },
           "createdAt": {
             "type": "number"
@@ -30455,6 +30462,105 @@
           "cancelled",
           "done",
           "failed"
+        ]
+      },
+      "RoutineMadeThreadEvent": {
+        "description": "{@link RoutineMadeEvent} as a ThreadEvent kind.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "routine-made"
+            ]
+          },
+          "by": {
+            "$ref": "#/components/schemas/RoutineMadeEventBy",
+            "description": "`caw`: the project's Caw made it; `delegate` or `session`: another session."
+          },
+          "expiresAt": {
+            "description": "When it turns itself off unless kept, ms epoch; null when it was kept as it was made.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "instanceId": {
+            "description": "The session that made it.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "routineId": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/RoutineSchedule"
+          },
+          "why": {
+            "description": "What the making turn said just before the call, one paragraph; null when it said nothing.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "by",
+          "expiresAt",
+          "instanceId",
+          "kind",
+          "name",
+          "routineId",
+          "schedule",
+          "why"
+        ]
+      },
+      "RoutineMadeEvent": {
+        "description": "A session made a routine with `routine_create` (routines.ts `announce`):\nthe notice in the thread its maker's turn was in, or the routine's own\nthread when it was in none. Keep, Turn off and Open act on `routineId`\nthrough `/api/routines/:id`.",
+        "type": "object",
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/RoutineMadeEventBy",
+            "description": "`caw`: the project's Caw made it; `delegate` or `session`: another session."
+          },
+          "expiresAt": {
+            "description": "When it turns itself off unless kept, ms epoch; null when it was kept as it was made.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "instanceId": {
+            "description": "The session that made it.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "routineId": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/RoutineSchedule"
+          },
+          "why": {
+            "description": "What the making turn said just before the call, one paragraph; null when it said nothing.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "by",
+          "expiresAt",
+          "instanceId",
+          "name",
+          "routineId",
+          "schedule",
+          "why"
         ]
       },
       "ThreadRead": {
@@ -30560,6 +30666,17 @@
               "number"
             ]
           },
+          "madeIn": {
+            "description": "Where a session made it; null for yours, the hub's, and those made before the hub kept where.",
+            "$ref": "#/components/schemas/RoutineMadeIn"
+          },
+          "madeWhy": {
+            "description": "What the making turn said just before its call, one paragraph; null when it said nothing or a session did not make it.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "name": {
             "type": "string"
           },
@@ -30611,6 +30728,7 @@
           "keep",
           "lands",
           "lastSlot",
+          "madeWhy",
           "name",
           "nextSlot",
           "projectId",
@@ -30622,8 +30740,31 @@
           "timeZone"
         ]
       },
+      "RoutineMadeIn": {
+        "description": "Where a routine was made: the session whose `routine_create` call made\nit, how its notice names that session, and the Caw thread its turn was in.",
+        "type": "object",
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/RoutineMadeEventBy"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "by",
+          "instanceId",
+          "threadId"
+        ]
+      },
       "RoutineRunView": {
-        "description": "One run, as the routes and tools answer it (times in ms).",
+        "description": "One run, as the routes and tools answer it (times in ms), with what\nactually ran it: a delegate run's work item, or a lead run's Caw session\nand the thread its wake went to.",
         "type": "object",
         "properties": {
           "attempt": {
@@ -30637,6 +30778,13 @@
           },
           "id": {
             "type": "string"
+          },
+          "leadInstanceId": {
+            "description": "A lead run's Caw session, once his harness read its wake; null for a delegate run.",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "outcome": {
             "$ref": "#/components/schemas/RoutineRunViewOutcome"
@@ -30662,6 +30810,13 @@
           "state": {
             "$ref": "#/components/schemas/RoutineRunState"
           },
+          "threadId": {
+            "description": "A lead run's thread: where its slot was noted and Caw woken; null for a delegate run.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "usd": {
             "type": [
               "null",
@@ -30669,6 +30824,7 @@
             ]
           },
           "workItemId": {
+            "description": "A delegate run's work item; null for a lead run, and before its work began.",
             "type": [
               "null",
               "string"
@@ -30679,11 +30835,13 @@
           "attempt",
           "endedAt",
           "id",
+          "leadInstanceId",
           "output",
           "reason",
           "slot",
           "startedAt",
           "state",
+          "threadId",
           "usd",
           "workItemId"
         ]
@@ -44113,6 +44271,14 @@
         "enum": [
           "gh-missing",
           "gh-unauthenticated"
+        ]
+      },
+      "RoutineMadeEventBy": {
+        "type": "string",
+        "enum": [
+          "caw",
+          "delegate",
+          "session"
         ]
       },
       "RoutineRunViewOutcome": {

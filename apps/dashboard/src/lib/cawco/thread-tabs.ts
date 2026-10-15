@@ -8,7 +8,12 @@
  * A thread is addressed as `thread:<thread id>`; a thread not started yet,
  * whose first message will make it, as `thread:new:<project id>`.
  */
-import type { InstanceRow, ThreadSummary } from "@cawco/core";
+import type {
+  EventThreadMessage,
+  InstanceRow,
+  RoutineMadeEvent,
+  ThreadSummary,
+} from "@cawco/core";
 import type { ProjectRow } from "./client.svelte";
 import { checkoutOf } from "./projects";
 
@@ -36,6 +41,25 @@ export const isThreadTab = (id: string): boolean => id.startsWith(PREFIX);
 /** Where a thread opens: its tab, the way `/session/<id>` opens a session's. */
 export const threadHref = (threadId: string): string =>
   `/session/${threadTabId(threadId)}`;
+
+/**
+ * The routine a thread's note says a session made, read where the hub
+ * puts it: `routineMade` beside a null `event` while the bridge stands (hub
+ * caw.ts `wireEvent`). The one place that reads it, so the day it becomes a
+ * ThreadEvent kind only this changes.
+ */
+export const routineMadeOf = (
+  message: EventThreadMessage
+): RoutineMadeEvent | undefined => message.routineMade;
+
+/**
+ * Where a routine opens: its own thread, where its runs are noted; null
+ * while it has none. The one place that says it, for the routines view to
+ * take over.
+ */
+export const routineHref = (routine: {
+  threadId: string | null;
+}): string | null => (routine.threadId ? threadHref(routine.threadId) : null);
 
 /**
  * A thread as a session row, under its project: running while Caw works on

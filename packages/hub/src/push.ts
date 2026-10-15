@@ -194,8 +194,10 @@ export type PushData =
   | {
       /**
        * A routine's run (routines.ts): failed twice and needs you, or, for a
-       * routine in no project (no thread to note it in), delivered. The app
-       * opens the board for a kind it does not know.
+       * routine in no project (no thread to note it in), delivered. Or a
+       * session made a routine (`runId` null): the Caw thread its notice
+       * went to is `threadId`. The app opens the board for a kind it does
+       * not know.
        */
       kind: "routine";
       /** Its run's session, while the hub holds it; Reply writes to it. */
@@ -203,7 +205,10 @@ export type PushData =
       machineId: string | null;
       projectId: string | null;
       routineId: string;
-      runId: string;
+      /** The run; null for the notice that a session made the routine. */
+      runId: string | null;
+      /** The thread the made notice went to; absent on a run's push. */
+      threadId?: string;
     }
   | {
       /**
@@ -1445,6 +1450,48 @@ export const createPush = ({
       console.log(
         `[push] routine ${run.routineId} run ${run.runId}: ${run.failed ? "needs you" : "delivered"}`
       );
+    },
+
+    /**
+     * A session made a routine (routines.ts `announce`): you hear of it once,
+     * beside its notice in the Caw thread. Its name and what it said are the
+     * agent's words, so they go sealed; the visible words are "Routine" and
+     * "New routine". Open only: there is nothing to answer from the lock
+     * screen, and Keep and Turn off are on its notice.
+     */
+    routineMade(made: {
+      /** The sealed line under its name: its schedule and when it turns off. */
+      line: string;
+      name: string;
+      /** Null for a routine in no project: it has no thread, so this push is all you hear. */
+      projectId: string | null;
+      routineId: string;
+      threadId: string | null;
+    }): void {
+      const project = projectName(made.projectId);
+      arrive({
+        ask: false,
+        instanceId: null,
+        landedAt: new Date(),
+        still: () => true,
+        notification: {
+          shown: alertOf("Routine", project, "New routine"),
+          sealed: alertOf(made.name, project, made.line),
+          category: PUSH_CATEGORIES.taskOpenOnly,
+          collapseId: `routine-made-${made.routineId}`,
+          threadId: made.projectId ?? `routine-${made.routineId}`,
+          data: {
+            kind: "routine",
+            instanceId: null,
+            machineId: null,
+            projectId: made.projectId,
+            routineId: made.routineId,
+            runId: null,
+            ...(made.threadId ? { threadId: made.threadId } : {}),
+          },
+        },
+      });
+      console.log(`[push] routine ${made.routineId}: made, announced`);
     },
 
     /**

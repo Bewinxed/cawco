@@ -3862,6 +3862,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/RoutineMadeEventBy`.
+    public enum RoutineMadeEventBy: OpenEnum {
+        case caw
+        case delegate
+        case session
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "caw": self = .caw
+            case "delegate": self = .delegate
+            case "session": self = .session
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .caw: "caw"
+            case .delegate: "delegate"
+            case .session: "session"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.caw, .delegate, .session]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/RoutineRunState`.
     public enum RoutineRunState: OpenEnum {
         case ended

@@ -60,6 +60,7 @@ import type {
   LandsMode,
   NeutralMessage,
   NeutralOrigin,
+  RoutineMadeEvent,
   RoutineSchedule,
   SessionRole,
   ThreadEvent,
@@ -151,19 +152,38 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
   throw new RoutineRefusal(code, message);
 };
 
-/** One run, as the routes and tools answer it (times in ms). */
+/**
+ * One run, as the routes and tools answer it (times in ms), with what
+ * actually ran it: a delegate run's work item, or a lead run's Caw session
+ * and the thread its wake went to.
+ */
 export interface RoutineRunView {
   attempt: number;
   endedAt: number | null;
   id: string;
+  /** A lead run's Caw session, once his harness read its wake; null for a delegate run. */
+  leadInstanceId: string | null;
   outcome: RoutineOutcome | null;
   output: string | null;
   reason: string | null;
   slot: string;
   startedAt: number;
   state: RoutineRunRow["state"];
+  /** A lead run's thread: where its slot was noted and Caw woken; null for a delegate run. */
+  threadId: string | null;
   usd: number | null;
+  /** A delegate run's work item; null for a lead run, and before its work began. */
   workItemId: string | null;
+}
+
+/**
+ * Where a routine was made: the session whose `routine_create` call made
+ * it, how its notice names that session, and the Caw thread its turn was in.
+ */
+export interface RoutineMadeIn {
+  by: RoutineMadeEvent["by"];
+  instanceId: string;
+  threadId: string | null;
 }
 
 /** A routine, as the routes and tools answer it (times in ms), with its newest runs. */
@@ -181,6 +201,10 @@ export interface RoutineView {
   keep: boolean;
   lands: LandsMode;
   lastSlot: number | null;
+  /** Where a session made it; null for yours, the hub's, and those made before the hub kept where. */
+  madeIn: RoutineMadeIn | null;
+  /** What the making turn said just before its call, one paragraph; null when it said nothing or a session did not make it. */
+  madeWhy: string | null;
   name: string;
   nextSlot: number;
   projectId: string | null;
@@ -259,8 +283,8 @@ export type RoutineActor = "owner" | InstanceRow;
 export interface RoutineDeps {
   /** Whether any machine is connected now. */
   readonly anyOnline: () => boolean;
-  /** Caw's routine notes and wakes (caw.ts). */
-  readonly caw: Pick<Caw, "notice" | "wake">;
+  /** Caw's routine notes and wakes, and the thread his turn is in (caw.ts). */
+  readonly caw: Pick<Caw, "notice" | "turnThread" | "wake">;
   /**
    * A curator run's inbox, made ready (memory.ts): `none` when no note is
    * left to curate, else the brief it reads; Jev failing throws.
@@ -285,7 +309,7 @@ export interface RoutineDeps {
   readonly online: (machineId: string) => boolean;
   /** Why the project's spend cap holds its work back now, or nothing (project-caps.ts). */
   readonly pauses: (projectId: string) => string | undefined;
-  readonly push: Pick<Push, "routine">;
+  readonly push: Pick<Push, "routine" | "routineMade">;
   /** Why the project's spend cap keeps its Caw from waking, or nothing (project-caps.ts). */
   readonly quiets: (projectId: string) => string | undefined;
   /** The delegate types a project's sessions see (the fleet's without one). */
@@ -394,6 +418,8 @@ const runView = (run: RoutineRunRow): RoutineRunView => ({
   attempt: run.attempt,
   state: run.state,
   workItemId: run.workItemId,
+  leadInstanceId: run.leadInstanceId,
+  threadId: run.threadId,
   outcome: run.outcome,
   output: run.output,
   reason: run.reason,
@@ -410,8 +436,11 @@ const FAILED_ANSWER = new RegExp(
   `^${AUTOMATION_FAILED}(?:\\s*[:\\-—–]\\s*|\\s+|$)([\\s\\S]*)$`
 );
 
-/** A call of `routine_result` or `finish_item`, under any harness's MCP prefix. */
+/** A call of `routine_result`, `finish_item` or `routine_create`, under any harness's MCP prefix. */
 const ROUTINE_RESULT_CALL = /(?:^|__|_)routine_result$/;
+const ROUTINE_CREATE_CALL = /(?:^|__|_)routine_create$/;
+/** Paragraphs in what a turn said: the last one before a `routine_create` call is why it was made. */
+const PARAGRAPHS = /\n\s*\n/;
 const FINISH_CALL = /(?:^|__|_)finish_item$/;
 
 /** The longest reason a run keeps: the owner's "Failed: …" line, not a transcript. */
@@ -548,6 +577,15 @@ export const createRoutines = ({
     enabled: row.enabled,
     disabledReason: row.disabledReason,
     createdBy: row.createdBy,
+    madeIn:
+      row.madeInInstance && row.madeBy
+        ? {
+            by: row.madeBy,
+            instanceId: row.madeInInstance,
+            threadId: row.madeInThread,
+          }
+        : null,
+    madeWhy: row.madeWhy,
     keep: row.keep,
     expiresAt: ms(row.expiresAt),
     lastSlot: ms(row.lastSlot),
@@ -891,6 +929,7 @@ export const createRoutines = ({
     }
     const label = slotLabel(run.slot, routine.timeZone);
     const threadId = note(routine, run, "started");
+    store.setRun(run.id, { threadId: threadId ?? null });
     const woke = await caw.wake(projectId, {
       by: "event",
       routine: routine.id,
@@ -1215,6 +1254,7 @@ export const createRoutines = ({
     /** The session is a project's lead: his words count from before his wake's read receipt arms him. */
     lead = false
   ): void => {
+    heard(instanceId, neutral);
     const watched =
       armed.has(instanceId) || running.has(instanceId) || held.has(instanceId);
     if (!(watched || lead)) {
@@ -1523,6 +1563,257 @@ export const createRoutines = ({
     );
   };
 
+  // --- where a routine was made, and telling you ----------------------------------
+
+  /**
+   * What each session's turn said last: why a routine it makes now was made
+   * ({@link heard}). Cleared at its turn's end.
+   */
+  const turnText = new Map<string, string>();
+  /**
+   * `routine_create` calls read off a session's frames before their routine
+   * was made (the frame came first): the call's tool_use id and what the
+   * turn said before it.
+   */
+  const callsSeen = new Map<string, { callId: string; why: string | null }[]>();
+  /**
+   * Routines a session made whose call is not on its frames yet (the call
+   * came first), with the call's id when its harness named it (Claude
+   * Code's `_meta`). In memory: a hub that restarts before the why comes
+   * announces them as it starts ({@link start}), with no why.
+   */
+  const madeUnheard = new Map<
+    string,
+    { callId: string | undefined; routineId: string }[]
+  >();
+
+  /** Who made a routine, as its notice names them: Caw, a delegate, or another session. */
+  type MadeBy = RoutineMadeEvent["by"];
+  const madeByOf = (actor: InstanceRow): MadeBy => {
+    if (actor.role === "lead") {
+      return "caw";
+    }
+    return actor.parentInstanceId || actor.workItemId ? "delegate" : "session";
+  };
+
+  /** One paragraph of what a turn said: the last, clipped to {@link REASON_MAX}. */
+  const paragraphOf = (words: string): string | null => {
+    const last = words
+      .split(PARAGRAPHS)
+      .map((each) => each.trim())
+      .filter(Boolean)
+      .at(-1);
+    return last ? clipReason(last) : null;
+  };
+
+  /** Removes and answers the first entry of `instanceId`'s list in `map` that `match` picks. */
+  const takeFrom = <T>(
+    map: Map<string, T[]>,
+    instanceId: string,
+    match: (entry: T) => boolean
+  ): T | undefined => {
+    const list = map.get(instanceId) ?? [];
+    const at = list.findIndex(match);
+    if (at === -1) {
+      return undefined;
+    }
+    const [taken] = list.splice(at, 1);
+    if (list.length === 0) {
+      map.delete(instanceId);
+    }
+    return taken;
+  };
+
+  /**
+   * Every session's frames (server.ts, through {@link said}): its turn's
+   * text is kept, a `routine_create` call reads what was said before it as
+   * the why of the routine it made ({@link madeWhy}), and its turn's end
+   * settles the routines whose call it never showed, with no why.
+   */
+  const heard = (instanceId: string, neutral: NeutralMessage): void => {
+    if (neutral.type === "result") {
+      madeTurnOver(instanceId);
+      return;
+    }
+    if (neutral.type !== "assistant") {
+      return;
+    }
+    const words: string[] = [];
+    for (const block of neutral.message.content) {
+      if (block.type === "text") {
+        words.push(block.text);
+      } else if (
+        block.type === "tool_use" &&
+        ROUTINE_CREATE_CALL.test(block.name)
+      ) {
+        const first = words.join("\n").trim() || turnText.get(instanceId);
+        createSeen(instanceId, block.id, first ? paragraphOf(first) : null);
+      }
+    }
+    const text = words.join("\n").trim();
+    if (text) {
+      turnText.set(instanceId, text);
+    }
+  };
+
+  /** A session's turn is over: the routines whose call it never showed are announced with no why. */
+  const madeTurnOver = (instanceId: string): void => {
+    turnText.delete(instanceId);
+    callsSeen.delete(instanceId);
+    const unheard = madeUnheard.get(instanceId) ?? [];
+    madeUnheard.delete(instanceId);
+    for (const each of unheard) {
+      madeWhy(each.routineId, null);
+    }
+  };
+
+  /**
+   * A `routine_create` call `callId` on a session's frame, `why` said
+   * before it: its routine's why, when the routine is made already (by the
+   * call's id, else the oldest whose harness named none); else kept for it.
+   */
+  const createSeen = (
+    instanceId: string,
+    callId: string,
+    why: string | null
+  ): void => {
+    const made =
+      takeFrom(madeUnheard, instanceId, (each) => each.callId === callId) ??
+      takeFrom(madeUnheard, instanceId, (each) => each.callId === undefined);
+    if (made) {
+      madeWhy(made.routineId, why);
+      return;
+    }
+    callsSeen.set(instanceId, [
+      ...(callsSeen.get(instanceId) ?? []),
+      { callId, why },
+    ]);
+  };
+
+  /**
+   * A session made routine `routineId` with call `callId`: its why is read
+   * off the call's frame when that came first, else when it comes, or as
+   * nothing at its turn's end ({@link heard}). The notice waits for it.
+   */
+  const awaitWhy = (
+    actor: InstanceRow,
+    routineId: string,
+    callId: string | undefined
+  ): void => {
+    const seen = takeFrom(callsSeen, actor.id, (each) =>
+      callId === undefined ? true : each.callId === callId
+    );
+    if (seen) {
+      madeWhy(routineId, seen.why);
+      return;
+    }
+    madeUnheard.set(actor.id, [
+      ...(madeUnheard.get(actor.id) ?? []),
+      { callId, routineId },
+    ]);
+  };
+
+  /** A made routine's why, stored, and the routine announced ({@link announce}). */
+  const madeWhy = (routineId: string, why: string | null): void => {
+    const row = why
+      ? store.update(routineId, { madeWhy: why })
+      : store.get(routineId);
+    if (row) {
+      announce(row);
+    }
+  };
+
+  /** A routine's next run in words, in its zone: "Thu 16 Oct, 09:00". */
+  const nextWords = (at: number, timeZone: string): string =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(at));
+
+  /**
+   * The notice that `maker` made `routine`, in the Caw thread its turn was
+   * in, else the routine's own thread (kept as its thread): its name, its
+   * schedule and next run on the line; what was said before and how long it
+   * lasts (`lasts`) in its fold. Answers the thread it went to.
+   */
+  const madeNotice = (
+    routine: RoutineRow,
+    projectId: string,
+    maker: string,
+    by: MadeBy,
+    lasts: string | null
+  ): string => {
+    const schedule = scheduleOf(routine);
+    const who = { caw: "Caw", delegate: "A delegate", session: "A session" }[
+      by
+    ];
+    const next = schedule.nextAt
+      ? ` · next ${nextWords(schedule.nextAt, routine.timeZone)}`
+      : "";
+    const body = [routine.madeWhy, lasts].filter(Boolean).join("\n\n");
+    const threadId = caw.notice(
+      projectId,
+      routine.madeInThread ?? routine.threadId,
+      {
+        title: `${who} set up a routine: ${routine.name} · ${schedule.words}${next}`,
+        ...(body ? { body } : {}),
+        event: {
+          kind: "routine-made",
+          by,
+          expiresAt: ms(routine.expiresAt),
+          instanceId: maker,
+          name: routine.name,
+          routineId: routine.id,
+          schedule,
+          why: routine.madeWhy,
+        },
+      }
+    );
+    if (!routine.madeInThread && threadId !== routine.threadId) {
+      store.update(routine.id, { threadId });
+    }
+    return threadId;
+  };
+
+  /**
+   * A session made `routine`, and you hear of it once: a notice in the Caw
+   * thread its maker's turn was in (else the routine's own thread, which it
+   * then is), naming it, its schedule and its next run, with what was said
+   * before it was made, and that it turns off in 7 days unless kept; and a
+   * push, as a routine that needs you pushes.
+   */
+  const announce = (routine: RoutineRow): void => {
+    const maker = routine.madeInInstance;
+    const by = routine.madeBy;
+    if (!(maker && by) || routine.announcedAt) {
+      return;
+    }
+    store.update(routine.id, { announcedAt: new Date() });
+    const schedule = scheduleOf(routine);
+    const lasts =
+      routine.expiresAt && !routine.keep
+        ? "Off in 7 days unless you keep it."
+        : null;
+    const threadId = routine.projectId
+      ? madeNotice(routine, routine.projectId, maker, by, lasts)
+      : null;
+    push.routineMade({
+      line: [schedule.words, lasts].filter(Boolean).join(" · "),
+      name: routine.name,
+      projectId: routine.projectId,
+      routineId: routine.id,
+      threadId,
+    });
+    console.log(
+      `[routines] ${routine.name} made by ${maker}${routine.madeInThread ? ` in thread ${routine.madeInThread}` : ""}: announced${threadId ? ` in thread ${threadId}` : ""}, why ${routine.madeWhy ? JSON.stringify(routine.madeWhy.slice(0, 60)) : "none"}`
+    );
+  };
+
   // --- the scheduler ------------------------------------------------------------
 
   /** Turns off agent routines past their expiry that nobody kept. */
@@ -1668,6 +1959,13 @@ export const createRoutines = ({
     for (const run of store.liveRuns()) {
       resume(run);
     }
+    // A session's routine whose why a stopped hub was still waiting for is
+    // told now, with the why it has: you hear of every one, once.
+    for (const row of store.list()) {
+      if (row.madeInInstance && !row.announcedAt) {
+        announce(row);
+      }
+    }
     started = true;
     tick();
     for (const routineId of store.queuedRoutines()) {
@@ -1678,7 +1976,39 @@ export const createRoutines = ({
 
   // --- what sessions and the dashboard do ------------------------------------------
 
-  const create = (input: RoutineInput, by: RoutineActor): RoutineView => {
+  /** Who made a routine, as its row keeps it: you, or a session, its turn's thread and how it is named. */
+  const originOf = (
+    by: RoutineActor
+  ): Pick<
+    RoutineRow,
+    "createdBy" | "madeBy" | "madeInInstance" | "madeInThread"
+  > =>
+    by === "owner"
+      ? {
+          createdBy: "owner",
+          madeBy: null,
+          madeInInstance: null,
+          madeInThread: null,
+        }
+      : {
+          createdBy: by.id,
+          madeBy: madeByOf(by),
+          madeInInstance: by.id,
+          madeInThread: caw.turnThread(by.id) ?? null,
+        };
+
+  /**
+   * A new routine. A session's (`by` an instance) keeps where it was made:
+   * the session, the Caw thread its turn is in, and, once its call's frame
+   * is read, what the turn said before it (`callId`: the call's tool_use id,
+   * when its harness names it); then it is announced to you. Yours (the
+   * dashboard) is made by you, with no why and no notice.
+   */
+  const create = (
+    input: RoutineInput,
+    by: RoutineActor,
+    callId?: string
+  ): RoutineView => {
     const fields = {
       projectId: input.projectId,
       name: input.name.trim(),
@@ -1700,7 +2030,9 @@ export const createRoutines = ({
       ...fields,
       enabled: true,
       disabledReason: null,
-      createdBy: agent ? by.id : "owner",
+      ...originOf(by),
+      madeWhy: null,
+      announcedAt: null,
       keep,
       expiresAt:
         agent && !keep ? new Date(now.getTime() + AGENT_LIFETIME_MS) : null,
@@ -1710,8 +2042,11 @@ export const createRoutines = ({
       createdAt: now,
     });
     console.log(
-      `[routines] ${row.name} made by ${row.createdBy}: ${row.cron} (${row.timeZone}), ${row.target}`
+      `[routines] ${row.name} made by ${row.createdBy}${row.madeInThread ? ` in thread ${row.madeInThread}` : ""}: ${row.cron} (${row.timeZone}), ${row.target}`
     );
+    if (agent) {
+      awaitWhy(by, row.id, callId);
+    }
     fireExtra(row, `test:${now.toISOString()}`, 1);
     schedule();
     return viewOf(store.get(row.id) ?? row);
@@ -1817,6 +2152,11 @@ export const createRoutines = ({
       enabled: true,
       disabledReason: null,
       createdBy: "hub",
+      madeInInstance: null,
+      madeInThread: null,
+      madeWhy: null,
+      madeBy: null,
+      announcedAt: null,
       keep: true,
       expiresAt: null,
       lastSlot: null,
@@ -1870,8 +2210,12 @@ export const createRoutines = ({
 
   const routineRef = () => z.string().trim().min(1).describe("Its id.");
 
-  /** The routine tools, bound to the calling session; with none, the same definitions for discovery. */
-  const tools = (actor: InstanceRow | undefined) => {
+  /**
+   * The routine tools, bound to the calling session and, when its harness
+   * names it, the call's tool_use id; with no session, the same definitions
+   * for discovery.
+   */
+  const tools = (actor: InstanceRow | undefined, toolUseId?: string) => {
     const me = (): InstanceRow => {
       if (!actor) {
         throw new Error("Discovery cannot execute tools");
@@ -1881,7 +2225,7 @@ export const createRoutines = ({
     return [
       tool(
         "routine_create",
-        `Make a routine in your project: a prompt the hub runs on a schedule. target 'delegate' starts a fresh delegate each run; its finish_item headline is the output: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <one sentence on why> fails it with that reason, retried once then the owner is asked, anything else is noted in the routine's thread. target 'lead' messages Caw (skipped while Caw is off). It runs once at once as a test, and turns itself off after 7 days unless kept.`,
+        `Make a routine in your project: a prompt the hub runs on a schedule. target 'delegate' starts a fresh delegate each run; its finish_item headline is the output: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <one sentence on why> fails it with that reason, retried once then the owner is asked, anything else is noted in the routine's thread. target 'lead' messages Caw (skipped while Caw is off). It runs once at once as a test, and turns itself off after 7 days unless kept. The owner is told, with what you said just before this call: say why first.`,
         {
           name: z.string().describe("3–6 plain words."),
           prompt: z.string().describe("What each run does."),
@@ -1930,7 +2274,8 @@ export const createRoutines = ({
                   dailyCapUsd: input.daily_cap_usd ?? null,
                   keep: input.keep ?? false,
                 },
-                caller
+                caller,
+                toolUseId
               )
             )
           );

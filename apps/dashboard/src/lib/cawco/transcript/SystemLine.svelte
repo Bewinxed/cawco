@@ -28,6 +28,7 @@
    * nor a tool call lands here.
    */
   import type { Message } from "../types";
+  import RoutineMadeActions from "./RoutineMadeActions.svelte";
   import type { HarnessNote } from "./rows";
   import { CAW_EVENT } from "./voice";
 
@@ -94,6 +95,10 @@
    * and when it happened is said in the reader's own time.
    */
   const wokeCaw = $derived(message?.metadata?.noteKind === CAW_EVENT);
+  /** A session made a routine: Keep, Turn off and Open under its line. */
+  const routineMade = $derived(
+    wokeCaw ? message?.metadata?.routineMade : undefined
+  );
   /**
    * The line a session moved to its machine opens on (core `MOVED_HERE`):
    * what moved, with the done glyph, and what stayed under it, open. It is
@@ -303,6 +308,9 @@
         {/if}
       </Collapsible.Content>
     </Collapsible.Root>
+    {#if routineMade}
+      <RoutineMadeActions routine={routineMade} />
+    {/if}
   </div>
 {:else}
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
@@ -317,6 +325,9 @@
         >
       {/if}
     </span>
+    {#if routineMade}
+      <RoutineMadeActions routine={routineMade} />
+    {/if}
   </div>
 {/if}
 

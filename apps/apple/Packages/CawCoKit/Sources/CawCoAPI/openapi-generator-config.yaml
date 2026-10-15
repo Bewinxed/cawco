@@ -97,6 +97,7 @@ typeOverrides:
     RepoInfoVisibility: OpenEnums.RepoInfoVisibility
     ReposResultError: OpenEnums.ReposResultError
     RestartHoldReason: OpenEnums.RestartHoldReason
+    RoutineMadeEventBy: OpenEnums.RoutineMadeEventBy
     RoutineRunState: OpenEnums.RoutineRunState
     RoutineRunViewOutcome: OpenEnums.RoutineRunViewOutcome
     RoutineTarget: OpenEnums.RoutineTarget

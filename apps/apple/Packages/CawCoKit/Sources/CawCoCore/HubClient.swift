@@ -20,7 +20,7 @@ extension Client {
     }
 }
 
-/// The connect-time reads (`HubConnection.readFleet`) and a transcript's page, read as the socket's
+/// The connect-time reads (`HubConnection.readFleet`), a transcript's page and a Caw thread, read as the socket's
 /// frames are (`Wire.lossy`): a machine, a row or a project this app's types
 /// refuse is left out of its list, and the list is read, where the generated
 /// client alone would refuse the whole answer and the board would not read.
@@ -42,6 +42,10 @@ private struct LossyReads: ClientMiddleware {
         // A transcript's page: the read again an unreadable stream event asks
         // for (`SessionsStore.apply`) reads without what it cannot, and ends.
         Operations.GetApiInstancesByIdTranscript.id: prune(Components.Schemas.TranscriptPage.self),
+        // A Caw thread, as its `thread.message` frames already read: a note
+        // whose event is of a kind this build does not know keeps its line,
+        // its event read as absent, and the thread reads.
+        Operations.GetApiProjectsByIdThreadsByThreadId.id: prune(Components.Schemas.ThreadRead.self),
     ]
 
     private static func prune<T: Codable & Sendable>(_: T.Type) -> Prune {

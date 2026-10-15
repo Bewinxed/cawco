@@ -93,9 +93,19 @@ export const SENT = new Set([
  * object schema that declares `beside`, the property `property`. Each is
  * time-boxed: openapi.ts takes it out of the document and compares again,
  * and refuses the bridge once no shipped reader breaks without it.
+ *
+ * With `holds`, the bridge stands in for a new kind of `beside`'s union
+ * that a shipped app reads closed: the document declares the kind, so apps
+ * built from then on read it, but the hub sends it as `property` beside an
+ * empty `beside` instead. Shipped readers are held to what the hub sends
+ * (the union without that kind, {@link asSent}), and the bridge is refused
+ * once sending the kind in `beside` would break none of them: then the
+ * kind goes out where it belongs and `property` goes.
  */
 export interface Bridge {
   beside: string;
+  /** The tag (its `kind`) of `beside`'s union the hub holds back, sending `property` in its place. */
+  holds?: string;
   property: string;
   /** What it is for and when it goes. */
   until: string;
@@ -107,7 +117,88 @@ export const BRIDGES: Bridge[] = [
     until:
       "host mode's address before `origin` (core frames.ts PreviewAddress); it goes in the change that expires TestFlight 20261015",
   },
+  {
+    property: "routineMade",
+    beside: "event",
+    holds: "routine-made",
+    until:
+      "the `routine-made` ThreadEvent kind (core threads.ts), sent as `routineMade` beside a null `event` (hub caw.ts `wireEvent`, dashboard thread-tabs.ts `routineMadeOf`) because TestFlight 20261015 reads `event` closed and would drop the note's thread read; it goes in the change that expires that build (bash apps/apple/scripts/testflight.sh --expire 20261015)",
+  },
 ];
+
+/**
+ * Whether `branch` is the union member tagged `tag` (its `kind` the one
+ * value `tag`), inline or a component `schemas` names.
+ */
+const taggedAs = (
+  branch: unknown,
+  tag: string,
+  schemas: Record<string, unknown>
+): boolean => {
+  const named =
+    isObject(branch) && typeof branch.$ref === "string"
+      ? schemas[branch.$ref.slice(COMPONENT.length)]
+      : branch;
+  if (!(isObject(named) && isObject(named.properties))) {
+    return false;
+  }
+  const { kind } = named.properties;
+  return (
+    isObject(kind) &&
+    Array.isArray(kind.enum) &&
+    kind.enum.length === 1 &&
+    kind.enum[0] === tag
+  );
+};
+
+/**
+ * The document as the hub sends it while `bridge` holds a kind back: in
+ * every object schema that declares both `beside` and `property`, the
+ * member of `beside`'s union tagged `holds` gone. The document unchanged for
+ * a bridge that holds nothing.
+ */
+export const asSent = (document: unknown, bridge: Bridge): unknown => {
+  const { holds } = bridge;
+  if (holds === undefined || !isObject(document)) {
+    return document;
+  }
+  const components = isObject(document.components)
+    ? document.components.schemas
+    : undefined;
+  const schemas = isObject(components) ? components : {};
+  const sent = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map(sent);
+    }
+    if (!isObject(value)) {
+      return value;
+    }
+    const out: Schema = {};
+    for (const [key, item] of Object.entries(value)) {
+      out[key] = sent(item);
+    }
+    const { properties } = out;
+    if (!(
+      isObject(properties) &&
+      bridge.property in properties &&
+      isObject(properties[bridge.beside])
+    )) {
+      return out;
+    }
+    const beside = { ...(properties[bridge.beside] as Schema) };
+    for (const union of ["anyOf", "oneOf"]) {
+      const members = beside[union];
+      if (Array.isArray(members)) {
+        beside[union] = members.filter(
+          (member) => !taggedAs(member, holds, schemas)
+        );
+      }
+    }
+    out.properties = { ...properties, [bridge.beside]: beside };
+    return out;
+  };
+  return sent(document);
+};
 
 /** The document as it would be without `bridge`: the property gone from every schema that has both. */
 export const withoutBridge = (document: unknown, bridge: Bridge): unknown => {
