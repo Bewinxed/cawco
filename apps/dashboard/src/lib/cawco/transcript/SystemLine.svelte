@@ -30,7 +30,7 @@
   import type { Message } from "../types";
   import RoutineMadeActions from "./RoutineMadeActions.svelte";
   import type { HarnessNote } from "./rows";
-  import { CAW_EVENT } from "./voice";
+  import { CAW_EVENT, useVoice } from "./voice";
 
   let {
     message,
@@ -98,6 +98,13 @@
   /** A session made a routine: Keep, Turn off and Open under its line. */
   const routineMade = $derived(
     wokeCaw ? message?.metadata?.routineMade : undefined
+  );
+  /** The pane's word under an event's line (a not-woken note's reason and Try again). */
+  const voice = useVoice();
+  const under = $derived(
+    wokeCaw && message && voice?.event
+      ? { snippet: voice.event, id: message.id }
+      : null
   );
   /**
    * The line a session moved to its machine opens on (core `MOVED_HERE`):
@@ -311,6 +318,9 @@
     {#if routineMade}
       <RoutineMadeActions routine={routineMade} />
     {/if}
+    {#if under}
+      {@render under.snippet(under.id)}
+    {/if}
   </div>
 {:else}
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
@@ -327,6 +337,9 @@
     </span>
     {#if routineMade}
       <RoutineMadeActions routine={routineMade} />
+    {/if}
+    {#if under}
+      {@render under.snippet(under.id)}
     {/if}
   </div>
 {/if}

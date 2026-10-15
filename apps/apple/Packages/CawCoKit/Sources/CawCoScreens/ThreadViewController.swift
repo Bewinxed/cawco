@@ -211,10 +211,12 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         placeSeat()
     }
 
-    /// The tab closed: the plan it followed is let go.
+    /// The tab closed: the plan it followed, and his session it watched, are let go.
     func close() {
         if let followed { hub.plans.unfollow(followed) }
         followed = nil
+        if let hearingLead { hub.sessions.unwatchDelegate(hearingLead) }
+        hearingLead = nil
     }
 
     var restorationValues: [String: Any] { ["draft": composerBinding.draft] }
@@ -268,7 +270,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
             cawReadOn = on
             readCaw()
         }
-        transcriptView.voice = TranscriptVoice(name: "Caw", extras: threadId.map(hub.threads.extras) ?? [:], revision: tasksRead) { [weak self] extras, blockId in
+        transcriptView.voice = TranscriptVoice(name: "Caw", extras: threadId.map(hub.threads.extras) ?? [:], revision: tasksRead + wakesDrawn) { [weak self] extras, blockId in
             self?.accessory(extras, blockId: blockId)
         }
         transcriptView.configure(transcript)
@@ -294,6 +296,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         if off.isHidden != (cannot == nil) { off.isHidden = cannot == nil }
 
         follow(caw?.leadInstanceId)
+        hear()
         syncPlan()
         syncTasks()
 
@@ -379,6 +382,23 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         if let followed { hub.plans.unfollow(followed) }
         followed = lead
         if let lead { hub.plans.follow(lead) }
+    }
+
+    // MARK: His words as he writes them
+
+    /// His session, watched while his turn answers your words here (the
+    /// thread's `hearing`): it is no tab of this app's (ThreadPane.svelte
+    /// `hearingLead`).
+    private var hearingLead: String?
+
+    private func hear() {
+        let lead = thread?.hearing?.instanceId
+        if lead != hearingLead {
+            if let hearingLead { hub.sessions.unwatchDelegate(hearingLead) }
+            hearingLead = lead
+            if let lead { hub.sessions.watchDelegate(lead) }
+        }
+        if let threadId { hub.threads.hear(threadId) }
     }
 
     private func syncPlan() {
@@ -490,6 +510,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     /// and under the Setup thread's newest reply that names files, the way
     /// to the board (ThreadPane.svelte `taskCards`, `folderFiles`).
     private func accessory(_ extras: ThreadExtras, blockId: String) -> UIView? {
+        if let woken = extras.notWoken { return notWoken(woken, note: blockId, again: extras.wakeAgain) }
         let column = UIStackView()
         column.axis = .vertical
         column.spacing = Space.space3
@@ -517,6 +538,57 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
             }
         }
         return column.arrangedSubviews.isEmpty ? nil : column
+    }
+
+    // MARK: Your words he has not read
+
+    /// What Try again last came to, by note: under way, or the refusal.
+    private var wakingAgain: [String: String?] = [:] {
+        didSet { wakesDrawn += 1 }
+    }
+    /// Moves with `wakingAgain`: the notes' lines are drawn again.
+    private var wakesDrawn = 0
+
+    /// A not-woken note's reason, in the hub's words, and the way on with
+    /// the words he has not read where the note still stands for them
+    /// (ThreadPane.svelte `eventUnder`, RowFault).
+    private func notWoken(_ woken: ThreadNotWoken, note: String, again: Bool) -> UIView {
+        let refused = wakingAgain[note] ?? nil
+        let reason = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
+        reason.text = refused ?? "Caw hasn't read your message: \(woken.words)"
+        reason.accessibilityIdentifier = "not-woken-\(woken.reason)"
+        let line = UIStackView(arrangedSubviews: [reason])
+        line.axis = .vertical
+        line.alignment = .leading
+        line.spacing = Space.space1
+        line.isLayoutMarginsRelativeArrangement = true
+        line.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: Space.space2, bottom: 0, trailing: 0)
+        if again {
+            let trying = wakingAgain.keys.contains(note) && refused == nil
+            let button = KitButton.make(trying ? "Waking Caw…" : "Try again", glyph: .refresh, variant: .ghost, height: .xs) { [weak self] in
+                self?.wakeAgain(note)
+            }
+            button.isEnabled = !trying
+            button.accessibilityIdentifier = "wake-again"
+            line.addArrangedSubview(button)
+        }
+        return line
+    }
+
+    private func wakeAgain(_ note: String) {
+        guard let threadId, !projectId.isEmpty, wakingAgain[note] != .some(nil) else { return }
+        wakingAgain[note] = .some(nil)
+        requestRefresh()
+        Task { [weak self, hub, projectId] in
+            do {
+                try await hub.threads.wake(projectId: projectId, threadId: threadId, note: note)
+                self?.wakingAgain[note] = nil
+            } catch {
+                self?.wakingAgain[note] = .some(ThreadsStore.failureWords(error))
+                Self.log.error("thread \(threadId, privacy: .public) not woken again: \(error.localizedDescription, privacy: .public)")
+            }
+            self?.requestRefresh()
+        }
     }
 
     /// The Setup thread's newest reply that names files: setup ends there.

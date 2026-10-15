@@ -54,6 +54,7 @@ import {
   CAW_DENIED_TOOLS,
   type CawHarness,
   type CawInitiated,
+  type CawNotWokenReason,
   type CawRunning,
   type CawView,
   CURATOR_DENIED_TOOLS,
@@ -71,6 +72,7 @@ import {
   type SpawnPayload,
   type ThreadAnswer,
   type ThreadEvent,
+  type ThreadHearing,
   type ThreadMessage,
   type ThreadMessageFrame,
   type ThreadNote,
@@ -420,8 +422,24 @@ const endOf = (item: WorkItemRow): ItemEnd => {
 /** Statuses a lead session cannot be woken from: its row is gone for good. */
 const GONE: ReadonlySet<string> = new Set(["discarded"]);
 
-/** A sentence's closing stop, dropped so a reason sits inside a sentence of ours. */
-const FINAL_STOP = /\.$/;
+/** What a thrown error says. */
+const errorWords = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/** Why an event's wake goes no further while Caw is off. */
+const CAW_OFF = "Caw is off: only your own words wake him.";
+
+/** Why Caw's start failed: refused for want of a machine (`startLead`), else failed on its machine. */
+const startFailure = (error: unknown): CawNotWokenReason =>
+  error instanceof CawRefusal && error.status === 409
+    ? "no-machine"
+    : "could-not-start";
+
+/** The not-woken a thread message is, when it is one (`notWoken`, core threads.ts). */
+const notWokenOf = (row: ThreadMessageRow) =>
+  row.author === "event" && row.event?.kind === "caw"
+    ? row.event.notWoken
+    : undefined;
 
 /** A refusal a route answers with its status. */
 export class CawRefusal extends Error {
@@ -446,7 +464,7 @@ const briefOf = (projectName: string): string =>
     "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
     "Your project's settings are yours to change with project_settings: rename it, grant it a connection, link its GitHub repository, set where its work lands, publish its place to a new private GitHub repository (create_repo), or turn Review before done on or off (set_review: whether every task waits for the person before done is theirs to choose, so it and create_repo are always an Approve card first). Each other change applies at once and is noted in the thread. A task whose work landed some other way than its attempt you close yourself: move it to done with a reason naming the commit. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
-    "When the person writes in a thread, answer in that thread with thread_reply, and name the tasks a reply is about in its `tasks`. A turn their words started that ends without a thread_reply to their thread has what you said in plain text posted there as your reply, so say nothing in plain text you would not say to them.",
+    "When the person writes in a thread, answer them in plain text: what you say in the turn after reading their words is posted in that thread as your reply when the turn ends, and they watch it in the thread as you write it, so say nothing in plain text you would not say to them. When a reply names tasks (its `tasks`, shown as cards) or files you wrote, or belongs in another thread, send it with thread_reply instead: a thread_reply to their thread is your reply there, and what you say in plain text after it stays in your session.",
     "When you need the person's decision, ask with AskUserQuestion, with options; it shows as a card in the thread and their pick comes back to you. Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with the card.",
     "A view-request event is the person asking for a view of the project: it carries how to write one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
     'Judgments go to Jev while the person has connected it; while Jev is off some are yours, and never about your own work. Mark a task `fields: { ready: "yes" }` when an agent can do it from its file alone: the dispatcher starts no other. Rank tasks with `rank`: the dispatcher starts them in that order. Triage the tasks a wake lists for triage. Judge an attempt\'s acceptance criteria when a wake asks you to.',
@@ -688,38 +706,56 @@ export const createCaw = ({
   /**
    * Each lead's turn under way, as far as his words go: `words`, what he
    * said in plain text in it (main loop only); `heard`, by thread, where in
-   * `words` he stood when the turn read your newest words in it; `replied`,
-   * the threads he has answered with thread_reply since. A turn that read
-   * your words and ends without answering them leaves what it said after
-   * reading them in their thread, as his reply ({@link answerUnreplied}):
-   * you read only the thread, so nothing he says to you stays in his
-   * session alone.
+   * `words` he stood when the turn read your newest words in it (`from`),
+   * and the send it read them as (`send`, the row his session's transcript
+   * has of it); `replied`, the threads he has answered with thread_reply
+   * since. A turn that read your words and ends without answering them
+   * leaves what it said after reading them in their thread, as his reply
+   * ({@link answerUnreplied}): you read only the thread, so nothing he says
+   * to you stays in his session alone. Until it does, the thread names that
+   * send ({@link hearingOf}), so it draws his words as he writes them.
    */
   const speech = new Map<
     string,
-    { heard: Map<string, number>; replied: Set<string>; words: string[] }
+    {
+      heard: Map<string, { from: number; send: string }>;
+      replied: Set<string>;
+      words: string[];
+    }
   >();
 
   /**
-   * His turn read a send: one that starts the turn (`started` false) starts
-   * what it says over; your words in a thread (`yours`), read even mid-turn,
-   * are owed an answer from here on, whatever answered that thread before.
+   * His turn read the send `uuid`: one that starts the turn (`started`
+   * false) starts what it says over; your words in a thread (`yours`, its
+   * id), read even mid-turn, are owed an answer from here on, whatever
+   * answered that thread before.
    */
   const heardIn = (
     instanceId: string,
     started: boolean,
-    yours: string | undefined
+    yours: string | undefined,
+    uuid: string
   ): void => {
     const now = (started && speech.get(instanceId)) || {
-      heard: new Map<string, number>(),
+      heard: new Map<string, { from: number; send: string }>(),
       replied: new Set<string>(),
       words: [],
     };
     if (yours) {
-      now.heard.set(yours, now.words.length);
+      now.heard.set(yours, { from: now.words.length, send: uuid });
       now.replied.delete(yours);
     }
     speech.set(instanceId, now);
+  };
+
+  /** The lead turn that has read your words in `threadId` and owes them its answer ({@link speech}). */
+  const hearingOf = (threadId: string): ThreadHearing | undefined => {
+    for (const [instanceId, turn] of speech) {
+      const heard = turn.heard.get(threadId);
+      if (heard && !turn.replied.has(threadId)) {
+        return { instanceId, send: heard.send };
+      }
+    }
   };
 
   /**
@@ -733,7 +769,7 @@ export const createCaw = ({
     if (!turn) {
       return;
     }
-    for (const [threadId, from] of turn.heard) {
+    for (const [threadId, { from }] of turn.heard) {
       const body = turn.words.slice(from).join("\n\n").trim();
       if (!body || turn.replied.has(threadId) || !db.thread(threadId)) {
         continue;
@@ -770,14 +806,18 @@ export const createCaw = ({
     return "ready";
   };
 
-  const summaryOf = (thread: ThreadRow): ThreadSummary => ({
-    id: thread.id,
-    projectId: thread.projectId,
-    title: thread.title,
-    lastAt: thread.updatedAt.getTime(),
-    setup: thread.setup,
-    status: statusOf(thread.id),
-  });
+  const summaryOf = (thread: ThreadRow): ThreadSummary => {
+    const hearing = hearingOf(thread.id);
+    return {
+      ...(hearing ? { hearing } : {}),
+      id: thread.id,
+      projectId: thread.projectId,
+      title: thread.title,
+      lastAt: thread.updatedAt.getTime(),
+      setup: thread.setup,
+      status: statusOf(thread.id),
+    };
+  };
 
   const upsert = (thread: ThreadRow | undefined): void => {
     if (thread) {
@@ -899,7 +939,7 @@ export const createCaw = ({
       return;
     }
     if (wasRead) {
-      heardIn(instanceId, turn.started, yours);
+      heardIn(instanceId, turn.started, yours, uuid);
     }
     const woke = turn.waiting[uuid];
     if (woke === undefined) {
@@ -1145,28 +1185,6 @@ export const createCaw = ({
   };
 
   /**
-   * Past its spend cap the project's Caw takes no turn: true for an event,
-   * which stays in its thread; your words are refused with the cap's
-   * sentence (a thread's words are refused before they are kept,
-   * `listening`). `settle` publishes the wake's thread row either way.
-   */
-  const capHolds = (
-    projectId: string,
-    by: Origin,
-    settle: () => void
-  ): boolean => {
-    const capped = caps.quiets(projectId);
-    if (capped === undefined) {
-      return false;
-    }
-    settle();
-    if (by === "you") {
-      refuse(409, capped);
-    }
-    return true;
-  };
-
-  /**
    * What a wake says: the event, where it was noted, and, with Jev off, the
    * batch of the project's untriaged tasks every wake carries (§5.9 Triage).
    */
@@ -1188,27 +1206,53 @@ export const createCaw = ({
   };
 
   /**
+   * What one wake came to: a model woken, or not and why (`why`, the reason
+   * a thread's not-woken note carries), with what was thrown when something
+   * refused it.
+   */
+  type Woke =
+    | { woke: true }
+    | {
+        thrown?: unknown;
+        why: { reason: CawNotWokenReason; words: string };
+        woke: false;
+      };
+
+  /**
    * The one way anything wakes a project's Caw (§5.3: your message, your ask
    * for a view, the project's setup; an attempt landing or failing, a
    * needs-you item; routines, GitHub events and check results call it the
    * same way). Its note goes into its thread first; then one message to
    * Caw's session, starting the session when it has none, and that thread
    * follows the turn. Your words wake him on or off; an event, only while he
-   * is on. There is no timer behind it. Answers whether a model was woken.
+   * is on. There is no timer behind it. Answers what came of it ({@link Woke});
+   * {@link wake} is its answer as the other wakers take it.
    */
-  const wake = async (projectId: string, event: CawEvent): Promise<boolean> => {
+  const wakeOnce = async (
+    projectId: string,
+    event: CawEvent
+  ): Promise<Woke> => {
     // The thread's row goes out once, with the status this wake leaves it in.
     const settle = (id: string | undefined) =>
       upsert(id ? db.thread(id) : undefined);
     if (event.by === "event" && !projectOf(projectId).caw) {
       settle(event.threadId);
-      return false;
+      return { woke: false, why: { reason: "failed", words: CAW_OFF } };
     }
     const threadId = event.note
       ? noteIn(projectId, event.threadId, event.note, false)
       : event.threadId;
-    if (capHolds(projectId, event.by, () => settle(threadId))) {
-      return false;
+    // Past its spend cap the project's Caw takes no turn: an event stays in
+    // its thread; your words are refused with the cap's sentence (a thread's
+    // words are refused before they are kept, `listening`).
+    const capped = caps.quiets(projectId);
+    if (capped !== undefined) {
+      settle(threadId);
+      return {
+        woke: false,
+        why: { reason: "capped", words: capped },
+        ...(event.by === "you" ? { thrown: new CawRefusal(409, capped) } : {}),
+      };
     }
     const words = await wakeWords(projectId, event, threadId);
     // Inbound events no route took ride on this wake (ingress.ts): taken
@@ -1216,8 +1260,37 @@ export const createCaw = ({
     const inbox = db.ingress.claimInbox(projectId, new Date());
     const text =
       inbox.length > 0 ? `${words}\n\n---\n\n${inboxText(inbox)}` : words;
-    const giveBack = () =>
+    return deliver(projectId, event, threadId, text, inbox.length, (why) => {
       db.ingress.releaseInbox(inbox.map((line) => line.id));
+      settle(threadId);
+      return why;
+    });
+  };
+
+  /**
+   * A wake's message to his session, its words ready: his session (started
+   * for it when he has none), his place's boundary read again, the message,
+   * and its thread following the turn. `notOut` gives back what the wake
+   * took and answers why it went no further.
+   */
+  const deliver = async (
+    projectId: string,
+    event: CawEvent,
+    threadId: string | undefined,
+    text: string,
+    inboxed: number,
+    notOut: (why: Woke & { woke: false }) => Woke
+  ): Promise<Woke> => {
+    const failed = (
+      reason: CawNotWokenReason,
+      words: string,
+      thrown?: unknown
+    ): Woke =>
+      notOut({
+        woke: false,
+        why: { reason, words },
+        ...(thrown === undefined ? {} : { thrown }),
+      });
     let lead: Awaited<ReturnType<typeof leadFor>>;
     try {
       lead = await leadFor(
@@ -1227,33 +1300,40 @@ export const createCaw = ({
         event.routine,
         event.send
       );
+    } catch (error) {
+      return failed(startFailure(error), errorWords(error), error);
+    }
+    if (!lead) {
+      return failed("failed", CAW_OFF);
+    }
+    try {
       // His place's boundary read again before he reads this: what became
       // only its owner's since it started is hidden from him too.
       await placeFresh(lead);
     } catch (error) {
-      giveBack();
-      settle(threadId);
-      throw error;
-    }
-    if (!lead) {
-      giveBack();
-      settle(threadId);
-      return false;
+      return failed("place", errorWords(error), error);
     }
     const sent = lead.started
       ? lead.sent
       : message(lead.row, text, event.by, event.routine, event.send);
     if (!sent) {
       // His session refused it: nothing woke him, and the thread is not his.
-      giveBack();
-      settle(threadId);
-      return false;
+      return failed("not-taken", "His session didn't take the message.");
     }
-    wakeSent(sent, sourceOf(event, inbox.length));
+    wakeSent(sent, sourceOf(event, inboxed));
     if (threadId) {
       followWake(lead.row.id, projectId, event.by, sent, threadId);
     }
-    return true;
+    return { woke: true };
+  };
+
+  /** {@link wakeOnce}, as the wakers that only ask whether he woke take it: what refused it is thrown. */
+  const wake = async (projectId: string, event: CawEvent): Promise<boolean> => {
+    const woke = await wakeOnce(projectId, event);
+    if (!woke.woke && woke.thrown !== undefined) {
+      throw woke.thrown;
+    }
+    return woke.woke;
   };
 
   /**
@@ -1292,41 +1372,51 @@ export const createCaw = ({
    * Your words wake Caw after the answer that keeps them: a thread's send is
    * stored and answered at once, and the wake (his session started, moved
    * or busy, his account at its limit) runs behind it. A wake that does not
-   * go out is said in the thread, in the error formula: what happened, why,
-   * that your words are kept, and how to wake him with them.
+   * go out is noted in the thread as typed data (`notWoken`): why, the
+   * hub's sentence for it, and `unread`, your message he has not read, which
+   * Try again wakes him with ({@link api.wakeAgain}). `settled` is told once
+   * the wake has gone out or been noted.
    */
   const wakeForYou = (
     projectId: string,
     threadId: string,
-    event: CawEvent
+    unread: string,
+    event: CawEvent,
+    settled?: () => void
   ): void => {
-    const notWoken = (why: string) => {
+    const notWoken = (reason: CawNotWokenReason, words: string) => {
+      console.warn(
+        `[caw] ${projectId}: your words in thread ${threadId} did not wake Caw (${reason}): ${words}`
+      );
+      sayNestedBoundaryFix(words);
       // A project deleted meanwhile has no thread to say it in.
       if (!db.project(projectId)) {
         return;
       }
       noteIn(projectId, threadId, {
         title: "Caw · not woken",
-        body: `Caw hasn't read your message: ${why.replace(FINAL_STOP, "")}. Your message is kept in this thread. Write again to wake him with it.`,
-        event: { kind: "caw", what: "not-woken" },
+        event: {
+          kind: "caw",
+          what: "not-woken",
+          notWoken: { message: unread, reason, words },
+        },
       });
     };
-    const settled = wake(projectId, event)
-      .then((woke) => {
-        if (!woke) {
-          notWoken("his session didn't take it");
-        }
-      })
-      .catch((error: unknown) => {
-        const why = error instanceof Error ? error.message : String(error);
-        console.warn(
-          `[caw] ${projectId}: your words in thread ${threadId} did not wake Caw: ${why}`
-        );
-        sayNestedBoundaryFix(why);
-        notWoken(why);
-      });
-    event.send?.waking(settled);
+    const woken = wakeOnce(projectId, event)
+      .then(
+        (woke) => {
+          if (!woke.woke) {
+            notWoken(woke.why.reason, woke.why.words);
+          }
+        },
+        (error: unknown) => notWoken("failed", errorWords(error))
+      )
+      .finally(() => settled?.());
+    event.send?.waking(woken);
   };
+
+  /** Threads a Try again is waking Caw for now ({@link api.wakeAgain}): one at a time each. */
+  const wakingAgain = new Set<string>();
 
   /** Logs a wake that failed: an event is never lost silently. */
   const wakeQuietly = (projectId: string, event: CawEvent): void => {
@@ -1628,7 +1718,7 @@ export const createCaw = ({
 
   /** What Caw reads when you write: the thread, and your words. */
   const yourWords = (thread: ThreadRow, body: string, first: boolean) =>
-    `${first ? "You started a thread" : "You wrote in the thread"} “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nAnswer with thread_reply({ thread: "${thread.id}", body }).`;
+    `${first ? "You started a thread" : "You wrote in the thread"} “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nAnswer in plain text: it is posted in this thread as your reply, and the person watches it as you write it. When your reply names tasks or files, send it with thread_reply({ thread: "${thread.id}", body, tasks, files }) instead.`;
 
   /** What Caw reads when you ask for a view: your words, then how a view is written. */
   const viewRequest = (thread: ThreadRow, body: string) =>
@@ -2011,7 +2101,7 @@ export const createCaw = ({
       }
       listening(projectId);
       const opened = open(projectId, body, id);
-      wakeForYou(projectId, opened.row.id, {
+      wakeForYou(projectId, opened.row.id, opened.said.message.id, {
         by: "you",
         text: yourWords(opened.row, body, true),
         threadId: opened.row.id,
@@ -2060,13 +2150,63 @@ export const createCaw = ({
         ...(id ? { id } : {}),
       });
       const out = said(added.thread, added.message, false);
-      wakeForYou(projectId, threadId, {
+      wakeForYou(projectId, threadId, added.message.id, {
         by: "you",
         text: yourWords(added.thread, body, false),
         threadId,
         ...(person ? { send: person } : {}),
       });
       return { ...out, thread: summaryOf(added.thread) };
+    },
+
+    /**
+     * Try again on a thread's not-woken note: Caw woken with your newest
+     * words in the thread, the message a wake failed to carry, as you wrote
+     * them, behind the answer ({@link wakeForYou}); nothing of yours is
+     * added. Refused while his turn is on the thread, when your newest words
+     * are not ones a wake failed to carry or he has answered them, and while
+     * he cannot read them (`listening`). A wake that fails again is noted
+     * again. Answers the thread.
+     */
+    wakeAgain(projectId: string, threadId: string): ThreadSummary {
+      const thread = threadIn(projectId, threadId);
+      if (wakingAgain.has(threadId) || statusOf(threadId) === "working") {
+        refuse(409, "Caw is already reading this thread.");
+      }
+      const lines = db.threadMessages(threadId);
+      const at = lines.findLastIndex(
+        (line) => line.author === "you" && !line.answer
+      );
+      const yours = lines[at];
+      const after = lines.slice(at + 1);
+      if (!(
+        yours &&
+        after.some((line) => notWokenOf(line)?.message === yours.id) &&
+        !after.some((line) => line.author === "caw")
+      )) {
+        return refuse(
+          409,
+          "Caw has your newest message in this thread already. Write to him to wake him again."
+        );
+      }
+      listening(projectId);
+      wakingAgain.add(threadId);
+      wakeForYou(
+        projectId,
+        threadId,
+        yours.id,
+        {
+          by: "you",
+          text: yourWords(
+            thread,
+            yours.body,
+            !lines.slice(0, at).some((line) => line.author !== "event")
+          ),
+          threadId,
+        },
+        () => wakingAgain.delete(threadId)
+      );
+      return summaryOf(thread);
     },
 
     /**
@@ -2155,7 +2295,7 @@ export const createCaw = ({
       const body = bodyOf(raw);
       listening(projectId);
       const opened = open(projectId, body);
-      wakeForYou(projectId, opened.row.id, {
+      wakeForYou(projectId, opened.row.id, opened.said.message.id, {
         by: "you",
         text: viewRequest(opened.row, body),
         threadId: opened.row.id,
@@ -2609,10 +2749,12 @@ export const createCaw = ({
               ...(tasks?.length ? { tasks: [...new Set(tasks)] } : {}),
               ...(named.length ? { files: named } : {}),
             });
-            said(added.thread, added.message);
+            // Answered before the thread's row goes out, so the row no
+            // longer names his turn as hearing it (`hearingOf`).
             if (actor) {
               speech.get(actor.id)?.replied.add(thread);
             }
+            said(added.thread, added.message);
             return ok({ ok: true, message: added.message.id });
           }
         ),
@@ -2834,6 +2976,14 @@ export const cawRoutes = (caw: Caw) =>
         }
       }
     )
+    // Try again on a not-woken note: Caw woken with the words he has not read.
+    .post("/api/projects/:id/threads/:threadId/wake", ({ params }) => {
+      try {
+        return caw.wakeAgain(params.id, params.threadId);
+      } catch (error) {
+        return answer(error);
+      }
+    })
     .post(
       "/api/projects/:id/view-requests",
       { body: t.Object({ text: t.String() }) },

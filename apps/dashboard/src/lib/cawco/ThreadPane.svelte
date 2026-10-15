@@ -43,12 +43,16 @@
     cawco,
     cawOf,
     readThread,
+    readTranscript,
     type SendExtras,
     type SessionState,
     sayInThread,
     startThread,
     submitCommand,
+    unwatchDelegate,
     unwatchPlan,
+    wakeThread,
+    watchDelegate,
     watchPlan,
   } from "./client.svelte";
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
@@ -66,6 +70,7 @@
     type TaskSummary,
     type TaskView,
   } from "./project-tasks";
+  import RowFault from "./RowFault.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskSheet from "./tasks/TaskSheet.svelte";
@@ -221,6 +226,64 @@
    */
   let withdrawn = $state<Message[]>([]);
 
+  // --- his words as he writes them ----------------------------------------------
+
+  /**
+   * His turn that has read your words here and not answered them yet: his
+   * session, and the send it read them as (core `ThreadHearing`). Declared
+   * before the transcript's effect that reads what it gives.
+   */
+  const hearing = $derived(thread?.hearing ?? null);
+  const hearingLead = $derived(hearing?.instanceId ?? null);
+  // His session is no tab of this dashboard's: its frames are followed while
+  // his turn answers this thread, and its newest page read to stand on.
+  $effect(() => {
+    const id = hearingLead;
+    if (!id) {
+      return;
+    }
+    untrack(() => {
+      watchDelegate(id);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget: the read adopts the page and the stream follows it
+      void readTranscript(id);
+    });
+    return () => unwatchDelegate(id);
+  });
+  /**
+   * What he has said since reading your words, as the hub posts it here as
+   * his reply when his turn ends (caw.ts `answerUnreplied`): his plain words
+   * in his session after the send `hearing` names, the one he is writing
+   * last. None once a reply of his stands after your newest words: it lands
+   * a frame before the thread's row lets go of the hearing, and the live
+   * row settles into it.
+   */
+  const liveWords = $derived.by(() => {
+    if (!hearing) {
+      return "";
+    }
+    const newest = (messages ?? []).findLast(
+      (message) => message.author !== "event"
+    );
+    const lead = cawco.session(hearing.instanceId);
+    const at = lead?.blocks.findIndex((block) => block.id === hearing.send);
+    if (!(lead && at !== undefined && at >= 0 && newest?.author === "you")) {
+      return "";
+    }
+    const words = lead.blocks
+      .slice(at + 1)
+      .filter(
+        (block) =>
+          block.type === "assistant" &&
+          !block.parentToolUseId &&
+          block.content.trim()
+      )
+      .map((block) => block.content);
+    if (lead.streaming) {
+      words.push(lead.streaming);
+    }
+    return words.join("\n\n").trim();
+  });
+
   /** The thread as the transcript's session: one object, its fields kept current. */
   const session = $state<SessionState>(
     untrack(() => ({ ...blankSession(viewId), harness: "claude" }))
@@ -238,6 +301,7 @@
     session.messages = blocks;
     session.initialized = messages !== null;
     session.busy = thread?.status === "working";
+    session.streaming = liveWords;
     session.lastActivityAt = thread ? new Date(thread.lastAt) : null;
   });
 
@@ -393,7 +457,46 @@
   const taskHref = (id: string) =>
     `/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(id)}`;
 
-  setVoice({ face, tasks: taskCards, files: folderFiles });
+  // --- your words he has not read ----------------------------------------------
+
+  /** A thread message's not-woken data, when it is a not-woken note (core `CawNotWoken`). */
+  const notWokenOf = (message: ThreadMessage | undefined) =>
+    message?.author === "event" && message.event?.kind === "caw"
+      ? message.event.notWoken
+      : undefined;
+  /** The note Try again was pressed on and went: its wake is under way, so it is not offered twice. */
+  let retried = $state<string | null>(null);
+  /**
+   * The one not-woken note that offers Try again: the newest, about your
+   * newest words, with no reply of his after them, while no turn of his is
+   * on the thread (the hub refuses the rest the same way).
+   */
+  const retryable = $derived.by(() => {
+    const said = messages ?? [];
+    if (thread?.status === "working") {
+      return null;
+    }
+    const at = said.findLastIndex(
+      (message) => message.author === "you" && !message.answer
+    );
+    const yours = said[at];
+    const after = said.slice(at + 1);
+    const note = after.findLast(
+      (message) => notWokenOf(message)?.message === yours?.id
+    );
+    return yours &&
+      note &&
+      note.id !== retried &&
+      !after.some((message) => message.author === "caw")
+      ? note.id
+      : null;
+  });
+  async function wakeAgain(noteId: string): Promise<void> {
+    await wakeThread(projectId, threadId ?? "");
+    retried = noteId;
+  }
+
+  setVoice({ event: eventUnder, face, tasks: taskCards, files: folderFiles });
 
   /**
    * The Setup thread's newest reply that names files is where setup ends:
@@ -546,6 +649,23 @@
 
 {#snippet face(live: boolean)}
   <CawFace size={18} status={live ? "working" : "ready"} />
+{/snippet}
+
+{#snippet eventUnder(id: string)}
+  <!-- A not-woken note: why, in the hub's words, and the way on with the
+       words he has not read (only on the note that still stands for them). -->
+  {@const why = notWokenOf(
+    (messages ?? []).find((message) => message.id === id)
+  )}
+  {#if why}
+    <RowFault
+      class="not-woken"
+      again={retryable === id ? () => wakeAgain(id) : undefined}
+      againPending="Waking Caw…"
+      data-not-woken={why.reason}
+      reason="Caw hasn't read your message: {why.words}"
+    />
+  {/if}
 {/snippet}
 
 {#snippet taskCards(ids: string[])}
@@ -753,6 +873,11 @@
      on a narrow screen) and the answered question's card stands on it. */
   .state :global(.tx-columns) {
     --x-rail: 0px;
+  }
+  /* A not-woken note's reason and Try again under its line, from where the
+     line's words start inside its dashed box (SystemLine `.note[data-code]`). */
+  .state :global(.not-woken) {
+    --fault-indent: var(--space-2);
   }
   .veil {
     position: absolute;

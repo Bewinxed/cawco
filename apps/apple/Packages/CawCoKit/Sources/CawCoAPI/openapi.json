@@ -6691,6 +6691,91 @@
         }
       }
     },
+    "/api/projects/{id}/threads/{threadId}/wake": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdThreadsByThreadIdWake",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdThreadsByThreadIdWake 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdThreadsByThreadIdWake 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdThreadsByThreadIdWake 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdThreadsByThreadIdWake 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdThreadsByThreadIdWake 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiProjectsByIdThreadsByThreadIdWake 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/view-requests": {
       "post": {
         "parameters": [
@@ -29136,6 +29221,10 @@
         "description": "A thread as the project's list and the `thread.upsert` frame carry it.",
         "type": "object",
         "properties": {
+          "hearing": {
+            "$ref": "#/components/schemas/ThreadHearing",
+            "description": "While his turn has read your words here and not yet answered them: what\nhe says in plain text after that send in his session is posted here as\nhis reply when the turn ends, so the thread draws it as he writes it.\nAbsent otherwise."
+          },
           "id": {
             "type": "string"
           },
@@ -29164,6 +29253,22 @@
           "setup",
           "status",
           "title"
+        ]
+      },
+      "ThreadHearing": {
+        "description": "Caw's turn answering your words in a thread, before his reply lands: his\nsession, and the send his turn read your words as.",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "send": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "send"
         ]
       },
       "ThreadStatus": {
@@ -30166,6 +30271,10 @@
                       "caw"
                     ]
                   },
+                  "notWoken": {
+                    "$ref": "#/components/schemas/CawNotWoken",
+                    "description": "Your words that did not wake him: on every `not-woken` event, and only there."
+                  },
                   "what": {
                     "enum": [
                       "could-not-start",
@@ -30462,6 +30571,40 @@
           "cancelled",
           "done",
           "failed"
+        ]
+      },
+      "CawNotWoken": {
+        "description": "Your words in a thread that did not wake Caw (a `not-woken` event): why,\nthe hub's sentence for it, and your message he has not read, which Try\nagain (`POST /api/projects/:id/threads/:threadId/wake`) wakes him with.",
+        "type": "object",
+        "properties": {
+          "message": {
+            "description": "Your message in the thread he has not read.",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/CawNotWokenReason"
+          },
+          "words": {
+            "description": "The cause, in the hub's words (\"No machine is online, so Caw can't start.\").",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "reason",
+          "words"
+        ]
+      },
+      "CawNotWokenReason": {
+        "description": "Why your words did not wake Caw: `no-machine`, no machine is online for\nhim; `capped`, the project is past its spend cap; `could-not-start`, his\nsession could not be started; `place`, his place's boundary could not be\nheld on his machine; `not-taken`, his session did not take the message;\n`failed`, anything else (its words say what).",
+        "type": "string",
+        "enum": [
+          "capped",
+          "could-not-start",
+          "failed",
+          "no-machine",
+          "not-taken",
+          "place"
         ]
       },
       "RoutineMadeThreadEvent": {
@@ -35498,6 +35641,11 @@
                   "reason": {
                     "description": "What the hub got from the step that failed.",
                     "type": "string"
+                  },
+                  "waits": {
+                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up): the move goes when that ends, or after\n{@link MOVE_LATER_WAIT_MS} at the latest, ending it.",
+                    "const": true,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -41211,6 +41359,11 @@
                   "reason": {
                     "description": "What the hub got from the step that failed.",
                     "type": "string"
+                  },
+                  "waits": {
+                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up): the move goes when that ends, or after\n{@link MOVE_LATER_WAIT_MS} at the latest, ending it.",
+                    "const": true,
+                    "type": "boolean"
                   }
                 },
                 "required": [

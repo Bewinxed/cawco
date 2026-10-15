@@ -59,6 +59,8 @@ public struct ThreadNote: Sendable, Equatable {
     /// Your answer to his question: the question's JSON, and the answer's.
     let question: Data?
     let answer: Data?
+    /// A not-woken note's data: your words he has not read, and why.
+    public let notWoken: ThreadNotWoken?
 
     init?(_ raw: [String: Any]) {
         guard let id = raw["id"] as? String, let threadId = raw["threadId"] as? String else { return nil }
@@ -77,6 +79,7 @@ public struct ThreadNote: Sendable, Equatable {
         files = raw["files"] as? [String] ?? []
         question = (raw["question"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         answer = (raw["answer"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+        notWoken = ((raw["event"] as? [String: Any])?["notWoken"] as? [String: Any]).flatMap(ThreadNotWoken.init)
     }
 
     /// A generated message (a frame's, a read's) as one note.
@@ -136,11 +139,33 @@ public struct ThreadNote: Sendable, Equatable {
     public static let cawEvent = "caw.event"
 }
 
-/// What a Caw reply carries under it, by its block's id: the tasks it is
-/// about and the files it wrote (ThreadPane.svelte `setVoice`).
+/// Your words in a thread that did not wake Caw (core threads.ts
+/// `CawNotWoken`): the message he has not read, why, and the hub's sentence
+/// for it.
+public struct ThreadNotWoken: Sendable, Equatable {
+    public let message: String
+    /// `no-machine`, `capped`, `could-not-start`, `place`, `not-taken` or `failed`.
+    public let reason: String
+    public let words: String
+
+    init?(_ raw: [String: Any]) {
+        guard let message = raw["message"] as? String, let reason = raw["reason"] as? String,
+              let words = raw["words"] as? String else { return nil }
+        self.message = message
+        self.reason = reason
+        self.words = words
+    }
+}
+
+/// What a message carries under it, by its block's id (ThreadPane.svelte
+/// `setVoice`): a Caw reply's tasks and the files it wrote; a not-woken
+/// note's reason, and whether Try again stands under it.
 public struct ThreadExtras: Sendable, Equatable {
     public let tasks: [String]
     public let files: [String]
+    public let notWoken: ThreadNotWoken?
+    /// The note is the one Try again wakes Caw from (ThreadPane.svelte `retryable`).
+    public let wakeAgain: Bool
 }
 
 /// Every project's threads with its Caw, and the messages of each thread
@@ -178,6 +203,7 @@ public final class ThreadsStore {
         messages = [:]
         withdrawn = [:]
         transcripts = [:]
+        retried = []
         read = false
         onThreads()
     }
@@ -326,13 +352,77 @@ public final class ThreadsStore {
         return made
     }
 
-    /// What Caw's replies carry under them, by block id.
+    /// What Caw's replies and the not-woken notes carry under them, by block id.
     public func extras(_ threadId: String) -> [String: ThreadExtras] {
+        let again = wakeAgainNote(threadId)
         var out: [String: ThreadExtras] = [:]
-        for note in messages[threadId] ?? [] where note.author == .caw && (!note.tasks.isEmpty || !note.files.isEmpty) {
-            out[note.id] = ThreadExtras(tasks: note.tasks, files: note.files)
+        for note in messages[threadId] ?? [] {
+            if note.author == .caw, !note.tasks.isEmpty || !note.files.isEmpty {
+                out[note.id] = ThreadExtras(tasks: note.tasks, files: note.files, notWoken: nil, wakeAgain: false)
+            } else if let woken = note.notWoken {
+                out[note.id] = ThreadExtras(tasks: [], files: [], notWoken: woken, wakeAgain: note.id == again)
+            }
         }
         return out
+    }
+
+    /// His words as he writes them, while his turn answers your words in this
+    /// thread (ThreadPane.svelte `liveWords`), as the thread's live tail: his
+    /// plain words in his session after the send `hearing` names, the one he
+    /// is writing last, as the hub posts them as his reply when the turn
+    /// ends; none once a reply of his stands after your newest words. The
+    /// thread screen watches his session while `hearing` names it.
+    public func hear(_ threadId: String) {
+        guard let transcript = transcripts[threadId] else { return }
+        let thread = byId[threadId]
+        let busy = thread?.status == .working
+        var words = ""
+        if let hearing = thread?.hearing, let lead = hub.sessions.transcripts[hearing.instanceId],
+           (messages[threadId] ?? []).last(where: { $0.author != .event })?.author == .you,
+           let at = lead.blocks.firstIndex(where: { $0.id == hearing.send }) {
+            var said = lead.blocks[(at + 1)...]
+                .filter { $0._type.value3 == .assistant && $0.parentToolUseId == nil }
+                .map(\.content)
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if let streaming = lead.tail?.streaming, !streaming.isEmpty { said.append(streaming) }
+            words = said.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard transcript.tail?.streaming != words || transcript.tail?.busy != busy else { return }
+        let raw: [String: Any] = [
+            "busy": busy, "streaming": words, "streams": [String: Any](),
+            "thinkingClosing": false, "thinkingSince": NSNull(), "thinkingStream": "",
+        ]
+        transcript.tail = (try? JSONSerialization.data(withJSONObject: raw))
+            .flatMap { try? Wire.decoder().decode(Components.Schemas.TranscriptTail.self, from: $0) }
+    }
+
+    /// Not-woken notes Try again was pressed on and went: their wake is under way.
+    private var retried: Set<String> = []
+
+    /// The one not-woken note that offers Try again (ThreadPane.svelte
+    /// `retryable`): the newest, about your newest words, with no reply of
+    /// his after them, while no turn of his is on the thread.
+    private func wakeAgainNote(_ threadId: String) -> String? {
+        let notes = messages[threadId] ?? []
+        guard byId[threadId]?.status != .working,
+              let at = notes.lastIndex(where: { $0.author == .you && $0.answer == nil }) else { return nil }
+        let yours = notes[at]
+        let after = notes[(at + 1)...]
+        guard !after.contains(where: { $0.author == .caw }),
+              let note = after.last(where: { $0.notWoken?.message == yours.id }),
+              !retried.contains(note.id) else { return nil }
+        return note.id
+    }
+
+    /// Try again on a not-woken note (`wakeThread`): Caw woken with your
+    /// words he has not read; nothing of yours is added. The thread's frames
+    /// carry what comes of it.
+    public func wake(projectId: String, threadId: String, note: String) async throws {
+        guard let client = hub.client else { throw TaskRefusal(message: Self.noHub) }
+        let output = try await client.postApiProjectsByIdThreadsByThreadIdWake(path: .init(id: projectId, threadId: threadId))
+        guard case .ok = output else { throw await TaskRefusal.reading(output) }
+        retried.insert(note)
+        log.notice("woke Caw again in thread \(threadId, privacy: .public) from note \(note, privacy: .public)")
     }
 
     private func draw(_ threadId: String, history: Bool) {

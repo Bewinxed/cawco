@@ -27,6 +27,7 @@ typeOverrides:
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawHarness: OpenEnums.CawHarness
+    CawNotWokenReason: OpenEnums.CawNotWokenReason
     CawRunningKind: OpenEnums.CawRunningKind
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage

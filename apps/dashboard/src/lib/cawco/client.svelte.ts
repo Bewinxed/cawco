@@ -5570,6 +5570,22 @@ export async function sayInThread(
   return said;
 }
 
+/**
+ * Try again on a thread's not-woken note: Caw woken with your newest words
+ * in it, the ones a wake failed to carry; nothing of yours is added. The
+ * thread's frames carry what comes of it (working, his reply, or a new
+ * not-woken note), so the answer is not adopted over them.
+ */
+export async function wakeThread(
+  projectId: string,
+  threadId: string
+): Promise<void> {
+  await askHub<ThreadSummary>(
+    `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/wake`,
+    json("POST", {})
+  );
+}
+
 /** "Ask Caw for a view": a new thread with your words, Caw woken to draft it. */
 export async function requestView(
   projectId: string,

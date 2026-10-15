@@ -770,6 +770,56 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/CawNotWokenReason`.
+    public enum CawNotWokenReason: OpenEnum {
+        case capped
+        case couldNotStart
+        case failed
+        case noMachine
+        case notTaken
+        case place
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "capped": self = .capped
+            case "could-not-start": self = .couldNotStart
+            case "failed": self = .failed
+            case "no-machine": self = .noMachine
+            case "not-taken": self = .notTaken
+            case "place": self = .place
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .capped: "capped"
+            case .couldNotStart: "could-not-start"
+            case .failed: "failed"
+            case .noMachine: "no-machine"
+            case .notTaken: "not-taken"
+            case .place: "place"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.capped, .couldNotStart, .failed, .noMachine, .notTaken, .place]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/CawRunningKind`.
     public enum CawRunningKind: OpenEnum {
         case attempt

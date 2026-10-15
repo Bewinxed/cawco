@@ -63,8 +63,24 @@ export type CawInitiated = "finish" | "stop";
  */
 export type ThreadStatus = "working" | "needs-you" | "ready";
 
+/**
+ * Caw's turn answering your words in a thread, before his reply lands: his
+ * session, and the send his turn read your words as.
+ */
+export interface ThreadHearing {
+  instanceId: string;
+  send: string;
+}
+
 /** A thread as the project's list and the `thread.upsert` frame carry it. */
 export interface ThreadSummary {
+  /**
+   * While his turn has read your words here and not yet answered them: what
+   * he says in plain text after that send in his session is posted here as
+   * his reply when the turn ends, so the thread draws it as he writes it.
+   * Absent otherwise.
+   */
+  hearing?: ThreadHearing;
   id: string;
   /** When its newest message was added, ms epoch. */
   lastAt: number;
@@ -197,6 +213,8 @@ export type ThreadEvent =
       /** The command or file of one of Caw's gated calls; absent for a wake. */
       command?: string;
       kind: "caw";
+      /** Your words that did not wake him: on every `not-woken` event, and only there. */
+      notWoken?: CawNotWoken;
       what:
         | "not-woken"
         | "could-not-start"
@@ -278,6 +296,34 @@ export interface RoutineMadeEvent {
 /** {@link RoutineMadeEvent} as a ThreadEvent kind. */
 export interface RoutineMadeThreadEvent extends RoutineMadeEvent {
   kind: "routine-made";
+}
+
+/**
+ * Why your words did not wake Caw: `no-machine`, no machine is online for
+ * him; `capped`, the project is past its spend cap; `could-not-start`, his
+ * session could not be started; `place`, his place's boundary could not be
+ * held on his machine; `not-taken`, his session did not take the message;
+ * `failed`, anything else (its words say what).
+ */
+export type CawNotWokenReason =
+  | "no-machine"
+  | "capped"
+  | "could-not-start"
+  | "place"
+  | "not-taken"
+  | "failed";
+
+/**
+ * Your words in a thread that did not wake Caw (a `not-woken` event): why,
+ * the hub's sentence for it, and your message he has not read, which Try
+ * again (`POST /api/projects/:id/threads/:threadId/wake`) wakes him with.
+ */
+export interface CawNotWoken {
+  /** Your message in the thread he has not read. */
+  message: string;
+  reason: CawNotWokenReason;
+  /** The cause, in the hub's words ("No machine is online, so Caw can't start."). */
+  words: string;
 }
 
 /** A note in a thread as its writers give it: one line, its fold, and what it is. */

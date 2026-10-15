@@ -95,7 +95,12 @@ nonisolated struct Builder {
         case "user.peer", "user.rule", "user.delegate_ask":
             return [Item(id: key, top: Space.space4, kind: .peer(block), print: Self.print(block))]
         default:
-            return [Item(id: key, top: gap, kind: .system(block), print: Self.print(block))]
+            let line = Item(id: key, top: gap, kind: .system(block), print: Self.print(block))
+            // What a thread's event carries under its line: a not-woken
+            // note's reason and Try again (SystemLine.svelte `voice.event`).
+            guard let carried = extras[block.id], let woken = carried.notWoken else { return [line] }
+            let print = "voice:\(voiceRevision):\(woken.reason)|\(woken.words)|\(carried.wakeAgain)"
+            return [line, Item(id: "\(key):voice", top: Space.space1, kind: .voice(block.id, carried), print: print)]
         }
     }
 
