@@ -98,10 +98,12 @@ bash apps/apple/scripts/testflight.sh --mac --commit <sha> --notes notes.md  # t
 bash apps/apple/scripts/build-both.sh both --compile-only
 ```
 
-An upload archives the commit it names (on origin/main), never whatever main is.
+An upload archives the commit it names (on origin/main), never whatever main is,
+and refuses to start from a checkout with uncommitted or untracked work.
 Before anything reaches the Mac it runs that commit's `bun run typecheck` (the
 wire against every shipped build, migrations, roles, tools) and `bun run lint`
-in a checkout of it, and holds the app to the newest published nightly's hub
+in a worktree of it at `~/.worktrees/release-<sha>-testflight`, removed when the
+run ends, and holds the app to the newest published nightly's hub
 (`packages/hub/scripts/wire-compat.ts --app <sha> --hub <nightly>`): an app
 that cannot read the hub people run waits for a nightly that can. The archive is
 the app's compile; nothing uploads unless it succeeds. Once the archive has its

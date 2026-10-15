@@ -90,7 +90,7 @@ const hubLandLine = (
         ? `${opening} Nothing is pushed: when finish_item's checks pass, your outputs (${outputs.join(", ")}) are collected into the project's folder, and a missing one comes back to you like a failing check. They need not be committed.${compare}`
         : `${opening} Nothing is pushed and nothing is collected: the hub runs finish_item's checks and reports.${compare}`;
     default:
-      return `${opening} Commit your work and do not push: when finish_item's checks pass, the hub rebases your commits onto origin/${base}, runs the checks again if ${base} moved, and pushes to ${base}.${outputsSaid}${compare}`;
+      return `${opening} Commit your work and do not push: when finish_item's checks pass, the hub rebases your commits onto origin/${base}, runs the checks again if ${base} moved, runs the repository's \`lint:changed\` and \`typecheck\` scripts (those its package.json defines) on the result, and pushes to ${base}.${outputsSaid}${compare}`;
   }
 };
 

@@ -117,6 +117,7 @@ import { leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
   land,
+  landGateChecks,
   landingQueue,
   openPullRequest,
   pushBranch,
@@ -3819,6 +3820,8 @@ export const createWorkItems = ({
     const { base } = workspace;
     /** What the recheck after a rebase installed first, for the landing line. */
     let installed = "";
+    /** The gate scripts that ran and passed, for the landing line. */
+    let gated: string[] = [];
     const outcome = await land<CheckRun>(base, {
       run: runIn(workspace),
       recheck: async () => {
@@ -3829,6 +3832,18 @@ export const createWorkItems = ({
           .join("");
         return runFailed(again) ? again : undefined;
       },
+      // The repository's lint and typecheck on the commit about to be
+      // pushed (landing.ts LAND_GATE_SCRIPTS): run as checks are, so a
+      // lockfile the rebase moved is installed first.
+      gate: async () => {
+        const run = await runChecks(
+          workspace,
+          item,
+          await landGateChecks(runIn(workspace))
+        );
+        gated = run.outcomes.map((each) => each.check.name);
+        return runFailed(run) ? run : undefined;
+      },
       queue: landings,
       skip: item.outputs ?? [],
       ...(item.projectId ? { repo: item.projectId } : {}),
@@ -3837,7 +3852,7 @@ export const createWorkItems = ({
       case "landed":
         return {
           kind: "done",
-          line: `Landed on ${base} at ${outcome.sha.slice(0, 9)}${outcome.rebased ? `, rebased onto the newer ${base} with the checks run again${installed}` : ""}.`,
+          line: `Landed on ${base} at ${outcome.sha.slice(0, 9)}${outcome.rebased ? `, rebased onto the newer ${base} with the checks run again${installed}` : ""}${gated.length > 0 ? `; ${gated.join(" and ")} passed on it first` : ""}.`,
         };
       case "nothing":
         return {
@@ -3861,6 +3876,16 @@ export const createWorkItems = ({
         return {
           kind: "retry",
           text: `${base} had moved, so the hub rebased your commits onto it and ran the checks again. ${head} Your branch is now on top of origin/${base}. Fix the cause and call finish_item again.\n\n${lines}`,
+        };
+      }
+      case "gate-failed": {
+        const { lines } = failedRun(outcome.failing);
+        const failing = outcome.failing.outcomes
+          .filter((each) => !each.passed)
+          .map((each) => each.check.name);
+        return {
+          kind: "retry",
+          text: `The checks passed, but the work did not land: before pushing to ${base}, the hub runs the repository's lint and typecheck on your commits as they stand on top of origin/${base}, and ${failing.length > 0 ? failing.join(" and ") : "the dependency install"} failed. Your branch is now on top of origin/${base}. Fix it, commit, and call finish_item again.\n\n${lines}`,
         };
       }
       default:

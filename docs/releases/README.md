@@ -1,10 +1,15 @@
 # Release notes
 
 Every build carries its own notes. A stable release reads `docs/releases/<version>.md`.
-A nightly takes them from a file: `bun scripts/release.ts --commit REF --channel nightly
+A nightly takes them from a file: `bun scripts/release.ts --commit <sha> --channel nightly
 --output /abs/path --notes /abs/notes.md`. Every TestFlight build takes them too:
 `apps/apple/scripts/testflight.sh --commit <sha> --notes <file>`. To correct a build that
 has already shipped, run `testflight.sh --set-notes <build> <file>`.
+
+Both build exactly the commit they name, which must be on origin/main, each in a worktree of
+it under `~/.worktrees/release-<sha>…` that it makes and removes itself, and both refuse to
+run from a checkout with uncommitted or untracked work. Run them from any clean checkout; no
+wrapper script is needed around them.
 
 What every shipped build came from is recorded as a git tag on its commit: a published
 nightly as `nightly-<count>-<commit>` (`release.ts --publish`), a TestFlight build as

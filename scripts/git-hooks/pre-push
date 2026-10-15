@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# The repository's pre-push hook. `bun install` installs it: package.json's
+# `prepare` (scripts/git-hooks/install.ts) copies it into the clone's hooks
+# directory, so edit it here and run `bun install` again.
+#
+# A push that updates main runs the land gate, the same two checks the hub
+# runs before it lands a work item (packages/hub/src/landing.ts
+# LAND_GATE_SCRIPTS): `bun run lint:changed` and `bun run typecheck`. They run
+# on this checkout, so the commit pushed must be its HEAD, with nothing
+# uncommitted or untracked beside it (a file left out of the commit can make
+# the typecheck pass here and fail on main). Pushes to other branches, and
+# deletions, pass untouched. The hub's own pushes run with hooks off
+# (packages/core/src/safe-git.ts), after it has run the gate itself.
+#
+# Skipped only with CAWCO_SKIP_PRE_PUSH=1 in the push's environment.
+set -euo pipefail
+
+SKIP='CAWCO_SKIP_PRE_PUSH=1'
+ZERO='^0+$'
+
+pushed=
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+  if [[ $remote_ref == refs/heads/main && ! $local_sha =~ $ZERO ]]; then
+    pushed=$local_sha
+  fi
+done
+if [[ -z $pushed ]]; then
+  exit 0
+fi
+if [[ -n ${CAWCO_SKIP_PRE_PUSH:-} ]]; then
+  echo "pre-push: lint and typecheck skipped for main ($SKIP is set)" >&2
+  exit 0
+fi
+
+refuse() {
+  echo "pre-push: not pushing ${pushed:0:12} to main: $1" >&2
+  echo "pre-push: to push without the checks: $SKIP git push ..." >&2
+  exit 1
+}
+
+cd "$(git rev-parse --show-toplevel)"
+head=$(git rev-parse HEAD)
+if [[ $pushed != "$head" ]]; then
+  refuse "the checks run on this checkout, which is at ${head:0:12}. Check out ${pushed:0:12} and push from there."
+fi
+dirty=$(git status --porcelain)
+if [[ -n $dirty ]]; then
+  refuse "the checks run on this checkout, and it has work outside the commit:
+$dirty
+Commit or stash it first."
+fi
+
+failed=()
+for script in lint:changed typecheck; do
+  echo "pre-push: bun run $script" >&2
+  if ! bun run "$script"; then
+    failed+=("$script")
+  fi
+done
+if ((${#failed[@]} > 0)); then
+  refuse "$(printf '`bun run %s` ' "${failed[@]}")failed (output above). Fix it, commit, and push again."
+fi

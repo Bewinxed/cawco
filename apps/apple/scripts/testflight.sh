@@ -2,6 +2,11 @@
 # Run from the repository on obelisk; all credentials stay on the Mac.
 # Every upload names its commit and carries end-user notes (docs/releases/README.md):
 #   testflight.sh [--mac] --commit <sha> --notes <file>
+# --commit is required. The build is made from exactly that commit: a worktree of it at
+# ~/.worktrees/release-<sha>-testflight on real disk, made here and removed when the run ends,
+# whichever way; the Mac gets that commit's `git archive`. The checkout this runs from must be
+# clean (this script, and testflight.py, which it streams to the Mac, are read from it), and the
+# commit must be on origin/main; either refuses the run before anything is built.
 # The commit is proven here before anything is archived: the repo's checks at that commit
 # (typecheck, which holds the wire to every shipped build, plus migrations, roles and tools;
 # lint), and its app against the newest published nightly's hub. The archive is the app's
@@ -99,12 +104,14 @@ esac
 mkdir -p "$HOME/.cache"
 exec 9>"$HOME/.cache/cawco-testflight.lock"
 flock -n 9 || { echo 'TestFlight upload already running' >&2; exit 1; }
+DIRTY=$(git status --porcelain)
+[[ -z $DIRTY ]] || { printf 'TestFlight refused: the checkout it runs from (%s) must be clean, and it holds:\n%s\n' "$PWD" "$DIRTY" >&2; exit 2; }
 git fetch --quiet --tags origin
 REV=$(git rev-parse --verify "$COMMIT^{commit}")
-git merge-base --is-ancestor "$REV" origin/main || { echo "$REV is not on origin/main" >&2; exit 2; }
+git merge-base --is-ancestor "$REV" origin/main || { echo "TestFlight refused: $REV is not on origin/main" >&2; exit 2; }
 send_notes "$NOTES"
-# The commit's own checks, in a checkout of it, before anything reaches the Mac.
-CHECKOUT="$HOME/.cache/cawco-testflight/checkout-${REV:0:12}"
+# The commit's own checks, in a worktree of it on real disk, before anything reaches the Mac.
+CHECKOUT="$HOME/.worktrees/release-${REV:0:12}-testflight"
 rm -rf "$CHECKOUT"
 git worktree prune
 git worktree add --quiet --detach "$CHECKOUT" "$REV"

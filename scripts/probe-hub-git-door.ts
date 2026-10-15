@@ -303,6 +303,7 @@ try {
     const outcome = await land(base, {
       queue: landingQueue(),
       recheck: () => Promise.resolve(undefined),
+      gate: () => Promise.resolve(undefined),
       run: async (cmd) => {
         const ran = await Bun.$`sh -c ${`${SAFE_GIT_SHELL}${cmd}`}`
           .cwd(ws.path)

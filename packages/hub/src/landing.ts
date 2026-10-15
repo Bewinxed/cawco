@@ -11,9 +11,16 @@
  *
  * One landing at a time per repository and branch: fetch, rebase onto it
  * (a conflict is undone and goes back to the delegate), run the checks again
- * when the branch had moved, push, and, while someone keeps pushing in
- * between, the same again, three tries in all. Nothing ahead of the branch
- * counts as landed, so running this again after a hub restart is safe.
+ * when the branch had moved, run the repository's land gate on the commit
+ * about to be pushed ({@link LAND_GATE_SCRIPTS}), push, and, while someone
+ * keeps pushing in between, the same again, three tries in all. Nothing ahead
+ * of the branch counts as landed, so running this again after a hub restart
+ * is safe.
+ *
+ * The gate runs on every landing, rebased or not: an item's own checks need
+ * not lint or typecheck anything, and a clean rebase can still break either
+ * (23da40303 sorted boundary.ts's imports, and ded95f4d2 formatted
+ * SessionHover's, after rebases had landed them unlinted on main).
  *
  * A work item that lands `branch` or `pr` goes to a branch of its own
  * instead ({@link pushBranch}): HEAD as it is, replacing only what the hub
@@ -47,9 +54,15 @@ export type LandingOutcome<F> =
   | { kind: "dirty"; files: string }
   | { kind: "conflict"; files: string }
   | { kind: "recheck-failed"; failing: F }
+  | { kind: "gate-failed"; failing: F }
   | Refusal;
 
 export interface LandingDeps<F> {
+  /**
+   * The repository's land gate on the commit about to be pushed, after any
+   * rebase and recheck: undefined when it passes.
+   */
+  gate: () => Promise<F | undefined>;
   /** Serialises landings that share a key. */
   queue: LandingQueue;
   /** The item's checks again, after a rebase moved HEAD: undefined when all pass. */
@@ -147,6 +160,51 @@ export const statusCommand = (skip: string[] = []): string =>
     ? "git status --porcelain"
     : `git status --porcelain -- . ${skip.map((path) => quote(`:(exclude,literal)${path}`)).join(" ")}`;
 
+/**
+ * The land gate: these scripts of the repository's root package.json, each
+ * run as `bun run <name>` in the workspace, inside its boundary, on the
+ * commit about to be pushed. The repository says what they check; a
+ * repository whose package.json defines neither has no gate. The cockpit's
+ * pre-push hook (scripts/git-hooks/pre-push) runs the same two for a push
+ * to main by hand.
+ */
+export const LAND_GATE_SCRIPTS = ["lint:changed", "typecheck"] as const;
+
+/**
+ * Prints, one per line, the {@link LAND_GATE_SCRIPTS} the checkout's root
+ * package.json defines; nothing without a package.json.
+ */
+export const landGateProbe = `if [ -f package.json ]; then bun -e ${quote(
+  `const scripts = JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).scripts ?? {}; for (const name of ${JSON.stringify(LAND_GATE_SCRIPTS)}) { if (typeof scripts[name] === "string") { console.log(name); } }`
+)}; fi`;
+
+/** One gate script as a check: its name is its command. */
+export interface GateCheck {
+  command: string;
+  name: string;
+}
+
+/**
+ * The gate's checks for the workspace `run` reaches, in {@link
+ * LAND_GATE_SCRIPTS}' order. Throws with the probe's words when the
+ * package.json could not be read.
+ */
+export async function landGateChecks(
+  run: LandingDeps<unknown>["run"]
+): Promise<GateCheck[]> {
+  const probe = await run(landGateProbe, LOCAL_MS);
+  if (probe.exitCode !== 0) {
+    throw new Error(
+      `the land gate's scripts could not be read from package.json:\n${detailOf(probe)}`
+    );
+  }
+  const defined = new Set(probe.stdout.split("\n").map((line) => line.trim()));
+  return LAND_GATE_SCRIPTS.filter((name) => defined.has(name)).map((name) => ({
+    name: `bun run ${name}`,
+    command: `bun run ${name}`,
+  }));
+}
+
 /** Lands HEAD of the workspace on `base`. */
 export async function land<F>(
   base: string,
@@ -216,6 +274,10 @@ async function attempt<F>(
     if (failing !== undefined) {
       return { kind: "recheck-failed", failing };
     }
+  }
+  const gated = await deps.gate();
+  if (gated !== undefined) {
+    return { kind: "gate-failed", failing: gated };
   }
   const pushed = await run(
     `git push origin ${quote(`HEAD:refs/heads/${base}`)}`,

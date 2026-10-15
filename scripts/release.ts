@@ -1,4 +1,16 @@
-/** Local, trigger-free release pipeline. Never publishes, tags or uploads. */
+/**
+ * The release pipeline:
+ *   bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path
+ *     [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--mac-host mac] [--publish]
+ *
+ * A release names its commit, and is built from exactly that commit: a
+ * worktree of it at ~/.worktrees/release-<sha>, on real disk, made here and
+ * removed when the build ends, whichever way. The checkout this runs from must
+ * be clean (this script and what it imports are read from it), and the commit
+ * must be on origin/main; either refuses the run before anything is built.
+ * Without --publish nothing is published, tagged or uploaded: the signed
+ * artifacts are left in --output.
+ */
 // biome-ignore-all lint/performance/noAwaitInLoops: the owner requires one build at a time, including signing and promotion.
 import { createPublicKey } from "node:crypto";
 import {
@@ -32,7 +44,6 @@ import { signingPem, takeSigningKey, underSigningEnv } from "./release-signing";
 
 const repo = resolve(import.meta.dir, "..");
 const argv = Bun.argv.slice(2);
-await underSigningEnv(import.meta.path, argv);
 function argument(name: string): string | undefined {
   const i = argv.indexOf(name);
   return i < 0 ? undefined : argv[i + 1];
@@ -44,10 +55,41 @@ if (
   !(commitInput && output && isAbsolute(output)) ||
   (channel !== "stable" && channel !== "nightly")
 ) {
-  throw new Error(
-    "Usage: bun scripts/release.ts --commit REF --channel stable|nightly --output /absolute/path [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--mac-host mac]"
+  console.error(
+    "Usage: bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--mac-host mac] [--publish]"
+  );
+  process.exit(2);
+}
+/** A refusal before anything is built: its reason, and exit 2. */
+const refuse = (why: string): never => {
+  console.error(`Release refused: ${why}`);
+  process.exit(2);
+};
+const git = (...args: string[]) =>
+  Bun.spawnSync(["git", ...args], {
+    cwd: repo,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+// This script and everything it imports are read from this checkout.
+const dirty = git("status", "--porcelain");
+if (dirty.exitCode !== 0 || dirty.stdout.toString().trim()) {
+  refuse(
+    `the checkout it runs from (${repo}) must be clean, and it holds:\n${dirty.stdout.toString().trimEnd() || dirty.stderr.toString().trim()}`
   );
 }
+if (git("fetch", "--quiet", "--tags", "origin").exitCode !== 0) {
+  refuse("git fetch origin failed");
+}
+const resolved = git("rev-parse", "--verify", `${commitInput}^{commit}`);
+if (resolved.exitCode !== 0) {
+  refuse(`${commitInput} is not a commit here`);
+}
+const commit = resolved.stdout.toString().trim();
+if (git("merge-base", "--is-ancestor", commit, "origin/main").exitCode !== 0) {
+  refuse(`${commit} is not on origin/main`);
+}
+await underSigningEnv(import.meta.path, argv);
 // A nightly's notes are written for the person updating; see docs/releases/README.md.
 const notesFile = argument("--notes");
 if (channel === "nightly" && !(notesFile && isAbsolute(notesFile))) {
@@ -364,11 +406,6 @@ const runPublished = async (
   console.log(`published ${target} binary ran: ${version}, build-info matches`);
 };
 
-const commit = await run(
-  ["git", "rev-parse", `${commitInput}^{commit}`],
-  repo,
-  true
-);
 const state = join(homedir(), ".cache", "cawco", "release-pipeline");
 await mkdir(state, { recursive: true });
 const queued = join(state, "queued.json");
@@ -947,7 +984,12 @@ const build = async (current: Request): Promise<void> => {
       "Release build refused: podman is not on this machine, so the container proofs cannot run and nothing is released without them"
     );
   }
-  const checkout = join(state, `checkout-${current.commit.slice(0, 12)}`);
+  // On real disk, never tmpfs; `clear` removes it when the build ends.
+  const checkout = join(
+    homedir(),
+    ".worktrees",
+    `release-${current.commit.slice(0, 12)}`
+  );
   const staging = join(state, `staging-${current.commit.slice(0, 12)}`);
   me.checkout = checkout;
   me.staging = staging;

@@ -26,6 +26,7 @@
     "lint:changed": "bun scripts/css-scope-check.ts && bun scripts/fmt.ts --check --changed && git diff --name-only --diff-filter=ACMR \"$(git merge-base HEAD origin/main)\" | xargs -r biome check --no-errors-on-unmatched",
     "lint:fix": "ultracite fix && bun scripts/fmt.ts",
     "machine-paths:check": "bun scripts/machine-paths-check.ts",
+    "prepare": "bun scripts/git-hooks/install.ts",
     "typecheck": "bun scripts/typecheck.ts",
     "typecheck:coverage": "bun scripts/typecheck-coverage.ts",
     "words": "bun scripts/words-swift.ts",
