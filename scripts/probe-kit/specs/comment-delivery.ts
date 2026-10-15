@@ -41,7 +41,7 @@
 import { Database } from "bun:sqlite";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Frame } from "playwright-core";
+import type { Frame, Page } from "playwright-core";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
@@ -228,6 +228,31 @@ const numbered = (pins: Pins, number: number) =>
       })
     | undefined;
 
+/** The pane's pin list: in the Comments popover hung from the well, opened when shut. */
+const rowsOf = async (page: Page) => {
+  const button = page.locator(".preview-pane button.comments");
+  if ((await button.getAttribute("aria-expanded")) !== "true") {
+    await button.click();
+  }
+  const list = page.locator(".pin-list-pop .pin-list");
+  await list.waitFor({ timeout: 5000 });
+  return list;
+};
+/** Pin `number`'s card, opened from its row in the Comments popover. */
+const openRow = async (page: Page, number: number) =>
+  (await rowsOf(page)).locator(`.pin-row[data-pin-row="${number}"]`).click();
+/** The Comments popover shut, when open. */
+const shutList = async (page: Page) => {
+  const button = page.locator(".preview-pane button.comments");
+  if ((await button.getAttribute("aria-expanded")) === "true") {
+    await button.click();
+    await page
+      .locator(".pin-list-pop")
+      .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => undefined);
+  }
+};
+
 /** Until the page has heard the pane's Comment mode. */
 const pageInComment = (frame: Frame) =>
   until(
@@ -398,11 +423,12 @@ const endedWriterChecks = async (
     !now.heard &&
     now.thread.every((entry) => entry.by !== "person" || !entry.sentAt);
   const readCard = async () => {
-    await tab.locator('.pin-list .pin-row[data-pin-row="1"]').click();
+    await openRow(tab, 1);
     const said = await tab
       .locator('.pin-card[data-pin-card="1"] .entry[data-by="agent"]')
       .allInnerTexts();
     await tab.keyboard.press("Escape");
+    await shutList(tab);
     return said.join(" | ");
   };
   if (outcome.nested) {
@@ -652,7 +678,7 @@ const run = async (kit: Kit) => {
   // 3. A reply to pin 2 later: one more delivery, pin 2 alone.
   const before3 = heard.length;
   const events3 = events.length;
-  await page.locator('.pin-list .pin-row[data-pin-row="2"]').click();
+  await openRow(page, 2);
   const card2 = page.locator('.pin-card[data-pin-card="2"]');
   await card2.getByRole("textbox").fill("On second thought, keep the weight.");
   await card2.getByRole("button", { name: "Reply" }).click();
@@ -664,6 +690,7 @@ const run = async (kit: Kit) => {
   );
   const repliedAt = Date.now();
   await page.keyboard.press("Escape");
+  await shutList(page);
   const second = await nextDelivery(
     "the reply's delivery",
     before3,
@@ -688,7 +715,7 @@ const run = async (kit: Kit) => {
 
   // 4. The person resolves pin 3: its one resolve line.
   const before4 = heard.length;
-  await page.locator('.pin-list .pin-row[data-pin-row="3"]').click();
+  await openRow(page, 3);
   await page
     .locator('.pin-card[data-pin-card="3"]')
     .getByRole("button", { name: "Resolve" })
@@ -700,6 +727,7 @@ const run = async (kit: Kit) => {
     5000
   );
   await page.keyboard.press("Escape");
+  await shutList(page);
   const pin3 = numbered((await docOf(frame)).pins, 3);
   const resolved = await nextDelivery(
     "the resolve's delivery",
