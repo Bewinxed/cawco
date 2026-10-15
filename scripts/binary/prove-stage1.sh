@@ -34,7 +34,8 @@ trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 # Usage: run_step "what it does" /path/to/its.log command...
-run_step(){ step=$1; step_log=$2; shift 2; "$@" > "$step_log" 2>&1; }
+# Each step that ends prints its seconds: `step: <what it does> (<n>s)`.
+run_step(){ step=$1; step_log=$2; shift 2; local t0=$SECONDS; "$@" > "$step_log" 2>&1; echo "step: $step ($((SECONDS - t0))s)"; }
 mkdir -p "$1"
 out=$(realpath "$1")
 bin=$(realpath "$2")
@@ -89,4 +90,5 @@ step_log=""
 "${p[@]}" inspect "$prefix-systemd" > "$out/systemd-config.json"
 run_step "run the proofs under systemd" "$out/systemd-proof.log" "${p[@]}" exec "$prefix-systemd" bash -c 'mkdir -p "$HOME"; /cawco capabilities > /output/capabilities-present.json; /cawco proof-stack'
 cat "$out/clean-proof.log" "$out/systemd-proof.log"
+echo "total: ${SECONDS}s"
 echo "Evidence: $out"

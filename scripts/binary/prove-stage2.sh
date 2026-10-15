@@ -130,15 +130,20 @@ trap cleanup EXIT INT TERM
 
 # ---------------------------------------------------------------- helpers
 
+# Every setup step and check, with its seconds, one tab-separated line each: what the summary at the end ranks.
+timing() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$out/timings.tsv"; }
+PROOF_START=$SECONDS
 # Setup steps stop the script: a check run against a missing container proves nothing.
 setup() {
-  local step=$1 log=$2
+  local step=$1 log=$2 t0=$SECONDS
   shift 2
   if ! "$@" > "$log" 2>&1; then
-    echo "setup failed at: $step (log: $log)" >&2
+    echo "setup failed at: $step after $((SECONDS - t0))s (log: $log)" >&2
     tail -n 20 "$log" >&2
     exit 3
   fi
+  echo "setup: $step ($((SECONDS - t0))s)"
+  timing setup "$((SECONDS - t0))" "$step"
 }
 export -f setup 2>/dev/null || true
 
@@ -150,7 +155,7 @@ declare -A VERDICT
 # A third verdict beside PASS and FAIL: NOT RUN, when a check it depends on did not pass. DEPENDS_ON_CHECK_NAMES is
 # one check's name, or several joined by `|`: every one of them, each an earlier check, must have passed.
 check() {
-  local name=$1 fn=$2 limit=${3:-600} needs=${4:-} good=${5:-} log rc=0 need
+  local name=$1 fn=$2 limit=${3:-600} needs=${4:-} good=${5:-} log rc=0 need t0=$SECONDS took
   log="$out/logs/$(echo "$name" | tr -cs 'A-Za-z0-9' '-').log"
   LAST_LOG=$log
   # PROOF_ONLY (an extended regex) runs only the checks whose names match it, with every check they depend on
@@ -182,9 +187,11 @@ check() {
   # -x prints each command, the ERR trap prints each failing command's exit status (-E: inside functions too).
   PS4='+ [${FUNCNAME[0]:-main}:${LINENO}] ' timeout --kill-after=10 "$limit" \
     bash -eEx -c "trap 'echo \"ERR: exit \$? from: \$BASH_COMMAND\" >&2' ERR; $fn" >> "$log" 2>&1 < /dev/null || rc=$?
-  echo "---- the check ended with exit status $rc at $(date -u +%FT%TZ)" >> "$log"
+  took=$((SECONDS - t0))
+  echo "---- the check ended with exit status $rc at $(date -u +%FT%TZ), after ${took}s" >> "$log"
+  timing check "$took" "$name"
   if [[ $rc == 0 ]]; then
-    echo "$name: PASS"
+    echo "$name: PASS (${took}s)"
     VERDICT[$name]=PASS
     [[ -z $good ]] || echo "$good" > "$out/hub-good-version"
     return
@@ -193,7 +200,7 @@ check() {
   if [[ $rc == 124 || $rc == 137 ]]; then
     echo "$name: FAIL (timed out after ${limit}s, see $log)"
   else
-    echo "$name: FAIL (see $log)"
+    echo "$name: FAIL after ${took}s (see $log)"
   fi
   status=1
   timeout --kill-after=10 300 bash -c diagnose >> "$log" 2>&1 < /dev/null || true
@@ -2250,5 +2257,8 @@ check "with a session memory limit set on the hub, a session that allocates past
 
 check "the keeper's children run each in a cgroup of its own in its delegated cgroup, all of them capped below the keeper's reserve" keeper_children_capped 600 "a session start requested while the joined machine installs runs once afterwards, one child, none lost"
 
+echo "total: $((SECONDS - PROOF_START))s (setup $(awk -F'\t' '$1 == "setup" { n += $2 } END { print n + 0 }' "$out/timings.tsv")s, checks $(awk -F'\t' '$1 == "check" { n += $2 } END { print n + 0 }' "$out/timings.tsv")s)"
+echo "slowest:"
+sort -t$'\t' -k2,2nr "$out/timings.tsv" | head -n 15 | awk -F'\t' '{ printf "  %5ss  %s: %s\n", $2, $1, $3 }'
 echo "Evidence: $out"
 exit $status

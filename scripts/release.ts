@@ -162,6 +162,7 @@ async function run(
   if (stopped) {
     await stopped;
   }
+  const started = performance.now();
   const child = Bun.spawn(command, {
     cwd,
     stdout: capture ? "pipe" : "inherit",
@@ -189,7 +190,14 @@ async function run(
     return text.trim();
   } finally {
     running = undefined;
+    logStep(command.join(" "), started);
   }
+}
+/** One line per step with its seconds, so a slow release says where the time went. */
+function logStep(what: string, started: number): void {
+  const seconds = ((performance.now() - started) / 1000).toFixed(1);
+  const label = what.length > 140 ? `${what.slice(0, 137)}...` : what;
+  console.log(`[release] ${seconds}s ${label}`);
 }
 const commit = await run(
   ["git", "rev-parse", `${commitInput}^{commit}`],
@@ -475,6 +483,7 @@ const versionAndNotes = async (
 
 /** One commit, built, signed and (unless a newer one is queued) promoted. */
 const build = async (current: Request): Promise<void> => {
+  const building = performance.now();
   if (freemem() < 4 * 1024 ** 3) {
     throw new Error("Release build refused: less than 4 GiB available memory");
   }
@@ -713,8 +722,11 @@ const build = async (current: Request): Promise<void> => {
     );
     console.log(`Local artifacts ready: ${published}`);
     if (argv.includes("--publish")) {
+      const publishing = performance.now();
       await publishRelease(published, manifest);
+      logStep("publish", publishing);
     }
+    logStep(`build of ${current.commit.slice(0, 12)}, in all`, building);
   } catch (error) {
     const kept = await keepEvidence(current.commit, staging);
     if (!kept) {
