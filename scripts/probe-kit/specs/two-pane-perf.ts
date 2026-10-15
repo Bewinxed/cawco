@@ -679,13 +679,23 @@ async function measure(
     }
   }
   const switchScript = new Map<string, number>();
+  // Each switch's longest task alone: the one the switch is held to.
   for (const at of presses) {
-    for (const [fn, ms] of sampled.selfTime(at, at + SETTLE_MS * 1000)) {
+    const longestTask = sampled.tasks
+      .filter((task) => task.at >= at && task.at < at + SETTLE_MS * 1000)
+      .reduce<MainTask | null>(
+        (most, task) => (most && most.cpu >= task.cpu ? most : task),
+        null
+      );
+    if (!longestTask) {
+      continue;
+    }
+    for (const [fn, ms] of sampled.selfTime(longestTask.at, longestTask.end)) {
       switchScript.set(fn, (switchScript.get(fn) ?? 0) + ms);
     }
   }
   kit.note(
-    `${mode} pane(s), point: the script its ${presses.length} switches ran, by self time, all told: ${[
+    `${mode} pane(s), point: the script in its ${presses.length} switches' longest tasks, by self time, all told: ${[
       ...switchScript,
     ]
       .filter(([fn]) => fn !== "(idle)")
