@@ -26,8 +26,13 @@
    * and refuses any other. One that failed says why (the hub's or the
    * service's words), and one whose call may or may not have happened says
    * so; Remove puts either away once you have read it.
+   *
+   * An onboarding choice nobody answered (the fleet's upstream choice) is
+   * the same row with its risk as its line and its two options as the
+   * peers; it opens nothing, and leaves once the hub has the answer.
    */
   import { questionsOf } from "@cawco/core";
+  import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
@@ -39,12 +44,14 @@
     IconFolder,
     IconMaximize,
     IconSend,
+    IconShield,
     IconTick,
     IconWarningTriangle,
     IconWorkflow,
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
   import {
+    answerFleetUpstream,
     answerFor,
     cawco,
     decideAction,
@@ -74,6 +81,9 @@
   } = $props();
 
   const href = $derived.by(() => {
+    if (item.kind === "choice") {
+      return;
+    }
     if (item.kind !== "ask") {
       return item.href;
     }
@@ -99,6 +109,8 @@
         return "Waiting on your answer";
       case "watch":
         return item.notice.title;
+      case "choice":
+        return UPSTREAM_WORDS.risk;
       case "action":
         if (item.action.state === "unknown") {
           return `This may or may not have happened. Check ${item.action.service}.`;
@@ -189,6 +201,9 @@
     if (item.kind === "run") {
       return `Workflow · ${item.place}`;
     }
+    if (item.kind === "choice") {
+      return "Onboarding · each project can change it";
+    }
     return item.kind === "watch" ? `Fleet watch · ${item.place}` : "Budget";
   });
   /**
@@ -209,7 +224,7 @@
       return;
     }
     onchoose();
-    openPeek({ viewId: item.instanceId, href, title: item.title });
+    openPeek({ viewId: item.instanceId, href: href ?? "", title: item.title });
   }
 
   /** A permission answered on the row, under the `answer` choice. */
@@ -249,6 +264,24 @@
       requestId: item.request.requestId,
       result: permissionAnswer(item.request, kind),
     });
+  }
+
+  /** The upstream choice's answer on its way, by the option pressed; the hub's refusal in its words. */
+  let choosing = $state<boolean | null>(null);
+  let choiceRefusal = $state<string | null>(null);
+  async function choose(posts: boolean): Promise<void> {
+    if (item.kind !== "choice" || stale || choosing !== null) {
+      return;
+    }
+    choosing = posts;
+    choiceRefusal = null;
+    try {
+      await answerFleetUpstream(posts);
+    } catch (error) {
+      choiceRefusal = failureWords(error);
+    } finally {
+      choosing = null;
+    }
   }
 
   /** An approved action waiting for your approval: Deny and Approve stand. */
@@ -296,14 +329,17 @@
   data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
   data-stale={held || undefined}
 >
-  <!-- The whole row opens it; the panel closes. -->
-  <a
-    aria-label="Open {item.title}"
-    class="cover press-tint focus-inset"
-    {href}
-    onclick={onchoose}
-    {onkeydown}><span class="sr-only">Open {item.title}</span></a
-  >
+  <!-- The whole row opens it; the panel closes. A choice opens nothing:
+       it is answered here. -->
+  {#if href !== undefined}
+    <a
+      aria-label="Open {item.title}"
+      class="cover press-tint focus-inset"
+      {href}
+      onclick={onchoose}
+      {onkeydown}><span class="sr-only">Open {item.title}</span></a
+    >
+  {/if}
   <!-- The session's own mark, as the rail draws it; a run and a budget their glyphs. -->
   <span class="lead">
     {#if item.kind === "ask" || item.kind === "watch"}
@@ -315,6 +351,8 @@
       />
     {:else if item.kind === "run"}
       <IconWorkflow aria-hidden="true" />
+    {:else if item.kind === "choice"}
+      <IconShield aria-hidden="true" />
     {:else if item.kind === "action"}
       {#if item.action.state === "unknown"}
         <IconWarningTriangle aria-hidden="true" />
@@ -452,6 +490,39 @@
         {onkeydown}
         pending={answering && pressed === "allow"}
         pendingLabel="Approving…"
+        size="sm"
+        variant="secondary"
+      />
+    </div>
+  {:else if item.kind === "choice"}
+    <!-- Its two options as the peers: same size, type and fill (The Peer
+         Rule); keeping agents off comes first, as the recommended one. -->
+    <div class="peers">
+      {#if choiceRefusal}
+        <ErrorText
+          class="refusal"
+          message={choiceRefusal}
+          title="The hub refused that answer"
+        />
+      {/if}
+      <Button
+        class="peer"
+        disabled={stale || choosing === true}
+        failed={choiceRefusal !== null}
+        label={UPSTREAM_WORDS.keepOff}
+        onclick={() => choose(false)}
+        pending={choosing === false}
+        pendingLabel="Saving…"
+        size="sm"
+        variant="secondary"
+      />
+      <Button
+        class="peer"
+        disabled={stale || choosing === false}
+        label={UPSTREAM_WORDS.allow}
+        onclick={() => choose(true)}
+        pending={choosing === true}
+        pendingLabel="Saving…"
         size="sm"
         variant="secondary"
       />
@@ -739,6 +810,11 @@
   }
   .peers > :global(.peer) {
     border-color: transparent;
+  }
+  /* A choice's options are its words, longer than Deny and Approve: they
+     wrap onto a second line before either is cut. */
+  .row[data-kind="choice"] > .peers {
+    flex-wrap: wrap;
   }
   .peers > :global(.deny),
   .peers > :global(.deny:hover) {

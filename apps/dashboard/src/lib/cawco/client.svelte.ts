@@ -269,6 +269,11 @@ export interface ProjectRow {
   remote: string | null;
   /** Review before done: only you move a task to done, and landed work waits in review. */
   review: boolean;
+  /**
+   * Whether its agents may post to other people's repositories (hub
+   * upstream.ts); null: the fleet's answer ({@link cawco.fleetUpstream}).
+   */
+  upstreamPosts: boolean | null;
 }
 
 /**
@@ -925,6 +930,13 @@ const state = $state({
    * `fleet_watch.notices` frames.
    */
   watchNotices: [] as FleetWatchNotice[],
+  /**
+   * The fleet's upstream answer (`GET /api/fleet/choices` `upstream`):
+   * whether agents may post to other people's repositories; null while
+   * nobody has answered, which is when Needs you asks it; undefined until
+   * read.
+   */
+  fleetUpstream: undefined as boolean | null | undefined,
   /**
    * Each machine's latest Claude limit reading, by machineId — folded in from
    * the `kind: 'usage'` frame so the pill updates live rather than polling
@@ -2433,6 +2445,8 @@ async function refresh(): Promise<boolean> {
   readWaitingActions();
   // Fleet watch's notices to you: frames keep them from here.
   readWatchNotices();
+  // The fleet's upstream answer: Needs you asks it while nobody has.
+  readFleetUpstream();
   // Every project's threads, for the rail; frames keep them from here.
   readThreads();
   // What the socket says about asks from here on is newer than the read.
@@ -5156,14 +5170,20 @@ export async function renameInstance(
 }
 
 /**
- * The person's own edit of a project: its name, its Review before done, or
- * its Apple build gate (`PATCH /api/projects/:id`). The answer lands in the
+ * The person's own edit of a project: its name, its Review before done, its
+ * Apple build gate, or its upstream choice, null for the fleet's
+ * (`PATCH /api/projects/:id`). The answer lands in the
  * projects at once; the hub's `projects.changed` brings it to every other
  * dashboard and the app. Throws the refusal, in the hub's words.
  */
 export async function editProject(
   projectId: string,
-  change: { appleGate?: boolean; name?: string; review?: boolean }
+  change: {
+    appleGate?: boolean;
+    name?: string;
+    review?: boolean;
+    upstreamPosts?: boolean | null;
+  }
 ): Promise<ProjectRow> {
   const response = await fetch(`/api/projects/${projectId}`, {
     method: "PATCH",
@@ -5411,6 +5431,28 @@ async function readProjectOffers(): Promise<void> {
 }
 
 /** Fleet watch's needs-you notices, as the hub holds them now. */
+/** The fleet's upstream answer, as the hub holds it now. */
+async function readFleetUpstream(): Promise<void> {
+  const read = await load<{ upstream: boolean | null }>("/api/fleet/choices");
+  if (read) {
+    state.fleetUpstream = read.upstream;
+  }
+}
+
+/**
+ * Answers the fleet's upstream choice (`PUT /api/fleet/choices`): whether
+ * agents may post to other people's repositories wherever a project sets
+ * nothing. Every machine's workspaces judge by it from their next beat.
+ * Throws the refusal, in the hub's words.
+ */
+export async function answerFleetUpstream(posts: boolean): Promise<void> {
+  const answered = await askHub<{ upstream: boolean | null }>(
+    "/api/fleet/choices",
+    json("PUT", { upstream: posts })
+  );
+  state.fleetUpstream = answered.upstream;
+}
+
 async function readWatchNotices(): Promise<void> {
   const read = await load<{ notices: FleetWatchNotice[] }>(
     "/api/fleet-watch/notices"
@@ -7696,6 +7738,10 @@ export const cawco = {
   /** Fleet watch's needs-you notices, oldest first. */
   get watchNotices(): FleetWatchNotice[] {
     return state.watchNotices;
+  },
+  /** The fleet's upstream answer; null while nobody has given it, undefined until read. */
+  get fleetUpstream(): boolean | null | undefined {
+    return state.fleetUpstream;
   },
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {

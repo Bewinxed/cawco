@@ -8,13 +8,16 @@
    * his question as a link to its thread, a task that landed. Then New
    * session, Spin off, and `⋯` holding Pick stages (while the code
    * stages stand in), Caw's settings (CawPanel, off `⋯`: a popover on a
-   * desk, the bottom sheet on touch), Spend and Forget (and, under 640px,
-   * New task and Ask Caw for a view), each with its glyph.
+   * desk, the bottom sheet on touch), Spend, Other people's repositories
+   * (the upstream choice: the fleet's answer until the project picks its
+   * own) and Forget (and, under 640px, New task and Ask Caw for a view),
+   * each with its glyph.
    *
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
    */
   import { machineLabel } from "@cawco/core";
+  import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import {
@@ -34,6 +37,7 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
@@ -49,6 +53,7 @@
     IconMore,
     IconPlus,
     IconSettings,
+    IconShield,
     IconSparkles,
     IconTrash,
     IconUsage,
@@ -181,6 +186,33 @@
     } catch (error) {
       renaming = null;
       renameFault = message(error);
+    }
+  }
+
+  /**
+   * The upstream choice as the menu reads it: the project's own, or `fleet`
+   * while it takes the fleet's answer, which the fleet's row names.
+   */
+  const upstream = $derived.by(() => {
+    if (project.upstreamPosts === null) {
+      return "fleet";
+    }
+    return project.upstreamPosts ? "on" : "off";
+  });
+  const fleetUpstreamWords = $derived(
+    cawco.fleetUpstream === false
+      ? UPSTREAM_WORDS.keepOff
+      : UPSTREAM_WORDS.allow
+  );
+  async function setUpstream(value: string): Promise<void> {
+    const posts = value === "fleet" ? null : value === "on";
+    if (posts === project.upstreamPosts) {
+      return;
+    }
+    try {
+      await editProject(project.id, { upstreamPosts: posts });
+    } catch (error) {
+      toast.error(message(error));
     }
   }
 
@@ -518,6 +550,30 @@
           <IconUsage />
           <span>Spend</span>
         </DropdownMenu.Item>
+        <!-- The upstream choice: the fleet's answer until the project picks
+             its own; every workspace of it judges by it from its next beat. -->
+        <DropdownMenu.Sub>
+          <DropdownMenu.SubTrigger>
+            <IconShield />
+            <span>{UPSTREAM_WORDS.title}</span>
+          </DropdownMenu.SubTrigger>
+          <DropdownMenu.SubContent class="w-72">
+            <DropdownMenu.RadioGroup
+              onValueChange={setUpstream}
+              value={upstream}
+            >
+              <DropdownMenu.RadioItem value="fleet"
+                >{UPSTREAM_WORDS.inherit} · {fleetUpstreamWords}</DropdownMenu.RadioItem
+              >
+              <DropdownMenu.RadioItem value="off"
+                >{UPSTREAM_WORDS.keepOff}</DropdownMenu.RadioItem
+              >
+              <DropdownMenu.RadioItem value="on"
+                >{UPSTREAM_WORDS.allow}</DropdownMenu.RadioItem
+              >
+            </DropdownMenu.RadioGroup>
+          </DropdownMenu.SubContent>
+        </DropdownMenu.Sub>
         <!-- The one destructive row, as every menu draws one: the house's
              destructive item, set apart at the end. -->
         <DropdownMenu.Separator />

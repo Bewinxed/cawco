@@ -26,6 +26,7 @@ import {
   questionsOf,
   topsIn,
 } from "@cawco/core";
+import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
 import {
   type BlockedRequest,
   cawco,
@@ -351,7 +352,22 @@ export interface WatchItem {
   title: string;
 }
 
-export type NeedsItem = AskItem | RunItem | CapItem | ActionItem | WatchItem;
+/**
+ * An onboarding choice nobody has answered yet, asked once as the dashboard
+ * loads: today the fleet's upstream choice (hub fleet-choices.ts), whether
+ * agents may post to other people's repositories. Its two options answer it
+ * on the row, and it leaves once the hub has the answer.
+ */
+export interface ChoiceItem {
+  key: string;
+  kind: "choice";
+  place: string;
+  raisedAt: undefined;
+  title: string;
+}
+
+export type NeedsItem =
+  AskItem | RunItem | CapItem | ActionItem | WatchItem | ChoiceItem;
 
 export interface RecentItem {
   at: number;
@@ -949,8 +965,28 @@ class Home {
         raisedAt: notice.at,
       };
     });
+    // Asked until it is answered; unread (undefined), it waits for the read.
+    const unanswered: NeedsItem[] =
+      cawco.fleetUpstream === null
+        ? [
+            {
+              kind: "choice",
+              key: "choice:upstream",
+              title: UPSTREAM_WORDS.title,
+              place: "Onboarding",
+              raisedAt: undefined,
+            },
+          ]
+        : [];
     // Longest wait first; an ask the hub has not stamped sorts last.
-    return [...asks, ...runs, ...caps, ...actions, ...watched].sort(
+    return [
+      ...asks,
+      ...runs,
+      ...caps,
+      ...actions,
+      ...watched,
+      ...unanswered,
+    ].sort(
       (a, b) =>
         (a.raisedAt ?? Number.POSITIVE_INFINITY) -
         (b.raisedAt ?? Number.POSITIVE_INFINITY)
