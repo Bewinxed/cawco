@@ -27,7 +27,6 @@ import {
   type CawInitiated,
   type CawView,
   type ProjectCap,
-  type ProjectSpend,
   questionsOf,
 } from "@cawco/core";
 import { failureWords } from "#lib/cawco/hub-read.js";
@@ -37,7 +36,6 @@ import {
   cawco,
   cawOf,
   configureCaw,
-  projectSpend,
   threadsOf,
 } from "../client.svelte";
 import type { CawStatus } from "../home/Caw.svelte";
@@ -83,8 +81,6 @@ export class CawLead {
   refused = $state<string | null>(null);
   /** A switch or harness change is on its way to the hub. */
   moving = $state(false);
-  /** The project's spend, read when the panel opens. */
-  spend = $state<ProjectSpend | null>(null);
   /** The task that just landed, held for two breaths. */
   landed = $state<string | null>(null);
   /**
@@ -136,7 +132,6 @@ export class CawLead {
       // A wait already past its grace (the page still connecting) stands.
       this.waited = this.waited || this.view !== null || this.#reading();
       this.view = null;
-      this.spend = null;
     }
     const grace = this.view
       ? undefined
@@ -166,19 +161,6 @@ export class CawLead {
       this.#reading() ||
       cawco.hub === "unreachable"
   );
-
-  /** Reads what the project has spent (the panel's line). */
-  async readSpend(): Promise<void> {
-    const id = this.#projectId();
-    try {
-      const spend = await projectSpend(id);
-      if (id === this.#projectId()) {
-        this.spend = spend;
-      }
-    } catch {
-      // The panel's line stays as it was; the Usage page says why.
-    }
-  }
 
   /** Turns the lead on or off, or moves it to another harness or model. */
   async configure(change: {

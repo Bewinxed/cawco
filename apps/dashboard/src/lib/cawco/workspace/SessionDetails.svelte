@@ -701,9 +701,6 @@
         >{@render figure(`${session.mcp.length} MCP`)}</a
       >
     {/if}
-    {#if stats.cost !== null}
-      <span class="cost">{@render figure(`$${stats.cost.toFixed(2)}`)}</span>
-    {/if}
   </div>
   <div class="footer">
     <button
@@ -952,7 +949,7 @@
     row-gap: var(--space-2);
     color: var(--ink-strong);
   }
-  /* Each meter (context, the provider's limit, MCP, cost) is one unit, sized
+  /* Each meter (context, the provider's limit, MCP) is one unit, sized
      by its content: a unit that does not fit beside the others moves to the
      next line. Only a unit wider than the whole strip wraps inside itself, a
      part to a line, and no part ever gets narrower than its own text. */
@@ -967,17 +964,10 @@
   .context {
     flex: auto;
   }
-  .tools,
-  .cost {
-    flex: none;
-  }
   .tools {
+    flex: none;
     display: inline-flex;
     align-items: center;
-    color: var(--ink-strong);
-  }
-  .cost {
-    margin-left: auto;
     color: var(--ink-strong);
   }
   /* Context: a word, a 4px bar of what is used (usage/LimitBar) and a

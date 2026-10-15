@@ -144,7 +144,6 @@ public final class SessionDetailsController: ObservedViewController {
     private let limitFigure = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
     private let mcpButton = UIControl()
     private let mcpFigure = MorphLabel(TypeScale.typeMeta)
-    private let costFigure = MorphLabel(TypeScale.typeMeta)
     private var continueButton: NsButton!
     private var bodyFits: NSLayoutConstraint!
     private weak var modelPopover: UIViewController?
@@ -467,11 +466,10 @@ public final class SessionDetailsController: ObservedViewController {
         scroller.alwaysBounceVertical = false
         scroller.addSubview(body)
 
-        // Stats: context, the provider's limit, MCP, cost; each one unit that wraps whole.
+        // Stats: context, the provider's limit, MCP; each one unit that wraps whole.
         contextLabel.text = "Context"
         contextFigure.tabular = true
         mcpFigure.tabular = true
-        costFigure.tabular = true
         limitFigure.tabular = true
         // The context bar takes the unit's spare room, 48 to 96pt; its words keep their own width.
         let narrow = contextBar.widthAnchor.constraint(equalToConstant: 48)
@@ -504,11 +502,10 @@ public final class SessionDetailsController: ObservedViewController {
         ])
         stats.gap = Space.space4
         stats.rowGap = Space.space2
-        stats.set([contextUnit, limitUnit, mcpButton, costFigure])
+        stats.set([contextUnit, limitUnit, mcpButton])
         // Context takes whatever its line has spare, its bar first (48 to 96pt).
         stats.stretch = contextUnit
         stats.stretchBy = 48
-        stats.end = costFigure
         // On the body's own surface, no fill of its own; the action follows by space alone (`.stats`).
         let statsBox = Self.inset(stats, NSDirectionalEdgeInsets(top: Space.space3, leading: pad, bottom: 0, trailing: pad))
 
@@ -774,12 +771,6 @@ public final class SessionDetailsController: ObservedViewController {
             mcpButton.accessibilityLabel = "\(count) MCP servers"
         } else {
             mcpButton.isHidden = true
-        }
-        if let cost = facts?.totalCost {
-            costFigure.isHidden = false
-            costFigure.text = String(format: "$%.2f", cost)
-        } else {
-            costFigure.isHidden = true
         }
         stats.setNeedsLayout()
         // What this paint made (the feedback's row, the chips) keeps its own margins too.

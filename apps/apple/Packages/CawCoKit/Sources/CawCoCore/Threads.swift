@@ -12,7 +12,6 @@ import OSLog
 public typealias ThreadSummary = Components.Schemas.ThreadSummary
 /// A project's Caw as the hub answers it (`GET`/`PATCH /api/projects/:id/caw`); the mascot is `CawView`.
 public typealias CawLeadView = Components.Schemas.CawView
-public typealias ProjectSpend = Components.Schemas.ProjectSpend
 
 /// How a thread is addressed as a session (thread-tabs.ts): `thread:<id>`,
 /// and a thread not started yet, whose first message makes it,
@@ -492,14 +491,6 @@ public final class ThreadsStore {
         let output = try await client.getApiProjectsByIdFolderFile(path: .init(id: projectId), query: .init(path: path))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
         return try ok.body.json.content
-    }
-
-    /// What a project has spent: today, this month, its Caw's share (`projectSpend`).
-    public func spend(_ projectId: String) async throws -> ProjectSpend {
-        guard let client = hub.client else { throw TaskRefusal(message: "No hub is connected.") }
-        let output = try await client.getApiProjectsByIdSpend(path: .init(id: projectId))
-        guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
-        return try ok.body.json
     }
 }
 

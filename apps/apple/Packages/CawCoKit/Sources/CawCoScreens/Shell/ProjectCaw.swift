@@ -20,8 +20,6 @@ final class ProjectCawLead {
     var refused: String?
     /// A switch or harness change is on its way to the hub.
     var moving = false
-    /// The project's spend, read when the panel opens.
-    var spend: ProjectSpend?
 
     init(hub: HubConnection, projectId: String) {
         self.hub = hub
@@ -36,10 +34,6 @@ final class ProjectCawLead {
         } catch {
             refused = error.localizedDescription
         }
-    }
-
-    func readSpend() async {
-        spend = try? await hub.threads.spend(projectId)
     }
 
     /// Turns him on or off, or moves him to another harness or model (nil: the harness's default).
@@ -139,15 +133,14 @@ final class ProjectCawSeat: UIControl {
 }
 
 /// Caw's panel (project/CawPanel.svelte): who he is and what he is doing in
-/// one sentence, the lead switch, the harness he runs on and his model,
-/// what he has spent with the way to Usage, and the way to talk to him, on
-/// or off. Off, he acts only when you write to him (WORDS.md, Caw on and off).
+/// one sentence, the lead switch, the harness he runs on and his model, and
+/// the way to talk to him, on or off. Off, he acts only when you write to
+/// him (WORDS.md, Caw on and off).
 final class ProjectCawPanel: KitPopoverController {
     private let lead: ProjectCawLead
     private let hub: HubConnection
     private let projectName: String
     private let openThread: (String) -> Void
-    private let openUsage: () -> Void
     private let stack = UIStackView()
     private static let inset = 12.0
 
@@ -163,7 +156,6 @@ final class ProjectCawPanel: KitPopoverController {
     private let refusedLine = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
     private let harness = UIButton(configuration: .bordered())
     private let model = UIButton(configuration: .bordered())
-    private let spent = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private var talk: UIButton!
     private var last: UIButton!
     private let field = KitField(placeholder: "Message the project…")
@@ -180,12 +172,11 @@ final class ProjectCawPanel: KitPopoverController {
         case running([Components.Schemas.CawRunning])
     }
 
-    init(lead: ProjectCawLead, hub: HubConnection, projectName: String, openThread: @escaping (String) -> Void, openUsage: @escaping () -> Void) {
+    init(lead: ProjectCawLead, hub: HubConnection, projectName: String, openThread: @escaping (String) -> Void) {
         self.lead = lead
         self.hub = hub
         self.projectName = projectName
         self.openThread = openThread
-        self.openUsage = openUsage
         super.init()
     }
 
@@ -254,14 +245,6 @@ final class ProjectCawPanel: KitPopoverController {
         model.accessibilityLabel = "Model"
         stack.addArrangedSubview(row([runsOn, harness, model]))
 
-        let see = UIButton(configuration: .plain(), primaryAction: UIAction { [weak self] _ in
-            self?.dismiss(animated: true)
-            self?.openUsage()
-        })
-        see.configuration?.attributedTitle = AttributedString("See spend →", attributes: TypeScale.typeMeta.container(color: Palette.linkInk))
-        see.configuration?.contentInsets = .zero
-        stack.addArrangedSubview(row([spent, UIView(), see]))
-
         talk = KitButton.make("Message Caw", variant: .outline, height: .sm) { [weak self] in
             self?.talking = true
             self?.render()
@@ -291,7 +274,6 @@ final class ProjectCawPanel: KitPopoverController {
 
         Task { [lead] in
             await lead.read()
-            await lead.readSpend()
         }
         render()
     }
@@ -350,10 +332,6 @@ final class ProjectCawPanel: KitPopoverController {
                 Task { await self?.lead.configure(model: .some(row.value)) }
             }
         })
-        if let spend = lead.spend {
-            spent.text = "Spent \(Usage.money(spend.caw.todayUsd)) today · \(Usage.money(spend.caw.monthUsd)) this month"
-        }
-        spent.isHidden = lead.spend == nil
         switch asking {
         case let .turn(turn)?:
             turnWords.text = "\(turn.title ?? "Answering an event"). Off, it can finish or stop now."

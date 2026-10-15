@@ -22,7 +22,6 @@
   import {
     cawco,
     isFailed,
-    projectSpend,
     readThread,
     readTranscript,
   } from "./client.svelte";
@@ -36,7 +35,6 @@
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
   import { askDetailOf } from "./transcript/present";
-  import { money } from "./usage";
   import { runIdOf } from "./workflow-runs";
   import { workflowState } from "./workflow-state.svelte";
 
@@ -77,11 +75,7 @@
     }
   }
 
-  /**
-   * What a thread's card says that its row cannot: what its turns cost, read
-   * from its project's spend each time the card is asked for, by thread id.
-   */
-  let threadSpend = $state<Record<string, number>>({});
+  /** A thread's card reads its messages, so it opens on its newest line. */
   function readThreadCard(threadId: string): void {
     const thread = cawco.threadOf(`thread:${threadId}`);
     if (!thread) {
@@ -91,14 +85,6 @@
       // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
       void readThread(thread.projectId, threadId).catch(() => undefined);
     }
-    projectSpend(thread.projectId).then(
-      (spend) => {
-        for (const each of spend.threads) {
-          threadSpend[each.id] = each.usd;
-        }
-      },
-      () => undefined
-    );
   }
 
   /**
@@ -384,18 +370,14 @@
           </span>
         </div>
         {#if thread}
-          <!-- A thread's card: its newest line, and what its turns cost. -->
+          <!-- A thread's card: its newest line. -->
           {@const newest = cawco.threadMessagesOf(thread.id)?.at(-1)}
           {@const line = newestLine(newest)}
-          {@const spent = threadSpend[thread.id]}
           {#if newest && line}
             <p class="newest">
               <span class="who">{SPEAKER[newest.author]}</span>
               <span class="said">{line}</span>
             </p>
-          {/if}
-          {#if spent !== undefined}
-            <p class="spent num">{money(spent)} this month</p>
           {/if}
         {:else if runId}
           <!-- A workflow run's card: its steps under it, then the live tail of
@@ -486,11 +468,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .spent {
-    margin-block-start: var(--space-1);
-    font-size: var(--text-meta);
-    color: var(--ink-muted);
   }
   .state {
     flex: none;

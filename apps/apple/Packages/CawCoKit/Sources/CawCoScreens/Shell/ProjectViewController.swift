@@ -441,8 +441,7 @@ final class ProjectViewController: ObservedViewController {
     private func openCaw() {
         guard let project else { return }
         let panel = ProjectCawPanel(lead: lead, hub: context.hub, projectName: project.name,
-                                    openThread: { [weak self] id in self?.context.openSession(ThreadTabs.tabId(id)) },
-                                    openUsage: { [weak self] in self?.context.go(.usage) })
+                                    openThread: { [weak self] id in self?.context.openSession(ThreadTabs.tabId(id)) })
         KitPopover.present(panel, from: seat, in: self, align: .start)
     }
 

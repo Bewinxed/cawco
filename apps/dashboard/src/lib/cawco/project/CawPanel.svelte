@@ -2,8 +2,8 @@
   /**
    * Caw's panel (fable-lead-switch.md §1, "switch in panel"): who he is and
    * what he is doing in one sentence, the lead switch, the harness he runs
-   * on and the model his session runs, what he has spent with the way to
-   * the Usage page, and the way to talk to him, on or off. Off, he acts only
+   * on and the model his session runs, and the way to talk to him, on or
+   * off. Off, he acts only
    * when you write to him: no event wakes him (WORDS.md, Caw on and off).
    */
   import type { CawHarness, CawInitiated, CawRunning } from "@cawco/core";
@@ -18,7 +18,6 @@
   import CawFace from "#lib/cawco/home/CawFace.svelte";
   import ModelCombobox from "#lib/cawco/ModelCombobox.svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { usd } from "#lib/cawco/usage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
@@ -114,10 +113,6 @@
       return "Moving…";
     }
     return lead.view ? CAW_HARNESS_LABEL[lead.view.harness] : "Reading…";
-  });
-
-  $effect(() => {
-    lead.readSpend();
   });
 
   // A turn begins: his view is read again, so the panel says what it answers
@@ -219,18 +214,6 @@
       />
     {/if}
   </div>
-  <div class="row meta">
-    {#if lead.spend}
-      <span
-        >Spent <span class="num">{usd(lead.spend.caw.todayUsd)}</span> today ·
-        <span class="num">{usd(lead.spend.caw.monthUsd)}</span>
-        this month</span
-      >
-    {/if}
-    <a class="see" href="/usage?project={encodeURIComponent(projectId)}"
-      >See spend →</a
-    >
-  </div>
   {#if !lead.view?.problem || lastThread}
     <div class="row actions">
       {#if !(lead.view?.problem || talking)}
@@ -300,21 +283,9 @@
   .sentence {
     min-inline-size: 0;
   }
-  .muted,
-  .meta {
+  .muted {
     font: var(--type-meta);
     color: var(--ink-muted);
-  }
-  .see {
-    margin-inline-start: auto;
-    color: var(--link-ink);
-    text-decoration: none;
-  }
-  @media (hover: hover) {
-    .see:hover {
-      text-decoration: underline;
-      text-underline-offset: 3px;
-    }
   }
   .actions {
     justify-content: flex-start;

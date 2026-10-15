@@ -631,12 +631,6 @@ export interface SessionState {
    */
   tooling: SessionTooling;
   /**
-   * The cumulative cost the latest `result` frame reported, in dollars.
-   * `undefined` until a turn has closed with one. Frames, not transcript
-   * scraping: a successful turn's cost has no transcript line.
-   */
-  totalCost?: number;
-  /**
    * When this stretch of work began, epoch ms, or `null` while the session is
    * idle. Stamped by the local send before a single frame has come back — the
    * wait for the first one is exactly the silence the transcript's presence line
@@ -1403,9 +1397,6 @@ function applyFacts(
   }
   if (facts.lastTurnFailed !== undefined) {
     target.lastTurnFailed = facts.lastTurnFailed;
-  }
-  if (facts.totalCost !== undefined && facts.totalCost !== null) {
-    target.totalCost = facts.totalCost;
   }
   if (facts.sdkStatus !== undefined) {
     target.sdkStatus = facts.sdkStatus;
@@ -7672,7 +7663,7 @@ export const cawco = {
   withdrawnAsk: (requestId: string): Message | undefined =>
     state.withdrawnAsks[requestId],
   /**
-   * The ledger stats the fleet table shows per session — turns, context %, cost.
+   * The ledger stats the fleet table shows per session — turns, context %.
    * Only populated for a session this browser has state for (subscribed / a turn
    * has closed); `null` otherwise, which the table renders as an em dash.
    */
@@ -7683,7 +7674,6 @@ export const cawco = {
     contextPct: number | null;
     totalTokens: number | null;
     maxTokens: number | null;
-    cost: number | null;
   } => {
     const t = state.sessions[instanceId];
     if (!t) {
@@ -7692,7 +7682,6 @@ export const cawco = {
         contextPct: null,
         totalTokens: null,
         maxTokens: null,
-        cost: null,
       };
     }
     const turns = t.messages.filter((m) => m.type === "assistant").length;
@@ -7701,7 +7690,6 @@ export const cawco = {
       contextPct: t.context?.percentage ?? null,
       totalTokens: t.context?.totalTokens ?? null,
       maxTokens: t.context?.maxTokens ?? null,
-      cost: t.totalCost ?? null,
     };
   },
   /** What a session offers behind `/`, grouped the way the palette lists it. */

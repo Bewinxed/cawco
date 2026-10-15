@@ -2,7 +2,7 @@
  * What the home says, as one model both of its places read: the phone's
  * home page and the wide screen's sidebar draw the same groups from here.
  *
- * - Status: the hub, the machines and today's spend, in one line.
+ * - Status: the hub and the machines, in one line.
  * - Needs you: every ask parked on the operator (a session's permission or
  *   question, a workflow run's question), longest wait first by the moment
  *   the hub parked it (`raisedAt`), so every device lists them alike.
