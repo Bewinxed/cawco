@@ -424,12 +424,14 @@
      missed field brings the zoom back, so this is a floor for every field
      rather than a per-component fix. Important in the base layer, the
      strongest place an important declaration can sit, so neither a utility
-     nor a component rule can take a field under it. */
+     nor a component rule can take a field under it. A floor, not a size: a
+     field set in larger type than 16px (a project's name edited in its
+     title's type) keeps the size it inherits, `1em` being its parent's. */
   @media (width < 640px), (pointer: coarse) {
     input:not([type="checkbox"], [type="radio"], [type="range"]),
     textarea,
     select {
-      font-size: 16px !important;
+      font-size: max(16px, 1em) !important;
     }
   }
 }
