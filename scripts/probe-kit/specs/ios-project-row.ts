@@ -15,6 +15,27 @@
  *   come back (the accessibility tree), and the log says the route held;
  * - (c) on the phone, the rail's sheet closes after (a).
  *
+ * The project's name, edited where it stands (ProjectViewController
+ * `ProjectNameEditor`, read from its `ProjectName` DEBUG lines and the
+ * accessibility tree):
+ *
+ * - (d) the title is a header and a button with the hint "Renames the
+ *   project"; a tap on it puts `project-name-field` in its place, holding
+ *   the name, all of it selected, with the caret, in the title's type, its
+ *   words within a point of where the title's stood;
+ * - (e) a new name and Return: the hub's projects hold it and the title
+ *   shows it;
+ * - (f) a rename the web makes (`PATCH /api/projects/:id`) reaches the open
+ *   page live (`projects.changed`);
+ * - (g) emptied and Return: "A project needs a name." under it
+ *   (`project-name-problem`), the field keeping the caret;
+ * - (h) Escape from a hardware keyboard puts the name back with no request.
+ *
+ * And a tapped push of several things that need you (its `cawco` data
+ * `{"kind":"needs"}`, routed as a tap is, `-push-route`):
+ *
+ * - (k) the route lands and Caw's panel opens (the `Push` and `CawPanel` logs).
+ *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-project-row
  *
@@ -22,12 +43,13 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the checks are read in order, one after another.
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
-import { MACHINE, type Seen } from "../../scratch-fleet";
+import { MACHINE, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
@@ -46,8 +68,20 @@ const DEVICES = [
   },
 ];
 const NAME = "Harbour";
+const RENAMED = "Harbour Two";
 const SESSIONS = ["Alpha", "Beta"];
 const LOG_HEAD = /^.*\] /;
+const HINT = "Renames the project";
+/** HID keyboard codes axe sends: Return, Delete (backspace), Escape. */
+const RETURN = 40;
+const DELETE = 42;
+const ESCAPE = 41;
+/** A `name tap label` line's type and words' box. */
+const LABEL_LINE =
+  /^name tap label font=([\d.]+) text=([\d.-]+),([\d.-]+),[\d.]+,[\d.]+ header=(\w+) button=(\w+) hint=(.+)$/;
+/** A `name field` line: what it holds, selected, the caret, its type, its words' box. */
+const FIELD_LINE =
+  /^name field id=(\S+) text="(.*)" selected=(\w+) first=(\w+) font=([\d.]+) text-box=([\d.-]+),([\d.-]+),[\d.]+,[\d.]+$/;
 
 const pause = (ms: number) => Bun.sleep(ms);
 
@@ -70,6 +104,10 @@ async function sh(script: string): Promise<string> {
 
 interface Node {
   frame?: { x: number; y: number; width: number; height: number };
+  /** Its accessibility hint. */
+  help?: string;
+  /** Its accessibility identifier. */
+  id?: string;
   label?: string;
   role?: string;
   value?: string;
@@ -88,6 +126,8 @@ async function device(
   let sim: MacSim | undefined;
   let stream: Subprocess | undefined;
   const heard: string[] = [];
+  /** The app's other lines: the name's edit (`name …`), the push's route, Caw's panel. */
+  const said: string[] = [];
   const { tag } = which;
   try {
     sim = await macSim({ runtime: RUNTIME, device: which.type });
@@ -99,7 +139,7 @@ async function device(
       [
         "bash",
         "-c",
-        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Rail" AND eventMessage BEGINSWITH "rail project"'`,
+        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND ((category == "Rail" AND eventMessage BEGINSWITH "rail project") OR category == "ProjectName" OR category == "Push" OR category == "CawPanel")'`,
       ],
       { stdout: "pipe", stderr: "ignore" }
     );
@@ -120,6 +160,8 @@ async function device(
         for (const line of split) {
           if (line.includes("rail project")) {
             heard.push(line.replace(LOG_HEAD, ""));
+          } else if (line.includes("dev.cawco.app")) {
+            said.push(line.replace(LOG_HEAD, ""));
           }
         }
       }
@@ -134,6 +176,8 @@ async function device(
           value: (node.AXValue ?? node.value) as string | undefined,
           role: node.role as string | undefined,
           frame: node.frame as Node["frame"],
+          help: node.help as string | undefined,
+          id: node.AXUniqueId as string | undefined,
         });
         for (const kid of (node.children as
           Record<string, unknown>[] | undefined) ?? []) {
@@ -257,10 +301,147 @@ async function device(
           ? "the switch is still on screen"
           : "no switch on screen"
       );
-      nodes = await rail();
-    } else {
-      nodes = await tree();
     }
+
+    // (d)–(h) The project's name, edited where it stands.
+    const key = (code: number) => sh(`${AXE} key ${code} --udid ${udid}`);
+    const typed = (words: string) =>
+      sh(`${AXE} type '${words}' --udid ${udid}`);
+    const hubName = async () =>
+      (
+        (await (await fetch(`${base}/api/projects`)).json()) as {
+          id: string;
+          name: string;
+        }[]
+      ).find((one) => one.id === projectId)?.name;
+    /** The name's lines since `from`. */
+    const lines = (from: number) =>
+      said.slice(from).filter((line) => line.startsWith("name "));
+    /** The first of the name's lines since `from` that `test` passes, waited for. */
+    const awaitLine = (
+      from: number,
+      test: (line: string) => boolean,
+      ms = 10_000
+    ) =>
+      until("the name's line", () => lines(from).find(test), Boolean, ms).catch(
+        () => undefined
+      );
+    const titleOf = (list: Node[]) => find(list, (n) => n.help === HINT);
+
+    // (d) The tap: the field in the title's place.
+    const fromD = said.length;
+    const title = titleOf(await tree());
+    await tap(title, "the project's title");
+    const fieldLine = await awaitLine(fromD, (l) =>
+      l.startsWith("name field ")
+    );
+    const tapLine = lines(fromD).find((l) => l.startsWith("name tap label "));
+    const label = tapLine ? LABEL_LINE.exec(tapLine) : null;
+    const field = fieldLine ? FIELD_LINE.exec(fieldLine) : null;
+    const fieldNode = find(await tree(), (n) => n.id === "project-name-field");
+    kit.check(
+      `${tag} (d) 7: VoiceOver reads the title as a header and a button, hint "${HINT}"`,
+      title?.label === NAME &&
+        title.help === HINT &&
+        label?.[4] === "true" &&
+        label?.[5] === "true" &&
+        label?.[6] === HINT,
+      `${tapLine ?? "no tap line"}; tree: ${JSON.stringify(title)}`
+    );
+    const dx = Math.abs(Number(field?.[6]) - Number(label?.[2]));
+    const dy = Math.abs(Number(field?.[7]) - Number(label?.[3]));
+    kit.check(
+      `${tag} (d) 2: a tap puts project-name-field in the title's place, holding the name, selected, with the caret, in the title's type, its words within 1pt of the title's`,
+      field?.[1] === "project-name-field" &&
+        field[2] === NAME &&
+        field[3] === "true" &&
+        field[4] === "true" &&
+        field[5] === label?.[1] &&
+        dx <= 1 &&
+        dy <= 1 &&
+        !!fieldNode,
+      `${tapLine ?? "no tap line"} | ${fieldLine ?? "no field line"}; dx ${dx.toFixed(1)} dy ${dy.toFixed(1)}; tree: ${JSON.stringify(fieldNode)}`
+    );
+
+    // (e) A new name and Return.
+    const fromE = said.length;
+    await typed(RENAMED);
+    await key(RETURN);
+    const shows = await awaitLine(fromE, (l) => l === `name shows ${RENAMED}`);
+    await pause(800);
+    const renamed = await hubName();
+    const afterE = titleOf(await tree());
+    kit.check(
+      `${tag} (e) 3: a new name and Return: the hub's projects hold it and the title shows it`,
+      renamed === RENAMED && !!shows && afterE?.label === RENAMED,
+      `hub ${renamed}; title ${afterE?.label}; ${lines(fromE).join(" | ")}`
+    );
+
+    // (f) The web renames it back, as its head does.
+    const fromF = said.length;
+    const patched = await fetch(`${base}/api/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: NAME }),
+    });
+    const live = await awaitLine(fromF, (l) => l === `name shows ${NAME}`);
+    await pause(800);
+    const afterF = titleOf(await tree());
+    kit.check(
+      `${tag} (f) 6: a web rename reaches the open project page live`,
+      patched.ok &&
+        !!live &&
+        afterF?.label === NAME &&
+        !lines(fromF).some((l) => l.startsWith("name commit")),
+      `PATCH ${patched.status}; title ${afterF?.label}; ${lines(fromF).join(" | ")}`
+    );
+
+    // (g) Emptied and Return: the hub's refusal under it, the caret kept.
+    const fromG = said.length;
+    await tap(afterF, "the project's title again");
+    await awaitLine(fromG, (l) => l.startsWith("name field "));
+    await key(DELETE);
+    await key(RETURN);
+    const refused = await awaitLine(fromG, (l) =>
+      l.startsWith("name refused ")
+    );
+    await pause(800);
+    const problem = find(await tree(), (n) => n.id === "project-name-problem");
+    const unchanged = await hubName();
+    kit.check(
+      `${tag} (g) 4: emptied and Return: "A project needs a name." under it (project-name-problem), the caret kept`,
+      refused ===
+        'name refused "A project needs a name." shown=true id=project-name-problem first=true' &&
+        lines(fromG).includes('name commit ""') &&
+        problem?.label === "A project needs a name." &&
+        unchanged === NAME,
+      `${lines(fromG).join(" | ")}; tree: ${JSON.stringify(problem)}; hub ${unchanged}`
+    );
+    // Escape leaves the refused edit, the name back.
+    await key(ESCAPE);
+    await awaitLine(fromG, (l) => l === "name close");
+
+    // (h) Escape from the keyboard: the name back, no request.
+    const fromH = said.length;
+    await tap(titleOf(await tree()), "the project's title once more");
+    await awaitLine(fromH, (l) => l.startsWith("name field "));
+    await typed("Scratch");
+    await key(ESCAPE);
+    const closed = await awaitLine(fromH, (l) => l === "name close");
+    await pause(800);
+    const afterH = titleOf(await tree());
+    const kept = await hubName();
+    kit.check(
+      `${tag} (h) 5: Escape from a hardware keyboard puts the name back with no request`,
+      !!closed &&
+        lines(fromH).includes("name escape") &&
+        !lines(fromH).some((l) => l.startsWith("name commit")) &&
+        kept === NAME &&
+        afterH?.label === NAME,
+      `${lines(fromH).join(" | ")}; hub ${kept}; title ${afterH?.label}`
+    );
+
+    nodes = which.phone ? await rail() : await tree();
 
     // (b) The mark, both ways.
     const fromB = heard.length;
@@ -292,8 +473,32 @@ async function device(
         ),
       `shut ${shutMark?.label}/${shutMark?.value} ${sessionRows(shut)} rows; back ${backMark?.label}/${backMark?.value} ${sessionRows(back)} rows; log ${afterB.join(" | ")}`
     );
+
+    // (k) A tapped push of several things that need you, at launch.
+    const fromK = said.length;
+    await sh(
+      `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${base} -push-route 'push:{"kind":"needs"}' >/dev/null`
+    );
+    const landed = await until(
+      "the needs route landing",
+      () => said.slice(fromK).find((l) => l === "route needs landed"),
+      Boolean,
+      60_000
+    ).catch(() => undefined);
+    await pause(1500);
+    const sinceK = said.slice(fromK);
+    kit.check(
+      `${tag} (k): a tapped push of {"kind":"needs"} lands its route and opens Caw's panel`,
+      !!landed && sinceK.includes("panel open: true"),
+      sinceK
+        .filter((l) => l.startsWith("route") || l.startsWith("panel"))
+        .join(" | ") || "no route or panel line"
+    );
   } finally {
-    await writeFile(join(kit.out, `${tag}-log.txt`), heard.join("\n"));
+    await writeFile(
+      join(kit.out, `${tag}-log.txt`),
+      [...heard, ...said].join("\n")
+    );
     stream?.kill();
     await sim?.release();
   }

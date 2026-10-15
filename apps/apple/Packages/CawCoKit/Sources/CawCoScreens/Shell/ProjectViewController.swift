@@ -1,6 +1,9 @@
 import CawCoAPI
 import CawCoCore
 import CawCoDesign
+#if DEBUG
+import OSLog
+#endif
 import UIKit
 
 /// A project's views (routes/project/[id]/+page.svelte): the head, then the
@@ -394,6 +397,9 @@ final class ProjectViewController: ObservedViewController {
     }
 
     private func showHead(_ project: ProjectRow, fleet: FleetStore) {
+        #if DEBUG
+        if name.text != project.name { ProjectNameProbe.say("shows \(project.name)") }
+        #endif
         name.text = project.name
         let primary = project.primaryPlace
         let machine = primary.flatMap { home in fleet.machines.first { $0.machineId == home.machineId } }
@@ -650,6 +656,9 @@ final class ProjectViewController: ObservedViewController {
     /// A tap on the name: the field takes its place, holding it, selected (ProjectHead.svelte).
     @objc private func editName() {
         guard let project, nameEditor.isHidden else { return }
+        #if DEBUG
+        ProjectNameProbe.tapped(name)
+        #endif
         name.isHidden = true
         nameEditor.begin(project.name)
     }
@@ -974,6 +983,9 @@ final class ProjectNameEditor: UIView, UITextFieldDelegate {
         isHidden = false
         field.becomeFirstResponder()
         field.selectAll(nil)
+        #if DEBUG
+        DispatchQueue.main.async { [field] in ProjectNameProbe.began(field) }
+        #endif
     }
 
     func textFieldShouldReturn(_: UITextField) -> Bool {
@@ -1001,6 +1013,9 @@ final class ProjectNameEditor: UIView, UITextFieldDelegate {
         busy = true
         field.isEnabled = false
         field.textColor = Palette.inkMuted
+        #if DEBUG
+        ProjectNameProbe.say("commit \"\(next)\"")
+        #endif
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -1018,6 +1033,9 @@ final class ProjectNameEditor: UIView, UITextFieldDelegate {
                 }.startAnimation()
                 UIAccessibility.post(notification: .announcement, argument: problem.text)
                 field.becomeFirstResponder()
+                #if DEBUG
+                ProjectNameProbe.say("refused \"\(problem.text ?? "")\" shown=\(!problem.isHidden) id=\(problem.accessibilityIdentifier ?? "none") first=\(field.isFirstResponder)")
+                #endif
             }
         }
     }
@@ -1025,6 +1043,9 @@ final class ProjectNameEditor: UIView, UITextFieldDelegate {
     private func close() {
         guard !closing else { return }
         closing = true
+        #if DEBUG
+        ProjectNameProbe.say("close")
+        #endif
         if field.isFirstResponder { field.resignFirstResponder() }
         problem.isHidden = true
         isHidden = true
@@ -1061,7 +1082,12 @@ final class ProjectNameEditor: UIView, UITextFieldDelegate {
             [UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escaped))]
         }
 
-        @objc private func escaped() { escape?() }
+        @objc private func escaped() {
+            #if DEBUG
+            ProjectNameProbe.say("escape")
+            #endif
+            escape?()
+        }
 
         @discardableResult
         override func becomeFirstResponder() -> Bool {
@@ -1081,3 +1107,43 @@ final class ProjectNameEditor: UIView, UITextFieldDelegate {
         }
     }
 }
+
+#if DEBUG
+/// The project's name edited where it stands, as `ProjectName` lines
+/// (scripts/probe-kit/specs/ios-project-row.ts): where the title's words
+/// stood and the field's words stand, in the window's points; what the
+/// field holds; each send, refusal, Escape and close; each name the title shows.
+enum ProjectNameProbe {
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "ProjectName")
+
+    static func say(_ line: String) {
+        log.notice("name \(line, privacy: .public)")
+    }
+
+    private static func box(_ rect: CGRect) -> String {
+        String(format: "%.1f,%.1f,%.1f,%.1f", rect.minX, rect.minY, rect.width, rect.height)
+    }
+
+    /// The title as it was tapped: its first line's box, its type, and what VoiceOver reads it as.
+    static func tapped(_ label: UILabel) {
+        let text = label.textRect(forBounds: label.bounds, limitedToNumberOfLines: 0)
+        let top = (label.bounds.height - text.height) / 2
+        let line = label.convert(CGRect(x: text.minX, y: top, width: text.width, height: label.font.lineHeight), to: nil)
+        let traits = label.accessibilityTraits
+        say("tap label font=\(label.font.pointSize) text=\(box(line)) header=\(traits.contains(.header)) button=\(traits.contains(.button)) hint=\(label.accessibilityHint ?? "none")")
+    }
+
+    /// The field in the title's place, laid out: what it holds, whether all of it is selected and it has the caret, its type, its words' box.
+    static func began(_ field: UITextField) {
+        field.window?.layoutIfNeeded()
+        let rect = field.textRect(forBounds: field.bounds)
+        let height = field.font?.lineHeight ?? 0
+        let line = field.convert(CGRect(x: rect.minX, y: rect.midY - height / 2, width: rect.width, height: height), to: nil)
+        let length = ((field.text ?? "") as NSString).length
+        let selected = field.selectedTextRange.map {
+            length > 0 && field.offset(from: field.beginningOfDocument, to: $0.start) == 0 && field.offset(from: $0.start, to: $0.end) == length
+        } ?? false
+        say("field id=\(field.accessibilityIdentifier ?? "none") text=\"\(field.text ?? "")\" selected=\(selected) first=\(field.isFirstResponder) font=\(field.font?.pointSize ?? 0) text-box=\(box(line))")
+    }
+}
+#endif
