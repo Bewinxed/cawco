@@ -25,11 +25,17 @@
  *   Every item joins the open burst ({@link QUIET_MS}, {@link BURST_MS}),
  *   and as the burst goes out each is asked again whether it still needs
  *   you and whether the gate lets it through. One left goes as itself;
- *   several go as one push under the burst's own collapse id, naming the
- *   count and the first ("6 tasks need you"), which opens Needs you. An ask
+ *   several go as one push under the burst's own collapse id. A burst never
+ *   costs a lock-screen answer: while an ask among them is still parked,
+ *   the push is the newest such ask's (its words, category and ids, so its
+ *   buttons answer it) and "And 5 more need you"; with none, it names the
+ *   count and the first ("6 tasks need you") and opens Needs you. An ask
  *   goes at once (a session is blocked on it); a second ask in the burst
  *   replaces it on the device under the burst's id rather than stacking,
- *   and the burst's push replaces both. A push that takes another's place
+ *   and the burst's push replaces both. An answered ask is over: it leaves
+ *   the burst, and a push it led is replaced at once, by the same rule,
+ *   under a fresh id (the device's word that it acted on the old one then
+ *   takes nothing else down). A push that takes another's place
  *   names the one it replaces in `cawco.cleared`, so the device takes it
  *   down and never reports it as the person's dismissal. The burst's id
  *   clears once every item it named has cleared.
@@ -271,19 +277,29 @@ interface Arrival {
 /** Items that arose close together, from one actor or several: one notification. */
 interface Burst {
   readonly firstAt: number;
-  /** The collapse id a push naming more than one of its items goes under. */
-  readonly id: string;
+  /**
+   * The collapse id a push naming more than one of its items goes under: a
+   * fresh one each time an answered ask's push is replaced, so the device's
+   * late word that it acted on the old one never takes the new one down.
+   */
+  id: string;
   /**
    * By collapse id, in the order they arose: a second arrival under one id
    * (a task's move and its failed attempt) is the same item, newer words.
    */
   readonly items: Map<string, Arrival>;
+  /** The ask whose buttons what it shows carries; null when it shows one item alone or nothing to answer. */
+  lead: string | null;
+  /** How many times its push was replaced after an answer: the next id's suffix. */
+  replaced: number;
   /** What the device shows of it: one item's own collapse id, the burst's id, or nothing yet. */
   showing: string | null;
-  /** The items what it shows counted. */
-  shown: ReadonlySet<string>;
+  /** The items what it shows counted, in the order they arose. */
+  shown: readonly Arrival[];
   timer?: HubTimer;
 }
+
+const idOf = (item: Arrival): string => item.notification.collapseId;
 
 /** What a burst's items are, when they are all one thing: "6 tasks need you". */
 const NOUNS: Partial<Record<PushData["kind"], string>> = {
@@ -326,13 +342,17 @@ const burstOf = (id: string, items: readonly Arrival[]): Notification => {
   };
 };
 
-/** An ask that replaces the burst's earlier ones on the device: its own words and buttons, and how many more wait. */
+/**
+ * Several items led by an ask still parked: the ask's own words first, its
+ * category and data, so its buttons answer it from the lock screen, then
+ * how many more need you.
+ */
 const askAmong = (
   id: string,
   ask: Notification,
   count: number
 ): Notification => {
-  const more = `And ${count - 1} more`;
+  const more = `And ${count - 1} more need you`;
   return {
     ...ask,
     collapseId: id,
@@ -342,21 +362,26 @@ const askAmong = (
 };
 
 /**
- * What a burst sends for `items`: one item as itself; several under the
- * burst's id, as the newest ask that just arrived or as the burst.
+ * What a burst sends for `items` (each still needing you): one item as
+ * itself; several under the burst's id, led by the newest ask among them
+ * so a burst never costs a lock-screen answer, else Open only as the burst.
+ * `lead` is the ask whose buttons it carries.
  */
 const pushOf = (
   id: string,
-  items: readonly Arrival[],
-  ask: Arrival | null
-): Notification => {
+  items: readonly Arrival[]
+): { lead: string | null; notification: Notification } => {
   const [first] = items;
   if (items.length === 1) {
-    return first.notification;
+    return { lead: null, notification: first.notification };
   }
+  const ask = items.findLast((item) => item.ask);
   return ask
-    ? askAmong(id, ask.notification, items.length)
-    : burstOf(id, items);
+    ? {
+        lead: idOf(ask),
+        notification: askAmong(id, ask.notification, items.length),
+      }
+    : { lead: null, notification: burstOf(id, items) };
 };
 
 /** Cawrier refuses a payload over APNs' 4096 bytes (apps/cawrier `MAX_PAYLOAD_BYTES`). */
@@ -741,10 +766,14 @@ export const createPush = ({
   /** The burst items arrive into, while it is open. */
   let open: Burst | undefined;
   /**
-   * By a burst's collapse id, once its push named several items: the ones
-   * that have not cleared yet. When the last clears, so does the burst's.
+   * By the collapse id of a burst's push that named several items: its
+   * burst, and the items not cleared yet. When the last clears, so does
+   * the burst's push.
    */
-  const covers = new Map<string, { at: number; items: Set<string> }>();
+  const covers = new Map<
+    string,
+    { at: number; burst: Burst; outstanding: Set<string> }
+  >();
 
   notifications.onCleared((ids, via) => {
     const now = Date.now();
@@ -754,9 +783,9 @@ export const createPush = ({
         continue;
       }
       for (const item of ids) {
-        cover.items.delete(item);
+        cover.outstanding.delete(item);
       }
-      if (cover.items.size === 0) {
+      if (cover.outstanding.size === 0) {
         covers.delete(id);
         notifications.clear([id], via);
       }
@@ -764,44 +793,94 @@ export const createPush = ({
   });
 
   /**
-   * Shows what of `burst` still needs you, unless the device already shows
-   * all of it: one item as itself, several as one push under the burst's id
-   * (`ask`, the newest ask, keeps its own words and buttons; without it, the
-   * count and the first item). Whatever the burst showed before is named in
-   * the new push's `cawco.cleared`, so the device takes it down.
+   * Sends `items` for `burst` (one as itself, several under `id`, led by
+   * the newest ask among them: `pushOf`), in place of whatever the burst
+   * showed before, which the push names in `cawco.cleared` so the device
+   * takes it down.
    */
-  const show = (
-    burst: Burst,
-    items: readonly Arrival[],
-    ask: Arrival | null
-  ): void => {
-    const ids = items.map((item) => item.notification.collapseId);
-    if (ids.every((id) => burst.shown.has(id))) {
-      return;
-    }
-    const notification = pushOf(burst.id, items, ask);
+  const send = (burst: Burst, items: readonly Arrival[], id: string): void => {
+    const { lead, notification } = pushOf(id, items);
     const replacing =
       burst.showing && burst.showing !== notification.collapseId
         ? [burst.showing]
         : [];
+    if (burst.showing) {
+      covers.delete(burst.showing);
+    }
     const now = Date.now();
-    for (const id of ids) {
-      recent.set(id, now);
+    const ids = items.map(idOf);
+    for (const one of ids) {
+      recent.set(one, now);
     }
     if (items.length > 1) {
       // Each item is outstanding under its own id too: its clear (an ask
       // settled, a session looked at) reaches `covers`.
-      for (const id of ids) {
-        notifications.shown(id);
+      for (const one of ids) {
+        notifications.shown(one);
       }
-      covers.set(burst.id, { at: now, items: new Set(ids) });
+      covers.set(notification.collapseId, {
+        at: now,
+        burst,
+        outstanding: new Set(ids),
+      });
     }
     burst.showing = notification.collapseId;
-    burst.shown = new Set(ids);
+    burst.shown = items;
+    burst.lead = lead;
     console.log(
-      `[notify] push ${notification.collapseId}: ${items.length === 1 ? "sent" : `${items.length} in one (${ids.join(", ")})`}${replacing.length > 0 ? `, replacing ${replacing.join(", ")}` : ""}`
+      `[notify] push ${notification.collapseId}: ${items.length === 1 ? "sent" : `${items.length} in one (${ids.join(", ")})${lead ? `, led by ${lead}` : ""}`}${replacing.length > 0 ? `, replacing ${replacing.join(", ")}` : ""}`
     );
     replace(notification, replacing);
+  };
+
+  /** Shows what of `burst` still needs you, unless the device already shows all of it. */
+  const show = (burst: Burst, items: readonly Arrival[]): void => {
+    const shown = new Set(burst.shown.map(idOf));
+    if (items.every((item) => shown.has(idOf(item)))) {
+      return;
+    }
+    send(burst, items, burst.id);
+  };
+
+  /** An item the device was shown that still needs you: an ask still parked, anything else not cleared. */
+  const stillShown = (item: Arrival, outstanding: ReadonlySet<string>) =>
+    item.notification.data.kind === "ask"
+      ? asked.has(item.notification.data.requestId)
+      : outstanding.has(idOf(item));
+
+  /**
+   * An ask was answered (or otherwise settled): it is over, and leaves the
+   * open burst at once. A burst push it led (its buttons) is replaced at
+   * once by what is left, under a fresh id and by the same rule: led by the
+   * newest ask still parked, else Open only, or the last item as itself;
+   * with nothing left it comes down.
+   */
+  const answered = (requestId: string): void => {
+    const id = askCollapseId(requestId);
+    open?.items.delete(id);
+    const [shownId, cover] =
+      [...covers].find(([, one]) => one.burst.lead === id) ?? [];
+    if (!(shownId && cover)) {
+      return;
+    }
+    const { burst } = cover;
+    const rest = burst.shown.filter(
+      (item) => idOf(item) !== id && stillShown(item, cover.outstanding)
+    );
+    if (rest.length === 0) {
+      covers.delete(shownId);
+      burst.showing = null;
+      burst.shown = [];
+      burst.lead = null;
+      notifications.clear([shownId], "settled");
+      return;
+    }
+    burst.replaced += 1;
+    burst.id = `${needsCollapseId(burst.firstAt)}-${burst.replaced}`;
+    console.log(
+      `[notify] push ${shownId}: ${id} was answered, replaced by what is left`
+    );
+    send(burst, rest, burst.id);
   };
 
   /**
@@ -819,6 +898,7 @@ export const createPush = ({
           .catch(() => true)
       )
     );
+    const shown = new Set(burst.shown.map(idOf));
     const live: Arrival[] = [];
     for (const [index, [id, item]] of entries.entries()) {
       if (burst.items.get(id) !== item) {
@@ -832,7 +912,7 @@ export const createPush = ({
       }
       const passes =
         over ||
-        burst.shown.has(id) ||
+        shown.has(id) ||
         notifications.passes({
           outlet: "push",
           collapseId: id,
@@ -849,7 +929,7 @@ export const createPush = ({
       return;
     }
     if (live.length > 0) {
-      show(burst, live, ask);
+      show(burst, live);
     }
   };
 
@@ -877,8 +957,10 @@ export const createPush = ({
       id: needsCollapseId(now),
       firstAt: now,
       items: new Map(),
+      lead: null,
+      replaced: 0,
       showing: null,
-      shown: new Set(),
+      shown: [],
     };
     open = burst;
     burst.items.set(collapseId, item);
@@ -1082,6 +1164,7 @@ export const createPush = ({
     /** An ask left the pending list: a later ask can never reuse its id, so its mark goes. */
     onSettled(requestId: string): void {
       asked.delete(requestId);
+      answered(requestId);
     },
 
     /** A turn of the session is under way: a stop asked before it is not this turn's. */

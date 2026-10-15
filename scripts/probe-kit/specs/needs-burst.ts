@@ -16,16 +16,26 @@
  *    under the burst's own collapse id: "6 tasks need you", the first
  *    task's title and "and 5 more", kind `needs` (opens Needs you).
  * b. Four more moves, a fifth task moved in and back out, and two asks
- *    amid them: the first ask is pushed at once as itself; the second at
- *    once under the burst's id, naming the first in `cawco.cleared`
- *    (the device takes it down, no stacking); the burst's push follows
- *    under that same id, counting 6 (four tasks, two asks), not the task
- *    that left the stage, which the hub logs as over before it went out.
- * c. One item alone (the first ask answered, its session's turn ends): it
- *    goes as itself, under its own id, as it always has.
+ *    (a Write each: Approve and Deny on the push) amid them: the first ask
+ *    is pushed at once as itself; the second at once under the burst's id,
+ *    naming the first in `cawco.cleared` (the device takes it down, no
+ *    stacking); the burst's push follows under that same id, led by the
+ *    newest ask (its category and ids) and "And 5 more need you" (four
+ *    tasks and the other ask), not the task that left the stage, which the
+ *    hub logs as over before it went out.
+ * b2. Approve on that push, as the app's action handler does it (the ask
+ *    it names, answered with the card's command, then the push reported
+ *    let go of `via: action`): the ask resolves; the push it led is
+ *    replaced at once under a fresh id, led by the other ask and "And 4
+ *    more need you"; the device's report clears only the old id. The
+ *    answered session's turn then goes alone, as itself.
+ * c. The last ask answered elsewhere: its push is replaced at once by the
+ *    Open-only burst, "4 tasks need you", kind `needs`; then that
+ *    session's turn, as itself.
  *
  *   bun scripts/probe-kit/run.ts needs-burst
  */
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the scenario runs in order, one step after the last.
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -329,17 +339,18 @@ const run = async (kit: Kit) => {
       moveCall(t11.id, "ready"),
       moveCall(t10.id, "review"),
     ]);
-    const bash = (n: number): Call => ({
-      name: "Bash",
-      input: {
-        command: `touch burst-probe-${n}.txt`,
-        description: "Make a file",
-      },
+    // A Write asks with Approve and Deny on the push (a Bash is opened to be read).
+    const file = (n: number) => join(fleet.repo, `burst-probe-${n}.txt`);
+    const write = (n: number): Call => ({
+      name: "Write",
+      input: { file_path: file(n), content: `burst probe ${n}\n` },
     });
-    scripts.set("PROBE-ASK:1", [bash(1)]);
-    scripts.set("PROBE-ASK:2", [bash(2)]);
+    scripts.set("PROBE-ASK:1", [write(1)]);
+    scripts.set("PROBE-ASK:2", [write(2)]);
     interface Parked {
       instanceId?: string;
+      machineId?: string;
+      payload?: { input?: Record<string, unknown> };
       requestId?: string;
     }
     const parked = (instanceId: string) =>
@@ -383,7 +394,9 @@ const run = async (kit: Kit) => {
     const bBurst = await until(
       "b: the burst's push",
       () =>
-        visible(bStart).find((one) => one.body.payload.cawco?.kind === "needs"),
+        visible(bStart).filter(
+          (one) => one.body.collapseId === ask2Push?.body.collapseId
+        )[1],
       Boolean,
       60_000
     );
@@ -403,8 +416,8 @@ const run = async (kit: Kit) => {
       ask2Push.at - ask2Parked < 3000 &&
         ask2Push.body.collapseId?.startsWith("needs-") === true &&
         (ask2Push.body.payload.cawco?.cleared ?? []).includes(`ask-${ask1}`) &&
-        ask2Push.body.payload.aps.category === "CAWCO_PERMISSION_OPEN" &&
-        ask2Sealed.body?.endsWith("\nAnd 1 more") === true,
+        ask2Push.body.payload.aps.category === "CAWCO_PERMISSION" &&
+        ask2Sealed.body?.endsWith("\nAnd 1 more need you") === true,
       JSON.stringify({
         ms: ask2Push.at - ask2Parked,
         collapseId: ask2Push.body.collapseId,
@@ -415,16 +428,18 @@ const run = async (kit: Kit) => {
     );
     const bSealed = await sealed(bBurst);
     kit.check(
-      "b: the burst's push collapses onto the same notification and counts 6",
+      "b: the burst's push collapses onto the same notification, leads with the newest ask (its category and ids) and counts the rest",
       bBurst.body.collapseId === ask2Push.body.collapseId &&
-        bBurst.body.payload.cawco?.count === 6 &&
-        bBurst.body.payload.aps.alert?.title === "6 need you" &&
-        bBurst.body.payload.aps.alert?.body === `${t7.title}, and 5 more` &&
-        bSealed.title === "6 need you",
+        bBurst.body.payload.cawco?.kind === "ask" &&
+        bBurst.body.payload.cawco.requestId === ask2 &&
+        bBurst.body.payload.aps.category === "CAWCO_PERMISSION" &&
+        bBurst.body.payload.aps.alert?.body ===
+          "Needs you\nAnd 5 more need you" &&
+        bSealed.body?.endsWith("\nAnd 5 more need you") === true,
       JSON.stringify({
         collapseId: bBurst.body.collapseId,
         cawco: bBurst.body.payload.cawco,
-        alert: bBurst.body.payload.aps.alert,
+        aps: bBurst.body.payload.aps,
         sealed: bSealed,
       })
     );
@@ -452,30 +467,177 @@ const run = async (kit: Kit) => {
       `${Math.max(...bAt, ask2Parked) - Math.min(...bAt, ask1Parked)} ms from the first to the last arrival`
     );
 
-    // ── c. one item alone goes as itself ──────────────────────────────────
-    const cStart = Date.now();
-    await fleet.control(asker1, "resolvePermission", [
-      ask1,
-      {
-        behavior: "allow",
-        updatedInput: bash(1).input,
+    // ── b2. Approve on the burst's push, as the app's action does it ──────
+    // PushActions.approve: the ask the push names, read off /api/pending by
+    // its requestId and instanceId, answered with the card's command; once
+    // applied, the device reports the push let go of `via: action`.
+    const burstId = bBurst.body.collapseId as string;
+    const named = bBurst.body.payload.cawco as {
+      instanceId?: string;
+      requestId?: string;
+    };
+    const card = (await fleet.api<Parked[]>("/api/pending")).find(
+      (one) =>
+        one.requestId === named.requestId && one.instanceId === named.instanceId
+    );
+    if (!card?.requestId) {
+      throw new Error(`b2: the push's ask ${named.requestId} is not parked`);
+    }
+    const b2Start = Date.now();
+    await fleet.post({
+      type: "command",
+      commandId: crypto.randomUUID(),
+      kind: "permission.answer",
+      machineId: card.machineId,
+      sessionId: card.instanceId,
+      payload: {
+        instanceId: card.instanceId,
+        requestId: card.requestId,
+        method: "resolvePermission",
+        args: [
+          card.requestId,
+          { behavior: "allow", updatedInput: card.payload?.input ?? {} },
+        ],
       },
-    ]);
-    const turn = await until(
-      "c: the answered session's finished turn",
-      () => visible(cStart)[0],
+    });
+    await until(
+      "b2: the ask answered",
+      async () =>
+        (await fleet.api<Parked[]>("/api/pending")).some(
+          (one) => one.requestId === card.requestId
+        )
+          ? undefined
+          : true,
+      Boolean,
+      30_000
+    );
+    const answeredAt = Date.now();
+    await fleet.api("/api/notifications/dismiss", {
+      collapseIds: [burstId],
+      via: "action",
+      deliveredAt: { [burstId]: bBurst.at },
+    });
+    const written = await until(
+      "b2: the approved Write ran",
+      () => Bun.file(file(2)).exists(),
+      Boolean,
+      60_000
+    ).catch(() => false);
+    const b2Replaced = await until(
+      "b2: the push it led, replaced",
+      () =>
+        visible(b2Start).find((one) =>
+          (one.body.payload.cawco?.cleared ?? []).includes(burstId)
+        ),
+      Boolean,
+      15_000
+    );
+    if (!b2Replaced) {
+      throw new Error("b2: no replacement");
+    }
+    const b2Id = b2Replaced.body.collapseId as string;
+    kit.check(
+      "b2: answering through the burst push's action resolves that ask",
+      card.requestId === ask2 && written,
+      `${card.requestId} answered, ${file(2)} written: ${written}`
+    );
+    const b2Sealed = await sealed(b2Replaced);
+    kit.check(
+      "b2: the push it led is replaced at once under a fresh id, led by the ask still parked, and counts the rest",
+      b2Replaced.at - answeredAt < 3000 &&
+        b2Id !== burstId &&
+        b2Id.startsWith("needs-") &&
+        b2Replaced.body.payload.cawco?.kind === "ask" &&
+        b2Replaced.body.payload.cawco.requestId === ask1 &&
+        b2Replaced.body.payload.aps.category === "CAWCO_PERMISSION" &&
+        b2Sealed.body?.endsWith("\nAnd 4 more need you") === true,
+      JSON.stringify({
+        ms: b2Replaced.at - answeredAt,
+        collapseId: b2Id,
+        cawco: b2Replaced.body.payload.cawco,
+        category: b2Replaced.body.payload.aps.category,
+        sealed: b2Sealed,
+      })
+    );
+    await Bun.sleep(2000);
+    const ledger = (table: string, id: string) =>
+      fleet.query<{ collapse_id: string }>(
+        `SELECT collapse_id FROM ${table} WHERE collapse_id = ?`,
+        id
+      ).length;
+    kit.check(
+      "b2: the device's word that it acted on the old push takes the replacement nowhere",
+      ledger("notification_cleared", burstId) === 1 &&
+        ledger("notification_sent", b2Id) === 1 &&
+        ledger("notification_cleared", b2Id) === 0,
+      `${burstId} cleared ${ledger("notification_cleared", burstId)}, ${b2Id} sent ${ledger("notification_sent", b2Id)} cleared ${ledger("notification_cleared", b2Id)}`
+    );
+    const turn2 = await until(
+      "b2: the answered session's finished turn",
+      () =>
+        visible(b2Start).find(
+          (one) => one.body.collapseId === `turn-${asker2}`
+        ),
       Boolean,
       90_000
     );
-    if (!turn) {
-      throw new Error("c: no push");
+    if (!turn2) {
+      throw new Error("b2: no turn push");
     }
-    await settled(turn);
+    await settled(turn2);
     kit.check(
-      "c: a single item goes under its own id, as itself",
-      visible(cStart).length === 1 &&
-        turn.body.collapseId === `turn-${asker1}` &&
-        turn.body.payload.cawco?.kind === "turn",
+      "b2: a single item alone (the answered session's turn) goes under its own id, as itself",
+      turn2.body.payload.cawco?.kind === "turn" &&
+        visible(b2Start).length === 2,
+      visible(b2Start)
+        .map((one) => `${one.body.collapseId} ${one.body.payload.cawco?.kind}`)
+        .join(", ")
+    );
+
+    // ── c. the last ask answered elsewhere: Open only, as the burst ───────
+    const cStart = Date.now();
+    await fleet.control(asker1, "resolvePermission", [
+      ask1,
+      { behavior: "allow", updatedInput: write(1).input },
+    ]);
+    const cReplaced = await until(
+      "c: the push the last ask led, replaced",
+      () =>
+        visible(cStart).find((one) =>
+          (one.body.payload.cawco?.cleared ?? []).includes(b2Id)
+        ),
+      Boolean,
+      30_000
+    );
+    const turn1 = await until(
+      "c: the answered session's finished turn",
+      () =>
+        visible(cStart).find((one) => one.body.collapseId === `turn-${asker1}`),
+      Boolean,
+      90_000
+    );
+    if (!(cReplaced && turn1)) {
+      throw new Error("c: a push is missing");
+    }
+    await settled(turn1);
+    const cSealed = await sealed(cReplaced);
+    kit.check(
+      "c: with no ask left parked the burst's push is Open only and opens Needs you",
+      cReplaced.body.payload.cawco?.kind === "needs" &&
+        cReplaced.body.payload.cawco.count === 4 &&
+        cReplaced.body.payload.aps.category === "CAWCO_NEEDS" &&
+        cReplaced.body.payload.aps.alert?.title === "4 tasks need you" &&
+        cSealed.body === `${t7.title}, and 3 more`,
+      JSON.stringify({
+        collapseId: cReplaced.body.collapseId,
+        cawco: cReplaced.body.payload.cawco,
+        aps: cReplaced.body.payload.aps,
+        sealed: cSealed,
+      })
+    );
+    kit.check(
+      "c: then the answered session's turn, as itself",
+      turn1.body.payload.cawco?.kind === "turn" && visible(cStart).length === 2,
       visible(cStart)
         .map((one) => `${one.body.collapseId} ${one.body.payload.cawco?.kind}`)
         .join(", ")
