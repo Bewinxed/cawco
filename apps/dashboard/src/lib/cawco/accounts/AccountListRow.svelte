@@ -11,8 +11,7 @@
    * (motion/share).
    */
   import { type Account, accountsWords as words } from "@cawco/core";
-  import { TextMorph } from "torph/svelte";
-  import { morphMs } from "#lib/cawco/motion/curves.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconChevronRight, IconWarningTriangle } from "#lib/icons.js";
   import { hueVar, nameOf, problemOf } from "./model.svelte";
 
@@ -34,7 +33,7 @@
     {#if problem}
       <span class="problem" data-flip>
         <IconWarningTriangle aria-hidden="true" />
-        <TextMorph as="span" duration={morphMs()} text={problem} />
+        <span><MorphText text={problem} /></span>
       </span>
     {/if}
     <span aria-hidden="true" class="chev"><IconChevronRight /></span>

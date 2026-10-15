@@ -8,8 +8,8 @@
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { TextMorph } from "torph/svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconCheck } from "#lib/icons.js";
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Link from "~icons/solar/link-bold-duotone";
@@ -33,7 +33,6 @@
     crossOut,
     dur,
     easeOut,
-    morphMs as morphDuration,
   } from "../motion/curves.svelte";
   import { morph } from "../motion/morph.svelte";
   import { bypasses, permissionModesFor } from "../permission-modes";
@@ -67,7 +66,6 @@
     dir: 1 | -1;
   } = $props();
   const reduceMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
-  const morphMs = $derived(reduceMotion.current ? 0 : morphDuration());
   let metaEl = $state<HTMLElement>();
   let statsEl = $state<HTMLElement>();
   /** The harness mark arrives from the side the card moved toward. */
@@ -489,15 +487,9 @@
   >
 {/snippet}
 
-<!-- A changing figure in the stats strip. A still copy of the text sizes its
-     box, so the strip lays out and wraps by the text's final width while
-     torph tweens its own width from the old size (it clips to that width:
-     app.css). -->
+<!-- A changing figure in the stats strip. -->
 {#snippet figure(text: string)}
-  <span class="figure">
-    <span aria-hidden="true" class="figure-size">{text}</span>
-    <TextMorph as="span" duration={morphMs} {text} />
-  </span>
+  <span class="figure"><MorphText {text} /></span>
 {/snippet}
 
 <!-- One line per field, whatever it is saying: the lines cross-fade at the
@@ -530,7 +522,7 @@
       <div class="identity">
         <div class="title">
           <h2 id={`${uid}-title`} {title}>
-            <TextMorph as="span" duration={morphMs} text={title} />
+            <MorphText text={title} wrap />
           </h2>
           <button
             aria-label="Copy link"
@@ -558,15 +550,11 @@
         {/if}
       </div>
       <p class="meta" bind:this={metaEl}>
-        <SessionStatus duration={morphMs} {sessionId} />
+        <SessionStatus {sessionId} />
         {#if machine?.hostname || machineId}
           <span aria-hidden="true" class="sep">·</span>
           <span class="host"
-            ><TextMorph
-              as="span"
-              duration={morphMs}
-              text={machine?.hostname || machineId || ""}
-            /></span
+            ><MorphText text={machine?.hostname || machineId || ""} /></span
           >
         {/if}
         {#if cwd}
@@ -578,7 +566,7 @@
             title={cwd}
             type="button"
           >
-            <TextMorph as="span" duration={morphMs} text={shortPath(cwd)} />
+            <MorphText text={shortPath(cwd)} />
           </button>
         {/if}
       </p>
@@ -771,11 +759,6 @@
     -webkit-line-clamp: 3;
     line-clamp: 3;
     overflow: hidden;
-  }
-  /* TextMorph keeps one line by default; the title wraps between words. */
-  h2 :global([torph-root]) {
-    display: inline;
-    white-space: normal;
   }
   /* Level with the title's first line, like the copy button beside it. */
   .harness {
@@ -982,19 +965,9 @@
     min-width: 48px;
     max-width: 96px;
   }
-  /* The still copy and the morph share one cell, so the cell is as wide as
-     the wider of the two. */
   .figure {
-    display: inline-grid;
     flex: none;
     white-space: nowrap;
-  }
-  .figure > :global(*) {
-    grid-area: 1 / 1;
-    justify-self: start;
-  }
-  .figure-size {
-    visibility: hidden;
   }
   .refusal {
     min-width: 0;

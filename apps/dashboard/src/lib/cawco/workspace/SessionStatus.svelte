@@ -1,31 +1,22 @@
 <script lang="ts">
   import type { WorkflowStep } from "@cawco/core";
   import type { TransitionConfig } from "svelte/transition";
-  import { TextMorph } from "torph/svelte";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import {
-    dur,
-    easeOut,
-    morphMs,
-    motionOk,
-    popScale,
-  } from "../motion/curves.svelte";
-  import { sessionStatus } from "./session-status";
+  import { dur, easeOut, motionOk, popScale } from "../motion/curves.svelte";
+  import { stepSessionStatus } from "./session-status";
 
   let {
     sessionId = "",
     step,
     compact = false,
-    duration = morphMs(),
   }: {
     sessionId?: string;
     /** A workflow step's status, read in the session glyphs instead of a session's. */
     step?: WorkflowStep["status"];
     compact?: boolean;
-    /** How long the label takes to morph into the next one. */
-    duration?: number;
   } = $props();
-  const status = $derived(sessionStatus(sessionId, step));
+  const status = $derived(stepSessionStatus(sessionId, step));
 
   /**
    * A new glyph cross-fades over the old one at the control tier, coming up
@@ -67,7 +58,7 @@
     {/key}
   </span>
   {#if !compact}
-    <TextMorph as="span" {duration} text={status.label} />
+    <MorphText text={status.label} />
   {/if}
 </span>
 

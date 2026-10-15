@@ -8,12 +8,11 @@
   import { validateWorkflow } from "@cawco/core";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { TextMorph } from "torph/svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { loadDelegateTypes } from "#lib/cawco/delegate-types.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
-  import { crossIn, dur, morphMs } from "#lib/cawco/motion/curves.svelte.js";
+  import { crossIn, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { runHref } from "#lib/cawco/workflow-runs.js";
   import {
@@ -34,6 +33,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -456,11 +456,7 @@
   <div class="palette wf-stack" {@attach highlight({ rows: ".palette-item" })}>
     <div class="wf-row wf-spread">
       <h2>
-        <TextMorph
-          as="span"
-          duration={morphMs()}
-          text={paletteCollapsed ? "Add" : "Nodes"}
-        />
+        <MorphText text={paletteCollapsed ? "Add" : "Nodes"} />
       </h2>
       {#if !narrow.current}
         <button
@@ -645,7 +641,7 @@
         {/if}
       </div>
       <span class="wf-muted num save-state" role="status"
-        ><TextMorph as="span" duration={morphMs()} text={saveState} /></span
+        ><MorphText text={saveState} /></span
       >
     </div>
   </header>

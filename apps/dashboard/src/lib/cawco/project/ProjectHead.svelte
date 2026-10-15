@@ -285,7 +285,7 @@
       </h1>
       <!-- A rename the hub refused, under the name, in its words. -->
       <RowFault again={commitName} reason={renameFault} />
-      <!-- Words change by TextMorph. The line is one ellipsized line as wide
+      <!-- Words change by MorphText. The line is one ellipsized line as wide
            as its column, with nothing standing after it on its row: its box
            neither grows nor narrows, so there is no size for morph() to
            tween. -->

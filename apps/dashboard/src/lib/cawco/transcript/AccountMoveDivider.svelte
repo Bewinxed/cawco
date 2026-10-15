@@ -26,13 +26,13 @@
   import { accountMoveWords } from "@cawco/core";
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
-  import { TextMorph } from "torph/svelte";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
   import IconTransfer from "~icons/solar/transfer-horizontal-bold-duotone";
   import { hueVar } from "../accounts/model.svelte";
   import Caw from "../home/Caw.svelte";
   import MessageBody from "../MessageBody.svelte";
-  import { dur, morphMs } from "../motion/curves.svelte";
+  import { dur } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { COMPACTING_MARK } from "./compaction-mark";
   import type { Row } from "./rows";
@@ -158,7 +158,7 @@
       {/if}
       <span class="words"
         >{#if watched}
-          <TextMorph as="span" duration={morphMs()} text={words.line} />
+          <MorphText text={words.line} />
         {:else}
           {words.line}
         {/if}</span

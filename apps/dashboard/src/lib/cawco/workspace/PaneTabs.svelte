@@ -92,7 +92,7 @@
   import SessionDetails from "./SessionDetails.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { rebuildScheduler } from "./scheduler.svelte";
-  import { type StatusTone, sessionStatus } from "./session-status";
+  import { type StatusTone, stepSessionStatus } from "./session-status";
   import { noNativeDrag, pressTab } from "./tab-drag.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
@@ -169,7 +169,7 @@
           ? `${ACTIVITY_LABEL.working} — ${tool}`
           : ACTIVITY_LABEL[activity];
     }
-    const state = isThreadTab(id) ? null : sessionStatus(id);
+    const state = isThreadTab(id) ? null : stepSessionStatus(id);
     return {
       id,
       key: `${id}:${arrivals.get(id) ?? 0}`,

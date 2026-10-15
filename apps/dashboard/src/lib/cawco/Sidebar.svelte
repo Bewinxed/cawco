@@ -19,13 +19,13 @@
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
-  import { TextMorph } from "torph/svelte";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
   import CawLoopSwitcher from "#lib/components/ui/CawLoopSwitcher.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import SoundSwitcher from "#lib/components/ui/SoundSwitcher.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
@@ -64,7 +64,6 @@
   import MachinesList from "./MachinesList.svelte";
   import { markHue } from "./mark";
   import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
-  import { CURVE, dur } from "./motion/curves.svelte";
   import { echoBeat } from "./motion/echo.svelte";
   import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
@@ -686,12 +685,6 @@
     row.id.slice(0, 8);
 
   const fleetCount = $derived(cawco.blockedCount || cawco.runningRows.length);
-
-  /** TextMorph's length, read from the token once the stylesheet is there. */
-  let morphMs = $state(0);
-  $effect(() => {
-    morphMs = dur("--dur-morph");
-  });
 </script>
 
 {#snippet pending(rows: number, height: string)}
@@ -917,12 +910,7 @@
                 : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]!"}
               data-flip="pop box"
             >
-              <TextMorph
-                as="span"
-                duration={morphMs}
-                ease={CURVE.out}
-                text={String(fleetCount)}
-              />
+              <MorphText text={String(fleetCount)} />
             </Sidebar.MenuBadge>
           {/if}
         </Sidebar.MenuItem>

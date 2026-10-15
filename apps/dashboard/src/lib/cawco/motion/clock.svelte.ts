@@ -4,7 +4,7 @@
  * An elapsed label is a clock: while a run goes on it re-reads the time on a
  * timer and writes plain tabular figures, so a second ticking over changes
  * digits in place and never the label's width, and nothing animates on a
- * tick. A clock never morphs (TextMorph is for words that change meaning).
+ * tick. A clock never morphs (MorphText is for words that change meaning).
  *
  * One rule, here: a clock does not run while the element it writes into is
  * not on show — scrolled out of the viewport or inside a subtree nothing

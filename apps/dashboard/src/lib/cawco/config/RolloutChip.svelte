@@ -9,7 +9,6 @@
    * The chip's glyph cross-fades between refused, landed everywhere and a
    * sync on its way (--dur-control) while its tint turns over --dur-panel.
    */
-  import { TextMorph } from "torph/svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import PendingContent, {
     whileIdle,
@@ -19,6 +18,7 @@
     machineHue,
     machineIcon,
   } from "#lib/components/ui/machine-row/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -34,7 +34,7 @@
   import { causeOf, type FaultScope } from "../fleet-faults";
   import AddMachineLink from "../join/AddMachineLink.svelte";
   import { machineOs } from "../machine";
-  import { appear, morphMs } from "../motion/curves.svelte";
+  import { appear } from "../motion/curves.svelte";
 
   let {
     machines,
@@ -128,12 +128,7 @@
       <Spinner aria-hidden="true" data-for="busy" role="presentation" />
     </span>
     <!-- A machine catching up ticks the count over rather than swapping it. -->
-    <TextMorph
-      as="span"
-      class="count"
-      duration={morphMs()}
-      text="{applied}/{machines.length}"
-    />
+    <span class="count"><MorphText text="{applied}/{machines.length}" /></span>
     <span class="unit">machines</span>
   </Popover.Trigger>
   <Popover.Content align="end" class="w-[360px] max-w-[calc(100vw-2rem)] gap-1">
@@ -314,7 +309,7 @@
       animation-play-state: paused;
     }
   }
-  :global(.rollout-chip .count) {
+  .count {
     font-variant-numeric: tabular-nums;
     color: inherit;
   }

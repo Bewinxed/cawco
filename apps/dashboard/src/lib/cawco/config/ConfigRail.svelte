@@ -5,15 +5,14 @@
    * screen under 900px — the same entries at a touch height.
    */
   import { configureWords as words } from "@cawco/core";
-  import { TextMorph } from "torph/svelte";
   import {
     dur,
     easeOut,
-    morphMs,
     motionOk,
     popScale,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { badgeOf, countOf } from "./counts.svelte";
   import { unsavedIn } from "./drafts.svelte";
   import { GROUPS, type SectionSlug } from "./sections";
@@ -37,7 +36,7 @@
   /**
    * A section's fault badge pops in from the pop scale as it fades
    * (--dur-menu) and leaves the same way on the exit tier; its figure ticks
-   * over through TextMorph. With reduced motion, a fade.
+   * over through MorphText. With reduced motion, a fade.
    */
   function badge(
     _node: Element,
@@ -92,11 +91,7 @@
                     ? words.badgeWaiting(faults)
                     : words.badgeFailing(faults)}
                   transition:badge
-                  ><TextMorph
-                    as="span"
-                    duration={morphMs()}
-                    text={String(faults)}
-                  />
+                  ><MorphText text={String(faults)} />
                   <span class="sr-only">
                     {waiting
                       ? words.badgeWaitingSaid

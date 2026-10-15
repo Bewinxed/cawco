@@ -8,9 +8,9 @@
    * and reports, the daemon's pulse, and, once opened, its live transcript.
    */
   import type { DelegateAskStatus } from "@cawco/core";
-  import { TextMorph } from "torph/svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconChevronRight, IconExternal } from "#lib/icons.js";
   import { formatDuration } from "#lib/utils/time.js";
   import {
@@ -24,7 +24,7 @@
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
   import { tickingClock } from "../motion/clock.svelte.js";
-  import { CURVE, dur, easeOut } from "../motion/curves.svelte";
+  import { dur, easeOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import type {
     DelegateAskEvent,
@@ -305,16 +305,6 @@
           (report?.failed ? (report.headline ?? headline(report.body)) : ""))
   );
 
-  /**
-   * The pill's words morph letter by letter (TextMorph, over --dur-morph)
-   * once the page is live; the server draws them as plain text, which
-   * TextMorph would draw empty. Its clock never morphs.
-   */
-  let morphMs = $state(0);
-  $effect(() => {
-    morphMs = dur("--dur-morph");
-  });
-
   /** Kept by the call that started it, so a card the reader opened stays open. */
   const disclosed = $derived(disclosure(message));
   const open = $derived(disclosed.get());
@@ -415,43 +405,20 @@
           <span class="may">may delegate</span>
         {/if}
         <span class="pill {tone}">
-          {#if morphMs}
-            <!-- One box per letter once morphed, which a screen reader would
-                 spell out: the name is read from the plain copy beside it. -->
-            <span aria-hidden="true" class="pill-words"
-              ><TextMorph
-                as="span"
-                duration={morphMs}
-                ease={CURVE.out}
-                text={pillWords}
-              />
-              {#if elapsed}
-                {pillWords ? " · " : ""}
-                <!-- The clock is plain tabular figures: a second ticking
-                     over changes digits in place, never the pill's width,
-                     and nothing animates on a tick. -->
-                <span
-                  class="elapsed"
-                  class:ticking={inFlight}
-                  {@attach clock.watch}>{elapsed}</span
-                >
-              {/if}</span
+          <MorphText text={pillWords} />
+          {#if elapsed}
+            {pillWords ? " · " : ""}
+            <!-- The clock is plain tabular figures: a second ticking over
+                 changes digits in place, never the pill's width, and nothing
+                 animates on a tick. It is a timer (live off): in the
+                 transcript's log the phase words are read when they change,
+                 not every second. -->
+            <span
+              class="elapsed"
+              class:ticking={inFlight}
+              role="timer"
+              {@attach clock.watch}>{elapsed}</span
             >
-            <!-- The clock is a timer (live off): in the transcript's log the
-                 phase words are read when they change, not every second. -->
-            <span class="sr-only"
-              >{pillWords}{#if elapsed}<span role="timer"
-                  >{pillWords ? " · " : ""}{elapsed}</span
-                >{/if}</span
-            >
-          {:else}
-            {pillWords}
-            {#if elapsed}
-              {pillWords ? " · " : ""}
-              <span class="elapsed" class:ticking={inFlight} role="timer"
-                >{elapsed}</span
-              >
-            {/if}
           {/if}
         </span>
       </Collapsible.Trigger>

@@ -33,13 +33,13 @@
    */
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
-  import { TextMorph } from "torph/svelte";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconError } from "#lib/icons.js";
   import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
   import Caw from "../home/Caw.svelte";
   import CawMark from "../home/CawMark.svelte";
   import MessageBody from "../MessageBody.svelte";
-  import { dur, morphMs } from "../motion/curves.svelte";
+  import { dur } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
   import { compactionFailure } from "./compaction-failure";
@@ -204,11 +204,7 @@
       >{#if failed}
         <!-- A compaction that failed never reads "Compacted", seen or not. -->
       {:else if watched}
-        <TextMorph
-          as="span"
-          duration={morphMs()}
-          text={live ? "Compacting…" : "Compacted"}
-        />
+        <MorphText text={live ? "Compacting…" : "Compacted"} />
       {:else}
         Compacted
       {/if}</span

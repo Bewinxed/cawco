@@ -9,8 +9,7 @@
    */
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
-  import { TextMorph } from "torph/svelte";
-  import { CURVE, morphMs } from "#lib/cawco/motion/curves.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
 
   interface Props extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
     action?: Snippet;
@@ -35,13 +34,7 @@
   <span class="st-label">{label}</span>
   <span class="st-figure">
     <!-- A new figure morphs out of the old one, digit by digit, in place. -->
-    <TextMorph
-      as="span"
-      class="st-value num"
-      duration={morphMs()}
-      ease={CURVE.out}
-      text={String(value)}
-    />
+    <span class="st-value num"><MorphText text={String(value)} /></span>
     {#if unit}
       {#key unit}
         <span class="st-unit num" data-flip="pop">{unit}</span>
@@ -78,23 +71,23 @@
     align-items: baseline;
     column-gap: var(--space-2);
   }
-  /* TextMorph writes its text after mount; the line stands from the first
-     paint so nothing below it moves when the figure lands. */
-  .st-card :global(.st-value) {
+  /* The line stands even for an empty figure, so nothing below it moves
+     when one lands. */
+  .st-value {
     min-block-size: 1lh;
     font: var(--type-kpi);
     color: var(--ink-stat);
   }
-  .st-card[data-tone="live"] :global(.st-value) {
+  .st-card[data-tone="live"] .st-value {
     color: var(--status-live-ink);
   }
-  .st-card[data-tone="attn"] :global(.st-value) {
+  .st-card[data-tone="attn"] .st-value {
     color: var(--status-attn-ink);
   }
-  .st-card[data-tone="done"] :global(.st-value) {
+  .st-card[data-tone="done"] .st-value {
     color: var(--status-done-ink);
   }
-  .st-card[data-tone="fail"] :global(.st-value) {
+  .st-card[data-tone="fail"] .st-value {
     color: var(--status-fail-ink);
   }
   .st-action {
@@ -108,7 +101,7 @@
     color: var(--ink-muted);
   }
   @media (max-width: 900px) {
-    .st-card :global(.st-value) {
+    .st-value {
       font: var(--type-title);
     }
   }

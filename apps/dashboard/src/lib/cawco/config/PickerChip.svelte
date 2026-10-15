@@ -4,8 +4,8 @@
    * for the narrowings — machine, project, harness, model — where "every" is
    * the usual answer and the list can be long.
    */
-  import { TextMorph } from "torph/svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconCheck, IconChevronDown } from "#lib/icons.js";
@@ -33,7 +33,7 @@
 <Popover.Root bind:open={expanded}>
   <Popover.Trigger aria-label="{label}: {chosen}" class="picker-chip">
     <span class="k">{label}</span>
-    <span class="v num"><TextMorph text={chosen} /></span>
+    <span class="v num"><MorphText text={chosen} /></span>
     <IconChevronDown />
   </Popover.Trigger>
   <Popover.Content align="start" class="max-h-80 w-64 gap-0 overflow-y-auto">

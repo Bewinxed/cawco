@@ -40,7 +40,12 @@ const STEP: Record<WorkflowStep["status"], SessionStatusOf> = {
   unknown: { label: "Unknown", icon: Unknown, tone: "quiet" },
 };
 
-export function sessionStatus(
+/**
+ * The status the rail's glyph and the phone tab's rim show: the workflow
+ * step's when `step` is given, the session's own otherwise. Not
+ * `../session-status`'s `sessionStatus`, which is a row's mark status.
+ */
+export function stepSessionStatus(
   sessionId: string,
   step?: WorkflowStep["status"]
 ): SessionStatusOf {

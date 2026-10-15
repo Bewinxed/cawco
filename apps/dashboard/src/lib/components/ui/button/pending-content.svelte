@@ -22,9 +22,9 @@
   /**
    * What a button that runs something draws inside itself: the icon slot (its
    * icon at rest, the spinner while the work runs, a drawn check when it
-   * ends well, cross-fading in one cell) and the label, which morphs to
-   * `pendingLabel` and back through TextMorph while the width follows over
-   * --dur-morph. The kit Button draws it; a button in another skin (the
+   * ends well, cross-fading in one cell) and the label, which cross-fades to
+   * `pendingLabel` and back in a cell as wide as the wider of the two, so the
+   * button keeps its width. The kit Button draws it; a button in another skin (the
    * new-session dialog, a workflow form) draws it in its own element, sets
    * --btn-gap and --btn-icon to its gap and icon size, and takes presses
    * through `whileIdle`. An icon-only button passes no `label`: only its
@@ -103,7 +103,15 @@
     }
     return done ? "done" : "idle";
   });
-  const text = $derived(pending && pendingLabel ? pendingLabel : (label ?? ""));
+  /**
+   * The label has a pending wording of its own: both stand in one cell, so
+   * the button is as wide as the wider of them from the start and never
+   * changes width as the work starts or ends, and they cross-fade on one
+   * transition.
+   */
+  const swapsLabel = $derived(
+    pendingLabel !== undefined && pendingLabel !== label
+  );
 
   /**
    * The ring stands in the slot: some of the work is done and it is still
@@ -212,7 +220,17 @@
   <!-- Icon only: nothing to morph. -->
 {:else}
   <span class="kit-label"
-    ><MorphText {text} />
+    >{#if swapsLabel}
+      <span class="kit-words"
+        ><span aria-hidden={pending || undefined} data-active={!pending}
+          ><MorphText text={label} /></span
+        ><span aria-hidden={!pending || undefined} data-active={pending}
+          >{pendingLabel}</span
+        ></span
+      >
+    {:else}
+      <MorphText text={label} />
+    {/if}
     {#if reason}
       <span class="kit-reason" role="alert" transition:unfold>{reason}</span>
     {/if}</span
@@ -239,6 +257,32 @@
     inline-size: 100%;
     block-size: 100%;
     pointer-events: none;
+  }
+  /* The label and its pending wording in one cell, read from the start: the
+     cell is as wide as the wider one, and the swap is one opacity and blur
+     transition over --dur-morph on --ease-out, both words on the same
+     clock. With less motion the words still cross-fade, unblurred. */
+  .kit-words {
+    display: inline-grid;
+    justify-items: start;
+
+    > * {
+      grid-area: 1 / 1;
+      transition: opacity var(--dur-morph) var(--ease-out);
+    }
+    > [data-active="false"] {
+      opacity: 0;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      > * {
+        transition:
+          opacity var(--dur-morph) var(--ease-out),
+          filter var(--dur-morph) var(--ease-out);
+      }
+      > [data-active="false"] {
+        filter: blur(2px);
+      }
+    }
   }
   /* The reason stands under the label, from where the label starts, in the
      fail status's ink; it wraps rather than widening the menu past reading. */

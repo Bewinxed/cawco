@@ -6,8 +6,7 @@
    */
   import type { EffortLevel } from "@cawco/core";
   import { untrack } from "svelte";
-  import { TextMorph } from "torph/svelte";
-  import { morphMs } from "#lib/cawco/motion/curves.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
 
   let {
     efforts,
@@ -230,12 +229,7 @@
             {#if n}
               <!-- The word morphs letter by letter into the next. The chip is as wide
                    as its longest label, so the word never leaves it. -->
-              <TextMorph
-                as="span"
-                class="lvl"
-                duration={morphMs()}
-                text={capital(label)}
-              />
+              <span class="lvl"><MorphText text={capital(label)} /></span>
             {:else}
               <span class="lvl">{label}</span>
             {/if}
@@ -383,7 +377,7 @@
   .ghost > span {
     grid-area: 1 / 1;
   }
-  .knob :global(.lvl) {
+  .knob .lvl {
     text-transform: none;
     white-space: nowrap;
   }

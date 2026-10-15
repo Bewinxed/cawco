@@ -77,8 +77,8 @@
       icon?: Component<SVGAttributes<SVGSVGElement>>;
       /**
        * The work this button started is running. The icon slot spins, the
-       * label says `pendingLabel`, the width follows over --dur-morph, and the
-       * button holds its place and its focus but takes no press. When it
+       * label cross-fades to `pendingLabel` (the button is as wide as the
+       * wider of the two from the start), and the button holds its place and its focus but takes no press. When it
        * ends without `failed`, a check stands in the slot for --dur-hold.
        */
       pending?: boolean;

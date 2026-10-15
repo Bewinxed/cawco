@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { WorkflowRunStatus, WorkflowStepStatus } from "@cawco/core";
-  import { TextMorph } from "torph/svelte";
-  import { crossIn, morphMs } from "#lib/cawco/motion/curves.svelte.js";
+  import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
     IconCheck,
     IconChevronUp,
@@ -58,7 +58,7 @@
     >{#key tone}
       <span transition:crossIn><Glyph class="size-3" /></span>
     {/key}</span
-  ><TextMorph as="span" duration={morphMs()} text={label} /></span
+  ><MorphText text={label} /></span
 >
 
 <style>
