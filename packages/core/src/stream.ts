@@ -39,12 +39,24 @@ import type { CarrySessionRequest } from "./harness";
  *    and name no session. A page built for 5 reads any frame it does not
  *    know as a session's and files a blank session under no id, so it
  *    reloads first. The app logs a frame it cannot decode and goes on.
+ * 7: a preview's address is `port` or `origin` alone; the `host` bridge
+ *    beside `origin` (host mode's `name[:port]`) is gone, its time box over
+ *    with TestFlight 20261015. A page built for 6 that read it reloads.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 6;
+export const WIRE_PROTOCOL = 7;
+
+/**
+ * The wire whose board an app reads (6: board deltas and Caw's thread
+ * frames). An app cannot reload onto a newer wire, so it names the wire it
+ * was built for and the hub sends it the board's deltas from this one on; a
+ * later change that reaches an app is kept readable for it by the hub's
+ * schema check (hub scripts openapi.ts), never by a protocol bump.
+ */
+export const APP_BOARD_WIRE = 6;
 
 /**
  * What a session's stream carries: the changes each frame made to its

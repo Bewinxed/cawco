@@ -100,14 +100,7 @@ export interface Bridge {
   /** What it is for and when it goes. */
   until: string;
 }
-export const BRIDGES: Bridge[] = [
-  {
-    property: "host",
-    beside: "origin",
-    until:
-      "host mode's address before `origin` (core frames.ts PreviewAddress); it goes in the change that expires TestFlight 20261015",
-  },
-];
+export const BRIDGES: Bridge[] = [];
 
 /** The document as it would be without `bridge`: the property gone from every schema that has both. */
 export const withoutBridge = (document: unknown, bridge: Bridge): unknown => {

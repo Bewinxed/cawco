@@ -864,12 +864,12 @@ export function createPreviewListeners(
     address(instanceId: string): PreviewAddress {
       if (settings.mode === "host") {
         const pattern = parsePattern(settings.pattern ?? "");
-        const origin = originFor(
-          pattern,
-          pattern.key === "port" ? portFor(instanceId, () => true) : instanceId
-        );
-        // core `PreviewAddress`: `host` is a bridge for readers before `origin`.
-        return { origin, host: new URL(origin).host };
+        return {
+          origin: originFor(
+            pattern,
+            pattern.key === "port" ? portFor(instanceId, () => true) : instanceId
+          ),
+        };
       }
       const running = sessions.get(instanceId);
       return { port: running?.port ?? bind(instanceId) };

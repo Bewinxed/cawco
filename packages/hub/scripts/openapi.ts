@@ -1275,10 +1275,10 @@ if (leftNulls.length) {
  *
  * Two ways through, by who reads. A dashboard tab reloads itself onto a wire
  * newer than its own, so for the base and the nightly a break passes once
- * WIRE_PROTOCOL rises above that reader's. An app cannot reload, and the
- * hub sends a client on an older wire the board's snapshot only, so a bump
- * would leave every shipped app there: a break a TestFlight build reads has
- * no protocol way through. It is kept readable (the old field sent until no
+ * WIRE_PROTOCOL rises above that reader's. An app cannot reload, so a bump
+ * does not move it (the hub holds an app to core APP_BOARD_WIRE, never to
+ * WIRE_PROTOCOL): a break a TestFlight build reads has no protocol way
+ * through. It is kept readable (the old field sent until no
  * installable build reads it, a BRIDGE), or the app that reads the new shape
  * ships first and the old build's record ends once the hub moves past it.
  */
@@ -1348,7 +1348,7 @@ for (const { app, label, protocol, breaks: against } of readers) {
   }
   if (app) {
     refused.push(
-      `The wire would break ${label}, an app people can still install, at ${places(breaks)}\nAn app cannot reload, and a WIRE_PROTOCOL bump would leave it on the board's snapshot only, so neither is a way through. Either:\n  - keep sending what it reads until no installable TestFlight build reads it (a BRIDGE in scripts/wire-compat.ts), or\n  - ship the app that reads the new shape first (testflight.sh --commit <sha> records it), then end this build's record once the hub moves past it: ${app.expire}`
+      `The wire would break ${label}, an app people can still install, at ${places(breaks)}\nAn app cannot reload, so a WIRE_PROTOCOL bump does not move it: it keeps reading this wire as it was built. Either:\n  - keep sending what it reads until no installable TestFlight build reads it (a BRIDGE in scripts/wire-compat.ts), or\n  - ship the app that reads the new shape first (testflight.sh --commit <sha> records it), then end this build's record once the hub moves past it: ${app.expire}`
     );
     continue;
   }
