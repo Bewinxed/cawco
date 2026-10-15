@@ -549,12 +549,12 @@
 
   .drift:nth-child(2) {
     --cx: calc(var(--corner-x) - 45px);
-    --cy: calc(var(--corner-y) + 70px);
+    --cy: calc(var(--corner-y) + 74px);
   }
 
   .drift:nth-child(3) {
     --cx: calc(var(--corner-x) - 76px);
-    --cy: calc(var(--corner-y) + 107px);
+    --cy: calc(var(--corner-y) + 126px);
   }
 }
 
@@ -596,12 +596,12 @@
 
   .drift:nth-child(2) {
     --cx: calc(var(--corner-x) - 128px);
-    --cy: calc(var(--corner-y) + 97px);
+    --cy: calc(var(--corner-y) + 105px);
   }
 
   .drift:nth-child(3) {
     --cx: calc(var(--corner-x) - 157px);
-    --cy: calc(var(--corner-y) + 130px);
+    --cy: calc(var(--corner-y) + 150px);
   }
 }
 

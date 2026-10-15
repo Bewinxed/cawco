@@ -240,27 +240,31 @@ code {
  * Mobile Safari extends a fixed element's background behind its own controls, and needs a few
  * pixels of it in view to take the colour (joshpuckett.me/seamless-mobile-safari). A strip at
  * each edge, at least 12px or the safe area, in the edge's colour. They sit under the skip link.
+ * Only on touch screens: there they lie under the browser's bars, while under a mouse they would
+ * cut a band across whatever scrolls beneath the window's edges.
  */
-.edge-top::after,
-.edge-bottom::after {
-  position: fixed;
-  left: 0;
-  right: 0;
-  z-index: 9;
-  pointer-events: none;
-  content: '';
-}
+@media (hover: none) and (pointer: coarse) {
+  .edge-top::after,
+  .edge-bottom::after {
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 9;
+    pointer-events: none;
+    content: '';
+  }
 
-.edge-top::after {
-  top: 0;
-  height: max(12px, env(safe-area-inset-top, 0px));
-  background: var(--edge-top-background);
-}
+  .edge-top::after {
+    top: 0;
+    height: max(12px, env(safe-area-inset-top, 0px));
+    background: var(--edge-top-background);
+  }
 
-.edge-bottom::after {
-  bottom: 0;
-  height: max(12px, env(safe-area-inset-bottom, 0px));
-  background: var(--edge-bottom-background);
+  .edge-bottom::after {
+    bottom: 0;
+    height: max(12px, env(safe-area-inset-bottom, 0px));
+    background: var(--edge-bottom-background);
+  }
 }
 
 /*
