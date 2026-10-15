@@ -43,6 +43,7 @@ import type {
   MachineHookScript,
   MachineMemorySet,
   ModelInfo,
+  MoveEnded,
   MoveProgressFrame,
   MoveRequest,
   NeutralAssistantMessage,
@@ -209,6 +210,7 @@ import {
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
+  MOVE_LATER_WAIT_MS,
   MOVED_HERE,
   machineLabel,
   memoryDocProblem,
@@ -7327,6 +7329,9 @@ export const createServer = (
               sessionId: row.sessionId,
               accountId,
               ...(stop ? { stop: true } : {}),
+              ...(stop && endLaterNow.has(row.id)
+                ? { endLater: true as const }
+                : {}),
             },
           ]
         : []
@@ -7337,18 +7342,157 @@ export const createServer = (
     const kept = new Map<string, Kept>();
     const moved: string[] = [];
     for (const row of rows) {
+      const outcome = outcomes.get(row.id);
       const why = requests.some((one) => one.instanceId === row.id)
-        ? keptBecause(machineId, outcomes.get(row.id))
+        ? keptBecause(machineId, outcome)
         : undefined;
       if (why) {
         kept.set(row.id, why);
+        if (why.later) {
+          waitForLater(row.id);
+        }
         continue;
+      }
+      lifetime.cancel(laterWaits.get(row.id));
+      laterWaits.delete(row.id);
+      if (outcome?.state === "carried" && outcome.ended) {
+        endedByMove.set(row.id, outcome.ended);
       }
       db.patchInstance(row.id, { accountId });
       moved.push(row.id);
     }
     return { moved, kept };
   };
+
+  /**
+   * The moves held only by work a session's process holds for later (a
+   * background task, a one-time wake-up: {@link Kept.later}), by instance id:
+   * each tried again {@link MOVE_LATER_WAIT_MS} after it was first held,
+   * then with `endLater` ({@link endLaterNow}), which ends that work with the
+   * process. A completion before then starts the turn whose end the move
+   * takes, as it always has.
+   */
+  const laterWaits = new Map<string, HubTimer>();
+  /** The rows whose next carry ends what their process holds for later: their wait is over. */
+  const endLaterNow = new Set<string>();
+  /** What a move ended with a session's process, told to it once it runs on the new account ({@link tellEndedByMove}). */
+  const endedByMove = new Map<string, MoveEnded>();
+
+  /** The move of `instanceId` is held by work its process holds for later: tried again, ending it, once its wait is over. */
+  const waitForLater = (instanceId: string): void => {
+    if (laterWaits.has(instanceId)) {
+      return;
+    }
+    laterWaits.set(
+      instanceId,
+      lifetime.after(MOVE_LATER_WAIT_MS, () => {
+        laterWaits.delete(instanceId);
+        detach(retryLaterMove(instanceId), "move past its wait");
+      })
+    );
+  };
+
+  /**
+   * The move owed by `instanceId` after its wait for the work it holds for
+   * later ({@link waitForLater}), carried with `endLater`: through the
+   * at-limit controller when it holds the session at its limit, else as any
+   * owed move ({@link takeUpOwedMove}). Nothing when the move was dropped
+   * meanwhile.
+   */
+  const retryLaterMove = async (instanceId: string): Promise<void> => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const owed = relaunchAtTurnEnd.get(instanceId);
+    const held = db.atLimit.hold(instanceId) !== undefined;
+    if (!(row && (held || owed?.to !== undefined))) {
+      return;
+    }
+    console.info(
+      `[accounts] ${sessionName(row)}'s move waited ${MOVE_LATER_WAIT_MS / 60_000} minutes for the work its process holds for later; it is carried now, that work ending with the process, and the session is told what ended once it runs on the new account.`
+    );
+    endLaterNow.add(instanceId);
+    try {
+      await (held
+        ? atLimit.lookNow(
+            instanceId,
+            `its move waited ${MOVE_LATER_WAIT_MS / 60_000} minutes for the work its process holds for later`
+          )
+        : takeUpOwedMove(instanceId));
+    } finally {
+      endLaterNow.delete(instanceId);
+    }
+  };
+
+  /**
+   * Tells `row`, relaunched on its new account, what its move ended with its
+   * old process ({@link endedByMove}): each background task, by its id,
+   * description and the last of its output, and the one-time wake-ups, none
+   * of which Claude Code brings back on resume. Its first turn there reads
+   * it, so the session starts again what it still needs.
+   */
+  const tellEndedByMove = (row: { id: string; machineId: string }): void => {
+    const ended = endedByMove.get(row.id);
+    endedByMove.delete(row.id);
+    if (!ended || (ended.tasks.length === 0 && ended.wakeups === 0)) {
+      return;
+    }
+    deliverSend({
+      verb: "send",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        instanceId: row.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: { role: "user", content: endedByMoveWords(ended) },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name: LIMIT_ORIGIN },
+        },
+      },
+    } satisfies Envelope<SendPayload>);
+  };
+
+  /**
+   * What happens next to a move a carry left where it was ({@link keptBecause}):
+   * held by work its process holds for later, it goes when that ends or past
+   * its wait ({@link waitForLater}); held by a turn, at that turn's end;
+   * otherwise it is dropped.
+   */
+  const keptNextWords = (why: Kept, toName: string): string => {
+    if (why.later) {
+      return `It moves when that work ends, or in ${MOVE_LATER_WAIT_MS / 60_000} minutes at the latest, ending it; the session is told on ${toName} what ended.`;
+    }
+    return why.running
+      ? "It moves when its next turn ends."
+      : "The move is dropped; it stays where it is until it is moved again.";
+  };
+
+  /**
+   * The words a session reads on its new account about what its move ended
+   * ({@link tellEndedByMove}): each background task by its id, kind and
+   * description with the last of its output, and the one-time wake-ups.
+   */
+  const endedByMoveWords = (ended: MoveEnded): string =>
+    [
+      `You were moved to another account. Claude Code doesn't bring back background work when it resumes a session, so the move ended what your old process was still running:`,
+      ...ended.tasks.map((task) =>
+        [
+          `- Background task ${task.taskId} (${task.type}): ${task.description}.`,
+          task.output
+            ? `  The last of its output:\n${task.output
+                .split("\n")
+                .map((line) => `    ${line}`)
+                .join("\n")}`
+            : "  Its output couldn't be read.",
+        ].join("\n")
+      ),
+      ...(ended.wakeups > 0
+        ? [
+            `- ${ended.wakeups} one-time wake-up(s) you had scheduled (CronCreate, not recurring).`,
+          ]
+        : []),
+      "Start again whatever you still need, then carry on.",
+    ].join("\n");
 
   /** Why a carry left a row's data where it was ({@link moveRowsToAccount}); undefined when it is all in the new dir. */
   const keptBecause = (
@@ -7363,6 +7507,13 @@ export const createServer = (
     }
     if (outcome.state === "carried") {
       return;
+    }
+    if (outcome.state === "live" && outcome.later) {
+      return {
+        later: true,
+        running: true,
+        why: `${outcome.why}, and Claude Code doesn't bring that back when it resumes a session on another account`,
+      };
     }
     return outcome.state === "live"
       ? {
@@ -11230,6 +11381,7 @@ export const createServer = (
       startFresh(row);
     }
     sendOpening(job, true);
+    tellEndedByMove(row);
     db.atLimit.dropHold(id);
     db.atLimit.dropSummary(id);
     console.info(
@@ -11241,8 +11393,59 @@ export const createServer = (
     publishInstances(row.machineId);
   };
 
-  /** Continuations whose session's process still runs, already said so ({@link leaveConversation}). */
-  const leavingSaid = new Set<string>();
+  /**
+   * Continuations whose session's process still runs, already said so
+   * ({@link leaveConversation}), with when that was first said: one held
+   * only by work its process holds for later goes past
+   * {@link MOVE_LATER_WAIT_MS}, ending it.
+   */
+  const leavingSaid = new Map<string, number>();
+
+  /** Says once per wait why `row`'s continuation in place can't leave its conversation yet ({@link leavingSaid}). */
+  const sayLeavingHeld = (
+    job: ContinuationRow,
+    row: StoredRow,
+    why: Kept
+  ): void => {
+    if (leavingSaid.has(job.id)) {
+      return;
+    }
+    leavingSaid.set(job.id, Date.now());
+    const after = why.later
+      ? `, and after ${MOVE_LATER_WAIT_MS / 60_000} minutes ends that work with its process`
+      : "";
+    console.info(
+      `[continuation] ${sessionName(row)} can't go on from its summary yet: ${why.why}. The hub asks again every ${IN_PLACE_IDLE_LOOK_MS / 1000} s until it can${after}.`
+    );
+  };
+
+  /**
+   * Ends the process of `row`, which a continuation in place takes out of
+   * its conversation, its data staying in its own account's dir. Held past
+   * its wait by work its process holds for later ({@link leavingSaid}), that
+   * work ends with it, and the session hears of it in its fresh conversation
+   * ({@link switchConversation}). Why it was left running, if it was.
+   */
+  const endConversationProcess = async (
+    job: ContinuationRow,
+    row: StoredRow
+  ): Promise<Kept | undefined> => {
+    const since = leavingSaid.get(job.id);
+    if (since !== undefined && Date.now() - since >= MOVE_LATER_WAIT_MS) {
+      endLaterNow.add(row.id);
+    }
+    try {
+      const { kept } = await moveRowsToAccount(
+        row.machineId,
+        [row],
+        row.accountId,
+        true
+      );
+      return kept.get(row.id);
+    } finally {
+      endLaterNow.delete(row.id);
+    }
+  };
   /**
    * A continuation in place's session leaves the conversation it runs, once
    * it is between turns: refused before anything changes when its start on
@@ -11271,22 +11474,11 @@ export const createServer = (
     if (refused) {
       throw new Error(refused);
     }
-    const { kept } = await moveRowsToAccount(
-      row.machineId,
-      [row],
-      row.accountId,
-      true
-    );
-    const why = kept.get(id);
+    const why = await endConversationProcess(job, row);
     if (why?.running) {
-      // Between turns, yet holding work for later its machine will not end:
-      // asked again a beat later, not at once. Said once per wait.
-      if (!leavingSaid.has(job.id)) {
-        leavingSaid.add(job.id);
-        console.info(
-          `[continuation] ${sessionName(row)} can't go on from its summary yet: ${why.why}. The hub asks again every ${IN_PLACE_IDLE_LOOK_MS / 1000} s until it can.`
-        );
-      }
+      // Between turns, yet holding work its machine will not end: asked
+      // again a beat later, not at once. Said once per wait.
+      sayLeavingHeld(job, row, why);
       await lifetime.sleep(IN_PLACE_IDLE_LOOK_MS);
       return leaveConversation(job);
     }
@@ -13882,7 +14074,7 @@ export const createServer = (
     const why = kept.get(row.id);
     if (why?.running) {
       return owe(
-        `${title} can't move from ${fromName} to ${toName} yet: ${why.why}. It moves when its next turn ends.`
+        `${title} can't move from ${fromName} to ${toName} yet: ${why.why}. ${keptNextWords(why, toName)}`
       );
     }
     if (why) {
@@ -13957,6 +14149,8 @@ export const createServer = (
     // wakes it next starts it there.
     const stopped = notRunning(row);
     if (stopped) {
+      // No process of it ran on, so nothing of its was ended to tell it of.
+      endedByMove.delete(row.id);
       console.log(
         `[hub] ${sessionName(row)} is on ${accountWords(row.accountId)} now, and isn't relaunched: ${stopped}. Whatever wakes it next starts it there.`
       );
@@ -13972,6 +14166,7 @@ export const createServer = (
       { ...row, sessionId: row.sessionId },
       true
     );
+    tellEndedByMove(row);
     if (carry) {
       carryOn(row, carry);
     }
@@ -14010,7 +14205,7 @@ export const createServer = (
             relaunchAtTurnEnd.set(stored.id, owed);
           }
           console.warn(
-            `[accounts] ${sessionName(stored)} can't move from ${accountWords(stored.accountId)} to ${accountWords(to)} yet: ${why.why}. ${why.running ? "It moves when its next turn ends." : "The move is dropped; it stays where it is until it is moved again."}`
+            `[accounts] ${sessionName(stored)} can't move from ${accountWords(stored.accountId)} to ${accountWords(to)} yet: ${why.why}. ${keptNextWords(why, accountWords(to))}`
           );
           return;
         }
@@ -17526,6 +17721,7 @@ export const createServer = (
         { ...now, sessionId: now.sessionId },
         true
       );
+      tellEndedByMove(now);
       if (stopped) {
         carryOn(now, stopped);
       }

@@ -1508,26 +1508,64 @@ export const CONTROL_GET_TODOS = "getTodos";
 export interface CarrySessionRequest {
   /** The account it is to run on; null for none (the machine's own Claude Code dir). */
   accountId: string | null;
+  /**
+   * The move has waited its bound for the work this session holds for later
+   * (hub `MOVE_LATER_WAIT_MS`): its process ends with that work, and the
+   * outcome says what ended ({@link MoveEnded}), for the session to hear
+   * once it runs on the new account. Only with `stop`.
+   */
+  endLater?: true;
   /** Its row, whose process the carry stops first when `stop` is set. */
   instanceId: string;
   sessionId: string;
   /**
    * End the session's process first when it is between turns: what a move
    * to another account does before it relaunches the session there with its
-   * conversation. A turn running, an ask parked, a send it has not read, a
-   * background task it started or a wake-up its resume would not bring back
-   * keep it (`live`), and the move waits for that turn's end. Without `stop`,
-   * a session whose process runs is left where it is.
+   * conversation. A turn running, an ask parked or a send it has not read
+   * keep it (`live`), and the move waits for that turn's end. So does work
+   * it holds for later (a background task it started, a wake-up its resume
+   * would not bring back: `live` with `later`), unless `endLater` is set.
+   * Without `stop`, a session whose process runs is left where it is.
    */
   stop?: boolean;
 }
 
+/** One background task of a Claude session that a move ended with its process. */
+export interface EndedTask {
+  description: string;
+  /** The last of what it printed (at most 8 KiB), when the CLI could read it. */
+  output?: string;
+  /** Its id in the conversation the session resumes (a tool_use's background task). */
+  taskId: string;
+  /** Its kind as Claude Code names it: `local_bash`, `monitor`, `local_agent`, … */
+  type: string;
+}
+
+/**
+ * What a move ended with a session's process ({@link CarrySessionRequest.endLater}):
+ * Claude Code restores neither a background task nor a one-time wake-up on
+ * resume, so the session is told of each once it runs on the new account.
+ */
+export interface MoveEnded {
+  tasks: EndedTask[];
+  /** One-time wake-ups it had scheduled (CronCreate, not recurring). */
+  wakeups: number;
+}
+
 /** What one {@link CONTROL_CARRY_SESSIONS} request came to on its machine. */
 export type CarrySessionOutcome =
-  /** Its data is all in the dir the request named; `entries` were moved there now. */
-  | { state: "carried"; entries: number }
-  /** Its process runs, so nothing moved; `why`: what keeps it running, in the machine's words. */
-  | { state: "live"; why: string }
+  /**
+   * Its data is all in the dir the request named; `entries` were moved there
+   * now. `ended`: the work its process held for later, ended with it
+   * ({@link CarrySessionRequest.endLater}).
+   */
+  | { state: "carried"; entries: number; ended?: MoveEnded }
+  /**
+   * Its process runs, so nothing moved; `why`: what keeps it running, in the
+   * machine's words. `later`: only work it holds for later (a background
+   * task, a one-time wake-up), which a request with `endLater` ends.
+   */
+  | { state: "live"; why: string; later?: true }
   | { state: "failed"; error: string };
 
 /**

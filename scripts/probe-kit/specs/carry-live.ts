@@ -19,12 +19,26 @@
  *    is connected again"), B's limit resets, the agent starts again. The
  *    move lands with no new message, and the queued message is answered on
  *    B's token.
+ * 4. At its limit, busy: a session on A at rest with a background command
+ *    that runs on (a watcher) hits A's limit. The at-limit controller's
+ *    move waits for the command at most `MOVE_LATER_WAIT_MS`, then ends it
+ *    with the process: the row lands on B within that bound (plus a look's
+ *    slack), the session is told on B what the move ended (the command's
+ *    description and the last of its output), and a send after runs on B.
+ * 5. A person's session in a folder a project lead's place holds (a
+ *    `-caw` workspace record naming the session's folder, as Caw's boundary
+ *    writes it) runs on the host, before and after a move: its shell's
+ *    pid namespace and /proc/1 are the spec runner's own, never a boundary's.
  *
  *   bun scripts/probe-kit/run.ts carry-live
+ *   CARRY_CASE=4 bun scripts/probe-kit/run.ts carry-live
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { readFileSync, readlinkSync } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { MOVE_LATER_WAIT_MS } from "../../../packages/core/src/accounts";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import { LEAD_PLACE_SUFFIX } from "../../../packages/core/src/workspace-policy";
 import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -65,6 +79,22 @@ const CARRIED_LINE = /carried, \d+ entr/;
 const MOVE_LINE = /\[at-limit\]|\[accounts\]|\[carry\]/;
 /** A move pending on its machine says it goes as that machine connects again. */
 const AS_IT_CONNECTS = /connected again/;
+/** Case 4's watcher, as the session is told of it on B. */
+const WATCHER = "A watcher that runs on";
+/** What the session reads on B about the work its move ended (hub `endedByMoveWords`): the watcher and the last of its output. */
+const ENDED_NOTICE =
+  /You were moved to another account[\s\S]*A watcher that runs on[\s\S]*watcher-tick/;
+/** Case 5's shell: its pid namespace, then its pid 1's command line. */
+const SHELL_PROBE =
+  "readlink /proc/self/ns/pid; tr '\\0' ' ' < /proc/1/cmdline; echo";
+/** What a workspace boundary's pid 1 names in its command line (agent boundary.ts). */
+const BOUNDARY_MARK = "cawco-boundary";
+/** The shell probe's answer as the request after it carries it, for a failed check to show. */
+const SHELL_ANSWER = /pid:\[\d+\][^"]{0,120}/;
+/** Where case 4's watcher has got to: called, then its result answered and the turn at rest. */
+let watcher: "none" | "called" | "started" = "none";
+/** Case 5's shell probe was called, and its result is next. */
+let shellAsked = false;
 
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
@@ -104,7 +134,43 @@ const respond = (request: Seen): Reply => {
   if (request.all.includes("BIG-MARK")) {
     return { everyMs: 1, words: [...BIG, "BIG-DONE"] };
   }
-  return words("ok");
+  return watcherReply(request) ?? shellReply(request) ?? words("ok");
+};
+
+/** Case 4: the watcher started once, its turn ending at rest; the notice of its end answered on B. */
+const watcherReply = (request: Seen): Reply | undefined => {
+  if (ENDED_NOTICE.test(request.all)) {
+    return words("ENDED-NOTICED");
+  }
+  if (!request.all.includes("WATCH-MARK") || watcher === "started") {
+    return undefined;
+  }
+  if (watcher === "none") {
+    watcher = "called";
+    return tool("Bash", {
+      command: "for n in $(seq 1 900); do echo watcher-tick $n; sleep 1; done",
+      description: WATCHER,
+      run_in_background: true,
+    });
+  }
+  if (!request.afterTool) {
+    return undefined;
+  }
+  watcher = "started";
+  return words("WATCH-STARTED, waiting for it");
+};
+
+/** Case 5: each SHELL-MARK send runs the shell probe once, and its result is answered. */
+const shellReply = (request: Seen): Reply | undefined => {
+  if (request.last.includes("SHELL-MARK") && !request.afterTool) {
+    shellAsked = true;
+    return tool("Bash", { command: SHELL_PROBE, description: "Read pid 1" });
+  }
+  if (!(shellAsked && request.afterTool)) {
+    return undefined;
+  }
+  shellAsked = false;
+  return words("SHELL-READ");
 };
 
 /** A signed-in fake login for account `id` in `home`, with its own token. */
@@ -298,119 +364,248 @@ const run = async (kit: Kit) => {
     );
   }
 
-  // 2. At its limit: the at-limit controller carries it to B.
-  if (runs("2")) {
-    const name = "at its limit";
-    const s = await start("Limit move", ACCOUNT);
-    limited.set(ACCOUNT, Date.now() + 4 * 60 * 60_000);
-    await fleet.send(s.id, "LIMIT-MARK go on");
-    const landed = await until(
-      `${name}: the at-limit controller moves it to B`,
-      () => accountOf(s.id) ?? undefined,
-      (one) => one === B,
-      180_000
-    ).catch(() => accountOf(s.id));
-    kit.check(
-      `${name}: the at-limit controller carries it to B`,
-      landed === B,
-      `account ${landed}`
-    );
-    const onB = await seenWhere(
-      (one) => one.all.includes("LIMIT-MARK") && accountOfAuth(one.auth) === B,
-      `${name}: it carries on on B`,
-      120_000
-    ).catch(() => undefined);
-    kit.check(`${name}: it carries on on B's token`, !!onB);
-    limited.delete(ACCOUNT);
-  }
+  // Cases 2 and 3 leave A read at its limit for hours: they run last, after
+  // 4 and 5, which need A free when they start.
+  const limitCases = async () => {
+    // 2. At its limit: the at-limit controller carries it to B.
+    if (runs("2")) {
+      const name = "at its limit";
+      const s = await start("Limit move", ACCOUNT);
+      limited.set(ACCOUNT, Date.now() + 4 * 60 * 60_000);
+      await fleet.send(s.id, "LIMIT-MARK go on");
+      const landed = await until(
+        `${name}: the at-limit controller moves it to B`,
+        () => accountOf(s.id) ?? undefined,
+        (one) => one === B,
+        180_000
+      ).catch(() => accountOf(s.id));
+      kit.check(
+        `${name}: the at-limit controller carries it to B`,
+        landed === B,
+        `account ${landed}`
+      );
+      const onB = await seenWhere(
+        (one) =>
+          one.all.includes("LIMIT-MARK") && accountOfAuth(one.auth) === B,
+        `${name}: it carries on on B`,
+        120_000
+      ).catch(() => undefined);
+      kit.check(`${name}: it carries on on B's token`, !!onB);
+      limited.delete(ACCOUNT);
+    }
 
-  // 3. Held while its machine is away: the move lands at reconnect.
-  if (runs("3")) {
-    const name = "held while away";
-    const s = await start("Held away move", ACCOUNT);
-    const t = await start("B at its limit", B);
-    const bResets = Date.now() + 150_000;
-    limited.set(B, bResets);
-    limited.set(ACCOUNT, Date.now() + 4 * 60 * 60_000);
-    // B's own refusal is what tells the hub B is at its limit.
-    await fleet.send(t.id, "B-LIMIT-MARK");
-    await Bun.sleep(8000);
-    await fleet.send(s.id, "HELD-MARK go on");
-    const held = await until(
-      `${name}: held at A's limit`,
-      () =>
-        fleet.query<{ instance_id: string }>(
-          "SELECT instance_id FROM limit_holds WHERE instance_id = ?",
-          s.id
-        )[0],
-      Boolean,
+    // 3. Held while its machine is away: the move lands at reconnect.
+    if (runs("3")) {
+      const name = "held while away";
+      const s = await start("Held away move", ACCOUNT);
+      const t = await start("B at its limit", B);
+      const bResets = Date.now() + 150_000;
+      limited.set(B, bResets);
+      limited.set(ACCOUNT, Date.now() + 4 * 60 * 60_000);
+      // B's own refusal is what tells the hub B is at its limit.
+      await fleet.send(t.id, "B-LIMIT-MARK");
+      await Bun.sleep(8000);
+      await fleet.send(s.id, "HELD-MARK go on");
+      const held = await until(
+        `${name}: held at A's limit`,
+        () =>
+          fleet.query<{ instance_id: string }>(
+            "SELECT instance_id FROM limit_holds WHERE instance_id = ?",
+            s.id
+          )[0],
+        Boolean,
+        120_000
+      ).catch(() => undefined);
+      kit.check(`${name}: held at its limit, no account free`, !!held);
+      const queued = await fleet.send(s.id, "QUEUED-WHILE-HELD answer this");
+      await Bun.sleep(2000);
+      kit.check(
+        `${name}: the message waits for the limit`,
+        fleet.sendRow(queued)?.state === "pending",
+        `state ${fleet.sendRow(queued)?.state}`
+      );
+      await fleet.stop("agent");
+      const asked = await move(s.id, B);
+      kit.check(
+        `${name}: the move waits for the machine, and says it goes as it connects`,
+        asked.answer.state === "pending" &&
+          AS_IT_CONNECTS.test(asked.answer.why),
+        asked.answer.why
+      );
+      limited.delete(B);
+      await Bun.sleep(Math.max(0, bResets - Date.now() + 2000));
+      fleet.launch("agent");
+      await fleet.agentUp();
+      const landed = await until(
+        `${name}: lands on B with no new message`,
+        () => accountOf(s.id) ?? undefined,
+        (one) => one === B,
+        180_000
+      ).catch(() => accountOf(s.id));
+      kit.check(
+        `${name}: the move lands on B with no new message`,
+        landed === B,
+        `account ${landed}`
+      );
+      if (landed !== B) {
+        console.log((await linesAbout(s.id)).slice(-60).join("\n"));
+      }
+      const answered = await seenWhere(
+        (one) =>
+          one.all.includes("QUEUED-WHILE-HELD") &&
+          accountOfAuth(one.auth) === B,
+        `${name}: the queued message is answered on B`,
+        180_000
+      ).catch(() => undefined);
+      const queuedRow = await until(
+        `${name}: the queued message read`,
+        () => fleet.sendRow(queued),
+        (one) => one?.state === "read",
+        60_000
+      ).catch(() => fleet.sendRow(queued));
+      kit.check(
+        `${name}: the queued message is read and answered on B's token`,
+        !!answered && queuedRow?.state === "read",
+        `send ${queuedRow?.state} ${queuedRow?.reason ?? ""}; requests with it: ${fleet.seen
+          .filter((one) => one.all.includes("QUEUED-WHILE-HELD"))
+          .map((one) => accountOfAuth(one.auth))
+          .join(",")}`
+      );
+      if (!answered) {
+        console.log((await linesAbout(s.id)).slice(-40).join("\n"));
+      }
+      const hubLines = (await fleet.logs("hub"))
+        .split("\n")
+        .filter((line) => line.includes("connected again"));
+      kit.check(
+        `${name}: the reconnect logs the move it retries, with why`,
+        hubLines.length > 0,
+        hubLines.at(-1)
+      );
+    }
+  };
+
+  // 4. At its limit with a background command that runs on.
+  if (runs("4")) {
+    const name = "at its limit, busy";
+    const s = await start("Busy limit move", ACCOUNT);
+    await fleet.send(s.id, "WATCH-MARK start the watcher and wait");
+    await until(
+      `${name}: the watcher started and the turn at rest`,
+      () => watcher,
+      (one) => one === "started",
       120_000
-    ).catch(() => undefined);
-    kit.check(`${name}: held at its limit, no account free`, !!held);
-    const queued = await fleet.send(s.id, "QUEUED-WHILE-HELD answer this");
-    await Bun.sleep(2000);
-    kit.check(
-      `${name}: the message waits for the limit`,
-      fleet.sendRow(queued)?.state === "pending",
-      `state ${fleet.sendRow(queued)?.state}`
     );
-    await fleet.stop("agent");
-    const asked = await move(s.id, B);
-    kit.check(
-      `${name}: the move waits for the machine, and says it goes as it connects`,
-      asked.answer.state === "pending" && AS_IT_CONNECTS.test(asked.answer.why),
-      asked.answer.why
-    );
-    limited.delete(B);
-    await Bun.sleep(Math.max(0, bResets - Date.now() + 2000));
-    fleet.launch("agent");
-    await fleet.agentUp();
+    await Bun.sleep(5000);
+    limited.set(ACCOUNT, Date.now() + 4 * 60 * 60_000);
+    const refusedAt = Date.now();
+    await fleet.send(s.id, "WATCH-LIMIT go on");
     const landed = await until(
-      `${name}: lands on B with no new message`,
+      `${name}: the move lands on B past its wait`,
       () => accountOf(s.id) ?? undefined,
       (one) => one === B,
-      180_000
+      MOVE_LATER_WAIT_MS + 120_000
     ).catch(() => accountOf(s.id));
+    const tookMs = Date.now() - refusedAt;
     kit.check(
-      `${name}: the move lands on B with no new message`,
-      landed === B,
+      `${name}: it moves to B within the wait (${MOVE_LATER_WAIT_MS / 1000} s) and a look's slack, in ${Math.round(tookMs / 1000)} s`,
+      landed === B && tookMs <= MOVE_LATER_WAIT_MS + 60_000,
       `account ${landed}`
     );
     if (landed !== B) {
       console.log((await linesAbout(s.id)).slice(-60).join("\n"));
     }
-    const answered = await seenWhere(
-      (one) =>
-        one.all.includes("QUEUED-WHILE-HELD") && accountOfAuth(one.auth) === B,
-      `${name}: the queued message is answered on B`,
-      180_000
+    const told = await seenWhere(
+      (one) => ENDED_NOTICE.test(one.all) && accountOfAuth(one.auth) === B,
+      `${name}: the session is told on B what the move ended`,
+      120_000
     ).catch(() => undefined);
-    const queuedRow = await until(
-      `${name}: the queued message read`,
-      () => fleet.sendRow(queued),
-      (one) => one?.state === "read",
-      60_000
-    ).catch(() => fleet.sendRow(queued));
     kit.check(
-      `${name}: the queued message is read and answered on B's token`,
-      !!answered && queuedRow?.state === "read",
-      `send ${queuedRow?.state} ${queuedRow?.reason ?? ""}; requests with it: ${fleet.seen
-        .filter((one) => one.all.includes("QUEUED-WHILE-HELD"))
-        .map((one) => accountOfAuth(one.auth))
-        .join(",")}`
+      `${name}: the session is told on B what the move ended (the watcher and the last of its output)`,
+      !!told
     );
-    if (!answered) {
-      console.log((await linesAbout(s.id)).slice(-40).join("\n"));
-    }
-    const hubLines = (await fleet.logs("hub"))
+    const carryLine = (await fleet.logs("agent"))
       .split("\n")
-      .filter((line) => line.includes("connected again"));
+      .find((line) => line.includes(s.id) && line.includes("waited its bound"));
     kit.check(
-      `${name}: the reconnect logs the move it retries, with why`,
-      hubLines.length > 0,
-      hubLines.at(-1)
+      `${name}: the agent says the move ended the watcher with the process`,
+      !!carryLine,
+      carryLine
     );
+    await landsAndRuns(name, s.id, B, "AFTER-MOVE-4");
+    // A resets now: the hub forgets the limit it read off A's refusal, as
+    // at A's reset, so the cases after this one start with A free.
+    limited.delete(ACCOUNT);
+    fleet.write("DELETE FROM account_bench WHERE account_id = ?", ACCOUNT);
+    fleet.write("DELETE FROM account_readings WHERE account_id = ?", ACCOUNT);
   }
+
+  // 5. A person's session in a folder a lead's place holds runs on the host.
+  if (runs("5")) {
+    const name = "host, not a lead's place";
+    const place = join(
+      fleet.home,
+      ".cawco",
+      "workspaces",
+      `0badcafe${LEAD_PLACE_SUFFIX}`
+    );
+    await mkdir(place, { recursive: true });
+    await writeFile(
+      join(place, "create.json"),
+      JSON.stringify({ path: fleet.workdir })
+    );
+    // The runner's own view: the session's shell sees the same, with no
+    // boundary's pid namespace between them.
+    const hostNs = readlinkSync("/proc/self/ns/pid");
+    const hostInit = readFileSync("/proc/1/cmdline", "utf8")
+      .replaceAll("\0", " ")
+      .trim();
+    /** The shell's answer to SHELL-MARK in the request after its tool call. */
+    const shellSees = async (id: string, step: string, marker: string) => {
+      const before = fleet.seen.length;
+      await fleet.send(id, `SHELL-MARK ${marker}`);
+      const read = await seenWhere(
+        (one) =>
+          fleet.seen.indexOf(one) >= before &&
+          one.afterTool &&
+          one.body.includes("pid:["),
+        `${name}: the shell's answer ${step}`,
+        120_000
+      ).catch(() => undefined);
+      const body = read?.body ?? "";
+      const sameNs = body.includes(hostNs);
+      const sameInit = body.includes(JSON.stringify(hostInit).slice(1, -1));
+      // A runner inside a workspace sees that workspace's boundary as its
+      // own pid 1; the shell sees no other.
+      const noBoundary =
+        hostInit.includes(BOUNDARY_MARK) || !body.includes(BOUNDARY_MARK);
+      kit.check(
+        `${name}: ${step}, its shell is in the runner's pid namespace and sees its pid 1`,
+        sameNs && sameInit && noBoundary,
+        read
+          ? `same pid namespace ${sameNs}, same pid 1 ${sameInit}, no boundary of its own ${noBoundary}; runner ${hostNs} "${hostInit.slice(0, 60)}"; the shell's answer ${SHELL_ANSWER.exec(body)?.[0] ?? "not found"}`
+          : "no answer seen"
+      );
+    };
+    const s = await start("Person in a lead's folder");
+    await shellSees(s.id, "as it starts", "first");
+    const asked = await move(s.id, s.to);
+    kit.check(
+      `${name}: a person's move at rest goes at once`,
+      asked.answer.state === "moved",
+      asked.answer.why
+    );
+    await until(
+      `${name}: lands`,
+      () => accountOf(s.id),
+      (one) => one === s.to,
+      120_000
+    );
+    await shellSees(s.id, "after its move", "after");
+    await rm(place, { recursive: true, force: true });
+  }
+
+  await limitCases();
 };
 
 export default { name: "carry-live", run } satisfies Spec;

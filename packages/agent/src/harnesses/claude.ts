@@ -45,10 +45,12 @@ import type {
   AccountKind,
   AuthState,
   EffortLevel,
+  EndedTask,
   FleetMcpChange,
   HarnessCapabilities,
   HarnessReport,
   ModelInfo,
+  MoveEnded,
   NeutralMessage,
   NeutralSessionInfo,
   SendPayload,
@@ -988,6 +990,9 @@ const STOP_HOOK_TIMEOUT_S = 5;
  */
 const WAKEUPS_DECIDED_MS = 25 * 3_600_000;
 
+/** How long a move's stop waits for the CLI to read one background task's output before it ends the process ({@link ClaudeSession.endedForMove}). */
+const TASK_OUTPUT_READ_MS = 3000;
+
 /**
  * When an attached session whose wake-ups neither the ring nor the record
  * kept says last wrote its conversation: since then no turn of it has ended
@@ -1566,9 +1571,10 @@ class ClaudeSession implements HarnessSession {
    * The background work the CLI is running in this process, by task id:
    * shells, subagents, monitors, workflows. The CLI says the whole set each
    * time it changes (`background_tasks_changed`) and to a host that attaches
-   * to it, and nothing at start, when there is none.
+   * to it, and nothing at start, when there is none. Each with what a move
+   * that ends it tells the session ({@link endedForMove}).
    */
-  #background = new Set<string>();
+  #background = new Map<string, { description: string; type: string }>();
   /**
    * The main thread's tool calls that block its turn and can be moved to the
    * background (a shell command, a subagent), by `tool_use` id, from their
@@ -2032,10 +2038,13 @@ class ClaudeSession implements HarnessSession {
           message.type === "system" &&
           message.subtype === "background_tasks_changed"
         ) {
-          this.#background = new Set(
+          this.#background = new Map(
             message.tasks
               .filter((task) => !task.ambient)
-              .map((task) => task.task_id)
+              .map((task) => [
+                task.task_id,
+                { description: task.description, type: task.task_type },
+              ])
           );
         }
         this.#trackForeground(message);
@@ -2608,34 +2617,86 @@ class ClaudeSession implements HarnessSession {
     if (!this.#stored) {
       return "its conversation is not stored, so nothing could wake it";
     }
+    // What a move would lose is held for later, and {@link heldForLater}'s
+    // to say: the move waits for it within a bound, not for ever.
+    if (forMove) {
+      return undefined;
+    }
     // A background task's completion is what wakes the session for it, and
-    // no resume brings the task back ("Background Bash and monitor tasks are
-    // never restored on resume", code.claude.com/docs/en/scheduled-tasks):
-    // a sleep or a move waits for it, as for a running turn. Its completion
-    // starts the turn whose end the move then takes.
+    // a sleep would end it: a sleep waits for it, as for a running turn.
     if (this.#background.size > 0) {
       return `${this.#background.size} background task(s) it started are still running`;
     }
-    if (this.#crons === undefined) {
-      // At rest past {@link WAKEUPS_DECIDED_MS}: nothing it scheduled at an
-      // interval that short is pending, and what it scheduled further out
-      // comes back when it is resumed.
-      return this.#restingSince !== undefined &&
-        Date.now() - this.#restingSince >= WAKEUPS_DECIDED_MS
-        ? undefined
-        : "its scheduled wake-ups are not known until its next turn ends";
+    const unknown = this.#wakeupsUnknown();
+    if (unknown) {
+      return unknown;
+    }
+    // A sleep fires none of its wake-ups until it is woken.
+    return (this.#crons?.all ?? 0) > 0
+      ? `it has scheduled itself ${this.#crons?.all} wake-up(s)`
+      : undefined;
+  }
+
+  /**
+   * Its wake-ups not known yet: none of its turns has ended since it
+   * started, and it has not been at rest past {@link WAKEUPS_DECIDED_MS}
+   * (past it, nothing it scheduled at an interval that short is pending, and
+   * what it scheduled further out comes back when it is resumed).
+   */
+  #wakeupsUnknown(): string | undefined {
+    if (this.#crons !== undefined) {
+      return undefined;
+    }
+    return this.#restingSince !== undefined &&
+      Date.now() - this.#restingSince >= WAKEUPS_DECIDED_MS
+      ? undefined
+      : "its scheduled wake-ups are not known until its next turn ends";
+  }
+
+  heldForLater(): string | undefined {
+    // A background task's completion is what wakes the session for it, and
+    // no resume brings the task back ("Background Bash and monitor tasks are
+    // never restored on resume", code.claude.com/docs/en/scheduled-tasks).
+    // Its completion starts the turn whose end the move then takes.
+    if (this.#background.size > 0) {
+      return `${this.#background.size} background task(s) it started are still running`;
+    }
+    const unknown = this.#wakeupsUnknown();
+    if (unknown) {
+      return unknown;
     }
     // A move resumes the conversation at once on another account, which
     // brings back the recurring wake-ups and not every one-shot
-    // ({@link Wakeups}); a sleep fires none of them until it is woken.
-    if (forMove) {
-      return this.#crons.once > 0
-        ? `it has scheduled itself ${this.#crons.once} one-time wake-up(s), which resuming it on another account may not bring back`
-        : undefined;
-    }
-    return this.#crons.all > 0
-      ? `it has scheduled itself ${this.#crons.all} wake-up(s)`
+    // ({@link Wakeups}).
+    return (this.#crons?.once ?? 0) > 0
+      ? `it has scheduled itself ${this.#crons?.once} one-time wake-up(s)`
       : undefined;
+  }
+
+  /**
+   * Each background task as its process ends for a move, with the last of
+   * its output read through the CLI's `get_task_output` (on the `Query` at
+   * runtime, missing from its type); a task whose output it does not keep (a
+   * subagent's) goes without. Each read is bounded: the process ends next
+   * whatever they answer.
+   */
+  async endedForMove(): Promise<MoveEnded> {
+    const handle = this.#handle as unknown as {
+      getTaskOutput?: (taskId: string) => Promise<{ output: string }>;
+    };
+    const tasks = await Promise.all(
+      [...this.#background].map(async ([taskId, task]): Promise<EndedTask> => {
+        const output = await Promise.race([
+          handle
+            .getTaskOutput?.(taskId)
+            .then((read) => read.output)
+            .catch(() => undefined),
+          Bun.sleep(TASK_OUTPUT_READ_MS).then(() => undefined),
+        ]);
+        return { taskId, ...task, ...(output ? { output } : {}) };
+      })
+    );
+    return { tasks, wakeups: this.#crons?.once ?? 0 };
   }
 
   send(message: SentMessage, extras: TurnExtras): void {

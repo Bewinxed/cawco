@@ -58,9 +58,13 @@ export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
  * `moveRowsToAccount`), in words a line quotes after "can't move …: ".
  * `running`: its Claude Code process still runs there and keeps something
  * a stop would lose, so a move waits for its next turn's end rather than
- * failing.
+ * failing. `later`: what it keeps is only work it holds for later (a
+ * background task, a one-time wake-up), which the hub waits for up to
+ * `MOVE_LATER_WAIT_MS` and then ends with the move (server.ts
+ * `moveRowsToAccount`).
  */
 export interface Kept {
+  later?: true;
   running: boolean;
   why: string;
 }
@@ -626,7 +630,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     failed: { action: "move" | "continue"; step: ContinueStep },
     reason: string,
     line?: string,
-    refused = false
+    refused = false,
+    /** Only work its process holds for later kept it ({@link Kept.later}): the hub moves it once that ends, or past its bound. */
+    waits = false
   ): void => {
     const events = db.atLimit.events([row.id]);
     const last = events.filter((event) => event.id !== line).at(-1)?.move;
@@ -644,6 +650,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       to: namedAccount(target),
       step: failed.step,
       reason,
+      ...(waits ? { waits: true as const } : {}),
     };
     if (repeated) {
       // Said once, as the line written the first time logged itself: it
@@ -688,7 +695,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         { action: "move", step: "start" },
         kept.why,
         undefined,
-        refused
+        refused,
+        kept.later === true
       );
       return;
     }

@@ -13,6 +13,7 @@ import {
   isDamagedRecord,
   readRecord,
 } from "@cawco/core/state-file";
+import { isLeadPlace } from "@cawco/core/workspace-policy";
 import { reportDamaged } from "./damaged-records";
 
 interface Scan {
@@ -105,13 +106,32 @@ const insideCloneOf = async (at: string, id: string): Promise<boolean> => {
  * none names its clone, is that workspace's too: the damage is thrown, and
  * what asked does not run there outside its boundary.
  */
-export const workspaceHolding = async (
+export const workspaceHolding = (
   path: string
+): Promise<WorkspaceRef | undefined> => holding(path, () => true);
+
+/**
+ * The boundary a spawn that names none runs in: a delegation workspace's,
+ * when `path` is inside its clone ({@link workspaceHolding}), and never a
+ * project lead's place. A lead's place is a person's own folder (core
+ * `isLeadPlace`), bounded only for the lead's own row, which the hub names
+ * on every spawn of it (hub caw.ts `leadPlaceRef`); a person's session in
+ * that folder runs on the host.
+ */
+export const cloneHolding = (path: string): Promise<WorkspaceRef | undefined> =>
+  holding(path, (ref) => !isLeadPlace(ref.id));
+
+/** {@link workspaceHolding} over the workspaces `take` keeps. */
+const holding = async (
+  path: string,
+  take: (ref: WorkspaceRef) => boolean
 ): Promise<WorkspaceRef | undefined> => {
   const at = await realOf(path);
   const { refs, unread } = await scan();
   const clones = await Promise.all(
-    refs.map(async (ref) => ({ ref, root: await realOf(ref.path) }))
+    refs
+      .filter(take)
+      .map(async (ref) => ({ ref, root: await realOf(ref.path) }))
   );
   const held = clones
     .filter(({ root }) => at === root || at.startsWith(`${root}/`))

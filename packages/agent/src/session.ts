@@ -27,6 +27,7 @@ import type {
   HarnessKind,
   IngestMark,
   LaunchGrant,
+  MoveEnded,
   NeutralMessage,
   NeutralResultMessage,
   NeutralSessionInfo,
@@ -138,7 +139,7 @@ import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
 import { StreamsSoFar } from "./stream-so-far";
 import { installTool, probeTools } from "./tools";
 import { runWorkflowCommand } from "./workflow-command";
-import { workspaceHolding } from "./workspace-records";
+import { cloneHolding, workspaceHolding } from "./workspace-records";
 
 /**
  * What {@link SessionSupervisor.reattach} needs of a sessiond-backed adapter, named
@@ -336,11 +337,29 @@ const liveBecause = (of: {
     : undefined;
 };
 
+/**
+ * What the runtime itself holds in `session`'s process that a stop would
+ * lose ({@link HarnessSession.holding}); for a move's stop, then the work it
+ * holds for later (`later`, {@link HarnessSession.heldForLater}), last, so
+ * `later` means nothing else keeps it and a move may end it.
+ */
+const heldBy = (
+  session: HarnessSession,
+  forMove: boolean
+): { why: string; later?: true } | undefined => {
+  const held = session.holding?.(forMove);
+  if (held) {
+    return { why: held };
+  }
+  const later = forMove ? session.heldForLater?.() : undefined;
+  return later ? { why: later, later: true } : undefined;
+};
+
 /** A carry's outcome as its end line says it. */
 const carryWords = (outcome: CarrySessionOutcome | undefined): string => {
   switch (outcome?.state) {
     case "carried":
-      return `carried, ${outcome.entries} entr${outcome.entries === 1 ? "y" : "ies"} moved`;
+      return `carried, ${outcome.entries} entr${outcome.entries === 1 ? "y" : "ies"} moved${outcome.ended ? `, ending ${outcome.ended.tasks.length} background task(s) and ${outcome.ended.wakeups} one-time wake-up(s)` : ""}`;
     case "live":
       return `left running: ${outcome.why}`;
     case "failed":
@@ -1591,7 +1610,7 @@ export class SessionSupervisor {
     keepAliveAside = false,
     /** A move's stop: what its resume on the new account brings back is not counted ({@link HarnessSession.holding}). */
     forMove = false
-  ): Promise<{ why: string; unsure?: true } | undefined> {
+  ): Promise<{ why: string; unsure?: true; later?: true } | undefined> {
     if (this.#adopting.has(instanceId)) {
       return { why: "its custody is still being decided", unsure: true };
     }
@@ -1618,9 +1637,9 @@ export class SessionSupervisor {
     if (!keepAliveAside && this.#keptAwake?.has(instanceId)) {
       return { why: "the hub is keeping its prompt cache warm" };
     }
-    const held = session.holding?.(forMove);
+    const held = heldBy(session, forMove);
     if (held) {
-      return { why: held };
+      return held;
     }
     if (session.harness === "opencode") {
       const busy =
@@ -1718,11 +1737,12 @@ export class SessionSupervisor {
    * Carries each Claude session's own data into the dir its row is to say
    * ({@link CONTROL_CARRY_SESSIONS}). A session whose process runs is left
    * where it is, `live`, unless the request says `stop` and it is between
-   * turns (no turn running, no ask parked, no send unread, nothing it would
-   * lose: a background task, a wake-up its resume does not bring back): then
-   * its process ends first, the way a relaunch ends it, and the hub starts it
-   * again on the account it moved to. A process sessiond still holds that no
-   * session here has taken back is live too.
+   * turns (no turn running, no ask parked, no send unread, and nothing it
+   * would lose: a background task, a wake-up its resume does not bring back,
+   * unless the request says `endLater`, when what ends is answered as
+   * `ended`): then its process ends first, the way a relaunch ends it, and
+   * the hub starts it again on the account it moved to. A process sessiond
+   * still holds that no session here has taken back is live too.
    *
    * Every step is bounded ({@link CARRY_KEEPERS_MS}, {@link CARRY_STOP_MS},
    * {@link CARRY_COPY_MS}) and logged with its time, so the hub hears the
@@ -1827,9 +1847,10 @@ export class SessionSupervisor {
     }
     const held = await this.#carryHeld();
     const go: CarrySessionRequest[] = [];
+    const ended = new Map<string, MoveEnded>();
     for (const request of requests) {
       // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each checked before its process is touched
-      const left = await this.#carryReady(request, held);
+      const left = await this.#carryReady(request, held, ended);
       if (left) {
         outcomes[request.instanceId] = left;
       } else {
@@ -1864,10 +1885,15 @@ export class SessionSupervisor {
     );
     for (const request of go) {
       const result = carried.get(request.sessionId);
+      const work = ended.get(request.instanceId);
       outcomes[request.instanceId] =
         result && "error" in result
           ? { state: "failed", error: result.error }
-          : { state: "carried", entries: result?.entries ?? 0 };
+          : {
+              state: "carried",
+              entries: result?.entries ?? 0,
+              ...(work ? { ended: work } : {}),
+            };
     }
   }
 
@@ -1878,7 +1904,9 @@ export class SessionSupervisor {
    */
   async #carryReady(
     request: CarrySessionRequest,
-    held: { alive: Set<string>; exited: Set<string> } | undefined
+    held: { alive: Set<string>; exited: Set<string> } | undefined,
+    /** What a stop with `endLater` ended, by instance id ({@link #stopForCarry}). */
+    ended: Map<string, MoveEnded>
   ): Promise<CarrySessionOutcome | undefined> {
     const { instanceId } = request;
     // Refused before anything is done to it: a carry that cannot happen
@@ -1906,7 +1934,7 @@ export class SessionSupervisor {
       return;
     }
     if (running && request.stop) {
-      return await this.#stopForCarry(instanceId, running, held);
+      return await this.#stopForCarry(request, running, held, ended);
     }
     if (!held) {
       return {
@@ -1928,16 +1956,31 @@ export class SessionSupervisor {
    * {@link CARRY_STOP_MS}. Undefined once it has ended (its conversation may
    * be moved); else why it was left: `live` with what keeps it running, or
    * `failed` when the stop did not end in time and its keeper does not report
-   * the process gone.
+   * the process gone. Work it holds for later keeps it `live` (`later`),
+   * unless the request says `endLater`: then what that work is goes into
+   * `ended` first, and the process ends with it.
    */
   async #stopForCarry(
-    instanceId: string,
+    request: CarrySessionRequest,
     running: HarnessSession,
-    held: { alive: Set<string> } | undefined
+    held: { alive: Set<string> } | undefined,
+    ended: Map<string, MoveEnded>
   ): Promise<CarrySessionOutcome | undefined> {
+    const { instanceId } = request;
     const awake = await this.#awake(instanceId, running, undefined, true, true);
-    if (awake) {
-      return { state: "live", why: awake.why };
+    if (awake && !(awake.later && request.endLater)) {
+      return {
+        state: "live",
+        why: awake.why,
+        ...(awake.later ? { later: true as const } : {}),
+      };
+    }
+    if (awake && running.endedForMove) {
+      const work = await running.endedForMove();
+      ended.set(instanceId, work);
+      console.info(
+        `[carry] ${instanceId}: the move waited its bound for ${awake.why}; its process ends with ${work.tasks.length} background task(s) and ${work.wakeups} one-time wake-up(s), which the session is told of on the new account`
+      );
     }
     if (this.#queues.has(instanceId)) {
       return { state: "live", why: "something sent to it is still on its way" };
@@ -2577,11 +2620,13 @@ export class SessionSupervisor {
       // A work item's session runs every shell command inside its workspace's
       // boundary, and does not start without one: the refusal is the spawn's.
       // A spawn that names no workspace but runs anywhere inside a
-      // workspace's clone runs inside that clone's. A Claude session's
-      // account goes with it: the boundary reads that account's user layer
-      // by the paths the session is given.
+      // workspace's clone runs inside that clone's; one in a project lead's
+      // place (a person's own folder) runs on the host, as only the lead's
+      // own spawns name that place. A Claude session's account goes with
+      // it: the boundary reads that account's user layer by the paths the
+      // session is given.
       const boundary = await boundaryFor(
-        spec.workspace ?? (await workspaceHolding(workdir)),
+        spec.workspace ?? (await cloneHolding(workdir)),
         (spec.harness ?? "claude") === "claude"
           ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
           : undefined

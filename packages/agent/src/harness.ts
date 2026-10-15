@@ -21,6 +21,7 @@ import type {
   HarnessCapabilities,
   HarnessKind,
   HarnessReport,
+  MoveEnded,
   NeutralMessage,
   NeutralSessionInfo,
   PermissionResult,
@@ -183,16 +184,31 @@ export interface HarnessSession {
   /** Hard teardown, used on drain/shutdown. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   dispose(): Promise<void>;
+  /**
+   * What a move's stop is about to end with this process ({@link heldForLater}),
+   * read before it ends: each background task with the last of its output,
+   * and the one-time wake-ups, for the session to hear on the new account.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
+  endedForMove?(): Promise<MoveEnded>;
   readonly harness: HarnessKind;
+  /**
+   * For a move's stop: the work this process holds for later that a resume
+   * on another account would not bring back (a background task it started,
+   * a one-time wake-up), in words. The move waits for it up to its bound,
+   * then ends it with the process ({@link endedForMove}). Nothing when it
+   * holds none.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
+  heldForLater?(): string | undefined;
   /**
    * What stopping this session's processes now would lose, in words, beyond
    * what the supervisor sees for itself (a running turn, a parked ask): work
    * the runtime holds in its own process. Nothing when it holds nothing.
    * `forMove`: the stop is a move's, which relaunches it at once on another
    * account with its conversation (core `CarrySessionRequest.stop`): what
-   * that resume brings back is not counted, and everything it would lose
-   * (background work, a wake-up no resume restores) is, so the move waits
-   * for it.
+   * that resume brings back is not counted, and what it holds for later is
+   * {@link heldForLater}'s to say.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
   holding?(forMove?: boolean): string | undefined;
