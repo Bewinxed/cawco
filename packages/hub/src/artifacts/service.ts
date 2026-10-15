@@ -565,6 +565,8 @@ export interface ArtifactServiceDeps {
   /**
    * The projects session `instance` leads (their Caw): an ended writer's
    * marks are routed to him, and he answers them in their pins' threads.
+   * He also reads every page of his project, so a page whose session ended
+   * or is gone is his to act on (Projects spec §5.8, decisions.ts).
    */
   ledProjects: (instance: InstanceRow) => string[];
   /** The machines the hub knows. */
@@ -695,9 +697,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ),
   ];
 
-  /** Artifact `id`, when the session answers its pins ({@link answerable}); refused when not. */
+  /** Page `id`, when it belongs to a project `instance` leads. */
+  const ledPage = (
+    instance: InstanceRow,
+    id: string
+  ): ArtifactRow | undefined => {
+    const row = db.get(id);
+    return row?.kind === "page" &&
+      row.projectId &&
+      deps.ledProjects(instance).includes(row.projectId)
+      ? row
+      : undefined;
+  };
+
+  /**
+   * Artifact `id`, when the session answers its pins ({@link answerable}),
+   * or when it is a page of a project the session leads, whatever became of
+   * its writer; refused when neither.
+   */
   const readable = (instance: InstanceRow, id: string): ArtifactRow => {
-    const row = answerable(instance).find((one) => one.id === id);
+    const row =
+      answerable(instance).find((one) => one.id === id) ??
+      ledPage(instance, id);
     if (!row) {
       throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
     }
@@ -2046,7 +2067,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
       const row =
-        id === undefined ? db.ofInstance(instance.id)[0] : own(instance, id);
+        id === undefined
+          ? db.ofInstance(instance.id)[0]
+          : readable(instance, id);
       if (!row) {
         throw new ArtifactRefusal(
           404,

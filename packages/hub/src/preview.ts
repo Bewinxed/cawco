@@ -288,6 +288,14 @@ const joinArtifact = (
  */
 const CANVAS_PATH = /^\/__cawco\/canvas\/([0-9a-f-]{36})(\/.*)$/;
 
+/**
+ * A page by its id, whichever artifact the panel shows: the project page's
+ * Decisions tab opens a decision page in its own pane, at
+ * `/__cawco/page/<id>/` on its session's preview origin, beside the doc's
+ * socket the page joins there.
+ */
+const PAGE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})(\/.*)$/;
+
 /** Everything under it is the hub's own on a preview origin; a previewed app never sees it. */
 const RESERVED = "/__cawco/";
 
@@ -425,6 +433,14 @@ async function serveSession(
       deps.kindOf(artifactId) === "canvas"
       ? serveCanvas(artifactId, rest, deps.state)
       : new Response("This session has no such canvas.", { status: 404 });
+  }
+  const paged = pathname.match(PAGE_PATH);
+  if (paged) {
+    const [, artifactId, rest] = paged;
+    return deps.ownerOf(artifactId) === instanceId &&
+      deps.kindOf(artifactId) === "page"
+      ? servePage(artifactId, rest, deps.state)
+      : new Response("This session has no such page.", { status: 404 });
   }
   if (pathname.startsWith(RESERVED)) {
     return new Response("Not found", { status: 404 });

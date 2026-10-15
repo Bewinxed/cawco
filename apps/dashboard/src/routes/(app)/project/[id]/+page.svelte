@@ -26,6 +26,11 @@
     startThread,
     threadsOf,
   } from "#lib/cawco/client.svelte.js";
+  import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
+  import {
+    type DecisionsMode,
+    ProjectDecisions,
+  } from "#lib/cawco/decisions/decisions.svelte.js";
   import {
     type HubRead,
     failureWords as message,
@@ -320,6 +325,8 @@
     { value: "pipeline", label: "Pipeline", draft: false },
     // Routines, the fourth tab, always there.
     { value: "routines", label: "Routines", draft: false },
+    // The project's decision pages, always: an empty one starts Caw on one.
+    { value: "decisions", label: "Decisions", draft: false },
     // The task graph, while the tasks draw one (an edge between two).
     ...(taskEdges(tasks).length > 0
       ? [{ value: "canvas", label: "Canvas", draft: false }]
@@ -343,18 +350,85 @@
     tab.startsWith("view:") && !viewsRead && current !== tab
   );
 
+  // --- the Decisions tab ---------------------------------------------------------
+
+  /** The project's decision pages (decisions.svelte.ts): the tab and its trail read them. */
+  const decisions = new ProjectDecisions(() => projectId);
+  /** The decision page open in the tab, and how the tab shows the rest. */
+  let decisionPage = $derived<string | null>(data.decisionPage);
+  let decisionMode = $derived<DecisionsMode>(data.decisionMode);
+  /** The card a link names (`#<card>`): the page opens scrolled to it. */
+  let decisionCard = $derived<string | null>(
+    page.url.hash ? decodeURIComponent(page.url.hash.slice(1)) : null
+  );
+  interface DecisionsPlace {
+    card?: string | null;
+    mode?: DecisionsMode;
+    page?: string | null;
+  }
+
   /** The view and the open task in the URL, so a link opens the same. */
-  function hrefOf(id: string | null, as: string = current): string {
+  function hrefOf(
+    id: string | null,
+    as: string = current,
+    place: DecisionsPlace = {}
+  ): string {
     const query = new URLSearchParams();
     if (as !== "board") {
       query.set("view", as);
+    }
+    const at = {
+      page: "page" in place ? (place.page ?? null) : decisionPage,
+      mode: place.mode ?? decisionMode,
+      card: "card" in place ? (place.card ?? null) : decisionCard,
+    };
+    if (as === "decisions" && at.page) {
+      query.set("page", at.page);
+    } else if (as === "decisions" && at.mode === "graph") {
+      query.set("mode", "graph");
     }
     if (id) {
       query.set("task", id);
     }
     const search = query.toString();
-    return `/project/${projectId}${search ? `?${search}` : ""}`;
+    const hash =
+      as === "decisions" && at.page && at.card
+        ? `#${encodeURIComponent(at.card)}`
+        : "";
+    return `/project/${projectId}${search ? `?${search}` : ""}${hash}`;
   }
+
+  /** Where the Decisions tab goes: a page (at a card), the list or the graph. */
+  function decisionsGo(to: DecisionsPlace) {
+    if ("page" in to) {
+      decisionPage = to.page ?? null;
+    }
+    if (to.mode) {
+      decisionMode = to.mode;
+    }
+    if ("card" in to) {
+      decisionCard = to.card ?? null;
+    }
+    remember();
+  }
+
+  /** The time the tiles' ages read, moved each minute while the tab shows. */
+  let now = $state(Date.now());
+  $effect(() => {
+    if (current !== "decisions") {
+      return;
+    }
+    now = Date.now();
+    const ticking = setInterval(() => {
+      now = Date.now();
+    }, 60_000);
+    return () => clearInterval(ticking);
+  });
+
+  const taskOf = (id: string) => {
+    const task = tasks.find((each) => each.id === id);
+    return task ? { kind: task.kind, title: task.title } : undefined;
+  };
 
   function remember() {
     if (!browser) {
@@ -636,6 +710,7 @@
       readViews();
       readDated();
       readArchived();
+      decisions.read();
       if (list) {
         refresh();
       }
@@ -653,12 +728,26 @@
     changesSeen = changes;
   });
 
+  // A decision page was built, picked on or sent, or tasks it made moved:
+  // its tiles and the tab's count are read again.
+  let decisionsSeen = -1;
+  $effect(() => {
+    const changes =
+      cawco.decisionsChangedOf(projectId) + cawco.tasksChangedOf(projectId);
+    if (decisionsSeen !== -1 && changes !== decisionsSeen) {
+      untrack(() => decisions.read());
+    }
+    decisionsSeen = changes;
+  });
+
   // Another hand may have changed the tasks while the tab was away.
   $effect(() => {
     const back = () => {
       if (document.visibilityState === "visible") {
         // biome-ignore lint/complexity/noVoid: the re-read sets its own state
         void refresh();
+        // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+        void decisions.read();
       }
     };
     document.addEventListener("visibilitychange", back);
@@ -738,12 +827,26 @@
    * form — once a task is being added by hand.
    */
   const standing = $derived(
-    empty &&
-      canTalk &&
-      !adding &&
-      !current.startsWith("view:") &&
-      current !== "routines"
+    current === "decisions"
+      ? canTalk && !decisionPage && decisions.list?.pages.length === 0
+      : empty &&
+          canTalk &&
+          !adding &&
+          !current.startsWith("view:") &&
+          current !== "routines"
   );
+  /** What the pane holds, as its layout reads it: a decision page or the graph fills it. */
+  const paneView = $derived.by(() => {
+    if (current !== "decisions") {
+      return current;
+    }
+    if (decisionPage) {
+      return "decisions-page";
+    }
+    return decisionMode === "graph" && decisions.list?.graph
+      ? "decisions-graph"
+      : "decisions";
+  });
 
   /**
    * When he sits down (the first task landed, or the view moved off the
@@ -790,6 +893,8 @@
                 <Badge class="draft-badge" variant="secondary"
                   ><span>draft</span></Badge
                 >
+              {:else if each.value === "decisions" && decisions.waiting > 0}
+                <span class="tab-num">{decisions.waiting}</span>
               {/if}
             {/snippet}
           </TabItem>
@@ -919,6 +1024,25 @@
       cawProblem={lead.view?.problem ?? null}
       project={{ id: project.id, name: project.name }}
       starters={stages?.routineStarters ?? []}
+    />
+  {:else if value === "decisions"}
+    <DecisionsView
+      {canTalk}
+      card={decisionCard}
+      {decisions}
+      go={decisionsGo}
+      hrefOf={(to) => hrefOf(null, "decisions", to)}
+      {lead}
+      mode={decisionMode}
+      {now}
+      onfirstwords={firstWords}
+      onopentask={openOne}
+      page={decisionPage}
+      {projectId}
+      projectName={project?.name ?? ""}
+      {sitDown}
+      taskHref={(id) => hrefOf(id)}
+      {taskOf}
     />
   {:else if !list}
     <div class="state">
@@ -1122,10 +1246,12 @@
           "pane",
           current !== "board" &&
             current !== "canvas" &&
+            paneView !== "decisions-page" &&
+            paneView !== "decisions-graph" &&
             !reading &&
             "kit-edge-fade-block",
         ]}
-        data-view={reading ? "board" : current}
+        data-view={reading ? "board" : paneView}
       >
         {#if reading}
           <!-- The board at its real layout, its columns standing empty: the
@@ -1293,12 +1419,22 @@
     padding: 0 var(--space-6) 0 var(--space-7);
     overflow-y: auto;
   }
-  /* The board and the canvas fill the pane and scroll (or pan) inside. */
-  .pane[data-view="board"],
-  .pane[data-view="canvas"] {
+  /* The board, the canvas, a decision page and the decisions' graph fill the
+     pane and scroll (or pan) inside. A decision page runs to the pane's foot,
+     under its docked composer. */
+  .pane:is(
+      [data-view="board"],
+      [data-view="canvas"],
+      [data-view="decisions-page"],
+      [data-view="decisions-graph"]
+    ) {
     overflow: hidden;
   }
-  .pane:not([data-view="board"], [data-view="canvas"]) {
+  .pane:not(
+      [data-view="board"],
+      [data-view="canvas"],
+      [data-view="decisions-page"]
+    ) {
     padding-block-end: var(--space-6);
   }
   .swap {
@@ -1334,10 +1470,13 @@
     flex-direction: column;
     min-block-size: 0;
   }
-  .pane[data-view="board"] .swap,
-  .pane[data-view="board"] .current,
-  .pane[data-view="canvas"] .swap,
-  .pane[data-view="canvas"] .current {
+  .pane:is(
+      [data-view="board"],
+      [data-view="canvas"],
+      [data-view="decisions-page"],
+      [data-view="decisions-graph"]
+    )
+    :is(.swap, .current) {
     flex: 1 1 auto;
   }
   /* The routines bento fills the pane, as the board does, and its panels
@@ -1349,8 +1488,16 @@
   .pane:has(:global(.routines-view[data-layout="bento"])) .current {
     flex: 1 1 auto;
   }
-  .pane[data-view="canvas"] {
+  .pane:is([data-view="canvas"], [data-view="decisions-graph"]) {
     padding-block-end: var(--space-5);
+  }
+  /* The Decisions tab's trail: the pages still waiting for picks, as Needs
+     you's number. */
+  .strip :global(.tab-num) {
+    margin-inline-start: var(--space-1);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
   }
   .view-pane {
     display: flex;

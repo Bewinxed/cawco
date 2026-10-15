@@ -235,8 +235,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   after: string[];
   checks: string[];
   description: string;
-  /** Front matter keys the file carries that a task file does not know. */
-  extra: string[];
+  /** Front matter fields the file carries that a task file does not know, with their values (a scalar or a list), as the hub reads them. */
+  extra: Record<string, string | string[]>;
   foundIn: string | null;
   /** sha256 hex of the file as read. */
   hash: string;

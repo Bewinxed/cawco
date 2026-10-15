@@ -50,7 +50,11 @@ export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
 export { default as IconToolTodo } from "~icons/solar/checklist-bold-duotone";
-export { default as IconReport } from "~icons/solar/clipboard-check-bold-duotone";
+/** A report; and a project's decision pages (the Decisions tab's tiles and its empty state). */
+export {
+  default as IconDecisions,
+  default as IconReport,
+} from "~icons/solar/clipboard-check-bold-duotone";
 export { default as IconFileTable } from "~icons/solar/clipboard-list-bold-duotone";
 export { default as IconReportFailed } from "~icons/solar/clipboard-remove-bold-duotone";
 export { default as IconClock } from "~icons/solar/clock-circle-bold-duotone";

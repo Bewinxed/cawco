@@ -1387,6 +1387,7 @@ export type FramePayload =
   | import("./frames").ThreadUpsertFrame
   | import("./frames").ThreadMessageFrame
   | import("./frames").TasksChangedFrame
+  | import("./frames").DecisionsChangedFrame
   | import("./frames").ProjectsChangedFrame
   | import("./frames").FleetFetchFrame
   | import("./frames").ProjectCapFrame

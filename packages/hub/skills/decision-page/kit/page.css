@@ -49,10 +49,13 @@ a {
   }
 }
 
+/* `--page-inset-bottom`: what a host's docked composer covers of the page's
+   foot (the project's Decisions tab says it), so the last card scrolls clear. */
 .dp {
   max-width: 920px;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4) calc(var(--space-8) * 2);
+  padding: var(--space-6) var(--space-4)
+    calc(var(--space-8) * 2 + var(--page-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
