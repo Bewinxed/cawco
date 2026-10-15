@@ -1,9 +1,12 @@
 /**
- * What is in people's hands, as the release records say: git tags on the
- * repository. A published nightly is `nightly-<count>-<commit>`
- * (publish-release.ts creates it at the build's commit); a TestFlight build
- * is `testflight-<ios|mac>-<build>` (testflight.sh tags its commit before
- * the upload). A `git fetch` brings both.
+ * What is in people's hands, as the release records say: git tags on origin.
+ * A published nightly is `nightly-<count>-<commit>` (publish-release.ts
+ * creates it at the build's commit); a TestFlight build is
+ * `testflight-<ios|mac>-<build>` (testflight.sh tags its commit before the
+ * upload). They are read from origin itself, never from this clone's tags: a
+ * clone cut without `--tags`, or fetched before a build was recorded, would
+ * otherwise check against less than what ships, and say nothing. A tagged
+ * commit this clone lacks is fetched by its id.
  */
 
 /**
@@ -30,32 +33,76 @@ export interface Baseline {
   label: string;
 }
 
-const tags = (cwd: string, pattern: string): string[] => {
-  const run = Bun.spawnSync(
-    ["git", "tag", "--list", pattern, "--format=%(refname:short)"],
-    { cwd }
-  );
-  if (run.exitCode !== 0) {
-    throw new Error(`git tag --list ${pattern}: ${run.stderr.toString()}`);
-  }
-  return run.stdout.toString().split("\n").filter(Boolean);
-};
+const git = (cwd: string, args: string[]) =>
+  Bun.spawnSync(["git", ...args], { cwd, stderr: "pipe" });
 
-/** The newest published nightly: the highest build count among the tags. */
+/** Origin's release tags, by name, each the commit it names; read once a process. */
+let read: Map<string, string> | undefined;
+const originTags = (cwd: string): Map<string, string> => {
+  if (read) {
+    return read;
+  }
+  const listed = git(cwd, [
+    "ls-remote",
+    "--tags",
+    "origin",
+    "refs/tags/nightly-*",
+    "refs/tags/testflight-*",
+  ]);
+  if (listed.exitCode !== 0) {
+    throw new Error(
+      `origin can't be reached, so what is shipped is unknown and nothing is checked against it: git ls-remote --tags origin: ${listed.stderr.toString().trim()}`
+    );
+  }
+  const byName = new Map<string, string>();
+  for (const line of listed.stdout.toString().split("\n").filter(Boolean)) {
+    const [sha, ref] = line.split("\t") as [string, string];
+    const name = ref.slice("refs/tags/".length);
+    // An annotated tag's `^{}` line is the commit it names; it wins over the tag object.
+    if (name.endsWith("^{}")) {
+      byName.set(name.slice(0, -3), sha);
+    } else if (!byName.has(name)) {
+      byName.set(name, sha);
+    }
+  }
+  const missing = [...new Set(byName.values())].filter(
+    (sha) => git(cwd, ["cat-file", "-e", `${sha}^{commit}`]).exitCode !== 0
+  );
+  if (missing.length) {
+    const fetched = git(cwd, [
+      "fetch",
+      "--quiet",
+      "--no-tags",
+      "origin",
+      ...missing,
+    ]);
+    if (fetched.exitCode !== 0) {
+      throw new Error(
+        `origin's shipped commits ${missing.join(", ")} could not be fetched: ${fetched.stderr.toString().trim()}`
+      );
+    }
+  }
+  read = byName;
+  return byName;
+};
+const tags = (cwd: string, prefix: string): [string, string][] =>
+  [...originTags(cwd)].filter(([name]) => name.startsWith(prefix));
+
+/** The newest published nightly: the highest build count among origin's tags. */
 export const newestNightly = (cwd: string): Baseline => {
-  let newest: { count: number; tag: string } | undefined;
-  for (const tag of tags(cwd, "nightly-*")) {
+  let newest: { commit: string; count: number } | undefined;
+  for (const [tag, commit] of tags(cwd, "nightly-")) {
     const count = Number(NIGHTLY.exec(tag)?.[1]);
     if (count > (newest?.count ?? -1)) {
-      newest = { count, tag };
+      newest = { commit, count };
     }
   }
   if (!newest) {
     throw new Error(
-      "No nightly-* tag in this repository, so the newest published nightly is unknown: run `git fetch origin --tags`"
+      "origin has no nightly-* tag, so the newest published nightly is unknown"
     );
   }
-  return { label: `nightly ${newest.count}`, commit: newest.tag };
+  return { label: `nightly ${newest.count}`, commit: newest.commit };
 };
 
 /** Every TestFlight build uploaded in the last 90 days, by platform and build number. */
@@ -63,7 +110,7 @@ export const installableTestFlight = (
   cwd: string,
   now = Date.now()
 ): Baseline[] =>
-  tags(cwd, "testflight-*").flatMap((tag) => {
+  tags(cwd, "testflight-").flatMap(([tag, commit]) => {
     const match = TESTFLIGHT.exec(tag);
     if (!match) {
       return [];
@@ -75,7 +122,7 @@ export const installableTestFlight = (
       ? [
           {
             label: `TestFlight ${platform} ${build}`,
-            commit: tag,
+            commit,
             app: {
               expire: `bash apps/apple/scripts/testflight.sh${train} --expire ${build}`,
             },
