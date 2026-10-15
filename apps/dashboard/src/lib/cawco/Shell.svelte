@@ -10,14 +10,12 @@
   import { onMount, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
-  import { TextMorph } from "torph/svelte";
   import { navSheet } from "#lib/cawco/motion/clock.svelte.js";
   import {
     crossOut,
     dur,
     ease,
     easeOut,
-    morphMs,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
@@ -1127,14 +1125,7 @@
             role="status"
           >
             {#if everConnected}
-              <span
-                >Hub connection lost — retrying in
-                <TextMorph
-                  as="span"
-                  duration={morphMs()}
-                  text="{retryIn}s"
-                /></span
-              >
+              <span>Hub connection lost — retrying in {retryIn}s</span>
             {:else}
               <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
             {/if}

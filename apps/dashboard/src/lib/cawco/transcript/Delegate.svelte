@@ -277,8 +277,7 @@
 
   // Elapsed is a clock: while it runs the card re-reads it on its own, and once
   // it has settled the last report is the end of the run. A clock nobody can
-  // see neither ticks nor morphs (motion/clock), and comes back to the time
-  // now in plain text.
+  // see does not tick (motion/clock).
   const clock = tickingClock(() => inFlight);
   const startedAt = $derived(
     message.timestamp ? Date.parse(message.timestamp) : undefined
@@ -307,10 +306,9 @@
   );
 
   /**
-   * The pill's words and clock morph letter by letter (TextMorph, over
-   * --dur-morph) once the page is live, the clock only while the card is on
-   * show; the server draws them as plain text, which TextMorph would draw
-   * empty.
+   * The pill's words morph letter by letter (TextMorph, over --dur-morph)
+   * once the page is live; the server draws them as plain text, which
+   * TextMorph would draw empty. Its clock never morphs.
    */
   let morphMs = $state(0);
   $effect(() => {
@@ -429,23 +427,13 @@
               />
               {#if elapsed}
                 {pillWords ? " · " : ""}
-                <!-- The clock's own figure: a catch-up lands as text
-                     (motion/clock), so only a second the reader could see
-                     morphs into the next. -->
+                <!-- The clock is plain tabular figures: a second ticking
+                     over changes digits in place, never the pill's width,
+                     and nothing animates on a tick. -->
                 <span
                   class="elapsed"
                   class:ticking={inFlight}
-                  {@attach clock.watch}
-                  >{#if clock.morph}
-                    <TextMorph
-                      as="span"
-                      duration={morphMs}
-                      ease={CURVE.out}
-                      text={elapsed}
-                    />
-                  {:else}
-                    {elapsed}
-                  {/if}</span
+                  {@attach clock.watch}>{elapsed}</span
                 >
               {/if}</span
             >
