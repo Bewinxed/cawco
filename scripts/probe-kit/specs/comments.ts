@@ -582,7 +582,6 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   await on.page.locator('.pin-list .pin-row[data-pin-row="1"]').click();
   await card.getByRole("textbox").fill("And a little larger.");
   await card.getByRole("button", { name: "Reply" }).click();
-  await on.page.keyboard.press("Escape");
   const second = await until(
     "the second reply's delivery",
     () => heard.slice(again).find((said) => NOTICE.test(said.last)),
