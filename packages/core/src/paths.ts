@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { CLAUDE_DIR_NAME, CLAUDE_JSON_NAME } from "./claude-dirs";
 import { sessiondEndpoint } from "./sessiond";
 
@@ -675,16 +675,21 @@ export const workspaceProjectFile = (id: string): string =>
   join(workspaceStateDir(id), "project.json");
 
 /**
+ * The hub's sqlite file, as an absolute path: `CAWCO_DB_PATH`, else
+ * `cawco.db` in {@link hubDataDir}. The one rule every end reads it by: the
+ * hub itself, the unit the CLI writes for it, the binary installer, and the
+ * agent's workspace policy (its data dir denied, its projects dir's folders).
+ * Everything else the hub keeps lies beside it.
+ */
+export const hubDbPath = (): string =>
+  resolve(process.env.CAWCO_DB_PATH ?? join(hubDataDir(), "cawco.db"));
+
+/**
  * Where the hub keeps every project's folder: `projects/` beside its
- * database (hub project-folder.ts `PROJECTS_DIR`), the database where the
- * hub's unit puts it (`CAWCO_DB_PATH`, else `cawco.db` in
- * {@link hubDataDir}). Only on the hub's machine does it exist.
+ * database ({@link hubDbPath}). Only on the hub's machine does it exist.
  */
 export const hubProjectsDir = (): string =>
-  join(
-    dirname(process.env.CAWCO_DB_PATH ?? join(hubDataDir(), "cawco.db")),
-    "projects"
-  );
+  join(dirname(hubDbPath()), "projects");
 
 /**
  * The caches a workspace writes besides its clone and scratch dir: the
@@ -958,7 +963,6 @@ export const AGENT_SOCKET_ENV = [
  */
 export const credentialStores = (): string[] => {
   const home = homedir();
-  const dbPath = process.env.CAWCO_DB_PATH;
   return [
     // Each account's Claude Code dir (its `.credentials.json`, its
     // `.claude.json`) and each provider account's `credential.json`.
@@ -971,7 +975,7 @@ export const credentialStores = (): string[] => {
     // keys) and its backups, the transcript index.
     cawcoDataDir(),
     hubDataDir(),
-    ...(dbPath ? [dirname(dbPath)] : []),
+    dirname(hubDbPath()),
     // Claude Code: each config dir's login (the machine's own, each
     // account's, any it was pointed at), and the fleet's MCP servers with
     // their headers and env.

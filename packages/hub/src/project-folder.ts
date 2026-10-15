@@ -38,14 +38,17 @@ import {
   unlink,
 } from "node:fs/promises";
 import { devNull } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import { hubProjectsDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { Elysia, status, t } from "elysia";
-import { DB_PATH } from "./config";
 
-/** Where every project's folder lives: `projects/` beside the database. */
-export const PROJECTS_DIR = resolve(dirname(DB_PATH), "projects");
+/**
+ * Where every project's folder lives: `projects/` beside the database, by
+ * core's one rule, which the agent's workspace policy reads them by too.
+ */
+export const PROJECTS_DIR = hubProjectsDir();
 /** A deleted project's folder, kept rather than erased. */
 const TRASH_DIR = join(PROJECTS_DIR, ".trash");
 

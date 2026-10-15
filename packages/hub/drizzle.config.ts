@@ -1,5 +1,6 @@
 import { defineConfig } from "drizzle-kit";
 import { getTableName } from "drizzle-orm";
+import { hubDbPath } from "../core/src/paths";
 // biome-ignore lint/performance/noNamespaceImport: Drizzle must enumerate every declared table to protect separately managed tables in the same database.
 import * as schema from "./src/db/schema";
 
@@ -10,8 +11,9 @@ export default defineConfig({
   // Delegate presets own separate tables on the same connection; schema push must not delete them.
   tablesFilter: Object.values(schema).map((table) => getTableName(table)),
   dbCredentials: {
-    // A plain read rather than core's `readEnv`: drizzle-kit bundles this
-    // config on its own and never sees the workspace's TypeScript sources.
-    url: process.env.CAWCO_DB_PATH ?? "./cawco.db",
+    // Core's one rule for where the hub's database is. Imported by a
+    // relative path: drizzle-kit transpiles sources outside node_modules
+    // only, so the `@cawco/core` package name does not load here.
+    url: hubDbPath(),
   },
 });

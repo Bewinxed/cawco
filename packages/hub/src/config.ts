@@ -5,6 +5,7 @@ import {
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
+import { hubDbPath } from "@cawco/core/paths";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 
 /** Reported by `GET /health`; keep in sync with package.json. */
@@ -87,10 +88,10 @@ export const FLEET_PORTS: ReadonlyMap<number, string> = new Map([
 export const SPAWN_START_TIMEOUT_MS = 120_000;
 
 /**
- * Where the hub's sqlite file lives. The production path comes from the CLI
- * through the environment; the relative default is the bare `bun run hub` case.
+ * Where the hub's sqlite file lives: core's one rule (`hubDbPath`), the
+ * same whether the CLI's unit started the hub or `bun run hub` did.
  */
-export const DB_PATH = readEnv(CAWCO_ENV.dbPath) ?? "./cawco.db";
+export const DB_PATH = hubDbPath();
 
 /** The hub as a git remote (git-remote.ts): each project's bare repository, beside the database. */
 export const GIT_ROOT = resolve(dirname(DB_PATH), "git");

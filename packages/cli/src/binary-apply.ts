@@ -72,6 +72,7 @@ import {
   publishKeeper,
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
+import { hubDbPath } from "@cawco/core/paths";
 import { markerIsLive, ownIdentity } from "@cawco/core/process-identity";
 import {
   type ReleaseManifest,
@@ -85,7 +86,6 @@ import {
 } from "@cawco/core/state-file";
 import { binaryLayout } from "./binary-install";
 import {
-  hubDbPath,
   releaseAgentUnit,
   type ServiceId,
   service,

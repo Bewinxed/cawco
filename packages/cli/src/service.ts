@@ -11,7 +11,7 @@ import {
 } from "@cawco/core";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
-import { hubDataDir } from "@cawco/core/paths";
+import { hubDbPath } from "@cawco/core/paths";
 import { processStart } from "@cawco/core/process-identity";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -327,18 +327,13 @@ const servicePath = (): string => {
 };
 
 /**
- * Where the hub's sqlite file lives by default now (C9, our choice): per-user,
- * created with no sudo, and outside any git checkout — so `git clean -fdx` in a
- * dev tree or a deploy clone can never again reach the fleet's whole memory.
- * `XDG_DATA_HOME` is honoured the same way `SYSTEMD_DIR` honours
- * `XDG_CONFIG_HOME` above. Every workspace boundary hides the dir
- * (`credentialStores`).
+ * Where the hub's sqlite file lives (C9, our choice): per-user, created with
+ * no sudo, and outside any git checkout — so `git clean -fdx` in a dev tree or
+ * a deploy clone can never again reach the fleet's whole memory. Core's one
+ * rule (`hubDbPath`), which the hub itself reads too. Every workspace
+ * boundary hides the dir (`credentialStores`).
  */
-const DEFAULT_DB_PATH =
-  readEnv(CAWCO_ENV.dbPath) ?? join(hubDataDir(), "cawco.db");
-
-/** Where the hub this machine runs keeps its database: what its unit is given. */
-export const hubDbPath = (): string => DEFAULT_DB_PATH;
+const DEFAULT_DB_PATH = hubDbPath();
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
 const PROBE_TIMEOUT_MS = 2000;
@@ -617,15 +612,14 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         [CAWCO_ENV.hubPort]: String(
           readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT
         ),
-        // The hub's DB_PATH defaults to `./cawco.db` — relative to wherever it
-        // was started. A unit that leaves this unset opens a second, empty
-        // database in whatever directory the init system chose, and the fleet
-        // comes up blank with nothing to say why. Point it at the platform data
-        // dir (C9: ~/.local/share/cawco on linux, ~/Library/Application
-        // Support/cawco on darwin) rather than the checkout: the hub's own
-        // boot migration (see packages/hub/src/index.ts) carries an existing
-        // in-tree database there the first time it finds one.
-        [CAWCO_ENV.dbPath]: DEFAULT_DB_PATH, // ~/.local/share/cawco or ~/Library/Application Support/cawco
+        // The database the CLI resolved (core `hubDbPath`), written into the
+        // unit so the hub opens the same file whatever environment the init
+        // system gives it: the platform data dir (C9: ~/.local/share/cawco on
+        // linux, ~/Library/Application Support/cawco on darwin), or the
+        // CAWCO_DB_PATH the operator set. The hub's own boot migration
+        // (packages/hub/src/index.ts) carries an existing in-tree database
+        // there the first time it finds one.
+        [CAWCO_ENV.dbPath]: DEFAULT_DB_PATH,
         // Its preview listeners' ports: the operator's range, else the
         // hundred after the hub's own (hub config.ts `PREVIEW_PORTS`).
         ...(readEnv(CAWCO_ENV.previewPorts)
