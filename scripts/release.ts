@@ -495,7 +495,13 @@ async function stage2(
     );
   }
   await run(
-    [process.execPath, "scripts/binary/build-stage2.ts", bins],
+    // The proof build prepared this checkout's assets: stage 2's builds reuse them.
+    [
+      process.execPath,
+      "scripts/binary/build-stage2.ts",
+      bins,
+      "--skip-prepare",
+    ],
     checkout
   );
   const proving = (async () => {

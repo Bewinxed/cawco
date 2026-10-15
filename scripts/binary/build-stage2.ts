@@ -3,7 +3,11 @@
  * real linux-x64 builds of the repository's entry point, each with that key's
  * public half embedded as the release key and the stub harnesses linked in
  * (and with them the proof clock, scripts/binary/proof-clock.ts). Usage:
- *   bun scripts/binary/build-stage2.ts /ABSOLUTE/OUTPUT/DIR
+ *   bun scripts/binary/build-stage2.ts /ABSOLUTE/OUTPUT/DIR [--skip-prepare]
+ *
+ * `--skip-prepare`: this checkout's assets (the dashboard's build, the preview
+ * overlay) are prepared already, as build-binary.ts's flag of that name says;
+ * release.ts passes it after its own proof build prepared them.
  *
  * - cawco-1, 0.0.1-test.1: built from {@link BEFORE_SIDE_BY_SIDE}, the last
  *   commit whose machines run one session keeper, `cawco-sessiond.service`,
@@ -170,7 +174,7 @@ const builds = [
 const keptDir = tree
   ? join(cache, "builds", `${tree.slice(0, 16)}-${keyId}`)
   : undefined;
-let prepared = false;
+let prepared = Bun.argv.includes("--skip-prepare");
 /** One of this tree's builds into the output: the kept one, or compiled (and kept, from a clean checkout). */
 const provide = async (name: string, version: string, commit: string) => {
   const kept = keptDir ? join(keptDir, `cawco-${name}`) : undefined;
