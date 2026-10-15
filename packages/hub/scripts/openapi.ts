@@ -24,7 +24,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { baseRefOf, checkGate, outsideInputs } from "./openapi-inputs";
-import { shippedBaselines } from "./shipped";
+import { type Baseline, shippedBaselines } from "./shipped";
 import {
   APP_SCHEMA,
   BRIDGES,
@@ -1271,8 +1271,16 @@ if (leftNulls.length) {
  * published nightly, whose dashboard tabs and joined agents meet this hub
  * after an update, and every TestFlight build still installable. What would
  * break a reader built at any of them is refused, named by schema and
- * property, unless WIRE_PROTOCOL rose above that reader's; nothing is
- * written then.
+ * property; nothing is written then.
+ *
+ * Two ways through, by who reads. A dashboard tab reloads itself onto a wire
+ * newer than its own, so for the base and the nightly a break passes once
+ * WIRE_PROTOCOL rises above that reader's. An app cannot reload, and the
+ * hub sends a client on an older wire the board's snapshot only, so a bump
+ * would leave every shipped app there: a break a TestFlight build reads has
+ * no protocol way through. It is kept readable (the old field sent until no
+ * installable build reads it, a BRIDGE), or the app that reads the new shape
+ * ships first and the old build's record ends once the hub moves past it.
  */
 const git = (...args: string[]): string => {
   const run = Bun.spawnSync(["git", ...args], { cwd: HUB });
@@ -1282,14 +1290,16 @@ const git = (...args: string[]): string => {
   return run.stdout.toString();
 };
 const baseRef = baseRefOf(process.argv);
-// One compare per commit: a shipped build can be the base itself.
-const byCommit = new Map<string, { label: string; commit: string }>();
+// One compare per commit: a shipped build can be the base itself. An app
+// built there is the reader that counts: it has no protocol way through.
+const byCommit = new Map<string, Baseline>();
 for (const base of [
-  { label: `the base ${baseRef.slice(0, 12)}`, commit: baseRef },
+  { label: `the base ${baseRef.slice(0, 12)}`, commit: baseRef } as Baseline,
   ...shippedBaselines(HUB),
 ]) {
   const commit = git("rev-parse", `${base.commit}^{commit}`).trim();
-  byCommit.set(commit, byCommit.get(commit) ?? { ...base, commit });
+  const seen = byCommit.get(commit);
+  byCommit.set(commit, seen && !base.app ? seen : { ...base, commit });
 }
 const bases = [...byCommit.values()];
 const readers = bases.map((base) => {
@@ -1328,9 +1338,18 @@ for (const bridge of BRIDGES) {
     );
   }
 }
-for (const { label, protocol, breaks: against } of readers) {
+const places = (breaks: string[]): string =>
+  `${breaks.length} place${breaks.length === 1 ? "" : "s"}:\n${breaks.map((line) => `  ${line}`).join("\n")}`;
+let tabsRefused = false;
+for (const { app, label, protocol, breaks: against } of readers) {
   const breaks = against(document);
   if (breaks.length === 0) {
+    continue;
+  }
+  if (app) {
+    refused.push(
+      `The wire would break ${label}, an app people can still install, at ${places(breaks)}\nAn app cannot reload, and a WIRE_PROTOCOL bump would leave it on the board's snapshot only, so neither is a way through. Either:\n  - keep sending what it reads until no installable TestFlight build reads it (a BRIDGE in scripts/wire-compat.ts), or\n  - ship the app that reads the new shape first (testflight.sh --commit <sha> records it), then end this build's record once the hub moves past it: ${app.expire}`
+    );
     continue;
   }
   if (WIRE_PROTOCOL > protocol) {
@@ -1339,15 +1358,17 @@ for (const { label, protocol, breaks: against } of readers) {
     );
     continue;
   }
+  tabsRefused = true;
   refused.push(
-    `The wire would break ${label} (WIRE_PROTOCOL ${protocol}), at ${breaks.length} place${breaks.length === 1 ? "" : "s"}:\n${breaks.map((line) => `  ${line}`).join("\n")}`
+    `The wire would break ${label} (WIRE_PROTOCOL ${protocol}), at ${places(breaks)}`
   );
 }
 if (refused.length) {
   rmSync(scratch, { recursive: true, force: true });
-  console.error(
-    `${refused.join("\n")}\nKeep each readable by them (scripts/wire-compat.ts), or raise WIRE_PROTOCOL in packages/core/src/stream.ts in the same change. Nothing was written.`
-  );
+  const tabs = tabsRefused
+    ? "\nKeep each readable by the dashboard tabs above (scripts/wire-compat.ts), or raise WIRE_PROTOCOL in packages/core/src/stream.ts in the same change: a tab on an older wire reloads itself."
+    : "";
+  console.error(`${refused.join("\n")}${tabs}\nNothing was written.`);
   process.exit(1);
 }
 console.log(

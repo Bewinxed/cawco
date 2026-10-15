@@ -19,6 +19,13 @@ const NIGHTLY = /^nightly-(\d+)-[0-9a-f]+$/;
 const TESTFLIGHT = /^testflight-(ios|mac)-((\d{4})(\d{2})(\d{2})(?:\.\d+)?)$/;
 
 export interface Baseline {
+  /**
+   * A TestFlight build: an app, which cannot reload, so no WIRE_PROTOCOL
+   * bump takes it to a new wire (the hub sends a client on an older wire the
+   * board's snapshot only). The command that ends its record once the hub no
+   * longer serves it.
+   */
+  app?: { expire: string };
   commit: string;
   label: string;
 }
@@ -63,8 +70,17 @@ export const installableTestFlight = (
     }
     const [, platform, build, year, month, day] = match;
     const uploaded = Date.UTC(Number(year), Number(month) - 1, Number(day));
+    const train = platform === "mac" ? " --mac" : "";
     return now - uploaded <= (TESTFLIGHT_DAYS + 1) * DAY_MS
-      ? [{ label: `TestFlight ${platform} ${build}`, commit: tag }]
+      ? [
+          {
+            label: `TestFlight ${platform} ${build}`,
+            commit: tag,
+            app: {
+              expire: `bash apps/apple/scripts/testflight.sh${train} --expire ${build}`,
+            },
+          },
+        ]
       : [];
   });
 
