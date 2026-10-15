@@ -17,7 +17,8 @@
  * 3. That thread holds one notice of it: "Caw set up a routine: <name> · …",
  *    `event` null and `routineMade` naming the routine (the bridge the
  *    dashboard draws Keep, Turn off and Open from); the hub logs one push.
- * 4. Its test run's delegate ends `NO_REPLY`; Run now gives a run whose
+ * 4. Its test run's delegate ends `NO_REPLY` (silent, one attempt); Run now, once
+ *    no run goes, starts a run whose
  *    `workItemId` is set in GET /api/routines/:id, a work item the hub keeps.
  * 5. Keep and Turn off, through the routes the notice's buttons call: the
  *    routine reads kept, then off.
@@ -45,8 +46,13 @@ const SESSION_WHY =
   "The suite breaks quietly between pushes, so a morning run will say so first.";
 /** The routines' prompt: their delegates' runs are known by it. */
 const RUN = "PROBE-RUN: look over the board.";
-/** A delegate run's prompt line: which run of the routine it is. */
-const RUN_LINE = /Routine “Probe origin”, its ([\w-]+) run/;
+/**
+ * A delegate run's prompt line: which routine, which run and which attempt
+ * (a retry's says "(attempt 2: …)"), so each answers once. Both routines'
+ * runs end, so none is left running.
+ */
+const RUN_LINE =
+  /Routine “Probe (?:session )?origin”, its [\w-]+ run(?: \(attempt \d+)?/;
 /** The hub's stdout files in a fleet's sandbox (scratch-fleet `launch`). */
 const HUB_LOG = /^hub-\d+\.log$/;
 const AGENT_LOG = /^agent-\d+\.log$/;
@@ -80,7 +86,8 @@ const making = (request: Seen): Reply | undefined => {
   if (!maker) {
     return undefined;
   }
-  if (made.has(maker.name) || request.afterTool) {
+  // Once: a request after ToolSearch's result (`afterTool`) still calls it.
+  if (made.has(maker.name)) {
     return text("Set up.");
   }
   if (!request.toolNames.includes(CREATE)) {
@@ -113,7 +120,8 @@ const respond = (request: Seen): Reply => {
   }
   const run = request.all.match(RUN_LINE)?.[0];
   if (run && request.all.includes(RUN)) {
-    if (finished.has(run) || request.afterTool) {
+    // Once per run and attempt: after ToolSearch loaded it, the call still goes.
+    if (finished.has(run)) {
       return text("Done.");
     }
     if (!request.toolNames.includes(FINISH)) {
@@ -135,6 +143,8 @@ const respond = (request: Seen): Reply => {
 interface RunView {
   id: string;
   leadInstanceId: string | null;
+  outcome: string | null;
+  reason: string | null;
   slot: string;
   state: string;
   threadId: string | null;
@@ -385,18 +395,28 @@ const run = async (kit: Kit) => {
   kit.check("3: one push is logged", pushes.length === 1, pushes.join(" | "));
 
   // ── 4. a run linked to its work item ──────────────────────────────────
-  await told(
+  // Every run of its test slot over, a retry included: a run still going
+  // would file Run now's as skipped.
+  const tested = await told(
     until(
-      "the test run ended",
+      "the test run and any retry ended",
       () => fleet.api<RoutineView>(`/api/routines/${routine.id}`),
       (row) =>
-        row.runs.some(
-          (one) => one.slot.startsWith("test:") && one.state === "ended"
-        ),
+        row.runs.some((one) => one.slot.startsWith("test:")) &&
+        row.runs.every((one) => ["ended", "skipped"].includes(one.state)),
       180_000
     )
   );
+  kit.check(
+    "4: its test run's delegate answered NO_REPLY: silent, first try",
+    tested.runs.length === 1 && tested.runs[0]?.outcome === "silent",
+    JSON.stringify(tested.runs)
+  );
   const begun = await fleet.api<RunView>(`/api/routines/${routine.id}/run`, {});
+  if (begun.state === "skipped") {
+    kit.check("4: Run now starts a run", false, JSON.stringify(begun));
+    return;
+  }
   const linked = await told(
     until(
       "the run's work item",
