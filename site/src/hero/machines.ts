@@ -317,14 +317,14 @@ export function laptop(): string {
   // `<use>` on every pose, so it paints inline; the characters start hidden for scene.ts to type.
   const row = (y: number, width: number) =>
     `<rect style="fill:var(--scr-row)" x="33" y="${y}" width="${width}" height="6" rx="3"/>`;
+  // The line sits high on the screen: at 1440 × 900 the fold crosses the open lid's lower half.
   const screen = [
     '<g id="m-screen">',
-    '<rect style="fill:var(--scr-mark)" x="16" y="18" width="11" height="11" rx="3"/>',
-    row(20.5, 118),
-    row(35, 176),
-    row(49.5, 92),
-    '<rect style="fill:var(--scr-ink)" x="16" y="94" width="11" height="11" rx="3"/>',
-    `<text class="ui-line" x="33" y="105" style="fill:var(--scr-ink);font:600 17px 'Figtree Variable',ui-sans-serif,system-ui,sans-serif">${[
+    '<rect style="fill:var(--scr-mark)" x="16" y="13" width="11" height="11" rx="3"/>',
+    row(15.5, 118),
+    row(29, 176),
+    '<rect style="fill:var(--scr-ink)" x="16" y="48" width="11" height="11" rx="3"/>',
+    `<text class="ui-line" x="33" y="59" style="fill:var(--scr-ink);font:600 17px 'Figtree Variable',ui-sans-serif,system-ui,sans-serif">${[
       ...SCREEN_LINE,
     ]
       .map((ch) => `<tspan class="ch" style="display:none">${ch === ' ' ? '&#160;' : ch}</tspan>`)

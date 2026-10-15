@@ -161,7 +161,7 @@
   grid-area: stage;
   position: relative;
   height: clamp(380px, 380px + (100vw - 390px) * 0.2716, 600px);
-  margin-top: clamp(28px, 4vw, 52px);
+  margin-top: clamp(24px, 3vw, 40px);
   container-type: size;
   text-align: left;
 }
