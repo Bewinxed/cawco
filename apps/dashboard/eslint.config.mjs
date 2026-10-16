@@ -56,9 +56,15 @@ export default defineConfig([
     settings,
     rules,
   },
-  // no-restyle's own doc: off inside the component directory.
+  // "Turn `no-restyle` off inside your component directory… When you enable
+  // `no-arbitrary-values` and `require-static-classes`, turn them off there
+  // too." (https://github.com/shadcn-ui/lint/blob/main/docs/rules.md)
   {
     files: ["src/lib/components/ui/**"],
-    rules: { "shadcn/no-restyle": "off" },
+    rules: {
+      "shadcn/no-restyle": "off",
+      "shadcn/no-arbitrary-values": "off",
+      "shadcn/require-static-classes": "off",
+    },
   },
 ]);

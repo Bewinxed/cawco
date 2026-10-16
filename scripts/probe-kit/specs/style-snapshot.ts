@@ -42,7 +42,7 @@ import { player, readTape, recorder, type Tape, writeTape } from "../hub-tape";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { chosen, type Surface } from "../surfaces/catalogue";
 import { PROPS, readSurface } from "../surfaces/read";
-import { scriptedReply, seedScene } from "../surfaces/scene";
+import { sceneHub, scriptedReply, seedScene } from "../surfaces/scene";
 import {
   counts,
   differences,
@@ -171,6 +171,7 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
   let repo = "";
   const fleet = await kit.fleet(scriptedReply(() => repo));
   ({ repo } = fleet);
+  const stopJev = sceneHub(fleet);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -204,6 +205,7 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
   } finally {
     await servers.close();
     rec.stop();
+    stopJev();
   }
   await mkdir(join(TAPE, ".."), { recursive: true });
   await writeTape(TAPE, tape);

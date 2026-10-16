@@ -13,20 +13,94 @@
  *  - "Lay out the chip wraps": an artifact page it made;
  *  - "Name the hang card's states": a question it asked, answered;
  *  - "Decide the chip's wrap", in the project: a decision page it made;
- *  - the project "cawco": tasks and a routine;
- *  - a workflow and one finished run of it, and a workflow drawn as a graph.
- * The mock model plays a script per message: the message carries
+ *  - "Split the chip audit": a delegate it started (`delegate`), which
+ *    worked and reported back (the delegate's transcript inline);
+ *  - "Run the chip audit": a workflow run it started (`workflow_run`), its
+ *    step's session handing in its result (`submit_result`);
+ *  - the project "cawco": tasks, a routine and a made view; a task in
+ *    review with two attempts (one failed, one finished handing in a post,
+ *    notes and the chip-wrap page), and a task whose one attempt failed,
+ *    their attempts filed as the hub files them (work items, no live
+ *    delegate: ios-task-review.ts's seed); a thread where Caw names those
+ *    two tasks (their cards, and what each needs);
+ *  - the project "tray", with Caw on and an empty board: its starters
+ *    (Jev's stand-in, `sceneHub`);
+ *  - the project "launch-q4": three linked decision pages and their graph
+ *    (decisions-preview/seed.ts);
+ *  - a workflow and one finished run of it with a step, and a workflow
+ *    drawn as a graph;
+ *  - a second Claude account, signed in once every session has started;
+ *  - `~/code/chip-tray` on the machine, for the spawn sheet's folder browser.
+ * The mock model plays a script per session: its first message carries
  * `PROBE-STEP:<name>`, and each request after it takes the plan's next step
  * by the tool results the conversation holds since (artifacts.ts's shape).
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
+import {
+  CLAUDE_DIR_NAME,
+  CLAUDE_JSON_NAME,
+} from "../../../packages/core/src/claude-dirs";
+import { seedDecisions } from "../../decisions-preview/seed";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
+import { jevMock, jevOn } from "../jev-mock";
 import type { Kit, KitFleet } from "../kit";
 
 const DAY = 24 * 60 * 60 * 1000;
+const MINUTE = 60_000;
+/** A made view (views spec's good draft): figures, a table, the board by stage and a month, over the view tools. */
+const WEEK_VIEW = `root = Column([title, figures, table, board, month])
+tasks = Query("tasks", {}, {rows: []})
+stages = Query("stages", {}, {stages: [], byKind: {you: 0, done: 0}, total: 0})
+title = Text("Chip week", "title")
+figures = Row([StatTile("All tasks", stages.total), StatTile("Waiting on you", stages.byKind.you, "attn")])
+table = Table(tasks.rows, [{label: "Task", field: "title"}, {label: "Stage", field: "stage"}])
+board = Board(@Each(stages.stages, "s", StageColumn(s, tasks.rows)), "By stage")
+month = Calendar(tasks.rows, "dates.createdAt", "month")
+`;
+/** The second account, signed in after every session started (the spawn sheet's account chip, the routing's two). */
+const SECOND_ACCOUNT = "acct-scratch-second";
+/** The review task's outputs, as its finished attempt handed them in. */
+const POST = {
+  kind: "x-post",
+  account: "@cawco",
+  text: "The tray's chips keep their badge whole now.\n\nA long branch name clips with an ellipsis instead of pushing the count out.",
+  alternates: ["Long branch names no longer push the tray's count out."],
+  media: { plan: "A before and after of the tray at 390px." },
+};
+const AUDIT = `# The push probe's misses
+
+- It never reads a push sent while the phone is locked.
+- A burst of three reads as one, and the probe counts one.
+`;
+const REVIEW_TASK = `---
+stage: review
+outputs: [push.post.json, audit.md]
+lands: none
+---
+# Audit the push probe
+
+Read the push probe's last runs and say what it misses.
+
+## Acceptance criteria
+
+Every miss is named with the run it came from.
+
+## To-dos
+
+- [x] [td-1] Read the last runs
+- [x] [td-2] Name each miss
+`;
+const REVIEW_TITLE = "Audit the push probe";
+const REVIEW_HEADLINE = "The push probe misses two kinds of push.";
+const REVIEW_REPORT =
+  "I read the push probe's last six runs. It never reads a push sent while the phone is locked, and it counts a burst of three as one. The post says what changed for the tray; the notes list each miss with its run.";
+const FAILED_WHY =
+  "The attempt's session ended before it handed anything in: the token sheet's build failed on a missing font.";
+/** Caw's words in the cawco project's thread, over the two tasks that wait on you. */
+const CAW_SAYS =
+  "The push probe audit is ready for your review, and the token sheet's attempt failed: it needs you to say whether to try again.";
 /** A workflow drawn as a graph (the editor's canvas): start, one step, end. */
 const GRAPH = {
   nodes: [
@@ -67,7 +141,7 @@ const GRAPH = {
     { id: "e2", from: { node: "step-1", port: "out" }, to: { node: "end-1" } },
   ],
 };
-/** A workflow that sets one slot and returns: its run ends at once. */
+/** A workflow that sets one slot and runs one step (its session hands in `overflows`), then returns. */
 const WORKFLOW = `import { z } from "zod";
 
 export const inputs = z.object({});
@@ -75,7 +149,14 @@ export const inputs = z.object({});
 export default async function (w: Workflow<typeof inputs>) {
   const count = w.state("count", z.number());
   await count.set(3);
-  return { chips: await count.get() };
+  const audit = await w.run({
+    title: "Audit the chip row",
+    harness: "claude",
+    model: "claude-haiku-4-5",
+    prompt: "Read the chip row and say whether it overflows. PROBE-STEP:step",
+    output: z.object({ overflows: z.boolean() }),
+  });
+  return { chips: await count.get(), overflows: audit.overflows };
 }
 `;
 const STEP = /PROBE-STEP:([a-z-]+)/g;
@@ -284,9 +365,81 @@ const plans = (repo: string): Record<string, Step[]> => ({
     },
     { words: "The three wraps are on the page." },
   ],
+  split: [
+    {
+      tool: {
+        name: DELEGATE,
+        input: {
+          title: DELEGATE_TITLE,
+          prompt: "Read the chip row and say what overflows. PROBE-STEP:child",
+          checks: [{ name: "Nothing to check", command: "true" }],
+          lands: "none",
+        },
+      },
+    },
+    { words: "The chip row's check is with a delegate." },
+  ],
+  child: [
+    {
+      tool: {
+        name: "Bash",
+        input: { command: "ls", description: "List the chip row's files" },
+      },
+    },
+    {
+      tool: {
+        name: FINISH_ITEM,
+        input: {
+          headline: "The label never shrinks, so the badge is cut first.",
+          summary:
+            "The chip row is a flex row with no wrap, and each label keeps its whole width: a long branch name pushes the count badge out.",
+        },
+      },
+    },
+    { words: "Reported." },
+  ],
+  runner: [
+    {
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${WORKFLOW_RUN}`, max_results: 1 },
+      },
+    },
+    {
+      tool: {
+        name: WORKFLOW_RUN,
+        input: {
+          name: WORKFLOW_NAME,
+          inputs: {},
+          workspace: { path: repo, machineId: MACHINE },
+        },
+      },
+    },
+    { words: "The chip audit is running." },
+  ],
+  step: [
+    {
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${SUBMIT_RESULT}`, max_results: 1 },
+      },
+    },
+    {
+      tool: { name: SUBMIT_RESULT, input: { result: { overflows: true } } },
+    },
+    { words: "Handed in." },
+  ],
 });
 
 const ARTIFACT_CREATE = "mcp__cawco__artifact_create";
+/** CawCo's own tools a plan calls: `delegate` and `finish_item` load upfront, the workflow ones are deferred. */
+const DELEGATE = "mcp__cawco__delegate";
+const FINISH_ITEM = "mcp__cawco__finish_item";
+const WORKFLOW_RUN = "mcp__cawco__workflow_run";
+const SUBMIT_RESULT = "mcp__cawco__submit_result";
+/** The delegate the "split" session starts: its card's name in the parent's transcript. */
+export const DELEGATE_TITLE = "Check the chip row";
+const WORKFLOW_NAME = "Chip audit";
 /** The question the "named" session asks and the scene answers: the transcript's answered card. */
 const NAMED_QUESTION = "Which names do the hang card's three states take?";
 const NAMED_ANSWER = "Rest, open, hung";
@@ -351,8 +504,9 @@ export const scriptedReply =
     if (!request.tools) {
       return { everyMs: 5, words: ["Probe title"] };
     }
-    const markers = [...request.all.matchAll(STEP)];
-    const marker = markers.at(-1);
+    // The session's own marker is its first message's: a delegate's report
+    // the parent later hears may quote the delegate's brief, and its marker.
+    const [marker] = [...request.all.matchAll(STEP)];
     const name = marker?.[1] ?? "";
     const written = plans(repo())[name];
     if (!(marker && written)) {
@@ -390,22 +544,55 @@ export interface Scene {
   ask: string;
   chips: string;
   decision: string;
+  /** The project with three linked decision pages and their graph. */
+  decisions: string;
+  /** The task whose one attempt failed. */
+  failed: string;
   graph: string;
   permission: string;
   project: string;
+  /** The task in review: two attempts, the newest's result. */
+  review: string;
   run: string;
+  /** The session that started a workflow run (its RunBlock). */
+  runner: string;
+  second: string;
+  /** The session that started a delegate. */
+  split: string;
   task: string;
+  /** The project with Caw on, its board empty. */
+  tray: string;
   workflow: string;
   [name: string]: string;
 }
 
-/** Stands the scene up on `fleet` (its services up, the account signed in). */
+/**
+ * What the hub must hear before it starts: Jev's stand-in (jev-mock.ts, on
+ * `CAWCO_TYPESAFE_URL`), which the scene turns on for the Caw project's
+ * starters, and caw-dock.ts's short starters pace (1.5 s quiet, 5 s gap).
+ * Returns its stop.
+ */
+export function sceneHub(fleet: KitFleet): () => void {
+  const jev = jevMock();
+  fleet.env.CAWCO_TYPESAFE_URL = jev.url;
+  fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
+  return jev.stop;
+}
+
+/** Stands the scene up on `fleet` (its services up, the account signed in; `sceneHub` heard by the hub). */
 export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   await writeFile(
     join(fleet.repo, "README.md"),
     "# Tray\n\nThe tray holds a session's chips: its branch, its machine and its count.\n"
   );
   await Bun.$`git -C ${fleet.repo} -c user.email=p@p -c user.name=p add -A && git -C ${fleet.repo} -c user.email=p@p -c user.name=p commit -qm 'The tray readme'`.quiet();
+  // The machine's home as the spawn sheet's folder browser lists it: a
+  // person's identity for the delegate's workspace, and `~/code/chip-tray`.
+  await writeFile(
+    join(fleet.home, ".gitconfig"),
+    "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
+  );
+  await mkdir(join(fleet.home, "code", "chip-tray"), { recursive: true });
 
   // Claude Code's own subagents allowed, so the chips turn runs one: the
   // fleet's "Use delegates instead" off (fleet-choices.ts), heard by the
@@ -463,6 +650,12 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
     answered,
     "Ask me what the hang card's states are called. PROBE-STEP:named"
   );
+  // A delegate it starts, which reports back: its card, transcript inline.
+  const split = await fleet.spawn("claude", "Split the chip audit", fleet.repo);
+  await fleet.send(
+    split,
+    "Hand the chip row's check to a delegate. PROBE-STEP:split"
+  );
 
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "cawco",
@@ -473,7 +666,6 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   });
   const titles = [
     "Fix tray chip overflow",
-    "Audit the push probe",
     "Rebuild the token sheet",
     "Name the hang card's states",
     "Measure the board's columns on a phone",
@@ -503,6 +695,45 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   );
   await mkdir(join(fleet.repo, "notes"), { recursive: true });
 
+  const put = async (projectId: string, path: string, content: string) => {
+    const response = await fetch(
+      `${fleet.base}/api/projects/${projectId}/folder/file`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path, content }),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(
+        `PUT ${path}: ${response.status} ${await response.text()}`
+      );
+    }
+  };
+  // A made view, kept, as a hand-written view file is (views.ts: files are the truth).
+  await put(project.id, "views/week.oui", WEEK_VIEW);
+
+  // A task in review (the code template's `review` stage waits on you), its
+  // outputs in the folder; its attempts' sessions, the finished one with a
+  // turn so its transcript has rows (ios-task-review.ts's seed).
+  const review = await fleet.api<{ id: string; path: string }>(
+    `/api/projects/${project.id}/tasks`,
+    { title: REVIEW_TITLE, stage: "review" }
+  );
+  await put(project.id, review.path, REVIEW_TASK);
+  await put(
+    project.id,
+    `assets/${review.id}/push.post.json`,
+    JSON.stringify(POST, null, 2)
+  );
+  await put(project.id, `assets/${review.id}/audit.md`, AUDIT);
+  const attempt = (title: string) =>
+    fleet.spawn("claude", title, fleet.repo, { projectId: project.id });
+  const reviewDone = await attempt("Attempt 2");
+  const reviewFailed = await attempt("Attempt 1");
+  const tokenFailed = await attempt("Attempt 1");
+  await fleet.send(reviewDone, "Audit the push probe's last runs.");
+
   // A decision: a page a session of the project made (written to its decisions/).
   const decision = await fleet.spawn(
     "claude",
@@ -520,21 +751,38 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
     graph: GRAPH,
   });
 
-  // A workflow, and one run of it that has finished.
+  // A workflow, and one run of it that has finished (its step's session
+  // handing in its result); and a session that runs it (its RunBlock).
   const workflow = await fleet.api<{ id: string }>("/api/workflows", {
-    name: "Chip audit",
+    name: WORKFLOW_NAME,
     program: WORKFLOW,
   });
   const { runId } = await fleet.api<{ runId: string }>(
     `/api/workflows/${workflow.id}/runs`,
     { workspace: { path: fleet.repo, machineId: MACHINE } }
   );
-  await until(
-    "the workflow's run done",
-    () => fleet.api<{ status: string }>(`/api/workflow-runs/${runId}`),
-    (run) => !["running", "waiting"].includes(run.status),
-    120_000
+  const runDone = (what: string, id: string) =>
+    until(
+      what,
+      () => fleet.api<{ status: string }>(`/api/workflow-runs/${id}`),
+      (run) => !["running", "waiting"].includes(run.status),
+      180_000
+    );
+  await runDone("the workflow's run done", runId);
+  const runner = await fleet.spawn("claude", "Run the chip audit", fleet.repo);
+  await fleet.send(runner, "Run the chip audit workflow. PROBE-STEP:runner");
+  const runnerRun = await until(
+    "the runner session's workflow run",
+    () =>
+      fleet.query<{ id: string }>(
+        "SELECT id FROM workflow_runs WHERE workflow_id = ? AND id <> ?",
+        workflow.id,
+        runId
+      )[0]?.id,
+    Boolean,
+    180_000
   );
+  await runDone("the runner session's run done", runnerRun as string);
 
   // The named session's question, answered as the dashboard answers it:
   // its transcript keeps the answered card (QuestionCard).
@@ -609,11 +857,247 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
       180_000
     );
   }
+
+  // The attempts, filed as the hub files them (work items in an archived
+  // workspace): the review task's failed one and its finished one, whose
+  // result leads with the chip-wrap page and hands in the post and the
+  // notes; and the token sheet's one failed attempt.
+  fleet.write(
+    "INSERT INTO workspaces (id, machine_id, repo_root, path, branch, state, created_by_instance_id, created_at) VALUES (?, ?, ?, ?, ?, 'archived', ?, ?)",
+    "ws-review",
+    MACHINE,
+    fleet.repo,
+    fleet.repo,
+    "ws/review",
+    reviewDone,
+    now - 60 * MINUTE
+  );
+  const tokenTask = tasks[1] as string;
+  const item = (
+    id: string,
+    instance: string,
+    task: { id: string; title: string },
+    state: "done" | "failed",
+    started: number,
+    words: { error?: string; headline?: string; summary?: string },
+    result: object | null
+  ) =>
+    fleet.write(
+      "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, task_id, project_id, harness, state, summary, headline, error, outputs, task_result, created_at, ended_at) VALUES (?, 'ws-review', ?, ?, ?, ?, ?, ?, 'claude', ?, ?, ?, ?, ?, ?, ?, ?)",
+      id,
+      reviewDone,
+      instance,
+      `Your work item is an attempt at ${task.id}.`,
+      task.title,
+      task.id,
+      project.id,
+      state,
+      words.summary ?? null,
+      words.headline ?? null,
+      words.error ?? null,
+      JSON.stringify(task.id === review.id ? ["push.post.json", "audit.md"] : []),
+      result === null ? null : JSON.stringify(result),
+      started,
+      started + (state === "done" ? 65_000 : 3 * MINUTE)
+    );
+  item(
+    "wi-review-1",
+    reviewFailed,
+    { id: review.id, title: REVIEW_TITLE },
+    "failed",
+    now - 40 * MINUTE,
+    { error: FAILED_WHY },
+    null
+  );
+  item(
+    "wi-review-2",
+    reviewDone,
+    { id: review.id, title: REVIEW_TITLE },
+    "done",
+    now - 10 * MINUTE,
+    { summary: REVIEW_REPORT, headline: REVIEW_HEADLINE },
+    {
+      at: now - 10 * MINUTE + 65_000,
+      summary: REVIEW_REPORT,
+      check: [
+        "The post reads in under a minute.",
+        "Each miss names its run.",
+      ],
+      artifacts: [
+        {
+          kind: "artifact",
+          artifactId: artifact as string,
+          name: "Chip wraps",
+          primary: true,
+        },
+        { kind: "post", path: "push.post.json" },
+        { kind: "file", path: "audit.md" },
+      ],
+    }
+  );
+  item(
+    "wi-token-1",
+    tokenFailed,
+    { id: tokenTask, title: titles[1] as string },
+    "failed",
+    now - 25 * MINUTE,
+    { error: FAILED_WHY },
+    null
+  );
+
+  // A thread in the project where Caw names the two tasks that wait on you:
+  // their cards, and what each needs under it (TaskNeedsFor).
+  const thread = crypto.randomUUID();
+  const said = crypto.randomUUID();
+  fleet.write(
+    "INSERT INTO project_threads (id, project_id, title, setup, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)",
+    thread,
+    project.id,
+    "Where the push probe stands",
+    now - 5 * MINUTE,
+    now - 4 * MINUTE
+  );
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, created_at) VALUES (?, ?, 'you', ?, ?)",
+    crypto.randomUUID(),
+    thread,
+    "Where do the push probe audit and the token sheet stand?",
+    now - 5 * MINUTE
+  );
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, created_at) VALUES (?, ?, 'caw', ?, ?)",
+    said,
+    thread,
+    CAW_SAYS,
+    now - 4 * MINUTE
+  );
+  for (const taskId of [review.id, tokenTask]) {
+    fleet.write(
+      "INSERT INTO thread_message_tasks (message_id, project_id, task_id) VALUES (?, ?, ?)",
+      said,
+      project.id,
+      taskId
+    );
+  }
+
+  // Jev on (the record's stand-in answers it, style-snapshot.ts `record`),
+  // then a project with Caw on and nothing on its board: its starters.
+  await jevOn(fleet.base);
+  const trayPlace = join(fleet.sandbox, "tray");
+  await mkdir(trayPlace, { recursive: true });
+  await writeFile(
+    join(trayPlace, "README.md"),
+    "# Tray\n\nThe tray holds a session's chips.\n"
+  );
+  const tray = await fleet.api<{ id: string }>("/api/projects", {
+    name: "tray",
+    machineId: MACHINE,
+    cwd: trayPlace,
+    caw: true,
+    template: "code",
+  });
+  await until(
+    "the tray project's starters",
+    () =>
+      fleet
+        .api<{ starters: unknown[] }>(`/api/projects/${tray.id}/stages`)
+        .then((stages) => stages.starters.length)
+        .catch(() => 0),
+    (count) => count > 0,
+    120_000
+  );
+
+  // Three linked decision pages and their graph, in a project of their own.
+  const launchPlace = join(fleet.sandbox, "launch");
+  await mkdir(launchPlace, { recursive: true });
+  const decisions = await seedDecisions(fleet, {
+    name: "launch-q4",
+    machineId: MACHINE,
+    cwd: launchPlace,
+  });
+
+  // A second Claude account, signed in on the machine with a fake login of
+  // its own (scratch-fleet.ts `furnish`'s shape), filed after every session
+  // has started so each runs on the first: two signed in is what the spawn
+  // sheet's account chip and the routing's strategy are for.
+  const secondDir = join(
+    fleet.home,
+    ".cawco",
+    "accounts",
+    SECOND_ACCOUNT,
+    "claude"
+  );
+  await mkdir(secondDir, { recursive: true });
+  await writeFile(
+    join(secondDir, ".credentials.json"),
+    JSON.stringify({
+      claudeAiOauth: {
+        accessToken: "sk-ant-oat01-fake-scratch-second",
+        refreshToken: "sk-ant-ort01-fake-scratch-second",
+        expiresAt: now + 365 * DAY,
+        scopes: ["user:inference", "user:profile"],
+        subscriptionType: "max",
+      },
+    })
+  );
+  await writeFile(
+    join(secondDir, CLAUDE_JSON_NAME),
+    JSON.stringify({
+      hasCompletedOnboarding: true,
+      oauthAccount: {
+        emailAddress: "second@scratch-fleet.test",
+        organizationName: "Scratch Fleet",
+        accountUuid: "00000000-0000-4000-8000-000000000003",
+        organizationUuid: "00000000-0000-4000-8000-000000000002",
+      },
+    })
+  );
+  fleet.write(
+    "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Second', 'amber', 1, 0, ?)",
+    SECOND_ACCOUNT,
+    now
+  );
+  await until(
+    "the second account signed in",
+    () =>
+      fleet.query<{ state: string }>(
+        "SELECT state FROM account_signins WHERE account_id = ?",
+        SECOND_ACCOUNT
+      )[0]?.state,
+    (state) => state === "signed-in",
+    180_000
+  );
+
+  // The delegate done and its report heard: the parent's turns at rest.
+  await until(
+    "the delegate's item done",
+    () =>
+      fleet.query<{ state: string }>(
+        "SELECT state FROM work_items WHERE parent_instance_id = ? AND task_id IS NULL",
+        split
+      )[0]?.state,
+    (state) => state === "done",
+    300_000
+  );
+  for (const [what, id] of [
+    ["the split session's turn done", split],
+    ["the runner session's turn done", runner],
+    ["the review attempt's turn done", reviewDone],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one session at a time
+    await until(
+      what,
+      () => fleet.instance(id),
+      (row) => row?.status === "running" && row.turn_open_at === null,
+      180_000
+    );
+  }
+
   if (unoffered.length > 0) {
     throw new Error(`the scene is not what it says: ${unoffered.join("; ")}`);
   }
   kit.note(
-    `scene: sessions ${chips}, ${ask}, ${permission}, ${art}, ${answered}; artifact ${artifact}; project ${project.id} with ${tasks.length} tasks`
+    `scene: sessions ${chips}, ${ask}, ${permission}, ${art}, ${answered}, ${split}, ${runner}; artifact ${artifact}; project ${project.id} with ${tasks.length + 1} tasks; tray ${tray.id}; decisions ${decisions.projectId}`
   );
   return {
     chips,
@@ -624,10 +1108,17 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
     artifact: artifact as string,
     project: project.id,
     task: tasks[0] as string,
+    review: review.id,
+    failed: tokenTask,
     workflow: workflow.id,
     graph: graph.id,
     decision,
+    decisions: decisions.projectId,
     run: runId,
+    runner,
+    split,
+    tray: tray.id,
     account: ACCOUNT,
+    second: SECOND_ACCOUNT,
   };
 }

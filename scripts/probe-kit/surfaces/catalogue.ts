@@ -14,7 +14,7 @@
  */
 import type { Page } from "playwright-core";
 import { COMPOSER_FIELD } from "../kit";
-import type { Scene } from "./scene";
+import { DELEGATE_TITLE, type Scene } from "./scene";
 
 export type Width = "desk" | "tablet" | "phone";
 
@@ -98,6 +98,29 @@ const WROTE_ROW = /Wrote chip\.css/;
 const OPEN_DIFF = /diff|Open|Expand/i;
 /** A workflow's run control. */
 const RUN_WORKFLOW = /^Run|Launch/;
+/** The delegate's card in its parent's transcript: its fold, named for the delegate first. */
+const DELEGATE_CARD = new RegExp(`^${DELEGATE_TITLE}`);
+/** The spawn sheet's chips, each its popover's trigger (NsPopover's `label`). */
+const LOCATION_CHIP = /^Location: /;
+const EFFORT_CHIP = /^Effort: /;
+const PERMISSION_CHIP = /^Permission mode: /;
+const ACCOUNT_CHIP = /^Account: /;
+/** The spawn sheet's location popover, then its folder browser walked to `~/code/chip-tray` (the scene's). */
+const browseTo = async (page: Page) => {
+  await press("Browse")(page);
+  for (const folder of ["code", "chip-tray"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one folder deeper at a time
+    await page
+      .getByRole("button", { name: folder, exact: true })
+      .filter({ visible: true })
+      .first()
+      .click();
+    await page
+      .getByRole("button", { name: folder, exact: true })
+      .and(page.locator("[aria-current=location]"))
+      .waitFor();
+  }
+};
 const BENCHES: [string, string][] = [
   ["caw", "/motion/caw"],
   ["caw-notices", "/motion/caw-notices?fixture=full"],
@@ -167,6 +190,12 @@ const EDITORS: Record<string, State[]> = {
     {
       name: "account",
       route: (s) => `/config/accounts/${s.account}`,
+      root: "body",
+    },
+    {
+      // The second account, signed in on the machine.
+      name: "second",
+      route: (s) => `/config/accounts/${s.second}`,
       root: "body",
     },
     {
@@ -334,6 +363,19 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.permission}`,
         root: MAIN,
       },
+      {
+        // The delegate it started, reported back: its card opened, its transcript inline.
+        name: "delegate",
+        route: (s) => `/session/${s.split}`,
+        act: press(DELEGATE_CARD),
+        root: MAIN,
+      },
+      {
+        // The workflow run it started: the RunBlock and its steps.
+        name: "run-block",
+        route: (s) => `/session/${s.runner}`,
+        root: MAIN,
+      },
     ],
   },
   {
@@ -382,20 +424,65 @@ export const SURFACES: Surface[] = [
     name: "task",
     serve: "built",
     route: (s) => `/project/${s.project}?task=${s.task}`,
-    states: [{ name: "open", root: "body" }],
+    states: [
+      { name: "open", root: "body" },
+      {
+        // In review: its two attempts, the newest's result (the page it presented, the post, the notes).
+        name: "review",
+        route: (s) => `/project/${s.project}?task=${s.review}`,
+        root: "body",
+      },
+      {
+        // Its one attempt failed.
+        name: "failed",
+        route: (s) => `/project/${s.project}?task=${s.failed}`,
+        root: "body",
+      },
+    ],
   },
   {
     name: "views",
     serve: "built",
     route: (s) => `/project/${s.project}`,
-    // Each view is the project's route with its `view` (the view tabs' own hrefs).
-    states: ["table", "pipeline", "routines", "decisions"].map(
+    // Each view is the project's route with its `view` (the view tabs' own
+    // hrefs): a made view's tab is `view:<name>` (+page.svelte's `tabs`).
+    states: ["table", "pipeline", "routines", "decisions", "view:week"].map(
       (view): State => ({
-        name: view,
+        name: view.replace("view:", ""),
         route: (s) => `/project/${s.project}?view=${view}`,
         root: MAIN,
       })
     ),
+  },
+  {
+    // Three linked decision pages: the list, one page, and their graph.
+    name: "decisions",
+    serve: "built",
+    route: (s) => `/project/${s.decisions}?view=decisions`,
+    states: [
+      { name: "rest", root: MAIN },
+      {
+        name: "page",
+        route: (s) => `/project/${s.decisions}?view=decisions&page=pricing`,
+        root: MAIN,
+      },
+      {
+        name: "graph",
+        route: (s) => `/project/${s.decisions}?view=decisions&mode=graph`,
+        root: MAIN,
+      },
+    ],
+  },
+  {
+    // A project with Caw on and nothing on its board: the starters on the
+    // board, then his panel (its lead switch, the starters in its hero).
+    name: "caw-on",
+    serve: "built",
+    route: (s) => `/project/${s.tray}`,
+    states: [
+      { name: "rest", root: "body" },
+      { name: "panel", act: press(CAW_SEAT), root: "body" },
+    ],
   },
   ...CONFIG.map((section): Surface => ({
     name: `config-${section}`,
@@ -413,11 +500,46 @@ export const SURFACES: Surface[] = [
     name: "new-session",
     serve: "built",
     route: () => "/",
+    // One sheet, walked as a person fills it: where, the folder browsed to
+    // and used, then each chip's popover, then the prompt's `/` menu.
     states: [
       {
         name: "open",
         act: press("Start session"),
         root: "[role=dialog][data-state=open]",
+      },
+      { name: "location", act: press(LOCATION_CHIP), root: "body" },
+      { name: "browse", act: browseTo, root: "body" },
+      {
+        name: "used",
+        act: press("Use this folder"),
+        root: "[role=dialog][data-state=open]",
+      },
+      { name: "effort", act: press(EFFORT_CHIP), root: "body" },
+      {
+        name: "permission",
+        act: async (page) => {
+          await page.keyboard.press("Escape");
+          await press(PERMISSION_CHIP)(page);
+        },
+        root: "body",
+      },
+      {
+        name: "account",
+        act: async (page) => {
+          await page.keyboard.press("Escape");
+          await press(ACCOUNT_CHIP)(page);
+        },
+        root: "body",
+      },
+      {
+        name: "insert",
+        act: async (page) => {
+          await page.keyboard.press("Escape");
+          await page.getByRole("textbox", { name: "First prompt" }).click();
+          await page.keyboard.type("/");
+        },
+        root: "body",
       },
     ],
   },
@@ -481,6 +603,8 @@ export const SURFACES: Surface[] = [
       },
       // A graph workflow: the canvas, its nodes and edges, the inspector.
       { name: "graph", route: (s) => `/workflows/${s.graph}`, root: "body" },
+      // The finished run in its own pane: its steps.
+      { name: "run", route: (s) => `/session/run:${s.run}`, root: "body" },
     ],
   },
   {
