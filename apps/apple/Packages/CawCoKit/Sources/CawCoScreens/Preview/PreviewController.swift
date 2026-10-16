@@ -1152,7 +1152,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let arriving = card.isHidden
         card.isHidden = false
         card.link = pinLink(pin.label)
-        card.show(pin, live: live.contains(openPin), thumbnail: thumbs[openPin], problem: cardError, replying: replying,
+        // The agent answers as the session the artifact belongs to (PreviewPane.svelte `ownerName`).
+        let agentName = hub.fleet.byId[instanceId].map(hub.fleet.title) ?? "The session"
+        card.show(pin, agentName: agentName, live: live.contains(openPin), thumbnail: thumbs[openPin], problem: cardError, replying: replying,
                   draft: drafts[openPin] ?? "")
         if outsidePress.view == nil, let window = view.window { window.addGestureRecognizer(outsidePress) }
         placeCard()

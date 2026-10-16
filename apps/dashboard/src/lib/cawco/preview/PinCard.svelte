@@ -5,7 +5,9 @@
    * control edge, hairline shadow, 11px padding), on a phone standing at the
    * well's foot as the house drawer does. What the pin stands on (its text
    * and file:line) with its picture, which opens full size in the lightbox;
-   * its thread, the agent's replies as markdown; the reply field and Reply.
+   * its thread in the transcript's two voices (MessageRow itself): the
+   * person's words in the reader's well, the agent's bare under its mark and
+   * the session's name; the reply field and Reply.
    * Its head carries what acts on the pin, as Figma's, Vercel's and Miro's
    * comment popovers do: Resolve (or Reopen), ⋯ (Copy link, Delete pin) and
    * Close. A resolved pin's field reopens it with its reply ("Reply to
@@ -24,7 +26,7 @@
    * presses this document never hears, says its own (`cawco:press`). What
    * the field holds is the pin's draft, which the pane keeps with the pin.
    */
-  import type { Pin } from "@cawco/core/comments";
+  import type { Pin, ThreadEntry } from "@cawco/core/comments";
   import { tick, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
@@ -35,18 +37,19 @@
     IconSuccess,
     IconTrash,
   } from "#lib/icons.js";
-  import { formatAgeShort } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import RowMenu from "../config/RowMenu.svelte";
   import { copyToClipboard } from "../copy";
-  import MessageBody from "../MessageBody.svelte";
   import { pressOutside } from "../press-outside";
+  import MessageRow from "../transcript/MessageRow.svelte";
+  import type { Message } from "../types";
   import PinDisc from "./PinDisc.svelte";
   import { pinName } from "./pin-name";
 
   let {
     pin,
+    agentName,
     link,
     at,
     room,
@@ -62,6 +65,8 @@
     onpicture,
   }: {
     pin: Pin;
+    /** Who answers in the thread: the session the artifact belongs to, as its transcript names it. */
+    agentName: string;
     /** The pin's own address: its artifact's page, opening this pin's card. */
     link: string;
     /** The pin's disc in the well, px; null while it is not on screen. */
@@ -197,6 +202,21 @@
     }
     return pin.thread.length > 0 ? "Reply" : "Say what to change here";
   });
+
+  /**
+   * A thread entry as the transcript's row for it: the person's as a sent
+   * turn, the agent's as its turn. Under the pin, not a session, so the row
+   * offers none of a session turn's actions (edit, fork, send again).
+   */
+  function asMessage(entry: ThreadEntry): Message {
+    return {
+      id: `pin:${pin.id}:${entry.id}`,
+      instanceId: `pin:${pin.id}`,
+      type: entry.by === "agent" ? "assistant" : "user",
+      content: entry.text,
+      timestamp: entry.at,
+    };
+  }
 
   function reply() {
     const text = draft.trim();
@@ -341,26 +361,25 @@
         </button>
       {/if}
       {#if pin.thread.length > 0}
+        <!-- The transcript's own rows: a run of one speaker's entries is one
+             turn (its later entries grouped under the first's speaker line),
+             the person's run one well. -->
         <ol class="thread">
-          {#each pin.thread as entry (entry.id)}
+          {#each pin.thread as entry, i (entry.id)}
             <li class="entry" data-by={entry.by}>
-              <p class="who">
-                <span>{entry.by === "agent" ? "Agent" : "You"}</span>
-                <time datetime={entry.at}
-                  >{formatAgeShort(Date.parse(entry.at))}</time
-                >
-              </p>
-              {#if entry.by === "agent"}
-                <MessageBody source={entry.text} />
-                {#if entry.files?.length}
-                  <p class="files">
-                    {#each entry.files as file (file)}
-                      <code>{file}</code>
-                    {/each}
-                  </p>
-                {/if}
-              {:else}
-                <p class="words">{entry.text}</p>
+              <MessageRow
+                {agentName}
+                grouped={pin.thread[i - 1]?.by === entry.by}
+                message={asMessage(entry)}
+                runsOn={entry.by === "person" &&
+                  pin.thread[i + 1]?.by === "person"}
+              />
+              {#if entry.by === "agent" && entry.files?.length}
+                <p class="files">
+                  {#each entry.files as file (file)}
+                    <code>{file}</code>
+                  {/each}
+                </p>
               {/if}
             </li>
           {/each}
@@ -529,33 +548,16 @@
       object-fit: cover;
     }
   }
+  /* The rows keep the transcript's rhythm: a turn --space-4 under the one
+     before, its speaker line --space-2 over its words. The first turn starts
+     at the room's own top. */
   .thread {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  .who {
-    display: flex;
-    gap: var(--space-2);
-    margin: 0;
-    color: var(--ink-strong);
-    font: var(--type-label);
-
-    & time {
-      color: var(--ink-muted);
-      font-size: var(--text-meta);
-      font-weight: var(--weight-body);
-    }
-  }
-  .words {
-    margin: 0;
-    color: var(--ink-row);
-    font: var(--type-body);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+  .entry:first-child > :global(.turn) {
+    margin-block-start: 0;
   }
   .files {
     display: flex;
@@ -564,6 +566,8 @@
     margin: var(--space-1) 0 0;
 
     & code {
+      min-width: 0;
+      overflow-wrap: anywhere;
       padding: 0 var(--space-1);
       border-radius: var(--radius-xs);
       background: var(--code-bg);

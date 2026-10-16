@@ -684,6 +684,62 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     `in the card ${shown - done} ms after the tool answered; live dot seen ${live}`
   );
 
+  // The thread in the transcript's two voices (MessageRow): the person's two
+  // replies one well (the first runs on, the second grouped under it, the
+  // well's surface painted under each), the agent's bare under its mark and
+  // the session's name.
+  const voices = await card.evaluate((el) => {
+    const surface = (node: Element | null) =>
+      node ? getComputedStyle(node, "::before").backgroundColor : null;
+    const people = [...el.querySelectorAll('.entry[data-by="person"]')];
+    const agent = el.querySelector('.entry[data-by="agent"]');
+    const wells = people.map((entry) => entry.querySelector(".turn.you .well"));
+    const [upper, lower] = wells.map((well) => well?.getBoundingClientRect());
+    const agentTurn = agent?.querySelector(".turn");
+    return {
+      people: people.length,
+      personWells: wells.map(surface),
+      runsOn: people[0]
+        ?.querySelector(".turn.you")
+        ?.classList.contains("runs-on"),
+      grouped: people[1]
+        ?.querySelector(".turn.you")
+        ?.classList.contains("grouped"),
+      marks: people.filter((entry) => entry.querySelector(".who .dot.u"))
+        .length,
+      seam: upper && lower ? Math.round(lower.top - upper.bottom) : null,
+      agentWell: agent?.querySelector(".well") ? "yes" : "no",
+      agentSurface: agentTurn
+        ? getComputedStyle(agentTurn).backgroundColor
+        : null,
+      agentMark: (() => {
+        const dot = agent?.querySelector(".who .dot.a");
+        return dot ? getComputedStyle(dot).backgroundColor : null;
+      })(),
+      agentName:
+        agent?.querySelector(".who .role")?.textContent?.trim() ?? null,
+    };
+  });
+  const clear = (color: string | null | undefined) =>
+    !color || color === "transparent" || color === "rgba(0, 0, 0, 0)";
+  on.kit.check(
+    "4: the card's thread speaks in two voices: the person's two replies one well (painted, the first running on, the second grouped, no gap), the agent's reply bare under its mark and the session's name",
+    voices.people === 2 &&
+      voices.personWells.every((color) => !clear(color)) &&
+      voices.personWells[0] === voices.personWells[1] &&
+      voices.runsOn === true &&
+      voices.grouped === true &&
+      voices.marks === 1 &&
+      voices.seam !== null &&
+      Math.abs(voices.seam) <= 1 &&
+      voices.agentWell === "no" &&
+      clear(voices.agentSurface) &&
+      !clear(voices.agentMark) &&
+      !!voices.agentName &&
+      voices.agentName !== "Agent",
+    JSON.stringify(voices)
+  );
+
   await on.call(RESOLVE, { pin: one });
   const dim = await until(
     "pin 1 dimmed",

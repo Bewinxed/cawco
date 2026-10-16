@@ -320,8 +320,10 @@ private final class MovedRow: UIView {
 /// raised card recipe (12pt radius, control edge, hairline shadow, 11pt
 /// in); on a phone standing at the well's foot in the house drawer's shape.
 /// What the pin stands on (its text, its file:line in mono) with its
-/// picture as a 56pt thumbnail that opens the lightbox; its thread, the
-/// agent's replies as the transcript sets markdown; the 16pt reply field and
+/// picture as a 56pt thumbnail that opens the lightbox; its thread in the
+/// transcript's two voices (ThreadTurnsView: the person's words in the
+/// reader's well, the agent's bare under its mark and the session's name);
+/// the 16pt reply field and
 /// Reply. Its head carries what acts on the pin, as the web's does: Resolve
 /// or Reopen, ⋯ (Copy link, Delete pin) and Close; a resolved pin's field
 /// reopens it with its reply. Delete is
@@ -359,7 +361,7 @@ final class PinCard: UIView, UITextViewDelegate {
     private let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private let source = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
     private let thumb = UIButton(type: .custom)
-    private let thread = UIStackView()
+    private let thread = ThreadTurnsView()
     /// The picture and the thread, the one part of the card that scrolls
     /// (PinCard.svelte `.room`): past the card's cap it gives up height,
     /// never the head over it or the field and actions under it.
@@ -385,6 +387,7 @@ final class PinCard: UIView, UITextViewDelegate {
     /// The pin stands on ink: its delete takes that ink with it.
     private var inked = false
     private var shownThread: [PinEntry] = []
+    private var shownAgent = ""
     /// As a phone's drawer: flush with the well's sides and foot, rounded on top.
     var drawer = false { didSet { paint() } }
 
@@ -443,8 +446,6 @@ final class PinCard: UIView, UITextViewDelegate {
         thumb.addAction(UIAction { [weak self] _ in self?.onPicture() }, for: .touchUpInside)
         let thumbRow = UIStackView(arrangedSubviews: [thumb, UIView()])
 
-        thread.axis = .vertical
-        thread.spacing = Space.space2
         for part in [thumbRow, thread] as [UIView] { roomColumn.addArrangedSubview(part) }
         roomColumn.axis = .vertical
         roomColumn.spacing = Space.space2
@@ -529,10 +530,11 @@ final class PinCard: UIView, UITextViewDelegate {
     required init?(coder _: NSCoder) { fatalError("PinCard is built in code") }
 
     /// The card's pin as the hub has it now, its thumbnail when drawn, and
-    /// what went wrong with the last reply, resolve or send. The reply
-    /// being written stays as it is; another pin's card starts from that
-    /// pin's own `draft`.
-    func show(_ pin: Pin, live: Bool, thumbnail: Data?, problem said: String?, replying: Bool, draft: String) {
+    /// what went wrong with the last reply, resolve or send. The agent
+    /// answers in its thread as `agentName`: the session the artifact
+    /// belongs to. The reply being written stays as it is; another pin's
+    /// card starts from that pin's own `draft`.
+    func show(_ pin: Pin, agentName: String, live: Bool, thumbnail: Data?, problem said: String?, replying: Bool, draft: String) {
         liveMark.isHidden = !live
         let fresh = pin.id != pinId
         // Another pin in the same card: a question asked of the last one goes.
@@ -551,10 +553,10 @@ final class PinCard: UIView, UITextViewDelegate {
         thumb.superview?.isHidden = image == nil
         thumb.accessibilityLabel = "Pin \(pin.label)'s picture, full size"
         let threadChanged = fresh || pin.thread != shownThread
-        if threadChanged {
+        if threadChanged || agentName != shownAgent {
             shownThread = pin.thread
-            for entry in thread.arrangedSubviews { entry.removeFromSuperview() }
-            for entry in pin.thread { thread.addArrangedSubview(Self.entry(entry)) }
+            shownAgent = agentName
+            thread.show(pin.thread, agentName: agentName)
         }
         thread.isHidden = pin.thread.isEmpty
         room.isHidden = pin.thread.isEmpty && image == nil
@@ -772,39 +774,6 @@ final class PinCard: UIView, UITextViewDelegate {
         layer.maskedCorners = drawer ? [.layerMinXMinYCorner, .layerMaxXMinYCorner]
             : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         thumb.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
-    }
-
-    /// One thread entry (PinCard.svelte `.entry`): who and when, then the
-    /// words, the agent's as markdown with the files its reply names.
-    private static func entry(_ entry: PinEntry) -> UIView {
-        let who = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-        who.text = entry.by == .agent ? "Agent" : "You"
-        let when = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-        let at = (try? Date(entry.at, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true)))
-            ?? (try? Date(entry.at, strategy: .iso8601))
-        when.text = at.map { RailAge.short($0.timeIntervalSince1970 * 1000, now: Date.now.timeIntervalSince1970 * 1000) }
-        let line = UIStackView(arrangedSubviews: [who, when, UIView()])
-        line.spacing = Space.space2
-        line.alignment = .firstBaseline
-        let stack = UIStackView(arrangedSubviews: [line])
-        stack.axis = .vertical
-        stack.spacing = Space.space1
-        if entry.by == .agent {
-            let words = MarkdownDocumentView(message: true)
-            words.setSource(entry.text)
-            stack.addArrangedSubview(words)
-            if let files = entry.files, !files.isEmpty {
-                let named = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted, lines: 0)
-                named.text = files.joined(separator: "  ")
-                stack.addArrangedSubview(named)
-            }
-        } else {
-            let words = KitLabel(TypeScale.typeBody, ink: Palette.inkRow, lines: 0)
-            words.text = entry.text
-            stack.addArrangedSubview(words)
-        }
-        stack.isAccessibilityElement = false
-        return stack
     }
 
     #if DEBUG

@@ -1764,6 +1764,7 @@
   <div class="pin-room" bind:clientHeight={roomH} bind:clientWidth={roomW}>
     {#if cardPin}
       <PinCard
+        agentName={owner ? ownerName : "The session"}
         at={pinAt}
         link={pinLink(cardPin.number)}
         live={live.has(cardPin.id)}
