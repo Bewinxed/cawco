@@ -329,11 +329,7 @@ export interface EventRouteView {
   id: string;
   kinds: string[];
   label: string | null;
-  /**
-   * When an event it fits (its source and kinds) last went to its routine;
-   * null when none has. Its author, label, branch and regex are not read
-   * back from the stored event.
-   */
+  /** When it last delivered an event to its routine; null when it never has. */
   lastDeliveryAt: number | null;
   projectId: string;
   regex: string | null;
@@ -407,30 +403,15 @@ export interface IngressDeps {
   readonly routines: Pick<Routines, "runForEvent">;
 }
 
-/** The newest of the project's deliveries `row` fits: to its routine, from its source, of its kinds. */
-const lastDeliveryOf = (
-  row: EventRouteRow,
-  deliveries: Delivery[]
-): number | null => {
-  let last: number | null = null;
-  for (const each of deliveries) {
-    if (
-      each.routedTo === row.routineId &&
-      (row.kinds.length === 0 || row.kinds.includes(each.kind)) &&
-      globMatches(row.source, each.source) &&
-      (last === null || each.receivedAt > last)
-    ) {
-      last = each.receivedAt;
-    }
-  }
-  return last;
-};
+/** Each route's last delivery by its id (`IngressDb.deliveries`). */
+const deliveredBy = (deliveries: Delivery[]): Map<string, number> =>
+  new Map(deliveries.map((each) => [each.routeId, each.receivedAt]));
 
 const routeView = (
   row: EventRouteRow,
-  deliveries: Delivery[]
+  delivered: Map<string, number>
 ): EventRouteView => ({
-  lastDeliveryAt: lastDeliveryOf(row, deliveries),
+  lastDeliveryAt: delivered.get(row.id) ?? null,
   id: row.id,
   projectId: row.projectId,
   source: row.source,
@@ -578,17 +559,20 @@ export const createIngress = ({
     row: InboundEventRow,
     event: InboundEvent
   ): Promise<void> => {
-    const routineIds = [
-      ...new Set(matching(row.projectId, event).map((each) => each.routineId)),
-    ];
+    const routes = matching(row.projectId, event);
+    const routineIds = [...new Set(routes.map((each) => each.routineId))];
     const to =
       routineIds.length > 0 ? await chosen(row, event, routineIds) : TO_LEAD;
     if (to === undefined) {
       return;
     }
     if (to !== TO_LEAD) {
-      // Routed first: a queued run is handled when it starts (routines.ts `drain`).
-      store.setEvent(row.id, { routedTo: to });
+      // Routed first: a queued run is handled when it starts (routines.ts
+      // `drain`). It was delivered by the oldest matching route to its routine.
+      store.setEvent(row.id, {
+        routedTo: to,
+        routeId: routes.find((each) => each.routineId === to)?.id ?? null,
+      });
       const run = routines.runForEvent(to, row.id);
       if (run?.state !== "queued") {
         store.setEvent(row.id, { handledAt: new Date() });
@@ -623,6 +607,7 @@ export const createIngress = ({
       receivedAt: new Date(),
       via,
       routedTo: null,
+      routeId: null,
       handledAt: null,
     });
     if (!row) {
@@ -957,10 +942,10 @@ export const createIngress = ({
   };
 
   const view = (projectId: string): IngressView => {
-    const deliveries = store.deliveries(projectId);
+    const delivered = deliveredBy(store.deliveries(projectId));
     return {
       github: githubOf(projectId),
-      routes: store.routes(projectId).map((row) => routeView(row, deliveries)),
+      routes: store.routes(projectId).map((row) => routeView(row, delivered)),
       connectorPolls: store.connectorPolls(projectId).map(pollView),
       events: store.events(projectId, EVENTS_SHOWN).map(eventView),
     };
@@ -1064,7 +1049,7 @@ export const createIngress = ({
     console.log(
       `[ingress] route ${row.id} (${row.source}) → routine ${row.routineId}, by ${row.createdBy}`
     );
-    return routeView(row, store.deliveries(row.projectId));
+    return routeView(row, deliveredBy(store.deliveries(row.projectId)));
   };
 
   const updateRoute = (
@@ -1090,7 +1075,7 @@ export const createIngress = ({
     checkedRoute(row.projectId, next);
     return routeView(
       store.updateRoute(id, next) ?? row,
-      store.deliveries(row.projectId)
+      deliveredBy(store.deliveries(row.projectId))
     );
   };
 

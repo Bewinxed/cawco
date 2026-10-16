@@ -450,6 +450,7 @@ const webhookInsert = (kind: "pull_request", payload: unknown) => {
         receivedAt: new Date(),
         via: "webhook",
         routedTo: null,
+        routeId: null,
         handledAt: null,
       })
     );

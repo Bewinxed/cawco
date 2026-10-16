@@ -33813,7 +33813,7 @@
             ]
           },
           "lastDeliveryAt": {
-            "description": "When an event it fits (its source and kinds) last went to its routine;\nnull when none has. Its author, label, branch and regex are not read\nback from the stored event.",
+            "description": "When it last delivered an event to its routine; null when it never has.",
             "type": [
               "null",
               "number"

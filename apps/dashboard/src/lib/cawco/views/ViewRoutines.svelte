@@ -884,8 +884,8 @@
               <Table.Cell class="col-name">
                 <span class="name">{poll.what}</span>
                 <span class="sub"
-                  >{#if poll.tool}<span class="code">{poll.tool}</span> ·
-                  {/if}{everyOf(poll)}</span
+                  >{#if poll.tool}<span class="code">{poll.tool}</span
+                    >{" · "}{/if}{everyOf(poll)}</span
                 >
               </Table.Cell>
               <Table.Cell class="col-last" data-cell="last">

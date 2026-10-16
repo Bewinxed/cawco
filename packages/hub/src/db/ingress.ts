@@ -21,12 +21,10 @@ export type EventRouteRow = typeof eventRoutes.$inferSelect;
 export type GitHubPollerRow = typeof githubPollers.$inferSelect;
 export type ConnectorPollRow = typeof connectorPolls.$inferSelect;
 
-/** The newest event a routine was sent from one source, of one kind. */
+/** When a route last delivered an event. */
 export interface Delivery {
-  kind: string;
   receivedAt: number;
-  routedTo: string;
-  source: string;
+  routeId: string;
 }
 
 /** The rows ingress.ts keeps. */
@@ -44,10 +42,7 @@ export interface IngressDb {
   readonly createRoute: (row: EventRouteRow) => EventRouteRow;
   readonly deleteConnectorPoll: (id: string) => boolean;
   readonly deleteRoute: (id: string) => boolean;
-  /**
-   * A project's routed events, newest of each routine, source and kind: what
-   * a route's last delivery is read from, in one query.
-   */
+  /** Each of a project's routes' newest delivered event, in one query. */
   readonly deliveries: (projectId: string) => Delivery[];
   readonly event: (id: string) => InboundEventRow | undefined;
   /** A project's events, newest first. */
@@ -66,7 +61,7 @@ export interface IngressDb {
   readonly routes: (projectId: string) => EventRouteRow[];
   readonly setEvent: (
     id: string,
-    patch: Pick<Partial<InboundEventRow>, "routedTo" | "handledAt">
+    patch: Pick<Partial<InboundEventRow>, "routedTo" | "routeId" | "handledAt">
   ) => void;
   /** Names the connection a project's repository is polled with; null stops its poller. */
   readonly setGitHubConnection: (
@@ -100,19 +95,17 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => ({
   deliveries: (projectId) =>
     db
       .select({
-        routedTo: sql<string>`${inboundEvents.routedTo}`,
-        source: inboundEvents.source,
-        kind: inboundEvents.kind,
+        routeId: sql<string>`${inboundEvents.routeId}`,
         receivedAt: sql<number>`max(${inboundEvents.receivedAt})`,
       })
       .from(inboundEvents)
       .where(
         and(
           eq(inboundEvents.projectId, projectId),
-          isNotNull(inboundEvents.routedTo)
+          isNotNull(inboundEvents.routeId)
         )
       )
-      .groupBy(inboundEvents.routedTo, inboundEvents.source, inboundEvents.kind)
+      .groupBy(inboundEvents.routeId)
       .all(),
   events: (projectId, limit) =>
     db

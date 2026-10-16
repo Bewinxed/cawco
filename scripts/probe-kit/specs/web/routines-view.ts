@@ -47,10 +47,10 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one width at a time
 import { randomBytes } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { type Fleet, MACHINE, type Seen } from "../../../scratch-fleet";
+import { type Fleet, MACHINE, type Seen, until } from "../../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../../kit";
 
 const ROUTINES = 4;
@@ -285,12 +285,12 @@ async function bento(kit: Kit, base: string, busyId: string) {
       panel.head?.match(TITLED)?.slice(1, 3)
     );
     kit.check(
-      `${at}: Fleet ops is a bento of Routines ${BUSY}, Event sources 5 and Approved actions 6, each head with its needs-you mark (failing routines, a failing source, actions waiting)`,
+      `${at}: Fleet ops is a bento of Routines ${BUSY}, Event sources 7 (four routes, two connector polls, the GitHub poller) and Approved actions 6, each head with its needs-you mark (failing routines, a failing source, actions waiting)`,
       b.layout === "bento" &&
         JSON.stringify(heads) ===
           JSON.stringify([
             ["Routines", String(BUSY)],
-            ["Event sources", "5"],
+            ["Event sources", "7"],
             ["Approved actions", "6"],
           ]) &&
         b.panels.every((panel) => panel.needs),
@@ -390,6 +390,7 @@ async function bento(kit: Kit, base: string, busyId: string) {
       ...document.querySelectorAll(".panel[data-part='sources'] tr.row"),
     ].map((row) => ({
       name: row.querySelector(".name")?.textContent?.trim() ?? "",
+      sub: row.querySelector(".sub")?.textContent?.trim() ?? "",
       last:
         (
           row.querySelector("[data-cell='last']") as HTMLElement | null
@@ -404,11 +405,19 @@ async function bento(kit: Kit, base: string, busyId: string) {
     fromRun?.from === "From Check the relay's health",
     JSON.stringify(read.actions)
   );
-  const merged = read.routes.find((row) => row.name === "Smoke tests on merge");
+  const toMerge = read.routes.filter(
+    (row) => row.name === "Smoke tests on merge"
+  );
+  const labelled = toMerge.find((row) => row.sub.includes(RELEASE));
+  const plain = toMerge.find((row) => !row.sub.includes(RELEASE));
   const quiet = read.routes.find((row) => row.name === "Triage new issues");
   kit.check(
-    "bento 1920: the route whose event went to its routine two hours ago says so in Last read; one with none says No events yet",
-    merged?.last === "Delivered, 2h ago" && quiet?.last === "No events yet",
+    "bento 1920: two routes to one routine that differ only by a label filter show their own Last read: the labelled one's three hours ago, the other's just now; a route with none says No events yet",
+    toMerge.length === 2 &&
+      labelled?.last === "Delivered, 3h ago" &&
+      plain?.last.startsWith("Delivered, ") === true &&
+      plain.last !== labelled.last &&
+      quiet?.last === "No events yet",
     JSON.stringify(read.routes)
   );
   await page.close();
@@ -951,30 +960,27 @@ async function seedSources(fleet: Fleet, projectId: string) {
   };
   const gmail = await connection("support-mail", "gmail");
   const github = await connection("repo-stats", "github");
+  // Two routes to busy-1 that differ only by a label filter; the labelled
+  // one is older, so a merged pull request labelled `release` (which both
+  // match) is delivered by it, and an unlabelled one by the other.
   const ROUTES = [
-    ["github:*", ["pr.merged"], "main", "busy-1"],
-    ["conn:linear-issues:*", ["item"], null, "busy-0"],
-    ["conn:slack-releases:*", ["item"], null, "busy-7"],
+    [LABEL_ROUTE, "github:*", ["pr.merged"], RELEASE, "busy-1"],
+    [PLAIN_ROUTE, "github:*", ["pr.merged"], null, "busy-1"],
+    ["route-linear", "conn:linear-issues:*", ["item"], null, "busy-0"],
+    ["route-slack", "conn:slack-releases:*", ["item"], null, "busy-7"],
   ] as const;
-  ROUTES.forEach(([source, kinds, branch, routineId], index) => {
+  ROUTES.forEach(([id, source, kinds, label, routineId], index) => {
     fleet.write(
-      "INSERT INTO event_routes (id, project_id, source, kinds, branch, routine_id, enabled, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 'owner', ?)",
-      `route-${index}`,
+      "INSERT INTO event_routes (id, project_id, source, kinds, label, routine_id, enabled, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 'owner', ?)",
+      id,
       projectId,
       source,
       JSON.stringify(kinds),
-      branch,
+      label,
       routineId,
-      now
+      now - (ROUTES.length - index) * MIN
     );
   });
-  // A merged pull request the github route sent to its routine two hours ago.
-  fleet.write(
-    "INSERT INTO inbound_events (id, source, delivery_key, kind, project_id, payload, received_at, via, routed_to, handled_at) VALUES ('event-merged', 'github:cawco/fleet-ops', 'pr:12:merged', 'pr.merged', ?, '{}', ?, 'webhook', 'busy-1', ?)",
-    projectId,
-    now - DELIVERED_AGO,
-    now - DELIVERED_AGO
-  );
   const POLLS = [
     [gmail, "list_messages", 900, null],
     [github, "list_stargazers", 3600, "rate limited"],
@@ -1033,8 +1039,117 @@ async function seedSources(fleet: Fleet, projectId: string) {
   });
 }
 
-/** How long ago the github route's event went to its routine. */
-const DELIVERED_AGO = 2 * 60 * MIN;
+// --- GitHub, faked: what the poller reads ------------------------------------------
+
+const REPO = "cawco/fleet-ops";
+const GITHUB_TOKEN = `ghp_probe_${crypto.randomUUID().replaceAll("-", "")}`;
+const RELEASE = "release";
+const LABEL_ROUTE = "route-release";
+const PLAIN_ROUTE = "route-merged";
+/** How long ago the labelled pull request's event is said to have landed. */
+const LABELLED_AGO = 3 * 60 * MIN;
+
+/** The repository's pull requests, as GitHub lists them; the probe adds to it. */
+const pulls: { label: string | null; number: number }[] = [];
+
+/** GitHub's REST lists the poller reads: the pulls above, nothing else. */
+function fakeGitHub(): string {
+  const at = new Date().toISOString();
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request) => {
+      const url = new URL(request.url);
+      if (request.headers.get("authorization") !== `Bearer ${GITHUB_TOKEN}`) {
+        return Response.json({ message: "Bad credentials" }, { status: 401 });
+      }
+      if (url.pathname === `/repos/${REPO}/pulls`) {
+        return Response.json(
+          pulls.map((pr) => ({
+            number: pr.number,
+            html_url: `https://github.com/${REPO}/pull/${pr.number}`,
+            title: `PR ${pr.number}`,
+            body: null,
+            user: { login: "alice" },
+            labels: pr.label ? [{ name: pr.label }] : [],
+            head: { ref: `feature-${pr.number}` },
+            base: { repo: { full_name: REPO } },
+            state: "closed",
+            created_at: at,
+            updated_at: new Date().toISOString(),
+            closed_at: new Date().toISOString(),
+            merged_at: new Date().toISOString(),
+          }))
+        );
+      }
+      if (url.pathname.startsWith(`/repos/${REPO}/issues`)) {
+        return Response.json([]);
+      }
+      return new Response("not found", { status: 404 });
+    },
+  });
+  return `http://127.0.0.1:${server.port}`;
+}
+
+/**
+ * The busy project's repository polled through the hub's own GitHub poller:
+ * two merged pull requests, one labelled `release`, each routed by the hub,
+ * which records the route that delivered it. The labelled one's landing is
+ * then dated three hours back, so the two routes' Last read differ.
+ * Answers the route the hub recorded for each.
+ */
+async function deliverPulls(
+  fleet: Fleet,
+  projectId: string
+): Promise<{ labelled: string | null; plain: string | null }> {
+  const send = async (method: string, path: string, body: object) => {
+    const response = await fetch(`${fleet.base}${path}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`${path}: ${response.status} ${await response.text()}`);
+    }
+  };
+  await fleet.api("/api/connections", {
+    name: "gh-fleet-ops",
+    service: "github",
+    account: "probe",
+    transport: "http",
+    url: "http://127.0.0.1:9/mcp",
+    auth: "bearer",
+  });
+  await send("PUT", "/api/connections/gh-fleet-ops/key", { key: GITHUB_TOKEN });
+  await send("PUT", `/api/projects/${projectId}/ingress/github`, {
+    connection: "gh-fleet-ops",
+  });
+  const poll = () =>
+    send("POST", `/api/projects/${projectId}/ingress/github/poll`, {});
+  // The poller's first poll only sets its mark.
+  await poll();
+  pulls.push({ number: 12, label: RELEASE }, { number: 13, label: null });
+  await poll();
+  const routeOf = (key: string) =>
+    fleet.query<{ route_id: string | null }>(
+      "SELECT route_id FROM inbound_events WHERE delivery_key = ? AND routed_to IS NOT NULL",
+      key
+    )[0];
+  await until(
+    "both merged pull requests routed",
+    () => [routeOf("pr:12:merged"), routeOf("pr:13:merged")],
+    (rows) => rows.every((row) => row !== undefined),
+    30_000
+  );
+  fleet.write(
+    "UPDATE inbound_events SET received_at = ? WHERE delivery_key = 'pr:12:merged'",
+    Date.now() - LABELLED_AGO
+  );
+  return {
+    labelled: routeOf("pr:12:merged")?.route_id ?? null,
+    plain: routeOf("pr:13:merged")?.route_id ?? null,
+  };
+}
 
 /** A stdio MCP stub with one tool an action may call. */
 const TRACKER_STUB = `
@@ -1140,6 +1255,7 @@ const spec: Spec = {
       everyMs: 20,
       words: ["Ready."],
     }));
+    fleet.env.CAWCO_GITHUB_API = fakeGitHub();
     fleet.launch("sessiond");
     await fleet.sessiondUp();
     fleet.launch("hub");
@@ -1155,13 +1271,29 @@ const spec: Spec = {
       caw: false,
       template: "code",
     });
+    // Its own checkout, whose origin is on github.com: the poller reads it.
+    const busyRepo = join(fleet.sandbox, "fleet-ops");
+    await mkdir(busyRepo, { recursive: true });
+    await Bun.$`git init -q -b main && echo ops > README.md && git add -A && git -c user.name=Owner -c user.email=owner@probe.test commit -qm 'First commit' && git remote add origin https://github.com/${REPO}.git`
+      .cwd(busyRepo)
+      .quiet();
     const busy = await fleet.api<{ id: string }>("/api/projects", {
       name: "Fleet ops",
       machineId: MACHINE,
-      cwd: fleet.repo,
+      cwd: busyRepo,
       caw: false,
       template: "code",
     });
+    await until(
+      "Fleet ops' remote",
+      () =>
+        fleet.query<{ remote: string | null }>(
+          "SELECT remote FROM projects WHERE id = ?",
+          busy.id
+        )[0]?.remote,
+      (remote) => remote === `github.com/${REPO}`,
+      60_000
+    );
     // No routines: the empty page's starters over the Composer.
     const empty = await fleet.api<{ id: string }>("/api/projects", {
       name: "Field notes",
@@ -1193,6 +1325,12 @@ const spec: Spec = {
     await seedRoutines(fleet, project.id, OWN);
     await seedRoutines(fleet, busy.id, busyRoutines());
     await seedSources(fleet, busy.id);
+    const delivered = await deliverPulls(fleet, busy.id);
+    kit.check(
+      "hub: of two routes to one routine that differ only by a label filter, each merged pull request records the route that delivered it (the oldest matching)",
+      delivered.labelled === LABEL_ROUTE && delivered.plain === PLAIN_ROUTE,
+      JSON.stringify(delivered)
+    );
     const proposed = await proposeFromRun(fleet, busy.id);
     kit.check(
       "hub: an action a routine's delegate run proposes through action_propose records that routine and run",

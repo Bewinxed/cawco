@@ -3148,6 +3148,10 @@ export const inboundEvents = sqliteTable(
     via: text("via").$type<InboundVia>().notNull(),
     /** The routine a route sent it to, `lead` for the lead's inbox, or null (stored only: the lead was off). */
     routedTo: text("routed_to"),
+    /** The route it was delivered by: the oldest matching route to the routine it went to; null otherwise. */
+    routeId: text("route_id").references(() => eventRoutes.id, {
+      onDelete: "set null",
+    }),
     /** When it was handed on: its routine's run filed, or the lead's wake that carried it. */
     handledAt: timestamp("handled_at"),
   },
