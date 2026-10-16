@@ -97,6 +97,7 @@ import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import {
   APPLE_GATE_CHECK,
   APPLE_GATE_COMMAND,
+  APPLE_GATE_INPUTS,
   APPLE_GATE_TIMEOUT_SEC,
   appleGateDiff,
   appleGateRefusal,
@@ -1243,14 +1244,70 @@ interface Passed {
 }
 
 /**
- * Why `check` need not run on a tree where `passed` passed: the same
- * command passed there (with the same `expect`, when it has one), or one
- * that covers it did (landing.ts {@link GATE_COVERS}). Undefined when it
- * must run.
+ * The paths a check's command reads, for the commands that declare them: its
+ * pass is kept and matched by those paths' trees rather than the whole
+ * tree's, so it holds after a rebase that left them as they were (the Apple
+ * gate's compile, apple-gate.ts {@link APPLE_GATE_INPUTS}). Every other check
+ * is kept and matched by the whole tree.
+ */
+const CHECK_INPUTS: Readonly<Record<string, readonly string[]>> = {
+  [APPLE_GATE_COMMAND]: APPLE_GATE_INPUTS,
+};
+/** Every path a check declares, read once per look at the workspace. */
+const INPUT_PATHS = [...new Set(Object.values(CHECK_INPUTS).flat())];
+
+/**
+ * A clean workspace as {@link checkOnce} keys passes by it: `tree`, HEAD's
+ * tree with the item's outputs' contents beside it; `inputs`, the tree of
+ * each declared input path at HEAD (`absent` where HEAD has none); `outputs`,
+ * each output's content hash; `stamp`, all of it, to tell whether the
+ * workspace moved during a run.
+ */
+interface Checked {
+  inputs: ReadonlyMap<string, string>;
+  outputs: ReadonlyMap<string, string>;
+  stamp: string;
+  tree: string;
+}
+
+/**
+ * Where `check`'s pass is kept in `state`, and how its skip says where it
+ * passed: the whole tree, or, for a check that declares inputs, those paths'
+ * trees (and the contents of any output under them).
+ */
+const passKey = (
+  check: WorkItemCheck,
+  state: Checked
+): { key: string; said: (stage: string) => string } => {
+  const inputs = CHECK_INPUTS[check.command.trim()];
+  if (!inputs) {
+    return {
+      key: state.tree,
+      said: (stage) => `passed on this tree ${stage}`,
+    };
+  }
+  const parts = inputs.flatMap((path) => [
+    `${path}=${state.inputs.get(path) ?? "absent"}`,
+    ...[...state.outputs]
+      .filter(([output]) => output === path || output.startsWith(`${path}/`))
+      .map(([output, hash]) => `${output}=${hash}`),
+  ]);
+  return {
+    key: `inputs ${parts.join(" ")}`,
+    said: (stage) => `passed ${stage} on the same ${inputs.join(" and ")} tree`,
+  };
+};
+
+/**
+ * Why `check` need not run where `passed` passed (all kept under its
+ * {@link passKey}, which `said` names): the same command passed there (with
+ * the same `expect`, when it has one), or one that covers it did (landing.ts
+ * {@link GATE_COVERS}). Undefined when it must run.
  */
 const priorPass = (
   check: WorkItemCheck,
-  passed: Passed[]
+  passed: Passed[],
+  said: (stage: string) => string
 ): string | undefined => {
   const command = check.command.trim();
   const same = passed.find(
@@ -1259,7 +1316,7 @@ const priorPass = (
       (check.expect === undefined || each.expect === check.expect)
   );
   if (same) {
-    return `passed on this tree ${same.stage}`;
+    return said(same.stage);
   }
   const covers = GATE_COVERS[command] ?? [];
   const cover =
@@ -1267,7 +1324,7 @@ const priorPass = (
       ? passed.find((each) => covers.includes(each.command))
       : undefined;
   return cover
-    ? `${cover.command}, which covers it, passed on this tree ${cover.stage}`
+    ? `${cover.command}, which covers it, ${said(cover.stage)}`
     : undefined;
 };
 
@@ -1622,8 +1679,9 @@ export const createWorkItems = ({
    */
   const checkQueues = new Map<string, { words: string; since: number }>();
   /**
-   * The check commands that passed for each live item, by the tree they
-   * passed on ({@link treeOf}): one command runs at most once on one tree
+   * The check commands that passed for each live item, by what they passed
+   * on ({@link passKey}: the whole tree, or the trees of the paths a check
+   * declares): one command runs at most once on one such key
    * ({@link checkOnce}). In memory: a hub that starts runs them again.
    */
   const passes = new Map<string, Map<string, Passed[]>>();
@@ -4262,36 +4320,64 @@ export const createWorkItems = ({
   };
 
   /**
-   * The tree a check run in the workspace checks: HEAD's tree (`git
-   * rev-parse HEAD^{tree}`), with the item's outputs' contents beside it when
-   * it has outputs, while nothing else is uncommitted; landing.ts lands only
-   * such a tree. Undefined while something else is uncommitted: those checks
-   * read files no tree names, so their passes are not kept.
+   * What a check run in the workspace checks ({@link Checked}): HEAD's tree
+   * (`git rev-parse HEAD^{tree}`), with the item's outputs' contents beside
+   * it when it has outputs, and the tree of each path a check declares as
+   * its inputs (`git rev-parse HEAD:<path>`), while nothing else is
+   * uncommitted; landing.ts lands only such a tree. Undefined while
+   * something else is uncommitted: those checks read files no tree names, so
+   * their passes are neither kept nor matched.
    */
-  const treeOf = async (
+  const checkedState = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
-  ): Promise<string | undefined> => {
+  ): Promise<Checked | undefined> => {
     const outputs = item.outputs ?? [];
     const hashed =
       outputs.length > 0
         ? ` && git hash-object -- ${outputs.map(quote).join(" ")}`
         : "";
+    const declared =
+      INPUT_PATHS.length > 0
+        ? ` && for path in ${INPUT_PATHS.map(quote).join(" ")}; do git rev-parse --verify -q "HEAD:$path" || echo absent; done`
+        : "";
     const read = await runIn(workspace, item)(
-      `left=$(${statusCommand(outputs)}) && test -z "$left" && git rev-parse --verify 'HEAD^{tree}'${hashed}`,
+      `left=$(${statusCommand(outputs)}) && test -z "$left" && git rev-parse --verify 'HEAD^{tree}'${hashed}${declared}`,
       GIT_TIMEOUT_MS
     );
-    const tree = read.stdout.trim().split(WORD).join(" ");
-    return read.exitCode === 0 && tree ? tree : undefined;
+    const lines = read.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (
+      read.exitCode !== 0 ||
+      lines.length !== 1 + outputs.length + INPUT_PATHS.length
+    ) {
+      return;
+    }
+    const contents = lines.slice(1, 1 + outputs.length);
+    const trees = lines.slice(1 + outputs.length);
+    return {
+      tree: lines.slice(0, 1 + outputs.length).join(" "),
+      outputs: new Map(
+        outputs.map((output, at) => [output, contents[at] ?? ""])
+      ),
+      inputs: new Map(INPUT_PATHS.map((path, at) => [path, trees[at] ?? ""])),
+      stamp: lines.join(" "),
+    };
   };
 
   /**
    * {@link runChecks}, each check run at most once on one tree: a check that
    * passed on the tree the workspace holds now, or whose command one that
    * covers it did (landing.ts GATE_COVERS), is not run again; its outcome
-   * says where it passed. `stage` names this run for the lines of the checks
-   * it lets skip later. A pass is kept only when the workspace held the same
-   * tree before and after the run.
+   * says where it passed. A check that declares its inputs
+   * ({@link CHECK_INPUTS}) is matched by those paths' trees instead, so a
+   * rebase that left them alone does not run it again: the Apple gate's iOS
+   * compile once per apps/apple tree, where it ran twice (at finish_item and
+   * after the rebase) on every landing behind another. `stage` names this run
+   * for the lines of the checks it lets skip later. A pass is kept only when
+   * the workspace held the same trees before and after the run.
    */
   const checkOnce = async (
     workspace: WorkspaceRow,
@@ -4299,9 +4385,15 @@ export const createWorkItems = ({
     checks: WorkItemCheck[],
     stage: string
   ): Promise<CheckRun> => {
-    const tree = await treeOf(workspace, item);
-    const kept = tree ? (passes.get(item.id)?.get(tree) ?? []) : [];
-    const prior = checks.map((check) => priorPass(check, kept));
+    const state = await checkedState(workspace, item);
+    const kept = passes.get(item.id);
+    const prior = checks.map((check) => {
+      if (!state) {
+        return;
+      }
+      const { key, said } = passKey(check, state);
+      return priorPass(check, kept?.get(key) ?? [], said);
+    });
     const due = checks.filter((_, at) => prior[at] === undefined);
     const run =
       due.length > 0
@@ -4311,19 +4403,24 @@ export const createWorkItems = ({
       // The workspace's install failed: no check ran.
       return run;
     }
-    if (tree && due.length > 0 && (await treeOf(workspace, item)) === tree) {
-      const byTree = passes.get(item.id) ?? new Map<string, Passed[]>();
-      byTree.set(tree, [
-        ...kept,
-        ...run.outcomes
-          .filter((each) => each.passed)
-          .map((each) => ({
+    if (
+      state &&
+      due.length > 0 &&
+      (await checkedState(workspace, item))?.stamp === state.stamp
+    ) {
+      const byKey = kept ?? new Map<string, Passed[]>();
+      for (const each of run.outcomes.filter((outcome) => outcome.passed)) {
+        const { key } = passKey(each.check, state);
+        byKey.set(key, [
+          ...(byKey.get(key) ?? []),
+          {
             command: each.check.command.trim(),
             expect: each.check.expect,
             stage,
-          })),
-      ]);
-      passes.set(item.id, byTree);
+          },
+        ]);
+      }
+      passes.set(item.id, byKey);
     }
     const ran = [...run.outcomes];
     return {

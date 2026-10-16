@@ -40,7 +40,9 @@ PLATFORMS = {
 
 
 def archive_command(platform, number, derived, archive):
-    return ["xcodebuild", "-project", "CawCo.xcodeproj", "-scheme", "CawCo", "-configuration", "Release", "-destination", PLATFORMS[platform]["destination"], "-skipPackagePluginValidation", "-derivedDataPath", str(derived), "-archivePath", str(archive), f"CURRENT_PROJECT_VERSION={number}", "clean", "archive"]
+    # The committed pins alone (build-both.sh's header): resolution off, so a
+    # shipped build compiles the packages apps/apple/Package.resolved names.
+    return ["xcodebuild", "-project", "CawCo.xcodeproj", "-scheme", "CawCo", "-configuration", "Release", "-destination", PLATFORMS[platform]["destination"], "-skipPackagePluginValidation", "-disableAutomaticPackageResolution", "-derivedDataPath", str(derived), "-archivePath", str(archive), f"CURRENT_PROJECT_VERSION={number}", "clean", "archive"]
 
 
 def export_options(platform):
@@ -244,6 +246,10 @@ def ship(app, mode, notes, platform, commit):
         else:
             os.chdir(source)
             subprocess.run(["/opt/homebrew/bin/xcodegen", "generate", "--quiet"], check=True)
+            # The commit's pins, where Xcode reads them in the generated project.
+            pins = source / "CawCo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm"
+            pins.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source / "Package.resolved", pins / "Package.resolved")
             for path in [archive, derived, work / "export"]:
                 if path.exists():
                     shutil.rmtree(path)

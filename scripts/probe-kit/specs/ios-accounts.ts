@@ -48,6 +48,7 @@
  *     -project CawCo.xcodeproj -scheme CawCo \
  *     -destination "platform=macOS,variant=Mac Catalyst" \
  *     -derivedDataPath ../../DerivedData-macprobe -skipPackagePluginValidation \
+ *     -disableAutomaticPackageResolution \
  *     CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
  *     PROVISIONING_PROFILE_SPECIFIER= CODE_SIGN_ENTITLEMENTS= build
  *

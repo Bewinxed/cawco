@@ -3,6 +3,7 @@
 # (Mac Catalyst), and
 # proves each build starts and stays up for 8 s. A launch-time abort fails it.
 # Run from anywhere in the repo: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only|--gate]
+# (or `build-both.sh update-packages`, below).
 # With no argument it builds both and prints BUILT iOS, LAUNCHED iOS,
 # BUILT macOS, LAUNCHED macOS, BUILT iOS 18.5, LAUNCHED iOS 18.5.
 # `ios` proves both iOS runtimes; `macos` proves only macOS.
@@ -20,6 +21,13 @@
 # that tree exactly (--checksum --delete; a changed file is written anew,
 # an unchanged one keeps its mtime), and Xcode's incremental build follows.
 # No probe reads that root; a workspace's own builds stay in its own.
+# Every build compiles against the SwiftPM versions committed in
+# apps/apple/Package.resolved, resolution off (-disableAutomaticPackageResolution;
+# a resolved file Package.swift no longer matches fails the build, saying so),
+# so one apps/apple tree is one set of dependencies in every build root.
+# Dependencies change only by a commit of that file: `build-both.sh
+# update-packages`, on the Mac, resolves from it (delete it first to take
+# every package's newest allowed version) and writes the result back to commit.
 # Exits non-zero at the first failure. It starts only with room for a whole
 # build root: below 10 GB free (CAWCO_MIN_FREE_GB) where it builds, it exits 3
 # with one sentence naming the free space and the biggest folders under
@@ -51,6 +59,25 @@
 # no key and reaches no other machine: there the check names the Mac and the
 # hub runs this script in a workspace on it.
 set -euo pipefail
+
+# Where Xcode reads a project's resolved packages, under apps/apple.
+SWIFTPM_DIR=CawCo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+
+# Dependencies change here and only here: resolution on, from the committed
+# pins, its result written back to apps/apple/Package.resolved for a person to
+# commit. On the Mac, in the checkout whose apps/apple it updates.
+if [[ ${1:-} == update-packages ]]; then
+  [[ $(uname -s) == Darwin ]] || { echo "build-both.sh update-packages resolves with Xcode: run it on the Mac, in a checkout there" >&2; exit 2; }
+  cd "$(git rev-parse --show-toplevel)/apps/apple"
+  "$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)" generate --quiet
+  mkdir -p "$SWIFTPM_DIR"
+  rm -f "$SWIFTPM_DIR/Package.resolved"
+  [[ ! -f Package.resolved ]] || cp Package.resolved "$SWIFTPM_DIR/Package.resolved"
+  xcodebuild -project CawCo.xcodeproj -scheme CawCo -skipPackagePluginValidation -resolvePackageDependencies
+  cp "$SWIFTPM_DIR/Package.resolved" Package.resolved
+  echo "UPDATED apps/apple/Package.resolved: review its diff and commit it"
+  exit 0
+fi
 
 if [[ -n ${CAWCO_MAC_SLOT:-} ]]; then
   echo "build-both.sh takes the Mac build slot itself; inside a mac-slot.sh $CAWCO_MAC_SLOT slot it would wait on its own caller. Run it on its own." >&2
@@ -273,6 +300,12 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 "$XCODEGEN" generate --quiet
+# The committed pins, in the generated project where Xcode reads them, over
+# whatever an earlier build of this root resolved: resolution is off below,
+# so this file alone says which version of each package the build compiles.
+[[ -f Package.resolved ]] || { echo "FAILED: apps/apple/Package.resolved is missing; every build compiles the pinned packages (build-both.sh update-packages writes it)"; exit 1; }
+mkdir -p CawCo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+cp Package.resolved CawCo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 build() { # <destination> <label> [signed]
   # A build that signs with an identity (Mac Catalyst) runs with the CI
@@ -289,7 +322,7 @@ build() { # <destination> <label> [signed]
   local stamp="$DD/Build/Products/Debug-iphonesimulator/CawCo.app.tree"
   case $1 in *"iOS Simulator"*) rm -f "$stamp" ;; *) stamp= ;; esac
   "$runner" xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination "$1" \
-    -derivedDataPath "$DD" -skipPackagePluginValidation ${archs:+"$archs"} build \
+    -derivedDataPath "$DD" -skipPackagePluginValidation -disableAutomaticPackageResolution ${archs:+"$archs"} build \
     >"$LOGS/build-$2.log" 2>&1 || {
     if grep -a -q -E "error:|BUILD FAILED" "$LOGS/build-$2.log"; then
       grep -a -E "error:|BUILD FAILED" "$LOGS/build-$2.log" | sort -u | head -40 || true

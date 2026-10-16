@@ -36,6 +36,18 @@ export const APPLE_GATE_CHECK = "iOS build compiles";
 export const APPLE_GATE_COMMAND =
   "bash apps/apple/scripts/build-both.sh ios --gate";
 
+/**
+ * What the gate's compile reads, by path in the repository: build-both.sh
+ * rsyncs `apps/apple/` alone to the Mac and builds there (xcodegen makes the
+ * Xcode project from its project.yml), and every SwiftPM dependency is at the
+ * version its committed `apps/apple/Package.resolved` names, resolution off
+ * (build-both.sh `PINNED`). So one apps/apple tree is one compile: a pass
+ * the gate made on it holds wherever that tree is again, a rebase that left
+ * it alone included (work-items.ts `checkOnce`). The Mac's Xcode toolchain is
+ * not in it, as it is not in a whole-tree pass either.
+ */
+export const APPLE_GATE_INPUTS: readonly string[] = ["apps/apple"];
+
 /** The build waits for the Mac's one build slot, then compiles: half an hour at most. */
 export const APPLE_GATE_TIMEOUT_SEC = 1800;
 
