@@ -89,19 +89,87 @@ export interface LandingDeps<F> {
    * the hub collects rather than lands, committed or not.
    */
   skip?: string[];
+  /** This landing in the queue: how others name it, and how it hears its wait. */
+  turn?: LandingTurn;
+}
+
+/**
+ * One landing in a {@link LandingQueue}: how a landing queued behind it names
+ * it, and how it hears its own wait for its turn.
+ */
+export interface LandingTurn {
+  /** Each change of its wait: the words while it waits its turn, null once it runs. */
+  onWait?: (words: string | null) => void;
+  /** The landing as a waiter's words name it: `“Fix the tray” (153fd0db)`. */
+  who: string;
 }
 
 export type LandingQueue = <T>(
   key: string,
-  run: () => Promise<T>
+  run: () => Promise<T>,
+  turn?: LandingTurn
 ) => Promise<T>;
 
-/** One chain of landings per key; a failed landing never blocks the next. */
+/**
+ * What a landing waiting its turn says: the branch, the landing running now,
+ * and how many more are ahead of it.
+ */
+export const turnWords = (branch: string, ahead: LandingTurn[]): string =>
+  `queued to land on ${branch} behind ${ahead[0]?.who ?? "another landing"}${ahead.length > 1 ? ` and ${ahead.length - 1} more` : ""}`;
+
+/**
+ * One chain of landings per key; a failed landing never blocks the next. A
+ * landing that waits its turn says so, naming the one running and how many
+ * more are ahead (`turn.onWait`), each time that changes: a landing runs its
+ * checks again and the land gate inside its turn, an Apple build on a Mac
+ * included, so a turn can last as long as they do (2026-10-15: items sat
+ * "checking" for half an hour with nothing to say what held them).
+ */
 export function landingQueue(): LandingQueue {
   const tails = new Map<string, Promise<void>>();
-  return <T>(key: string, run: () => Promise<T>): Promise<T> => {
-    const prior = tails.get(key) ?? Promise.resolve();
-    const result = prior.then(run);
+  /** Per key: the landing running now and those waiting behind it, in order. */
+  const lines = new Map<
+    string,
+    { running: LandingTurn | undefined; waiting: LandingTurn[] }
+  >();
+  /** Tells each waiting landing of `key` who is ahead of it now. */
+  const sayWaits = (key: string): void => {
+    const line = lines.get(key);
+    if (!line) {
+      return;
+    }
+    const branch = key.slice(key.lastIndexOf("#") + 1);
+    const ahead = line.running ? [line.running] : [];
+    for (const turn of line.waiting) {
+      turn.onWait?.(turnWords(branch, ahead));
+      ahead.push(turn);
+    }
+  };
+  return <T>(
+    key: string,
+    run: () => Promise<T>,
+    turn: LandingTurn = { who: "another landing" }
+  ): Promise<T> => {
+    const line = lines.get(key) ?? { running: undefined, waiting: [] };
+    lines.set(key, line);
+    const queued = line.running !== undefined || line.waiting.length > 0;
+    line.waiting.push(turn);
+    if (queued) {
+      sayWaits(key);
+    }
+    const result = (tails.get(key) ?? Promise.resolve()).then(async () => {
+      line.waiting = line.waiting.filter((each) => each !== turn);
+      line.running = turn;
+      if (queued) {
+        turn.onWait?.(null);
+      }
+      sayWaits(key);
+      try {
+        return await run();
+      } finally {
+        line.running = undefined;
+      }
+    });
     const tail = result.then(
       () => undefined,
       () => undefined
@@ -112,6 +180,7 @@ export function landingQueue(): LandingQueue {
       tail.then(() => {
         if (tails.get(key) === tail) {
           tails.delete(key);
+          lines.delete(key);
         }
       }),
       "landing queue"
@@ -235,8 +304,10 @@ export async function land<F>(
   if (start.kind !== "ready") {
     return start;
   }
-  return await deps.queue(`${deps.repo ?? start.remote}#${base}`, () =>
-    attempt(base, deps, 1)
+  return await deps.queue(
+    `${deps.repo ?? start.remote}#${base}`,
+    () => attempt(base, deps, 1),
+    deps.turn
   );
 }
 
@@ -365,7 +436,7 @@ async function ready(
 export async function pushBranch(
   base: string,
   branch: string,
-  deps: Pick<LandingDeps<unknown>, "queue" | "repo" | "run" | "skip">
+  deps: Pick<LandingDeps<unknown>, "queue" | "repo" | "run" | "skip" | "turn">
 ): Promise<BranchOutcome> {
   const { run } = deps;
   const start = await ready(run, deps.skip);

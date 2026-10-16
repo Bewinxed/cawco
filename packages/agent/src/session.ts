@@ -140,7 +140,7 @@ import { fenced } from "./restart";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
 import { StreamsSoFar } from "./stream-so-far";
 import { installTool, probeTools } from "./tools";
-import { runWorkflowCommand } from "./workflow-command";
+import { folderTurn, runWorkflowCommand } from "./workflow-command";
 import { cloneHolding, workspaceHolding } from "./workspace-records";
 
 /**
@@ -1166,8 +1166,17 @@ export class SessionSupervisor {
         this.#route(envelope)
       );
     }
+    // A command behind another in its folder says so as it queues (folderTurn).
+    const folder =
+      control?.method === CONTROL_RUN_COMMAND
+        ? folderTurn(control.args, this.#queues.has(key))
+        : undefined;
     const queue = (this.#queues.get(key) ?? Promise.resolve())
-      .then(() => this.#route(envelope))
+      .then(() => {
+        folder?.start();
+        return this.#route(envelope);
+      })
+      .finally(() => folder?.end())
       .catch((error: unknown) => {
         warn(`${envelope.verb} failed: ${error}`);
         // A route failure otherwise reads as delivered silence: spawn answers

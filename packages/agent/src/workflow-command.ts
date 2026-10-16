@@ -11,6 +11,7 @@ import {
   queueWords,
   type WorkspaceRef,
 } from "@cawco/core";
+import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { ensureBoundary } from "./boundary";
 
@@ -120,10 +121,114 @@ const isCommandRun = (value: unknown): value is CommandRun =>
   typeof (value as CommandRun).id === "string" &&
   typeof (value as CommandRun).queueMaxMs === "number";
 
+/** The slots only the runner itself waits for: no command's marker opens them. */
+const RUNNER_SLOTS: ReadonlySet<QueueSlot> = new Set(["folder", "boundary"]);
+
 /** `CAWCO-QUEUE wait <slot>: <holders>` or `CAWCO-QUEUE held <slot>`. */
 const QUEUE_LINE = new RegExp(
-  `^${QUEUE_MARKER} (wait|held) (${Object.keys(QUEUE_SLOTS).join("|")})(?:: (.*))?$`
+  `^${QUEUE_MARKER} (wait|held) (${(Object.keys(QUEUE_SLOTS) as QueueSlot[])
+    .filter((slot) => !RUNNER_SLOTS.has(slot))
+    .join("|")})(?:: (.*))?$`
 );
+
+/** One run's wait, to the hub under its id; nothing for a run the hub did not name. */
+const tellWait = (
+  run: CommandRun | undefined,
+  queue: CommandQueue | null
+): void => {
+  if (run) {
+    sendQueue({ kind: "command_queue", runId: run.id, queue });
+  }
+};
+
+/**
+ * The command each folder runs now: the machine runs a folder's commands one
+ * after another (session.ts `dispatch`), and one queued behind names it.
+ */
+const folderRunning = new Map<string, { cmd: string; since: number }>();
+
+/** A command as a waiter's words show it: its first line, without the safe-git preamble. */
+const shownCommand = (cmd: string): string => {
+  const own = cmd.startsWith(SAFE_GIT_SHELL)
+    ? cmd.slice(SAFE_GIT_SHELL.length)
+    : cmd;
+  const line = own.trim().split("\n")[0] ?? "";
+  return line.length > 120 ? `${line.slice(0, 119)}…` : line;
+};
+
+/** How long a command has run, as a waiter's words say it. */
+const runningFor = (since: number): string => {
+  const seconds = Math.round((Date.now() - since) / 1000);
+  return seconds < 120 ? `${seconds} s` : `${Math.round(seconds / 60)} min`;
+};
+
+/**
+ * A `CONTROL_RUN_COMMAND` in its folder's line (session.ts `dispatch`), its
+ * args as the hub sent them. One `behind` another there tells the hub at
+ * once, naming the command running there and for how long: before
+ * 2026-10-16 a check queued behind another command in its workspace waited
+ * with nothing said. `start` as its turn comes ends that wait; `end` as it
+ * finishes frees the folder.
+ */
+export function folderTurn(
+  args: readonly unknown[] | undefined,
+  behind: boolean
+): { end: () => void; start: () => void } {
+  const folder = String(args?.[0]);
+  const cmd = typeof args?.[1] === "string" ? args[1] : "";
+  const run = isCommandRun(args?.[4]) ? args[4] : undefined;
+  if (behind) {
+    const ahead = folderRunning.get(folder);
+    tellWait(run, {
+      slot: "folder",
+      holders: ahead
+        ? `\`${shownCommand(ahead.cmd)}\`, running ${runningFor(ahead.since)}`
+        : "an earlier command there",
+    });
+  }
+  const mine = { cmd, since: 0 };
+  return {
+    start: () => {
+      if (behind) {
+        tellWait(run, null);
+      }
+      mine.since = Date.now();
+      folderRunning.set(folder, mine);
+    },
+    end: () => {
+      if (folderRunning.get(folder) === mine) {
+        folderRunning.delete(folder);
+      }
+    },
+  };
+}
+
+/** How long a boundary may take to start before its command says it waits for it. */
+const BOUNDARY_QUIET_MS = 2000;
+
+/**
+ * The executor of `workspace`'s boundary, started or found ({@link
+ * ensureBoundary}); a start past {@link BOUNDARY_QUIET_MS} is the run's wait,
+ * told to the hub, for nothing else says what it waits on then.
+ */
+const boundaryExec = async (
+  workspace: WorkspaceRef,
+  run: CommandRun | undefined
+): Promise<string> => {
+  let waiting = false;
+  const timer = setTimeout(() => {
+    waiting = true;
+    tellWait(run, { slot: "boundary", holders: "" });
+  }, BOUNDARY_QUIET_MS);
+  try {
+    return (await ensureBoundary(workspace)).exec;
+  } finally {
+    clearTimeout(timer);
+    if (waiting) {
+      tellWait(run, null);
+    }
+  }
+};
 
 /**
  * The command's clock: its limit counts only the time no slot wait is open.
@@ -262,7 +367,7 @@ export async function runWorkflowCommand(
     throw new Error("runCommand's workspace must be { id, path }.");
   }
   const [file, args] = isWorkspaceRef(workspace)
-    ? [(await ensureBoundary(workspace)).exec, [cmd]]
+    ? [await boundaryExec(workspace, named), [cmd]]
     : ["/bin/sh", ["-c", cmd]];
   // Cancelled while it waited its turn or its boundary: it never starts.
   if (named && cancelledEarly.delete(named.id)) {

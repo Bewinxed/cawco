@@ -45253,7 +45253,9 @@
       "QueueSlot": {
         "type": "string",
         "enum": [
+          "boundary",
           "build",
+          "folder",
           "heavy",
           "sim",
           "template"

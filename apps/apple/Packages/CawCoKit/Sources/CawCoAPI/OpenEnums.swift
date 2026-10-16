@@ -3682,7 +3682,9 @@ public enum OpenEnums {
 
     /// `#/components/schemas/QueueSlot`.
     public enum QueueSlot: OpenEnum {
+        case boundary
         case build
+        case folder
         case heavy
         case sim
         case template
@@ -3691,7 +3693,9 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "boundary": self = .boundary
             case "build": self = .build
+            case "folder": self = .folder
             case "heavy": self = .heavy
             case "sim": self = .sim
             case "template": self = .template
@@ -3701,7 +3705,9 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .boundary: "boundary"
             case .build: "build"
+            case .folder: "folder"
             case .heavy: "heavy"
             case .sim: "sim"
             case .template: "template"
@@ -3713,7 +3719,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.build, .heavy, .sim, .template]
+        public static let allCases: [Self] = [.boundary, .build, .folder, .heavy, .sim, .template]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

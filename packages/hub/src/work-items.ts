@@ -122,6 +122,7 @@ import { leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
   GATE_COVERS,
+  type LandingTurn,
   land,
   landGateChecks,
   landingQueue,
@@ -1615,9 +1616,9 @@ export const createWorkItems = ({
   /** Items whose checks this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
   /**
-   * Items one of whose checks waits for a shared machine slot now: what its
-   * status says, and since when. In memory: a hub that starts runs the
-   * checks again from the first.
+   * Items whose checks wait for something now: what its status says, and
+   * since when. In memory: a hub that starts runs the checks again from the
+   * first.
    */
   const checkQueues = new Map<string, { words: string; since: number }>();
   /**
@@ -1626,6 +1627,26 @@ export const createWorkItems = ({
    * ({@link checkOnce}). In memory: a hub that starts runs them again.
    */
   const passes = new Map<string, Map<string, Passed[]>>();
+  /**
+   * What an item's checks wait for, as its status says it (WorkItemSummary
+   * `checkQueue`): a shared slot ("queued for …"), its machine's pause
+   * ("waiting: Omars-MacBook-Pro is paused until 00:57"), another command in
+   * its folder, or its turn to land ("queued to land on main behind …"); null
+   * once it waits no more. Every wait between `finish_item` and the item's
+   * outcome comes here: before 2026-10-16 only a check's own slot and pause
+   * waits did, and items queued to land sat "checking" with nothing said.
+   */
+  const checkWait = (itemId: string, words: string | null): void => {
+    if (words) {
+      checkQueues.set(itemId, {
+        words,
+        since: checkQueues.get(itemId)?.since ?? Date.now(),
+      });
+    } else if (!checkQueues.delete(itemId)) {
+      return;
+    }
+    published(db.workItem(itemId));
+  };
   /** One landing at a time per repository and branch (landing.ts). */
   const landings = landingQueue();
   /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
@@ -3877,23 +3898,8 @@ export const createWorkItems = ({
     checks: WorkItemCheck[]
   ): Promise<CheckRun> => {
     let commit: Promise<WorkspaceCommit> | undefined;
-    /**
-     * What a check waits for, as the item's status says it (WorkItemSummary
-     * `checkQueue`): a shared slot ("queued for …") or its machine's pause
-     * ("waiting: Omars-MacBook-Pro is paused until 00:57"); null once it
-     * waits no more.
-     */
-    const queued = (words: string | null): void => {
-      if (words) {
-        checkQueues.set(item.id, {
-          words,
-          since: checkQueues.get(item.id)?.since ?? Date.now(),
-        });
-      } else if (!checkQueues.delete(item.id)) {
-        return;
-      }
-      published(db.workItem(item.id));
-    };
+    /** What a check waits for, as the item's status says it ({@link checkWait}). */
+    const queued = (words: string | null): void => checkWait(item.id, words);
     /** How a check's commands run: a pause that cancels one hands it back here. */
     const asCheck = { onWait: queued, what: "check", movable: true } as const;
     /**
@@ -4349,7 +4355,7 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<string> => {
-    const git = (cmd: string) => runIn(workspace)(cmd, GIT_TIMEOUT_MS);
+    const git = (cmd: string) => runIn(workspace, item)(cmd, GIT_TIMEOUT_MS);
     const since = Math.floor(item.createdAt.getTime() / 1000);
     const kept = (await git(keptCommits(since))).stdout
       .split("\n")
@@ -4371,18 +4377,27 @@ export const createWorkItems = ({
   /**
    * Runs a command in the item's workspace, inside its boundary, with every
    * `git` in it run as `safe-git.ts` says: no hook or config the workspace
-   * wrote runs for the hub.
+   * wrote runs for the hub. Each wait it makes (its machine's pause, another
+   * command in the folder, a boundary starting) is the item's status
+   * ({@link checkWait}).
    */
   const runIn =
-    (workspace: WorkspaceRow) =>
+    (workspace: WorkspaceRow, item: WorkItemRow) =>
     (cmd: string, timeoutMs: number): Promise<CommandResult> =>
       command(
         workspace.machineId,
         workspace.path,
         `${SAFE_GIT_SHELL}${cmd}`,
         timeoutMs,
-        refOf(workspace)
+        refOf(workspace),
+        { onWait: (words) => checkWait(item.id, words) }
       );
+
+  /** The item in the landing queue: named as `“title” (id)`, its wait its status. */
+  const turnOf = (item: WorkItemRow): LandingTurn => ({
+    who: `“${item.title}” (${item.id.slice(0, 8)})`,
+    onWait: (words) => checkWait(item.id, words),
+  });
 
   /**
    * Lands a checked item's commits on its workspace's base branch
@@ -4400,7 +4415,8 @@ export const createWorkItems = ({
     /** The recheck after a rebase and the gate's run, for the landing line. */
     const runs: { gate?: CheckRun; recheck?: CheckRun } = {};
     const outcome = await land<CheckRun>(base, {
-      run: runIn(workspace),
+      run: runIn(workspace, item),
+      turn: turnOf(item),
       recheck: async () => {
         const run = await checkOnce(
           workspace,
@@ -4418,7 +4434,7 @@ export const createWorkItems = ({
         const run = await checkOnce(
           workspace,
           item,
-          await landGateChecks(runIn(workspace)),
+          await landGateChecks(runIn(workspace, item)),
           "in the land gate"
         );
         runs.gate = run;
@@ -4538,7 +4554,8 @@ export const createWorkItems = ({
     const { base } = workspace;
     const branch = landingBranch(item);
     const pushed = await pushBranch(base, branch, {
-      run: runIn(workspace),
+      run: runIn(workspace, item),
+      turn: turnOf(item),
       queue: landings,
       skip: item.outputs ?? [],
       ...(item.projectId ? { repo: item.projectId } : {}),
@@ -4576,7 +4593,7 @@ export const createWorkItems = ({
         : undefined) ?? item.title;
     const pr = await openPullRequest(
       { base, branch, title, body: pullRequestBody(item, said) },
-      runIn(workspace)
+      runIn(workspace, item)
     );
     if (pr.kind === "refused") {
       const why =
@@ -4628,9 +4645,10 @@ export const createWorkItems = ({
    */
   const outputsProblem = async (
     workspace: WorkspaceRow,
+    item: WorkItemRow,
     outputs: string[]
   ): Promise<string | undefined> => {
-    const result = await runIn(workspace)(
+    const result = await runIn(workspace, item)(
       outputsProbe(outputs),
       GIT_TIMEOUT_MS
     );
@@ -4669,7 +4687,7 @@ export const createWorkItems = ({
       const files: { path: string; content: Uint8Array }[] = [];
       for (const path of outputs) {
         // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps each read under the command's output cap
-        const read = await runIn(workspace)(
+        const read = await runIn(workspace, item)(
           `base64 < ${quote(path)}`,
           GIT_TIMEOUT_MS
         );
@@ -4720,7 +4738,7 @@ export const createWorkItems = ({
     const settled = { checkingSince: null, submission: null };
     const { count, lines } = passed;
     const unready = item.outputs?.length
-      ? await outputsProblem(workspace, item.outputs)
+      ? await outputsProblem(workspace, item, item.outputs)
       : undefined;
     if (unready) {
       update(item.id, settled);
@@ -4775,8 +4793,11 @@ export const createWorkItems = ({
   };
 
   /** The paths of the workspace's changes against its target that the Swift build reads (apple-gate.ts). */
-  const appTouched = async (workspace: WorkspaceRow): Promise<string[]> => {
-    const diff = await runIn(workspace)(
+  const appTouched = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<string[]> => {
+    const diff = await runIn(workspace, item)(
       appleGateDiff(quote(`origin/${workspace.base}`)),
       GIT_TIMEOUT_MS
     );
@@ -4831,7 +4852,7 @@ export const createWorkItems = ({
     if (!(gated && item.projectId)) {
       return { checks };
     }
-    const touched = await appTouched(workspace);
+    const touched = await appTouched(workspace, item);
     if (touched.length === 0) {
       return { checks };
     }
@@ -4909,6 +4930,8 @@ export const createWorkItems = ({
       throw error;
     } finally {
       finishing.delete(item.id);
+      // A wait an error cut short leaves no words behind it.
+      checkWait(item.id, null);
     }
   };
 

@@ -2034,9 +2034,17 @@ export const CONTROL_CANCEL_COMMAND = "cancelCommand";
  */
 export const QUEUE_MARKER = "CAWCO-QUEUE";
 
-/** The shared slots a command may queue for, as the status names each. */
+/**
+ * The shared slots a command may queue for, as the status names each. Two
+ * are the runner's own, never a marker's: `folder`, a command waiting behind
+ * the one running in its directory (the machine runs those one after
+ * another), and `boundary`, one waiting for its workspace's boundary to start
+ * (agent workflow-command.ts).
+ */
 export const QUEUE_SLOTS = {
+  boundary: "its workspace's boundary to start",
   build: "the Mac's build slot",
+  folder: "its turn in its folder",
   heavy: "a heavy-run slot",
   sim: "a simulator slot",
   template: "the simulator template lock",
