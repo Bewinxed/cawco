@@ -121,10 +121,54 @@ const call = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
-/** The request's last message, as sent: a tool call's result, on either API. */
-const lastMessage = (body: string): string => {
+/** The request's message `back` from its last, as sent: `1`, a tool call's result; `2`, the call. */
+const messageBack = (body: string, back = 1): string => {
   const parsed = JSON.parse(body) as { messages?: unknown[] };
-  return JSON.stringify(parsed.messages?.at(-1) ?? null);
+  return JSON.stringify(parsed.messages?.at(-back) ?? null);
+};
+const lastMessage = (body: string): string => messageBack(body);
+
+/** `wait_item` as each harness offers it. */
+const WAITS = ["mcp__cawco__wait_item", "cawco_wait_item", "wait_item"];
+const WAIT_INPUT = { minutes: 60, reason: "The probe drives this delegate." };
+
+/**
+ * A delegate's turn: a `wait_item` call, then its words. A work item whose
+ * session ends three turns in a row without `finish_item` fails (hub
+ * work-items.ts `QUIET_TURNS`), and a declared wait keeps it running
+ * without those reminders, so the probe's delegates stay live to be read
+ * and compacted. On Claude Code the tool is deferred: ToolSearch first.
+ */
+const delegateTurn = (request: Seen, owned: Step | undefined): Reply => {
+  const done = () => {
+    if (owned) {
+      owned.done = true;
+    }
+    return say("Waiting for the probe.");
+  };
+  const wait = request.toolNames.find((name) => WAITS.includes(name));
+  if (request.afterTool) {
+    // The call this answers was the wait itself: the turn's words.
+    if (!messageBack(request.body, 2).includes("ToolSearch")) {
+      return done();
+    }
+    return wait ? call(wait, WAIT_INPUT) : done();
+  }
+  if (wait) {
+    return call(wait, WAIT_INPUT);
+  }
+  if (request.toolNames.includes("ToolSearch")) {
+    return call("ToolSearch", {
+      query: "select:mcp__cawco__wait_item",
+      max_results: 1,
+    });
+  }
+  if (request.toolNames.includes(CODE_MODE)) {
+    return call(CODE_MODE, {
+      code: `return await tools.cawco.wait_item(${JSON.stringify(WAIT_INPUT)});`,
+    });
+  }
+  return done();
 };
 
 /** A delegate call for `type` on the orchestrator's own harness and model. */
@@ -190,10 +234,7 @@ const spec: Spec = {
       // A delegate's request: its brief is in its history, or (once it has
       // compacted) the turn the probe is driving is a delegate's.
       if (request.all.includes(DELEGATE_MARK) || now?.delegate) {
-        if (now?.delegate) {
-          now.done = true;
-        }
-        return say("Summary: the delegate's turns so far.");
+        return delegateTurn(request, now?.delegate ? now : undefined);
       }
       if (!now) {
         return say("ok");
