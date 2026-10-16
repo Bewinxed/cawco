@@ -8184,10 +8184,25 @@ export const createServer = (
       : "The move is dropped; it stays where it is until it is moved again.";
   };
 
+  /** An ended task's output line: the last of it, or that its read went unanswered, apart from one there was none to read. */
+  const endedTaskOutputWords = (task: MoveEnded["tasks"][number]): string => {
+    if (task.output) {
+      return `  The last of its output:\n${task.output
+        .split("\n")
+        .map((line) => `    ${line}`)
+        .join("\n")}`;
+    }
+    if (task.outputUnread) {
+      return `  Its output was asked for and didn't come within ${Math.ceil(task.outputUnread.after / 1000)} s, so the last of it isn't here.`;
+    }
+    return "  Its output couldn't be read.";
+  };
+
   /**
    * The words a session reads on its new account about what its move ended
    * ({@link tellEndedByMove}): each background task by its id, kind and
-   * description with the last of its output, and the one-time wake-ups.
+   * description with its output line ({@link endedTaskOutputWords}), and the
+   * one-time wake-ups.
    */
   const endedByMoveWords = (ended: MoveEnded): string =>
     [
@@ -8195,12 +8210,7 @@ export const createServer = (
       ...ended.tasks.map((task) =>
         [
           `- Background task ${task.taskId} (${task.type}): ${task.description}.`,
-          task.output
-            ? `  The last of its output:\n${task.output
-                .split("\n")
-                .map((line) => `    ${line}`)
-                .join("\n")}`
-            : "  Its output couldn't be read.",
+          endedTaskOutputWords(task),
         ].join("\n")
       ),
       ...(ended.wakeups > 0
