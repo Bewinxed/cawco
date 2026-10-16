@@ -45,6 +45,8 @@ const FINISH = "mcp__cawco__finish_item";
 const BASH = "Bash";
 /** Only an attempt's brief opens this way. */
 const BRIEF = "Your work item is an attempt at";
+/** The task an attempt's brief opens on (dispatch.ts `briefOf`). */
+const OWN_TASK = /Your work item is an attempt at tsk-\d+, “([^”]+)”/g;
 const T1 = "Harbour system draft PROBE-T1";
 const T2 = "Harbour system PROBE-T2";
 const COMMIT = "Design system: Harbour";
@@ -170,7 +172,8 @@ const attempts = new Map<string, Call[]>([
       {
         name: BASH,
         input: {
-          command: `git add design && git commit -qm '${COMMIT}' && git log -1 --format=%s`,
+          // Its own outcome in its answer: the commit's, then what is left.
+          command: `git add design && git commit -qm '${COMMIT}'; echo "commit exit $?"; git status --porcelain; git log -1 --format=%s`,
           description: "Commit design/",
         },
       },
@@ -221,16 +224,40 @@ const toolResultOf = (body: string): string => {
   }
 };
 
-/** The next call of `queue`, found first when it is deferred; or the closing words. */
-const next = (request: Seen, queue: Call[] | undefined): Reply => {
+/**
+ * What each turn's tools answered, in order, by the turn's key (an
+ * attempt's task title, a command's marker): what a stalled run reports,
+ * so a refused start or a landing sent back says itself.
+ */
+const answers = new Map<string, string[]>();
+/** The calls a turn already looked for with ToolSearch, by key. */
+const searched = new Map<string, Set<string>>();
+
+/**
+ * The next call of the turn keyed `key`: found first when it is deferred,
+ * once; a tool still not offered after that ends the turn saying so.
+ */
+const next = (request: Seen, key: string | undefined): Reply => {
+  if (key && request.afterTool) {
+    answers.set(key, [...(answers.get(key) ?? []), toolResultOf(request.body)]);
+  }
+  const queue = key ? (attempts.get(key) ?? commands.get(key)) : undefined;
   const [call] = queue ?? [];
-  if (!(queue && call)) {
+  if (!(key && queue && call)) {
     return text("ok");
   }
   if (!request.toolNames.includes(call.name)) {
-    return request.toolNames.includes("ToolSearch")
-      ? useTool("ToolSearch", { query: `select:${call.name}`, max_results: 1 })
-      : text(`${call.name} is not offered`);
+    const looked = searched.get(key) ?? new Set<string>();
+    if (looked.has(call.name) || !request.toolNames.includes("ToolSearch")) {
+      queue.shift();
+      return text(`${call.name} is not offered`);
+    }
+    looked.add(call.name);
+    searched.set(key, looked);
+    return useTool("ToolSearch", {
+      query: `select:${call.name}`,
+      max_results: 1,
+    });
   }
   queue.shift();
   const input =
@@ -246,11 +273,32 @@ const respond = (request: Seen): Reply => {
   }
   if (request.all.includes(BRIEF)) {
     builderHeard.push(request.last);
-    const task = [T1, T2].find((title) => request.all.includes(title));
-    return next(request, task ? attempts.get(task) : undefined);
+    // The newest work item the session runs: its brief's first line names
+    // its task (a session may carry more than one item).
+    const own = [...request.all.matchAll(OWN_TASK)].at(-1)?.[1];
+    return next(request, own);
   }
-  const marker = [...request.all.matchAll(TURN)].at(-1)?.[0];
-  return next(request, marker ? commands.get(marker) : undefined);
+  return next(request, [...request.all.matchAll(TURN)].at(-1)?.[0]);
+};
+
+/** The approval's refusal (hub design-system.ts `uncommittedLine`): its named paths, and how many more. */
+const UNCOMMITTED_LINE =
+  /design\/ isn't committed in the builder's workspace: (.+?)(?: and (\d+) more)?\. Send it back/;
+
+/** The paths a design_write answered it wrote, from among a turn's tool answers. */
+const writtenBy = (said: string[]): string[] => {
+  for (const one of said) {
+    const body = one.slice(one.indexOf("{"), one.lastIndexOf("}") + 1);
+    try {
+      const { written } = JSON.parse(body) as { written?: string[] };
+      if (written?.length) {
+        return written;
+      }
+    } catch {
+      // not design_write's answer
+    }
+  }
+  return [];
 };
 
 interface TaskRead {
@@ -359,13 +407,58 @@ const run = async (kit: Kit) => {
       throw new Error(`${marker}: no task filed`);
     }
     await command(`${marker}START`, [{ name: START, input: { id: task.id } }]);
-    await until(
-      `${task.id} in review with its result`,
-      () => read(task.id),
-      (now) => now.stage === "review" && now.result !== null,
-      400_000
-    );
+    try {
+      await until(
+        `${task.id} in review with its result`,
+        () => read(task.id),
+        (now) => now.stage === "review" && now.result !== null,
+        400_000
+      );
+    } catch (error) {
+      throw await stalled(error, marker, title, task.id);
+    }
     return task.id;
+  };
+  /**
+   * Why a task never reached review, said whole: the task as it stands, its
+   * attempts' rows, what every tool its filer and its builder called
+   * answered, and the hub's lines on it (also kept as <marker>-stalled.json).
+   */
+  const stalled = async (
+    error: unknown,
+    marker: string,
+    title: string,
+    id: string
+  ): Promise<Error> => {
+    const now = await read(id).catch(() => undefined);
+    const items = fleet.query<{
+      error: string | null;
+      id: string;
+      lands: string;
+      result: string | null;
+      state: string;
+    }>(
+      "SELECT id, state, lands, error, result FROM work_items WHERE project_id = ? AND task_id = ? ORDER BY created_at",
+      project.id,
+      id
+    );
+    const said = (key: string) =>
+      (answers.get(key) ?? []).map((one) => one.slice(0, 400));
+    const hub = (await fleet.logs("hub"))
+      .split("\n")
+      .filter((line) => line.includes(id))
+      .slice(-8);
+    const report = {
+      task: now,
+      items,
+      filer: said(`PROBE-CMD:${marker}START`),
+      builder: said(title),
+      hub,
+    };
+    await writeFile(join(kit.out, `${marker}-stalled.json`), json(report));
+    return new Error(
+      `${error instanceof Error ? error.message : String(error)}; ${JSON.stringify(report).slice(0, 2400)}`
+    );
   };
   const approve = (id: string) =>
     fetch(`${fleet.base}/api/projects/${project.id}/tasks/${id}/stage`, {
@@ -385,13 +478,22 @@ const run = async (kit: Kit) => {
   const refused = await approve(t1);
   const refusal = await refused.text();
   const stays = await read(t1);
+  // What the builder's design_write wrote (its answer's `written`): every
+  // path the line names is one of them, and its named paths and "N more"
+  // count all of them, as none was committed.
+  const written = writtenBy(answers.get(T1) ?? []);
+  const named = UNCOMMITTED_LINE.exec(refusal);
+  const paths = named?.[1]?.split(", ") ?? [];
+  const more = Number(named?.[2] ?? 0);
   kit.check(
-    "1: Approve with design/ uncommitted is refused with its line, and the task stays in review",
+    "1: Approve with design/ uncommitted is refused with its line, naming the builder's uncommitted files, and the task stays in review",
     refused.status === 409 &&
-      refusal.includes("design/ isn't committed in the builder's workspace") &&
-      refusal.includes("design/tokens.json") &&
+      written.length > 0 &&
+      paths.length > 0 &&
+      paths.every((path) => written.includes(path)) &&
+      paths.length + more === written.length &&
       stays.stage === "review",
-    `${refused.status} “${refusal.slice(0, 300)}”; stage ${stays.stage}`
+    `${refused.status} “${refusal.slice(0, 300)}”; named ${paths.length} + ${more} more of ${written.length} written (${written.join(", ")}); stage ${stays.stage}`
   );
 
   // ── 2. Reject with a pin reaches the builder's session as one message ─
