@@ -12,6 +12,7 @@
  */
 import { machineLabel } from "@cawco/core";
 import { cawco } from "../client.svelte";
+import { leaveThePage } from "../leaving";
 import { notices } from "../notices.svelte";
 import { bidFarewell, reloadWhenIdle } from "../reload.svelte";
 import { newerBuild } from "../served-build.svelte";
@@ -50,7 +51,7 @@ export const updateNotice = new UpdateNotice();
  */
 export async function reloadAcknowledging(acks: string[]): Promise<void> {
   await notices.acknowledge(acks);
-  location.reload();
+  leaveThePage(() => location.reload());
 }
 
 /** The notice's ✕: acknowledged everywhere; "running on N machines" also forgets this tab's installs. */

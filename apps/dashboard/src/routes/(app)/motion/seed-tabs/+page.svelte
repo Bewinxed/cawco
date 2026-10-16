@@ -9,6 +9,7 @@
    * strip from the first paint.
    */
   import { onMount } from "svelte";
+  import { leaveThePage } from "#lib/cawco/leaving.js";
   import { store } from "#lib/cawco/storage.js";
   import { page } from "$app/state";
 
@@ -33,6 +34,6 @@
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ [KEY]: layout }),
     });
-    location.replace(`/session/${ids[0]}`);
+    leaveThePage(() => location.replace(`/session/${ids[0]}`));
   });
 </script>
