@@ -12,7 +12,7 @@
  *   file whose prop types react-docgen can't follow.
  *
  * These are CawCo's, bundled into the host; `typescript`, `svelte` and
- * `vue` are the project's own (their peers), required from the Vite root
+ * `vue` are the project's own (their peers), required from the toolchain root
  * as the host runs there, and only when a file of theirs is read: a
  * project without TypeScript reads React props from their source alone
  * and says so, and Svelte's and Vue's not at all, saying why.
@@ -41,7 +41,7 @@ declare const __SVELTE_SHIMS__: string;
 type Ts = typeof TS;
 
 const root = process.cwd();
-/** The project's own packages, from the Vite root up, as Node resolves them. */
+/** The project's own packages, from the toolchain root up, as Node resolves them. */
 const project = createRequire(join(root, "package.json"));
 
 /** A peer of the docgen tools, the project's; null when it has none. */

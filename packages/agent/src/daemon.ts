@@ -2903,7 +2903,7 @@ export const startDaemon = (rediscover = false) =>
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : writeSheet(ref as WorkspaceRef, write as SheetWrite)
     );
-    // A Vite root's components, as its stage finds them (spec §6's discovery).
+    // A toolchain root's components, as its stage finds them (spec §6's discovery).
     supervisor.registerDaemonFunction(STAGE_COMPONENTS, (ref, dir) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))

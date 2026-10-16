@@ -828,7 +828,7 @@ const fileName = (file: string): string =>
 const EXTENSION = /\.[^.]+$/;
 
 /**
- * The Vite root's components (spec §6's discovery): every `.svelte` and
+ * The toolchain root's components (spec §6's discovery): every `.svelte` and
  * `.vue` file under its source folder (`src/` when it has one), and every
  * `.tsx`/`.jsx` exporting a component react-docgen recognises, routes and
  * builds left out; each with the story files whose meta mounts it.
@@ -950,7 +950,7 @@ async function serveStage(
   const file = storyFile(named);
   if (!file) {
     json(res, 404, {
-      error: `${named ?? "No file"} is no story file in ${root}: a sheet is a .stories.ts (or .js, .tsx, .jsx) file inside the Vite root.`,
+      error: `${named ?? "No file"} is no story file in ${root}: a sheet is a .stories.ts (or .js, .tsx, .jsx) file inside the toolchain root.`,
     });
     return;
   }
@@ -968,7 +968,7 @@ async function serveStage(
   );
 }
 
-/** A story file the request names, from the Vite root, when it is one inside it; null otherwise. */
+/** A story file the request names, from the toolchain root, when it is one inside it; null otherwise. */
 function storyFile(named: string | null): string | null {
   if (!(named && STORY_FILE.test(named))) {
     return null;
@@ -1155,7 +1155,7 @@ function cawcoStage() {
 /**
  * Stamps every element a React, Preact, Solid or Vue file writes with its
  * place (`data-insp-path="<file>:<line>:<column>:<tag>"`, the file from the
- * Vite root), by code-inspector's own transform (MIT, bundled into this
+ * toolchain root), by code-inspector's own transform (MIT, bundled into this
  * file with its notice). A Svelte element carries its place already
  * (`__svelte_meta`, in a dev compile). Before the framework's own plugin,
  * which compiles the markup away.

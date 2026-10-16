@@ -82,7 +82,7 @@ const noClient: Bun.BunPlugin = {
 /**
  * The docgen tools' peers (docgen.ts), the project's own: left out of the
  * bundle, so each tool's `require` of them is the project's copy, resolved
- * from where the host is written (the Vite root's `.cawco/stage/`) as Node
+ * from where the host is written (the toolchain root's `.cawco/stage/`) as Node
  * resolves it, and only when a file of that framework is read.
  */
 const PEERS = ["typescript", "svelte/compiler"];

@@ -33035,7 +33035,7 @@
         "type": "object",
         "properties": {
           "file": {
-            "description": "From the Vite root.",
+            "description": "From the toolchain root.",
             "type": "string"
           },
           "name": {
@@ -33151,7 +33151,7 @@
             "type": "object"
           },
           "component": {
-            "description": "The component, from the Vite root; null when the meta names none the stage could resolve.",
+            "description": "The component, from the toolchain root; null when the meta names none the stage could resolve.",
             "type": [
               "null",
               "string"
@@ -33179,7 +33179,7 @@
             "type": "number"
           },
           "component": {
-            "description": "The story's own component, from the Vite root, when it names one apart from the meta's.",
+            "description": "The story's own component, from the toolchain root, when it names one apart from the meta's.",
             "type": [
               "null",
               "string"
@@ -33202,14 +33202,14 @@
         ]
       },
       "StageState": {
-        "description": "A stage as the hub keeps it in each of its sheets' docs (`meta.stage`):\nwhere it is, the Vite root it runs (from the clone's root), why it failed\nwhen it did, and the compile errors standing now.",
+        "description": "A stage as the hub keeps it in each of its sheets' docs (`meta.stage`):\nwhere it is, the toolchain root it runs (from the clone's root), why it failed\nwhen it did, and the compile errors standing now.",
         "type": "object",
         "properties": {
           "at": {
             "type": "string"
           },
           "dir": {
-            "description": "The Vite root, from the clone's root (\".\" for the root itself).",
+            "description": "The toolchain root, from the clone's root (\".\" for the root itself).",
             "type": "string"
           },
           "errors": {
@@ -33234,7 +33234,7 @@
         ]
       },
       "StageError": {
-        "description": "A compile error the stage's Vite sent its pages, as the plugin keeps it\nuntil the module compiles again: the module's file from the Vite root,\n1-based line and column when Vite's payload has them, Vite's message and\ncode frame, and the story files that import the module, which the hub\nfiles it under.",
+        "description": "A compile error the stage's Vite sent its pages, as the plugin keeps it\nuntil the module compiles again: the module's file from the toolchain root,\n1-based line and column when Vite's payload has them, Vite's message and\ncode frame, and the story files that import the module, which the hub\nfiles it under.",
         "type": "object",
         "properties": {
           "column": {
@@ -33262,7 +33262,7 @@
             "type": "string"
           },
           "sheets": {
-            "description": "The story files (from the Vite root) whose sheet imports the module.",
+            "description": "The story files (from the toolchain root) whose sheet imports the module.",
             "type": "array",
             "items": {
               "type": "string"
@@ -33807,7 +33807,7 @@
             "type": "string"
           },
           "sheet": {
-            "description": "On a sheet: its story file (from the Vite root) and the story whose frame holds the element.",
+            "description": "On a sheet: its story file (from the toolchain root) and the story whose frame holds the element.",
             "type": "object",
             "properties": {
               "file": {
@@ -47436,7 +47436,7 @@
                     "type": "string"
                   },
                   "stage": {
-                    "description": "A sheet's: the workspace's stage serves the port (core `stage.ts`),\nits Vite root `dir` from the clone's root and the sheet's story file\n`file` from that root. A request for it wakes the stage when it sleeps.",
+                    "description": "A sheet's: the workspace's stage serves the port (core `stage.ts`),\nits toolchain root `dir` from the clone's root and the sheet's story file\n`file` from that root. A request for it wakes the stage when it sleeps.",
                     "type": "object",
                     "properties": {
                       "dir": {

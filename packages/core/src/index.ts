@@ -1515,7 +1515,7 @@ export type PreviewSource =
       path?: string;
       /**
        * A sheet's: the workspace's stage serves the port (core `stage.ts`),
-       * its Vite root `dir` from the clone's root and the sheet's story file
+       * its toolchain root `dir` from the clone's root and the sheet's story file
        * `file` from that root. A request for it wakes the stage when it sleeps.
        */
       stage?: { dir: string; file: string };

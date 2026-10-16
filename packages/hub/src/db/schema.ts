@@ -3366,7 +3366,7 @@ export const artifacts = sqliteTable(
     sourceWorkspace: text("source_workspace").references(() => workspaces.id, {
       onDelete: "set null",
     }),
-    /** A sheet's: the stage's Vite root and its story file, from the clone's root. */
+    /** A sheet's: the stage's toolchain root and its story file, from the clone's root. */
     sourceStageDir: text("source_stage_dir"),
     sourceStageFile: text("source_stage_file"),
     /** A workspace preview's: the command the workspace's stage runs and keeps up on the port, and its folder from the clone's root. */
