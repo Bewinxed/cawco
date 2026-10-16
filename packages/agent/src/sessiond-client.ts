@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 // The protocol lives behind its own subpath on purpose: `sessiond.ts` reaches
 // for `node:os`, and the core barrel is imported by the browser bundle.
 import type { SessionLimits } from "@cawco/core";
+import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
 import { standalone } from "@cawco/core/runtime";
@@ -71,21 +72,18 @@ export const heldSessions = (procs: readonly SessiondProcInfo[]): number =>
  * agent reads the endpoint as not answering. Our choice: a unix socket on the
  * same machine answers in microseconds, and the ad-hoc path needs a bound
  * before it decides to spawn a replacement. What a session's custody is
- * decided by waits on the keeper's own word instead ({@link KeeperEnded}).
+ * decided by waits on the keeper's own word instead ({@link keeperEnded}).
  */
 export const DIAL_TIMEOUT_MS = 2000;
 
 /**
  * The keeper's connection ended before it answered: the keeper ended (the
  * kernel closes a process's sockets as it exits), and what it held ended with
- * it. The one way a wait on a keeper's word ends without its answer.
+ * it. The one way a wait on a keeper's word ends without its answer: a
+ * {@link Gone}, which a bounded read answers `unanswered`, reason "dead".
  */
-export class KeeperEnded extends Error {
-  constructor(what: string) {
-    super(`[sessiond] the keeper's connection ended before ${what}`);
-    this.name = "KeeperEnded";
-  }
-}
+const keeperEnded = (what: string): Gone =>
+  new Gone(`[sessiond] the keeper's connection ended before ${what}`);
 
 /**
  * How long the ad-hoc path waits for a freshly spawned sessiond to bind before
@@ -142,26 +140,36 @@ export class SessiondUnavailableError extends Error {
   }
 }
 
-/** Does something answer on this endpoint? The dial half of the §9 probe. */
+/**
+ * Does something answer on this endpoint? The dial half of the §9 probe:
+ * answered true when a connect completes, answered false when it is refused
+ * (nothing listens), unanswered when it did not complete within `timeoutMs`.
+ */
 export const probeEndpoint = (
   endpoint: string,
   timeoutMs = DIAL_TIMEOUT_MS
-): Promise<boolean> =>
-  new Promise((resolve) => {
-    // Constructed unconnected, listeners first, THEN dialled: an `ENOENT` on a
-    // socket with no `error` listener yet is an uncaught exception, and the
-    // absent-endpoint case is the one this function exists to answer.
-    const socket = new Socket();
-    const settle = (answer: boolean): void => {
-      socket.destroy();
-      clearTimeout(timer);
-      resolve(answer);
-    };
-    const timer = setTimeout(() => settle(false), timeoutMs);
-    socket.once("connect", () => settle(true));
-    socket.once("error", () => settle(false));
-    socket.connect(endpoint);
-  });
+): Promise<Bounded<boolean>> =>
+  readWithin(
+    timeoutMs,
+    (signal) =>
+      new Promise<boolean>((resolve) => {
+        // Constructed unconnected, listeners first, THEN dialled: an `ENOENT`
+        // on a socket with no `error` listener yet is an uncaught exception,
+        // and the absent-endpoint case is the one this function exists to
+        // answer.
+        const socket = new Socket();
+        const settle = (answer: boolean): void => {
+          socket.destroy();
+          resolve(answer);
+        };
+        signal.addEventListener("abort", () => socket.destroy(), {
+          once: true,
+        });
+        socket.once("connect", () => settle(true));
+        socket.once("error", () => settle(false));
+        socket.connect(endpoint);
+      })
+  );
 
 /**
  * What one dial learned of the keeper: whether its `welcome` came, and if not,
@@ -172,61 +180,66 @@ export const probeEndpoint = (
  * nothing.
  */
 export interface KeeperDial {
-  answered: boolean;
-  /** How the dial ended, in words for the log: `accepted, no welcome in 10000ms`. */
+  /** How the dial ended, in words for the log: `first line was not a welcome`. */
   detail: string;
+  /** Whether the keeper's first line was its welcome. */
+  welcomed: boolean;
 }
 
 const WELCOME_LINE = /"type"\s*:\s*"welcome"/;
 
-/** One dial of the keeper, waiting `timeoutMs` for its welcome. */
-export const dialKeeper = (
+/**
+ * One dial of the keeper, waiting `timeoutMs` for its welcome: what it
+ * answered ({@link KeeperDial}), or unanswered; `accepted` says how far an
+ * unanswered dial got (its connect completed, or did not).
+ */
+export const dialKeeper = async (
   endpoint: string,
   timeoutMs: number
-): Promise<KeeperDial> =>
-  new Promise((resolve) => {
-    // Listeners before the dial, as in {@link probeEndpoint}.
-    const socket = new Socket();
-    let connected = false;
-    const lines = new LineSplitter();
-    const settle = (answered: boolean, detail: string): void => {
-      clearTimeout(timer);
-      socket.destroy();
-      resolve({ answered, detail });
-    };
-    const timer = setTimeout(
-      () =>
-        settle(
-          false,
-          connected
-            ? `accepted, no welcome in ${timeoutMs}ms`
-            : `connect did not complete in ${timeoutMs}ms`
-        ),
-      timeoutMs
-    );
-    socket.setEncoding("utf8");
-    socket.once("connect", () => {
-      connected = true;
-    });
-    socket.on("data", (chunk: string) => {
-      const [first] = lines.push(chunk);
-      if (first !== undefined) {
-        settle(
-          WELCOME_LINE.test(first),
-          WELCOME_LINE.test(first) ? "welcome" : "first line was not a welcome"
+): Promise<{ dial: Bounded<KeeperDial>; accepted: boolean }> => {
+  let accepted = false;
+  const dial = await readWithin(
+    timeoutMs,
+    (signal) =>
+      new Promise<KeeperDial>((resolve) => {
+        // Listeners before the dial, as in {@link probeEndpoint}.
+        const socket = new Socket();
+        const lines = new LineSplitter();
+        const settle = (welcomed: boolean, detail: string): void => {
+          socket.destroy();
+          resolve({ welcomed, detail });
+        };
+        signal.addEventListener("abort", () => socket.destroy(), {
+          once: true,
+        });
+        socket.setEncoding("utf8");
+        socket.once("connect", () => {
+          accepted = true;
+        });
+        socket.on("data", (chunk: string) => {
+          const [first] = lines.push(chunk);
+          if (first !== undefined) {
+            settle(
+              WELCOME_LINE.test(first),
+              WELCOME_LINE.test(first)
+                ? "welcome"
+                : "first line was not a welcome"
+            );
+          }
+        });
+        socket.once("error", (error: NodeJS.ErrnoException) =>
+          settle(
+            false,
+            accepted
+              ? `accepted, then ${error.code ?? error.message}`
+              : `connect failed: ${error.code ?? error.message}`
+          )
         );
-      }
-    });
-    socket.once("error", (error: NodeJS.ErrnoException) =>
-      settle(
-        false,
-        connected
-          ? `accepted, then ${error.code ?? error.message}`
-          : `connect failed: ${error.code ?? error.message}`
-      )
-    );
-    socket.connect(endpoint);
-  });
+        socket.connect(endpoint);
+      })
+  );
+  return { dial, accepted };
+};
 
 /**
  * Defined only in the published package's bundle (scripts/build-binary.ts),
@@ -270,8 +283,24 @@ export const ensureSessiond = async (
   endpoint: string = sessiondEndpoint(),
   env: NodeJS.ProcessEnv = process.env
 ): Promise<void> => {
-  if (await probeEndpoint(endpoint)) {
-    return;
+  const there = await probeEndpoint(endpoint);
+  switch (there.kind) {
+    case "answered":
+      if (there.value) {
+        return;
+      }
+      break;
+    case "unanswered":
+      // Something holds the endpoint and did not complete a connect: a
+      // keeper there that is not turning is the watchdog's, never replaced
+      // by a second one here.
+      throw new Error(
+        `[sessiond] ${endpoint} did not complete a connect within ${DIAL_TIMEOUT_MS} ms; no keeper was started in its place`
+      );
+    default: {
+      const unhandled: never = there;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
   if (serviceManaged(env)) {
     throw new SessiondUnavailableError(endpoint);
@@ -288,8 +317,20 @@ export const ensureSessiond = async (
   const deadline = Date.now() + ADHOC_START_TIMEOUT_MS;
   while (Date.now() < deadline) {
     // biome-ignore lint/performance/noAwaitInLoops: polls the freshly spawned daemon at a fixed interval until it binds or the deadline passes
-    if (await probeEndpoint(endpoint, 250)) {
-      return;
+    const bound = await probeEndpoint(endpoint, 250);
+    switch (bound.kind) {
+      case "answered":
+        if (bound.value) {
+          return;
+        }
+        break;
+      case "unanswered":
+        // Not bound yet as far as this one try saw: the next try asks again.
+        break;
+      default: {
+        const unhandled: never = bound;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
@@ -437,10 +478,10 @@ export class SessiondClient {
       const pending = [...this.#acks.values()];
       this.#acks.clear();
       for (const { reject } of pending) {
-        reject(new KeeperEnded("it answered"));
+        reject(keeperEnded("it answered"));
       }
       for (const waiter of this.#welcomeWaiters.splice(0)) {
-        waiter.reject(new KeeperEnded("its listing came"));
+        waiter.reject(keeperEnded("its listing came"));
       }
       this.onClose.emit("close");
     });
@@ -451,30 +492,51 @@ export class SessiondClient {
 
   /**
    * A connection to the keeper at `endpoint`, once its welcome has come.
-   * `timeoutMs` bounds the wait; `null` waits on the keeper's own word: its
-   * welcome, or its connection's end ({@link KeeperEnded}), which a keeper
-   * that is wedged reaches once the watchdog ends it (keeper-watchdog.ts).
+   * `timeoutMs` bounds the wait, and a welcome that did not come within it
+   * throws its own sentence ("no welcome from … within …"), never a refused
+   * dial (an errno) nor the keeper's end ({@link Gone}). `null` waits on the
+   * keeper's own word: its welcome, or its connection's end ({@link Gone}),
+   * which a keeper that is wedged reaches once the watchdog ends it
+   * (keeper-watchdog.ts).
    */
-  static connect(
+  static async connect(
     endpoint: string = sessiondEndpoint(),
     timeoutMs: number | null = DIAL_TIMEOUT_MS
+  ): Promise<SessiondClient> {
+    if (timeoutMs === null) {
+      return SessiondClient.#dial(endpoint);
+    }
+    const dialled = await readWithin(timeoutMs, (signal) =>
+      SessiondClient.#dial(endpoint, signal)
+    );
+    switch (dialled.kind) {
+      case "answered":
+        return dialled.value;
+      case "unanswered":
+        throw dialled.reason === "dead"
+          ? keeperEnded("its welcome came")
+          : new Error(
+              `[sessiond] no welcome from ${endpoint} within ${timeoutMs}ms`
+            );
+      default: {
+        const unhandled: never = dialled;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
+
+  /** One dial of the keeper at `endpoint`, until its welcome, its refusal, its end ({@link Gone}), or `signal`. */
+  static #dial(
+    endpoint: string,
+    signal?: AbortSignal
   ): Promise<SessiondClient> {
     return new Promise((resolve, reject) => {
       // Same ordering rule as {@link probeEndpoint}: listeners before dial.
       const socket = new Socket();
-      const timer =
-        timeoutMs === null
-          ? undefined
-          : setTimeout(() => {
-              socket.destroy();
-              reject(
-                new Error(
-                  `[sessiond] no welcome from ${endpoint} within ${timeoutMs}ms`
-                )
-              );
-            }, timeoutMs);
+      signal?.addEventListener("abort", () => socket.destroy(), {
+        once: true,
+      });
       socket.once("error", (error) => {
-        clearTimeout(timer);
         reject(error);
       });
       const client = new SessiondClient(socket);
@@ -482,7 +544,6 @@ export class SessiondClient {
       // The accept's own welcome, first in line: nothing is sent before it.
       client.#welcomeWaiters.push({
         resolve: (welcome) => {
-          clearTimeout(timer);
           // §5: no compatible capability is a loud refusal, never a plausible lie.
           if (!welcome.capabilities.includes(SESSIOND_V1)) {
             socket.destroy();
@@ -502,7 +563,6 @@ export class SessiondClient {
           resolve(client);
         },
         reject: (error) => {
-          clearTimeout(timer);
           reject(error);
         },
       });
@@ -798,7 +858,7 @@ export class SessiondClient {
     // would wait for a welcome that never comes.
     // biome-ignore lint/suspicious/noUnnecessaryConditions: set true at runtime by the socket's "close" and by close(); biome's inference sees only the initializer
     if (this.#closed) {
-      return Promise.reject(new KeeperEnded("this listing was asked"));
+      return Promise.reject(keeperEnded("this listing was asked"));
     }
     return new Promise((resolve, reject) => {
       this.#send({ type: "list" });

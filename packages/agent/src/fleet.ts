@@ -46,6 +46,7 @@ import type {
   SkillFile,
 } from "@cawco/core";
 import { hookProblem, memoryDocProblem } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { USER_LAYER_SHELL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { hashFiles } from "@cawco/core/file-hash";
 import {
@@ -570,22 +571,39 @@ const VERSION_TIMEOUT_MS = 5000;
 /** The first `x.y.z` a version command prints, the same rule tools.ts uses. */
 const VERSION_PATTERN = /\d+\.\d+\.\d+/;
 
+/** An install's version, or undefined when it is not known (it printed none, could not run, or did not answer in time, which is logged). */
 const askVersion = async (path: string): Promise<string | undefined> => {
+  let read: Bounded<string | undefined>;
   try {
-    const child = Bun.spawn([path, "--version"], {
-      env: toolEnv(),
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: VERSION_TIMEOUT_MS,
+    read = await readWithin(VERSION_TIMEOUT_MS, async (signal) => {
+      const child = Bun.spawn([path, "--version"], {
+        env: toolEnv(),
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+      });
+      const [out, err] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      await child.exited;
+      return `${out}${err}`.match(VERSION_PATTERN)?.[0];
     });
-    const [out, err] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    await child.exited;
-    return `${out}${err}`.match(VERSION_PATTERN)?.[0];
   } catch {
     return undefined;
+  }
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      console.info(
+        `[fleet] ${path} --version did not answer in ${VERSION_TIMEOUT_MS / 1000} s; its version is not known`
+      );
+      return undefined;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 };
 
@@ -672,23 +690,35 @@ const runClaude = async (
   args: string[],
   extraEnv?: Record<string, string>
 ): Promise<Ran> => {
-  const child = Bun.spawn([bin, ...args], {
-    // `$HOME/.claude`, the dir every path in this file names, whatever
-    // config dir the daemon itself was started in.
-    env: { ...claudeHomeEnv(), ...extraEnv },
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: CLI_TIMEOUT_MS,
+  const ran = await readWithin(CLI_TIMEOUT_MS, async (signal) => {
+    const child = Bun.spawn([bin, ...args], {
+      // `$HOME/.claude`, the dir every path in this file names, whatever
+      // config dir the daemon itself was started in.
+      env: { ...claudeHomeEnv(), ...extraEnv },
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
+    const [stdout, stderr] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    const code = await child.exited;
+    if (child.signalCode) {
+      return { output: `was ended by ${child.signalCode}` };
+    }
+    return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
   });
-  const [stdout, stderr] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  const code = await child.exited;
-  if (child.signalCode) {
-    return { output: `timed out after ${CLI_TIMEOUT_MS / 1000}s` };
+  switch (ran.kind) {
+    case "answered":
+      return ran.value;
+    case "unanswered":
+      return { output: `did not answer within ${CLI_TIMEOUT_MS / 1000}s` };
+    default: {
+      const unhandled: never = ran;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
 };
 
 /**
@@ -2591,27 +2621,40 @@ const scriptParseError = async (
   if (!shell) {
     return undefined;
   }
-  const child = Bun.spawn([shell, "-n"], {
-    env: toolEnv(),
-    stdin: new TextEncoder().encode(script),
-    stdout: "ignore",
-    stderr: "pipe",
-    timeout: PARSE_TIMEOUT_MS,
+  const parsed = await readWithin(PARSE_TIMEOUT_MS, async (signal) => {
+    const child = Bun.spawn([shell, "-n"], {
+      env: toolEnv(),
+      stdin: new TextEncoder().encode(script),
+      stdout: "ignore",
+      stderr: "pipe",
+      signal,
+    });
+    const stderr = await new Response(child.stderr).text();
+    const code = await child.exited;
+    if (child.signalCode) {
+      return `${shell} -n was ended by ${child.signalCode}`;
+    }
+    if (code === 0) {
+      return;
+    }
+    return (
+      stderr
+        .split("\n")
+        .find((line) => line.trim() !== "")
+        ?.trim() ?? `${shell} -n exited ${code}`
+    );
   });
-  const stderr = await new Response(child.stderr).text();
-  const code = await child.exited;
-  if (child.signalCode) {
-    return `${shell} -n timed out after ${PARSE_TIMEOUT_MS / 1000}s`;
+  switch (parsed.kind) {
+    case "answered":
+      return parsed.value;
+    case "unanswered":
+      // Not known to parse: never registered on a parse nobody finished.
+      return `${shell} -n did not answer within ${PARSE_TIMEOUT_MS / 1000}s`;
+    default: {
+      const unhandled: never = parsed;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  if (code === 0) {
-    return undefined;
-  }
-  return (
-    stderr
-      .split("\n")
-      .find((line) => line.trim() !== "")
-      ?.trim() ?? `${shell} -n exited ${code}`
-  );
 };
 
 /** `~/.claude/settings.json` for a fleet-wide hook, `<cwd>/.claude/settings.json`

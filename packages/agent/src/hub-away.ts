@@ -1,3 +1,5 @@
+import { readWithin } from "@cawco/core/bounded";
+
 /**
  * THE HUB AWAY IS NO ANSWER. What a session's start asks of the hub over
  * HTTP (its credential's ACK, session-identity.ts; pi's tool list,
@@ -41,16 +43,26 @@ export const hubAnswer = async (
     let away: string;
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one try at a time, the next only once this one found the hub away
-      const response = await fetch(url, {
-        ...init,
-        signal: AbortSignal.timeout(tryMs),
-      });
-      if (!AWAY.has(response.status)) {
-        return response;
+      const tried = await readWithin(tryMs, (signal) =>
+        fetch(url, { ...init, signal })
+      );
+      switch (tried.kind) {
+        case "answered":
+          if (!AWAY.has(tried.value.status)) {
+            return tried.value;
+          }
+          away = `HTTP ${tried.value.status}`;
+          break;
+        case "unanswered":
+          away = `no answer within ${tryMs / 1000} s`;
+          break;
+        default: {
+          const unhandled: never = tried;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
-      away = `HTTP ${response.status}`;
     } catch (error) {
-      // Refused, reset or timed out: no answer from the hub.
+      // Refused or reset: no answer from the hub.
       away =
         error instanceof Error ? error.message || error.name : String(error);
     }

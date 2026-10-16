@@ -14,6 +14,7 @@ import {
   versionExecutable,
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
+import { readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
 import { type PinMove, pinMoveWords, putOnPins } from "./tools";
 
@@ -98,22 +99,36 @@ export async function runBinaryPins(
   from: string,
   back?: string
 ): Promise<string> {
-  const child = Bun.spawn(
-    [versionExecutable(from), "binary-pins", ...(back ? ["back", back] : [])],
-    { stdout: "pipe", stderr: "pipe", timeout: PINS_MS }
-  );
-  const [out, err, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  if (code !== 0) {
-    const said = failureSentence(err);
-    throw new Error(
-      said ||
-        `${from}'s binary-pins ${child.signalCode ? `was ended after ${PINS_MS / 60_000} minutes` : `exited ${code}`}`
+  const ran = await readWithin(PINS_MS, async (signal) => {
+    const child = Bun.spawn(
+      [versionExecutable(from), "binary-pins", ...(back ? ["back", back] : [])],
+      { stdout: "pipe", stderr: "pipe", signal }
     );
+    const [out, err, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (code !== 0) {
+      const said = failureSentence(err);
+      throw new Error(
+        said ||
+          `${from}'s binary-pins ${child.signalCode ? `was ended by ${child.signalCode}` : `exited ${code}`}`
+      );
+    }
+    // Its last line is what it did; the lines before are the installers' own.
+    return out.trim().split("\n").at(-1) ?? "";
+  });
+  switch (ran.kind) {
+    case "answered":
+      return ran.value;
+    case "unanswered":
+      throw new Error(
+        `${from}'s binary-pins did not answer within ${PINS_MS / 60_000} minutes`
+      );
+    default: {
+      const unhandled: never = ran;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  // Its last line is what it did; the lines before are the installers' own.
-  return out.trim().split("\n").at(-1) ?? "";
 }

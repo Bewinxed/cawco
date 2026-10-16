@@ -38,6 +38,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { PreviewSource, WorkspaceRef } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   COMPONENTS_PATH,
@@ -443,49 +444,81 @@ const bridgeName = (stage: Stage) =>
   `stage-${createHash("sha256").update(stage.key).digest("hex").slice(0, 12)}`;
 
 /** A request to the stage itself, next to it: through the bridge into its boundary's network, or the host's loopback on macOS. */
-async function askStage(
+async function askStage<T>(
   stage: Stage,
   path: string,
   waitMs: number,
+  take: (response: Response) => Promise<T>,
   body?: object,
   init: RequestInit = {}
-): Promise<Response> {
+): Promise<Bounded<T>> {
   const reached = await reachWorkspace(
     bridgeName(stage),
     stage.workspace.id,
     stage.port
   );
-  return fetch(
-    reached === "host"
-      ? `http://127.0.0.1:${stage.port}${path}`
-      : `http://localhost:${stage.port}${path}`,
-    {
-      ...init,
-      signal: AbortSignal.timeout(waitMs),
-      ...(body
-        ? {
-            method: "POST",
-            body: JSON.stringify(body),
-            headers: { "content-type": "application/json" },
-          }
-        : {}),
-      ...(reached === "host" ? {} : { unix: reached }),
-    }
+  return readWithin(waitMs, async (signal) =>
+    take(
+      await fetch(
+        reached === "host"
+          ? `http://127.0.0.1:${stage.port}${path}`
+          : `http://localhost:${stage.port}${path}`,
+        {
+          ...init,
+          signal,
+          ...(body
+            ? {
+                method: "POST",
+                body: JSON.stringify(body),
+                headers: { "content-type": "application/json" },
+              }
+            : {}),
+          ...(reached === "host" ? {} : { unix: reached }),
+        }
+      )
+    )
   );
 }
 
 /** How long a sheet's read or write may take on its stage: the first read of a component runs its docgen, under 2 s measured. Ours. */
 const READ_WAIT_MS = 15_000;
 
-/** The stage's JSON answer, or a refusal in its own words. */
-async function answerOf<T>(response: Response, what: string): Promise<T> {
-  const body = (await response.json()) as T & { error?: string };
-  if (!response.ok) {
-    throw new StageRefusal(
-      body.error ?? `The stage could not ${what} (${response.status}).`
-    );
+/**
+ * The stage's JSON answer to `path`, a refusal in its own words, or that it
+ * did not answer within `waitMs`.
+ */
+async function answerOf<T>(
+  stage: Stage,
+  path: string,
+  waitMs: number,
+  what: string,
+  body?: object
+): Promise<T> {
+  const read = await askStage(
+    stage,
+    path,
+    waitMs,
+    async (response) => {
+      const answer = (await response.json()) as T & { error?: string };
+      if (!response.ok) {
+        throw new StageRefusal(
+          answer.error ?? `The stage could not ${what} (${response.status}).`
+        );
+      }
+      return answer as T;
+    },
+    body
+  );
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(`The stage did not ${what} within ${waitMs / 1000} s.`);
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return body;
 }
 
 /** Writes the host into the Vite root when it is not there as this build has it, git-excluded. */
@@ -556,21 +589,21 @@ function crashed(stage: Stage, why: string): void {
 /**
  * Whether the stage serves: a sheet's host answers {@link HEALTH_PATH} with
  * 200; a preview's server answers `/` with anything at all, its status its
- * own app's.
+ * own app's. Answered false when it refused (nothing listens) or answered
+ * otherwise; unanswered when nothing answered within `waitMs`.
  */
-const healthy = (stage: Stage, waitMs: number): Promise<boolean> =>
+const healthy = (stage: Stage, waitMs: number): Promise<Bounded<boolean>> =>
   askStage(
     stage,
     stage.runs.kind === "sheet" ? HEALTH_PATH : "/",
     waitMs,
-    undefined,
-    stage.runs.kind === "serve" ? { redirect: "manual" } : {}
-  )
-    .then(async (response) => {
+    async (response) => {
       await response.body?.cancel();
       return stage.runs.kind === "serve" || response.ok;
-    })
-    .catch(() => false);
+    },
+    undefined,
+    stage.runs.kind === "serve" ? { redirect: "manual" } : {}
+  ).catch(() => ({ kind: "answered", value: false }) as const);
 
 /** Its health look and its sleep, every {@link STAGE_HEALTH_MS} while it is live. */
 function watch(stage: Stage): void {
@@ -583,14 +616,29 @@ function watch(stage: Stage): void {
       sleep(stage);
       return;
     }
-    if (!(await healthy(stage, HEALTH_WAIT_MS))) {
-      crashed(
-        stage,
-        `it stopped answering ${stage.runs.kind === "sheet" ? HEALTH_PATH : `on port ${stage.port}`}`
-      );
-    } else if (stage.restarts > 0) {
-      // A whole look's time live: its next crash starts its restarts afresh.
-      stage.restarts = 0;
+    const where =
+      stage.runs.kind === "sheet" ? HEALTH_PATH : `on port ${stage.port}`;
+    const look = await healthy(stage, HEALTH_WAIT_MS);
+    switch (look.kind) {
+      case "answered":
+        if (!look.value) {
+          crashed(stage, `it stopped answering ${where}`);
+        } else if (stage.restarts > 0) {
+          // A whole look's time live: its next crash starts its restarts afresh.
+          stage.restarts = 0;
+        }
+        break;
+      case "unanswered":
+        // A health watch: a stage silent for a whole look is the crash it watches for, said as silence.
+        crashed(
+          stage,
+          `it did not answer ${where} within ${HEALTH_WAIT_MS / 1000} s`
+        );
+        break;
+      default: {
+        const unhandled: never = look;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
   }, STAGE_HEALTH_MS);
 }
@@ -661,14 +709,28 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
 /** Whether the stage's port stops answering within `waitMs`: a server an earlier daemon left lets go of it at its next beat. */
 const letGo = async (stage: Stage, waitMs: number): Promise<boolean> => {
   const deadline = Date.now() + waitMs;
-  // biome-ignore lint/performance/noAwaitInLoops: one ask at a time until the port is free or the wait ends
-  while (await healthy(stage, SERVE_ASK_MS)) {
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: one ask at a time until the port is free or the wait ends
+    const look = await healthy(stage, SERVE_ASK_MS);
+    switch (look.kind) {
+      case "answered":
+        if (!look.value) {
+          return true;
+        }
+        break;
+      case "unanswered":
+        // Something holds the port and has not answered: not free.
+        break;
+      default: {
+        const unhandled: never = look;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     if (Date.now() > deadline) {
       return false;
     }
     await Bun.sleep(500);
   }
-  return true;
 };
 
 /** A start found its port held: in `error` with why, and the hub told. */
@@ -679,6 +741,26 @@ function refusedStart(stage: Stage, why: string): never {
   tell(stage);
   throw new StageRefusal(why);
 }
+
+/**
+ * Whether a server's port answered, asked one try at a time while `waiting`
+ * holds and `child` is still the stage's; false once either ends first.
+ */
+const servesBy = async (
+  stage: Stage,
+  child: Stage["child"],
+  waiting: () => boolean
+): Promise<boolean> => {
+  while (waiting() && stage.child === child) {
+    // biome-ignore lint/performance/noAwaitInLoops: one ask at a time until the port answers or the start ends
+    const look = await healthy(stage, SERVE_ASK_MS);
+    if (look.kind === "answered" && look.value) {
+      return true;
+    }
+    await Bun.sleep(SERVE_POLL_MS);
+  }
+  return false;
+};
 
 /**
  * Starts the stage in its boundary; settles once it serves (the host says
@@ -711,84 +793,98 @@ async function start(stage: Stage): Promise<void> {
     said = (said + chunk.toString("utf8")).slice(-STDERR_KEPT);
   };
   child.stderr?.on("data", keep);
-  return new Promise((done, fail) => {
-    let settled = false;
-    const settle = (error?: Error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(deadline);
-      if (error) {
-        fail(error);
-      } else {
-        done();
-      }
-    };
-    const deadline = setTimeout(() => {
-      const why = `${stage.runs.kind === "sheet" ? "vite" : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
-      settle(new Error(why));
-      crashed(stage, why);
-    }, STAGE_READY_MS);
-    if (stage.runs.kind === "serve") {
-      // A server says nothing CawCo reads: its words are kept to say why it
-      // ended, and it serves once its port answers.
-      child.stdout?.on("data", keep);
-      const poll = async () => {
-        while (!settled && stage.child === child) {
-          // biome-ignore lint/performance/noAwaitInLoops: one ask at a time until the port answers or the start ends
-          if (await healthy(stage, SERVE_ASK_MS)) {
-            if (!settled && stage.child === child) {
-              up(stage);
-              settle();
-            }
+  const ready = await readWithin(
+    STAGE_READY_MS,
+    (signal) =>
+      new Promise<void>((done, fail) => {
+        let settled = false;
+        const settle = (error?: Error) => {
+          if (settled) {
             return;
           }
-          await Bun.sleep(SERVE_POLL_MS);
-        }
-      };
-      poll().catch(() => undefined);
-    } else {
-      let partial = "";
-      child.stdout?.on("data", (chunk: Buffer) => {
-        const lines = (partial + chunk.toString("utf8")).split("\n");
-        partial = lines.pop() ?? "";
-        for (const line of lines) {
-          const word = hostWord(line);
-          if (word?.cawco === "fatal") {
-            fatal = word.message;
-          } else if (word && heard(stage, word)) {
-            settle();
+          settled = true;
+          if (error) {
+            fail(error);
+          } else {
+            done();
           }
+        };
+        // Let go at the deadline: what comes after is no longer this start's.
+        signal.addEventListener(
+          "abort",
+          () => {
+            settled = true;
+          },
+          { once: true }
+        );
+        if (stage.runs.kind === "serve") {
+          // A server says nothing CawCo reads: its words are kept to say why it
+          // ended, and it serves once its port answers.
+          child.stdout?.on("data", keep);
+          servesBy(stage, child, () => !settled).then(
+            (serves) => {
+              if (serves && !settled && stage.child === child) {
+                up(stage);
+                settle();
+              }
+            },
+            () => undefined
+          );
+        } else {
+          let partial = "";
+          child.stdout?.on("data", (chunk: Buffer) => {
+            const lines = (partial + chunk.toString("utf8")).split("\n");
+            partial = lines.pop() ?? "";
+            for (const line of lines) {
+              const word = hostWord(line);
+              if (word?.cawco === "fatal") {
+                fatal = word.message;
+              } else if (word && heard(stage, word)) {
+                settle();
+              }
+            }
+          });
         }
-      });
-    }
-    // Only the stage's own child: one the daemon took down (a restart, a
-    // sleep, a stop) is no crash of the one that replaced it.
-    child.on("error", (error) => {
-      if (stage.child !== child) {
-        return;
-      }
-      settle(error);
-      crashed(stage, error.message);
-    });
-    child.on("exit", (code, signal) => {
-      if (stage.child !== child) {
-        return;
-      }
-      const why =
-        fatal ??
-        (said
-          .split("\n")
-          .filter((line) => line.trim())
-          .slice(-3)
-          .join(" ")
-          .slice(0, 400) ||
-          `it ended (${signal ?? `status ${code}`})`);
-      settle(new Error(why));
+        // Only the stage's own child: one the daemon took down (a restart, a
+        // sleep, a stop) is no crash of the one that replaced it.
+        child.on("error", (error) => {
+          if (stage.child !== child) {
+            return;
+          }
+          settle(error);
+          crashed(stage, error.message);
+        });
+        child.on("exit", (code, ended) => {
+          if (stage.child !== child) {
+            return;
+          }
+          const why =
+            fatal ??
+            (said
+              .split("\n")
+              .filter((line) => line.trim())
+              .slice(-3)
+              .join(" ")
+              .slice(0, 400) ||
+              `it ended (${ended ?? `status ${code}`})`);
+          settle(new Error(why));
+          crashed(stage, why);
+        });
+      })
+  );
+  switch (ready.kind) {
+    case "answered":
+      return;
+    case "unanswered": {
+      const why = `${stage.runs.kind === "sheet" ? "vite" : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
       crashed(stage, why);
-    });
-  });
+      throw new Error(why);
+    }
+    default: {
+      const unhandled: never = ready;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }
 
 /** The stage at `found`'s Vite root, kept from before or made now; started or woken by `by`, and waited on. */
@@ -828,11 +924,9 @@ export async function ensureStage(
   const stage = await stageAtRoot(stageFor(workspace, story), "a sheet's read");
   const rel = relative(stage.root, story);
   const sheet = await answerOf<SheetRead>(
-    await askStage(
-      stage,
-      `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
-      READ_WAIT_MS
-    ),
+    stage,
+    `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
+    READ_WAIT_MS,
     `read ${rel}'s stories`
   );
   return {
@@ -858,8 +952,11 @@ export async function writeSheet(
   const stage = await stageAtRoot(stageFor(workspace, story), "a write");
   const rel = relative(stage.root, story);
   const done = await answerOf<SheetWritten>(
-    await askStage(stage, WRITE_PATH, READ_WAIT_MS, { ...write, file: rel }),
-    `write ${rel}`
+    stage,
+    WRITE_PATH,
+    READ_WAIT_MS,
+    `write ${rel}`,
+    { ...write, file: rel }
   );
   return { ...done, file: join(stage.dir, done.file) };
 }
@@ -897,7 +994,9 @@ export async function stageComponents(
     "a components list"
   );
   const { components } = await answerOf<{ components: Found[] }>(
-    await askStage(stage, COMPONENTS_PATH, READ_WAIT_MS * 4),
+    stage,
+    COMPONENTS_PATH,
+    READ_WAIT_MS * 4,
     "list its components"
   );
   return {

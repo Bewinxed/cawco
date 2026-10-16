@@ -43,7 +43,23 @@ export interface DiscoverOptions {
 export const findExistingHub = async (): Promise<string | undefined> => {
   const port = Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
   const tailnet = (await tailscaleCandidates(port)).map(({ ip }) => ip);
-  const lan = process.platform === "darwin" ? [] : await browseMdns();
+  const lan: string[] = [];
+  if (process.platform !== "darwin") {
+    const advertised = await browseMdns();
+    switch (advertised.kind) {
+      case "answered":
+        lan.push(...advertised.value);
+        break;
+      case "unanswered":
+        // No hub answered on the link in the browse's window: only the
+        // tailnet's are probed.
+        break;
+      default: {
+        const unhandled: never = advertised;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
   return await firstToAnswer([...lan, ...tailnet]);
 };
 
@@ -125,16 +141,26 @@ export const discoverHub = async ({
     `[3/5] mDNS _${CAWCO_MDNS_TYPE}._tcp.local: browsing ${MDNS_BROWSE_MS}ms`
   );
   const advertised = await browseMdns();
-  if (advertised.length > 0) {
-    note(`[3/5] mDNS advertised ${advertised.join(", ")}: probing`);
-    const answered = await firstToAnswer(advertised);
-    if (answered) {
-      note(`[3/5] ${answered} answered`);
-      return settle(answered, "mdns");
+  switch (advertised.kind) {
+    case "answered": {
+      note(`[3/5] mDNS advertised ${advertised.value.join(", ")}: probing`);
+      const answered = await firstToAnswer(advertised.value);
+      if (answered) {
+        note(`[3/5] ${answered} answered`);
+        return settle(answered, "mdns");
+      }
+      note("[3/5] nothing advertised answered");
+      break;
     }
-    note("[3/5] nothing advertised answered");
-  } else {
-    note("[3/5] nothing advertising on the local link");
+    case "unanswered":
+      note(
+        `[3/5] no hub answered on the local link within ${MDNS_BROWSE_MS}ms`
+      );
+      break;
+    default: {
+      const unhandled: never = advertised;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 
   // 4. Different network — the tailnet is the only rung that gets there.

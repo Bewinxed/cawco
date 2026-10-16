@@ -14,6 +14,7 @@ import {
   type SentMessage,
   type TextAttachment,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "./delegation";
 
@@ -36,18 +37,40 @@ async function deliverFile(
   file: FileAttachment
 ): Promise<string> {
   const path = join(attachmentsDir(), attachedFileName(sessionId, file));
-  const response = await fetch(`${delegationHubUrl()}${file.ref}`, {
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  }).catch((error: unknown) => {
+  const read = await readWithin<{ bytes: Uint8Array } | { status: number }>(
+    FETCH_TIMEOUT_MS,
+    async (signal) => {
+      const response = await fetch(`${delegationHubUrl()}${file.ref}`, {
+        signal,
+      });
+      return response.ok
+        ? { bytes: new Uint8Array(await response.arrayBuffer()) }
+        : { status: response.status };
+    }
+  ).catch((error: unknown) => {
     throw fetchFailed(
       file,
       error instanceof Error ? error.message : String(error)
     );
   });
-  if (!response.ok) {
-    throw fetchFailed(file, `HTTP ${response.status}`);
+  let bytes: Uint8Array;
+  switch (read.kind) {
+    case "answered":
+      if (!("bytes" in read.value)) {
+        throw fetchFailed(file, `HTTP ${read.value.status}`);
+      }
+      ({ bytes } = read.value);
+      break;
+    case "unanswered":
+      throw fetchFailed(
+        file,
+        `the hub did not answer within ${FETCH_TIMEOUT_MS / 1000} s`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
   await writeStateFile(path, bytes);
   return attachedFileLine(path, {
     size: bytes.byteLength,

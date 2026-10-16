@@ -5,6 +5,7 @@ import {
   CAWCO_MDNS_TYPE,
   readEnv,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { Bonjour, type Service } from "bonjour-service";
 import { readConfig, writeConfig } from "./config";
 
@@ -53,37 +54,76 @@ export const toWsUrl = (httpBase: string): string =>
 
 /**
  * The id of the cawco hub at `httpUrl` (hub hub-id.ts), off its `/health`,
- * which answers anyone; undefined when nothing there says one. Never the
- * fleet's own list: a hub that requires paired devices answers that to its
- * person alone.
+ * which answers anyone: answered with it, answered undefined when what
+ * answered there says none (or refused the connection), unanswered when
+ * nothing answered within {@link PROBE_TIMEOUT_MS}. Never the fleet's own
+ * list: a hub that requires paired devices answers that to its person alone.
  */
-export const hubIdAt = async (httpUrl: string): Promise<string | undefined> => {
-  const body: { hubId?: unknown } = await fetch(`${httpUrl}/health`, {
-    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-  })
-    .then((response) =>
-      response.ok ? (response.json() as Promise<{ hubId?: unknown }>) : {}
-    )
-    .catch(() => ({}));
-  return typeof body.hubId === "string" && body.hubId ? body.hubId : undefined;
-};
+export const hubIdAt = (
+  httpUrl: string
+): Promise<Bounded<string | undefined>> =>
+  readWithin(PROBE_TIMEOUT_MS, async (signal) => {
+    const body: { hubId?: unknown } = await fetch(`${httpUrl}/health`, {
+      signal,
+    })
+      .then((response) =>
+        response.ok ? (response.json() as Promise<{ hubId?: unknown }>) : {}
+      )
+      .catch((error: unknown) => {
+        if (signal.aborted) {
+          throw error;
+        }
+        return {};
+      });
+    return typeof body.hubId === "string" && body.hubId
+      ? body.hubId
+      : undefined;
+  });
 
-/** A probe that answers true for the hub `joined` alone, and says when another hub answered. */
+/** A probe that answers true for the hub `joined` alone, and says when another hub answered or one did not answer in time. */
 const joinedHubAt =
   (joined: string, note: (line: string) => void) =>
   async (httpUrl: string): Promise<boolean> => {
-    const id = await hubIdAt(httpUrl);
-    if (id !== undefined && id !== joined) {
-      note(
-        `[rediscover] ${httpUrl} is another hub (${id}), not the one this machine joined (${joined}): ignored`
-      );
+    const read = await hubIdAt(httpUrl);
+    switch (read.kind) {
+      case "answered":
+        if (read.value !== undefined && read.value !== joined) {
+          note(
+            `[rediscover] ${httpUrl} is another hub (${read.value}), not the one this machine joined (${joined}): ignored`
+          );
+        }
+        return read.value === joined;
+      case "unanswered":
+        note(
+          `[rediscover] ${httpUrl} did not answer within ${PROBE_TIMEOUT_MS / 1000} s: not taken`
+        );
+        return false;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    return id === joined;
   };
 
-/** What tells a cawco hub apart from whatever else is listening on the port: it says its id. */
-export const probeHub = async (httpUrl: string): Promise<boolean> =>
-  (await hubIdAt(httpUrl)) !== undefined;
+/**
+ * What tells a cawco hub apart from whatever else is listening on the port:
+ * it says its id. True only for one that said it within
+ * {@link PROBE_TIMEOUT_MS}: a candidate that did not answer in time is not
+ * taken, and the rung that probed it says nothing answered.
+ */
+export const probeHub = async (httpUrl: string): Promise<boolean> => {
+  const read = await hubIdAt(httpUrl);
+  switch (read.kind) {
+    case "answered":
+      return read.value !== undefined;
+    case "unanswered":
+      return false;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 /** Probes every candidate at once and takes whichever answers first. */
 export const firstToAnswer = (
@@ -111,30 +151,34 @@ export const firstToAnswer = (
  * how long the browse runs. That case belongs to {@link tailscaleCandidates};
  * do not come back and try to widen this one.
  */
-export const browseMdns = (): Promise<string[]> =>
-  new Promise((resolve) => {
-    const bonjour = new Bonjour();
-    const settle = (candidates: string[]): void => {
-      clearTimeout(timer);
-      browser.stop();
-      bonjour.destroy();
-      resolve(candidates);
-    };
-    const browser = bonjour.find(
-      { type: CAWCO_MDNS_TYPE, protocol: "tcp" },
-      (service: Service) => {
-        const addresses = (service.addresses ?? []).filter((address) =>
-          IPV4.test(address)
+export const browseMdns = (): Promise<Bounded<string[]>> =>
+  readWithin(
+    MDNS_BROWSE_MS,
+    (signal) =>
+      new Promise<string[]>((resolve) => {
+        const bonjour = new Bonjour();
+        const stop = (): void => {
+          browser.stop();
+          bonjour.destroy();
+        };
+        const browser = bonjour.find(
+          { type: CAWCO_MDNS_TYPE, protocol: "tcp" },
+          (service: Service) => {
+            const addresses = (service.addresses ?? []).filter((address) =>
+              IPV4.test(address)
+            );
+            if (addresses.length > 0) {
+              stop();
+              resolve(
+                addresses.map((address) => `http://${address}:${service.port}`)
+              );
+            }
+          }
         );
-        if (addresses.length > 0) {
-          settle(
-            addresses.map((address) => `http://${address}:${service.port}`)
-          );
-        }
-      }
-    );
-    const timer = setTimeout(() => settle([]), MDNS_BROWSE_MS);
-  });
+        // Silence in the window is no hub answering in it, not "there is no hub".
+        signal.addEventListener("abort", stop, { once: true });
+      })
+  );
 
 /** The shape of `tailscale status --json` this reads, and nothing more. */
 interface TailscaleNode {
@@ -194,7 +238,7 @@ export const tailscaleCandidates = async (
 
 /** Everything {@link rediscoverHub} calls out to, injectable so a test never touches the real network or `CONFIG_PATH`. */
 export interface RediscoverProbes {
-  readonly browseMdns?: () => Promise<string[]>;
+  readonly browseMdns?: () => Promise<Bounded<string[]>>;
   /** The id of the hub this machine joined; `config.json`'s `hubId` when not given. */
   readonly joinedHubId?: string;
   readonly log?: (line: string) => void;
@@ -282,14 +326,24 @@ const walkRungs = async (
 
   note("[rediscover/mdns] browsing");
   const advertised = await findMdns();
-  if (advertised.length > 0) {
-    const answered = await firstToAnswer(advertised, probe);
-    if (answered) {
-      return settle(answered, "mdns");
+  switch (advertised.kind) {
+    case "answered": {
+      const answered = await firstToAnswer(advertised.value, probe);
+      if (answered) {
+        return settle(answered, "mdns");
+      }
+      note("[rediscover/mdns] nothing advertised answered");
+      break;
     }
-    note("[rediscover/mdns] nothing advertised answered");
-  } else {
-    note("[rediscover/mdns] nothing advertising on the local link");
+    case "unanswered":
+      note(
+        `[rediscover/mdns] no hub answered on the local link within ${MDNS_BROWSE_MS / 1000} s`
+      );
+      break;
+    default: {
+      const unhandled: never = advertised;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 
   const peers = await findTailscale(port);

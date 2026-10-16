@@ -6,6 +6,7 @@
  * it runs there; what a restarted agent takes back, it takes back from
  * whichever keeper holds it.
  */
+import { Gone } from "@cawco/core/bounded";
 import { holderOf, type KeeperWord } from "@cawco/core/handover";
 import {
   currentEndpoint,
@@ -14,34 +15,30 @@ import {
   machineEndpoint,
 } from "@cawco/core/keepers";
 import type { SessiondProcInfo } from "@cawco/core/sessiond";
-import { ensureSessiond, KeeperEnded, SessiondClient } from "./sessiond-client";
+import { ensureSessiond, SessiondClient } from "./sessiond-client";
 
 /** A dial that found no keeper there: a file left by one that is gone, or none at all. */
 const NOBODY_THERE = new Set(["ECONNREFUSED", "ENOENT"]);
 const nobodyThere = (error: unknown): boolean =>
   NOBODY_THERE.has((error as NodeJS.ErrnoException).code ?? "");
 
-/** A reading that ended with no keeper there: none listened, or the one that did ended before it answered. */
+/** A reading that ended with no keeper there: none listened, or the one that did ended before it answered ({@link Gone}). */
 const keeperGone = (error: unknown): boolean =>
-  nobodyThere(error) || error instanceof KeeperEnded;
+  nobodyThere(error) || error instanceof Gone;
 
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 /**
- * Keepers that are there and could not be read, for a reason other than
- * their end: whether one of them holds a child is not known, so "no keeper
- * holds it" is never said past them, nor is a listing without them whole.
+ * What a reading throws when keepers that are there could not be read, for
+ * a reason other than their end: whether one of them holds a child is not
+ * known, so "no keeper holds it" is never said past them, nor is a listing
+ * without them whole.
  */
-export class KeepersUnanswered extends Error {
-  readonly unanswered: readonly string[];
-  constructor(what: string, unanswered: readonly string[]) {
-    super(
-      `[sessiond] ${what} is not known: ${unanswered.length === 1 ? "a keeper" : `${unanswered.length} keepers`} could not be read: ${unanswered.join("; ")}`
-    );
-    this.unanswered = unanswered;
-  }
-}
+const notKnown = (what: string, unanswered: readonly string[]): Error =>
+  new Error(
+    `[sessiond] ${what} is not known: ${unanswered.length === 1 ? "a keeper" : `${unanswered.length} keepers`} could not be read: ${unanswered.join("; ")}`
+  );
 
 /** One held child, with the keeper that holds it and the epoch its seqs count in. */
 export interface HeldProc extends SessiondProcInfo {
@@ -76,7 +73,7 @@ export const keeperWord = (reading: KeeperReading): KeeperWord =>
  * as each kept its one connection before keepers ran side by side.
  *
  * A READING OF THE KEEPERS WAITS ON EACH KEEPER'S OWN WORD: its listing, or
- * its connection's end, which is the keeper's end ({@link KeeperEnded}); a
+ * its connection's end, which is the keeper's end ({@link Gone}); a
  * wedged one reaches that end once the watchdog ends it (keeper-watchdog.ts).
  * Never on a timer. A keeper answers a `list` in the turn of its loop that
  * reads it, but writes the answer on the same ordered socket as every ring
@@ -107,7 +104,7 @@ export class KeeperPool {
     return this.#client(await currentEndpoint(machine));
   }
 
-  /** Connections to every keeper there, the current one first; one that is gone is left out, and one that could not be reached is unknown ({@link KeepersUnanswered}). */
+  /** Connections to every keeper there, the current one first; one that is gone is left out, and one that could not be reached is unknown ({@link notKnown}). */
   async all(): Promise<SessiondClient[]> {
     const found = await keeperEndpoints();
     const clients = await Promise.all(
@@ -125,7 +122,7 @@ export class KeeperPool {
       (one): one is string => typeof one === "string"
     );
     if (unanswered.length > 0) {
-      throw new KeepersUnanswered("the keepers there", unanswered);
+      throw notKnown("the keepers there", unanswered);
     }
     return clients.filter(
       (client): client is SessiondClient => client instanceof SessiondClient
@@ -135,7 +132,7 @@ export class KeeperPool {
   /**
    * Every child each keeper there lists, live or not, with its keeper; the
    * current keeper's first. A keeper that could not be read makes the
-   * listing unknown: {@link KeepersUnanswered}, never a listing without it.
+   * listing unknown: {@link notKnown}, never a listing without it.
    */
   async held(): Promise<HeldProc[]> {
     const readings = await this.#survey();
@@ -143,7 +140,7 @@ export class KeeperPool {
       reading.kind === "unanswered" ? [reading.why] : []
     );
     if (unanswered.length > 0) {
-      throw new KeepersUnanswered("what the keepers hold", unanswered);
+      throw notKnown("what the keepers hold", unanswered);
     }
     return readings.flatMap(({ reading }) =>
       reading.kind === "listed" ? reading.procs : []
@@ -155,7 +152,7 @@ export class KeeperPool {
    * it (core handover.ts {@link holderOf}): the current one's answer first;
    * undefined only once every keeper there has listed or ended and none
    * holds it. A keeper that could not be read makes it unknown: {@link
-   * KeepersUnanswered}, naming each.
+   * notKnown}, naming each.
    */
   async holding(procId: string): Promise<HeldProc | undefined> {
     const readings = await this.#survey();
@@ -170,7 +167,7 @@ export class KeeperPool {
       return;
     }
     if (holder.kind === "unknown") {
-      throw new KeepersUnanswered(
+      throw notKnown(
         `which keeper holds ${procId}`,
         readings.flatMap(({ reading }) =>
           reading.kind === "unanswered" ? [reading.why] : []
@@ -242,7 +239,7 @@ export class KeeperPool {
     }
     this.#saidGone.add(endpoint);
     console.info(
-      error instanceof KeeperEnded
+      error instanceof Gone
         ? `[sessiond] the keeper at ${endpoint} ended before it answered, and what it held ended with it`
         : `[sessiond] ${endpoint} answers nothing (${(error as NodeJS.ErrnoException).code}): read as a file a keeper that is gone left`
     );

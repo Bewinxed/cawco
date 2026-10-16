@@ -49,6 +49,7 @@ import {
   waitingWords,
 } from "@cawco/core/binary-updates";
 import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
+import { readWithin } from "@cawco/core/bounded";
 import { timerMs } from "@cawco/core/clock";
 import {
   answers,
@@ -114,32 +115,44 @@ async function readReadiness(
   if (!hub) {
     return local;
   }
-  const response = await fetch(`${hub}/api/binary-updates/hub-readiness`, {
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `The hub did not say what its restart would cut: ${response.status}`
-    );
-  }
-  const holds = mergeHolds(
-    local.holds,
-    ((await response.json()) as RestartReadiness).holds
+  // A hub that did not say in time is waited on (the next tick asks again),
+  // never read as ready or as holding nothing.
+  const theirs = await askHub(
+    "what its restart would cut",
+    5000,
+    `${hub}/api/binary-updates/hub-readiness`,
+    {},
+    async (response) => {
+      if (!response.ok) {
+        throw new Error(
+          `The hub did not say what its restart would cut: ${response.status}`
+        );
+      }
+      return (await response.json()) as RestartReadiness;
+    }
   );
+  const holds = mergeHolds(local.holds, theirs.holds);
   return { ready: holds.length === 0, holds };
 }
 
 /** The hub's fence, for `ms` from now; 0 lowers it. */
 async function fenceHub(hub: string, ms: number): Promise<void> {
-  const response = await fetch(`${hub}/api/binary-updates/hub-fence`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ms }),
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!response.ok) {
-    throw new Error(`The hub did not take its fence: ${response.status}`);
-  }
+  await askHub(
+    "its fence",
+    5000,
+    `${hub}/api/binary-updates/hub-fence`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ms }),
+    },
+    (response) => {
+      if (!response.ok) {
+        throw new Error(`The hub did not take its fence: ${response.status}`);
+      }
+      return Promise.resolve();
+    }
+  );
 }
 
 let latest: BinaryUpdateState | undefined;
@@ -191,8 +204,41 @@ const logFailure = (error: unknown): void => {
   );
 };
 
-/** The hub could not be reached at all: no answer, not an answer that refused. */
+/**
+ * The hub could not be reached at all: no answer, not an answer that refused.
+ * Nothing is tried or written on it; the command stands, and the next tick
+ * asks again.
+ */
 class HubUnreachable extends Error {}
+
+/**
+ * `url` on the hub, its response read by `take`, all of it given `ms` to
+ * answer. A hub that did not answer in time is {@link HubUnreachable} ("the
+ * hub did not answer <what> within N s"), never an answer that refused.
+ */
+const askHub = async <T>(
+  what: string,
+  ms: number,
+  url: string,
+  init: RequestInit,
+  take: (response: Response) => Promise<T>
+): Promise<T> => {
+  const read = await readWithin(ms, async (signal) =>
+    take(await fetch(url, { ...init, signal }))
+  );
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new HubUnreachable(
+        `the hub did not answer ${what} within ${ms / 1000} s; nothing was done on it, and it is asked again on the next tick`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 /**
  * An attempt at an offered build failed (its download, its verification, the
@@ -626,8 +672,22 @@ export class BinaryUpdater {
       (await keeperEndpoints())
         .filter((found) => !found.current)
         .map(async (found) => {
-          if (!(await answers(found.endpoint))) {
-            await rm(found.endpoint, { force: true });
+          const live = await answers(found.endpoint);
+          switch (live.kind) {
+            case "answered":
+              if (!live.value) {
+                await rm(found.endpoint, { force: true });
+              }
+              break;
+            case "unanswered":
+              console.info(
+                `[update] ${found.endpoint} did not answer a connect within ${live.after} ms; it is kept, as whether a keeper holds it is not known`
+              );
+              break;
+            default: {
+              const unhandled: never = live;
+              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+            }
           }
         })
     );
@@ -814,17 +874,22 @@ export class BinaryUpdater {
     // The hub's machine considers the channel's newest; every other machine
     // takes the build its hub runs, so none is ever ahead of its hub.
     const path = installation.role === "hub" ? "latest" : "release";
-    const response = await fetch(`${hub}/api/binary-updates/${path}`, {
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!response.ok) {
-      throw new Error(
-        `The hub has no build to offer (${path}: ${response.status})`
-      );
-    }
-    const body = (await response.json()) as SignedRelease & {
-      dbSchemaVersion?: number;
-    };
+    const body = await askHub(
+      "with the build it offers",
+      20_000,
+      `${hub}/api/binary-updates/${path}`,
+      {},
+      async (response) => {
+        if (!response.ok) {
+          throw new Error(
+            `The hub has no build to offer (${path}: ${response.status})`
+          );
+        }
+        return (await response.json()) as SignedRelease & {
+          dbSchemaVersion?: number;
+        };
+      }
+    );
     verifyManifest(body.manifest, body.signature);
     if (installation.role === "hub") {
       if (body.manifest.channel !== this.#policy.channel) {
@@ -851,18 +916,29 @@ export class BinaryUpdater {
     if (!installation) {
       return;
     }
-    const settings = await fetch(
+    const settings = await askHub<
+      { policy: BinaryUpdatePolicy } | { status: number }
+    >(
+      "with its update settings",
+      10_000,
       `${installation.hubUrl}/api/binary-updates/settings`,
-      { signal: AbortSignal.timeout(10_000) }
+      {},
+      async (response) =>
+        response.ok
+          ? { policy: (await response.json()) as BinaryUpdatePolicy }
+          : { status: response.status }
     ).catch((error: unknown) => {
+      if (error instanceof HubUnreachable) {
+        throw error;
+      }
       throw new HubUnreachable(
         `the hub at ${installation.hubUrl} did not answer: ${error instanceof Error ? error.message : String(error)}`
       );
     });
-    if (!settings.ok) {
+    if (!("policy" in settings)) {
       throw new Error(`The hub's update settings answered ${settings.status}`);
     }
-    this.#policy = (await settings.json()) as BinaryUpdatePolicy;
+    this.#policy = settings.policy;
     const { release, dbSchemaVersion } = await this.#offer(installation);
     const running = await readRunningManifest();
     // Only a change is written: every write moves `updatedAt`, and the lost-helper rule (#settleLostHelper) reads it.
@@ -992,14 +1068,20 @@ export class BinaryUpdater {
       throw new Error(`This release has no build for ${target}`);
     }
     await this.#set({ phase: "downloading" });
-    const response = await fetch(
+    const bytes = await askHub(
+      `with the build ${manifest.version}`,
+      600_000,
       `${installation.hubUrl}/api/binary-updates/artifacts/${encodeURIComponent(manifest.version)}/${encodeURIComponent(artifact.archive)}`,
-      { signal: AbortSignal.timeout(600_000) }
+      {},
+      (response) => {
+        if (!response.ok) {
+          throw new Error(
+            `The hub could not supply the build: ${response.status}`
+          );
+        }
+        return readAtMost(response, artifact.size);
+      }
     );
-    if (!response.ok) {
-      throw new Error(`The hub could not supply the build: ${response.status}`);
-    }
-    const bytes = await readAtMost(response, artifact.size);
     if (!archiveMatches(manifest, target, bytes)) {
       throw new Error(
         "The downloaded build does not match the signed manifest"
@@ -1049,20 +1131,24 @@ export class BinaryUpdater {
     if (!installation) {
       return;
     }
-    const response = await fetch(
+    await askHub(
+      "for the update state",
+      10_000,
       `${installation.hubUrl}/api/binary-updates/machines/${await machineId()}/state`,
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(this.#state),
-        signal: AbortSignal.timeout(10_000),
+      },
+      (response) => {
+        if (!response.ok) {
+          throw new Error(
+            `The hub did not take the update state: ${response.status}`
+          );
+        }
+        return Promise.resolve();
       }
     );
-    if (!response.ok) {
-      throw new Error(
-        `The hub did not take the update state: ${response.status}`
-      );
-    }
   }
 
   /** Runs only from `ready`: the one state in which a build is staged and nothing is applying. */

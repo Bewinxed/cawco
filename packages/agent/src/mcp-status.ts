@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { type McpServerStatus, query } from "@anthropic-ai/claude-agent-sdk";
 import { type FleetSyncReport, mcpFleetState } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { idle } from "./auth";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { claudeHomeEnv } from "./tools";
@@ -80,53 +81,70 @@ export const readMcpRuntime = async (
     },
   });
   let statuses: McpServerStatus[] | undefined;
-  let expired = false;
-  const expire = (ms: number) =>
-    setTimeout(() => {
-      expired = true;
-      handle.close();
-    }, ms);
-  let timer = expire(START_TIMEOUT_MS);
-  const unsettled = (): string =>
-    statuses === undefined
-      ? `Claude Code did not start within ${START_TIMEOUT_MS / 1000} seconds, so no MCP server was read.`
-      : `Claude Code had not settled this server ${(connectMs + VERDICT_MARGIN_MS) / 1000} seconds after it started, past its own ${connectMs / 1000} second connect timeout.`;
+  /** Why a server's status was not read in time, once a phase went unanswered. */
+  let unanswered: string | undefined;
   const report = (): FleetSyncReport["mcp"] =>
     Object.fromEntries(
       names.map((name) => {
         const status = statuses?.find((row) => row.name === name);
         return [
           name,
-          status?.status === "pending" || (!status && expired)
-            ? { state: "failed", detail: unsettled() }
+          unanswered !== undefined && (!status || status.status === "pending")
+            ? { state: "failed", detail: unanswered }
             : mcpFleetState(status),
         ];
       })
     );
+  const settledFor = (read: McpServerStatus[]): boolean =>
+    !read.some((row) => names.includes(row.name) && row.status === "pending");
   try {
-    while (!expired) {
-      // biome-ignore lint/performance/noAwaitInLoops: wait on the same connection attempt until its status settles; no reconnect or retry is issued
-      const read = await handle.mcpServerStatus();
-      if (statuses === undefined) {
-        // The CLI is up and connecting: from here its own timeout runs.
-        clearTimeout(timer);
-        timer = expire(connectMs + VERDICT_MARGIN_MS);
-      }
-      statuses = read;
-      if (
-        !read.some(
-          (row) => names.includes(row.name) && row.status === "pending"
-        )
-      ) {
+    // The CLI's start: its first status.
+    const first = await readWithin(START_TIMEOUT_MS, () =>
+      handle.mcpServerStatus()
+    );
+    switch (first.kind) {
+      case "answered":
+        statuses = first.value;
+        break;
+      case "unanswered":
+        unanswered = `Claude Code did not start within ${START_TIMEOUT_MS / 1000} seconds, so no MCP server was read.`;
         return report();
+      default: {
+        const unhandled: never = first;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
-      await delay(250);
+    }
+    if (settledFor(first.value)) {
+      return report();
+    }
+    // The CLI is up and connecting: from here its own timeout runs.
+    const settledRead = await readWithin(
+      connectMs + VERDICT_MARGIN_MS,
+      async (signal) => {
+        while (!signal.aborted) {
+          // biome-ignore lint/performance/noAwaitInLoops: wait on the same connection attempt until its status settles; no reconnect or retry is issued
+          await delay(250);
+          const read = await handle.mcpServerStatus();
+          statuses = read;
+          if (settledFor(read)) {
+            return;
+          }
+        }
+      }
+    );
+    switch (settledRead.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        unanswered = `Claude Code had not settled this server ${(connectMs + VERDICT_MARGIN_MS) / 1000} seconds after it started, past its own ${connectMs / 1000} second connect timeout.`;
+        break;
+      default: {
+        const unhandled: never = settledRead;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
     return report();
   } catch (error) {
-    if (expired) {
-      return report();
-    }
     return Object.fromEntries(
       names.map((name) => [
         name,
@@ -137,7 +155,6 @@ export const readMcpRuntime = async (
       ])
     );
   } finally {
-    clearTimeout(timer);
     handle.close();
   }
 };

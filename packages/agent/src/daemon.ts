@@ -68,6 +68,7 @@ import {
   AGENT_RESTARTING,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   CUSTODY_BOUND_MS,
   type HandoverCommand,
@@ -264,8 +265,8 @@ const ACCOUNT_REFRESH_INTERVAL = Duration.seconds(60);
  * LaunchGrant}), until each is answered. They outlive a connection: one asked
  * while the hub is away, or whose answer went with a dropped connection, is
  * asked again on the next connection once it has registered. One not
- * answered within {@link CUSTODY_BOUND_MS} of its first ask is refused, in a
- * sentence its start fails with.
+ * answered within {@link CUSTODY_BOUND_MS} of its first ask keeps waiting,
+ * and says so once: the hub answers every grant, a refusal with its reason.
  */
 class LaunchAsks {
   readonly #machineId: string;
@@ -294,22 +295,41 @@ class LaunchAsks {
       requestId,
       payload: { processGeneration },
     };
-    return new Promise<LaunchGrant>((resolve) => {
+    const granted = new Promise<LaunchGrant>((resolve) => {
       const settle = (grant: LaunchGrant) => {
-        clearTimeout(timer);
         this.#pending.delete(requestId);
         resolve(grant);
       };
-      const timer = setTimeout(
-        () =>
-          settle({
-            refusal: `The hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s.`,
-          }),
-        CUSTODY_BOUND_MS
-      );
       this.#pending.set(requestId, { envelope, settle });
       this.#send?.(envelope);
     });
+    return this.#awaitGrant(instanceId, granted);
+  }
+
+  /**
+   * The hub's grant for a launch, however long it takes: the hub answers
+   * every grant, a refusal with its reason (987bb9cc0), so a launch it has
+   * not answered within {@link CUSTODY_BOUND_MS} keeps waiting, said once,
+   * never refused for the wait.
+   */
+  async #awaitGrant(
+    instanceId: string,
+    granted: Promise<LaunchGrant>
+  ): Promise<LaunchGrant> {
+    const first = await readWithin(CUSTODY_BOUND_MS, () => granted);
+    switch (first.kind) {
+      case "answered":
+        return first.value;
+      case "unanswered":
+        console.info(
+          `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s; still waiting for the hub's credential`
+        );
+        return granted;
+      default: {
+        const unhandled: never = first;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   }
 
   /** A connection registered: every ask not yet answered goes on it, and every one after. */
@@ -409,33 +429,36 @@ const machineProviders = async (): Promise<
 const PART_MS = 90_000;
 
 /**
- * One part of what the machine reports, read on its own: what it read, or,
- * when it could not be read in {@link PART_MS}, nothing, said once under
- * the part's name; it is read again on the next beat. One part failing, or
- * never answering, never keeps the others from being sent.
+ * One part of what the machine reports, read on its own: what it read, or
+ * undefined when it was not read (no answer in {@link PART_MS}, or a failure),
+ * said once under the part's name. Undefined is never sent as an empty part:
+ * the part is left out, the hub keeps its last copy, and it is read again
+ * on the next beat. One part failing, or never answering, never keeps the
+ * others from being sent.
  */
 const readPart = async <T>(
   part: string,
   read: () => Promise<T>
 ): Promise<T | undefined> => {
-  let late: ReturnType<typeof setTimeout> | undefined;
+  let answer: Bounded<T>;
   try {
-    return await Promise.race([
-      read(),
-      new Promise<undefined>((resolve) => {
-        late = setTimeout(() => {
-          console.warn(
-            `[agent] ${part} was not read within ${PART_MS / 1000} s; it is read again on the next beat`
-          );
-          resolve(undefined);
-        }, PART_MS);
-      }),
-    ]);
+    answer = await readWithin(PART_MS, () => read());
   } catch (error) {
     console.warn(`[agent] ${part} could not be read: ${errorWords(error)}`);
-    return undefined;
-  } finally {
-    clearTimeout(late);
+    return;
+  }
+  switch (answer.kind) {
+    case "answered":
+      return answer.value;
+    case "unanswered":
+      console.warn(
+        `[agent] ${part} was not read within ${PART_MS / 1000} s; the hub keeps its last copy, and it is read again on the next beat`
+      );
+      return;
+    default: {
+      const unhandled: never = answer;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 };
 
@@ -961,52 +984,82 @@ const open = (url: string) =>
       // as to an agent on the build before (`WIRE_PARTS_PARAM`).
       const socket = new WebSocket(announcingParts(url));
       let opened = false;
-      let challenge: Challenge | undefined;
-      const settle = () => {
-        clearTimeout(unanswered);
-        socket.removeEventListener("open", onOpen);
-        socket.removeEventListener("close", onClose);
-        socket.removeEventListener("message", onMessage);
-      };
-      const ready = () => {
-        if (opened && challenge) {
-          settle();
-          resume(Effect.succeed({ socket, challenge }));
+      const interrupted = new AbortController();
+      readWithin(
+        OPEN_TIMEOUT_MS,
+        (signal) =>
+          new Promise<Challenge>((resolve, reject) => {
+            let challenge: Challenge | undefined;
+            const settle = () => {
+              socket.removeEventListener("open", onOpen);
+              socket.removeEventListener("close", onClose);
+              socket.removeEventListener("message", onMessage);
+            };
+            const ready = () => {
+              if (opened && challenge) {
+                settle();
+                resolve(challenge);
+              }
+            };
+            const onOpen = () => {
+              opened = true;
+              ready();
+            };
+            const onMessage = (event: MessageEvent) => {
+              challenge ??= challengeIn(event.data);
+              ready();
+            };
+            const onClose = (event: CloseEvent) => {
+              settle();
+              reject(new ConnectionLost({ url, reason: closeReason(event) }));
+            };
+            signal.addEventListener(
+              "abort",
+              () => {
+                settle();
+                reject(signal.reason);
+              },
+              { once: true }
+            );
+            socket.addEventListener("open", onOpen, { once: true });
+            socket.addEventListener("close", onClose, { once: true });
+            socket.addEventListener("message", onMessage);
+          }),
+        { signal: interrupted.signal }
+      ).then(
+        (read) => {
+          switch (read.kind) {
+            case "answered":
+              resume(Effect.succeed({ socket, challenge: read.value }));
+              break;
+            case "unanswered":
+              socket.close();
+              resume(
+                Effect.fail(
+                  new ConnectionLost({
+                    url,
+                    reason: opened
+                      ? `the hub sent no challenge within ${OPEN_TIMEOUT_MS / 1000} s of the connection`
+                      : `the hub did not answer the connection within ${OPEN_TIMEOUT_MS / 1000} s`,
+                  })
+                )
+              );
+              break;
+            default: {
+              const unhandled: never = read;
+              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+            }
+          }
+        },
+        (error: unknown) => {
+          // The socket closed first; an interrupted open resumes nothing.
+          if (error instanceof ConnectionLost) {
+            resume(Effect.fail(error));
+          }
         }
-      };
-      const onOpen = () => {
-        opened = true;
-        ready();
-      };
-      const onMessage = (event: MessageEvent) => {
-        challenge ??= challengeIn(event.data);
-        ready();
-      };
-      const onClose = (event: CloseEvent) => {
-        settle();
-        resume(
-          Effect.fail(new ConnectionLost({ url, reason: closeReason(event) }))
-        );
-      };
-      const unanswered = setTimeout(() => {
-        settle();
-        socket.close();
-        resume(
-          Effect.fail(
-            new ConnectionLost({
-              url,
-              reason: opened
-                ? `the hub sent no challenge within ${OPEN_TIMEOUT_MS / 1000} s of the connection`
-                : `the hub did not answer the connection within ${OPEN_TIMEOUT_MS / 1000} s`,
-            })
-          )
-        );
-      }, OPEN_TIMEOUT_MS);
-      socket.addEventListener("open", onOpen, { once: true });
-      socket.addEventListener("close", onClose, { once: true });
-      socket.addEventListener("message", onMessage);
+      );
       return Effect.sync(() => {
-        settle();
+        interrupted.abort();
         socket.close();
       });
     }

@@ -367,7 +367,7 @@ const spec: Spec = {
       const lines = [];
       const run = (mdns) => rediscoverHub({
         readCachedHubUrl: async () => "http://127.0.0.1:9",
-        browseMdns: async () => mdns,
+        browseMdns: async () => ({ kind: "answered", value: mdns }),
         tailscaleCandidates: async () => [],
         repin: async () => {},
         log: (line) => lines.push(line),

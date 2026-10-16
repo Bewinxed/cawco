@@ -86,6 +86,7 @@ import type { WorkspaceRef } from "@cawco/core";
 import { invariant, WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { isGitDir } from "@cawco/core/git-dir";
 import {
   type HandoverCommand,
@@ -1466,8 +1467,8 @@ export const rearmHooks = async (): Promise<void> => {
  * boundary running on some keeper, whether a session's process or a command
  * is in it, and, where none runs, whether a session's process runs in its
  * clone. Throws when the folders or the keepers cannot be read whole: a
- * keeper that could not be read is {@link KeepersUnanswered}, never a keeper
- * read as holding nothing.
+ * keeper that could not be read makes the reading unknown (keepers.ts
+ * `notKnown`), never a keeper read as holding nothing.
  *
  * EVERY WORKSPACE A SESSION'S PROCESS RUNS IN HAS ITS JUDGE, WHATEVER BECAME
  * OF THAT SESSION'S ATTACH: one whose boundary no keeper runs, with a clone a
@@ -3728,32 +3729,47 @@ const HOOK_JUDGE = /^\$judge = '((?:[^'\\]|\\.)*)';$/m;
 
 /**
  * What the judge at `socket` answers to {@link JUDGE_BUILD_QUESTION}, word
- * for word, or why it answered nothing: given as long as a hook gives it
- * ({@link HOOK_LIMIT_S}).
+ * for word, or why it answered nothing; unanswered when it said nothing in
+ * as long as a hook gives it ({@link HOOK_LIMIT_S}).
  */
-const judgeSays = (socket: string): Promise<string> =>
-  new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    const connection = createConnection(socket);
-    const timer = setTimeout(() => {
-      connection.destroy();
-      resolve(`nothing within ${HOOK_LIMIT_S} s`);
-    }, HOOK_LIMIT_S * 1000);
-    connection.on("connect", () => {
-      connection.write(`${JUDGE_BUILD_QUESTION}\n`);
-    });
-    connection.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-    connection.on("end", () => {
-      clearTimeout(timer);
-      resolve(Buffer.concat(chunks).toString("utf8"));
-    });
-    connection.on("error", (error) => {
-      clearTimeout(timer);
-      resolve(`nothing (${error.message})`);
-    });
-  });
+const judgeSays = (socket: string): Promise<Bounded<string>> =>
+  readWithin(
+    HOOK_LIMIT_S * 1000,
+    (signal) =>
+      new Promise<string>((resolve) => {
+        const chunks: Buffer[] = [];
+        const connection = createConnection(socket);
+        signal.addEventListener("abort", () => connection.destroy(), {
+          once: true,
+        });
+        connection.on("connect", () => {
+          connection.write(`${JUDGE_BUILD_QUESTION}\n`);
+        });
+        connection.on("data", (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+        connection.on("end", () => {
+          resolve(Buffer.concat(chunks).toString("utf8"));
+        });
+        connection.on("error", (error) => {
+          resolve(`nothing (${error.message})`);
+        });
+      })
+  );
+
+/** What a judge said, in words a law's line quotes. */
+const judgeWords = (read: Bounded<string>): string => {
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      return `no answer within ${HOOK_LIMIT_S} s`;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 /**
  * Whether workspace `id` is between states its hook and judge move through:
@@ -3818,12 +3834,13 @@ const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
         () => ""
       );
       const socket = HOOK_JUDGE.exec(hook)?.[1];
-      const said = socket ? await judgeSays(socket) : undefined;
+      const read = socket ? await judgeSays(socket) : undefined;
       if (settling(id)) {
         return;
       }
+      const said = read ? judgeWords(read) : undefined;
       invariant(
-        said === `0\n${build}`,
+        read?.kind === "answered" && read.value === `0\n${build}`,
         "live-workspace-judge-answers",
         () =>
           `Workspace ${id} has a session's process or a command in it, and ${

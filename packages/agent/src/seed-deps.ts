@@ -38,6 +38,7 @@ import {
   WORKSPACE_INSTALL_TIMEOUT_MS,
   type WorkspaceRef,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { workspaceCacheEnv, workspaceStateDir } from "@cawco/core/paths";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -127,44 +128,64 @@ export const seedDependencies = async (
   const home = await mkdtemp(join(workspaceStateDir(id), "seed-home-"));
   const started = Date.now();
   try {
-    const install = Bun.spawn(
-      [
-        "bun",
-        "install",
-        "--frozen-lockfile",
-        "--ignore-scripts",
-        "--backend",
-        "hardlink",
-        "--cache-dir",
-        cache.BUN_INSTALL_CACHE_DIR,
-        "--no-progress",
-      ],
-      {
-        cwd: path,
-        env: {
-          ...hostEnvironment(),
-          ...cache,
-          HOME: home,
-          XDG_CONFIG_HOME: home,
-          NPM_CONFIG_USERCONFIG: join(home, ".npmrc"),
-        },
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: WORKSPACE_INSTALL_TIMEOUT_MS,
-        killSignal: "SIGKILL",
+    const ran = await readWithin(
+      WORKSPACE_INSTALL_TIMEOUT_MS,
+      async (signal) => {
+        const install = Bun.spawn(
+          [
+            "bun",
+            "install",
+            "--frozen-lockfile",
+            "--ignore-scripts",
+            "--backend",
+            "hardlink",
+            "--cache-dir",
+            cache.BUN_INSTALL_CACHE_DIR,
+            "--no-progress",
+          ],
+          {
+            cwd: path,
+            env: {
+              ...hostEnvironment(),
+              ...cache,
+              HOME: home,
+              XDG_CONFIG_HOME: home,
+              NPM_CONFIG_USERCONFIG: join(home, ".npmrc"),
+            },
+            stdin: "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+            signal,
+            killSignal: "SIGKILL",
+          }
+        );
+        const [, stderr, code] = await Promise.all([
+          new Response(install.stdout).text(),
+          new Response(install.stderr).text(),
+          install.exited,
+        ]);
+        if (code === 0) {
+          return;
+        }
+        return install.signalCode
+          ? `it was ended by ${install.signalCode}`
+          : stderr.trim().split("\n").slice(-3).join(" ");
       }
     );
-    const [, stderr, code] = await Promise.all([
-      new Response(install.stdout).text(),
-      new Response(install.stderr).text(),
-      install.exited,
-    ]);
-    if (code !== 0) {
-      const why =
-        install.signalCode === "SIGKILL"
-          ? `it ran past ${WORKSPACE_INSTALL_TIMEOUT_MS / 1000}s`
-          : stderr.trim().split("\n").slice(-3).join(" ");
+    let why: string | undefined;
+    switch (ran.kind) {
+      case "answered":
+        why = ran.value;
+        break;
+      case "unanswered":
+        why = `it did not finish within ${WORKSPACE_INSTALL_TIMEOUT_MS / 1000}s`;
+        break;
+      default: {
+        const unhandled: never = ran;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    if (why !== undefined) {
       console.warn(
         `[workspace] ${id}: its dependencies were not linked from the workspaces' cache (${why}); they install inside its boundary as copies`
       );

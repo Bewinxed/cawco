@@ -100,6 +100,7 @@ import {
   type RestartHold,
   waitingWords,
 } from "@cawco/core/binary-updates";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import {
   processLimitSentence,
@@ -285,20 +286,15 @@ const CARRY_KEEPERS_MS = 15_000;
 const CARRY_STOP_MS = 30_000;
 const CARRY_COPY_MS = 45_000;
 
-/** A carry step that did not end within its bound. */
-class CarryLate extends Error {}
-
-/** `work`, or a {@link CarryLate} saying `step` did not end within `ms`. */
-const within = <T>(step: string, ms: number, work: Promise<T>): Promise<T> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new CarryLate(`${step} did not end within ${ms / 1000} s`)),
-      ms
-    );
-  });
-  return Promise.race([work, late]).finally(() => clearTimeout(timer));
-};
+/** A carry step that was not answered: `step` did not end within `ms`, or what it waited on ended first. */
+const carryLate = (
+  step: string,
+  ms: number,
+  { reason }: { reason: "timeout" | "dead" }
+): string =>
+  reason === "timeout"
+    ? `${step} did not end within ${ms / 1000} s`
+    : `${step} did not end: what it waited on ended before it answered`;
 
 /**
  * Why a carry without `stop` leaves a session's data where it is, in words
@@ -1868,19 +1864,24 @@ export class SessionSupervisor {
     const adapter = this.#adapter("claude") as Harness &
       Partial<SessiondAdoption>;
     const at = Date.now();
+    const read = await readWithin(
+      CARRY_KEEPERS_MS,
+      () => adapter.custodyCandidates?.() ?? Promise.resolve({ procs: [] })
+    );
     let listing: { procs: { alive: boolean; procId: string }[] };
-    try {
-      listing = await within(
-        "reading what its keepers hold",
-        CARRY_KEEPERS_MS,
-        adapter.custodyCandidates?.() ?? Promise.resolve({ procs: [] })
-      );
-    } catch (error) {
-      if (!(error instanceof CarryLate)) {
-        throw error;
+    switch (read.kind) {
+      case "answered":
+        listing = read.value;
+        break;
+      case "unanswered":
+        console.warn(
+          `[carry] ${carryLate("reading what its keepers hold", CARRY_KEEPERS_MS, read)}`
+        );
+        return undefined;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
-      console.warn(`[carry] ${error.message}`);
-      return undefined;
     }
     const alive = new Set<string>();
     const listed = new Set<string>();
@@ -1926,24 +1927,24 @@ export class SessionSupervisor {
       return;
     }
     const copyAt = Date.now();
+    const copied = await readWithin(CARRY_COPY_MS, () => carrySessions(go));
     let carried: Awaited<ReturnType<typeof carrySessions>>;
-    try {
-      carried = await within(
-        "moving its conversation's files",
-        CARRY_COPY_MS,
-        carrySessions(go)
-      );
-    } catch (error) {
-      if (!(error instanceof CarryLate)) {
-        throw error;
+    switch (copied.kind) {
+      case "answered":
+        carried = copied.value;
+        break;
+      case "unanswered":
+        for (const request of go) {
+          outcomes[request.instanceId] = {
+            state: "failed",
+            error: `${carryLate("moving its conversation's files", CARRY_COPY_MS, copied)}; what moved stays in the new dir, and its next start moves the rest`,
+          };
+        }
+        return;
+      default: {
+        const unhandled: never = copied;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
-      for (const request of go) {
-        outcomes[request.instanceId] = {
-          state: "failed",
-          error: `${error.message}; what moved stays in the new dir, and its next start moves the rest`,
-        };
-      }
-      return;
     }
     console.info(
       `[carry] files of ${go.length} session(s) moved in ${Date.now() - copyAt} ms (${Date.now() - began} ms in)`
@@ -2062,21 +2063,22 @@ export class SessionSupervisor {
     // Ended by this daemon for a move: its end is no failure.
     this.#ending.add(running);
     const at = Date.now();
-    try {
-      await within(
-        "ending its Claude Code process",
-        CARRY_STOP_MS,
-        running.stop()
-      );
-      console.info(
-        `[carry] ${instanceId}: its process ended between turns in ${Date.now() - at} ms`
-      );
-      return;
-    } catch (error) {
-      if (!(error instanceof CarryLate)) {
-        throw error;
+    const stopped = await readWithin(CARRY_STOP_MS, () => running.stop());
+    switch (stopped.kind) {
+      case "answered":
+        console.info(
+          `[carry] ${instanceId}: its process ended between turns in ${Date.now() - at} ms`
+        );
+        return;
+      case "unanswered":
+        console.warn(
+          `[carry] ${instanceId}: ${carryLate("ending its Claude Code process", CARRY_STOP_MS, stopped)}`
+        );
+        break;
+      default: {
+        const unhandled: never = stopped;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
-      console.warn(`[carry] ${instanceId}: ${error.message}`);
     }
     // The stop did not finish: the conversation moves only once its keeper
     // reports no live process writing it.
@@ -4564,14 +4566,29 @@ export class SessionSupervisor {
     const options = (args[0] ?? {}) as { limit?: number; dir?: string };
     const listed = await Promise.all(
       harnesses().map(async (adapter) => {
+        let read: Bounded<NeutralSessionInfo[]>;
         try {
-          return await custodyProbe(
-            adapter.listSessions(options.dir),
-            AbortSignal.timeout(HARNESS_LISTING_MS)
+          read = await readWithin(HARNESS_LISTING_MS, () =>
+            adapter.listSessions(options.dir)
           );
         } catch (error) {
           warn(`listSessions on ${adapter.kind} failed: ${error}`);
           return [];
+        }
+        switch (read.kind) {
+          case "answered":
+            return read.value;
+          case "unanswered":
+            // Left out of this answer, not read as having none: the listing's
+            // wire shape cannot say "not answered" yet.
+            warn(
+              `${adapter.kind} did not list its sessions within ${HARNESS_LISTING_MS / 1000} s; it is left out of this answer`
+            );
+            return [];
+          default: {
+            const unhandled: never = read;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
         }
       })
     );

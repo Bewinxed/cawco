@@ -33,6 +33,7 @@ import {
   type ProviderSigninResult,
   sameIdentity,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import {
   accountCredentialPath,
   credentialAccountIds,
@@ -322,6 +323,8 @@ const TRAILING_PATH = /\/.*$/;
  * (github-copilot.js 244-268: `https://api.${domain}/copilot_internal/v2/token`).
  * Its login is who it is; the domain tells github.com from an Enterprise.
  */
+const GITHUB_IDENTITY_MS = 15_000;
+
 const githubIdentity = async (
   credential: Credential
 ): Promise<AccountIdentity> => {
@@ -330,21 +333,37 @@ const githubIdentity = async (
   if (typeof token !== "string" || !token) {
     throw new Error("The Copilot sign-in holds no GitHub token.");
   }
-  const response = await fetch(`https://api.${domain}/user`, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "User-Agent": "CawCo",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    signal: AbortSignal.timeout(15_000),
+  const read = await readWithin(GITHUB_IDENTITY_MS, async (signal) => {
+    const response = await fetch(`https://api.${domain}/user`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "CawCo",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(
+        `GitHub (${domain}) answered ${response.status} when asked who the Copilot sign-in is.`
+      );
+    }
+    return (await response.json()) as { login?: unknown };
   });
-  if (!response.ok) {
-    throw new Error(
-      `GitHub (${domain}) answered ${response.status} when asked who the Copilot sign-in is.`
-    );
+  let user: { login?: unknown };
+  switch (read.kind) {
+    case "answered":
+      user = read.value;
+      break;
+    case "unanswered":
+      throw new Error(
+        `GitHub (${domain}) did not answer within ${GITHUB_IDENTITY_MS / 1000} s when asked who the Copilot sign-in is.`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  const user = (await response.json()) as { login?: unknown };
   if (typeof user.login !== "string" || !user.login) {
     throw new Error(
       `GitHub (${domain}) named no user for the Copilot sign-in.`
@@ -499,38 +518,49 @@ const borrowFresh = (
   if (under) {
     return under;
   }
-  const ask = new Promise<void>((resolve, reject) => {
-    if (!askHub) {
-      reject(new Error("The agent is not connected to the hub yet."));
-      return;
-    }
-    const requestId = randomUUID();
-    const timer = setTimeout(
-      () =>
-        lendWaits
-          .get(requestId)
-          ?.settle(
-            new Error(
-              `The hub did not bring a fresh sign-in for account ${accountId} from its lender in time.`
-            )
-          ),
-      LEND_WAIT_MS
-    );
-    lendWaits.set(requestId, {
-      accountId,
-      lender,
-      settle: (outcome) => {
-        clearTimeout(timer);
-        lendWaits.delete(requestId);
-        if (outcome) {
-          reject(outcome);
-        } else {
-          resolve();
-        }
-      },
-    });
-    askHub({ kind: "account_borrow", accountId, lender, requestId });
-  })
+  const send = askHub;
+  const ask = (
+    send
+      ? readWithin(
+          LEND_WAIT_MS,
+          (signal) =>
+            new Promise<void>((resolve, reject) => {
+              const requestId = randomUUID();
+              signal.addEventListener(
+                "abort",
+                () => lendWaits.delete(requestId),
+                { once: true }
+              );
+              lendWaits.set(requestId, {
+                accountId,
+                lender,
+                settle: (outcome) => {
+                  lendWaits.delete(requestId);
+                  if (outcome) {
+                    reject(outcome);
+                  } else {
+                    resolve();
+                  }
+                },
+              });
+              send({ kind: "account_borrow", accountId, lender, requestId });
+            })
+        ).then((read) => {
+          switch (read.kind) {
+            case "answered":
+              return;
+            case "unanswered":
+              throw new Error(
+                `The hub did not bring a fresh sign-in for account ${accountId} from its lender within ${LEND_WAIT_MS / 1000} s.`
+              );
+            default: {
+              const unhandled: never = read;
+              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+            }
+          }
+        })
+      : Promise.reject(new Error("The agent is not connected to the hub yet."))
+  )
     .then(
       () => {
         lendRefused.delete(accountId);
@@ -792,14 +822,21 @@ export const completeProviderLogin = async (
   if (code) {
     signIn.code?.(code.trim());
   }
-  const outcome = await Promise.race([
-    signIn.done,
-    Bun.sleep(COMPLETE_WAIT_MS).then(() => "waiting" as const),
-  ]);
-  if (outcome === "waiting") {
-    return signIn.expiresAt === null || Date.now() < signIn.expiresAt
-      ? { state: "pending" }
-      : { state: "expired" };
+  const read = await readWithin(COMPLETE_WAIT_MS, () => signIn.done);
+  let outcome: Awaited<typeof signIn.done>;
+  switch (read.kind) {
+    case "answered":
+      outcome = read.value;
+      break;
+    case "unanswered":
+      // Not finished yet: the sign-in still waits for the person.
+      return signIn.expiresAt === null || Date.now() < signIn.expiresAt
+        ? { state: "pending" }
+        : { state: "expired" };
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
   signIns.delete(accountId);
   if (outcome === "expired") {

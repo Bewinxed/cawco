@@ -3,6 +3,7 @@ import { lstat, mkdir, readFile, stat } from "node:fs/promises";
 import { arch, platform, release } from "node:os";
 import { dirname, extname, resolve } from "node:path";
 import { type GeneratedImage, IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { credentialAccountIds } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { chatgptBaseUrl, chatgptClaims } from "@cawco/core/usage/chatgpt";
@@ -266,12 +267,36 @@ async function requestImage(
   body: { images?: { image_url: string }[] } & Record<string, unknown>
 ): Promise<Buffer> {
   const account = accountFacts(auth.access);
+  const read = await readWithin(IMAGE_GENERATION_TIMEOUT_MS, (signal) =>
+    askImage(auth, account, body, signal)
+  );
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `ChatGPT did not answer within ${IMAGE_GENERATION_TIMEOUT_MS / 60_000} minutes. No PNG was published and no automatic retry was submitted.`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+}
+
+/** {@link requestImage}'s one request and its answer, read until `signal` lets it go. */
+async function askImage(
+  auth: ChatgptAuth,
+  account: ReturnType<typeof accountFacts>,
+  body: { images?: { image_url: string }[] } & Record<string, unknown>,
+  signal: AbortSignal
+): Promise<Buffer> {
   const response = await fetch(
     `${codexImages()}/${body.images ? "edits" : "generations"}`,
     {
       method: "POST",
       redirect: "error",
-      signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS),
+      signal,
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -345,14 +370,6 @@ export async function generateImage(
       height: bytes.readUInt32BE(20),
       billing: "chatgpt_subscription",
     };
-  } catch (error) {
-    if (error instanceof Error && error.name === "TimeoutError") {
-      throw new Error(
-        "ChatGPT image generation exceeded its ten-minute deadline. No PNG was published and no automatic retry was submitted.",
-        { cause: error }
-      );
-    }
-    throw error;
   } finally {
     activeOutputs.delete(output);
   }
