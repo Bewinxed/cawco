@@ -56,9 +56,7 @@ async function run(kit: Kit): Promise<void> {
       return made.project?.id ?? made.id ?? "";
     };
     const projects = async () =>
-      await fleet.api<{ id: string; remote: string | null }[]>(
-        "/api/projects"
-      );
+      await fleet.api<{ id: string; remote: string | null }[]>("/api/projects");
 
     const dirA = await checkout("merge-a");
     await git(dirA, "remote", "add", "origin", ORIGIN);
