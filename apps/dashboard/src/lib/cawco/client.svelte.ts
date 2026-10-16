@@ -2900,27 +2900,29 @@ function handleFrame(frame: FramePayload): void {
       const question = parked
         ? questionsOf(parked.toolName, parked.input) !== null
         : frame.toolName === ASK_USER_QUESTION;
-      const note = withdrawnNote(frame.instanceId, question, frame.reason);
-      state.askEnds[frame.requestId] = note;
-      addNote(target, note);
+      sayAskEnd(
+        target,
+        frame.requestId,
+        withdrawnNote(frame.instanceId, question, frame.reason)
+      );
     }
     // Answered somewhere else while this tab held the card (another tab, the
     // app, Telegram, a session, the harness): it says what won and where.
-    if (
-      target &&
-      parked &&
-      frame.outcome === "answered" &&
-      frame.answer &&
-      !answeredHere(frame.requestId)
-    ) {
+    // With an answer of this tab's still out, the winner may be that answer
+    // or another device's: the line waits for the hub's word on ours, said
+    // if it was refused (`streamEffectsFor`, `permission.answer`).
+    if (target && parked && frame.outcome === "answered" && frame.answer) {
       const note = answeredNote(
         frame.instanceId,
         questionsOf(parked.toolName, parked.input) !== null,
         frame.answer,
         speakerName(target.harness)
       );
-      state.askEnds[frame.requestId] = note;
-      addNote(target, note);
+      if (answeredHere(frame.requestId)) {
+        answeredWhileOurs.set(frame.requestId, note);
+      } else {
+        sayAskEnd(target, frame.requestId, note);
+      }
     }
     return;
   }
@@ -3525,6 +3527,23 @@ const answers = new SvelteMap<string, string>();
 export function answerFor(requestId: string): CommandRecord | null {
   const commandId = answers.get(requestId);
   return commandId ? commandRecord(commandId) : null;
+}
+
+/**
+ * The "Already answered" line of an ask that settled while an answer of this
+ * tab's to it was still out, by request id: said if the hub refuses ours (it
+ * lost to another device), dropped once ours is the one applied.
+ */
+const answeredWhileOurs = new Map<string, Message>();
+
+/** The line an ask leaves in its session, kept by request id for a thread to read. */
+function sayAskEnd(
+  target: SessionState,
+  requestId: string,
+  note: Message
+): void {
+  state.askEnds[requestId] = note;
+  addNote(target, note);
 }
 
 /** Whether this tab answered the ask `requestId` itself, with an answer the hub has not refused. */
@@ -4267,7 +4286,16 @@ function streamEffectsFor<K extends CommandKind>(
       // (the session's card, the Needs row), and can be answered again.
       return {
         settled: (stage) => {
+          const elsewhere = answeredWhileOurs.get(requestId);
+          answeredWhileOurs.delete(requestId);
           if (stage === "failed") {
+            // The hub refused ours after the ask settled: another device's
+            // answer won, and the line says what won and where. A socket
+            // that dropped with ours out leaves it unknown whose won, so
+            // nothing is said of it.
+            if (elsewhere && commandRecord(commandId)?.refusedByHub) {
+              sayAskEnd(target, requestId, elsewhere);
+            }
             return;
           }
           target.pending = target.pending.filter(

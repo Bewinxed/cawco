@@ -50,6 +50,10 @@ public final class Ledger {
         public internal(set) var outcome: String?
         /// Known never to have left this device: safe to offer again.
         public internal(set) var undelivered = false
+        /// The hub's own `failed` ack: it took the command and refused it, which,
+        /// unlike a dropped socket or the ack timeout, says what became of it
+        /// (stream.ts `refusedByHub`).
+        public internal(set) var refusedByHub = false
         let at: ContinuousClock.Instant
         var changedAt: ContinuousClock.Instant
 
@@ -268,7 +272,7 @@ public final class Ledger {
                     return
                 }
                 advance(ack.commandId, to: Stage(rawValue: ack.stage.rawValue) ?? .failed, reason: ack.reason,
-                        outcome: ack.outcome?.rawValue)
+                        outcome: ack.outcome?.rawValue, byHub: true)
             } catch {
                 log.error("stream: unreadable command.ack: \(String(describing: error), privacy: .public)")
             }
@@ -507,12 +511,16 @@ public final class Ledger {
         .failed: [],
     ]
 
-    private func advance(_ id: String, to stage: Stage, reason: String?, outcome: String? = nil) {
+    /// `byHub`: the stage is the hub's own ack, not a local verdict.
+    private func advance(_ id: String, to stage: Stage, reason: String?, outcome: String? = nil, byHub: Bool = false) {
         guard var record = commands[id], Self.next[record.stage]?.contains(stage) == true else {
             return
         }
         record.stage = stage
         record.changedAt = clock.now
+        if stage == .failed, byHub {
+            record.refusedByHub = true
+        }
         if let reason {
             record.reason = reason
         }

@@ -689,6 +689,13 @@ public final class NeedsYouStore {
     public internal(set) var parked: [String: [ParkedAsk]] = [:]
     /// The answer command each ask carries, by `instanceId:requestId`.
     public internal(set) var answers: [String: String] = [:]
+    /// Says an ask's quiet line where it was asked (HubConnection `sayAskEnd`).
+    @ObservationIgnored var sayEnd: (ParkedAsk, String) -> Void = { _, _ in }
+    /// The "Already answered" line of an ask that settled while this device's
+    /// answer to it was still out, by request id: said if the hub refuses ours
+    /// (another device's won), dropped once ours is applied (client.svelte.ts
+    /// `answeredWhileOurs`).
+    @ObservationIgnored private var answeredWhileOurs: [String: (ask: ParkedAsk, line: String)] = [:]
     private let ledger: Ledger
     /// The order this device hears the hub's word on asks in: each ask parked
     /// and each ask settled takes the next number. A read of `/api/pending`
@@ -836,21 +843,37 @@ public final class NeedsYouStore {
         }
         let instanceId = ask.instanceId
         let requestId = ask.requestId
-        answers[key] = ledger.submit(
+        var commandId = ""
+        commandId = ledger.submit(
             kind: .permission_answer,
             sessionId: instanceId,
             machineId: ask.machineId,
             payload: payload,
             settlesAt: .applied,
             effects: Ledger.Effects(settled: { [weak self] stage, _ in
+                guard let self else { return }
+                let elsewhere = answeredWhileOurs.removeValue(forKey: requestId)
                 guard stage == .applied else {
+                    // The hub refused ours after the ask settled: another device's
+                    // answer won. A socket that dropped with ours out leaves it
+                    // unknown whose won, so nothing is said of it.
+                    if let elsewhere, ledger.commands[commandId]?.refusedByHub == true {
+                        sayEnd(elsewhere.ask, elsewhere.line)
+                    }
                     return
                 }
-                self?.settle(instanceId, requestId)
+                settle(instanceId, requestId)
             })
         )
+        answers[key] = commandId
         Logger(subsystem: "dev.cawco.app", category: "Permission").notice("request \(requestId, privacy: .public) answered by Apple app command \(self.answers[key] ?? "", privacy: .public)")
         return true
+    }
+
+    /// An ask settled answered while this device's answer to it is still out:
+    /// its line waits for the hub's word on ours.
+    func holdAnswered(_ ask: ParkedAsk, line: String) {
+        answeredWhileOurs[ask.requestId] = (ask, line)
     }
 
     /// The answer this device sent for an ask, with the hub's word on it.
