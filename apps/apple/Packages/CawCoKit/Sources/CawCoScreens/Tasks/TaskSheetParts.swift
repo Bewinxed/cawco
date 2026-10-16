@@ -371,6 +371,8 @@ enum TaskSheetProbe {
 
     private static func says(_ view: UIView) -> String? {
         switch view {
+        // A field you type in (the comment box, Send back's note) says what is in it.
+        case let field as UITextView: "text=\(field.text ?? "") first=\(field.isFirstResponder)"
         case let tabs as KitSegmented: "selected=\(tabs.selectedIndex.map(String.init) ?? "none")"
         case let list as UICollectionView:
             String(format: "offset=%.1f foot=%.1f safe=%.1f", list.contentOffset.y + list.adjustedContentInset.top,

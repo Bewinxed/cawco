@@ -76,6 +76,7 @@ final class TaskActivityPart: UIView, UITextViewDelegate {
         sendButton.accessibilityLabel = "Send the comment"
         sendButton.accessibilityIdentifier = "task-comment-send"
         sendButton.isEnabled = false
+        refused.accessibilityIdentifier = "task-comment-refused"
         let box = UIView()
         field.translatesAutoresizingMaskIntoConstraints = false
         box.addSubview(field)

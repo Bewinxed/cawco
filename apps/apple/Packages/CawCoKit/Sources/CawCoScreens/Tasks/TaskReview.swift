@@ -82,6 +82,13 @@ final class TaskReviewView: UIView, UITextViewDelegate {
         stageScroll.addSubview(stageWords)
         stageBand.addSubview(stageScroll)
         stageBand.translatesAutoresizingMaskIntoConstraints = false
+        // The stage takes what the bands leave (`minmax(0, 1fr)`); the result and the decision keep their own height.
+        stageBand.setContentHuggingPriority(.init(1), for: .vertical)
+        stageBand.setContentCompressionResistancePriority(.init(1), for: .vertical)
+        for band in [resultBand, decideBand] {
+            band.setContentCompressionResistancePriority(.required, for: .vertical)
+            band.setContentHuggingPriority(.required, for: .vertical)
+        }
         for band in [resultBand, decideBand] { band.translatesAutoresizingMaskIntoConstraints = false }
         for part in [resultBand, stageRule, stageBand, decideRule, decideBand] as [UIView] { addSubview(part) }
         let inline = Space.space5
@@ -375,9 +382,14 @@ final class TaskReviewView: UIView, UITextViewDelegate {
         decideBand.addArrangedSubview(Self.acts([send, cancel]))
     }
 
+    /// `.acts`: the buttons at their own size in one row from its start (a
+    /// WrapLayout set them at their words' height, 17pt, under the kit's).
     private static func acts(_ buttons: [UIView]) -> UIView {
         for button in buttons { button.setContentHuggingPriority(.required, for: .horizontal) }
-        return WrapLayout(buttons, gap: Space.space2, rowGap: Space.space2, centred: true)
+        let row = UIStackView(arrangedSubviews: buttons + [UIView()])
+        row.spacing = Space.space2
+        row.alignment = .center
+        return row
     }
 
     private func redraw() {

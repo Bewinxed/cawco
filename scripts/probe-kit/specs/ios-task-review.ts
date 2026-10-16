@@ -156,6 +156,7 @@ const OFFSET = /offset=([\d.-]+)/;
 const COMMENT_PART = /^task-activity-comment-\d+$/;
 const CHANGE_PART = /^task-activity-change-\d+$/;
 const SESSION_PART = /^task-session-/;
+const SPACES = /\s+/;
 
 /** What the sheet should show for a task, as its hub reads it. */
 interface ReadTask {
@@ -534,9 +535,9 @@ async function device(
     const offset = () =>
       Number(OFFSET.exec(part("task-details")?.says ?? "")?.[1] ?? 0);
     /**
-     * The details scrolled by a slow drag in their own margin (no fling):
-     * down to read further, up only while not at the top, where a drag would
-     * pull the sheet itself down.
+     * The details scrolled by a drag down their middle, about half their
+     * height: down to read further, up only while not at the top, where a
+     * drag would pull the sheet itself down.
      */
     const scroll = async (down: boolean) => {
       const body = part("task-details");
@@ -546,13 +547,15 @@ async function device(
       const reach = Math.round(
         down ? Math.min(200, body.h * 0.5) : Math.min(200, offset() / 2)
       );
-      const x = Math.round(body.x + 9);
+      // Down the list's middle at a finger's pace: a 1.5s drag in its 9pt
+      // margin moved it none in 24 tries; 0.5s down the middle moved it 476pt.
+      const x = Math.round(body.x + body.w / 2);
       const middle = Math.round(body.y + body.h / 2);
       const [from, to] = down
         ? [middle + reach / 2, middle - reach / 2]
         : [middle - reach / 2, middle + reach / 2];
       await sh(
-        `${AXE} swipe --start-x ${x} --start-y ${from} --end-x ${x} --end-y ${to} --duration 1.5 --udid ${udid}`
+        `${AXE} swipe --start-x ${x} --start-y ${from} --end-x ${x} --end-y ${to} --duration 0.6 --udid ${udid}`
       );
       await pause(1600);
     };
@@ -696,6 +699,22 @@ async function device(
       await tapLabel("Details");
       await waitFor("the details", () => !!part("task-details")?.shows, 15_000);
       await pause(1500);
+      // The main thread at rest on the details: a sample beside the captures.
+      const [pid] = (
+        await sh(
+          `xcrun simctl spawn ${udid} launchctl list | grep 'UIKitApplication:dev.cawco.app' || true`
+        )
+      )
+        .trim()
+        .split(SPACES);
+      kit.note(
+        `${tag} (${theme}): the app's pid on its details: ${pid || "none"}`
+      );
+      if (pid && pid !== "-") {
+        await sh(
+          `sample ${pid} 3 -file "${join(kit.out, `${tag}-details-${theme}.sample.txt`)}" >/dev/null 2>&1 || true`
+        );
+      }
       await shot(`details-${theme}`);
       for (
         let n = 0;
@@ -776,7 +795,15 @@ async function device(
         kit.check(
           `${tag} g: a comment typed into the activity's box and sent stands in its stream as yours`,
           !!posted && said?.[1].says === `You: ${COMMENT}`,
-          said ? `${said[0]} ${at(said[1])}` : lines.slice(-4).join(" | ")
+          said
+            ? `${said[0]} ${at(said[1])}`
+            : [
+                "task-comment-field",
+                "task-comment-send",
+                "task-comment-refused",
+              ]
+                .map((id) => `${id} ${at(seen.get(id))}`)
+                .join(" | ")
         );
       }
     }
