@@ -505,10 +505,11 @@
       >
     {/each}
     {#each finder.projectChips as word (word)}
-      <span class="chip word" data-flip="pop"
-        >{word}<button
+      <span class="chip word mark-line" data-flip="pop"
+        ><span>{word}</span><button
           class="chip-x"
           aria-label={`Stop narrowing to ${word}`}
+          data-box
           onclick={() => finder.removeWords([word])}
           type="button"><IconClose /></button
         ></span
@@ -516,18 +517,21 @@
     {/each}
     {#if finder.parsed.time}
       {@const time = finder.parsed.time}
-      <span class="chip word" data-flip="pop"
-        >{time}<button
+      <span class="chip word mark-line" data-flip="pop"
+        ><span>{time}</span><button
           class="chip-x"
           aria-label={`Stop narrowing to ${time}`}
+          data-box
           onclick={() => finder.removeWords(time.split(" "))}
           type="button"><IconClose /></button
         ></span
       >
     {/if}
     {#if finder.searching}
-      <span class="searching" aria-hidden="true"
-        >Searching {machines(finder.askable)}…<Spinner class="spin" /></span
+      <span class="searching mark-line" aria-hidden="true"
+        ><span>Searching {machines(finder.askable)}…</span><Spinner
+          class="spin"
+        /></span
       >
     {:else if finder.coverage?.asked && !short}
       <span class="covered"
@@ -599,7 +603,7 @@
         {@const k = `${row}#${act}`}
         <button
           id={idOf(k)}
-          class="act"
+          class="act mark-line"
           aria-selected={activeKey === k}
           data-active={activeKey === k ? "" : undefined}
           data-find-row
@@ -609,7 +613,7 @@
           tabindex="-1"
           type="button"
         >
-          <Server aria-hidden="true" />{label}
+          <Server aria-hidden="true" data-box /><span>{label}</span>
         </button>
       {/each}
     </div>
@@ -620,7 +624,7 @@
     {@const count = item.entry.results.length}
     <button
       id={idOf(item.key)}
-      class={["fold-row", { phone }]}
+      class={["fold-row mark-line", { phone }]}
       aria-label={`${count} ${kindNoun(first, count)} match “${finder.asked}”, ${open ? "shown" : "folded"}`}
       aria-selected={activeKey === item.key}
       data-active={activeKey === item.key ? "" : undefined}
@@ -640,12 +644,13 @@
       <ChevronRight
         class={open ? "fold-chev open" : "fold-chev"}
         aria-hidden="true"
+        data-box
       />
     </button>
   {:else if item.t === "waiting"}
     <button
       id={idOf("waiting")}
-      class={["waiting-row", { phone }]}
+      class={["waiting-row mark-line", { phone }]}
       aria-selected={activeKey === "waiting"}
       data-active={activeKey === "waiting" ? "" : undefined}
       data-find-row
@@ -656,13 +661,13 @@
       tabindex="-1"
       type="button"
     >
-      <NeedsYou class="waiting-glyph" aria-hidden="true" />
+      <NeedsYou class="waiting-glyph" aria-hidden="true" data-box />
       <span class="waiting-label"
-        >Waiting for you<span class="dot">·</span><span class="num"
+        >Waiting for you<span class="sep">·</span><span class="num"
           >{waitingCount}</span
         ></span
       >
-      <ChevronRight class="fold-chev" aria-hidden="true" />
+      <ChevronRight class="fold-chev" aria-hidden="true" data-box />
     </button>
   {:else if item.t === "head"}
     <div class="head" data-flip role="presentation">{item.label}</div>
@@ -672,13 +677,13 @@
     <div class="coverage" data-flip>
       {#if finder.missing.length > 0}
         <span class="num">{answered} of {machines(machineCount)}</span><span
-          class="dot">·</span
-        >{missingNames} didn't<span class="dot">·</span>
+          class="sep">·</span
+        >{missingNames} didn't<span class="sep">·</span>
       {/if}
       {#if finder.indexing.length > 0}
         {indexingNames}
         {finder.indexing.length === 1 ? "is" : "are"} still indexing<span
-          class="dot">·</span
+          class="sep">·</span
         >
       {/if}
       <button class="link" onclick={() => finder.retry()} type="button"
@@ -725,8 +730,10 @@
       onclick={() => finder.showFind()}
       type="button"><ChevronLeft /></button
     >
-    <span class="waiting-title"
-      >Waiting for you{#if waitingCount > 0}<span class="dot">·</span><span
+    <!-- The back control and the sort are boxes of their own; the title
+         stands between them on .mark-text, its x-height on their middle. -->
+    <span class="waiting-title mark-text"
+      >Waiting for you{#if waitingCount > 0}<span class="sep">·</span><span
           class="num">{waitingCount}</span
         >{/if}</span
     >
@@ -1057,7 +1064,7 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-  .dot {
+  .sep {
     padding-inline: 0.35em;
   }
   .num {
@@ -1122,7 +1129,7 @@
   .fold-label {
     flex: 1;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     white-space: nowrap;
     text-overflow: ellipsis;
   }

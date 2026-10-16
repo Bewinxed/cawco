@@ -42,9 +42,12 @@
 </script>
 
 <div class={["slot", { phone }]} data-flip data-key={row.key} role="none">
+  <!-- The glyph, title and age are the mark line (DESIGN.md The Mark Line
+       Rule): the glyph's cell is a box on it, and the meta and reason lines
+       stand under it, boxes the recipe leaves as they are. -->
   <button
     {id}
-    class={["row", { phone, "has-reason": row.reason !== null }]}
+    class={["row mark-line", { phone, "has-reason": row.reason !== null }]}
     aria-describedby={peeked ? `${id}-peek` : undefined}
     aria-label={row.spoken}
     aria-selected={active}
@@ -60,21 +63,22 @@
       class={["glyph", { breathes: row.breathes }]}
       data-tone={row.state.tone}
       aria-hidden="true"
+      data-box
     >
       <row.glyph />
     </span>
-    <span class="title"><span class="clip">{row.title}</span></span>
+    <span class="title">{row.title}</span>
     {#if ago}
       <span class="age num" aria-hidden="true">{ago}</span>
     {/if}
-    <span class="meta" aria-hidden="true">
+    <span class="meta" aria-hidden="true" data-box>
       <span class="state" data-tone={row.state.tone}>{row.state.word}</span>
       {#each row.meta as word (word)}
-        <span class="dot">·</span>{word}
+        <span class="sep">·</span>{word}
       {/each}
     </span>
     {#if row.reason}
-      <span class="reason" aria-hidden="true">
+      <span class="reason" aria-hidden="true" data-box>
         <span class="clip"
           ><span class="arrow">↳</span>
           {row.reason.source}
@@ -173,11 +177,15 @@
     }
   }
 
+  /* Its words trimmed to their x-height on the mark line, so the box clips
+     (Gecko does not trim a scroll container). */
   .title {
     grid-row: 1;
     grid-column: 2;
-    display: flex;
     min-inline-size: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font: var(--type-label);
     line-height: var(--line-1);
     color: var(--ink-row);
@@ -223,7 +231,7 @@
       color: var(--status-fail-ink);
     }
   }
-  .dot {
+  .sep {
     padding-inline: 0.35em;
   }
 
@@ -263,7 +271,7 @@
       line-height: var(--line-1);
       font-weight: var(--weight-strong);
     }
-    & .title .clip {
+    & .title {
       white-space: normal;
       display: -webkit-box;
       -webkit-box-orient: vertical;

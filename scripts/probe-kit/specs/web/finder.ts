@@ -446,6 +446,31 @@ async function deskHeights(kit: Kit, page: Page) {
       parts.chips === 36,
     JSON.stringify({ rows: drawn.map((r) => r.h), parts })
   );
+  // The mark line (DESIGN.md The Mark Line Rule): each title is trimmed to
+  // its x-height and padded back (padding on, and its box still its 20px
+  // line, which an untrimmed run would outgrow by the padding), so its box's
+  // middle is its x-height's middle, on the glyph's middle within ½px.
+  const lines = await page.evaluate(() =>
+    [...document.querySelectorAll("[data-finder-card] .slot .row")].map(
+      (row) => {
+        const title = row.querySelector(".title") as HTMLElement;
+        const glyph = row.querySelector(".glyph") as HTMLElement;
+        const t = title.getBoundingClientRect();
+        const g = glyph.getBoundingClientRect();
+        return {
+          pad: Number.parseFloat(getComputedStyle(title).paddingTop),
+          h: t.height,
+          off: t.top + t.height / 2 - (g.top + g.height / 2),
+        };
+      }
+    )
+  );
+  kit.check(
+    "desk: every title is on the mark line, its x-height's middle on its glyph's within ½px",
+    lines.length > 0 &&
+      lines.every((l) => l.pad > 0 && l.h === 20 && Math.abs(l.off) <= 0.5),
+    JSON.stringify(lines.slice(0, 4))
+  );
   kit.check(
     "desk 1055×567: the card stays within 499px, 24px clear of the window's foot",
     card !== null && card.h <= 499 && card.bottom <= DESK.height - 24 + 0.5,

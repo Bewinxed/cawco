@@ -61,7 +61,7 @@
   {#if conversation?.lastReport}
     <span class="label">last</span>
     <span class="value"
-      >report “{conversation.lastReport.headline}”<span class="dot">·</span
+      >report “{conversation.lastReport.headline}”<span class="sep">·</span
       ><span class="num">{age(conversation.lastReport.at, now)}</span></span
     >
   {/if}
@@ -82,10 +82,10 @@
           type="button"
         >
           <span class="clip"
-            >{AUTHOR[moment.author]}{#if moment.at !== null}<span class="dot"
+            >{AUTHOR[moment.author]}{#if moment.at !== null}<span class="sep"
                 >·</span
               ><span class="num">{age(moment.at, now)}</span>{/if}<span
-              class="dot">·</span
+              class="sep">·</span
             >“{#each excerptParts(moment.excerpt) as part, j (j)}{#if part.matched}<mark
                   >{part.text}</mark
                 >{:else}{part.text}{/if}{/each}”</span
@@ -100,7 +100,7 @@
   {:else if momentsState.state === "missing"}
     <span class="label">said</span>
     <span class="value muted"
-      >{momentsState.machine} didn't answer<span class="dot">·</span><button
+      >{momentsState.machine} didn't answer<span class="sep">·</span><button
         class="link"
         onclick={onretry}
         type="button">Retry</button
@@ -111,7 +111,7 @@
     <span class="label">delegates</span>
     <span class="value"
       ><span class="num">{conversation.children.count}</span
-      >{#if conversation.children.needsYou > 0}<span class="dot">·</span><span
+      >{#if conversation.children.needsYou > 0}<span class="sep">·</span><span
           class="attn"
           ><span class="num">{conversation.children.needsYou}</span> needs you</span
         >{/if}</span
@@ -119,7 +119,7 @@
   {/if}
   {#if !phone}
     <span class="foot" aria-hidden="true"
-      >↵ open<span class="dot">·</span>← fold</span
+      >↵ open<span class="sep">·</span>← fold</span
     >
   {/if}
 </div>
@@ -151,7 +151,7 @@
     color: var(--status-attn-ink);
     font-weight: var(--weight-strong);
   }
-  .dot {
+  .sep {
     padding-inline: 0.35em;
   }
   .num {
