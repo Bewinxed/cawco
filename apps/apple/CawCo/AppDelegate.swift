@@ -148,15 +148,38 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     ])
 
     /// The page has the first claim on keys (overlay page.ts `leftToShell`):
-    /// while a preview's page has the keyboard, these commands stand down,
-    /// so the key goes on to the page, which hands back as `cawco:shortcut`
-    /// the shell's combos it leaves alone. With no page holding the
-    /// keyboard, they act as ever.
+    /// while a preview's page has the keyboard, these commands' keys stand
+    /// down, so the key goes on to the page, which hands back as
+    /// `cawco:shortcut` the shell's combos it leaves alone. A click on the
+    /// Mac's menu bar is no key: its item acts as ever. With no page holding
+    /// the keyboard, they act as ever.
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        if Self.ownCommands.contains(action), PreviewKeys.pageHolds {
+        if Self.ownCommands.contains(action), PreviewKeys.pageHolds, Self.byKey {
+            #if DEBUG
+            Logger(subsystem: "dev.cawco.app", category: "Probe").notice("key command \(NSStringFromSelector(action), privacy: .public) left to the page")
+            #endif
             return false
         }
         return super.canPerformAction(action, withSender: sender)
+    }
+
+    /// Whether the command is being asked for by a key press. On the Mac the
+    /// menu bar is AppKit's, and its current event tells a key equivalent
+    /// from a click: "The type of the current event can be obtained by
+    /// reading NSApp.currentEvent.type"
+    /// (https://stackoverflow.com/questions/47913957), a key-down for a
+    /// key, a mouse event for the menu. UIKit runs on that NSApplication
+    /// under Mac Catalyst. On an iPad these commands are keys alone.
+    private static var byKey: Bool {
+        #if targetEnvironment(macCatalyst)
+        guard let appKit = NSClassFromString("NSApplication") as? NSObject.Type,
+              let application = appKit.value(forKey: "sharedApplication") as? NSObject else { return true }
+        // `NSEvent.EventType.keyDown`.
+        let keyDown: UInt = 10
+        return ((application.value(forKey: "currentEvent") as? NSObject)?.value(forKey: "type") as? UInt) == keyDown
+        #else
+        return true
+        #endif
     }
 
     override func validate(_ command: UICommand) {
