@@ -333,6 +333,16 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-overlay);
   }
+  /* A phone's foot is the project's views bar (ViewBar): the bulk bar
+     floats a step over it, so both stand whole. */
+  @media (max-width: 639px) {
+    .floating {
+      inset-block-end: calc(
+        var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) +
+          var(--space-2)
+      );
+    }
+  }
   .count,
   .progress {
     padding-inline-end: var(--space-2);

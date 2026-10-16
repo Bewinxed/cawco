@@ -283,6 +283,13 @@
     overflow-y: auto;
     list-style: none;
   }
+  /* On a phone the page scrolls, not the column: its cards stand whole. */
+  @media (max-width: 639px) {
+    .cards {
+      flex: none;
+      overflow: visible;
+    }
+  }
   .foot {
     flex: none;
   }

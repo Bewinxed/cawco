@@ -3283,7 +3283,7 @@
           ? "Meta+Shift+D Control+Shift+D"
           : undefined}
         aria-label={FIELD_LABEL}
-        class="cin field-shell"
+        class="cin kit-dock-shell field-shell"
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
         onpointerdown={onholddown}
@@ -3465,7 +3465,7 @@
             aria-busy={pending || undefined}
             aria-disabled={pending || held || undefined}
             aria-label={stops ? "Stop the agent" : "Send message"}
-            class="stop touch-hit pressable"
+            class="kit-send stop touch-hit pressable"
             disabled={!(
               busy ||
               pending ||
@@ -3727,26 +3727,13 @@
   .cin {
     --cin-pad: var(--c-composer-inset);
     --cin-ctl: var(--c-composer-field);
+    /* Its shell is the kit's (app.css `.kit-dock-shell`). */
     position: relative;
     z-index: 2;
-    border: 1px solid var(--border-control);
-    background: var(--material-panel);
-    -webkit-backdrop-filter: blur(var(--material-blur))
-      saturate(var(--material-saturate));
-    backdrop-filter: blur(var(--material-blur))
-      saturate(var(--material-saturate));
-
-    @media (prefers-reduced-transparency: reduce) {
-      background: var(--surface-raised);
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-    }
-    border-radius: var(--radius-lg);
     padding: var(--cin-pad) var(--cin-pad) var(--cin-pad) var(--space-3);
     display: flex;
     align-items: flex-end;
     gap: var(--space-2);
-    box-shadow: var(--shadow-tile);
 
     /* While it is grown, the grown shape is the composer: the pill's own
        surface steps aside. The wheel's shape stays the composer until it
@@ -4061,52 +4048,14 @@
       gap: 10px;
     }
   }
-  /* Attach (AttachButton) takes the same box. */
-  .stop {
-    width: var(--cin-ctl);
-    height: var(--cin-ctl);
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    /* Concentric with the shell: outer radius less the inset that seats it. */
-    border-radius: calc(var(--radius-lg) - var(--cin-pad));
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-    }
-  }
-  /* In the recall wheel's deck every button behind Send is a card: its
+  /* Send is the kit's (app.css `.kit-send`); Attach (AttachButton) takes
+     the same box. In the recall wheel's deck every button behind Send is a card: its
      face, its edge at the outline button's 3:1 (the control edge, 1.37:1,
      is lost at a 4px peek) and a little shadow, so each one's edge reads
      behind the one in front. */
   .ctrls[inert] :global(.att-btn) {
     box-shadow: var(--shadow-xs);
     border-color: var(--border-button-outline);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    /* Every primary action's hover (DESIGN.md, Primary button). */
-    .stop:not(:disabled):hover {
-      background-color: var(--action-hover);
-      background-image: var(--action-surface-hover);
-    }
-  }
-  /* The flat brand stays under the gradient: `.stop:disabled` drops the image. */
-  .stop {
-    position: relative;
-    border: 0;
-    background-color: var(--action-solid);
-    background-image: var(--action-surface);
-    color: var(--on-action);
-  }
-  .stop :global(svg) {
-    width: 16px;
-    height: 16px;
   }
   /* The glyph carrier, not the button: it is content-sized and centred, so
      scaling it in cannot change the control's box. */
@@ -4143,17 +4092,6 @@
       transform: scale(1);
       filter: blur(0);
     }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .stop:active:not(:disabled) {
-      transform: scale(var(--press-scale));
-    }
-  }
-  .stop:disabled {
-    opacity: 0.55;
-    cursor: default;
-    box-shadow: none;
-    background-image: none;
   }
   .send-error,
   .send-note {

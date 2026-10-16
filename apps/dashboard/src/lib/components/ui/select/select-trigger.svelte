@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
-  import { IconUnfold } from "#lib/icons.js";
+  import { IconChevronDown, IconUnfold } from "#lib/icons.js";
   import { cn, type WithoutChild } from "#lib/utils.js";
 
   let {
@@ -9,12 +9,16 @@
     children,
     size = "default",
     press = "scale",
+    mark = "unfold",
     ...restProps
   }: WithoutChild<SelectPrimitive.TriggerProps> & {
     size?: "sm" | "default";
     /** A trigger stretched wider than a control tints on press instead of
         scaling (app.css, press feedback). */
     press?: "scale" | "tint";
+    /** Its trailing mark: the unfold mark, or a chevron that turns over
+        --dur-control while the list is open (a list that opens one way). */
+    mark?: "unfold" | "chevron";
   } = $props();
 </script>
 
@@ -48,5 +52,12 @@
   <!-- Its words in an element, so the mark line centres their x-height on
        the unfold mark's (app.css). -->
   <span class="mark-text">{@render children?.()}</span>
-  <IconUnfold class="size-4 text-muted-foreground pointer-events-none" />
+  {#if mark === "chevron"}
+    <IconChevronDown
+      class="size-4 text-muted-foreground pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-(--ease-out) in-data-[state=open]:rotate-180"
+      data-mark="chevron"
+    />
+  {:else}
+    <IconUnfold class="size-4 text-muted-foreground pointer-events-none" />
+  {/if}
 </SelectPrimitive.Trigger>

@@ -2,7 +2,10 @@
   /**
    * The project's views (design §2, PRD §5.2): the head with Caw as the
    * lead's face, then the view; the view strip stands in the shell's bar on
-   * a wide screen and under the head on a phone. Board, Table and
+   * a wide screen and under the head on a narrow one. On a phone (under
+   * 640px) the page is the one scroller: the head scrolls away with the
+   * view, and the views, Needs you and New session stand in one bar docked
+   * at the foot where a session's composer docks (ViewBar). Board, Table and
    * Pipeline always; Calendar when a task carries a date; then each view
    * kept in `views/`, then each Caw drafted, marked `draft`, with Keep and
    * Discard over it. The tasks are the hub's: every change is a commit, so
@@ -49,7 +52,9 @@
   import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import { cawDock } from "#lib/cawco/project/caw-dock.svelte.js";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
+  import ViewBar from "#lib/cawco/project/ViewBar.svelte";
   import {
     archiveTask,
     createTask,
@@ -121,12 +126,7 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import {
-    IconNeedsYou,
-    IconPlus,
-    IconSparkles,
-    IconToolTodo,
-  } from "#lib/icons.js";
+  import { IconPlus, IconSparkles, IconToolTodo } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { navigating, page } from "$app/state";
@@ -367,6 +367,15 @@
       draft: view.draft,
     })),
   ]);
+  /** The views as a phone's bar lists them: Decisions with the pages waiting on picks. */
+  const barViews = $derived(
+    tabs.map((each) => ({
+      ...each,
+      count: each.value === "decisions" ? decisions.waiting : 0,
+    }))
+  );
+  /** The head: the views bar's "+" opens its New session popover. */
+  let head = $state<ReturnType<typeof ProjectHead> | null>(null);
   let tab = $derived(data.view);
   /** The view on screen: the one asked for once it exists, the board meanwhile. */
   const current = $derived(
@@ -1117,20 +1126,13 @@
         />
       {/if}
       {#if needsYou.length > 0}
-        <button
-          aria-pressed={filtering}
-          class="needs mark-line pressable"
-          onclick={() => {
+        <NeedsYouChip
+          count={needsYou.length}
+          on={filtering}
+          ontoggle={() => {
             needsOnly = !filtering;
           }}
-          type="button"
-          in:crossIn
-          out:crossOut
-        >
-          <IconNeedsYou aria-hidden="true" />
-          <span>Needs you</span>
-          <span class="num">{needsYou.length}</span>
-        </button>
+        />
       {/if}
       {#if strippedNewTask}
         <Button
@@ -1409,106 +1411,142 @@
     viewId="caw:{projectId}"
     visible
   >
-    <div class="project-page">
-      <ProjectHead
-        {lead}
-        {machine}
-        onask={canTalk ? ask : null}
-        onfilter={(anchor) => {
-          filterAnchor = anchor;
-          filterOpen = true;
-        }}
-        onnewtask={() => {
-          choose("board");
-          adding = true;
-        }}
-        onstages={stages?.source === "template"
-          ? (anchor) => {
-              stagesAnchor = anchor;
-              stagesOpen = true;
-            }
-          : null}
-        {project}
-        seated={!standing}
-      />
+    <!-- The frame the phone's views bar docks in, over the page's foot. -->
+    <div class="project-frame">
+      <div class="project-page">
+        <ProjectHead
+          bind:this={head}
+          {lead}
+          {machine}
+          onask={canTalk ? ask : null}
+          onfilter={(anchor) => {
+            filterAnchor = anchor;
+            filterOpen = true;
+          }}
+          onnewtask={() => {
+            choose("board");
+            adding = true;
+          }}
+          onstages={stages?.source === "template"
+            ? (anchor) => {
+                stagesAnchor = anchor;
+                stagesOpen = true;
+              }
+            : null}
+          {project}
+          seated={!standing}
+        />
 
-      {#if lead.view?.problem}
-        <Alert class="notice" variant="warning">
-          <AlertDescription>{lead.view.problem}</AlertDescription>
-        </Alert>
-      {/if}
-      {#if stages && stages.problems.length > 0}
-        <Alert class="notice" variant="warning">
-          <AlertDescription>{unreadStages}</AlertDescription>
-        </Alert>
-      {:else if stagesProblem}
-        <Alert class="notice" variant="warning">
-          <AlertDescription>
-            The project's stages could not be read: {stagesProblem}
-          </AlertDescription>
-        </Alert>
-      {/if}
-      {#if list && list.problems.length > 0}
-        <Alert class="notice" variant="warning">
-          <AlertDescription>{list.problems.join(" ")}</AlertDescription>
-        </Alert>
-      {/if}
-      {#if viewsProblem}
-        <Alert class="notice" variant="warning">
-          <AlertDescription
-            >The project's views could not be read:
-            {viewsProblem}</AlertDescription
-          >
-        </Alert>
-      {/if}
-
-      {#if !hosted}
-        {@render strip(false)}
-      {/if}
-
-      <div
-        aria-busy={cawco.hub === "unreachable" || awaiting || reading}
-        class={[
-          "pane",
-          current !== "board" &&
-            current !== "canvas" &&
-            paneView !== "decisions-page" &&
-            paneView !== "decisions-graph" &&
-            !reading &&
-            "kit-edge-fade-block",
-        ]}
-        data-view={reading ? "board" : paneView}
-      >
-        {#if reading}
-          <!-- The board at its real layout, its columns standing empty: the
-             next project's read cross-fades in over it. -->
-          <div aria-hidden="true" class="board-skeleton" out:crossOut>
-            {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
-              <div class="skeleton-column">
-                <Skeleton class="h-3.5 w-3/5" />
-                <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
-                <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <div class="swap" in:crossIn>
-            {#key shown}
-              <div
-                class="current"
-                style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
-                out:leave
-              >
-                {#if shown === "awaiting"}
-                  <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
-                {:else}
-                  {@render pane(shown)}
-                {/if}
-              </div>
-            {/key}
-          </div>
+        {#if lead.view?.problem}
+          <Alert class="notice" variant="warning">
+            <AlertDescription>{lead.view.problem}</AlertDescription>
+          </Alert>
         {/if}
+        {#if stages && stages.problems.length > 0}
+          <Alert class="notice" variant="warning">
+            <AlertDescription>{unreadStages}</AlertDescription>
+          </Alert>
+        {:else if stagesProblem}
+          <Alert class="notice" variant="warning">
+            <AlertDescription>
+              The project's stages could not be read: {stagesProblem}
+            </AlertDescription>
+          </Alert>
+        {/if}
+        {#if list && list.problems.length > 0}
+          <Alert class="notice" variant="warning">
+            <AlertDescription>{list.problems.join(" ")}</AlertDescription>
+          </Alert>
+        {/if}
+        {#if viewsProblem}
+          <Alert class="notice" variant="warning">
+            <AlertDescription
+              >The project's views could not be read:
+              {viewsProblem}</AlertDescription
+            >
+          </Alert>
+        {/if}
+
+        {#if !hosted}
+          <!-- Under the head from 640px; a phone's views are its bar's. -->
+          <div class="under-head">{@render strip(false)}</div>
+        {/if}
+
+        <div
+          aria-busy={cawco.hub === "unreachable" || awaiting || reading}
+          class={[
+            "pane",
+            current !== "board" &&
+              current !== "canvas" &&
+              paneView !== "decisions-page" &&
+              paneView !== "decisions-graph" &&
+              !reading &&
+              "kit-edge-fade-block",
+          ]}
+          data-view={reading ? "board" : paneView}
+        >
+          {#if reading}
+            <!-- The board at its real layout, its columns standing empty: the
+             next project's read cross-fades in over it. -->
+            <div aria-hidden="true" class="board-skeleton" out:crossOut>
+              {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
+                <div class="skeleton-column">
+                  <Skeleton class="h-3.5 w-3/5" />
+                  <Skeleton
+                    class="h-[54px] w-full rounded-[var(--radius-sm)]"
+                  />
+                  <Skeleton
+                    class="h-[54px] w-full rounded-[var(--radius-sm)]"
+                  />
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <div class="swap" in:crossIn>
+              {#key shown}
+                <div
+                  class="current"
+                  style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
+                  out:leave
+                >
+                  {#if shown === "awaiting"}
+                    <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+                  {:else}
+                    {@render pane(shown)}
+                  {/if}
+                </div>
+              {/key}
+            </div>
+          {/if}
+        </div>
       </div>
+      {#if !hosted}
+        <ViewBar
+          {current}
+          needs={needsYou.length}
+          needsOn={filtering}
+          onchoose={choose}
+          onnewsession={(anchor) => head?.newSessionFrom(anchor)}
+          ontoggleneeds={() => {
+            needsOnly = !filtering;
+          }}
+          views={barViews}
+        >
+          {#snippet tools()}
+            <!-- As the strip draws it on a narrow screen: its glyph and count
+                 while a filter stands; the head's ⋯ opens it. -->
+            {#if filterHere && narrowed > 0}
+              <TaskFilterPopover
+                compact
+                {filter}
+                {find}
+                onchange={setFilter}
+                tasks={[...tasks, ...archived]}
+              />
+            {/if}
+          {/snippet}
+        </ViewBar>
+      {/if}
     </div>
   </SideSplit>
 
@@ -1570,6 +1608,18 @@
 {/if}
 
 <style>
+  /* What the page stands in: the box a phone's views bar docks at the foot of. */
+  .project-frame {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+  }
+  .under-head {
+    display: contents;
+  }
   .project-page {
     display: flex;
     flex: 1;
@@ -1617,36 +1667,6 @@
     flex: none;
     align-items: center;
     gap: var(--space-2);
-  }
-  /* Needs you, as the needs-you tile is: a real button in the needs-you
-     tint, never coral (that is where you act). Chosen, the filter is on:
-     its edge takes the attention glyph's ink. */
-  .needs {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    block-size: var(--c-btn-h-sm);
-    padding-inline: var(--space-3);
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    background: var(--status-attn-bg);
-    font: var(--type-label);
-    color: var(--status-attn-ink);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out),
-      border-color var(--dur-control) var(--ease-out);
-  }
-  .needs :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--status-attn-glyph);
-  }
-  .needs .num {
-    color: var(--status-attn-ink);
-  }
-  .needs[aria-pressed="true"] {
-    border-color: var(--status-attn-glyph);
   }
   .pane {
     display: flex;
@@ -1815,6 +1835,53 @@
     .trail :global(.wide),
     .rule.wide {
       display: none;
+    }
+  }
+  /* A phone: the page is the one scroller, so iOS never chains two. The
+     head scrolls away with the view; the views are the bar's (ViewBar), so
+     no strip stands under the head; the pane gives up its own scroll and
+     the board's columns stand at their natural height (TaskBoard). The
+     page's foot clears the bar by its reach: the bar, its inset from the
+     foot and a step of air. A view that fills its pane (the canvas, a
+     decision page, the decisions' graph, the routines' bento) stands the
+     scroller's height less that reach, whole once the head has gone. */
+  @media (max-width: 639px) {
+    .project-page {
+      --bar-reach: calc(
+        var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) +
+          var(--space-3)
+      );
+      container-type: size;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      padding-block-end: var(--bar-reach);
+    }
+    .project-page > :global(*) {
+      flex-shrink: 0;
+    }
+    .under-head {
+      display: none;
+    }
+    .pane,
+    .pane:is(
+      [data-view="board"],
+      [data-view="canvas"],
+      [data-view="decisions-page"],
+      [data-view="decisions-graph"]
+    ),
+    .pane:has(:global(.routines-view[data-layout="bento"])) {
+      flex: 1 0 auto;
+      overflow: visible;
+    }
+    .pane:is(
+      [data-view="canvas"],
+      [data-view="decisions-page"],
+      [data-view="decisions-graph"]
+    ),
+    .pane:has(:global(.routines-view[data-layout="bento"])) {
+      /* The page's content box: its height less the foot it pads. */
+      block-size: 100cqb;
     }
   }
 </style>

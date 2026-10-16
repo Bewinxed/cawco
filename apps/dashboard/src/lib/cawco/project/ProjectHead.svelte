@@ -10,8 +10,15 @@
    * stages stand in), Caw's settings (CawPanel, off `⋯`: a popover on a
    * desk, the bottom sheet on touch), Spend, Other people's repositories
    * (the upstream choice: the fleet's answer until the project picks its
-   * own) and Forget (and, under 640px, New task and Ask Caw for a view),
-   * each with its glyph.
+   * own) and Forget (and, under 640px, Spin off, New task, Filter tasks…
+   * and Ask Caw for a view), each with its glyph.
+   *
+   * Under 640px the head carries no button but `⋯`: New session is the
+   * coral "+" of the page's views bar (ViewBar), which opens its popover
+   * over itself (`newSessionFrom`), and Spin off is in `⋯` (Apple HIG,
+   * Toolbars: "Prioritize only the most important items for inclusion in
+   * the main toolbar area … Create a More menu to include additional
+   * items").
    *
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
@@ -50,6 +57,7 @@
   import {
     IconColumns,
     IconFilter,
+    IconFork,
     IconMore,
     IconPlus,
     IconSettings,
@@ -93,6 +101,8 @@
   );
   let cawOpen = $state(false);
   let spawnOpen = $state(false);
+  /** What the New session popover opens over: its button, or the views bar's "+" on a phone. */
+  let spawnAnchor = $state<HTMLElement | null>(null);
   let spawnPrompt = $state("");
   let more = $state<HTMLElement | null>(null);
   /** The place a forget asked from this head's `⋯` stands (forget.svelte.ts). */
@@ -212,6 +222,20 @@
     }
     editedId = project.id;
   });
+
+  /**
+   * New session from somewhere other than its button (the views bar's "+"
+   * on a phone): the same popover, over `anchor`; with no checkout yet, the
+   * New Session dialog, as the button does.
+   */
+  export function newSessionFrom(anchor: HTMLElement): void {
+    if (!primary) {
+      newSession({ projectId: project.id });
+      return;
+    }
+    spawnAnchor = anchor;
+    spawnOpen = true;
+  }
 
   async function startSession(way: "start" | "empty" | "spin") {
     if (!primary || starting) {
@@ -379,19 +403,31 @@
       <!-- No checkout yet: a session needs a machine and folder, which the
            New Session dialog asks for. -->
       <Button
-        class="pressable"
+        class="head-act pressable"
         onclick={() => newSession({ projectId: project.id })}
         >New session</Button
       >
     {:else}
       <Popover.Root bind:open={spawnOpen}>
-        <Popover.Trigger>
+        <Popover.Trigger
+          onclick={() => {
+            spawnAnchor = null;
+          }}
+        >
           {#snippet child({ props })}
-            <Button {...props} class="pressable">New session</Button>
+            <Button {...props} class="head-act pressable">New session</Button>
           {/snippet}
         </Popover.Trigger>
-        <!-- The kit popover's own 6px padding (DESIGN.md, `kit-pop`). -->
-        <Popover.Content align="end" class="w-80">
+        <!-- The kit popover's own 6px padding (DESIGN.md, `kit-pop`). Over
+             the views bar's "+" it opens upward from the foot. -->
+        <Popover.Content
+          align="end"
+          class="w-80"
+          collisionPadding={8}
+          customAnchor={spawnAnchor}
+          side={spawnAnchor ? "top" : "bottom"}
+          sideOffset={spawnAnchor ? 8 : 4}
+        >
           <form
             class="flex flex-col gap-3"
             onsubmit={(e) => {
@@ -439,7 +475,7 @@
         </Popover.Content>
       </Popover.Root>
       <Button
-        class="pressable"
+        class="head-act pressable"
         data-share="session:new"
         data-share-ttl="8000"
         disabled={starting !== null && starting !== "spin"}
@@ -476,6 +512,15 @@
         }}
       >
         {#if narrow.current}
+          {#if primary}
+            <DropdownMenu.Item
+              disabled={starting !== null}
+              onSelect={() => startSession("spin")}
+            >
+              <IconFork />
+              <span>Spin off</span>
+            </DropdownMenu.Item>
+          {/if}
           <DropdownMenu.Item onSelect={onnewtask}>
             <IconPlus />
             <span>New task</span>
@@ -760,6 +805,16 @@
        the gutter by the glyph's inset. */
     .acts :global([aria-label^="More for"]) {
       margin-inline-end: calc((var(--c-btn-h) - 16px) / -2);
+    }
+  }
+  /* A phone's head carries no button but `⋯`, on the name's row: New
+     session is the views bar's "+", Spin off is in `⋯`. */
+  @media (max-width: 639px) {
+    .acts {
+      flex: none;
+    }
+    .acts :global(.head-act) {
+      display: none;
     }
   }
 </style>

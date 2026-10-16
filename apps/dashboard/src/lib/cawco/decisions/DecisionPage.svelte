@@ -294,7 +294,7 @@
     {#if refusal}
       <p class="feedback" role="alert" in:appear>{refusal}</p>
     {/if}
-    <div class="cin">
+    <div class="cin kit-dock-shell">
       <Textarea
         aria-label="Add a note for the session"
         class="note"
@@ -447,24 +447,13 @@
     max-inline-size: 100%;
     margin-inline: auto;
   }
+  /* Its shell is the composer's (app.css `.kit-dock-shell`). */
   .cin {
     display: flex;
     align-items: flex-end;
     gap: var(--space-2);
     padding: var(--c-composer-inset) var(--c-composer-inset)
       var(--c-composer-inset) var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--material-panel);
-    box-shadow: var(--shadow-tile);
-    backdrop-filter: blur(var(--material-blur))
-      saturate(var(--material-saturate));
-  }
-  @media (prefers-reduced-transparency: reduce) {
-    .cin {
-      background: var(--surface-raised);
-      backdrop-filter: none;
-    }
   }
   .cin :global(.note) {
     flex: 1 1 auto;

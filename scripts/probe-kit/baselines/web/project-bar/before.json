@@ -254,81 +254,81 @@
       "left": 0,
       "top": 44,
       "width": 390,
-      "height": 121.38
+      "height": 74.38
     },
     "row": {
       "left": 0,
-      "top": 165.38,
-      "width": 390,
-      "height": 54
+      "top": 0,
+      "width": 0,
+      "height": 0
     },
     "rowTabs": [
       {
-        "left": 22,
-        "top": 169.38,
-        "width": 60,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       },
       {
-        "left": 84,
-        "top": 169.38,
-        "width": 55,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       },
       {
-        "left": 141,
-        "top": 169.38,
-        "width": 70,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       },
       {
-        "left": 213,
-        "top": 169.38,
-        "width": 75,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       },
       {
-        "left": 290,
-        "top": 169.38,
-        "width": 80,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       },
       {
-        "left": 372,
-        "top": 169.38,
-        "width": 78,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       },
       {
-        "left": 452,
-        "top": 169.38,
-        "width": 94,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       },
       {
-        "left": 548,
-        "top": 169.38,
-        "width": 92,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       },
       {
-        "left": 642,
-        "top": 169.38,
-        "width": 105,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       },
       {
-        "left": 749,
-        "top": 169.38,
-        "width": 109,
-        "height": 32
+        "left": 0,
+        "top": 0,
+        "width": 0,
+        "height": 0
       }
     ],
     "pane": {
       "left": 0,
-      "top": 219.38,
+      "top": 118.38,
       "width": 390,
-      "height": 624.63
+      "height": 650.63
     }
   }
 }

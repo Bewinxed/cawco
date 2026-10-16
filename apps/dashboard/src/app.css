@@ -1158,6 +1158,80 @@
     }
   }
 
+  /* The composer's shell: what docks at a page's foot (a session's
+     composer, a decision page's note, the project's views on a phone) stands
+     in it. The panel's glass so the page shows faintly under it, the control
+     edge, the 12px radius and the tile shadow; the solid raised surface
+     where transparency is reduced. Its inset and its row are its own. */
+  .kit-dock-shell {
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-lg);
+    background: var(--material-panel);
+    -webkit-backdrop-filter: blur(var(--material-blur))
+      saturate(var(--material-saturate));
+    backdrop-filter: blur(var(--material-blur))
+      saturate(var(--material-saturate));
+    box-shadow: var(--shadow-tile);
+
+    @media (prefers-reduced-transparency: reduce) {
+      background: var(--surface-raised);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* Send's recipe: the one coral control in a dock shell, a square of the
+     composer's field height, concentric with the shell (its radius less the
+     inset that seats it). It presses to --press-scale over --kit-send-press
+     (--dur-control unless its dock says otherwise). */
+  .kit-send {
+    --kit-send-press: var(--dur-control);
+    position: relative;
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    inline-size: var(--c-composer-field);
+    block-size: var(--c-composer-field);
+    border: 0;
+    border-radius: calc(var(--radius-lg) - var(--c-composer-inset));
+    background-color: var(--action-solid);
+    background-image: var(--action-surface);
+    color: var(--on-action);
+    cursor: pointer;
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
+
+    & svg {
+      inline-size: 16px;
+      block-size: 16px;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        color var(--dur-control) var(--ease-out),
+        transform var(--kit-send-press) var(--ease-out);
+
+      &:active:not(:disabled) {
+        transform: scale(var(--press-scale));
+      }
+    }
+    /* Every primary action's hover (DESIGN.md, Primary button). */
+    @media (hover: hover) and (pointer: fine) {
+      &:not(:disabled):hover {
+        background-color: var(--action-hover);
+        background-image: var(--action-surface-hover);
+      }
+    }
+    /* The flat brand stays under the gradient: disabled drops the image. */
+    &:disabled {
+      opacity: 0.55;
+      cursor: default;
+      box-shadow: none;
+      background-image: none;
+    }
+  }
+
   /* Floating surfaces: popover, dropdown, select, context menu, toast. */
   .kit-pop {
     --kit-rise: 0 calc(-1 * var(--pop-rise));

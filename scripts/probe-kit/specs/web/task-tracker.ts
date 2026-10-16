@@ -15,11 +15,12 @@
  *     priority", as the hub's commit says (`update priority`, by you).
  *  d. A filter narrows the board: Label web leaves only the web tasks'
  *     cards, and the URL holds it (desk: the strip's Filter; phone: the
- *     head's ⋯, then the strip's glyph says one stands).
+ *     head's ⋯, then the views bar's glyph says one stands).
  *  e. Bulk select applies to every selected task: two cards ticked, Label
  *     picked in the bulk bar, and the hub's read of each carries the label;
  *     the bar stands within the width (one row on a desk, two at most on a
- *     phone, where its controls wrap).
+ *     phone, where its controls wrap), and on a phone wholly over the
+ *     project's views bar at the foot.
  *  f. Find is the hub's search: a word only one task's description holds
  *     leaves only that task, kept in the URL (`q=`), and a link carrying
  *     the word opens on the hub's answer.
@@ -267,12 +268,12 @@ async function filter(
     view === "desk"
       ? true
       : await page
-          .locator('.strip .filter-trigger[aria-label="Filter, 1 set"]')
+          .locator('.view-bar .filter-trigger[aria-label="Filter, 1 set"]')
           .isVisible();
   kit.check(
     `d. ${view}: Label web leaves only the web tasks, kept in the URL`,
     shown.join(",") === [...web].sort().join(",") && where === "web" && glyph,
-    `${shown.join(",")} · label=${where} · strip says one stands: ${glyph}`
+    `${shown.join(",")} · label=${where} · ${view === "desk" ? "strip" : "views bar"} says one stands: ${glyph}`
   );
   await page.keyboard.press("Escape");
 }
@@ -296,8 +297,15 @@ async function bulk(
   await page.waitForSelector(".bulk");
   const bar = await page.evaluate(() => {
     const box = document.querySelector(".bulk")?.getBoundingClientRect();
+    const views = document.querySelector(".view-bar")?.getBoundingClientRect();
     return box
-      ? { width: box.width, height: box.height, right: box.right }
+      ? {
+          width: box.width,
+          height: box.height,
+          right: box.right,
+          bottom: box.bottom,
+          viewsTop: views && views.height > 0 ? views.top : null,
+        }
       : null;
   });
   await page.locator(".bulk").getByRole("button", { name: "Label" }).click();
@@ -329,6 +337,13 @@ async function bulk(
       bar.height <= rows * 40,
     JSON.stringify(bar)
   );
+  if (view !== "desk") {
+    kit.check(
+      `e. ${view}: the bulk bar stands wholly over the views bar`,
+      bar !== null && bar.viewsTop !== null && bar.bottom <= bar.viewsTop,
+      JSON.stringify(bar)
+    );
+  }
 }
 
 /** The phone opens Filter from the head's ⋯; the desk from the strip. */

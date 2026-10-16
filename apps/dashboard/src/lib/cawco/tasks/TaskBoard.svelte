@@ -271,8 +271,13 @@
     cursor: pointer;
   }
   /* A phone shows one column and the edge of the next, and a swipe settles
-     on a column. */
+     on a column. The page is the one scroller there (the project page), so
+     the columns stand at their natural height and scroll with it. */
   @media (max-width: 639px) {
+    .board-wrap,
+    .board {
+      block-size: auto;
+    }
     .board {
       grid-auto-columns: calc(100% - var(--space-8));
       scroll-snap-type: x mandatory;
