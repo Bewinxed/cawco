@@ -60,22 +60,28 @@ interface Arrangement {
 /** The blocks a page shows, in order: each one's id, span and box. */
 const blocksOf = (page: Page) =>
   page.evaluate(() => {
-    const grid = document.querySelector<HTMLElement>(".blocks");
+    const grid = document.querySelector<HTMLElement>('[data-slot="blocks"]');
     return {
       columns: Number(
-        document.querySelector(".block-page")?.getAttribute("data-columns") ?? 0
+        document
+          .querySelector('[data-slot="block-page"]')
+          ?.getAttribute("data-columns") ?? 0
       ),
       tracks: grid
         ? getComputedStyle(grid).gridTemplateColumns.split(" ").length
         : 0,
-      blocks: [...document.querySelectorAll<HTMLElement>(".blocks > .block")]
+      blocks: [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+        ),
+      ]
         .filter((block) => !block.hasAttribute("data-reflow-ghost"))
         .map((block) => {
           const box = block.getBoundingClientRect();
           return {
             id: block.dataset.block ?? "",
             span: Number(block.dataset.span ?? 0),
-            width: block.classList.contains("wide") ? "wide" : "narrow",
+            width: block.matches("[data-wide]") ? "wide" : "narrow",
             left: Math.round(box.left),
             top: Math.round(box.top),
             w: Math.round(box.width),
@@ -131,7 +137,11 @@ async function columns(kit: Kit, page: Page, phone: Page, url: string) {
       JSON.stringify(read)
     );
   }
-  await open(phone, url, ".blocks > .block");
+  await open(
+    phone,
+    url,
+    '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+  );
   await settle(phone);
   const read = await blocksOf(phone);
   kit.check(
@@ -155,12 +165,20 @@ async function throughHub(
   projectId: string,
   url: string
 ) {
-  await open(other, url, ".blocks > .block");
+  await open(
+    other,
+    url,
+    '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+  );
   await settle(other);
   await pick(page, "Approved actions", "Move up");
   await page.waitForFunction(
     () =>
-      [...document.querySelectorAll(".blocks > .block")]
+      [
+        ...document.querySelectorAll(
+          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+        ),
+      ]
         .map((b) => (b as HTMLElement).dataset.block)
         .join(",") === "routines,actions,sources"
   );
@@ -174,7 +192,11 @@ async function throughHub(
   const seen = await other
     .waitForFunction(
       () =>
-        [...document.querySelectorAll(".blocks > .block")]
+        [
+          ...document.querySelectorAll(
+            '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+          ),
+        ]
           .map((b) => (b as HTMLElement).dataset.block)
           .join(",") === "routines,actions,sources",
       null,
@@ -188,12 +210,17 @@ async function throughHub(
     await orderOf(other)
   );
   await pick(page, "Routines", "Wide");
-  await page.waitForSelector(".block.wide[data-block='routines']");
+  await page.waitForSelector(
+    ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-wide][data-block='routines']"
+  );
   await settle(page);
   const widened = await other
-    .waitForSelector(".block.wide[data-block='routines'][data-span='4']", {
-      timeout: 10_000,
-    })
+    .waitForSelector(
+      ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-wide][data-block='routines'][data-span='4']",
+      {
+        timeout: 10_000,
+      }
+    )
     .then(() => true)
     .catch(() => false);
   kit.check(
@@ -204,7 +231,9 @@ async function throughHub(
     `${await hubPage(base, projectId, "routines")}; ${JSON.stringify(await blocksOf(other))}`
   );
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector(".block.wide[data-block='routines']");
+  await page.waitForSelector(
+    ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-wide][data-block='routines']"
+  );
   await settle(page);
   const after = await blocksOf(page);
   kit.check(
@@ -250,9 +279,13 @@ async function motion(kit: Kit, page: Page) {
   const clock = await Clock.on(page);
   await clock.catchRuns(
     () => pick(page, "Approved actions", "Move down"),
-    ".block[data-block='sources']"
+    ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
   );
-  const moved = await scrub(clock, page, ".block[data-block='sources']");
+  const moved = await scrub(
+    clock,
+    page,
+    ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
+  );
   await clock.release();
   await settle(page);
   const now = (await blocksOf(page)).blocks.find((b) => b.id === "sources");
@@ -278,9 +311,13 @@ async function motion(kit: Kit, page: Page) {
   const wideClock = await Clock.on(page);
   await wideClock.catchRuns(
     () => pick(page, "Event sources", "Wide"),
-    ".block[data-block='sources']"
+    ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
   );
-  const grown = await scrub(wideClock, page, ".block[data-block='sources']");
+  const grown = await scrub(
+    wideClock,
+    page,
+    ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
+  );
   await wideClock.release();
   await settle(page);
   const wide = (await blocksOf(page)).blocks.find((b) => b.id === "sources");
@@ -296,16 +333,24 @@ async function motion(kit: Kit, page: Page) {
   );
   // Back to narrow for what follows.
   await pick(page, "Event sources", "Narrow");
-  await page.waitForSelector(".block.narrow[data-block='sources']");
+  await page.waitForSelector(
+    ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-narrow][data-block='sources']"
+  );
   await settle(page);
 }
 
 /** Drags `from`'s head by the mouse onto `to`'s top edge; reads mid-drag what is drawn. */
 async function dragOnto(page: Page, from: string, to: string) {
   const head = await page
-    .locator(`.block[data-block='${from}'] .block-head .title`)
+    .locator(
+      `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${from}'] [data-slot="block-head"] [data-slot="title"]`
+    )
     .boundingBox();
-  const target = await page.locator(`.block[data-block='${to}']`).boundingBox();
+  const target = await page
+    .locator(
+      `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${to}']`
+    )
+    .boundingBox();
   if (!(head && target)) {
     throw new Error(`no head for ${from} or no block ${to}`);
   }
@@ -329,20 +374,30 @@ async function dragOnto(page: Page, from: string, to: string) {
   await page
     .waitForFunction(
       () =>
-        document.querySelector(".block[data-dragging]") !== null &&
-        document.querySelector(".block .drop") !== null,
+        document.querySelector(
+          ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-dragging]'
+        ) !== null &&
+        document.querySelector(
+          ':is([data-slot="block"], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
+        ) !== null,
       null,
       { timeout: 2000 }
     )
     .catch(() => undefined);
   const mid = await page.evaluate(() => ({
     slot:
-      document.querySelector<HTMLElement>(".block[data-dragging]")?.dataset
-        .block ?? null,
-    drop: document.querySelector(".block .drop")?.getAttribute("data-edge"),
+      document.querySelector<HTMLElement>(
+        ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-dragging]'
+      )?.dataset.block ?? null,
+    drop: document
+      .querySelector(
+        ':is([data-slot="block"], [data-field-separator-block], [data-switch-block]) :is([data-drop], [data-slot="drop"])'
+      )
+      ?.getAttribute("data-edge"),
     on:
-      document.querySelector<HTMLElement>(".block:has(> .drop)")?.dataset
-        .block ?? null,
+      document.querySelector<HTMLElement>(
+        ':is([data-slot="block"], [data-field-separator-block], [data-switch-block]):has(> :is([data-drop], [data-slot="drop"]))'
+      )?.dataset.block ?? null,
   }));
   await page.mouse.up();
   return mid;
@@ -354,7 +409,9 @@ async function deskDrag(kit: Kit, page: Page, base: string, projectId: string) {
   await page.waitForFunction(
     () =>
       document
-        .querySelector<HTMLElement>(".blocks > .block")
+        .querySelector<HTMLElement>(
+          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+        )
         ?.getAttribute("data-block") === "sources",
     null,
     { timeout: 10_000 }
@@ -383,11 +440,15 @@ async function phoneDrag(
   projectId: string,
   url: string
 ) {
-  await open(phone, url, ".blocks > .block");
+  await open(
+    phone,
+    url,
+    '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+  );
   await settle(phone);
   const head = await phone.evaluate(() => {
     const el = document.querySelector<HTMLElement>(
-      ".block[data-block='actions'] .block-head"
+      ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block=\'actions\'] [data-slot="block-head"]'
     );
     const styles = el ? getComputedStyle(el) : null;
     return {
@@ -415,7 +476,9 @@ async function phoneDrag(
   await phone.waitForFunction(
     () =>
       document
-        .querySelector<HTMLElement>(".blocks > .block")
+        .querySelector<HTMLElement>(
+          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+        )
         ?.getAttribute("data-block") === "actions",
     null,
     { timeout: 10_000 }
@@ -448,19 +511,22 @@ async function openView(
     await open(
       page,
       `${base}/project/${projectId}?view=view:${VIEW}`,
-      ".view-head",
+      '[data-slot="view-head"]',
       20_000
     );
   } catch (error) {
     const shown = await page.evaluate(() => ({
       url: location.href,
-      view: document.querySelector<HTMLElement>(".pane")?.dataset.view,
+      view: document.querySelector<HTMLElement>('[data-slot="pane"]')?.dataset
+        .view,
       strip: [...document.querySelectorAll("[role='tab']")].map((tab) =>
         (tab as HTMLElement).innerText.trim()
       ),
-      alerts: [...document.querySelectorAll("[role='alert'], .notice")].map(
-        (alert) => (alert as HTMLElement).innerText.trim()
-      ),
+      alerts: [
+        ...document.querySelectorAll(
+          "[role='alert'], :is([data-id-page-notice], [data-slot=\"notice\"])"
+        ),
+      ].map((alert) => (alert as HTMLElement).innerText.trim()),
     }));
     const views = await fetch(`${hub}/api/projects/${projectId}/views`).then(
       (response) => response.text()
@@ -486,7 +552,9 @@ async function tabAndBlock(
   await page.getByRole("button", { name: "More for Spend" }).click();
   await page.getByRole("menuitem", { name: "Place on a page" }).click();
   await page.getByRole("menuitem", { name: "Routines", exact: true }).click();
-  await page.waitForSelector(`.block[data-block='view:${VIEW}']`);
+  await page.waitForSelector(
+    `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
+  );
   await settle(page);
   const placed = {
     view: new URL(page.url()).searchParams.get("view"),
@@ -504,7 +572,10 @@ async function tabAndBlock(
     `${strip} → ${JSON.stringify(placed)}`
   );
   const reached = await other
-    .waitForSelector(`.block[data-block='view:${VIEW}']`, { timeout: 10_000 })
+    .waitForSelector(
+      `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`,
+      { timeout: 10_000 }
+    )
     .then(() => true)
     .catch(() => false);
   kit.check(
@@ -514,7 +585,10 @@ async function tabAndBlock(
   );
   await pick(page, "Spend", "Show as a tab");
   await page.waitForFunction(
-    (block) => !document.querySelector(`.block[data-block='${block}']`),
+    (block) =>
+      !document.querySelector(
+        `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
+      ),
     `view:${VIEW}`
   );
   await settle(page);
@@ -534,21 +608,25 @@ async function tabAndBlock(
   await page.getByRole("button", { name: "More for Spend" }).click();
   await page.getByRole("menuitem", { name: "Place on a page" }).click();
   await page.getByRole("menuitem", { name: "Board", exact: true }).click();
-  await page.waitForSelector(`.block[data-block='view:${VIEW}']`);
+  await page.waitForSelector(
+    `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
+  );
   await settle(page);
   const board = await page.evaluate(() => {
-    const pane = document.querySelector<HTMLElement>(".pane");
+    const pane = document.querySelector<HTMLElement>('[data-slot="pane"]');
     const block = document.querySelector<HTMLElement>(
-      ".block[data-block='board']"
+      ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='board']"
     );
-    const body = block?.querySelector<HTMLElement>(".block-body");
-    const stages = block?.querySelector<HTMLElement>(".board");
+    const body = block?.querySelector<HTMLElement>('[data-slot="block-body"]');
+    const stages = block?.querySelector<HTMLElement>('[data-slot="board"]');
     const styles = pane ? getComputedStyle(pane) : null;
     return {
       view: pane?.dataset.view ?? null,
       span: Number(block?.dataset.span ?? 0),
       columns: Number(
-        document.querySelector(".block-page")?.getAttribute("data-columns") ?? 0
+        document
+          .querySelector('[data-slot="block-page"]')
+          ?.getAttribute("data-columns") ?? 0
       ),
       body: Math.round(body?.getBoundingClientRect().height ?? 0),
       paneContent: pane
@@ -559,10 +637,16 @@ async function tabAndBlock(
           )
         : 0,
       headH: Math.round(
-        block?.querySelector(".block-head")?.getBoundingClientRect().height ?? 0
+        block
+          ?.querySelector('[data-slot="block-head"]')
+          ?.getBoundingClientRect().height ?? 0
       ),
       board: Math.round(stages?.getBoundingClientRect().height ?? 0),
-      order: [...document.querySelectorAll(".blocks > .block")]
+      order: [
+        ...document.querySelectorAll(
+          '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+        ),
+      ]
         .map((b) => (b as HTMLElement).dataset.block)
         .join(","),
     };
@@ -579,7 +663,10 @@ async function tabAndBlock(
   );
   await pick(page, "Spend", "Show as a tab");
   await page.waitForFunction(
-    (block) => !document.querySelector(`.block[data-block='${block}']`),
+    (block) =>
+      !document.querySelector(
+        `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
+      ),
     `view:${VIEW}`
   );
 }
@@ -624,7 +711,11 @@ const spec: Spec = {
     other.setDefaultTimeout(60_000);
     const phone = await kit.page("phone");
     phone.setDefaultTimeout(60_000);
-    await open(page, url, ".blocks > .block");
+    await open(
+      page,
+      url,
+      '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
+    );
     await settle(page);
     kit.check(
       "first read: an arrangement never written is the page's own blocks in their order, and the hub holds none",

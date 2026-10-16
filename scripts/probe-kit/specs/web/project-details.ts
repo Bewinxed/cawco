@@ -57,8 +57,8 @@ const TASKS = 18;
 const readTray = (page: Page) =>
   page.evaluate((selector) => {
     const tray = document.querySelector(selector);
-    const tile = tray?.querySelector(".tile");
-    const head = document.querySelector(".project-head");
+    const tile = tray?.querySelector('[data-slot="tile"]');
+    const head = document.querySelector('[data-slot="project-head"]');
     const box = (el: Element | null | undefined) => {
       const r = el?.getBoundingClientRect();
       return r
@@ -69,8 +69,14 @@ const readTray = (page: Page) =>
       el?.textContent?.replace(/\s+/g, " ").trim() ?? null;
     const rows = [...(tray?.querySelectorAll("[data-detail]") ?? [])].map(
       (row) => {
-        const label = row.querySelector(".label")?.getBoundingClientRect();
-        const value = row.querySelector(".value")?.getBoundingClientRect();
+        const label = row
+          .querySelector(
+            ':is([data-slot="trigger-menu-label"], [data-task-labels-label], [data-slot="switch-field-label"], [data-slot="memory-editor-label"], [data-field-label], [data-slot="section-row-label"], [data-slot="picker-chip-label"], [data-slot="config-rail-label"], [data-slot="release-notes-label"], [data-slot="relay-label"], [data-slot="rings-key-label"], [data-slot="limits-block-label"], [data-slot="record-card-label"], [data-slot="decision-group-label"], [data-slot="view-pipeline-label"], [data-slot="mk-switch-label"], [data-slot="mk-input-label"], [data-slot="account-setup-label"], [data-slot="order-list-label"], [data-slot="project-details-label"], [data-slot="message-row-label"], [data-slot="peer-label"], [data-slot="thinking-label"], [data-slot="find-peek-label"], [data-slot="memory-body-label"], [data-slot="thinking-step-label"], [data-slot="tab-item-label"])'
+          )
+          ?.getBoundingClientRect();
+        const value = row
+          .querySelector(':is([data-slot="value"], [data-where-it-goes-value])')
+          ?.getBoundingClientRect();
         return label && value ? value.top >= label.bottom - 0.5 : null;
       }
     );
@@ -107,13 +113,17 @@ const readTray = (page: Page) =>
           ?.getAttribute("aria-checked") ?? null,
       places: [...(tray?.querySelectorAll("li[data-place]") ?? [])].map(
         (li) => ({
-          path: words(li.querySelector(".path")) ?? "",
+          path: words(li.querySelector('[data-slot="path"]')) ?? "",
           remove: li.querySelector("[data-remove-place]") !== null,
           kept: words(li.querySelector("[data-place-kept]")),
         })
       ),
       repository:
-        words(tray?.querySelector("[data-detail='repository'] .value")) ?? "",
+        words(
+          tray?.querySelector(
+            "[data-detail='repository'] :is([data-slot=\"value\"], [data-where-it-goes-value])"
+          )
+        ) ?? "",
       placeWords: words(tray?.querySelector("[data-place-words]")) ?? "",
       placeCut: (() => {
         const el = tray?.querySelector<HTMLElement>("[data-place-words]");
@@ -131,7 +141,9 @@ const segment = (page: Page, words: string) =>
 /** The board's scroller under a card (the first ancestor that scrolls), marked; null: none. */
 const markScroller = (page: Page) =>
   page.evaluate(() => {
-    const card = document.querySelector(".project-page .task-card");
+    const card = document.querySelector(
+      '[data-slot="project-page"] :is([data-slot="task-card"], [data-side-surface-class~="task-card"])'
+    );
     for (let at = card?.parentElement; at; at = at.parentElement) {
       const flow = getComputedStyle(at).overflowY;
       if (
@@ -264,7 +276,11 @@ const leg = async (
       return el.scrollTop;
     })
     .catch(() => null);
-  const card = page.locator(".project-page .task-card").first();
+  const card = page
+    .locator(
+      '[data-slot="project-page"] :is([data-slot="task-card"], [data-side-surface-class~="task-card"])'
+    )
+    .first();
   const taskId = (await card.getAttribute("data-task")) ?? "\0";
   await card.scrollIntoViewIfNeeded();
   await card.click();
@@ -409,7 +425,9 @@ const rows = async (kit: Kit, { fleet, project, second, url }: Setup) => {
   );
   await field.fill("relative/folder");
   await submit.click();
-  const addFault = page.locator(`${TRAY} [data-add-fault] .reason`);
+  const addFault = page.locator(
+    `${TRAY} [data-add-fault] :is([data-slot="reason"], [data-delegate-tail-kind~="reason"])`
+  );
   await addFault.waitFor({ timeout: 15_000 });
   const addWords = (await addFault.textContent())?.trim() ?? "";
   kit.check(
@@ -474,7 +492,9 @@ const refusals = async (kit: Kit, { base, fleet, gone }: Setup) => {
     `${forgot.status}`
   );
   await segment(page, "Branch").click();
-  const landsFault = page.locator(`${TRAY} [data-lands-fault] .reason`);
+  const landsFault = page.locator(
+    `${TRAY} [data-lands-fault] :is([data-slot="reason"], [data-delegate-tail-kind~="reason"])`
+  );
   await landsFault.waitFor({ timeout: 15_000 });
   await settle(page, 300);
   const afterLands = await readTray(page);
@@ -485,7 +505,9 @@ const refusals = async (kit: Kit, { base, fleet, gone }: Setup) => {
     `“${landsWords}”; on ${afterLands.lands}`
   );
   await page.locator(`${TRAY} [data-review-switch]`).click();
-  const reviewFault = page.locator(`${TRAY} [data-review-fault] .reason`);
+  const reviewFault = page.locator(
+    `${TRAY} [data-review-fault] :is([data-slot="reason"], [data-delegate-tail-kind~="reason"])`
+  );
   await reviewFault.waitFor({ timeout: 15_000 });
   await settle(page, 300);
   const reviewWords = (await reviewFault.textContent())?.trim() ?? "";

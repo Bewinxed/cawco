@@ -100,10 +100,11 @@ const SAME_PX = 0.01;
 /** A computed value with every number in it to a hundredth. */
 const hundredths = (value: string) =>
   value.replace(/\d+\.\d+/g, (n) => Number.parseFloat(n).toFixed(2));
-const PANE = ".pane";
+const PANE = '[data-slot="pane"]';
 /** The box that scrolls the list, as `markScroller` found it. */
 const SCROLLER = "[data-probe-scroller]";
-const ROW = ".ledger tr.row";
+const ROW =
+  '[data-slot="ledger"] tr:is([data-slot="row"], [data-task-table-row], [data-project-spend-row], [data-view-routines-row], [data-view-table-row], [data-layout-row], [data-account-name-row], [data-session-row-row])';
 /** No fade: this spec's own style, never shipped. */
 const OFF =
   ".kit-edge-fade, .kit-edge-fade-block { animation: none !important; mask-image: none !important; }";
@@ -227,7 +228,7 @@ const markScroller = (page: Page) =>
 const footFade = (page: Page) =>
   page.evaluate((scrollerSel) => {
     const scroller = document.querySelector<HTMLElement>(scrollerSel);
-    const bar = document.querySelector(".view-bar");
+    const bar = document.querySelector('[data-slot="view-bar"]');
     if (!(scroller && bar)) {
       return null;
     }
@@ -564,7 +565,11 @@ const spec: Spec = {
     for (const [view, source] of WIDTHS) {
       const page = await kit.page(view, { init: [frameClock] });
       page.setDefaultTimeout(120_000);
-      await open(page, url, `.ledger tr:nth-child(${ROWS} of .row)`);
+      await open(
+        page,
+        url,
+        `[data-slot="ledger"] tr:nth-child(${ROWS} of :is([data-slot="row"], [data-task-table-row], [data-project-spend-row], [data-view-routines-row], [data-view-table-row], [data-layout-row], [data-account-name-row], [data-session-row-row]))`
+      );
       await settle(page);
       const where = await markScroller(page);
       const masked = await page.evaluate(

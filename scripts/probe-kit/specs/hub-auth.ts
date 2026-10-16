@@ -441,7 +441,7 @@ const spec: Spec = {
       "(o1) and it keeps working: its socket opened again and stays open, and no pairing screen shows",
       settled > 0 &&
         sockets.some((one) => !one.closed) &&
-        (await paired.locator("main.pairing").count()) === 0,
+        (await paired.locator('main[data-slot="pairing"]').count()) === 0,
       JSON.stringify(sockets)
     );
     const keyFile = join(home, ".config", "cawco", "machine-key");
@@ -678,8 +678,17 @@ const spec: Spec = {
 
     // (p5) An unpaired browser sees the code; the paired browser approves it.
     const stranger = await kit.page("desk");
-    await open(stranger, `${dashboard}/session`, "main.pairing .code", 60_000);
-    const shown = await stranger.locator("main.pairing .code").innerText();
+    await open(
+      stranger,
+      `${dashboard}/session`,
+      'main[data-slot="pairing"] :is([data-slot="code"], [data-account-setup-code], [data-workflow-run-view-code])',
+      60_000
+    );
+    const shown = await stranger
+      .locator(
+        'main[data-slot="pairing"] :is([data-slot="code"], [data-account-setup-code], [data-workflow-run-view-code])'
+      )
+      .innerText();
     const code = CODE.exec(shown)?.[0] ?? "";
     // For a reviewer: what an unpaired browser shows.
     await stranger.screenshot({ path: join(kit.out, "pairing-screen.png") });
@@ -717,7 +726,7 @@ const spec: Spec = {
     await stranger.waitForLoadState("domcontentloaded");
     await until(
       "the pairing screen gone",
-      () => stranger.locator("main.pairing").count(),
+      () => stranger.locator('main[data-slot="pairing"]').count(),
       (count) => count === 0,
       30_000
     );

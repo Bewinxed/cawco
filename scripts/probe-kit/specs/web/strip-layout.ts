@@ -59,7 +59,7 @@ const choiceLayout = (page: Page, css: string, tab: string) =>
       const laid = performance.now() - flushed;
       const chosen = document
         .querySelector(
-          '[data-strip="session"] .tab[data-chosen] [data-session-tab]'
+          '[data-strip="session"] [data-slot="tab"][data-chosen] [data-session-tab]'
         )
         ?.getAttribute("data-session-tab");
       style.remove();
@@ -73,7 +73,7 @@ async function read(kit: Kit): Promise<void> {
   await open(
     page,
     `${await kit.bench()}${ROUTE}&theme=light`,
-    `${STRIP} .tab[data-chosen]`,
+    `${STRIP} [data-slot="tab"][data-chosen]`,
     120_000
   );
   await settle(page, 600);

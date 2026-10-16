@@ -355,11 +355,11 @@ async function readOlder(page: Page): Promise<void> {
  */
 const census = (page: Page): Promise<string> =>
   page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>(".pane[data-pane]")]
+    [...document.querySelectorAll<HTMLElement>('[data-slot="pane"][data-pane]')]
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialized into the page whole, so it cannot lean on helpers out here
       .map((pane) => {
         const all = pane.getElementsByTagName("*").length;
-        const listing = pane.querySelector(".listing");
+        const listing = pane.querySelector('[data-slot="listing"]');
         const inList = listing?.getElementsByTagName("*").length ?? 0;
         const items = listing?.firstElementChild?.children.length ?? 0;
         // The boxes beside the path down to the list, each with what it holds.
@@ -387,9 +387,7 @@ const census = (page: Page): Promise<string> =>
           .slice(0, 4)
           .map(([name, n]) => `${name} ${n}`)
           .join(", ");
-        const state = pane.classList.contains("pane-hidden")
-          ? "hidden"
-          : "shown";
+        const state = pane.matches("[data-pane-hidden]") ? "hidden" : "shown";
         // Where the mounted rows stand against the view: virtua's buffer.
         const scroller = pane.querySelector<HTMLElement>(
           '[aria-label="Session transcript"]'
@@ -406,14 +404,16 @@ const census = (page: Page): Promise<string> =>
         return `${pane.dataset.pane?.slice(0, 8)} (${state}): ${all} elements, ${inList} in the list's ${items} rows (${span}; ${view}); beside it ${biggest || "nothing"}`;
       })
       .concat(
-        [...document.querySelectorAll("section.leaf")].map((leaf) => {
-          const count = (selector: string) =>
-            [...leaf.querySelectorAll(selector)].reduce(
-              (sum, el) => sum + el.getElementsByTagName("*").length + 1,
-              0
-            );
-          return `group ${(leaf as HTMLElement).dataset.leaf}: its composer ${count(":scope > .dock")}, its tabs ${count("[data-strip]")}`;
-        }),
+        [...document.querySelectorAll('section[data-slot="leaf"]')].map(
+          (leaf) => {
+            const count = (selector: string) =>
+              [...leaf.querySelectorAll(selector)].reduce(
+                (sum, el) => sum + el.getElementsByTagName("*").length + 1,
+                0
+              );
+            return `group ${(leaf as HTMLElement).dataset.leaf}: its composer ${count(':scope > [data-slot="dock"]')}, its tabs ${count("[data-strip]")}`;
+          }
+        ),
         [
           `the rail ${document.querySelector("aside")?.getElementsByTagName("*").length ?? 0}, the page ${document.getElementsByTagName("*").length}`,
         ]
@@ -532,12 +532,12 @@ const viewFrames = (page: Page, ms: number): Promise<string[][]> =>
         const stop = performance.now() + within;
         const step = () => {
           const view = document.querySelector<HTMLElement>(
-            ".pane:not(.pane-hidden, .pane-settling) .tr"
+            '[data-slot="pane"]:not([data-pane-hidden], [data-pane-settling]) [data-slot="tr"]'
           );
           if (view) {
             const { top } = view.getBoundingClientRect();
             const rows = view.querySelectorAll<HTMLElement>(
-              ".listing > div > div"
+              '[data-slot="listing"] > div > div'
             );
             const first = [...rows].find(
               (row) => row.getBoundingClientRect().bottom > top + 1
@@ -597,7 +597,7 @@ function movedAfterLanding(frames: string[][]): string[] {
 const hideAlone = (page: Page): Promise<string> =>
   page.evaluate(() => {
     const pane = document.querySelector<HTMLElement>(
-      ".pane:not(.pane-hidden, .pane-settling)"
+      '[data-slot="pane"]:not([data-pane-hidden], [data-pane-settling])'
     );
     if (!pane) {
       return "no drawn pane";
@@ -623,7 +623,9 @@ const hideAlone = (page: Page): Promise<string> =>
  */
 const composerAlone = (page: Page): Promise<string> =>
   page.evaluate(() => {
-    const dock = document.querySelector<HTMLElement>(".leaf > .dock .dock");
+    const dock = document.querySelector<HTMLElement>(
+      '[data-slot="leaf"] > [data-slot="dock"] [data-slot="dock"]'
+    );
     if (!dock) {
       return "no composer";
     }
@@ -639,9 +641,9 @@ const composerAlone = (page: Page): Promise<string> =>
     };
     const field = dock.querySelector<HTMLTextAreaElement>("textarea");
     const draft = field?.value ?? "";
-    const stack = dock.querySelector<HTMLElement>(".stack");
+    const stack = dock.querySelector<HTMLElement>('[data-slot="stack"]');
     const height = stack?.style.blockSize ?? "";
-    const trays = [...dock.querySelectorAll<HTMLElement>(".tray")];
+    const trays = [...dock.querySelectorAll<HTMLElement>('[data-slot="tray"]')];
     const swap = () => {
       for (const tray of trays) {
         tray.classList.toggle("away");
@@ -750,7 +752,7 @@ async function switchLayoutParts(
             const drawn = () =>
               [
                 ...document.querySelectorAll<HTMLElement>(
-                  ".pane:not(.pane-hidden, .pane-settling)"
+                  '[data-slot="pane"]:not([data-pane-hidden], [data-pane-settling])'
                 ),
               ]
                 .map((pane) => pane.dataset.pane)
@@ -1011,13 +1013,13 @@ async function noteAlone(
   };
   const hidden: string[] = [];
   const composed: string[] = [];
-  const warm = ".pane.pane-settling";
+  const warm = '[data-slot="pane"][data-pane-settling]';
   for (const id of order) {
     await page.mouse.move(0, 0);
     await page.waitForTimeout(REST_MS);
     hidden.push(await hideAlone(page));
     composed.push(await composerAlone(page));
-    const pane = `.pane.pane-hidden[data-pane="${id}"]`;
+    const pane = `[data-slot="pane"][data-pane-hidden][data-pane="${id}"]`;
     putAway.push(await revealAlone(page, pane, "pane-hidden"));
     await reach(id);
     warmed.push(await revealAlone(page, warm, "pane-settling"));
@@ -1530,7 +1532,7 @@ async function measure(
     const kept: Changed[] = [];
     const rowsOf = (target: Node, added: Node[]): string | null => {
       const pane =
-        target instanceof Element && target.closest(".listing")
+        target instanceof Element && target.closest('[data-slot="listing"]')
           ? target.closest<HTMLElement>("[data-pane]")
           : null;
       const tops = added.flatMap((node) =>
@@ -1542,9 +1544,9 @@ async function measure(
         return null;
       }
       let state = "drawn";
-      if (pane.classList.contains("pane-hidden")) {
+      if (pane.matches("[data-pane-hidden]")) {
         state = "put away";
-      } else if (pane.classList.contains("pane-settling")) {
+      } else if (pane.matches("[data-pane-settling]")) {
         state = "settling";
       }
       return `${tops.length} rows into ${pane.dataset.pane?.slice(0, 8)} (${state}) at ${Math.min(...tops)}-${Math.max(...tops)}px`;
@@ -1562,9 +1564,9 @@ async function measure(
         return "outside a pane";
       }
       let state = "drawn";
-      if (pane.classList.contains("pane-hidden")) {
+      if (pane.matches("[data-pane-hidden]")) {
         state = "put away";
-      } else if (pane.classList.contains("pane-settling")) {
+      } else if (pane.matches("[data-pane-settling]")) {
         state = "settling";
       }
       return `${(pane.getAttribute("data-pane") ?? "").slice(0, 8)} (${state})`;
@@ -1593,7 +1595,7 @@ async function measure(
         if (
           gone > 0 &&
           target instanceof Element &&
-          target.closest(".listing")
+          target.closest('[data-slot="listing"]')
         ) {
           later.push({ at, line: `${gone} rows out of ${paneOf(target)}` });
         }
@@ -1647,12 +1649,11 @@ async function measure(
           ({ mark, shown, pane }) => {
             const drawn = () => {
               const box = document.querySelector(
-                `.pane[data-pane="${CSS.escape(pane)}"]`
+                `[data-slot="pane"][data-pane="${CSS.escape(pane)}"]`
               );
               return (
                 box !== null &&
-                !box.classList.contains("pane-hidden") &&
-                !box.classList.contains("pane-settling")
+                !box.matches("[data-pane-hidden], [data-pane-settling]")
               );
             };
             const began = performance.now();
@@ -1661,12 +1662,14 @@ async function measure(
             // inside the switch being counted.
             const onScreen = () => {
               const box = document.querySelector(
-                `.pane[data-pane="${CSS.escape(pane)}"]`
+                `[data-slot="pane"][data-pane="${CSS.escape(pane)}"]`
               );
               const view = box
                 ?.querySelector('[aria-label="Session transcript"]')
                 ?.getBoundingClientRect();
-              const items = box?.querySelector(".listing > :first-child");
+              const items = box?.querySelector(
+                '[data-slot="listing"] > :first-child'
+              );
               let count = 0;
               for (const item of items?.children ?? []) {
                 const r = item.getBoundingClientRect();
@@ -1721,10 +1724,10 @@ async function measure(
             const clip = (value: string | null) => (value ?? "").slice(0, 80);
             const ours: string[] = [];
             const regions: [string, string][] = [
-              ["[data-pane]:not(.pane-hidden)", "a pane drawn"],
-              ["[data-pane].pane-hidden", "a pane put away"],
-              [".dock", "the composer"],
-              [".session-tabs, [data-session-tab]", "the tabs"],
+              ["[data-pane]:not([data-pane-hidden])", "a pane drawn"],
+              ["[data-pane][data-pane-hidden]", "a pane put away"],
+              ['[data-slot="dock"]', "the composer"],
+              ["[data-session-tabs], [data-session-tab]", "the tabs"],
             ];
             const nameOf = (box: Element) =>
               [box.tagName.toLowerCase(), ...box.classList]

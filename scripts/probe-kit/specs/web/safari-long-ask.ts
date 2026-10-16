@@ -104,15 +104,18 @@ function refuseStorage(): void {
 
 /** What the composer's ask card says, read from the DOM. */
 const cardState = () => {
-  const card = document.querySelector(".ask");
+  const card = document.querySelector('[data-slot="ask"]');
   const box = card?.getBoundingClientRect();
   return {
     drawn: Boolean(card && box && box.height > 0),
     text: card?.textContent?.replace(/\s+/g, " ").trim().slice(0, 300) ?? "",
-    command: card?.querySelector(".cmd-text")?.textContent?.length ?? 0,
-    fields: [...(card?.querySelectorAll(".field") ?? [])].map(
-      (field) => field.textContent?.replace(/\s+/g, " ").trim() ?? ""
-    ),
+    command:
+      card?.querySelector('[data-slot="cmd-text"]')?.textContent?.length ?? 0,
+    fields: [
+      ...(card?.querySelectorAll(
+        ':is([data-slot="new-page-field"], [data-slot="add-machine-dialog-field"], [data-slot="project-chip-field"], [data-slot="location-section-field"], [data-slot="task-fields-field"], [data-slot="task-activity-field"], [data-slot="task-labels-field"], [data-slot="field-field"], [data-slot="project-spend-field"], [data-slot="mk-input-field"], [data-field], [data-slot="tool-group-field"], [data-slot="composer-field"], [data-slot="prompt-field"], [data-slot="finder-field"], [data-slot="workflow-run-view-field"])'
+      ) ?? []),
+    ].map((field) => field.textContent?.replace(/\s+/g, " ").trim() ?? ""),
     // A button's label and its pending wording stand in one cell
     // ("ApproveApproving…"): read by how it starts.
     buttons: [...(card?.querySelectorAll("button") ?? [])].map(
@@ -166,7 +169,7 @@ async function leg(
     await fleet.send(id, `${ASK} slim the exports`);
     return settled(
       page
-        .locator(".ask button", { hasText: "Approve" })
+        .locator('[data-slot="ask"] button', { hasText: "Approve" })
         .waitFor({ timeout: 120_000 })
     );
   });
@@ -190,10 +193,12 @@ async function leg(
   );
 
   const opened = await answering(page, async () => {
-    await page.locator(".ask .cmd-toggle").tap();
+    await page.locator('[data-slot="ask"] [data-cmd-toggle]').tap();
     await page.waitForTimeout(600);
     return page.evaluate(
-      () => document.querySelector(".ask .cmd-text")?.textContent?.length ?? 0
+      () =>
+        document.querySelector('[data-slot="ask"] [data-slot="cmd-text"]')
+          ?.textContent?.length ?? 0
     );
   });
   kit.check(
@@ -203,7 +208,9 @@ async function leg(
   );
 
   const approved = await answering(page, async () => {
-    await page.locator(".ask button", { hasText: "Approve" }).tap();
+    await page
+      .locator('[data-slot="ask"] button', { hasText: "Approve" })
+      .tap();
     const answered = await settled(
       until(
         "the hub holds no ask",
@@ -217,9 +224,13 @@ async function leg(
       )
     );
     const folded = await settled(
-      page.waitForFunction(() => !document.querySelector(".ask"), null, {
-        timeout: 30_000,
-      })
+      page.waitForFunction(
+        () => !document.querySelector('[data-slot="ask"]'),
+        null,
+        {
+          timeout: 30_000,
+        }
+      )
     );
     return { answered, folded };
   });

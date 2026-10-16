@@ -33,7 +33,7 @@ const respond = (request: Seen): Reply => ({
 
 const STARTER = "Build a design system from our site and code";
 /** The empty board's starter cards (StarterCards). */
-const STARTERS = ".starter-cards .starter";
+const STARTERS = '[data-slot="starter-cards"] [data-slot="starter"]';
 /** Caw's floating panel (CawFloat). */
 const PANEL = "[data-caw-panel]";
 
@@ -283,7 +283,9 @@ const run = async (kit: Kit) => {
     .evaluateAll((cardsShown) =>
       cardsShown.map(
         (shownCard) =>
-          shownCard.querySelector(".starter-text")?.textContent?.trim() ?? ""
+          shownCard
+            .querySelector('[data-slot="starter-text"]')
+            ?.textContent?.trim() ?? ""
       )
     );
   const before = await threadCount();

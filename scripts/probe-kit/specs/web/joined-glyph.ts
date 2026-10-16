@@ -66,7 +66,7 @@ const spec: Spec = {
         await open(
           page,
           `${bench}/motion/mac-readiness?state=${state}`,
-          `${ROW}[data-readiness="${state}"] .glyph svg`
+          `${ROW}[data-readiness="${state}"] [data-slot="glyph"] svg`
         );
         await settle(page);
         const layers = await page.evaluate((row): Layers | null => {
@@ -83,7 +83,8 @@ const spec: Spec = {
             return [...pen.getImageData(0, 0, 1, 1).data];
           };
           const root = document.querySelector(row);
-          const svg = root?.querySelector(".glyph svg");
+          // Inside the joined row the one glyph is JoinedRow's slot.
+          const svg = root?.querySelector('[data-slot="glyph"] svg');
           const disc = svg?.querySelector("[opacity]");
           const stroke = [...(svg?.querySelectorAll("path") ?? [])].find(
             (path) => !path.closest("[opacity]")

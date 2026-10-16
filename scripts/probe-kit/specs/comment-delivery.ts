@@ -238,24 +238,30 @@ const numbered = (pins: Pins, number: number) =>
 
 /** The pane's pin list: in the Comments popover hung from the well, opened when shut. */
 const rowsOf = async (page: Page) => {
-  const button = page.locator(".preview-pane button.comments");
+  const button = page.locator(
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+  );
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
   }
-  const list = page.locator(".pin-list-pop .pin-list");
+  const list = page.locator('[data-pin-list-pop] [data-slot="pin-list"]');
   await list.waitFor({ timeout: 5000 });
   return list;
 };
 /** Pin `number`'s card, opened from its row in the Comments popover. */
 const openRow = async (page: Page, number: number) =>
-  (await rowsOf(page)).locator(`.pin-row[data-pin-row="${number}"]`).click();
+  (await rowsOf(page))
+    .locator(`[data-slot="pin-row"][data-pin-row="${number}"]`)
+    .click();
 /** The Comments popover shut, when open. */
 const shutList = async (page: Page) => {
-  const button = page.locator(".preview-pane button.comments");
+  const button = page.locator(
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+  );
   if ((await button.getAttribute("aria-expanded")) === "true") {
     await button.click();
     await page
-      .locator(".pin-list-pop")
+      .locator("[data-pin-list-pop]")
       .waitFor({ state: "detached", timeout: 3000 })
       .catch(() => undefined);
   }
@@ -294,7 +300,9 @@ const writePins = async (on: On, frame: Frame): Promise<number[]> => {
     }
     const b = await screenBox(on, frame, `#${PARAS[i].id}`);
     await page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
-    const card = page.locator(`.pin-card[data-pin-card="${number}"]`);
+    const card = page.locator(
+      `[data-slot="pin-card"][data-pin-card="${number}"]`
+    );
     await card.waitFor({ timeout: 5000 });
     await card.getByRole("textbox").fill(words);
     await card.getByRole("button", { name: "Reply" }).click();
@@ -319,7 +327,7 @@ const pinWith = async (
   words: string
 ) => {
   const comment = on.page.locator(
-    ".preview-pane button[aria-keyshortcuts='C']"
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
   await on.page.keyboard.press("c");
@@ -329,7 +337,9 @@ const pinWith = async (
   await settle(on.page, 300);
   const b = await screenBox(on, frame, selector);
   await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
-  const card = on.page.locator(`.pin-card[data-pin-card="${number}"]`);
+  const card = on.page.locator(
+    `[data-slot="pin-card"][data-pin-card="${number}"]`
+  );
   await card.waitFor({ timeout: 5000 }).catch(async (error: unknown) => {
     const pins = Object.values((await docOf(frame)).pins).map(
       (pin) => pin.number
@@ -382,7 +392,7 @@ const readFirstChecks = async (
   );
   const later = heard.length;
   await openRow(page, 4);
-  const card = page.locator('.pin-card[data-pin-card="4"]');
+  const card = page.locator('[data-slot="pin-card"][data-pin-card="4"]');
   await card.getByRole("textbox").fill(LATER_WORDS);
   await card.getByRole("button", { name: "Reply" }).click();
   await until(
@@ -451,7 +461,7 @@ const endedWriterChecks = async (
   // The writer's session in a tab of its own, as the person opens it.
   const tab = await kit.page("desk");
   const on: On = { ...desk, page: tab, session: writer };
-  await open(tab, `${base}/session/${writer}`, ".artifact-trigger");
+  await open(tab, `${base}/session/${writer}`, "[data-artifact-trigger]");
   const frame = await pageFrame(on);
   await frame.waitForSelector("#w", { timeout: 60_000 });
   await settle(on.page, 600);
@@ -500,7 +510,9 @@ const endedWriterChecks = async (
   const readCard = async () => {
     await openRow(tab, 1);
     const said = await tab
-      .locator('.pin-card[data-pin-card="1"] .entry[data-by="agent"]')
+      .locator(
+        '[data-slot="pin-card"][data-pin-card="1"] [data-slot="entry"][data-by="agent"]'
+      )
       .allInnerTexts();
     await tab.keyboard.press("Escape");
     await shutList(tab);
@@ -649,7 +661,7 @@ const run = async (kit: Kit) => {
   const page = await kit.page("desk");
   const said: string[] = [];
   page.on("pageerror", (error) => said.push(`pageerror: ${error.message}`));
-  await open(page, `${base}/session/${session}`, ".artifact-trigger");
+  await open(page, `${base}/session/${session}`, "[data-artifact-trigger]");
   const cdp = await page.context().newCDPSession(page);
   const on: On = { call, cdp, fleet, kit, page, said, session };
   const frame = await pageFrame(on);
@@ -657,7 +669,12 @@ const run = async (kit: Kit) => {
   await settle(page, 600);
 
   // 1. No Send control in the pane's head.
-  const sendControls = () => page.locator(".preview-pane .send").count();
+  const sendControls = () =>
+    page
+      .locator(
+        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="send"]'
+      )
+      .count();
   const atStart = await sendControls();
   kit.check(
     "1: the session's page is in its pane, and the pane's head has no Send control",
@@ -667,7 +684,9 @@ const run = async (kit: Kit) => {
 
   // 2. Three pins, 2 s apart, each tapped and written in.
   const startedAt = Date.now();
-  const comment = page.locator(".preview-pane button[aria-keyshortcuts='C']");
+  const comment = page.locator(
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+  );
   await comment.focus();
   await page.keyboard.press("c");
   await pageInComment(frame);
@@ -737,7 +756,9 @@ const run = async (kit: Kit) => {
     lines: Array.from(
       document.querySelectorAll<HTMLElement>("[data-artifact-responses]")
     ).map((row) => row.innerText.replace(/\s+/g, " ").trim()),
-    person: Array.from(document.querySelectorAll<HTMLElement>(".turn.you"))
+    person: Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="turn"][data-you]')
+    )
       .map((row) => row.innerText)
       .filter((words) => words.includes("[CawCo]") || words.includes("Pin:")),
   }));
@@ -754,7 +775,7 @@ const run = async (kit: Kit) => {
   const before3 = heard.length;
   const events3 = events.length;
   await openRow(page, 2);
-  const card2 = page.locator('.pin-card[data-pin-card="2"]');
+  const card2 = page.locator('[data-slot="pin-card"][data-pin-card="2"]');
   await card2.getByRole("textbox").fill("On second thought, keep the weight.");
   await card2.getByRole("button", { name: "Reply" }).click();
   await until(
@@ -792,7 +813,7 @@ const run = async (kit: Kit) => {
   const before4 = heard.length;
   await openRow(page, 3);
   await page
-    .locator('.pin-card[data-pin-card="3"]')
+    .locator('[data-slot="pin-card"][data-pin-card="3"]')
     .getByRole("button", { name: "Resolve" })
     .click();
   await until(

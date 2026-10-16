@@ -1,8 +1,8 @@
 /**
  * Three decision pages in a scratch fleet's project, as sessions publish
  * them (the decision-page skill's kit markup, built by the hub), for the
- * Decisions tab's preview (run.ts) and its probe (probe-kit
- * specs/web/decisions-tab.ts):
+ * Decisions tab's preview (run.ts) and the probes that seed a project with
+ * them (probe-kit specs/web/safari-blurs.ts):
  *
  * - **landing** — "Landing page hero", 12 cards, 5 picked and 2 noted: the
  *   tab says `5 of 12 picked · 2 notes`.

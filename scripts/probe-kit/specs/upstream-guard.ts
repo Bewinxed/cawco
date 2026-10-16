@@ -236,7 +236,8 @@ const press = async (page: Page, view: View, selector: string) => {
     : page.mouse.click(at.x, at.y));
 };
 
-const NEEDS_ROW = '.caw-pop .row[data-kind="choice"]';
+const NEEDS_ROW =
+  ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"]) :is([data-slot="row"], [data-task-table-row], [data-project-spend-row], [data-view-routines-row], [data-view-table-row], [data-layout-row], [data-account-name-row], [data-session-row-row])[data-kind="choice"]';
 const OPEN_MENU = "[data-slot='dropdown-menu-content'][data-state='open']";
 const OPEN_SUB = "[data-slot='dropdown-menu-sub-content'][data-state='open']";
 const SUB_TRIGGER = `${OPEN_MENU} [data-slot='dropdown-menu-sub-trigger'][data-probe-upstream]`;
@@ -245,7 +246,10 @@ const SUB_TRIGGER = `${OPEN_MENU} [data-slot='dropdown-menu-sub-trigger'][data-p
 const openNeeds = async (page: Page, view: View, base: string) => {
   await open(page, base, "[data-needs-caw]");
   await press(page, view, "[data-needs-caw]");
-  await page.waitForSelector(".caw-pop[data-shown]", { timeout: 30_000 });
+  await page.waitForSelector(
+    ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"])[data-shown]',
+    { timeout: 30_000 }
+  );
   await settle(page, 400);
 };
 
@@ -276,29 +280,37 @@ const readChoiceRow = (selector: string) => {
     const r = el.getBoundingClientRect();
     return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
   };
-  const list = row.closest(".list") ?? row.closest(".caw-pop");
+  const list =
+    row.closest(':is([data-slot="list"], [data-list])') ??
+    row.closest(':is([data-caw-pop], [data-glass-card-frame~="caw-pop"])');
   return {
-    name: shown(row.querySelector(".name")),
-    want: shown(row.querySelector(".want")),
-    meta: shown(row.querySelector(".meta")),
-    opens: row.querySelector("a.cover") !== null,
+    name: shown(
+      row.querySelector(
+        ':is([data-slot="name"], [data-transcript-skeleton-name])'
+      )
+    ),
+    want: shown(row.querySelector('[data-slot="want"]')),
+    meta: shown(row.querySelector(':is([data-slot="meta"], [data-meta])')),
+    opens: row.querySelector('a[data-slot="cover"]') !== null,
     row: box(row),
     sideways: list ? list.scrollWidth - list.clientWidth : -1,
-    buttons: [...row.querySelectorAll(".peers button")].map((button) => {
-      const b = button.getBoundingClientRect();
-      const hit = document.elementFromPoint(
-        b.left + b.width / 2,
-        b.top + b.height / 2
-      );
-      return {
-        label: shown(button),
-        box: box(button),
-        height: b.height,
-        width: b.width,
-        fill: getComputedStyle(button).backgroundColor,
-        hits: Boolean(hit && button.contains(hit)),
-      };
-    }),
+    buttons: [...row.querySelectorAll('[data-slot="peers"] button')].map(
+      (button) => {
+        const b = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          b.left + b.width / 2,
+          b.top + b.height / 2
+        );
+        return {
+          label: shown(button),
+          box: box(button),
+          height: b.height,
+          width: b.width,
+          fill: getComputedStyle(button).backgroundColor,
+          hits: Boolean(hit && button.contains(hit)),
+        };
+      }
+    ),
   };
 };
 

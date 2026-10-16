@@ -285,27 +285,33 @@ const pageInComment = (frame: Frame, on: boolean) =>
  * first ({@link shutList}).
  */
 const rowsOf = async (on: On) => {
-  const button = on.page.locator(".preview-pane button.comments");
+  const button = on.page.locator(
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+  );
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
   }
-  const list = on.page.locator(".pin-list-pop .pin-list");
+  const list = on.page.locator('[data-pin-list-pop] [data-slot="pin-list"]');
   await list.waitFor({ timeout: 5000 }).catch(() => undefined);
   return list;
 };
 const shutList = async (on: On) => {
-  const button = on.page.locator(".preview-pane button.comments");
+  const button = on.page.locator(
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+  );
   if ((await button.getAttribute("aria-expanded")) === "true") {
     await button.click();
     await on.page
-      .locator(".pin-list-pop")
+      .locator("[data-pin-list-pop]")
       .waitFor({ state: "detached", timeout: 3000 })
       .catch(() => undefined);
   }
 };
 /** The head's Interact: Comment's way back, as the old toggle's second press was. */
 const interactTab = (on: On) =>
-  on.page.locator(".preview-pane [role='tab'][aria-keyshortcuts='V']");
+  on.page.locator(
+    ":is([data-slot=\"preview-pane\"], [data-side-surface-class~=\"preview-pane\"]) [role='tab'][aria-keyshortcuts='V']"
+  );
 
 /** The overlay's outline over the page, in the frame's viewport. */
 const outlineOf = (frame: Frame) =>
@@ -388,7 +394,7 @@ const run = async (kit: Kit) => {
 /** 1. C, a tap, the card at the pin, Esc and Esc. */
 const commentChecks = async (on: On, frame: Frame) => {
   const comment = on.page.locator(
-    ".preview-pane button[aria-keyshortcuts='C']"
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
   await on.page.keyboard.press("c");
@@ -396,7 +402,9 @@ const commentChecks = async (on: On, frame: Frame) => {
   // The edge comes in over --dur-control: read once it has.
   await settle(on.page, 300);
   const edge = await on.page.evaluate(() => {
-    const well = document.querySelector(".preview-pane .side-well");
+    const well = document.querySelector(
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="side-well"]'
+    );
     const probe = document.createElement("span");
     probe.style.color = "var(--accent)";
     document.body.append(probe);
@@ -423,7 +431,7 @@ const commentChecks = async (on: On, frame: Frame) => {
     10_000
   ).catch(() => ({}) as Pins);
   const pin = pinNumbered(pins, 1);
-  const card = on.page.locator('.pin-card[data-pin-card="1"]');
+  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
   await card.waitFor({ timeout: 5000 }).catch(() => undefined);
   await settle(on.page, 500);
   const disc = await frame
@@ -544,9 +552,13 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
   );
   await writeIn(on, 2, "This stroke, thicker.");
   await on.page.keyboard.press("Escape");
-  const rows = await (await rowsOf(on)).locator(".pin-row").count();
+  const rows = await (
+    await rowsOf(on)
+  )
+    .locator('[data-slot="pin-row"]')
+    .count();
 
-  await (await rowsOf(on)).locator(".pin-row").first().focus();
+  await (await rowsOf(on)).locator('[data-slot="pin-row"]').first().focus();
   const steps: { current: string | null; outline: boolean }[] = [];
   for (const [key, selector] of [
     ["j", "#para"],
@@ -557,7 +569,9 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
     await on.page.keyboard.press(key);
     await settle(on.page, 700);
     const current = await on.page
-      .locator('.pin-list .pin-row[aria-current="true"]')
+      .locator(
+        '[data-slot="pin-list"] [data-slot="pin-row"][aria-current="true"]'
+      )
       .getAttribute("data-pin-row")
       .catch(() => null);
     steps.push({
@@ -577,10 +591,14 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
 
 /** 3. A reply in the card, delivered by itself once quiet; a second reply, one more delivery. */
 const sendChecks = async (on: On, frame: Frame, one: string) => {
-  await (await rowsOf(on)).locator('.pin-row[data-pin-row="1"]').click();
-  const card = on.page.locator('.pin-card[data-pin-card="1"]');
+  await (
+    await rowsOf(on)
+  )
+    .locator('[data-slot="pin-row"][data-pin-row="1"]')
+    .click();
+  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
   const before = heard.length;
-  const rows = await on.page.locator(".turn.you").count();
+  const rows = await on.page.locator('[data-slot="turn"][data-you]').count();
   await card.getByRole("textbox").fill("Make it bolder.");
   await card.getByRole("button", { name: "Reply" }).click();
   const replied = await until(
@@ -614,7 +632,7 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
     .waitFor({ timeout: 30_000 })
     .catch(() => undefined);
   await settle(on.page, 500);
-  const ownRows = await on.page.locator(".turn.you").count();
+  const ownRows = await on.page.locator('[data-slot="turn"][data-you]').count();
   const lines = await line.count();
   const stamped = await until(
     "sentAt on pin 1 and its entry",
@@ -630,7 +648,11 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
     },
     10_000
   ).catch(() => docOf(frame));
-  const sendControls = await on.page.locator(".preview-pane .send").count();
+  const sendControls = await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="send"]'
+    )
+    .count();
   const words = message?.last ?? "";
   on.kit.check(
     "3: with no Send, the reply reaches the session by itself: pin 1 with its words and its picture (pin 2, said nothing in, waits); one quiet line, no row of the person's; pin 1 stamped sentAt; no Send control in the pane",
@@ -647,7 +669,11 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   );
 
   const again = heard.length;
-  await (await rowsOf(on)).locator('.pin-row[data-pin-row="1"]').click();
+  await (
+    await rowsOf(on)
+  )
+    .locator('[data-slot="pin-row"][data-pin-row="1"]')
+    .click();
   await card.getByRole("textbox").fill("And a little larger.");
   await card.getByRole("button", { name: "Reply" }).click();
   const second = await until(
@@ -678,11 +704,19 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     read.slice(read.indexOf("{"), read.indexOf("{") + 600)
   );
 
-  const card = on.page.locator('.pin-card[data-pin-card="1"]');
+  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
   let live = false;
   // Polls the list while the agent's turn runs.
   const watch = setInterval(async () => {
-    if ((await (await rowsOf(on)).locator(".live").count()) > 0) {
+    if (
+      (await (
+        await rowsOf(on)
+      )
+        .locator(
+          ':is([data-task-card-live], [data-slot="live"], [data-account-move-divider-live], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
+        )
+        .count()) > 0
+    ) {
       live = true;
     }
   }, 100);
@@ -695,7 +729,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   const done = answeredAt.get(lastMarker) ?? Date.now();
   const shown = await until(
     "the agent's reply in the card",
-    () => card.locator('.entry[data-by="agent"]').count(),
+    () => card.locator('[data-slot="entry"][data-by="agent"]').count(),
     (count) => count === 1,
     5000
   )
@@ -703,7 +737,12 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     .catch(() => Number.NaN);
   await until(
     "the agent's turn to end",
-    () => on.page.locator(".pin-list-pop .live").count(),
+    () =>
+      on.page
+        .locator(
+          '[data-pin-list-pop] :is([data-task-card-live], [data-slot="live"], [data-account-move-divider-live], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
+        )
+        .count(),
     (count) => count === 0,
     15_000
   ).catch(() => undefined);
@@ -721,33 +760,44 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   const voices = await card.evaluate((el) => {
     const surface = (node: Element | null) =>
       node ? getComputedStyle(node, "::before").backgroundColor : null;
-    const people = [...el.querySelectorAll('.entry[data-by="person"]')];
-    const agent = el.querySelector('.entry[data-by="agent"]');
-    const wells = people.map((entry) => entry.querySelector(".turn.you .well"));
+    const people = [
+      ...el.querySelectorAll('[data-slot="entry"][data-by="person"]'),
+    ];
+    const agent = el.querySelector('[data-slot="entry"][data-by="agent"]');
+    const wells = people.map((entry) =>
+      entry.querySelector('[data-slot="turn"][data-you] [data-slot="well"]')
+    );
     const [upper, lower] = wells.map((well) => well?.getBoundingClientRect());
-    const agentTurn = agent?.querySelector(".turn");
+    const agentTurn = agent?.querySelector('[data-slot="turn"]');
     return {
       people: people.length,
       personWells: wells.map(surface),
       runsOn: people[0]
-        ?.querySelector(".turn.you")
-        ?.classList.contains("runs-on"),
+        ?.querySelector('[data-slot="turn"][data-you]')
+        ?.matches("[data-runs-on]"),
       grouped: people[1]
-        ?.querySelector(".turn.you")
-        ?.classList.contains("grouped"),
-      marks: people.filter((entry) => entry.querySelector(".who .dot.u"))
-        .length,
+        ?.querySelector('[data-slot="turn"][data-you]')
+        ?.matches("[data-grouped]"),
+      marks: people.filter((entry) =>
+        entry.querySelector(
+          '[data-slot="who"] :is([data-slot="dot"], [data-account-dot-dot])[data-u]'
+        )
+      ).length,
       seam: upper && lower ? Math.round(lower.top - upper.bottom) : null,
-      agentWell: agent?.querySelector(".well") ? "yes" : "no",
+      agentWell: agent?.querySelector('[data-slot="well"]') ? "yes" : "no",
       agentSurface: agentTurn
         ? getComputedStyle(agentTurn).backgroundColor
         : null,
       agentMark: (() => {
-        const dot = agent?.querySelector(".who .dot.a");
+        const dot = agent?.querySelector(
+          '[data-slot="who"] :is([data-slot="dot"], [data-account-dot-dot]):is([data-a], [data-slot="a"])'
+        );
         return dot ? getComputedStyle(dot).backgroundColor : null;
       })(),
       agentName:
-        agent?.querySelector(".who .role")?.textContent?.trim() ?? null,
+        agent
+          ?.querySelector('[data-slot="who"] [data-slot="role"]')
+          ?.textContent?.trim() ?? null,
     };
   });
   const clear = (color: string | null | undefined) =>
@@ -780,10 +830,14 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     (opacity) => opacity === "0.4",
     5000
   ).catch(() => null);
-  const openRows = await (await rowsOf(on)).locator(".pin-row").count();
+  const openRows = await (
+    await rowsOf(on)
+  )
+    .locator('[data-slot="pin-row"]')
+    .count();
   await on.page.getByRole("tab", { name: RESOLVED_TAB }).click();
   const resolved = await on.page
-    .locator('.pin-list .pin-row[data-pin-row="1"]')
+    .locator('[data-slot="pin-list"] [data-slot="pin-row"][data-pin-row="1"]')
     .count();
   on.kit.check(
     "4: comment_resolve dims pin 1 to 40% and moves it to Resolved",
@@ -791,7 +845,11 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     `opacity ${dim}; open rows ${openRows}; resolved row ${resolved}`
   );
 
-  await (await rowsOf(on)).locator('.pin-row[data-pin-row="1"]').click();
+  await (
+    await rowsOf(on)
+  )
+    .locator('[data-slot="pin-row"][data-pin-row="1"]')
+    .click();
   await card.getByRole("button", { name: "Reopen" }).click();
   const reopened = await until(
     "pin 1 reopened",
@@ -801,7 +859,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   ).catch(() => null);
   await on.page.getByRole("tab", { name: OPEN_TAB }).click();
   const back = await on.page
-    .locator('.pin-list .pin-row[data-pin-row="1"]')
+    .locator('[data-slot="pin-list"] [data-slot="pin-row"][data-pin-row="1"]')
     .count();
   on.kit.check(
     "4: Reopen brings pin 1 back to Open",
@@ -949,7 +1007,9 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
     (pin) => !!pin.movedAt,
     10_000
   ).catch(anchorOf);
-  const tray = (await rowsOf(on)).locator('.moved-row[data-moved-row="1"]');
+  const tray = (await rowsOf(on)).locator(
+    '[data-slot="moved-row"][data-moved-row="1"]'
+  );
   await tray.waitFor({ timeout: 5000 }).catch(() => undefined);
   const inTray = await tray.count();
   on.kit.check(
@@ -959,7 +1019,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   );
 
   const commentButton = on.page.locator(
-    ".preview-pane button[aria-keyshortcuts='C']"
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
   );
   const modeBefore = await commentButton.getAttribute("aria-selected");
   await tray.getByRole("button", { name: "Place again" }).click();
@@ -1202,7 +1262,7 @@ const frameChecks = async (on: On) => {
       `inner ${JSON.stringify(standing)}; outer overlay elements ${outerHost}`
     );
     const comment = on.page.locator(
-      ".preview-pane button[aria-keyshortcuts='C']"
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
     );
     await comment.click();
     await pageInComment(outer, true);
@@ -1276,7 +1336,11 @@ const frameChecks = async (on: On) => {
     await on.page.keyboard.press("Escape");
     await on.page.keyboard.press("Escape");
 
-    await on.page.locator('.preview-pane button[aria-label="Reload"]').click();
+    await on.page
+      .locator(
+        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Reload"]'
+      )
+      .click();
     const reloaded = (await until(
       "the reloaded preview",
       async () => {
@@ -1339,7 +1403,7 @@ const frameChecks = async (on: On) => {
  */
 const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const comment = on.page.locator(
-    ".preview-pane button[aria-keyshortcuts='C']"
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.click();
   await pageInComment(frame, true);
@@ -1379,17 +1443,17 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   // The card stands beside its pin once the page says where the pin is
   // (`cawco:pin-at`), a message from the preview's own process: it is read
   // once it stands still.
-  let openCard = await on.page.locator(".pin-card").boundingBox();
+  let openCard = await on.page.locator('[data-slot="pin-card"]').boundingBox();
   for (let reads = 0; reads < 20; reads += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: one read every 100 ms until two agree
     await on.page.waitForTimeout(100);
-    const now = await on.page.locator(".pin-card").boundingBox();
+    const now = await on.page.locator('[data-slot="pin-card"]').boundingBox();
     if (JSON.stringify(now) === JSON.stringify(openCard)) {
       break;
     }
     openCard = now;
   }
-  const tall = await screenBox(on, frame, ".tall");
+  const tall = await screenBox(on, frame, "[data-tall]");
   tapped.push(
     await tapPin(
       tall.x + 20,
@@ -1410,7 +1474,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   await (
     await rowsOf(on)
   )
-    .locator(`.pin-row[data-pin-row="${target}"]`)
+    .locator(`[data-slot="pin-row"][data-pin-row="${target}"]`)
     .click();
   const before = await numbersNow();
   const doomed = Object.entries(before).find(
@@ -1419,16 +1483,18 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const card = on.page.locator(`[data-pin-card="${target}"]`);
   // The head holds what acts on the pin (Resolve, ⋯, Close) on its row; the foot holds Reply alone.
   const parts = await card.evaluate((el) => {
-    const head = el.querySelector(".head");
+    const head = el.querySelector('[data-slot="head"]');
     const named = [...(head?.querySelectorAll("button") ?? [])].map(
       (button) => button.getAttribute("aria-label") ?? ""
     );
     const tops = [...(head?.querySelectorAll("button") ?? [])].map((button) =>
       Math.round(button.getBoundingClientRect().top)
     );
-    const foot = [...el.querySelectorAll(".actions button")].map((button) =>
-      button.textContent?.trim()
-    );
+    const foot = [
+      ...el.querySelectorAll(
+        ':is([data-slot="actions"], [data-actions]) button'
+      ),
+    ].map((button) => button.textContent?.trim());
     return { named, tops, foot };
   });
   on.kit.check(
@@ -1440,7 +1506,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
       parts.foot.join() === "Reply",
     JSON.stringify(parts)
   );
-  await card.locator(".head button").nth(1).click();
+  await card.locator('[data-slot="head"] button').nth(1).click();
   await on.page.getByRole("menuitem", { name: "Delete pin" }).click();
   const ask = card.locator('[data-ask="delete"]');
   const asked = await ask
@@ -1563,7 +1629,9 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
           .evaluate(
             ([kind, cards]) =>
               document.body?.dataset.scroller === kind &&
-              document.querySelectorAll(".card").length === cards &&
+              document.querySelectorAll(
+                ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
+              ).length === cards &&
               "cawcoArtifact" in window,
             [scroller, CARDS] as const
           )
@@ -1593,11 +1661,15 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
       const r = one.getBoundingClientRect();
       return Math.abs(r.top + r.height / 2 - mid);
     };
-    const cards = [...document.querySelectorAll<HTMLElement>(".card")];
+    const cards = [
+      ...document.querySelectorAll<HTMLElement>(
+        ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
+      ),
+    ];
     const nearest = cards.reduce((a, b) => (away(b) < away(a) ? b : a));
     return Number(nearest.dataset.n);
   });
-  const selector = `.card[data-n="${n}"]`;
+  const selector = `:is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])[data-n="${n}"]`;
   // How far the scroller moved from `start`, at any frame or scroll event, from here on.
   await frame.evaluate(
     ([top, y]) => {
@@ -1628,7 +1700,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   );
 
   const comment = on.page.locator(
-    ".preview-pane button[aria-keyshortcuts='C']"
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.click();
   await pageInComment(frame, true);
@@ -1656,7 +1728,9 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   )[0] as
     { anchor: { selector: string }; id: string; number: number } | undefined;
   const card = await focusedCard(on, pin?.number);
-  const pinCard = on.page.locator(`.pin-card[data-pin-card="${pin?.number}"]`);
+  const pinCard = on.page.locator(
+    `[data-slot="pin-card"][data-pin-card="${pin?.number}"]`
+  );
   await pinCard.getByRole("textbox").fill("This card, not the first.");
   await pinCard.getByRole("button", { name: "Reply" }).click();
   const kept = await until(
@@ -1772,7 +1846,11 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
     );
   }
 
-  await on.page.locator('.preview-pane button[aria-label="Reload"]').click();
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Reload"]'
+    )
+    .click();
   const reloaded = await loaded(frame);
   await scrollPage(reloaded, start.top + 200);
   const after = await until(
@@ -1808,12 +1886,20 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
     () =>
       reloaded.evaluate(
         () =>
-          document.querySelectorAll(".card")[2]?.getAttribute("data-n") ?? null
+          document
+            .querySelectorAll(
+              ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
+            )[2]
+            ?.getAttribute("data-n") ?? null
       ),
     (third) => third === String(n),
     15_000
   ).catch(() => null);
-  await on.page.locator('.preview-pane button[aria-label="Reload"]').click();
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Reload"]'
+    )
+    .click();
   const reordered = await loaded(reloaded);
   await reordered.evaluate(
     (s) => document.querySelector(s)?.scrollIntoView({ block: "center" }),
@@ -1834,7 +1920,12 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
         return el
           ? {
               n: el.getAttribute("data-n"),
-              at: [...document.querySelectorAll(".card")].indexOf(el) + 1,
+              at:
+                [
+                  ...document.querySelectorAll(
+                    ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
+                  ),
+                ].indexOf(el) + 1,
             }
           : null;
       }, keptAnchor.anchor.selector)
@@ -1889,13 +1980,13 @@ const inkAt = (frame: Frame) =>
 const dismissChecks = async (on: On) => {
   let frame = await pageFrame(on);
   const comment = on.page.locator(
-    ".preview-pane button[aria-keyshortcuts='C']"
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
   );
-  const cards = () => on.page.locator(".pin-card").count();
+  const cards = () => on.page.locator('[data-slot="pin-card"]').count();
   const pinsNow = async () => (await docOf(frame)).pins as Pins;
   const field = (number: number) =>
     on.page
-      .locator(`.pin-card[data-pin-card="${number}"]`)
+      .locator(`[data-slot="pin-card"][data-pin-card="${number}"]`)
       .getByRole("textbox")
       .inputValue({ timeout: 3000 })
       .catch(() => null);
@@ -1907,7 +1998,9 @@ const dismissChecks = async (on: On) => {
    * from its pin, leaves the other's disc clear to press.
    */
   const n = await frame.evaluate(() => {
-    const eight = document.querySelector('.card[data-n="8"]');
+    const eight = document.querySelector(
+      ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])[data-n="8"]'
+    );
     eight?.scrollIntoView({ block: "center" });
     const next = eight?.nextElementSibling as HTMLElement | null | undefined;
     const r = next?.getBoundingClientRect();
@@ -1921,7 +2014,10 @@ const dismissChecks = async (on: On) => {
   const tapNew = async () => {
     const held = Object.keys(await pinsNow()).length;
     const pane = await on.page.locator(FRAME).boundingBox();
-    const box = await boxIn(frame, `.card[data-n="${n}"]`);
+    const box = await boxIn(
+      frame,
+      `:is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])[data-n="${n}"]`
+    );
     const at = {
       x: (pane?.x ?? 0) + box.x + box.w * 0.7,
       y: (pane?.y ?? 0) + box.y + box.h * 0.5,
@@ -1976,7 +2072,7 @@ const dismissChecks = async (on: On) => {
       Object.values(await pinsNow()).map((pin) => [String(pin.number), true])
     );
   const row = (await rowsOf(on)).locator(
-    `.pin-row[data-pin-row="${kept.number}"]`
+    `[data-slot="pin-row"][data-pin-row="${kept.number}"]`
   );
   await row.click();
   const reopened = await field(kept.number);
@@ -1988,7 +2084,7 @@ const dismissChecks = async (on: On) => {
 
   // A press on the page, outside the card (the page's header, clear of the card).
   const pane = await on.page.locator(FRAME).boundingBox();
-  const openBox = await on.page.locator(".pin-card").boundingBox();
+  const openBox = await on.page.locator('[data-slot="pin-card"]').boundingBox();
   const spots = [
     { x: (pane?.x ?? 0) + 200, y: (pane?.y ?? 0) + HEADER / 2 },
     { x: (pane?.x ?? 0) + 12, y: (pane?.y ?? 0) + HEADER / 2 },
@@ -2023,7 +2119,9 @@ const dismissChecks = async (on: On) => {
   ) as { number: number } | undefined;
   await frame.evaluate(() =>
     document
-      .querySelector('.card[data-n="8"]')
+      .querySelector(
+        ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])[data-n="8"]'
+      )
       ?.scrollIntoView({ block: "center" })
   );
   await settle(on.page, 300);
@@ -2040,7 +2138,7 @@ const dismissChecks = async (on: On) => {
     async () => ({
       cards: await cards(),
       other: await on.page
-        .locator(`.pin-card[data-pin-card="${other?.number}"]`)
+        .locator(`[data-slot="pin-card"][data-pin-card="${other?.number}"]`)
         .count(),
     }),
     (seen) => seen.cards === 1 && seen.other === 1,
@@ -2057,7 +2155,7 @@ const dismissChecks = async (on: On) => {
   await on.page.reload({ waitUntil: "domcontentloaded" });
   frame = await pageFrame(on);
   const back = on.page.locator(
-    `.pin-list .pin-row[data-pin-row="${kept.number}"]`
+    `[data-slot="pin-list"] [data-slot="pin-row"][data-pin-row="${kept.number}"]`
   );
   await back.waitFor({ timeout: 30_000 }).catch(() => undefined);
   await back.click({ timeout: 5000 }).catch(() => undefined);
@@ -2100,11 +2198,15 @@ const roomChecks = async (on: On) => {
       }
     );
   }
-  await (await rowsOf(on)).locator('.pin-row[data-pin-row="1"]').click();
-  const card = on.page.locator('.pin-card[data-pin-card="1"]');
+  await (
+    await rowsOf(on)
+  )
+    .locator('[data-slot="pin-row"][data-pin-row="1"]')
+    .click();
+  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
   await until(
     "the seeded replies in pin 1's card",
-    () => card.locator(".entry").count(),
+    () => card.locator('[data-slot="entry"]').count(),
     (count) => count > replies,
     15_000
   ).catch(() => 0);
@@ -2132,7 +2234,7 @@ const roomChecks = async (on: On) => {
             atEnd: room.scrollTop + room.clientHeight >= room.scrollHeight - 1,
           }
         : null,
-      entries: el.querySelectorAll(".entry").length,
+      entries: el.querySelectorAll('[data-slot="entry"]').length,
       resolve: box(button("Resolve pin")),
       reply: box(button("Reply")),
       field: box(el.querySelector("textarea")),
@@ -2162,7 +2264,7 @@ const roomChecks = async (on: On) => {
   // alone (a phone's keyboard over a short well). The thread keeps its whole
   // height in the card's own scroll, never shrunk to nothing.
   await on.page.evaluate(() => {
-    const room = document.querySelector<HTMLElement>(".pin-room");
+    const room = document.querySelector<HTMLElement>('[data-slot="pin-room"]');
     room?.style.setProperty("bottom", "auto");
     room?.style.setProperty("height", "150px");
   });
@@ -2170,7 +2272,7 @@ const roomChecks = async (on: On) => {
   const squeezed = await card.evaluate((el) => {
     const room = el.querySelector("[data-pin-room]");
     return {
-      whole: room?.classList.contains("whole") ?? false,
+      whole: room?.matches(':is([data-slot="whole"], [data-whole])') ?? false,
       room: room
         ? { scroll: room.scrollHeight, height: room.clientHeight }
         : null,
@@ -2178,14 +2280,16 @@ const roomChecks = async (on: On) => {
     };
   });
   await on.page.evaluate(() => {
-    const room = document.querySelector<HTMLElement>(".pin-room");
+    const room = document.querySelector<HTMLElement>('[data-slot="pin-room"]');
     room?.style.removeProperty("bottom");
     room?.style.removeProperty("height");
   });
   await settle(on.page, 400);
   const unsqueezed = await card.evaluate(
     (el) =>
-      el.querySelector("[data-pin-room]")?.classList.contains("whole") ?? true
+      el
+        .querySelector("[data-pin-room]")
+        ?.matches(':is([data-slot="whole"], [data-whole])') ?? true
   );
   on.kit.check(
     "f: squeezed below its head and foot, the card keeps the thread whole (none of it clipped) and scrolls itself; with its room back, the thread scrolls alone again",
@@ -2201,7 +2305,7 @@ const roomChecks = async (on: On) => {
 
 const writeIn = (on: On, number: number, words: string) =>
   on.page
-    .locator(`.pin-card[data-pin-card="${number}"]`)
+    .locator(`[data-slot="pin-card"][data-pin-card="${number}"]`)
     .getByRole("textbox")
     .fill(words);
 
@@ -2212,11 +2316,24 @@ const writeIn = (on: On, number: number, words: string) =>
 const headOf = (card: Locator) =>
   card
     .evaluate((el) => ({
-      name: el.querySelector(".head .name")?.textContent?.trim() ?? null,
-      source: el.querySelector(".head .source")?.textContent?.trim() ?? null,
-      tip: el.querySelector(".head .anchor")?.getAttribute("title") ?? null,
+      name:
+        el
+          .querySelector(
+            '[data-slot="head"] :is([data-slot="name"], [data-transcript-skeleton-name])'
+          )
+          ?.textContent?.trim() ?? null,
+      source:
+        el
+          .querySelector('[data-slot="head"] [data-slot="source"]')
+          ?.textContent?.trim() ?? null,
+      tip:
+        el
+          .querySelector('[data-slot="head"] [data-slot="anchor"]')
+          ?.getAttribute("title") ?? null,
       shown: (el as HTMLElement).innerText,
-      pictures: el.querySelectorAll("img, .thumb").length,
+      pictures: el.querySelectorAll(
+        'img, :is([data-slot="thumb"], [data-thumb])'
+      ).length,
     }))
     .catch(() => ({
       name: null,
@@ -2252,11 +2369,15 @@ const wordlessChecks = async (on: On) => {
     60_000
   )) as Frame;
   await settle(on.page, 400);
-  await on.page.locator(".preview-pane button[aria-keyshortcuts='C']").click();
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .click();
   await pageInComment(frame, true);
   const b = await screenBox(on, frame, "[data-insp-path]");
   await on.page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
-  const card = on.page.locator('.pin-card[data-pin-card="1"]');
+  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
   await card.waitFor({ timeout: 10_000 }).catch(() => undefined);
   await settle(on.page, 300);
   const head = await headOf(card);
@@ -2280,7 +2401,7 @@ const wordlessChecks = async (on: On) => {
  */
 const documentChecks = async (on: On) => {
   await on.page
-    .locator("input.hidden-file")
+    .locator('input[data-slot="hidden-file"]')
     .first()
     .setInputFiles({
       name: "notes.md",
@@ -2294,7 +2415,7 @@ const documentChecks = async (on: On) => {
     "the document's markdown in the lightbox",
     () =>
       on.page.evaluate(() => {
-        const body = document.querySelector(".doc-body");
+        const body = document.querySelector('[data-slot="doc-body"]');
         const heading = body?.querySelector("h1, h2")?.textContent?.trim();
         const strong = body?.querySelector("strong")?.textContent?.trim();
         return heading && strong ? { heading, strong } : null;

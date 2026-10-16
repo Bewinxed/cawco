@@ -40,8 +40,6 @@ const ALLOWED: Record<string, string> = {
     "this check, whose own examples name the paths it looks for",
   "packages/core/src/workspace-judge.ts":
     "the boundary's judge, run as a plain script copied alone into a workspace's state dir, so it imports only node's built-ins; it names `.claude` as one of the folder names a project's protected config lies in (PROTECTED_UNDER), never as a path to build",
-  "scripts/probe-kit/specs/caw-hands.ts":
-    "a probe whose subject is that path: Caw linking his place to the host's own Claude Code settings, and a clone's `.claude` stand-in",
   "packages/jsonl-parser/bench/bench.ts":
     "a benchmark of a package that depends on nothing in the workspace (importing core drags it into that package's stricter compile); its default corpus is the operator's own ~/.claude/projects, and any other is its first argument",
 };
