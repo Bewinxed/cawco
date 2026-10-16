@@ -79,18 +79,55 @@ interface SeenElement {
   title?: string | null;
 }
 
-/** The app's window, as `window list --json` names it (`window_id`, peekaboo.sh/quickstart.html). */
+/**
+ * The window server's own list of on-screen windows
+ * (`CGWindowListCopyWindowInfo`, on screen only, no desktop elements): each
+ * one's owner, CGWindowID, layer and size. Read through JXA; it names no
+ * window titles, so it needs no screen-recording grant.
+ */
+const WINDOWS = `ObjC.import("CoreGraphics");
+const list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1 | 16, 0));
+const out = [];
+for (let i = 0; i < list.count; i++) {
+  const w = list.objectAtIndex(i);
+  const b = w.objectForKey("kCGWindowBounds");
+  out.push({ pid: ObjC.unwrap(w.objectForKey("kCGWindowOwnerPID")), id: ObjC.unwrap(w.objectForKey("kCGWindowNumber")), layer: ObjC.unwrap(w.objectForKey("kCGWindowLayer")), area: ObjC.unwrap(b.objectForKey("Width")) * ObjC.unwrap(b.objectForKey("Height")) });
+}
+JSON.stringify(out);`;
+
+/**
+ * The app's window by its CGWindowID, the identity Peekaboo's
+ * `--window-id` takes ("the captured process generation, window ID, and
+ * bounds must still match", peekaboo.sh/commands/see.html), as the window
+ * server lists it: the app's one on-screen window at the normal layer (0),
+ * the largest when Catalyst stands helpers beside it.
+ */
 async function windowOf(pid: number): Promise<string> {
-  const listed = JSON.parse(
-    await peekaboo(["window", "list", "--pid", String(pid), "--json"])
-  ) as { data?: { windows?: { window_id?: number | string }[] } };
-  const id = listed.data?.windows?.[0]?.window_id;
-  if (id === undefined) {
+  const run = await Bun.$`osascript -l JavaScript -e ${WINDOWS}`
+    .quiet()
+    .nothrow();
+  if (run.exitCode !== 0) {
     throw new Error(
-      `no window_id for pid ${pid}: ${JSON.stringify(listed).slice(0, 300)}`
+      `the window server's list: osascript exited ${run.exitCode}: ${run.stderr.toString().trim()}`
     );
   }
-  return String(id);
+  const windows = (
+    JSON.parse(run.stdout.toString()) as {
+      area: number;
+      id: number;
+      layer: number;
+      pid: number;
+    }[]
+  ).filter((one) => one.pid === pid);
+  const [main] = windows
+    .filter((one) => one.layer === 0)
+    .sort((a, b) => b.area - a.area);
+  if (!main) {
+    throw new Error(
+      `pid ${pid} has no on-screen window at layer 0: ${JSON.stringify(windows)}`
+    );
+  }
+  return String(main.id);
 }
 
 /**

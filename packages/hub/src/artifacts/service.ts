@@ -2630,10 +2630,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       };
     },
 
-    /** A sheet's stage as its doc keeps it, for its preview frame (core `PreviewFrame.stage`); null for any other artifact. */
+    /**
+     * A sheet's stage or a workspace preview's server as its doc keeps it,
+     * for its preview frame (core `PreviewFrame.stage`); null for any other
+     * artifact.
+     */
     stageFor: (id: string): StageState | null => {
       const row = db.get(id);
-      return row?.kind === "sheet"
+      return row && (row.kind === "sheet" || servedOf(row))
         ? ((docs.doc(row.id).getMap("meta").get("stage") as
             StageState | undefined) ?? null)
         : null;

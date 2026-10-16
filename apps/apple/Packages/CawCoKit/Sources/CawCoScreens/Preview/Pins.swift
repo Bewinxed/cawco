@@ -887,7 +887,8 @@ enum PreviewProbe {
     static let sendAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-send")
     /// `-preview-report <base64>`: a probe's own `report()` for a page that
     /// has none of its own (a sheet's stage page), added at each document's
-    /// end. The heartbeat calls it, and its `cawco:probe` post is logged as
+    /// start, before the page's own scripts (a probe may hold the document
+    /// there). The heartbeat calls it, and its `cawco:probe` post is logged as
     /// `preview page …` (scripts/probe-kit/specs/live-sheet.ts).
     static let report: String? = {
         let arguments = ProcessInfo.processInfo.arguments

@@ -91,8 +91,32 @@ public final class SessionComposerBinding {
         composer?.render(self)
     }
 
-    /// Whether this conversation's draft is being typed into now.
-    public var isWriting: Bool { composer?.isWriting ?? false }
+    // MARK: The question card's keys
+
+    /// The first question card standing on the composer.
+    private var questionCard: PromptCardView? {
+        prompts.compactMap { $0 as? PromptCardView }.first { $0.ask.isQuestion }
+    }
+
+    /// A question card stands on the composer: the pane may take the
+    /// keyboard, so the card's keys reach it.
+    public var standsQuestion: Bool { questionCard != nil }
+
+    /// The keys the first question card owns, the digits and Return: the
+    /// same in a session and in a Caw thread, each pane listing them among
+    /// its key commands with its own `action`, which calls `cardKey`, while
+    /// nothing that takes text holds the keyboard (a field, or a preview's
+    /// page). Never Escape: a question is put down only by its own Dismiss button.
+    public func cardKeys(_ action: Selector) -> [UIKeyCommand] {
+        guard questionCard != nil else { return [] }
+        return (1 ... 9).map { UIKeyCommand(input: "\($0)", modifierFlags: [], action: action) }
+            + [UIKeyCommand(input: "\r", modifierFlags: [], action: action)]
+    }
+
+    /// One of `cardKeys`, pressed: the first question card takes it.
+    public func cardKey(_ command: UIKeyCommand) {
+        if let input = command.input { questionCard?.key(input) }
+    }
 
     public func focus() {
         composer?.focus()

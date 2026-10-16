@@ -458,10 +458,31 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
             ordered.append(card)
         }
         composerBinding.prompts = ordered
+        claimCardKeys()
+    }
+
+    // A question card standing, the pane may take the keyboard, for the card's keys.
+    override var canBecomeFirstResponder: Bool { composerBinding.standsQuestion }
+
+    /// A question card standing and nothing holding the keyboard: the pane
+    /// takes it, so the card's digits and Return reach it (UIKit gathers key
+    /// commands from the first responder up, WWDC20 10109).
+    private func claimCardKeys() {
+        guard composerBinding.standsQuestion, view.window != nil, !isFirstResponder,
+              UIResponder.current == nil else { return }
+        becomeFirstResponder()
     }
 
     /// Where the standing ask is among the ones answered here and still waiting.
     private var askRun = AskRun()
+
+    /// His question card owns the digits and Return, as a session's does,
+    /// unless a field or a preview's page holds the keyboard: what is typed in keeps its keys.
+    override var keyCommands: [UIKeyCommand]? {
+        UIResponder.isTyping || PreviewKeys.pageHolds ? [] : composerBinding.cardKeys(#selector(cardKey(_:)))
+    }
+
+    @objc private func cardKey(_ command: UIKeyCommand) { composerBinding.cardKey(command) }
 
     #if DEBUG
     /// What each card last said to a simulator pass's log.

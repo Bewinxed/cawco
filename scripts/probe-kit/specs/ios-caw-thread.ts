@@ -23,7 +23,10 @@
  *    then four bare options, more than three) lists them: PromptCardView's
  *    DEBUG `options` line puts every row inside the card's width and each
  *    description there in full, and the digits 2 and 4 pick Warm and the
- *    fourth slot. Four is the most AskUserQuestion takes on Claude Code.
+ *    fourth slot (the thread's pane offers the card's keys, as a session's
+ *    does); Return sends them, the hub records both, and the ask settles,
+ *    so the next device starts from a thread at rest. Four is the most
+ *    AskUserQuestion takes on Claude Code.
  *
  * Caw starts in his own place's boundary: run it on a host, outside any
  * CawCo workspace (inside one his start fails with EPERM).
@@ -174,8 +177,9 @@ const longVerdict = (kit: Kit, tag: string, line: string | undefined) => {
   );
 };
 
-/** HID usages axe presses: the digits 1 to 9 are 30 to 38. */
+/** HID usages axe presses: the digits 1 to 9 are 30 to 38, Return 40. */
 const HID_DIGIT = (digit: number) => 29 + digit;
+const HID_RETURN = 40;
 
 /**
  * Caw's side, by the newest event: `PROBE-REPLY-X` answers with a
@@ -890,9 +894,25 @@ async function onDevice(
         .filter((l) => l.startsWith("pick "))
         .join(" | ") || "no pick"
     );
-    if (long) {
-      await tap("prompt-dismiss");
-    }
+    // Return sends the picks, and the ask settles: the next device starts
+    // from a thread at rest (a minimized ask would still wait there, the
+    // oldest, and stand first on its composer).
+    await sh(`${AXE} key ${HID_RETURN} --udid ${udid}`);
+    const rested = await until(
+      `${tag}: the long question answered`,
+      async () =>
+        !(await ctx.pending()).some((a) => a.requestId === long?.requestId),
+      Boolean,
+      30_000
+    ).catch(() => false);
+    const answer = ctx
+      .rows()
+      .find((r) => r.answer?.includes("Warm") && r.answer.includes(SLOTS[3]));
+    kit.check(
+      `7 ${tag}: Return sends the digits' picks, and the ask settles`,
+      !!long && rested === true && !!answer,
+      `settled ${rested}; answer ${answer?.answer ?? "none"}`
+    );
   } finally {
     stream?.kill();
     await mkdir(kit.out, { recursive: true });
