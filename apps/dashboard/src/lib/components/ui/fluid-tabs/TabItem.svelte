@@ -13,6 +13,7 @@
    * middle-click and copy — with a plain click still choosing in place.
    */
   import type { Component, Snippet } from "svelte";
+  import { untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import { HALF } from "#lib/cawco/motion/hang-shape.js";
   import { cn } from "#lib/utils.js";
@@ -75,6 +76,31 @@
   const index = $derived(node ? list.rects.items.indexOf(node) : -1);
 
   const selected = $derived(tabs.value === value);
+  /**
+   * The strip's one tab stop (`tabindex` 0, the rest -1), on the chosen tab
+   * a frame after the choice. Chrome reads a focused element's focusability
+   * again as its `tabindex` changes, a style pass over all the choice has
+   * changed so far: the pressed tab is focused as it is chosen, so moving
+   * the stop with the choice forced that pass into the switch's task (3.2 to
+   * 4.7ms a switch, two-pane-perf). Moved once that frame has painted, it
+   * reads a page with little left to restyle. Focus moves along the strip by
+   * script (`focus()` takes a -1 stop too), and a Tab into the strip in the
+   * frame between lands on the tab chosen before.
+   */
+  let stop = $state(untrack(() => tabs.value === value));
+  $effect(() => {
+    const now = selected;
+    let task: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      task = setTimeout(() => {
+        stop = now;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(task);
+    };
+  });
   /**
    * Where a folder tab stands in the stack at rest, from the order and the
    * value alone (`restRank`): what the first render draws, the server's
@@ -293,7 +319,7 @@
     {href}
     onclick={choose}
     role="tab"
-    tabindex={selected ? 0 : -1}
+    tabindex={stop ? 0 : -1}
     type={href ? undefined : "button"}
     {...rest}
   >

@@ -1444,6 +1444,35 @@
   const TAIL_MOUNTED = 8;
   /** A far landing: virtua mounts what is on screen alone (`landFar`). */
   let narrow = $state(false);
+  /**
+   * NOT SEEN, ONLY WHAT THE VIEW SHOWS IS MOUNTED.
+   *
+   * A transcript off screen (put away, or laid out while the reader reaches
+   * for its tab: PaneLeaf `.pane-settling`, hidden by `visibility`) keeps
+   * virtua to the rows in its view, no screen either side. The switch that
+   * shows a warm pane restyles every element it holds, the inherited
+   * `visibility` coming back on each (2,366 elements, 26.7ms, for a view and
+   * a screen above and below it); it holds the view's rows alone now. The
+   * screens either side mount in a task of their own once the shown pane's
+   * first frame has painted, and are let go the same way once it is put
+   * away, so neither lands in a switch's frame (web.dev, "Optimize long
+   * tasks"). What is on screen never moves: virtua keeps the view where it
+   * stands as rows mount above it.
+   */
+  let unseen = $state(untrack(() => !visible));
+  $effect(() => {
+    const now = visible;
+    let task: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      task = setTimeout(() => {
+        unseen = !now;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(task);
+    };
+  });
   /** The rows of the view a far landing left, held mounted while it lands. */
   let lingering = $state<number[]>([]);
   /**
@@ -3336,7 +3365,7 @@
     {@attach wholeHeight}
   >
     <Virtualizer
-      bufferSize={narrow ? 0 : viewHeight}
+      bufferSize={narrow || unseen ? 0 : viewHeight}
       {cache}
       data={renderedRows}
       getKey={(r) => r.key}
