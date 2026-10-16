@@ -24,14 +24,14 @@
    * send him from the hero to his seat on it.
    */
   import type { CawView, PermissionResult, ThreadMessage } from "@cawco/core";
-  import type { Snippet } from "svelte";
-  import { untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
+  import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import {
     Alert,
@@ -44,12 +44,6 @@
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { barGlass } from "./bar-glass.svelte";
-  import { failureWords, unreachable } from "./hub-read";
-
-  /** A thread send that got no answer, in the error formula: what, why, what is kept, the way back. */
-  const THREAD_SEND_UNREACHED =
-    "Message not sent: the dashboard couldn't reach the hub. Your words are back in the field. Send again once the hub answers.";
-
   import {
     type BlockedRequest,
     blankSession,
@@ -70,6 +64,7 @@
   } from "./client.svelte";
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
+  import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import FolderFile from "./project/FolderFile.svelte";
@@ -126,13 +121,19 @@
     active: boolean;
     focused?: boolean;
     /**
-     * Drawn in Caw's dock beside a project's page (CawDock), not as a tab:
-     * it draws its own composer (there is no group to lend one), nothing
-     * beside it (the dock is the page's side surface), and the thread its
-     * first message makes is handed to the dock (`onthread`) where a tab
-     * would be re-addressed.
+     * Drawn in Caw's panel floating over a project's page (CawThread), not
+     * as a tab: it draws its own composer (there is no group to lend one)
+     * on the panel's `draft`, so your half-written words outlive the panel
+     * being put away; nothing beside it; and the thread its first message
+     * makes is handed to the panel (`onthread`) where a tab would be
+     * re-addressed. Its hero offers the starters as chips, then `under`
+     * (the project's earlier threads).
      */
-    docked?: { onthread: (threadId: string) => void };
+    docked?: {
+      onthread: (threadId: string) => void;
+      draft: ComposerDraft;
+      under?: Snippet;
+    };
   } = $props();
 
   const threadId = $derived(threadIdOf(viewId));
@@ -547,7 +548,7 @@
 
   // --- the composer -------------------------------------------------------------
 
-  const draft = new ComposerDraft();
+  const draft = untrack(() => docked?.draft) ?? new ComposerDraft();
   let sending = $state(false);
   let sendError = $state("");
   /** The failed send never reached the hub: its line offers Send again. */
@@ -865,7 +866,7 @@
     {:else if hero}
       <div class="hero" data-thread-hero in:crossIn>
         <EmptyState
-          line={view && !view.on
+          line={view && !view.on && !docked
             ? "Caw is off, so he acts only when you write to him."
             : undefined}
           title="What's next for {projectName}?"
@@ -880,7 +881,10 @@
             </div>
           {/snippet}
           {#snippet action()}
-            {#if starters.length > 0}
+            {#if docked}
+              <CawStarters onpick={pick} {starters} />
+              {@render docked.under?.()}
+            {:else if starters.length > 0}
               <StarterCards onpick={pick} {starters} />
             {/if}
           {/snippet}

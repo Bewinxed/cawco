@@ -4,8 +4,8 @@
  * less 12px under 900px) with its rows 7px in, as home/CawPanel draws the
  * glass's Caw panel. It took that frame through the shared `.caw-pop` name
  * until 5a493be53 gave it its own (`.caw-seat-pop`), and must look as it did.
- * His seat opens his dock now (CawDock); his settings are the project's,
- * under the head's `⋯` (Caw settings…), in the same frame
+ * His seat opens his panel over the page (CawFloat); his on/off is the
+ * project's, under the head's `⋯` (Caw settings…), in the same frame
  * (`.caw-settings-pop`).
  *
  * On a scratch fleet (real hub, agent and sessiond), the built dashboard, a

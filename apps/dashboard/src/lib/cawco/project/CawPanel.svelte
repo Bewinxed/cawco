@@ -1,23 +1,21 @@
 <script lang="ts">
   /**
-   * Caw's settings, the project's own (fable-lead-switch.md §1), opened
-   * from the project head's `⋯`: who he is and what he is doing in one
-   * sentence, the lead switch, the harness he runs on and the model his
-   * session runs. Off, he acts only when you write to him: no event wakes
-   * him (WORDS.md, Caw on and off). Talking to him is his dock (CawDock).
+   * Caw's on/off, the project's own (fable-lead-switch.md §1), opened from
+   * the project head's `⋯`: who he is and what he is doing in one
+   * sentence, and the lead switch. Off, he acts only when you write to
+   * him: no event wakes him (WORDS.md, Caw on and off). Talking to him is
+   * his panel over the page (CawFloat); his harness and model are his lead
+   * session's card, from his name there (SessionDetails).
    */
-  import type { CawHarness, CawInitiated, CawRunning } from "@cawco/core";
+  import type { CawInitiated, CawRunning } from "@cawco/core";
   import { untrack } from "svelte";
   import CawOffTray, { type CawOffAsk } from "#lib/cawco/CawOffTray.svelte";
   import { cawco, onProjectStop } from "#lib/cawco/client.svelte.js";
   import CawFace from "#lib/cawco/home/CawFace.svelte";
-  import ModelCombobox from "#lib/cawco/ModelCombobox.svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Select from "#lib/components/ui/select/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
-  import { CAW_HARNESS_LABEL, type CawLead } from "./caw-lead.svelte";
+  import type { CawLead } from "./caw-lead.svelte";
 
   let {
     lead,
@@ -99,14 +97,6 @@
       cutting = false;
     }
   }
-  /** The harness picker's word: where he runs, or that he is moving there. */
-  const harnessWord = $derived.by(() => {
-    if (lead.moving) {
-      return "Moving…";
-    }
-    return lead.view ? CAW_HARNESS_LABEL[lead.view.harness] : "Reading…";
-  });
-
   // A turn begins: his view is read again, so the panel says what it answers
   // (a turn no thread woke works here, not on a thread).
   let wasWorking = false;
@@ -176,36 +166,6 @@
   {#if lead.refused}
     <p class="refused" role="alert">{lead.refused}</p>
   {/if}
-  <div class="row">
-    <span class="muted">Runs on</span>
-    <Select.Root
-      disabled={lead.moving || !lead.view}
-      onValueChange={(value) => {
-        if (value && value !== lead.view?.harness) {
-          lead.configure({ harness: value as CawHarness });
-        }
-      }}
-      type="single"
-      value={lead.view?.harness ?? ""}
-    >
-      <Select.Trigger aria-label="Harness" size="sm">
-        {harnessWord}
-      </Select.Trigger>
-      <Select.Content>
-        {#each Object.entries(CAW_HARNESS_LABEL) as [value, label] (value)}
-          <Select.Item {label} {value} />
-        {/each}
-      </Select.Content>
-    </Select.Root>
-    {#if lead.view}
-      <ModelCombobox
-        harness={lead.view.harness}
-        onchoose={(chosen) => lead.configure({ model: chosen || null })}
-        showDefault
-        value={lead.view.model ?? ""}
-      />
-    {/if}
-  </div>
   {#if cawco.hub === "unreachable"}
     <p class="muted">The hub is not answering; what shows was read before.</p>
   {/if}

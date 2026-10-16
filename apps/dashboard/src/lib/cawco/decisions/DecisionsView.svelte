@@ -5,8 +5,8 @@
    * it is; a tile opens its page in this same pane (DecisionPage), its title
    * and figure flying into the page's head, and ‹ Decisions goes back. When
    * the decisions form a graph, a List | Graph segment at the pane's top
-   * shows them as one (DecisionGraph). Empty, Caw stands over a field to ask
-   * him for a page (Empty Starts Work); while the list is read, the grid's
+   * shows them as one (DecisionGraph). Empty, Caw stands over a starter that
+   * asks him for a page in his panel (Empty Starts Work); while the list is read, the grid's
    * skeleton stands (The Claim Of Nothing Rule). The page, the card and the
    * mode live in the URL.
    */
@@ -19,10 +19,10 @@
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
-  import CawField from "#lib/cawco/project/CawField.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
+  import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
-  import type { StageKind } from "#lib/cawco/project-tasks.js";
+  import type { StageKind, Starter } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -50,7 +50,6 @@
     taskOf,
     taskHref,
     onopentask,
-    onfirstwords,
     sitDown,
     go,
   }: {
@@ -77,8 +76,6 @@
     ) => { kind: StageKind | null; title: string } | undefined;
     taskHref: (id: string) => string;
     onopentask: (id: string) => void;
-    /** The empty tab's first words to Caw: a thread, opened. */
-    onfirstwords: (text: string, id: string) => Promise<void>;
     /** Caw standing here departs into the head's seat as he leaves. */
     sitDown: (node: HTMLElement) => TransitionConfig;
     /** Where the pane goes: a page (at a card), the list or the graph, kept in the URL. */
@@ -88,6 +85,12 @@
       page?: string | null;
     }) => void;
   } = $props();
+
+  /** What the empty tab offers to ask him. */
+  const DECISION_STARTER: Starter = {
+    glyph: "brief",
+    text: "Write a decision page for this project",
+  };
 
   const list = $derived(decisions.list);
   const pages = $derived(list?.pages ?? []);
@@ -257,12 +260,11 @@
                 </div>
               {/snippet}
               {#snippet action()}
-                <CawField
-                  flies
-                  label="Message the project"
-                  onsend={onfirstwords}
-                  placeholder="Message the project…"
-                  text="Write a decision page for this project"
+                <!-- The ask is a starter: it opens his panel with its words
+                     in his composer, nothing sent. -->
+                <CawStarters
+                  onpick={(text) => lead.ask(text)}
+                  starters={[DECISION_STARTER]}
                 />
               {/snippet}
             </EmptyState>

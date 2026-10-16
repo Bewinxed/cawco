@@ -29,12 +29,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { barStrip } from "#lib/cawco/bar-strip.svelte.js";
-  import {
-    cawco,
-    requestView,
-    startThread,
-    threadsOf,
-  } from "#lib/cawco/client.svelte.js";
+  import { cawco, requestView, threadsOf } from "#lib/cawco/client.svelte.js";
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import {
     type DecisionsMode,
@@ -43,6 +38,8 @@
   import {
     type HubRead,
     failureWords as message,
+    THREAD_SEND_UNREACHED,
+    unreachable,
   } from "#lib/cawco/hub-read.js";
   import {
     crossIn,
@@ -52,14 +49,12 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
-  import CawDock from "#lib/cawco/project/CawDock.svelte";
-  import CawField from "#lib/cawco/project/CawField.svelte";
+  import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
-  import CawStarters from "#lib/cawco/project/CawStarters.svelte";
-  import { cawDock } from "#lib/cawco/project/caw-dock.svelte.js";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
+  import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import ViewBar from "#lib/cawco/project/ViewBar.svelte";
   import {
     archiveTask,
@@ -79,7 +74,6 @@
     updateTask,
   } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
-  import SideSplit from "#lib/cawco/side/SideSplit.svelte";
   import Split from "#lib/cawco/side/Split.svelte";
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
@@ -104,8 +98,9 @@
     pickTask,
     selection,
   } from "#lib/cawco/tasks/task-select.svelte.js";
-  import { threadHref } from "#lib/cawco/thread-tabs.js";
   import { toast } from "#lib/cawco/toasts.js";
+  import Composer from "#lib/cawco/transcript/Composer.svelte";
+  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
   import { taskEdges } from "#lib/cawco/views/task-graph.js";
   import ViewCalendar, {
@@ -349,7 +344,7 @@
    * the head. The line the shell hosts a conversation's tabs by.
    */
   const narrowQuery = new MediaQuery(NARROW_QUERY);
-  /** Under 900px Caw's dock is the kit's bottom sheet, not the split (SideSplit). */
+  /** Under 900px a task is its own page, not the split beside the view (`phone`). */
   const sheetQuery = new MediaQuery("(max-width: 899px)");
   const hosted = $derived(
     !(browser ? narrowQuery.current : Boolean(page.data.narrow))
@@ -548,8 +543,7 @@
 
   /**
    * Under 900px a task is its own page (the session split's line), read off
-   * the screen, the line Caw's dock rises as a sheet by: the page narrowing
-   * beside the dock never turns the task into a page.
+   * the screen.
    */
   const phone = $derived(browser ? sheetQuery.current : !hosted);
 
@@ -955,9 +949,37 @@
   let stagesAnchor = $state<HTMLElement | null>(null);
   let askOpen = $state(false);
   let askAnchor = $state<HTMLElement | null>(null);
+  /** The ask's words, in the session Composer the popover holds. */
+  const viewDraft = new ComposerDraft();
+  let viewSending = $state(false);
+  let viewRefused = $state("");
+  /** The ask never reached the hub: its line offers Send again. */
+  let viewAgain = $state(false);
+  /** What the Composer stands over its foot: the popover holds that much room. */
+  let viewFoot = $state(0);
   function ask(anchor: HTMLElement) {
     askAnchor = anchor;
     askOpen = true;
+    viewDraft.focusWanted = true;
+  }
+  /**
+   * The view is asked for, as a thread tab sends (ThreadPane): a refusal
+   * puts the words back in the composer with the reason over them.
+   */
+  async function askView(text: string) {
+    viewSending = true;
+    viewRefused = "";
+    viewAgain = false;
+    try {
+      await requestView(projectId, text);
+      askOpen = false;
+    } catch (error) {
+      viewDraft.restore(text);
+      viewAgain = unreachable(error);
+      viewRefused = viewAgain ? THREAD_SEND_UNREACHED : message(error);
+    } finally {
+      viewSending = false;
+    }
   }
 
   // --- what keeps the page live -------------------------------------------------
@@ -1141,16 +1163,6 @@
     depart(node);
     return { duration: 0 };
   }
-
-  /**
-   * The empty board's first words to Caw start a thread and open it: the
-   * words fly into its first row, and the standing Caw into its composer's
-   * seat (the navigation departs him).
-   */
-  async function firstWords(text: string, id: string) {
-    const said = await startThread(projectId, text, id);
-    await goto(threadHref(said.thread.id));
-  }
 </script>
 
 <svelte:head>
@@ -1326,7 +1338,6 @@
       {lead}
       mode={decisionMode}
       now={decisionsNow}
-      onfirstwords={firstWords}
       onopentask={openOne}
       page={decisionPage}
       {projectId}
@@ -1355,8 +1366,9 @@
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
             <!-- He stands here instead of sitting in the head, and is the
-                 same seat at 80: a press opens his dock (CawDock). His
-                 switch is under the head's ⋯, empty board or not. -->
+                 same seat at 80: a press opens his panel over the page
+                 (CawFloat). His switch is under the head's ⋯, empty board
+                 or not. -->
             <div class="caw-80" data-share="caw:{projectId}" out:sitDown|global>
               <CawSeat
                 {lead}
@@ -1367,13 +1379,13 @@
             </div>
           {/snippet}
           {#snippet action()}
-            <CawStarters
-              flies
-              label="Message the project"
-              onsend={firstWords}
-              placeholder="Message the project…"
-              starters={stages?.starters ?? []}
-            />
+            <!-- A starter opens his panel with its words in his composer. -->
+            {#if (stages?.starters ?? []).length > 0}
+              <StarterCards
+                onpick={(text) => lead.ask(text)}
+                starters={stages?.starters ?? []}
+              />
+            {/if}
           {/snippet}
         </EmptyState>
       </div>
@@ -1476,154 +1488,136 @@
     </p>
   </div>
 {:else}
-  {#snippet cawSide(sheet: boolean)}
-    <CawDock
-      onclose={() => cawDock.set(projectId, false)}
-      {projectId}
-      projectName={project?.name ?? ""}
-      {sheet}
-    />
-  {/snippet}
-  <!-- Caw's dock stands on the page's trailing edge: the page narrows beside
-       it on a desk, and it rises as a sheet on a phone. -->
-  <SideSplit
-    active
-    onsideclose={() => cawDock.set(projectId, false)}
-    phone={sheetQuery.current}
-    planOf={null}
-    side={cawSide}
-    sideOpen={cawDock.isOpen(projectId)}
-    viewId="caw:{projectId}"
-    visible
-  >
-    {#if phone && openTask && stages}
-      <!-- A phone: the task is its own page, with Back to the view. -->
-      <div class="project-page task-only">
-        <TaskPane
-          {allowedFrom}
-          backLabel={project.name}
-          onchanged={changed}
-          onclose={closeTask}
-          onmove={(id, stage) => move(id, stage)}
-          onopen={openOne}
-          page
-          {projectId}
-          {stages}
-          taskId={openTask}
-          {tasks}
+  {#if phone && openTask && stages}
+    <!-- A phone: the task is its own page, with Back to the view. -->
+    <div class="project-page task-only">
+      <TaskPane
+        {allowedFrom}
+        backLabel={project.name}
+        onchanged={changed}
+        onclose={closeTask}
+        onmove={(id, stage) => move(id, stage)}
+        onopen={openOne}
+        page
+        {projectId}
+        {stages}
+        taskId={openTask}
+        {tasks}
+      />
+    </div>
+  {:else}
+    <!-- The frame the phone's views bar docks in, over the page's foot. -->
+    <div class="project-frame">
+      <div class="project-page">
+        <ProjectHead
+          bind:this={head}
+          {lead}
+          {machine}
+          onask={canTalk ? ask : null}
+          onfilter={(anchor) => {
+            filterAnchor = anchor;
+            filterOpen = true;
+          }}
+          onnewtask={() => {
+            choose("board");
+            adding = true;
+          }}
+          onstages={stages?.source === "template"
+            ? (anchor) => {
+                stagesAnchor = anchor;
+                stagesOpen = true;
+              }
+            : null}
+          {project}
+          seated={!standing}
         />
-      </div>
-    {:else}
-      <!-- The frame the phone's views bar docks in, over the page's foot. -->
-      <div class="project-frame">
-        <div class="project-page">
-          <ProjectHead
-            bind:this={head}
-            {lead}
-            {machine}
-            onask={canTalk ? ask : null}
-            onfilter={(anchor) => {
-              filterAnchor = anchor;
-              filterOpen = true;
-            }}
-            onnewtask={() => {
-              choose("board");
-              adding = true;
-            }}
-            onstages={stages?.source === "template"
-              ? (anchor) => {
-                  stagesAnchor = anchor;
-                  stagesOpen = true;
-                }
-              : null}
-            {project}
-            seated={!standing}
-          />
 
-          {#if lead.view?.problem}
-            <Alert class="notice" variant="warning">
-              <AlertDescription>{lead.view.problem}</AlertDescription>
-            </Alert>
-          {/if}
-          {#if stages && stages.problems.length > 0}
-            <Alert class="notice" variant="warning">
-              <AlertDescription>{unreadStages}</AlertDescription>
-            </Alert>
-          {:else if stagesProblem}
-            <Alert class="notice" variant="warning">
-              <AlertDescription>
-                The project's stages could not be read: {stagesProblem}
-              </AlertDescription>
-            </Alert>
-          {/if}
-          {#if list && list.problems.length > 0}
-            <Alert class="notice" variant="warning">
-              <AlertDescription>{list.problems.join(" ")}</AlertDescription>
-            </Alert>
-          {/if}
-          {#if viewsProblem}
-            <Alert class="notice" variant="warning">
-              <AlertDescription
-                >The project's views could not be read:
-                {viewsProblem}</AlertDescription
-              >
-            </Alert>
-          {/if}
+        {#if lead.view?.problem}
+          <Alert class="notice" variant="warning">
+            <AlertDescription>{lead.view.problem}</AlertDescription>
+          </Alert>
+        {/if}
+        {#if stages && stages.problems.length > 0}
+          <Alert class="notice" variant="warning">
+            <AlertDescription>{unreadStages}</AlertDescription>
+          </Alert>
+        {:else if stagesProblem}
+          <Alert class="notice" variant="warning">
+            <AlertDescription>
+              The project's stages could not be read: {stagesProblem}
+            </AlertDescription>
+          </Alert>
+        {/if}
+        {#if list && list.problems.length > 0}
+          <Alert class="notice" variant="warning">
+            <AlertDescription>{list.problems.join(" ")}</AlertDescription>
+          </Alert>
+        {/if}
+        {#if viewsProblem}
+          <Alert class="notice" variant="warning">
+            <AlertDescription
+              >The project's views could not be read:
+              {viewsProblem}</AlertDescription
+            >
+          </Alert>
+        {/if}
 
-          {#if !hosted}
-            <!-- Under the head from 640px; a phone's views are its bar's. -->
-            <div class="under-head">{@render strip(false)}</div>
-          {/if}
-
-          {#if phone}
-            <!-- Under 900px a task is its own page: the view stands alone,
-                 the page's one scroller on a phone. -->
-            {@render viewPane()}
-          {:else}
-            <Split
-              backLabel="Back to {viewWord}"
-              defaultWidth={40}
-              keys={{
-                width: `cawco.task.width.${projectId}`,
-                expanded: `cawco.task.expanded.${projectId}`,
-              }}
-              main={viewPane}
-              mainClass="view-pane-side"
-              open={!!openTask && !!stages}
-              side={taskSide}
-            />
-          {/if}
-        </div>
         {#if !hosted}
-          <ViewBar
-            {current}
-            needs={needsYou.length}
-            needsOn={filtering}
-            onchoose={choose}
-            onnewsession={(anchor) => head?.newSessionFrom(anchor)}
-            ontoggleneeds={() => {
-              needsOnly = !filtering;
+          <!-- Under the head from 640px; a phone's views are its bar's. -->
+          <div class="under-head">{@render strip(false)}</div>
+        {/if}
+
+        {#if phone}
+          <!-- Under 900px a task is its own page: the view stands alone,
+                 the page's one scroller on a phone. -->
+          {@render viewPane()}
+        {:else}
+          <Split
+            backLabel="Back to {viewWord}"
+            defaultWidth={40}
+            keys={{
+              width: `cawco.task.width.${projectId}`,
+              expanded: `cawco.task.expanded.${projectId}`,
             }}
-            views={barViews}
-          >
-            {#snippet tools()}
-              <!-- As the strip draws it on a narrow screen: its glyph and count
-                 while a filter stands; the head's ⋯ opens it. -->
-              {#if filterHere && narrowed > 0}
-                <TaskFilterPopover
-                  compact
-                  {filter}
-                  {find}
-                  onchange={setFilter}
-                  tasks={[...tasks, ...archived]}
-                />
-              {/if}
-            {/snippet}
-          </ViewBar>
+            main={viewPane}
+            mainClass="view-pane-side"
+            open={!!openTask && !!stages}
+            side={taskSide}
+          />
         {/if}
       </div>
-    {/if}
-  </SideSplit>
+      {#if !hosted}
+        <ViewBar
+          {current}
+          needs={needsYou.length}
+          needsOn={filtering}
+          onchoose={choose}
+          onnewsession={(anchor) => head?.newSessionFrom(anchor)}
+          ontoggleneeds={() => {
+            needsOnly = !filtering;
+          }}
+          views={barViews}
+        >
+          {#snippet tools()}
+            <!-- As the strip draws it on a narrow screen: its glyph and count
+                 while a filter stands; the head's ⋯ opens it. -->
+            {#if filterHere && narrowed > 0}
+              <TaskFilterPopover
+                compact
+                {filter}
+                {find}
+                onchange={setFilter}
+                tasks={[...tasks, ...archived]}
+              />
+            {/if}
+          {/snippet}
+        </ViewBar>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- Caw's panel floats over the page, from whichever seat stands. -->
+  <CawFloat {lead} {projectId} projectName={project?.name ?? ""} />
 {/if}
 
 {#snippet taskSide()}
@@ -1692,19 +1686,32 @@
   <Popover.Root bind:open={askOpen}>
     <Popover.Content
       align="end"
-      class="w-96"
+      class="view-ask-pop"
       customAnchor={askAnchor}
       side="bottom"
     >
-      <CawField
-        autofocus
-        label="Ask Caw for a view"
-        onsend={async (text) => {
-          await requestView(projectId, text);
-          askOpen = false;
-        }}
-        placeholder="A view of what is scheduled this week…"
-      />
+      <div
+        class="view-ask"
+        style:block-size="calc({viewFoot}px + var(--space-4))"
+      >
+        <Composer
+          agentName="Caw"
+          attach={false}
+          draft={viewDraft}
+          onfoot={(foot) => {
+            viewFoot = foot.stack;
+          }}
+          onstop={() => undefined}
+          onsubmit={(text) => {
+            // biome-ignore lint/complexity/noVoid: the ask's own state is the composer's sending and its refusal
+            void askView(text);
+          }}
+          placeholder="A view of what is scheduled this week…"
+          sendAgain={viewAgain}
+          sendError={viewRefused}
+          sending={viewSending}
+        />
+      </div>
     </Popover.Content>
   </Popover.Root>
 
@@ -1921,6 +1928,22 @@
   }
   .caw-empty :global(.kit-empty-action) {
     align-self: stretch;
+  }
+  /* css-scope .view-ask-pop: the kit popover the ask stands in */
+  /* The ask is the session Composer floating under the menu: the composer
+     is the surface (its pill, edge and shadow), so the popover draws none
+     of its own, and its box is as tall as what the Composer stands
+     (Composer .dock stands on its foot). */
+  :global(.kit-pop.view-ask-pop) {
+    inline-size: min(var(--c-panel-w), calc(100vw - 2 * var(--space-3)));
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+  .view-ask {
+    position: relative;
+    inline-size: 100%;
   }
   .caw-80 {
     display: grid;

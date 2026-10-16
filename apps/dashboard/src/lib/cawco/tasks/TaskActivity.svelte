@@ -12,8 +12,8 @@
    * task is done or dropped or was never attempted. The hint says which.
    */
   import Choice from "#lib/cawco/config/Choice.svelte";
+  import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
-  import CawField from "#lib/cawco/project/CawField.svelte";
   import {
     stageLabel,
     type TaskComment,
@@ -25,6 +25,8 @@
   import { IconChevronRight, IconHistory } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import RowFault from "../RowFault.svelte";
+  import Composer from "../transcript/Composer.svelte";
+  import { ComposerDraft } from "../transcript/composer-draft.svelte";
 
   let {
     comments,
@@ -52,6 +54,32 @@
   } = $props();
 
   let only = $state<"all" | "comments">("all");
+
+  /** Your comment, in the session Composer at the stream's foot. */
+  const commentDraft = new ComposerDraft();
+  let commenting = $state(false);
+  let commentRefused = $state("");
+  /** The comment never reached the hub: its line offers Send again. */
+  let commentAgain = $state(false);
+  /** What the Composer stands over its foot: its box holds that much room. */
+  let commentFoot = $state(0);
+  /** The comment goes; a refusal puts the words back with the hub's reason over them. */
+  async function sendComment(text: string) {
+    commenting = true;
+    commentRefused = "";
+    commentAgain = false;
+    try {
+      await oncomment(text);
+    } catch (error) {
+      commentDraft.restore(text);
+      commentAgain = unreachable(error);
+      commentRefused = commentAgain
+        ? "Comment not sent: the dashboard couldn't reach the hub. Your words are back in the field. Send again once the hub answers."
+        : failureWords(error);
+    } finally {
+      commenting = false;
+    }
+  }
 
   type Line =
     | { kind: "comment"; at: number; who: string; text: string }
@@ -255,13 +283,31 @@
     </ol>
   {/if}
   <div class="composer">
-    <CawField
-      label={reaches?.kind === "live"
-        ? `Comment, read by ${reaches.session}`
-        : "Comment on this task"}
-      onsend={oncomment}
-      placeholder="Add a comment…"
-    />
+    <!-- The session Composer, words only; it stands on this box's foot
+         (Composer .dock), the box as tall as what it stands. -->
+    <div
+      class="field"
+      style:block-size="calc({commentFoot}px + var(--space-4) +
+      var(--safe-bottom))"
+    >
+      <Composer
+        agentName={reaches?.kind === "live" ? reaches.session : "The task"}
+        attach={false}
+        draft={commentDraft}
+        onfoot={(foot) => {
+          commentFoot = foot.stack;
+        }}
+        onstop={() => undefined}
+        onsubmit={(text) => {
+          // biome-ignore lint/complexity/noVoid: the comment's own state is the composer's sending and its refusal
+          void sendComment(text);
+        }}
+        placeholder="Add a comment…"
+        sendAgain={commentAgain}
+        sendError={commentRefused}
+        sending={commenting}
+      />
+    </div>
     {#if reaches?.kind === "live"}
       <p class="hint">
         {reaches.session} is working on this task and reads your comment now.
@@ -387,6 +433,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+  }
+  .field {
+    position: relative;
+    inline-size: 100%;
   }
   .hint {
     font: var(--type-meta);
