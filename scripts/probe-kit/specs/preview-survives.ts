@@ -65,8 +65,9 @@
  * same on the socket as on a request.
  *
  * A second preview is of a port inside a workspace: a delegate of a project
- * session starts a server in its own workspace (its boundary's network,
- * reached through the agent's bridge) and shows it by its port. Needs a
+ * session shows a preview naming what serves it (`serve`), which CawCo's
+ * stage runs in its workspace (its boundary's network, reached through the
+ * agent's bridge). Needs a
  * workspace boundary, so unprivileged user namespaces: a run inside a
  * workspace (where bwrap is refused) notes it and checks the host's alone.
  *
@@ -131,9 +132,6 @@ const OTHER = "Second session's page";
 const IN_WORKSPACE = "Workspace server's page";
 /** The workspace server's port, in its boundary's own network. */
 const WORKSPACE_PORT = 47_513;
-/** The delegate's brief asks for the server; its Bash's output says it is up (the command spells it apart, so its own text never matches). */
-const SERVE = "PROBE-WORKSPACE-SERVE";
-const SERVING = "WORKSPACE-SERVER-UP";
 /** How long a preview has to answer again after a restart. Our call: a register and a listener start take a few seconds. */
 const BOUND_MS = 30_000;
 /** A machine this spec plays itself, over raw agent sockets (check 18). */
@@ -275,51 +273,31 @@ const proxyOf = (dashboard: string) => {
 const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
 
 /**
- * What the delegate runs in its workspace: the same app as {@link appOf}, on
- * {@link WORKSPACE_PORT} of its boundary's loopback, left running in a
- * session of its own; the marker once it answers.
+ * What serves the delegate's preview (artifact_create's `serve`): the same
+ * app as {@link appOf}, on the `PORT` CawCo's stage gives it on its
+ * boundary's loopback, run and kept up by the stage.
  */
-const serveCommand = (): string => {
+const servedCommand = (): string => {
   const app = [
     `const page=${JSON.stringify(pageOf(IN_WORKSPACE))};`,
-    `Bun.serve({hostname:"127.0.0.1",port:${WORKSPACE_PORT},fetch(r,s){`,
+    `Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch(r,s){`,
     `if(new URL(r.url).pathname==="/hmr"){const o=r.headers.get("origin");`,
     `if(o&&o!=="http://"+r.headers.get("host"))return new Response("refused",{status:403});`,
     `return s.upgrade(r)?undefined:new Response("no upgrade",{status:400})}`,
     `return new Response(page,{headers:{"content-type":"text/html"}})},`,
     `websocket:{open(w){w.send(${JSON.stringify(IN_WORKSPACE)})},message(){}}});`,
   ].join("");
-  const [head, tail] = [SERVING.slice(0, 10), SERVING.slice(10)];
-  return [
-    `printf '%s' ${quoted(app)} > "$TMPDIR/workspace-app.js"`,
-    `(setsid nohup bun "$TMPDIR/workspace-app.js" > "$TMPDIR/workspace-app.log" 2>&1 < /dev/null &)`,
-    `for i in $(seq 100); do bun -e ${quoted(`await fetch("http://127.0.0.1:${WORKSPACE_PORT}/")`)} 2>/dev/null && echo "${head}""${tail}" && break; sleep 0.1; done`,
-  ].join(" && ");
+  return `bun -e ${quoted(app)}`;
 };
 
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
-let serveIssued = false;
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
-  }
-  if (request.all.includes(SERVE) && !request.all.includes(SERVING)) {
-    if (serveIssued) {
-      return text("The workspace's server did not start.");
-    }
-    serveIssued = true;
-    return {
-      everyMs: 5,
-      words: [],
-      tool: {
-        name: "Bash",
-        input: { command: serveCommand(), description: "Start the server" },
-      },
-    };
   }
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? asks.get(marker) : undefined;
@@ -1318,7 +1296,12 @@ const run = async (kit: Kit) => {
     const marker = String(sent);
     asks.set(marker, {
       name: CREATE,
-      input: { kind: "preview", name: "in-workspace", port: WORKSPACE_PORT },
+      input: {
+        kind: "preview",
+        name: "in-workspace",
+        port: WORKSPACE_PORT,
+        serve: { command: servedCommand() },
+      },
     });
     const delegated = await fleet.api<{
       instanceId: string;
@@ -1326,7 +1309,7 @@ const run = async (kit: Kit) => {
     }>("/api/work-items", {
       parentInstanceId: parent,
       title: "Serve a page in the workspace",
-      prompt: `${SERVE}: start the server, then show it. PROBE-CALL:${marker}`,
+      prompt: `Show the workspace's server. PROBE-CALL:${marker}`,
       harness: "claude",
       model: "claude-haiku-4-5",
       cwd: fleet.repo,
@@ -1348,7 +1331,7 @@ const run = async (kit: Kit) => {
     };
     const shownThere = await served(inWorkspace);
     kit.check(
-      "1c: a delegate's server on a port in its workspace is previewed: 200 with the overlay, and its WebSocket through the bridge opens",
+      "1c: a delegate's served preview of a port in its workspace (its server run by the stage) is previewed: 200 with the overlay, and its WebSocket through the bridge opens",
       !!inWorkspace.artifact && shownThere.ok,
       `${made.slice(0, 160)}; ${shownThere.ms} ms; ${shownThere.last}`
     );

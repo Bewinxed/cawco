@@ -1744,10 +1744,29 @@ ws_exec_as_session() {
   [[ " ${vars[*]} " == *" CAWCO_SESSION_CREDENTIAL="* && " ${vars[*]} " == *" CAWCO_INSTANCE_ID=$(cat "$rigdir/ws-delegate") "* ]] || { echo "ASSERTION FAILED: the delegate's process carries not both its id and its credential: ${vars[*]%%=*}" >&2; return 1; }
   as_user "$joinerc" env "${vars[@]}" sh -c 'cd "$1" && exec "$2" "$3"' sh "$(cat "$rigdir/ws-clone")" "$(ws_state)/exec" "$1"
 }
-# The workspace's preview of the listener's port, opened as the delegate opens one: its `artifact_create` tool,
-# called from its shell through the workspace's tool door (`cawco tool`, packages/cli/src/tools.ts). The hub's preview
-# port for it is read as the dashboard learns it.
-ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"name\":\"proof-listener\",\"port\":$WS_LISTENER_PORT}'"; }
+# The workspace preview's server, as a delegate names it: the command CawCo's stage runs and keeps up on its port
+# (artifact_create's `serve`, agent stage.ts `ensureServed`), never a shell of the delegate's. It answers each
+# connection with `served` and the pid namespace it runs in, so an answer names the boundary generation the stage
+# started it in. Its answer script lies in the workspace's scratch dir, written once by a command (ws_served_script);
+# socat's EXEC runs it with no shell, so the command has no quote and no space in its address.
+WS_SERVED_PORT=5198
+WS_SERVED_ANSWER='printf '"'"'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nserved %s\n'"'"' "$(readlink /proc/self/ns/pid)"'
+ws_served_script() { ws_exec "printf '%s\n' '#!/bin/sh' $(printf %q "$WS_SERVED_ANSWER") > \"\$TMPDIR/served.sh\" && chmod +x \"\$TMPDIR/served.sh\""; }
+# The served listener's own process: the socat whose argv carries the expanded port (its executor's and its shell's
+# carry `$PORT` unexpanded), the oldest of its forks.
+ws_served_pid() { as_user "$joinerc" pgrep -o -f "^socat TCP-LISTEN:$WS_SERVED_PORT,"; }
+# The workspace's preview of its server, opened as the delegate opens one: its `artifact_create` tool, called from its
+# shell through the workspace's tool door (`cawco tool`, packages/cli/src/tools.ts), naming what serves the port. Its
+# answer is kept in $rigdir/ws-preview-open (its id closes it). The hub's preview port for it is read as the dashboard
+# learns it.
+ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
+# The delegate removes that preview (artifact_delete): its server's last artifact, so the stage stops it.
+ws_preview_close() {
+  local id
+  id=$(grep -oE '"id": *"[0-9a-f-]{36}"' "$rigdir/ws-preview-open" | head -n 1 | grep -oE '[0-9a-f-]{36}')
+  [[ -n $id ]] || { echo "the preview's create answered no id: $(cat "$rigdir/ws-preview-open")"; return 1; }
+  ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_delete '{\"id\":\"$id\"}'"
+}
 ws_preview_port() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$(cat "$rigdir/ws-delegate")"; }
 # What the preview answers, through the hub's preview listener, the joined machine's agent and its bridge.
 ws_preview_says() { as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$(cat "$rigdir/ws-preview-port")/" 2>&1 || true; }
@@ -1929,12 +1948,15 @@ workspace_across_update() {
   wait_until 30 '[[ "$(ws_listener_pid gen-old)" =~ ^[0-9]+$ ]]' || { echo "ASSERTION FAILED: no listener runs after the command that started it ended"; ws_listener_why "$old_inner"; return 1; }
   listener=$(ws_listener_pid gen-old)
   ws_descends "$listener" "$old_inner" || return 1
-  # The delegate shows it: a preview of the port, which the owner reaches through the hub, the joined machine's agent
-  # and its bridge into the sandbox's network.
+  # The delegate shows its server as a preview that names what serves it: CawCo's stage runs it in this generation, and
+  # the owner reaches it through the hub, the joined machine's agent and its bridge into the sandbox's network.
+  ws_served_script
   ws_preview_open
+  [[ "$(ws_served_pid)" =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: no served listener runs once its preview was made: $(cat "$rigdir/ws-preview-open")"; return 1; }
+  ws_descends "$(ws_served_pid)" "$old_inner" || return 1
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
   echo "the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
-  wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
+  wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$old_ns"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
   # The delegate's work item is live going into the update.
   ws_item_live || { echo "ASSERTION FAILED: before the update the work item is $(ws_item_says)"; return 1; }
   echo "before the update the work item is $(ws_item_says)"
@@ -1955,9 +1977,10 @@ workspace_across_update() {
   as_user "$joinerc" kill -0 "$job"
   [[ "$(ns_of "$job")" == "$old_ns" ]]
   # The new build's agent finds the boundary of the older build's form with its work listening on the port, and keeps
-  # it as it is: handing it over would put every next command in a new network where nothing listens.
-  wait_until 180 'as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep -q "'"$id"': its boundary .* is kept as it is while its work listens on '"$WS_LISTENER_PORT"'"' || { echo "ASSERTION FAILED: the new build's agent did not say it keeps the boundary while its listener runs"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
-  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its boundary .* is kept as it is while its work listens on $WS_LISTENER_PORT" | tail -n 1
+  # it as it is: handing it over would put every next command in a new network where nothing listens. (The preview's
+  # served server listens in it too once the stage starts it again, so the ports it names may be both.)
+  wait_until 180 'as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep -q "'"$id"': its boundary .* is kept as it is while its work listens on .*'"$WS_LISTENER_PORT"'"' || { echo "ASSERTION FAILED: the new build's agent did not say it keeps the boundary while its listener runs"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
+  as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its boundary .* is kept as it is while its work listens on .*$WS_LISTENER_PORT" | tail -n 1
   # Through all of it, no call the hook was handed was refused.
   ws_hook_calls_stop
   ws_hook_calls_answered
@@ -1982,12 +2005,14 @@ workspace_across_update() {
   echo "the delegate answered $token after the update"
   ws_item_live || { echo "ASSERTION FAILED: after its answer the work item is $(ws_item_says)"; return 1; }
   echo "after its answer the work item is $(ws_item_says)"
-  # The listener ran through the update and still answers on its port, in the network it started in: the preview,
-  # started again by the hub at the new agent's register, reaches it there (the session's port is read again, as a
-  # dashboard learns it after the hub's own restart).
+  # The listener ran through the update. The preview, started again by the hub at the new agent's register, answers
+  # from its server, which the new agent's stage keeps or starts again at the preview's first request, in the
+  # generation kept for the listener (the session's port is read again, as a dashboard learns it after the hub's own
+  # restart).
   as_user "$joinerc" kill -0 "$listener"
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
-  wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
+  wait_until 90 '[[ "$(ws_preview_says)" == *"served '"$old_ns"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
+  echo "after the update the preview's server is $(ws_served_pid), in $old_ns"
   # With the job gone, the listener alone keeps the boundary as it is: through four of the agent's looks at it
   # (boundary.ts STALE_LOOK_MS, 5 s), its generation, its sandbox and the listener's answer stay, nothing retires, and
   # the next command still reaches the listener.
@@ -1999,7 +2024,7 @@ workspace_across_update() {
   as_user "$joinerc" kill -0 "$listener"
   answer=$(ws_exec_reach)
   [[ "$answer" == *gen-old* ]] || { echo "ASSERTION FAILED: with the job gone the next command reached no listener: $answer"; ws_listener_why "$old_inner"; return 1; }
-  wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
+  wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$old_ns"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
   # The same in host mode, the owner's: a request without a pass gets the lock's 401 page; one with the pass a
   # ticket bought reaches the listener in the generation kept for it.
   answer=$(ws_preview_mode host)
@@ -2012,7 +2037,11 @@ workspace_across_update() {
   [[ "$answer" == *"HTTP 401" && "$answer" == *cawco-preview-locked* ]] || { echo "ASSERTION FAILED: a request without a pass got: $answer"; return 1; }
   ws_preview_enter "$(cat "$rigdir/ws-preview-host")" > "$rigdir/ws-preview-pass"
   [[ "$(cat "$rigdir/ws-preview-pass")" == cawco-preview=* ]] || { echo "the entry set no pass: '$(cat "$rigdir/ws-preview-pass")'"; return 1; }
-  wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *gen-old*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; return 1; }
+  wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *"served '"$old_ns"'"*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; return 1; }
+  # The preview goes first, its server with it: a boundary is kept while any of its work listens, the served server's
+  # too, and the stage stops a server once its last artifact goes.
+  ws_preview_close
+  wait_until 30 '[[ -z "$(ws_served_pid)" ]]' || { echo "ASSERTION FAILED: the served listener $(ws_served_pid) runs on after its preview was removed"; return 1; }
   # The listener stops, as a delegate stops its dev server: at the agent's next look the boundary is handed over to a
   # generation of the new build's form, held by the new build's keeper, and the older one, nothing left running in
   # it, closes: its sandbox, its srt host, its record and its files go.
@@ -2040,9 +2069,12 @@ workspace_across_update() {
   ws_descends "$(ws_listener_pid gen-new)" "$new_inner" || return 1
   answer=$(ws_exec_reach)
   [[ "$answer" == *gen-new* ]] || { echo "ASSERTION FAILED: the next command reached no listener in the new generation: $answer"; ws_listener_why "$new_inner"; return 1; }
-  # The same preview now reaches the new generation's listener: in host mode with the same pass, then by port once
-  # the fleet is back in port mode.
-  wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *gen-new*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; ws_listener_why "$new_inner"; return 1; }
+  # The delegate shows its server again, and the stage runs it in the new generation. The session's preview reaches it
+  # there: in host mode with the same pass, then by port once the fleet is back in port mode.
+  ws_preview_open
+  [[ "$(ws_served_pid)" =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: no served listener runs once its preview was made again: $(cat "$rigdir/ws-preview-open")"; return 1; }
+  ws_descends "$(ws_served_pid)" "$new_inner" || return 1
+  wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *"served '"$(ns_of "$new_inner")"'"*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; ws_listener_why "$new_inner"; return 1; }
   [[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")" == *"HTTP 401" ]] || { echo "ASSERTION FAILED: host mode answered a request without a pass"; return 1; }
   answer=$(ws_preview_mode port)
   echo "the hub answered port mode: $answer"
@@ -2052,7 +2084,7 @@ workspace_across_update() {
   # `barred`, `portFor`).
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
   echo "back in port mode the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
-  wait_until 60 '[[ "$(ws_preview_says)" == *gen-new* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$new_inner"; return 1; }
+  wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$(ns_of "$new_inner")"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$new_inner"; return 1; }
   # The current one is untouched: the same generation, running the sandbox it started with.
   [[ "$(ws_gen)" == "$new" ]]
   ws_same_sandbox "$new" "$new_inner"
@@ -2063,16 +2095,18 @@ workspace_across_update() {
 # descends from its sandbox's init, with the sandbox itself (boundary.ts closeBoundary).
 workspace_archive_ends_all() {
   need_hub
-  local id gen inner listener tree answer left pid
+  local id gen inner listener served tree answer left pid
   id=$(cat "$rigdir/ws-id")
   gen=$(ws_gen)
   read -r _ inner _ <<< "$(ws_place "$gen")"
-  # The `setsid -f` listener the update's check started again in this generation, answering its preview by port (the
-  # across check ends in port mode, with the port it read last).
-  wait_until 60 '[[ "$(ws_preview_says)" == *gen-new* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$inner"; return 1; }
+  # The `setsid -f` listener the update's check started again in this generation, and the preview's server the stage
+  # runs there, answering its preview by port (the across check ends in port mode, with the port it read last).
+  wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$(ns_of "$inner")"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$inner"; return 1; }
   listener=$(ws_listener_pid gen-new)
+  served=$(ws_served_pid)
   tree=$(ws_tree "$inner")
   grep -qx "$listener" <<< "$tree" || { echo "ASSERTION FAILED: the listener $listener does not descend from the sandbox's init $inner"; return 1; }
+  grep -qx "$served" <<< "$tree" || { echo "ASSERTION FAILED: the preview's served listener $served does not descend from the sandbox's init $inner"; return 1; }
   echo "the sandbox's tree before the archive: $(tr '\n' ' ' <<< "$tree")"
   # The delegate's work item is live (its declared wait holds it open), and a workspace with a live work item refuses
   # its archive before it ends anything (work-items.ts archive: "has a live work item: … Stop it before archiving the
@@ -2098,18 +2132,20 @@ workspace_archive_ends_all() {
     fi
   done
   [[ -z $left ]] || { echo "ASSERTION FAILED: these processes of the archived workspace's sandbox still run:$left"; return 1; }
+  # The stage started no server again for the archived workspace's preview.
+  [[ -z "$(ws_served_pid)" ]] || { echo "ASSERTION FAILED: a served listener $(ws_served_pid) runs after the archive"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
-export WS_LISTENER_PORT
+export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from
   # this text, so a name held in a variable is listed as its own literal "$name" and never run.
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
   check "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" workspace_opens 600
-  check "a workspace open across an update keeps its job and a setsid listener running in the generation they started in, kept as it is while the listener runs: its next command reaches the listener and a preview reaches it by port and by host behind the lock; once the listener stops the next command runs in the new build's boundary and the old one closes, and a listener started in the new generation is reached by the preview in both modes" workspace_across_update 900 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
-  check "archiving a workspace ends a setsid listener and every other process its sandbox started" workspace_archive_ends_all 300 "a workspace open across an update keeps its job and a setsid listener running in the generation they started in, kept as it is while the listener runs: its next command reaches the listener and a preview reaches it by port and by host behind the lock; once the listener stops the next command runs in the new build's boundary and the old one closes, and a listener started in the new generation is reached by the preview in both modes"
+  check "a workspace open across an update keeps its job and a setsid listener running in the generation they started in, kept as it is while the listener runs: its next command reaches the listener, and the preview's served server, kept or started again by the stage, answers by port and by host behind the lock; once the preview and the listener stop the next command runs in the new build's boundary and the old one closes, and the preview made again is served in the new generation in both modes" workspace_across_update 900 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
+  check "archiving a workspace ends a setsid listener, its preview's served server and every other process its sandbox started" workspace_archive_ends_all 300 "a workspace open across an update keeps its job and a setsid listener running in the generation they started in, kept as it is while the listener runs: its next command reaches the listener, and the preview's served server, kept or started again by the stage, answers by port and by host behind the lock; once the preview and the listener stop the next command runs in the new build's boundary and the old one closes, and the preview made again is served in the new generation in both modes"
 }
 
 # ---------------------------------------------------------------- one session's runaway is its own

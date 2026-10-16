@@ -20,7 +20,7 @@ import {
   WorkspaceDown,
   workspaceGone,
 } from "./preview-bridge";
-import { stageViewer, wakeStage } from "./stage";
+import { sourceViewer, wakeSource } from "./stage";
 
 /**
  * The listeners this process serves, with the source each was asked for and
@@ -265,12 +265,28 @@ export function stopPreviews(): void {
   }
 }
 
+/** A port source with the parts a start names, and none it leaves out. */
+const portSource = (
+  port: number,
+  parts: Pick<
+    Parameters<typeof startPreview>[0],
+    "serve" | "stage" | "workspace"
+  >
+): Extract<PreviewSource, { port: number }> => ({
+  port,
+  ...(parts.workspace === undefined ? {} : { workspace: parts.workspace }),
+  ...(parts.stage === undefined ? {} : { stage: parts.stage }),
+  ...(parts.serve === undefined ? {} : { serve: parts.serve }),
+});
+
 export function startPreview(options: {
   instanceId: string;
   port?: number;
   dir?: string;
   /** A sheet's: the workspace's stage serves the port (core `PreviewSource`); each request wakes it. */
   stage?: { dir: string; file: string };
+  /** A workspace preview's: the server the workspace's stage runs on the port (core `ServeSpec`); each request wakes it. */
+  serve?: { command: string; cwd: string };
   /** The workspace whose network the port is in; none, the host's. */
   workspace?: string;
   /**
@@ -285,7 +301,7 @@ export function startPreview(options: {
 async function start(
   options: Parameters<typeof startPreview>[0]
 ): Promise<{ port: number }> {
-  const { instanceId, port, dir, workspace, token, stage } = options;
+  const { instanceId, port, dir, workspace, token, stage, serve } = options;
   if ((port === undefined) === (dir === undefined)) {
     throw new Error("Pass exactly one of port or dir.");
   }
@@ -309,26 +325,26 @@ async function start(
   if (root && !(await stat(root)).isDirectory()) {
     throw new Error("Directory does not exist.");
   }
-  const source: PreviewSource =
+  const source: Exclude<PreviewSource, { page: string }> =
     port === undefined
       ? { dir: root as string }
-      : {
-          port,
-          ...(workspace === undefined ? {} : { workspace }),
-          ...(stage === undefined ? {} : { stage }),
-        };
+      : portSource(port, { workspace, stage, serve });
   await stopNow(instanceId);
   if ("port" in source) {
     // A workspace no boundary runs refuses the preview in so many words.
     await upstreamOf(instanceId, source);
   }
-  /** A sheet's stage, woken when it sleeps; its refusal is the page the pane draws. */
+  /** A sheet's stage or a workspace preview's server, woken when it sleeps or failed; its refusal is the page the pane draws. */
   const staged = async (): Promise<Response | null> => {
-    if (!("port" in source && source.stage && source.workspace)) {
+    if (!(
+      "port" in source &&
+      (source.stage || source.serve) &&
+      source.workspace
+    )) {
       return null;
     }
     try {
-      await wakeStage(source.workspace, source.stage.dir, source.stage.file);
+      await wakeSource(source);
       return null;
     } catch (error) {
       previewFailed("agent listener", instanceId, causeOf(error));
@@ -429,14 +445,8 @@ async function start(
             hop: "agent listener",
             instanceId,
             // A page's open socket (its HMR) is a viewer: the stage stays awake for it.
-            ...(source.stage && source.workspace
-              ? {
-                  viewer: () =>
-                    stageViewer(
-                      source.workspace as string,
-                      (source.stage as { dir: string }).dir
-                    ),
-                }
+            ...((source.stage || source.serve) && source.workspace
+              ? { viewer: () => sourceViewer(source) }
               : {}),
           })
             ? undefined

@@ -8,6 +8,8 @@
  * the workspace's port preview. These are the shapes every hop speaks: the
  * daemon's answer to {@link STAGE_ENSURE}, the {@link StageFrame} it sends on
  * each change, and the state the hub keeps in the sheet's doc (`meta.stage`).
+ * A workspace preview's server ({@link ServeSpec}) runs on the same
+ * supervision, and its preview's doc keeps its state the same way.
  */
 
 /** Where a stage serves a sheet: `?file=<story file, from the Vite root>`. Outside the hub's own `/__cawco/`, after Vite's `/@vite/`. */
@@ -33,6 +35,30 @@ export const HEALTH_PATH = "/__cawco/health";
 
 /** The daemon's control method that starts a workspace's stage or wakes it, and answers a sheet's stories. */
 export const STAGE_ENSURE = "stageEnsure";
+
+/**
+ * A workspace preview's server: `command`, run by the workspace's stage
+ * inside its boundary in `cwd` (from the clone's root), with `PORT` set to
+ * `port`, which it serves on the boundary's loopback. Supervised as a sheet's
+ * Vite is: up once the port answers, asked every {@link STAGE_HEALTH_MS},
+ * started again {@link STAGE_RESTARTS} times, asleep after
+ * {@link STAGE_IDLE_MS} with no viewer, stopped with its artifact and its
+ * workspace. It never depends on the shell or session that asked for it.
+ */
+export interface ServeSpec {
+  command: string;
+  cwd: string;
+  port: number;
+}
+
+/** The longest command a preview's server takes. Our bound. */
+export const SERVE_COMMAND_LIMIT = 2000;
+
+/** The daemon's control method that starts a workspace preview's server or wakes it ({@link ServeSpec}), answering its state. */
+export const STAGE_SERVE = "stageServe";
+
+/** The daemon's control method that stops a workspace preview's server: its last artifact went. */
+export const STAGE_UNSERVE = "stageUnserve";
 
 /** How long a stage has to answer once started. The spec's number. */
 export const STAGE_READY_MS = 60_000;
@@ -221,9 +247,11 @@ export interface StageState {
   status: StageStatus;
 }
 
-/** The daemon's word on each change of a stage: every sheet of the workspace's that root hears it. */
+/** The daemon's word on each change of a stage: every artifact of the workspace's that previews its port hears it. */
 export interface StageFrame {
   kind: "stage";
+  /** The port it serves on, in the workspace's network: a sheet's stage's or a preview's server's. */
+  port: number;
   state: StageState;
   workspace: string;
 }

@@ -1475,6 +1475,12 @@ export type PreviewSource =
        * `file` from that root. A request for it wakes the stage when it sleeps.
        */
       stage?: { dir: string; file: string };
+      /**
+       * A workspace preview's server (core `stage.ts` {@link ServeSpec}): the
+       * command the workspace's stage runs and keeps up on `port`, in `cwd`
+       * from the clone's root. A request for it wakes it when it sleeps.
+       */
+      serve?: { command: string; cwd: string };
       /** The workspace whose dev server it is: it runs in that workspace's own network. */
       workspace?: string;
     }

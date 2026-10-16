@@ -128,10 +128,17 @@ import type { Tasks } from "./tasks";
  * they refuse: 305 tokens for the worker, the delegate and the lead (worker
  * 24,862, delegate 7,147, lead 16,049 measured with the hub's tools). Raised
  * deliberately, by those 305 each.
+ * 2026-10-16: artifact_create's `serve` (core `ServeSpec`), the one way a
+ * workspace's server is shown: the command CawCo runs and keeps up on the
+ * port, required with a workspace's port, so no preview hangs on a server
+ * the agent's own shell started; one clause in the description, the field's
+ * words its folder's alone. About 100 tokens for the worker, the delegate
+ * and the lead (worker 24,992, delegate 7,248, lead 16,150 measured).
+ * Raised deliberately; the lead's fits as it stands.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 24_895,
-  delegate: 7245,
+  worker: 25_000,
+  delegate: 7255,
   lead: 16_220,
   overseer: 770,
   "web-facing": 3400,

@@ -78,9 +78,12 @@ import {
 } from "@cawco/core/machine-key";
 import { userLayerPath } from "@cawco/core/paths";
 import {
+  type ServeSpec,
   type SheetWrite,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
+  STAGE_SERVE,
+  STAGE_UNSERVE,
   STAGE_WRITE,
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -180,9 +183,12 @@ import {
 } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
 import {
+  ensureServed,
   ensureStage,
+  StageRefusal,
   setStageSink,
   stageComponents,
+  stopServed,
   stopStages,
   writeSheet,
 } from "./stage";
@@ -235,6 +241,7 @@ import {
   workspaceBoundary,
   workspaceBundle,
 } from "./workspace";
+import { workspaceRefs } from "./workspace-records";
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
@@ -2748,6 +2755,20 @@ export const startDaemon = (rediscover = false) =>
             ref as WorkspaceRef,
             typeof dir === "string" ? dir : undefined
           )
+    );
+    // A workspace preview's server, started or woken and kept up there (stage.ts).
+    supervisor.registerDaemonFunction(STAGE_SERVE, async (workspace, serve) => {
+      if (fenced()) {
+        throw new Error(AGENT_RESTARTING);
+      }
+      const ref = (await workspaceRefs()).find((one) => one.id === workspace);
+      if (!ref) {
+        throw new StageRefusal(`No workspace ${workspace} is on this machine.`);
+      }
+      return ensureServed(ref, serve as ServeSpec);
+    });
+    supervisor.registerDaemonFunction(STAGE_UNSERVE, (workspace, port) =>
+      stopServed(String(workspace), Number(port))
     );
     // A check that names another machine: the commit leaves here, and arrives there.
     supervisor.registerDaemonFunction(

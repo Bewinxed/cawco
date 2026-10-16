@@ -57,6 +57,7 @@ import type { InkGroup } from "@cawco/core/ink";
 import { pageHash } from "@cawco/core/preview-proxy";
 import {
   type Found,
+  type ServeSpec,
   SHEET_PATH,
   type SheetRead,
   type SheetWrite,
@@ -125,6 +126,12 @@ export interface ArtifactInput {
   path?: string | undefined;
   port?: number | undefined;
   /**
+   * What serves a workspace's port (core `ServeSpec`): the command the
+   * workspace's stage runs and keeps up on `port`, in `cwd` from the clone's
+   * root. A preview of a port in a workspace names it.
+   */
+  serve?: { command: string; cwd?: string | undefined } | undefined;
+  /**
    * The workspace whose dev server a port is: the caller's own, or one of its
    * delegates'. Omitted, the caller's own when it runs in one, unless
    * `machine` names the host the port is on.
@@ -160,7 +167,7 @@ export type SheetChange =
 const KIND_FIELDS = {
   page: { fields: ["html", "dir"], takes: "html or dir" },
   preview: {
-    fields: ["port", "dir", "path", "machine", "workspace"],
+    fields: ["port", "dir", "path", "machine", "workspace", "serve"],
     takes: "port or dir",
   },
   canvas: { fields: ["elements", "mermaid"], takes: "elements or mermaid" },
@@ -175,6 +182,7 @@ const INPUT_FIELDS = [
   "path",
   "machine",
   "workspace",
+  "serve",
   "elements",
   "mermaid",
 ] as const;
@@ -201,8 +209,22 @@ const previewProblem = (input: ArtifactInput): string | null => {
   if (input.machine !== undefined && input.workspace !== undefined) {
     return "A workspace's port is on the workspace's machine: pass workspace for a workspace's server, or machine for a port on that machine's host.";
   }
+  if (input.serve !== undefined && input.port === undefined) {
+    return "serve goes with the port it serves on, not a dir.";
+  }
+  if (input.serve !== undefined && input.machine !== undefined) {
+    return "serve runs in a workspace, and machine names a port on a machine's host outside one: pass serve with your workspace's port.";
+  }
   return null;
 };
+
+/**
+ * Why a preview of a workspace's port with nothing named to serve it is
+ * refused: a server the agent starts in its own shell ends with that shell,
+ * the command or the session, and the person is left with a dead preview.
+ */
+const NOT_SERVED =
+  'A preview of a port in a workspace names what serves it: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }. CawCo runs it in the workspace and keeps it up for as long as the preview and the workspace last; a server started in your own shell ends with it.';
 
 /** An entry as `artifact_read` answers it. */
 type ReadEntry = ChoiceEntry & { earlierRevision?: true };
@@ -239,7 +261,7 @@ export interface ArtifactRead {
   seq: number;
   /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
   sheet?: SheetRead;
-  /** A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. */
+  /** A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. A served preview's: its server's status, and why it is in `error`. */
   stage?: StageState;
   /** Every key, or with `since` only those changed after it. */
   state: Record<string, ReadEntry>;
@@ -300,7 +322,7 @@ export interface Created {
   route: string;
   /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
   sheet?: SheetRead;
-  /** A sheet's stage, as it stands once started. */
+  /** A sheet's stage, or a served preview's server, as it stands once started. */
   stage?: StageState;
   /** Why it is not on screen, one sentence; only with `opened: false`. */
   why?: string;
@@ -509,6 +531,36 @@ const sheetOf = (
     ? { ...row.source.stage, workspace: row.source.workspace }
     : null;
 
+/** A workspace preview's server (core `ServeSpec`): its workspace and port; null for any other artifact. */
+const servedOf = (
+  row: ArtifactRow
+): { port: number; workspace: string } | null =>
+  row.kind === "preview" &&
+  "port" in row.source &&
+  row.source.serve &&
+  row.source.workspace
+    ? { port: row.source.port, workspace: row.source.workspace }
+    : null;
+
+/** A workspace port's source: refused without what serves it ({@link NOT_SERVED}). */
+const servedSource = (
+  input: ArtifactInput,
+  workspace: string
+): PreviewSource => {
+  if (!input.serve) {
+    throw new ArtifactRefusal(400, NOT_SERVED);
+  }
+  return {
+    port: input.port as number,
+    ...(input.path === undefined ? {} : { path: input.path }),
+    workspace,
+    serve: {
+      command: input.serve.command.trim(),
+      cwd: input.serve.cwd?.trim() || ".",
+    },
+  };
+};
+
 /** A compile error as a delivery has heard it: the same error again is not news. */
 const errorKey = (error: StageError): string =>
   `${error.file}:${error.line}:${error.column}:${error.message}`;
@@ -640,6 +692,16 @@ export interface ArtifactServiceDeps {
     artifact: ArtifactRow,
     state: Record<string, ChoiceEntry>
   ) => Promise<void>;
+  /**
+   * A workspace preview's server (agent stage.ts `ensureServed`), started or
+   * woken on the workspace's machine and waited on until its port answers:
+   * its state. Throws an {@link ArtifactRefusal} saying why it didn't start.
+   */
+  serve: (
+    machineId: string,
+    workspace: string,
+    serve: ServeSpec
+  ) => Promise<StageState>;
   /** The artifact a session's panel shows now, if any. */
   showing: (instanceId: string) => string | undefined;
   /**
@@ -678,6 +740,8 @@ export interface ArtifactServiceDeps {
     instance: InstanceRow,
     write: SheetWrite
   ) => Promise<SheetWritten>;
+  /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
+  unserve: (machineId: string, workspace: string, port: number) => void;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
 }
@@ -824,6 +888,69 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     db.remove(row.id);
     rmSync(join(deps.root, row.id), { recursive: true, force: true });
     deps.removed?.(row);
+    releaseServed(row);
+  };
+
+  /**
+   * A workspace preview's server, up before anything shows it (core
+   * `ServeSpec`): its state. One that can't start is the refusal, and nothing
+   * is kept. None for any other source.
+   */
+  const serveFirst = (
+    source: PreviewSource,
+    machineId: string | null
+  ): Promise<StageState | undefined> =>
+    "port" in source && source.serve && source.workspace && machineId
+      ? deps.serve(machineId, source.workspace, {
+          ...source.serve,
+          port: source.port,
+        })
+      : Promise.resolve(undefined);
+
+  /**
+   * A served preview's state kept in its doc; and, re-made on another port or
+   * workspace, the server it showed `before` let go once nothing else shows it.
+   */
+  const keepServed = (
+    row: ArtifactRow,
+    before: ArtifactRow | undefined,
+    stage: StageState | undefined
+  ) => {
+    if (stage) {
+      writeStage(row, stage);
+    }
+    const was = before ? servedOf(before) : null;
+    const now = servedOf(row);
+    if (
+      before &&
+      was &&
+      (was.port !== now?.port || was.workspace !== now?.workspace)
+    ) {
+      releaseServed(before);
+    }
+  };
+
+  /**
+   * The server `row` previewed (core `ServeSpec`) is stopped once no other
+   * artifact previews that port of its workspace: its life is its artifacts'.
+   */
+  const releaseServed = (row: ArtifactRow) => {
+    const served = servedOf(row);
+    if (!(served && row.machineId)) {
+      return;
+    }
+    const still = db
+      .previewing({
+        id: served.workspace,
+        machineId: row.machineId,
+        path: "//",
+      })
+      .some(
+        (other) => other.id !== row.id && servedOf(other)?.port === served.port
+      );
+    if (!still) {
+      deps.unserve(row.machineId, served.workspace, served.port);
+    }
   };
 
   const writePage = (id: string, html: string) => {
@@ -898,6 +1025,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...("workspace" in row.source && row.source.workspace
         ? { workspace: row.source.workspace }
         : {}),
+      ...(servedOf(row) && doc.getMap("meta").get("stage")
+        ? { stage: doc.getMap("meta").get("stage") as StageState }
+        : {}),
     };
   };
 
@@ -924,12 +1054,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (workspace) {
       return {
         machineId: workspace.machineId,
-        source: {
-          port: input.port as number,
-          ...at,
-          workspace: workspace.id,
-        },
+        source: servedSource(input, workspace.id),
       };
+    }
+    if (input.serve) {
+      throw new ArtifactRefusal(
+        400,
+        "serve runs in a workspace, and this session runs in none: show a server on this machine's host by its port alone, which you keep running."
+      );
     }
     const machineId =
       input.machine === undefined
@@ -2085,6 +2217,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       } else {
         ({ machineId, source } = previewSource(instance, input));
       }
+      const stage = await serveFirst(source, machineId);
       const now = new Date();
       const before = db.byName(instance.id, input.kind, input.name);
       const row = before
@@ -2115,6 +2248,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         writePage(row.id, html);
       }
       stampMeta(row, html === null ? null : pageHash(html));
+      keepServed(row, before, stage);
       const shown = await show(row);
       if (!(shown.started || before) && input.kind === "preview") {
         // A preview nothing could start shows nothing: it is not kept. One
@@ -2128,6 +2262,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         name: row.name,
         route: routeOf(row.id),
         ...openedOf(shown),
+        ...(stage ? { stage } : {}),
       };
     },
 
@@ -2270,8 +2405,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * A workspace's stage changed (the daemon's {@link StageFrame}): each
-     * sheet of the workspace that stage serves keeps its state, and one with
-     * a compile error its session has not heard has its delivery scheduled.
+     * sheet and each served preview of the workspace on that stage's port
+     * keeps its state, and a sheet with a compile error its session has not
+     * heard has its delivery scheduled.
      */
     staged: (machineId: string, frame: StageFrame): void => {
       // A port preview naming the workspace; no folder matches "//".
@@ -2281,7 +2417,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         path: "//",
       });
       for (const row of rows) {
-        if (sheetOf(row)?.dir !== frame.state.dir) {
+        const port = sheetOf(row) || servedOf(row) ? row.source : null;
+        if (!(port && "port" in port && port.port === frame.port)) {
           continue;
         }
         writeStage(row, frame.state);

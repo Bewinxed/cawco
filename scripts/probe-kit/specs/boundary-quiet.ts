@@ -9,7 +9,8 @@
  * preview artifact of the parent's that no server answers (the hub holds the
  * workspace, hub work-items.ts `settle`; nothing on its machine holds its
  * boundary, so it is idle there); a twenty-first
- * (P) starts a server in its workspace, shows it as a preview, and finishes;
+ * (P) shows a preview whose server CawCo's stage runs in its workspace
+ * (artifact_create's `serve`), and finishes;
  * a twenty-second (W) starts a `setsid` server in its workspace and declares
  * a {@link WAIT_MINUTES}-minute wait (`wait_item`), its item live, its
  * session quiet. All 22 are delegated at once from one repository with no
@@ -30,18 +31,19 @@
  *    everything under them, and the inotify instances they hold.
  * 4. A message to I0's sleeping session: it wakes, its boundary starts again
  *    and its first command runs inside it.
- * 5. A message to I1's: it wakes, starts a server in its workspace and shows
- *    it; the preview serves the page.
+ * 5. A message to I1's: it wakes and shows a served preview, whose server the
+ *    stage starts in its workspace; the preview serves the page.
  * 6. Agent restart after the closes: no closed workspace's boundary starts.
  * 7. W, its item live through the quiet time: its boundary is the one it had
  *    before the restart, never closed. The wait's end wakes it, and its first
  *    command reaches its server; the form its boundary lost is not taken
  *    there (the agent says it keeps it as it is while its work listens), so
  *    the server stays in the network its commands run in. A message after
- *    the quiet time: its command reaches the server again, and a preview of
- *    its port serves the page.
- * 8. The preview closed and W's item finished: its boundary, its server still
- *    listening in it, closes within {@link W_CLOSE_MS} of the item's end.
+ *    the quiet time: its command reaches the server again. (W shows no
+ *    preview: a preview of a workspace's port names what serves it, and W's
+ *    server is the one its own command left listening.)
+ * 8. W's item finished: its boundary, its server still listening in it,
+ *    closes within {@link W_CLOSE_MS} of the item's end.
  *
  *   bun scripts/probe-kit/run.ts boundary-quiet
  */
@@ -102,6 +104,13 @@ const serveCommand = (tag: string): string => {
     `(setsid nohup bun "$TMPDIR/quiet-app.js" > "$TMPDIR/quiet-app.log" 2>&1 < /dev/null &)`,
     `for i in $(seq 100); do bun -e ${quoted(`await fetch("http://127.0.0.1:${port}/")`)} 2>/dev/null && echo "SERVER-""UP-${tag}:" && break; sleep 0.1; done`,
   ].join(" && ");
+};
+
+/** What serves `tag`'s preview (artifact_create's `serve`): the same page on the `PORT` the stage gives it, run and kept up by CawCo, never by the delegate's shell. */
+const servedCommand = (tag: string): string => {
+  const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${titleOf(tag)}</title></head><body>${titleOf(tag)}</body></html>`;
+  const app = `Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch:()=>new Response(${JSON.stringify(page)},{headers:{"content-type":"text/html"}})});`;
+  return `bun -e ${quoted(app)}`;
 };
 
 /** A command that reaches `tag`'s server on its port and then says `marker`, spelled apart; nothing when it does not answer. */
@@ -174,10 +183,6 @@ const waiter = (request: Seen): Reply => {
       description: "Reach the server again",
     });
   }
-  if (step.checked && !step.shown) {
-    step.shown = true;
-    return tool(CREATE, { kind: "preview", name: "quiet-w", port: PORT.W });
-  }
   if (has("PROBE-QUIET-FINISH-W:") && !step.finished) {
     const reply = offered(request, FINISH, {
       headline: "W kept its server up through its wait.",
@@ -189,24 +194,19 @@ const waiter = (request: Seen): Reply => {
   return text("ok");
 };
 
-/** A delegate's own work: its one command, or P's server and preview, then finish_item. */
+/** A delegate's own work: its one command, or P's served preview, then finish_item. */
 const firstWork = (request: Seen, tag: string): Reply => {
   const step = steps.get(tag) ?? {};
   steps.set(tag, step);
   const has = (marker: string) => request.all.includes(marker);
   const serves = tag === "P" || has(`PROBE-QUIET-SERVE-${tag}:`);
-  if (serves && !has(`SERVER-UP-${tag}:`)) {
-    return tool("Bash", {
-      command: serveCommand(tag),
-      description: "Start the server",
-    });
-  }
   if (serves && !step.shown) {
     step.shown = true;
     return tool(CREATE, {
       kind: "preview",
       name: `quiet-${tag.toLowerCase()}`,
       port: PORT[tag],
+      serve: { command: servedCommand(tag) },
     });
   }
   if (has(`PROBE-QUIET-SERVE-${tag}:`)) {
@@ -671,21 +671,18 @@ const waiterHolds = async (
   );
   await fleet.send(
     w.instanceId,
-    "PROBE-QUIET-CHECK-W: is the server still up? Show it."
+    "PROBE-QUIET-CHECK-W: is the server still up?"
   );
-  const shown = await until(
-    "W reached its server again and showed it",
-    () =>
-      steps.get("W")?.shown &&
-      fleet.seen.some((one) => one.all.includes("STILL-UP-W:")),
+  const reached = await until(
+    "W reached its server again",
+    () => fleet.seen.some((one) => one.all.includes("STILL-UP-W:")),
     Boolean,
     240_000
   ).catch(() => false);
-  const serves = await serving(fleet, w.instanceId, "W");
   kit.check(
-    "7: after the quiet time W's command reaches its server again, and a preview of its port serves the page",
-    Boolean(shown) && serves.ok,
-    `reached: ${Boolean(shown)}; ${serves.last}`
+    "7: after the quiet time W's command reaches its server again",
+    Boolean(reached),
+    `reached: ${Boolean(reached)}`
   );
   const kept = (await fleet.logs("agent"))
     .split("\n")
@@ -698,16 +695,12 @@ const waiterHolds = async (
   );
 };
 
-/** 8: W's preview closed and its item finished; answers when the item ended. */
+/** 8: W's item finished; answers when the item ended. */
 const waiterFinishes = async (
   kit: Kit,
   fleet: Fleet,
   w: Delegated
 ): Promise<number> => {
-  const closed = await fetch(
-    `${fleet.base}/api/instances/${w.instanceId}/preview`,
-    { method: "DELETE" }
-  );
   await fleet.send(w.instanceId, "PROBE-QUIET-FINISH-W: finish your item.");
   const item = () =>
     fleet.query<{ state: string }>(
@@ -721,9 +714,9 @@ const waiterFinishes = async (
     300_000
   ).catch(item);
   kit.check(
-    "8: W's preview is closed and its item is done",
-    closed.ok && ended?.state === "done",
-    `preview close ${closed.status}; item ${ended?.state ?? "missing"}`
+    "8: W's item is done",
+    ended?.state === "done",
+    `item ${ended?.state ?? "missing"}`
   );
   return Date.now();
 };

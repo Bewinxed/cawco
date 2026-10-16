@@ -576,30 +576,36 @@
   );
   /*
    * A sheet's stage (live components): the project's own Vite, which the
-   * daemon runs in its workspace. Its state is in the sheet's doc: starting,
-   * waking (from sleep) and the page compiling stand on the loading cover;
-   * compile errors on a card over the last render, dimmed; a stage that
-   * didn't start, where the page would be.
+   * daemon runs in its workspace; or a workspace preview's server, the
+   * command it names (`serve`), run the same way. Its state is in the doc:
+   * starting, waking (from sleep) and a sheet's page compiling stand on the
+   * loading cover; a sheet's compile errors on a card over the last render,
+   * dimmed; a stage that didn't start or stopped, where the page would be.
    */
-  const sheetStage = $derived(
-    artifact?.kind === "sheet" ? (view?.stage ?? null) : null
+  const served = $derived(
+    source && "port" in source && source.serve ? source : null
   );
-  /** What the cover says while a sheet's page is on its way; null when nothing is. */
+  const staged = $derived(
+    artifact?.kind === "sheet" || served ? (view?.stage ?? null) : null
+  );
+  /** What the cover says while the page is on its way; null when nothing is. */
   const stageWaiting = $derived.by(() => {
-    switch (sheetStage?.status) {
+    switch (staged?.status) {
       case "starting":
-        return `Starting vite in ${sheetStage.dir}…`;
+        return served
+          ? "Starting the server…"
+          : `Starting vite in ${staged.dir}…`;
       case "waking":
       case "asleep":
         return "Waking…";
       case "live":
-        return connected ? null : "Compiling…";
+        return connected || served ? null : "Compiling…";
       default:
         return null;
     }
   });
   const compileErrors = $derived(
-    sheetStage?.status === "live" ? sheetStage.errors : []
+    staged?.status === "live" ? staged.errors : []
   );
   /*
    * A sheet's inspector (live components spec §5): the chosen story's props
@@ -1678,16 +1684,20 @@
       </div>
     {/if}
   {/if}
-  {#if sheetStage?.status === "error"}
-    <!-- The stage didn't start, or failed its restarts: where the page would be. -->
+  {#if staged?.status === "error"}
+    <!-- The stage or the server didn't start, or failed its restarts: where the page would be. -->
     <div class="down" role="alert" transition:appear>
       <EmptyState
         icon={IconAlert}
-        title={`The stage for ${sheetStage.dir} didn't start`}
+        title={served
+          ? `The server on port ${served.port} isn't running`
+          : `The stage for ${staged.dir} didn't start`}
       >
         {#snippet line()}
-          {sheetStage.message ?? "Vite ended before it served the sheet."} Try again
-          starts it again.
+          {staged.message ??
+            (served
+              ? "It ended before it answered."
+              : "Vite ended before it served the sheet.")} Try again starts it again.
         {/snippet}
         {#snippet action()}
           <Button
@@ -1703,8 +1713,8 @@
       </EmptyState>
     </div>
   {/if}
-  {#if down}
-    <!-- What happened, why and the way back, where the page would be. -->
+  {#if down && staged?.status !== "error"}
+    <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
     <div class="down" role="alert" transition:appear>
       <EmptyState icon={IconAlert} title={downTitle}>
         {#snippet line()}
@@ -1715,7 +1725,9 @@
             {downPort
               ? `Nothing is running on port ${downPort} on ${ownerMachine}, so the page can't load.`
               : `The page's server on ${ownerMachine} isn't running, so the page can't load.`}
-            {#if offerSession}
+            {#if served}
+              CawCo starts it again by itself; try again in a moment.
+            {:else if offerSession}
               Start it again from its session, then try again.
             {:else}
               Start it again, then try again.

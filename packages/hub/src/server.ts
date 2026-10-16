@@ -319,9 +319,12 @@ import {
   STAGE_COMPONENTS,
   STAGE_ENSURE,
   STAGE_READY_MS,
+  STAGE_SERVE,
+  STAGE_UNSERVE,
   STAGE_WRITE,
   type StageFrame,
   type StageOpened,
+  type StageState,
 } from "@cawco/core/stage";
 import type { UpstreamRules } from "@cawco/core/upstream-guard";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
@@ -9725,6 +9728,40 @@ export const createServer = (
         components: Found[];
         dir: string;
       },
+    // A workspace preview's server, run and kept up on the workspace's machine.
+    serve: async (machineId, workspace, serve) => {
+      const answer = await callAgent(
+        machineId,
+        STAGE_SERVE,
+        [workspace, serve],
+        STAGE_READY_MS + 15_000
+      );
+      if (answer === "offline") {
+        throw new ArtifactRefusal(
+          503,
+          "The workspace's machine isn't connected to the hub, so its server can't start."
+        );
+      }
+      if (answer === "timeout") {
+        throw new ArtifactRefusal(
+          504,
+          `The workspace's machine didn't answer within ${(STAGE_READY_MS + 15_000) / 1000}s, so the server's state is unknown.`
+        );
+      }
+      if (!answer.ok) {
+        throw new ArtifactRefusal(
+          422,
+          answer.error ?? "The server didn't start."
+        );
+      }
+      return answer.result as StageState;
+    },
+    unserve: (machineId, workspace, port) => {
+      detach(
+        callAgent(machineId, STAGE_UNSERVE, [workspace, port], BUSY_TIMEOUT_MS),
+        "preview server stop"
+      );
+    },
   });
   importLegacyCanvases({
     db: db.artifacts,

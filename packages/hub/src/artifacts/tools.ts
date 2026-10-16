@@ -8,7 +8,7 @@
 import { ARTIFACT_NAME, PREVIEW_START_PATH } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
-import { STORY_FILE } from "@cawco/core/stage";
+import { SERVE_COMMAND_LIMIT, STORY_FILE } from "@cawco/core/stage";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
 
@@ -76,7 +76,8 @@ export const artifactCreate = {
     "holding a decision page's page.html (decision-page skill); in a project, neither builds decisions/<name>/page.html " +
     "from its folder. A sheet is a component's states: `file`, a CSF 3 story file beside the real component " +
     "(`export default { component, args }`, a named export per state), run on your workspace's Vite. " +
-    "A preview is a whole app: your dev server (`port`) or a folder (`dir`). Options to pick between: " +
+    "A preview is a whole app: a folder (`dir`) or a server on `port`; in a workspace `serve` is its command, which " +
+    "CawCo runs there with PORT and keeps up (never start it yourself). Options to pick between: " +
     "design-explore skill first. A canvas is `elements` or `mermaid`, " +
     "or empty for the person. The same kind and name again replaces it, picks kept. " +
     "Answers its id and `opened` (false: `why`).",
@@ -122,6 +123,16 @@ export const artifactCreate = {
       .describe(
         "The workspace whose server a port is: yours, or a delegate's id as delegate returned it; omitted, your own."
       ),
+    serve: z
+      .object({
+        command: z.string().min(1).max(SERVE_COMMAND_LIMIT),
+        cwd: z
+          .string()
+          .max(1000)
+          .optional()
+          .describe("From your clone's root."),
+      })
+      .optional(),
     elements,
     mermaid,
   },
@@ -189,7 +200,7 @@ export const artifactRead = {
     "When the person sends picks, you are told the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture. A sheet adds " +
-    "`sheet` (stories, args, props) and its stage's `status` and `errors`; its picks are stories.",
+    "`sheet` (stories, args, props) and its stage's `status` and `errors`; its picks are stories; a served preview, its server's `stage`.",
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),

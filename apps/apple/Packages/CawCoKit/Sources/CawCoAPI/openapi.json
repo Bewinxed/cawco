@@ -4615,6 +4615,23 @@
                     "pattern": "^[0-9a-f][0-9a-f-]{7,35}$",
                     "type": "string"
                   },
+                  "serve": {
+                    "type": "object",
+                    "properties": {
+                      "command": {
+                        "minLength": 1,
+                        "maxLength": 2000,
+                        "type": "string"
+                      },
+                      "cwd": {
+                        "maxLength": 1000,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "command"
+                    ]
+                  },
                   "draft": {
                     "type": "boolean"
                   }
@@ -32062,7 +32079,7 @@
           },
           "stage": {
             "$ref": "#/components/schemas/StageState",
-            "description": "A sheet's stage, as it stands once started."
+            "description": "A sheet's stage, or a served preview's server, as it stands once started."
           },
           "why": {
             "description": "Why it is not on screen, one sentence; only with `opened: false`.",
@@ -32576,7 +32593,7 @@
           },
           "stage": {
             "$ref": "#/components/schemas/StageState",
-            "description": "A sheet's stage: its status, and the compile errors standing in the modules the sheet imports."
+            "description": "A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. A served preview's: its server's status, and why it is in `error`."
           },
           "state": {
             "type": "object",
@@ -46376,6 +46393,22 @@
                       "file"
                     ]
                   },
+                  "serve": {
+                    "description": "A workspace preview's server (core `stage.ts` {@link ServeSpec}): the\ncommand the workspace's stage runs and keeps up on `port`, in `cwd`\nfrom the clone's root. A request for it wakes it when it sleeps.",
+                    "type": "object",
+                    "properties": {
+                      "command": {
+                        "type": "string"
+                      },
+                      "cwd": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "command",
+                      "cwd"
+                    ]
+                  },
                   "workspace": {
                     "description": "The workspace whose dev server it is: it runs in that workspace's own network.",
                     "type": "string"
@@ -48416,7 +48449,7 @@
         ]
       },
       "StageFrame": {
-        "description": "The daemon's word on each change of a stage: every sheet of the workspace's that root hears it.",
+        "description": "The daemon's word on each change of a stage: every artifact of the workspace's that previews its port hears it.",
         "type": "object",
         "properties": {
           "kind": {
@@ -48424,6 +48457,10 @@
             "enum": [
               "stage"
             ]
+          },
+          "port": {
+            "description": "The port it serves on, in the workspace's network: a sheet's stage's or a preview's server's.",
+            "type": "number"
           },
           "state": {
             "$ref": "#/components/schemas/StageState"
@@ -48434,6 +48471,7 @@
         },
         "required": [
           "kind",
+          "port",
           "state",
           "workspace"
         ]

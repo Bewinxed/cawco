@@ -8,7 +8,11 @@
 import { ARTIFACT_NAME, PREVIEW_START_PATH, SHOWN_FAILURES } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
-import { STORY_FILE, type StoryOp } from "@cawco/core/stage";
+import {
+  SERVE_COMMAND_LIMIT,
+  STORY_FILE,
+  type StoryOp,
+} from "@cawco/core/stage";
 import { Elysia, t } from "elysia";
 import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
@@ -190,6 +194,15 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           ),
           machine: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
           workspace: t.Optional(t.String({ pattern: WORKSPACE_ID.source })),
+          serve: t.Optional(
+            t.Object({
+              command: t.String({
+                minLength: 1,
+                maxLength: SERVE_COMMAND_LIMIT,
+              }),
+              cwd: t.Optional(t.String({ maxLength: 1000 })),
+            })
+          ),
           draft: t.Optional(t.Boolean()),
         }),
       },

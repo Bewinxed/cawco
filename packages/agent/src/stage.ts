@@ -11,7 +11,7 @@
  *
  * - starts on the first {@link ensureStage} (an `artifact_create` of a
  *   sheet, an agent's read) or the first request a preview of it relays
- *   ({@link wakeStage}), answering `live` within {@link STAGE_READY_MS} or
+ *   ({@link wakeSource}), answering `live` within {@link STAGE_READY_MS} or
  *   `error`;
  * - is asked {@link HEALTH_PATH} every {@link STAGE_HEALTH_MS}; a stage that
  *   ends or stops answering is started again, {@link STAGE_RESTARTS} times
@@ -24,18 +24,27 @@
  *
  * Each change goes to the hub as a {@link StageFrame} ({@link setStageSink}),
  * which the hub keeps in the doc of each sheet the stage serves.
+ *
+ * A workspace preview's server (core `ServeSpec`, `artifact_create(kind:
+ * "preview", port, serve)`) is a stage too, keyed by its port: its command
+ * run through the same executor, on the same rules, `live` once its port
+ * answers any HTTP request ({@link ensureServed}). It is the daemon's child,
+ * so it outlives the shell, the command and the session that asked for it;
+ * its last artifact's removal stops it ({@link stopServed}).
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { WorkspaceRef } from "@cawco/core";
+import type { PreviewSource, WorkspaceRef } from "@cawco/core";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   COMPONENTS_PATH,
   type Found,
   HEALTH_PATH,
+  SERVE_COMMAND_LIMIT,
+  type ServeSpec,
   type SheetRead,
   type SheetWrite,
   type SheetWritten,
@@ -70,6 +79,37 @@ const PORT_SPAN = 8000;
 
 /** How long a health look waits for its answer. Ours. */
 const HEALTH_WAIT_MS = 5000;
+/** How often a starting preview server's port is asked whether it answers yet, and how long each ask waits. Ours. */
+const SERVE_POLL_MS = 250;
+const SERVE_ASK_MS = 2000;
+/** How often a preview server's wrapper tells the daemon it is there ({@link serveScript}), in seconds. Ours. */
+const SERVE_BEAT_S = 5;
+/** How long a start waits for a server its last daemon left to let go of the port: past its beat. Ours. */
+const SERVE_LET_GO_MS = (SERVE_BEAT_S + 7) * 1000;
+
+/**
+ * A preview server's command as the executor runs it: in the background of
+ * a shell that writes a blank line to its stdout every {@link SERVE_BEAT_S}
+ * seconds and, once that write fails (the daemon that reads it is gone, as
+ * the stage host's beat finds), ends its whole process group, the server
+ * with it. Otherwise it waits on the server and ends with its status, which
+ * the daemon reads as a crash. SIGPIPE is ignored only after the server
+ * started, so the server keeps its own.
+ */
+const serveScript = (command: string): string =>
+  [
+    "{",
+    command,
+    "} &",
+    "s=$!",
+    "trap '' PIPE",
+    `(while sleep ${SERVE_BEAT_S}; do echo 2>/dev/null || kill -TERM 0; done) &`,
+    "b=$!",
+    'wait "$s"',
+    "r=$?",
+    'kill "$b" 2>/dev/null',
+    'exit "$r"',
+  ].join("\n");
 /** The waits before each start again, ms: past a host's beat (15 s), so a stage its last daemon left has let go of its port. Ours. */
 const BACKOFF_MS = [1000, 4000, 16_000];
 /** How long a stopped stage's group has between TERM and KILL. */
@@ -100,16 +140,24 @@ export class StageRefusal extends Error {}
 const AS_PAGE =
   "Show its components as an HTML page artifact (artifact_create kind page) that loads the project's built CSS.";
 
+/** What a stage runs: the stage host on a sheet's Vite root, or the command a workspace preview names. */
+type Runs =
+  | {
+      readonly framework: Framework;
+      readonly kind: "sheet";
+      readonly kit: boolean;
+      readonly runtime: string;
+    }
+  | { readonly command: string; readonly kind: "serve" };
+
 interface Stage {
   child?: ChildProcess;
-  /** The Vite root, from the clone's root. */
+  /** Where it runs from the clone's root: a sheet's Vite root, a server's `cwd`. */
   readonly dir: string;
   errors: StageError[];
-  readonly framework: Framework;
   /** Its health look's timer, while it runs. */
   health?: ReturnType<typeof setInterval>;
   readonly key: string;
-  readonly kit: boolean;
   /** The last request, viewer or agent read: its idle time counts from here. */
   lastUse: number;
   message?: string;
@@ -117,9 +165,9 @@ interface Stage {
   /** Settles once it is `live`, or rejects with why it is not. */
   ready?: Promise<void>;
   restarts: number;
-  /** The Vite root, absolute. */
+  /** Where it runs, absolute. */
   readonly root: string;
-  readonly runtime: string;
+  readonly runs: Runs;
   /** It slept: its next start is a wake (`waking`). */
   slept: boolean;
   status: StageStatus;
@@ -147,12 +195,23 @@ const stateOf = (stage: Stage): StageState => ({
   ...(stage.message ? { message: stage.message } : {}),
 });
 
+/** The stage in words: a sheet's by its Vite root, a preview's server by its command and port. */
+const stageWords = (stage: Stage): string =>
+  stage.runs.kind === "sheet"
+    ? `The stage for ${stage.dir}`
+    : `\`${stage.runs.command}\` (port ${stage.port})`;
+
 /** Tells the hub where the stage is now, and logs it. */
 const tell = (stage: Stage) => {
   console.info(
-    `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: ${stage.status}${stage.message ? ` (${stage.message})` : ""}${stage.errors.length ? `, ${stage.errors.length} error(s)` : ""}`
+    `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.runs.kind === "sheet" ? stage.dir : `port ${stage.port}`}: ${stage.status}${stage.message ? ` (${stage.message})` : ""}${stage.errors.length ? `, ${stage.errors.length} error(s)` : ""}`
   );
-  sink({ kind: "stage", workspace: stage.workspace.id, state: stateOf(stage) });
+  sink({
+    kind: "stage",
+    workspace: stage.workspace.id,
+    port: stage.port,
+    state: stateOf(stage),
+  });
 };
 
 /** Each dir from `from` up to `top`, both included. */
@@ -312,17 +371,70 @@ function stageFor(
       `SvelteKit serves only ${dir}/src, so a sheet sits beside its component there; ${relative(workspace.path, story)} is outside it.`
     );
   }
-  const key = `${workspace.id}:${dir}`;
+  const key = sheetKey(workspace.id, dir);
   const hash = createHash("sha256").update(key).digest().readUInt32BE(0);
   return {
     key,
     workspace,
     root,
     dir,
-    framework: framework === "solid-js" ? "solid" : framework,
-    kit,
-    runtime,
+    runs: {
+      kind: "sheet",
+      framework: framework === "solid-js" ? "solid" : framework,
+      kit,
+      runtime,
+    },
     port: PORT_BASE + (hash % PORT_SPAN),
+  };
+}
+
+/** A sheet's stage's key: its workspace and Vite root. */
+const sheetKey = (workspace: string, dir: string) => `${workspace}:${dir}`;
+/** A preview server's key: its workspace and port, one server per port. */
+const serveKey = (workspace: string, port: number) => `${workspace}@${port}`;
+
+/**
+ * The stage a preview's server runs as: `cwd` inside the workspace's clone
+ * and a folder, the command one bounded line; refused with why otherwise.
+ */
+function servedFor(
+  workspace: WorkspaceRef,
+  serve: ServeSpec
+): Omit<
+  Stage,
+  | "status"
+  | "errors"
+  | "restarts"
+  | "lastUse"
+  | "slept"
+  | "stopping"
+  | "viewers"
+> {
+  const command = serve.command.trim();
+  if (command.length === 0 || command.length > SERVE_COMMAND_LIMIT) {
+    throw new StageRefusal(
+      `serve.command is the shell command that starts the server, at most ${SERVE_COMMAND_LIMIT} characters, like "bun run dev --port ${serve.port}".`
+    );
+  }
+  const root = resolve(workspace.path, serve.cwd || ".");
+  const inside = relative(workspace.path, root);
+  if (inside.startsWith("..") || isAbsolute(inside)) {
+    throw new StageRefusal(
+      `serve.cwd ${serve.cwd} is outside this workspace's clone (${workspace.path}): it is a folder of the clone, from its root.`
+    );
+  }
+  if (!existsSync(root)) {
+    throw new StageRefusal(
+      `serve.cwd ${inside || "."} isn't a folder in this workspace's clone.`
+    );
+  }
+  return {
+    key: serveKey(workspace.id, serve.port),
+    workspace,
+    root,
+    dir: inside || ".",
+    runs: { kind: "serve", command },
+    port: serve.port,
   };
 }
 
@@ -335,7 +447,8 @@ async function askStage(
   stage: Stage,
   path: string,
   waitMs: number,
-  body?: object
+  body?: object,
+  init: RequestInit = {}
 ): Promise<Response> {
   const reached = await reachWorkspace(
     bridgeName(stage),
@@ -347,6 +460,7 @@ async function askStage(
       ? `http://127.0.0.1:${stage.port}${path}`
       : `http://localhost:${stage.port}${path}`,
     {
+      ...init,
       signal: AbortSignal.timeout(waitMs),
       ...(body
         ? {
@@ -439,6 +553,25 @@ function crashed(stage: Stage, why: string): void {
   stage.ready.catch(() => undefined);
 }
 
+/**
+ * Whether the stage serves: a sheet's host answers {@link HEALTH_PATH} with
+ * 200; a preview's server answers `/` with anything at all, its status its
+ * own app's.
+ */
+const healthy = (stage: Stage, waitMs: number): Promise<boolean> =>
+  askStage(
+    stage,
+    stage.runs.kind === "sheet" ? HEALTH_PATH : "/",
+    waitMs,
+    undefined,
+    stage.runs.kind === "serve" ? { redirect: "manual" } : {}
+  )
+    .then(async (response) => {
+      await response.body?.cancel();
+      return stage.runs.kind === "serve" || response.ok;
+    })
+    .catch(() => false);
+
 /** Its health look and its sleep, every {@link STAGE_HEALTH_MS} while it is live. */
 function watch(stage: Stage): void {
   clearInterval(stage.health);
@@ -450,11 +583,11 @@ function watch(stage: Stage): void {
       sleep(stage);
       return;
     }
-    const answered = await askStage(stage, HEALTH_PATH, HEALTH_WAIT_MS)
-      .then((response) => response.ok)
-      .catch(() => false);
-    if (!answered) {
-      crashed(stage, `it stopped answering ${HEALTH_PATH}`);
+    if (!(await healthy(stage, HEALTH_WAIT_MS))) {
+      crashed(
+        stage,
+        `it stopped answering ${stage.runs.kind === "sheet" ? HEALTH_PATH : `on port ${stage.port}`}`
+      );
     } else if (stage.restarts > 0) {
       // A whole look's time live: its next crash starts its restarts afresh.
       stage.restarts = 0;
@@ -489,14 +622,19 @@ const hostWord = (line: string): HostWord | null => {
   }
 };
 
+/** It serves: `live`, its health look started, the hub told. */
+const up = (stage: Stage) => {
+  stage.status = "live";
+  stage.message = undefined;
+  stage.lastUse = Date.now();
+  watch(stage);
+  tell(stage);
+};
+
 /** What the host said, kept and told to the hub; whether it said it serves. */
 const heard = (stage: Stage, word: HostWord): boolean => {
   if (word.cawco === "ready") {
-    stage.status = "live";
-    stage.message = undefined;
-    stage.lastUse = Date.now();
-    watch(stage);
-    tell(stage);
+    up(stage);
     return true;
   }
   if (word.cawco === "errors") {
@@ -506,35 +644,73 @@ const heard = (stage: Stage, word: HostWord): boolean => {
   return false;
 };
 
-/** Starts the host in the stage's boundary; settles once it says it serves, rejects with why it did not. */
+/** The command the executor runs, and its environment past the host's: the stage host, or the preview's own command with `PORT`. */
+const commandOf = (stage: Stage): [string, Record<string, string>] =>
+  stage.runs.kind === "sheet"
+    ? [
+        `exec ${shellQuote(stage.runs.runtime)} ${HOST_FILE}`,
+        {
+          CAWCO_STAGE: "1",
+          CAWCO_STAGE_PORT: String(stage.port),
+          CAWCO_STAGE_FRAMEWORK: stage.runs.framework,
+          CAWCO_STAGE_KIT: stage.runs.kit ? "1" : "0",
+        },
+      ]
+    : [serveScript(stage.runs.command), { PORT: String(stage.port) }];
+
+/** Whether the stage's port stops answering within `waitMs`: a server an earlier daemon left lets go of it at its next beat. */
+const letGo = async (stage: Stage, waitMs: number): Promise<boolean> => {
+  const deadline = Date.now() + waitMs;
+  // biome-ignore lint/performance/noAwaitInLoops: one ask at a time until the port is free or the wait ends
+  while (await healthy(stage, SERVE_ASK_MS)) {
+    if (Date.now() > deadline) {
+      return false;
+    }
+    await Bun.sleep(500);
+  }
+  return true;
+};
+
+/** A start found its port held: in `error` with why, and the hub told. */
+function refusedStart(stage: Stage, why: string): never {
+  stage.status = "error";
+  stage.message = why;
+  stage.ready = undefined;
+  tell(stage);
+  throw new StageRefusal(why);
+}
+
+/**
+ * Starts the stage in its boundary; settles once it serves (the host says
+ * so, or a server's port answers), rejects with why it did not. A server
+ * whose port already answers is never started: something else serves it.
+ */
 async function start(stage: Stage): Promise<void> {
   stage.stopping = false;
-  await writeHost(stage);
+  if (stage.runs.kind === "sheet") {
+    await writeHost(stage);
+  } else if (!(await letGo(stage, SERVE_LET_GO_MS))) {
+    refusedStart(
+      stage,
+      `port ${stage.port} in this workspace already answers, so something else serves it and \`${stage.runs.command}\` wasn't started. Stop that server, or serve on another port.`
+    );
+  }
   const boundary = await ensureBoundary(stage.workspace);
-  const child = spawn(
-    boundary.exec,
-    [`exec ${shellQuote(stage.runtime)} ${HOST_FILE}`],
-    {
-      cwd: stage.root,
-      detached: true,
-      env: {
-        ...hostEnvironment(),
-        // The executor enters the boundary in `$PWD`.
-        PWD: stage.root,
-        CAWCO_STAGE: "1",
-        CAWCO_STAGE_PORT: String(stage.port),
-        CAWCO_STAGE_FRAMEWORK: stage.framework,
-        CAWCO_STAGE_KIT: stage.kit ? "1" : "0",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
+  const [command, env] = commandOf(stage);
+  const child = spawn(boundary.exec, [command], {
+    cwd: stage.root,
+    detached: true,
+    // The executor enters the boundary in `$PWD`.
+    env: { ...hostEnvironment(), PWD: stage.root, ...env },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   stage.child = child;
   let said = "";
   let fatal: string | undefined;
-  child.stderr?.on("data", (chunk: Buffer) => {
+  const keep = (chunk: Buffer) => {
     said = (said + chunk.toString("utf8")).slice(-STDERR_KEPT);
-  });
+  };
+  child.stderr?.on("data", keep);
   return new Promise((done, fail) => {
     let settled = false;
     const settle = (error?: Error) => {
@@ -550,23 +726,43 @@ async function start(stage: Stage): Promise<void> {
       }
     };
     const deadline = setTimeout(() => {
-      const why = `vite didn't answer within ${STAGE_READY_MS / 1000}s`;
+      const why = `${stage.runs.kind === "sheet" ? "vite" : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
       settle(new Error(why));
       crashed(stage, why);
     }, STAGE_READY_MS);
-    let partial = "";
-    child.stdout?.on("data", (chunk: Buffer) => {
-      const lines = (partial + chunk.toString("utf8")).split("\n");
-      partial = lines.pop() ?? "";
-      for (const line of lines) {
-        const word = hostWord(line);
-        if (word?.cawco === "fatal") {
-          fatal = word.message;
-        } else if (word && heard(stage, word)) {
-          settle();
+    if (stage.runs.kind === "serve") {
+      // A server says nothing CawCo reads: its words are kept to say why it
+      // ended, and it serves once its port answers.
+      child.stdout?.on("data", keep);
+      const poll = async () => {
+        while (!settled && stage.child === child) {
+          // biome-ignore lint/performance/noAwaitInLoops: one ask at a time until the port answers or the start ends
+          if (await healthy(stage, SERVE_ASK_MS)) {
+            if (!settled && stage.child === child) {
+              up(stage);
+              settle();
+            }
+            return;
+          }
+          await Bun.sleep(SERVE_POLL_MS);
         }
-      }
-    });
+      };
+      poll().catch(() => undefined);
+    } else {
+      let partial = "";
+      child.stdout?.on("data", (chunk: Buffer) => {
+        const lines = (partial + chunk.toString("utf8")).split("\n");
+        partial = lines.pop() ?? "";
+        for (const line of lines) {
+          const word = hostWord(line);
+          if (word?.cawco === "fatal") {
+            fatal = word.message;
+          } else if (word && heard(stage, word)) {
+            settle();
+          }
+        }
+      });
+    }
     // Only the stage's own child: one the daemon took down (a restart, a
     // sleep, a stop) is no crash of the one that replaced it.
     child.on("error", (error) => {
@@ -582,7 +778,12 @@ async function start(stage: Stage): Promise<void> {
       }
       const why =
         fatal ??
-        (said.trim().split("\n").slice(-3).join(" ").slice(0, 400) ||
+        (said
+          .split("\n")
+          .filter((line) => line.trim())
+          .slice(-3)
+          .join(" ")
+          .slice(0, 400) ||
           `it ended (${signal ?? `status ${code}`})`);
       settle(new Error(why));
       crashed(stage, why);
@@ -771,42 +972,102 @@ async function wake(stage: Stage, by: string): Promise<void> {
     await stage.ready;
   } catch (error) {
     throw new StageRefusal(
-      `The stage for ${stage.dir} didn't start: ${stage.message ?? (error instanceof Error ? error.message : String(error))}`,
+      `${stageWords(stage)} didn't start:${stage.message ?? (error instanceof Error ? error.message : String(error))}`,
       { cause: error }
     );
   }
 }
 
-/** The stage that serves workspace `workspace`'s Vite root `dir`, if this daemon has one. */
-const stageAt = (workspace: string, dir: string): Stage | undefined =>
-  stages.get(`${workspace}:${dir}`);
+/**
+ * A workspace preview's server (core `ServeSpec`), started or woken and
+ * waited on until its port answers: its state. The same port named with
+ * another command or folder stops the one running and starts this one. A
+ * server that never came up is not kept: the refusal says why, and nothing
+ * runs on.
+ */
+export async function ensureServed(
+  workspace: WorkspaceRef,
+  serve: ServeSpec
+): Promise<StageState> {
+  const found = servedFor(workspace, serve);
+  let stage = stages.get(found.key);
+  if (
+    stage?.runs.kind === "serve" &&
+    (stage.runs.command !== (found.runs as { command: string }).command ||
+      stage.dir !== found.dir)
+  ) {
+    stopOne(stage);
+    stage = undefined;
+  }
+  const fresh = !stage;
+  if (!stage) {
+    stage = {
+      ...found,
+      status: "starting",
+      errors: [],
+      restarts: 0,
+      lastUse: Date.now(),
+      slept: false,
+      stopping: false,
+      viewers: 0,
+    };
+    stages.set(found.key, stage);
+  }
+  try {
+    await wake(stage, "artifact_create's serve");
+  } catch (error) {
+    if (fresh) {
+      stopOne(stage);
+    }
+    throw error;
+  }
+  return stateOf(stage);
+}
+
+/** The stage a preview source names, by its key: a sheet's Vite root, or the server on its port; none for any other source. */
+const keyOf = (source: PreviewSource): string | null => {
+  if (!("port" in source && source.workspace)) {
+    return null;
+  }
+  if (source.stage) {
+    return sheetKey(source.workspace, source.stage.dir);
+  }
+  return source.serve ? serveKey(source.workspace, source.port) : null;
+};
 
 /**
  * A preview's request for a stage's page: the stage woken when it sleeps,
- * and waited on, so a sheet opened after its stage slept loads once it is
- * live. A stage this daemon does not know (it restarted since) is found
- * again from the sheet's own file.
+ * and waited on, so a page opened after its stage slept or failed (Try
+ * again) loads once it is live. A stage this daemon does not know (it
+ * restarted since) is found again from the source: the sheet's own file, or
+ * the server's command. Nothing for a source no stage serves.
  */
-export async function wakeStage(
-  workspace: string,
-  dir: string,
-  file: string
-): Promise<void> {
-  const known = stageAt(workspace, dir);
+export async function wakeSource(source: PreviewSource): Promise<void> {
+  const key = keyOf(source);
+  if (!(key && "port" in source && source.workspace)) {
+    return;
+  }
+  const known = stages.get(key);
   if (known) {
     await wake(known, "a preview's request");
     return;
   }
+  const { workspace } = source;
   const ref = (await workspaceRefs()).find((one) => one.id === workspace);
   if (!ref) {
     throw new StageRefusal(`No workspace ${workspace} is on this machine.`);
   }
-  await ensureStage(ref, join(dir, file));
+  if (source.stage) {
+    await ensureStage(ref, join(source.stage.dir, source.stage.file));
+  } else if (source.serve) {
+    await ensureServed(ref, { ...source.serve, port: source.port });
+  }
 }
 
-/** A viewer opened a socket through a preview of the stage: it stays awake until the answer's release. */
-export function stageViewer(workspace: string, dir: string): () => void {
-  const stage = stageAt(workspace, dir);
+/** A viewer opened a socket through a preview of a stage: it stays awake until the answer's release. */
+export function sourceViewer(source: PreviewSource): () => void {
+  const key = keyOf(source);
+  const stage = key ? stages.get(key) : undefined;
   if (!stage) {
     return () => undefined;
   }
@@ -829,14 +1090,34 @@ export function stageViewer(workspace: string, dir: string): () => void {
   };
 }
 
+/** Ends one stage and forgets it: its process group, its bridge. */
+function stopOne(stage: Stage): void {
+  stage.stopping = true;
+  kill(stage);
+  closeBridge(bridgeName(stage)).catch(() => undefined);
+  if (stages.get(stage.key) === stage) {
+    stages.delete(stage.key);
+  }
+}
+
 /** Stops every stage of workspace `id` (its archive), or every stage (the daemon's end). */
 export function stopStages(id?: string): void {
   for (const stage of [...stages.values()]) {
     if (id === undefined || stage.workspace.id === id) {
-      stage.stopping = true;
-      kill(stage);
-      closeBridge(bridgeName(stage)).catch(() => undefined);
-      stages.delete(stage.key);
+      stopOne(stage);
     }
   }
+}
+
+/** Stops the server on `port` of workspace `workspace`: its last artifact went. Whether one ran. */
+export function stopServed(workspace: string, port: number): boolean {
+  const stage = stages.get(serveKey(workspace, port));
+  if (!stage) {
+    return false;
+  }
+  console.info(
+    `[stage] ${workspace.slice(0, 8)} port ${port}: stopped, its preview is gone`
+  );
+  stopOne(stage);
+  return true;
 }

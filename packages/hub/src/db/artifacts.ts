@@ -16,7 +16,9 @@ type SourceColumn =
   | "sourcePath"
   | "sourceWorkspace"
   | "sourceStageDir"
-  | "sourceStageFile";
+  | "sourceStageFile"
+  | "sourceServeCommand"
+  | "sourceServeCwd";
 
 /** An artifact as everything reads it: what it shows as one {@link PreviewSource}. */
 export type ArtifactRow = Omit<StoredArtifact, SourceColumn> & {
@@ -34,6 +36,8 @@ export const sourceColumnsOf = (
   sourceWorkspace: "port" in source ? (source.workspace ?? null) : null,
   sourceStageDir: "port" in source ? (source.stage?.dir ?? null) : null,
   sourceStageFile: "port" in source ? (source.stage?.file ?? null) : null,
+  sourceServeCommand: "port" in source ? (source.serve?.command ?? null) : null,
+  sourceServeCwd: "port" in source ? (source.serve?.cwd ?? null) : null,
 });
 
 /** A stored artifact with its source whole again. */
@@ -45,6 +49,8 @@ export const artifactOf = ({
   sourceWorkspace,
   sourceStageDir,
   sourceStageFile,
+  sourceServeCommand,
+  sourceServeCwd,
   ...row
 }: StoredArtifact): ArtifactRow => {
   const path = sourcePath === null ? {} : { path: sourcePath };
@@ -54,6 +60,9 @@ export const artifactOf = ({
     ...(sourceStageDir !== null && sourceStageFile !== null
       ? { stage: { dir: sourceStageDir, file: sourceStageFile } }
       : {}),
+    ...(sourceServeCommand === null
+      ? {}
+      : { serve: { command: sourceServeCommand, cwd: sourceServeCwd ?? "." } }),
     ...(sourceWorkspace === null ? {} : { workspace: sourceWorkspace }),
   });
   const folder = (): PreviewSource =>
