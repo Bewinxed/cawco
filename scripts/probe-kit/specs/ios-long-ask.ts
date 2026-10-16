@@ -1130,8 +1130,19 @@ async function onSimulator(
       await pause(2000);
       // "Change hub" stands at the drawer's foot, under every project's
       // sessions: the drawer scrolled down to it.
-      // Flicked, as a hand does down a long list: on the owner's hub the
-      // drawer holds every project's sessions above it.
+      // On the owner's hub the drawer holds every project's sessions above
+      // it: each project folded first ("Hide <project>'s sessions", this
+      // simulator's own view of the drawer), then flicked, as a hand does.
+      for (let fold = 0; fold < 30; fold += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: one project folded after another
+        const folded = await tap(
+          (label) => label.startsWith("Hide ") && label.endsWith("'s sessions")
+        );
+        if (!folded) {
+          break;
+        }
+        await pause(700);
+      }
       for (let swipe = 0; swipe < 20; swipe += 1) {
         // biome-ignore lint/performance/noAwaitInLoops: one swipe after another, until it shows
         if ((await labels()).some((node) => node.label === "Change hub")) {
