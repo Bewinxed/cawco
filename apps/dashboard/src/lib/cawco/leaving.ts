@@ -22,12 +22,14 @@
  *    links, forms and `location`, but, by design, not for the reload button,
  *    the address bar or a bookmark (the API's explainer, "Appendix: types of
  *    navigations": "Browser UI (non-back/forward other) | Cross | No");
+ *  - a read that fails while none of these has come yet: before it is told,
+ *    the browser is asked ({@link loadsRefused}) whether loads are refused,
+ *    which they are once a navigation away is pending. That covers what
+ *    gives no word in time: Safari's own reload, address bar and bookmarks
+ *    on iOS, and back and forward, where WebKit fails the reads in flight a
+ *    task before it fires `beforeunload` or `navigate` (measured), which by
+ *    the time the ask is answered has come;
  *  - `pagehide`, which every browser fires, last.
- *
- * On back and forward WebKit fails the reads in flight before it fires
- * `beforeunload` or `navigate` (measured: the failures one task ahead of
- * `navigate`, and still ahead after a deferred look), so there the gate holds
- * only the reads the page would start after.
  *
  * A page brought back from the back/forward cache (`pageshow` with
  * `persisted`) opens it again. Nothing in the app cancels a leave (no
@@ -64,6 +66,30 @@ function heldUntilBack<T>(settle: () => Promise<T>): Promise<T> {
   });
 }
 
+/** One transparent pixel as a data URL: loading it touches no network. */
+const PIXEL =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+let asked = 0;
+
+/**
+ * Asks the browser whether this document is being torn down. WebKit refuses
+ * every load once a navigation away is pending; an image's refusal is an
+ * `error` event and writes no console line, where a fetch's writes one
+ * (measured). The fragment makes each ask a load of its own rather than a
+ * cache hit. The dashboard's policy allows data images (hooks.server.ts sets
+ * only `frame-ancestors`); one that forbade them would refuse every ask.
+ */
+function loadsRefused(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => resolve(false);
+    probe.onerror = () => resolve(true);
+    asked += 1;
+    probe.src = `${PIXEL}#${asked}`;
+  });
+}
+
 /** Installs the gate on the page's `fetch`; the client's init hook calls it once. */
 export function holdReadsWhileLeaving(): void {
   const native = globalThis.fetch.bind(globalThis);
@@ -88,11 +114,14 @@ export function holdReadsWhileLeaving(): void {
     }
   });
   const heardWhileHere = <T>(promise: Promise<T>): Promise<T> =>
-    promise.catch((error: unknown) =>
-      leaving
+    promise.catch(async (error: unknown) => {
+      if (!leaving && (await loadsRefused())) {
+        leave();
+      }
+      return leaving
         ? heldUntilBack<T>(() => Promise.reject(error))
-        : Promise.reject(error)
-    );
+        : Promise.reject(error);
+    });
   const gated: typeof fetch = (input, init) => {
     const outlivesThePage =
       init?.keepalive ?? (input instanceof Request && input.keepalive);
