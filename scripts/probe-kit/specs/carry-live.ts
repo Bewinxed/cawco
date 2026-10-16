@@ -45,7 +45,7 @@
  *   CARRY_CASE=4 bun scripts/probe-kit/run.ts carry-live
  */
 import { existsSync, readFileSync, readlinkSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { WORKSPACE_POLICY_NAME } from "../../../packages/core/src/paths";
@@ -93,6 +93,8 @@ const STOPPED_LINE = /ended between turns in \d+ ms/;
 const CARRIED_LINE = /carried, \d+ entr/;
 /** The hub's and agent's lines about moves, for a failed case to show. */
 const MOVE_LINE = /\[at-limit\]|\[accounts\]|\[carry\]|\[rebalance\]/;
+/** The agent's lines about its accounts' logins. */
+const LOGIN_LINE = /login|sign|auth|credential|account/i;
 /** The agent's lines about taking its sessions over, and its own starts. */
 const CUSTODY_LINE = /\[custody\]|\[rebalance\]|agent started|restart/i;
 /** A move pending on its machine says it goes as that machine connects again. */
@@ -772,7 +774,30 @@ const run = async (kit: Kit) => {
           )[0],
         (row) => row?.state === "signed-in",
         180_000
-      );
+      ).catch(async (error: unknown) => {
+        // What says why it is not: the hub's sign-in rows, the login file
+        // Claude Code keeps for it, and the agent's lines about logins.
+        const login = join(
+          fleet.home,
+          ".cawco",
+          "accounts",
+          account,
+          "claude",
+          ".credentials.json"
+        );
+        const held = await readFile(login, "utf8").catch(() => "");
+        console.log(
+          [
+            `sign-in rows: ${JSON.stringify(fleet.query("SELECT account_id, machine_id, state FROM account_signins"))}`,
+            `${account}'s login file: ${held ? `${held.length} bytes, access token ${held.includes("accessToken") ? "present" : "absent"}` : "missing"}`,
+            ...(await fleet.logs("agent"))
+              .split("\n")
+              .filter((line) => LOGIN_LINE.test(line))
+              .slice(-20),
+          ].join("\n")
+        );
+        throw error;
+      });
     }
     // The session first, on A, before C exists: placed with C first in order
     // it lands on C and is moved onto A by hand (host run at 48cc01b91), and
