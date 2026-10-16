@@ -80,49 +80,50 @@ export class Servers {
   }
 }
 
-/** `vite dev` against `hub`: the `/motion/` benches' server (the kit's own is against no hub). */
+/**
+ * `vite dev` against `hub`: the `/motion/` benches' server (the kit's own
+ * is against no hub). The run's heavy-run slot is held from here for the
+ * process's life (heavy-run.ts: a run holds its slot its whole heavy life;
+ * one process holds one, however many of its parts ask).
+ */
 async function devServer(hub: string) {
-  const slot = await heavySlot();
-  try {
-    const lease = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: () => new Response(null),
-    });
-    const port = lease.port as number;
-    await lease.stop(true);
-    const child = Bun.spawn(
-      [
-        "bunx",
-        "vite",
-        "dev",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(port),
-        "--strictPort",
-      ],
-      {
-        cwd: join(ROOT, "apps", "dashboard"),
-        env: { ...process.env, CAWCO_DEV_HUB_URL: hub, CAWCO_HUB_URL: hub },
-        stdout: "ignore",
-        stderr: "ignore",
-      }
-    );
-    const base = `http://127.0.0.1:${port}`;
-    await until(
-      "the dev server answering",
-      () =>
-        fetch(base)
-          .then((r) => r.ok)
-          .catch(() => false),
-      Boolean,
-      120_000
-    );
-    return { base, child };
-  } finally {
-    slot.release();
-  }
+  await heavySlot();
+  const lease = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(null),
+  });
+  const port = lease.port as number;
+  await lease.stop(true);
+  const child = Bun.spawn(
+    [
+      "bunx",
+      "vite",
+      "dev",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      "--strictPort",
+    ],
+    {
+      cwd: join(ROOT, "apps", "dashboard"),
+      env: { ...process.env, CAWCO_DEV_HUB_URL: hub, CAWCO_HUB_URL: hub },
+      stdout: "ignore",
+      stderr: "ignore",
+    }
+  );
+  const base = `http://127.0.0.1:${port}`;
+  await until(
+    "the dev server answering",
+    () =>
+      fetch(base)
+        .then((r) => r.ok)
+        .catch(() => false),
+    Boolean,
+    120_000
+  );
+  return { base, child };
 }
 
 /** A page for `pass`: its width, theme and motion, the reader installed, its clock held at `at`. */

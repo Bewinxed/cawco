@@ -83,7 +83,6 @@ const BENCHES: [string, string][] = [
   ["lift", "/motion/lift"],
   ["mac-readiness", "/motion/mac-readiness"],
   ["new-session", "/motion/new-session"],
-  ["oui-mockup", "/motion/oui-mockup"],
   ["overlays", "/motion/overlays"],
   ["recall", "/motion/recall"],
   ["seed-tabs", "/motion/seed-tabs"],
