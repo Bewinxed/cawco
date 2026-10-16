@@ -14,16 +14,16 @@ export interface HubFailure {
 export type HubRead<T> = { ok: true; value: T } | ({ ok: false } & HubFailure);
 
 /**
- * The machine a transcript read's 503 names as not connected, and whether
- * the hub says it is on its way back (`X-Cawco-Machine-State: reconnecting`:
- * heard from moments ago). Any other answer names none. `readAgainMs`: on
- * its way back, how long until the hub stops reading it so (its
- * `Retry-After`), when a read finds it back or offline; null otherwise.
+ * The machine a transcript read's 503 names as not connected, and, when the
+ * hub says it is on its way back (`X-Cawco-Machine-State: reconnecting`:
+ * heard from moments ago), until when (epoch ms): the hub's `Retry-After`,
+ * the time left before it stops reading the machine so, from now. Relative
+ * on the wire and made absolute here, so no two clocks are compared. Null
+ * otherwise. Any other answer names no machine.
  */
 export function machineAway(response: Response): {
   away: string | null;
-  readAgainMs: number | null;
-  reconnecting: boolean;
+  reconnectingUntil: number | null;
 } {
   const away =
     response.status === 503 ? response.headers.get("x-cawco-machine") : null;
@@ -33,10 +33,9 @@ export function machineAway(response: Response): {
   const seconds = Number(response.headers.get("retry-after"));
   return {
     away,
-    reconnecting,
-    readAgainMs:
+    reconnectingUntil:
       reconnecting && Number.isFinite(seconds) && seconds > 0
-        ? seconds * 1000
+        ? Date.now() + seconds * 1000
         : null,
   };
 }

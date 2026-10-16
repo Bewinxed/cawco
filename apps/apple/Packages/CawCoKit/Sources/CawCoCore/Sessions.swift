@@ -111,21 +111,29 @@ public struct ReadFault: Sendable, Equatable {
     public enum Reason: Sendable { case offline, localNetwork, failed }
     public let reason: Reason
     public let machineId: String?
-    public let message: String
+    /// The fault's sentence once any deadline has passed: for `offline`, that the machine is offline.
+    private let stated: String
     /// `offline`, and the hub heard from the machine moments ago (its 503's
-    /// `X-Cawco-Machine-State: reconnecting`): how long the hub still reads
-    /// it as on its way back (its `Retry-After`), as after a hub restart. A
-    /// wait, said in place, never toasted; when it lapses the transcript is
-    /// read again (`SessionsStore.readFailed`), and the hub says what it is then.
-    public let reconnectingFor: Duration?
-    /// Within the window the hub gave (`reconnectingFor`).
-    public var reconnecting: Bool { reconnectingFor != nil }
+    /// `X-Cawco-Machine-State: reconnecting`): the moment the hub stops
+    /// reading it as on its way back (its `Retry-After` from when the answer
+    /// came), as after a hub restart. A wait, said in place, never toasted.
+    /// A deadline, not a flag (client.svelte.ts `reconnectingUntil`): past
+    /// it the machine is offline on the clock alone, whatever is read since.
+    public let reconnectingUntil: ContinuousClock.Instant?
+    /// What it says while the deadline is ahead.
+    private let reconnectingSaid: String?
+    /// The hub's deadline for the machine still ahead (client.svelte.ts `reconnectingNow`).
+    public var reconnecting: Bool { reconnectingUntil.map { ContinuousClock.now < $0 } ?? false }
+    /// What the fault says now (client.svelte.ts `faultMessage`).
+    public var message: String { reconnecting ? reconnectingSaid ?? stated : stated }
 
-    init(reason: Reason, machineId: String?, message: String, reconnectingFor: Duration? = nil) {
+    init(reason: Reason, machineId: String?, message: String,
+         reconnecting: (until: ContinuousClock.Instant, message: String)? = nil) {
         self.reason = reason
         self.machineId = machineId
-        self.message = message
-        self.reconnectingFor = reconnectingFor
+        self.stated = message
+        self.reconnectingUntil = reconnecting?.until
+        self.reconnectingSaid = reconnecting?.message
     }
 
     /// A read that failed while the hub answered, or never reached it.
@@ -274,27 +282,27 @@ public final class SessionsStore {
     /// The failed reads in a row, by session, and the read again each waits for.
     @ObservationIgnored private var failedReads: [String: (count: Int, timer: Task<Void, Never>?)] = [:]
 
-    /// The one read again each transcript waits for when the window the hub
-    /// gave a reconnecting machine ends (`ReadFault.reconnectingFor`). Its
-    /// own, apart from the backoff: `machineOnline` reads at once over it.
+    /// The one read again each transcript waits for at the hub's deadline
+    /// for a reconnecting machine (`ReadFault.reconnectingUntil`), for its
+    /// data: what it says turns on the clock. Its own, apart from the
+    /// backoff: `machineOnline` reads at once over it.
     @ObservationIgnored private var lapses: [String: Task<Void, Never>] = [:]
     /// The same for the older page a reconnecting machine held back
-    /// (`olderFault`): asked for again once, when the hub's window ends.
+    /// (`olderFault`): asked for again once, at the hub's deadline.
     @ObservationIgnored private var olderLapses: [String: Task<Void, Never>] = [:]
 
     /// An older page that found its machine reconnecting is asked for again
-    /// when the hub's window for it ends (`readOlderPage`), so the strip
-    /// before the first row never says "reconnecting" past that window.
+    /// at the hub's deadline for it (`readOlderPage`).
     private func lapseOlder(_ transcript: SessionTranscript) {
         let id = transcript.id
         olderLapses.removeValue(forKey: id)?.cancel()
-        guard let window = transcript.olderFault?.reconnectingFor else { return }
-        log.notice("older page of \(id.prefix(8), privacy: .public) asked again when its machine's reconnecting window lapses in \(String(describing: window), privacy: .public)")
+        guard let deadline = transcript.olderFault?.reconnectingUntil else { return }
+        log.notice("older page of \(id.prefix(8), privacy: .public) asked again when its machine's reconnecting window lapses in \(String(describing: ContinuousClock.now.duration(to: deadline)), privacy: .public)")
         olderLapses[id] = Task { [weak self] in
-            try? await Task.sleep(for: window)
+            try? await Task.sleep(until: deadline, clock: .continuous)
             guard !Task.isCancelled, let self else { return }
             olderLapses[id] = nil
-            guard transcripts[id] === transcript, transcript.olderFault?.reconnecting == true else { return }
+            guard transcripts[id] === transcript, transcript.olderFault?.reconnectingUntil == deadline else { return }
             readOlderPage(id)
         }
     }
@@ -306,9 +314,8 @@ public final class SessionsStore {
     /// hub already lists that machine online: then the machine list has
     /// nothing more to say, and its every change would read again at once,
     /// so it is read again on `readAgain` too. One that found it reconnecting
-    /// is also read again once, when the hub's window for it ends: the hub
-    /// then says whether it is back or offline, and "reconnecting" never
-    /// outlasts the window.
+    /// says offline once the hub's deadline for it passes, on the clock
+    /// (`ReadFault.reconnecting`), and is read again then for its data.
     private func readFailed(_ transcript: SessionTranscript, _ fault: ReadFault) {
         transcript.loading = false
         transcript.catchingUp = false
@@ -316,15 +323,16 @@ public final class SessionsStore {
         let listedOnline = fault.reason == .offline
             && hub.fleet.machines.contains { $0.machineId == fault.machineId && $0.status == "online" }
         let id = transcript.id
-        if let window = fault.reconnectingFor, !listedOnline {
+        if let deadline = fault.reconnectingUntil, !listedOnline {
             lapses[id]?.cancel()
-            log.notice("read \(id.prefix(8), privacy: .public) again when its machine's reconnecting window lapses in \(String(describing: window), privacy: .public)")
+            log.notice("read \(id.prefix(8), privacy: .public) again when its machine's reconnecting window lapses in \(String(describing: ContinuousClock.now.duration(to: deadline)), privacy: .public)")
             lapses[id] = Task { [weak self] in
-                try? await Task.sleep(for: window)
+                try? await Task.sleep(until: deadline, clock: .continuous)
                 guard !Task.isCancelled, let self else { return }
                 lapses[id] = nil
-                guard let held = transcripts[id], !held.loading, (held.behind ?? held.fault)?.reconnecting == true else { return }
-                read(id, because: .reconnectLapsed)
+                guard let held = transcripts[id], !held.loading,
+                      (held.behind ?? held.fault)?.reconnectingUntil == deadline else { return }
+                read(id, because: .deadline)
             }
         }
         guard fault.reason != .offline || listedOnline else { return }
@@ -379,8 +387,9 @@ public final class SessionsStore {
         case backoff
         /// The app is active again after Local Network privacy refused the last read.
         case active
-        /// The window the hub gave a reconnecting machine ended with it still away.
-        case reconnectLapsed
+        /// The hub's deadline for a reconnecting machine passed: its data read
+        /// afresh. The pane already says offline, on the clock.
+        case deadline
 
         /// The hub asked for it: the rows drawn are behind what it holds, a
         /// catch-up the dock says. Every other read catches up quietly.
@@ -446,7 +455,7 @@ public final class SessionsStore {
                     transcript.catchingUp = false
                     transcript.missing = true
                     return
-                case let .away(machine, window): throw Fault(offline(machine, reconnectingFor: window))
+                case let .away(machine, until): throw Fault(offline(machine, reconnectingUntil: until))
                 }
                 guard !Task.isCancelled else { return }
                 // The pages back to the rows held, when the newest does not reach them.
@@ -487,8 +496,8 @@ public final class SessionsStore {
                         continue
                     case .missing:
                         older = .failed("The hub no longer holds the page before these")
-                    case let .away(machine, window):
-                        older = offline(machine, reconnectingFor: window)
+                    case let .away(machine, until):
+                        older = offline(machine, reconnectingUntil: until)
                     }
                     // The rows held before the page that could not be read cannot be joined: the
                     // read stands alone, and the strip before its first row says why.
@@ -591,8 +600,8 @@ public final class SessionsStore {
         /// The hub answered 404.
         case missing
         /// The machine holding the transcript is not connected (a 503 naming
-        /// it), and, while the hub says it is on its way back, for how long.
-        case away(String, reconnectingFor: Duration?)
+        /// it), and, while the hub says it is on its way back, until when.
+        case away(String, reconnectingUntil: ContinuousClock.Instant?)
     }
 
     /// One page of a transcript, fetched and decoded off the main thread:
@@ -612,11 +621,12 @@ public final class SessionsStore {
         case let .undocumented(statusCode, payload):
             if statusCode == 503, let away = payload.headerFields.first(where: { $0.name.canonicalName == "x-cawco-machine" })?.value {
                 // Reconnecting is a window: `X-Cawco-Machine-State: reconnecting`
-                // with its `Retry-After`, the seconds left of it (hub `reconnectingFor`).
+                // with its `Retry-After`, the seconds left of it (hub `reconnectingFor`),
+                // made a deadline on this device's clock as the answer comes.
                 let state = payload.headerFields.first { $0.name.canonicalName == "x-cawco-machine-state" }?.value
                 let left = payload.headerFields.first { $0.name.canonicalName == "retry-after" }?.value
-                let window = state == "reconnecting" ? left.flatMap { Int($0) }.map { Duration.seconds($0) } : nil
-                return .away(away, reconnectingFor: window)
+                let seconds = state == "reconnecting" ? left.flatMap { Int($0) }.flatMap { $0 > 0 ? $0 : nil } : nil
+                return .away(away, reconnectingUntil: seconds.map { ContinuousClock.now + .seconds($0) })
             }
             throw Fault(await refused(payload.body, status: statusCode))
         case let .conflict(answer): throw Fault(await refused(try? answer.body.plainText, status: 409))
@@ -634,13 +644,15 @@ public final class SessionsStore {
     }
 
     /// A 503 naming a machine is the hub saying that machine is not connected;
-    /// `reconnectingFor`, that it heard from it moments ago, and how long it
-    /// reads it so (client.svelte.ts `readFaultOf`).
-    private func offline(_ machine: String, reconnectingFor window: Duration?) -> ReadFault {
+    /// `reconnectingUntil`, that it heard from it moments ago, and until when
+    /// it reads it so (client.svelte.ts `readFaultOf`).
+    private func offline(_ machine: String, reconnectingUntil until: ContinuousClock.Instant?) -> ReadFault {
         let host = hub.fleet.machineName(machine)
-        return window != nil
-            ? ReadFault(reason: .offline, machineId: machine, message: "\(host) is reconnecting, so its stored transcript is read once it's back", reconnectingFor: window)
-            : ReadFault(reason: .offline, machineId: machine, message: "\(host) is offline, so its stored transcript can't be read right now")
+        return ReadFault(
+            reason: .offline, machineId: machine,
+            message: "\(host) is offline, so its stored transcript can't be read right now",
+            reconnecting: until.map { (until: $0, message: "\(host) is reconnecting, so its stored transcript is read once it's back") }
+        )
     }
 
     /// The one page older than what a transcript holds, put in front of it
@@ -683,8 +695,8 @@ public final class SessionsStore {
                 return
             case .success(.missing):
                 transcript.olderFault = .failed("The hub no longer holds the page before these")
-            case let .success(.away(machine, window)):
-                transcript.olderFault = offline(machine, reconnectingFor: window)
+            case let .success(.away(machine, until)):
+                transcript.olderFault = offline(machine, reconnectingUntil: until)
             case let .failure(error):
                 transcript.olderFault = await Self.fault(error)
             }

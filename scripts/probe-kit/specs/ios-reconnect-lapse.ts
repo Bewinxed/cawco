@@ -1,8 +1,9 @@
 /**
  * iOS: a session pane whose machine stopped answering says "reconnecting"
- * only for the window the hub gives (its 503's `Retry-After`). When that
- * window ends the pane reads again by itself (`because reconnectLapsed`) and
- * shows the real state; a machine back inside it shows the transcript again.
+ * only for the window the hub gives (its 503's `Retry-After`), a deadline
+ * read against the clock. At that deadline the pane reads its data again by
+ * itself (`because deadline`) and shows the real state; a machine back
+ * inside it shows the transcript again.
  *
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
  * mock model) and the built app on an iPhone simulator of its own (a
@@ -14,7 +15,7 @@
  *    drawn (`page adopted`), the pane's fault gone.
  * 2. Never back: the agent stops and the hub restarts, the app opens the session fresh, and the
  *    pane says "This machine is reconnecting" with the app's log naming the
- *    window; when it lapses the app reads again (`because reconnectLapsed`)
+ *    window; when it lapses the app reads again (`because deadline`)
  *    and the pane says "This machine is offline", with nothing else asked of it.
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
@@ -245,7 +246,7 @@ async function run(kit: Kit): Promise<void> {
       adopted !== undefined &&
         !shownBack.some((label) => label.includes(RECONNECTING)) &&
         !shownBack.some((label) => label.includes(OFFLINE)) &&
-        !logged(backFrom, "because reconnectLapsed"),
+        !logged(backFrom, "because deadline"),
       `${adopted ? "page adopted" : "no page adopted"}; reads: ${backCause}`
     );
 
@@ -255,7 +256,7 @@ async function run(kit: Kit): Promise<void> {
     await openFresh();
     const waiting = await says(RECONNECTING, 30_000, "gone-reconnecting");
     const offline = await says(OFFLINE, WINDOW_MS + SLACK_MS, "gone-offline");
-    const lapsed = logged(goneFrom, "because reconnectLapsed");
+    const lapsed = logged(goneFrom, "because deadline");
     // The window this app process set last before its read again: the one that lapsed.
     const scheduled = heard
       .slice(goneFrom)
@@ -280,7 +281,7 @@ async function run(kit: Kit): Promise<void> {
         scheduled !== undefined &&
         lapsed.at - scheduled.at >= lapse * 1000 - 1500 &&
         lapsed.at - scheduled.at <= lapse * 1000 + 5000,
-      `${lapsed ? `reconnectLapsed read ${((lapsed.at - (scheduled?.at ?? lapsed.at)) / 1000).toFixed(1)}s after the window was set (${lapse}s)` : "no reconnectLapsed read"}; ${offline ? "offline shown" : "no offline title"}`
+      `${lapsed ? `deadline read ${((lapsed.at - (scheduled?.at ?? lapsed.at)) / 1000).toFixed(1)}s after the window was set (${lapse}s)` : "no deadline read"}; ${offline ? "offline shown" : "no offline title"}`
     );
     // Offline waits for the machine: nothing reads again on its own after.
     await pause(15_000);

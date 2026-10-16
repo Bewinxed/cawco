@@ -28,6 +28,7 @@
     cawco,
     clearReadFault,
     clearRestore,
+    faultMessage,
     interrupt,
     latestCommandFor,
     loadMcpServers,
@@ -38,6 +39,7 @@
     type ReadFault,
     readFaultOf,
     readTranscript,
+    reconnectingNow,
     refreshCommands,
     type SendExtras,
     type ServerTail,
@@ -435,7 +437,7 @@
   const servedMissing = $derived(served?.status === 404);
   const servedFault = $derived(
     served && !servedMissing
-      ? readFaultOf(served, served.machineId, served.reconnecting)
+      ? readFaultOf(served, served.machineId, served.reconnectingUntil)
       : null
   );
 
@@ -524,8 +526,8 @@
 
   /**
    * What stopped the transcript arriving: the newest read's word, whoever
-   * made it (this pane, a socket backfill, a peek, a read again once its
-   * machine's reconnecting window ends), as the session's `readFault`; the
+   * made it (this pane, a socket backfill, a peek, a read again at its
+   * machine's reconnecting deadline), as the session's `readFault`; the
    * server's until this pane's read answers. A card with a button, never a
    * skeleton.
    */
@@ -617,7 +619,7 @@
     if (fault?.reason !== "offline") {
       return "This transcript couldn't be read";
     }
-    return fault.reconnecting
+    return reconnectingNow(fault)
       ? "This machine is reconnecting"
       : "This machine is offline";
   });
@@ -627,8 +629,8 @@
     if (fault?.reason !== "offline") {
       return `Reading it failed: ${fault?.message}. Try again; if it fails the same way, the hub's log has the cause.`;
     }
-    return fault.reconnecting
-      ? `${fault.message}.`
+    return reconnectingNow(fault)
+      ? `${faultMessage(fault)}.`
       : `${fault.message}. Try again once it is back online.`;
   });
 

@@ -45,8 +45,10 @@
   import { browser } from "$app/env";
   import {
     cawco,
+    faultMessage,
     readOlderPage,
     readTranscript,
+    reconnectingNow,
     type SessionState,
   } from "../client.svelte";
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
@@ -3415,12 +3417,12 @@
       <p class="empty">
         {#if session.olderFault.reason !== "offline"}
           The turns before these couldn't be read:
-        {:else if session.olderFault.reconnecting}
+        {:else if reconnectingNow(session.olderFault)}
           This machine is reconnecting:
         {:else}
           This machine is offline:
         {/if}
-        {session.olderFault.message}
+        {faultMessage(session.olderFault)}
       </p>
       <Button
         onclick={() => readOlderPage(session.instanceId)}

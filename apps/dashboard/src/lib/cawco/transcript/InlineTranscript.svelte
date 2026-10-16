@@ -14,7 +14,13 @@
   import type { Snippet } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
-  import { cawco, readOlderPage, readTranscript } from "../client.svelte";
+  import {
+    cawco,
+    faultMessage,
+    readOlderPage,
+    readTranscript,
+    reconnectingNow,
+  } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import Behind from "./Behind.svelte";
@@ -134,12 +140,12 @@
         <p class="empty">
           {#if fault.reason !== "offline"}
             Its transcript couldn't be read:
-          {:else if fault.reconnecting}
+          {:else if reconnectingNow(fault)}
             Its machine is reconnecting:
           {:else}
             Its machine is offline:
           {/if}
-          {fault.message}
+          {faultMessage(fault)}
         </p>
         <!-- The read that failed is the one asked for again: the newest
              page, or the older page at the cursor the session still holds. -->

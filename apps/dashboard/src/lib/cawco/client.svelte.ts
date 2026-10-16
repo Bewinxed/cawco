@@ -215,7 +215,8 @@ export type ConnectionStatus =
  * fault; `unreachable` is one — the hub is a process on somebody's machine,
  * and it being off is the ordinary case, not the exotic one. It holds from
  * {@link OUTAGE_GRACE} after the socket went until the hub is back, through
- * every retry in between.
+ * every retry in between: the deadline the first close sets
+ * (`state.outageAt`), read against the clock ({@link ahead}).
  */
 export type HubState = "connected" | "connecting" | "unreachable";
 
@@ -228,7 +229,6 @@ export type HubState = "connected" | "connecting" | "unreachable";
  * the socket is down from the first moment, over the page.
  */
 const OUTAGE_GRACE = 4000;
-let outageTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** A machine from the hub registry (`GET /api/agents`, and `instances` frames). */
 export type Machine = AgentRow;
@@ -314,6 +314,37 @@ if (browser) {
   setInterval(() => {
     minute.now = Date.now();
   }, 30_000);
+}
+
+/**
+ * The second every deadline is read against ({@link ahead}). A status that
+ * holds until a moment — a machine reconnecting until its hub stops reading
+ * it so, the hub gone past its grace — is that moment and this clock, never
+ * a flag a later event has to clear, so it ends on its own at the moment.
+ * It ticks while a deadline asked about is still ahead, and stops on the
+ * first tick past the last of them: every reader has its answer by then.
+ */
+const second = $state({ now: 0 });
+let secondTicker: ReturnType<typeof setInterval> | undefined;
+let lastDeadline = 0;
+
+/** Whether `deadline` (epoch ms) is still ahead, read so its reader turns when it passes. */
+export function ahead(deadline: number): boolean {
+  // Read off the tick, so a reader is asked again on every one; the tick is
+  // never later than the time itself.
+  const now = Math.max(second.now, Date.now());
+  if (!browser || deadline <= now) {
+    return deadline > now;
+  }
+  lastDeadline = Math.max(lastDeadline, deadline);
+  secondTicker ??= setInterval(() => {
+    second.now = Date.now();
+    if (second.now >= lastDeadline) {
+      clearInterval(secondTicker);
+      secondTicker = undefined;
+    }
+  }, 1000);
+  return true;
 }
 
 /**
@@ -482,11 +513,13 @@ export type ReadFault =
       /**
        * The hub heard from the machine moments ago: its agent is on its way
        * back (the hub restarted, or the machine's connection dropped), and
-       * the read comes once it is, or once the hub stops reading it so,
-       * when a machine still away is offline. A wait, not a fault: said in
-       * place, never as a toast.
+       * the read comes once it is. Until this moment (epoch ms), when the
+       * hub stops reading it so, the machine is said to be reconnecting
+       * ({@link reconnectingNow}); past it, offline, on the clock alone. A
+       * wait, not a fault: said in place, never as a toast. `message` is
+       * the offline sentence; {@link faultMessage} says the one for now.
        */
-      reconnecting?: true;
+      reconnectingUntil?: number;
     }
   | { message: string; reason: "failed" };
 
@@ -818,10 +851,11 @@ const state = $state({
    */
   failed: false,
   /**
-   * The hub has been gone for {@link OUTAGE_GRACE}: set by a timer the first
-   * close starts, cleared on the next open. Retries in between leave it set.
+   * When the hub is said unreachable (epoch ms): {@link OUTAGE_GRACE} after
+   * the first close, null again once it answers. Retries in between leave
+   * it. A deadline, not a flag: `cawco.hub` reads it against the clock.
    */
-  outage: false,
+  outageAt: null as number | null,
   /**
    * This page was built for an older wire than the hub's, so it reads nothing
    * more off the socket ({@link olderThanHub}): `reloading` while its reload
@@ -4565,9 +4599,7 @@ function hubReached(): void {
   // away: the stages each page reads again on a connection carry the newer.
   state.starters = {};
   state.failed = false;
-  clearTimeout(outageTimer);
-  outageTimer = undefined;
-  state.outage = false;
+  state.outageAt = null;
   globalThis.__cawcoReconnectAttempts = 0;
   readFleet();
   rereadFollowed();
@@ -4681,12 +4713,7 @@ function socketClosed(): void {
   // A socket that closed is an attempt that is over, one way or the other.
   state.failed = true;
   cancelFleetRead();
-  if (!(state.outage || outageTimer)) {
-    outageTimer = setTimeout(() => {
-      outageTimer = undefined;
-      state.outage = true;
-    }, OUTAGE_GRACE);
-  }
+  state.outageAt ??= Date.now() + OUTAGE_GRACE;
   abandonInflight("The connection to the hub dropped before that finished.");
   for (const listener of fleetFetchListeners) {
     listener.dropped();
@@ -6325,10 +6352,9 @@ export type TranscriptOutcome =
   | { ok: true; skipped?: boolean }
   /**
    * `status` is the hub's HTTP answer where there was one: 404 is "no such
-   * session", not a fault. `readAgainMs`: its machine reconnecting, how long
-   * until the hub stops reading it so (`machineAway`).
+   * session", not a fault.
    */
-  | ({ ok: false; readAgainMs?: number; status?: number } & ReadFault);
+  | ({ ok: false; status?: number } & ReadFault);
 
 /** Puts a session back to "nothing has been said about the read" — Try again's first move. */
 export function clearReadFault(instanceId: string): void {
@@ -6349,8 +6375,8 @@ export type ServerTail =
       /** The machine a 503 named as not connected, else null. */
       machineId: string | null;
       ok: false;
-      /** The hub heard from that machine moments ago (`machineAway`). */
-      reconnecting: boolean;
+      /** Until when that machine is on its way back, epoch ms (`machineAway`); else null. */
+      reconnectingUntil: number | null;
       status: number;
       viewId: string;
     };
@@ -6360,30 +6386,50 @@ export type ServerTail =
  * of why ({@link failureReason}), never the hub's body as it came. `away` is
  * the machine a 503 named: that is the hub saying the machine is not
  * connected, a state of the fleet, not a fault in the read, and a different
- * sentence.
+ * sentence. `reconnectingUntil`: the machine on its way back, until when.
  */
 export function readFaultOf(
   failure: HubFailure,
   away: string | null,
-  reconnecting = false
+  reconnectingUntil: number | null = null
 ): ReadFault {
   if (away) {
-    const machine = state.machines.find((row) => row.machineId === away);
-    const name = machine?.hostname || away;
-    return reconnecting
-      ? {
-          reason: "offline",
-          machineId: away,
-          reconnecting: true,
-          message: `${name} is reconnecting, so its stored transcript is read once it's back`,
-        }
-      : {
-          reason: "offline",
-          machineId: away,
-          message: `${name} is offline, so its stored transcript can't be read right now`,
-        };
+    return {
+      reason: "offline",
+      machineId: away,
+      ...(reconnectingUntil === null ? {} : { reconnectingUntil }),
+      message: `${machineName(away)} is offline, so its stored transcript can't be read right now`,
+    };
   }
   return { reason: "failed", message: failureReason(failure) };
+}
+
+/** A machine as the fleet list names it, else its id. */
+function machineName(machineId: string): string {
+  return (
+    state.machines.find((row) => row.machineId === machineId)?.hostname ||
+    machineId
+  );
+}
+
+/**
+ * Whether a read's machine is on its way back now: its hub's deadline still
+ * ahead on the clock ({@link ahead}). Past it, the machine is offline with
+ * nothing having to say so.
+ */
+export function reconnectingNow(fault: ReadFault | null | undefined): boolean {
+  return (
+    fault?.reason === "offline" &&
+    fault.reconnectingUntil !== undefined &&
+    ahead(fault.reconnectingUntil)
+  );
+}
+
+/** What a read fault says now: a machine on its way back, or the fault's own sentence. */
+export function faultMessage(fault: ReadFault): string {
+  return fault.reason === "offline" && reconnectingNow(fault)
+    ? `${machineName(fault.machineId)} is reconnecting, so its stored transcript is read once it's back`
+    : fault.message;
 }
 
 /**
@@ -6401,12 +6447,11 @@ function thrownReason(error: unknown): string {
 /** Why a page read ended with nothing, said the way the pane says it. */
 async function pageFault(response: Response): Promise<TranscriptOutcome> {
   const failure = await hubFailure(response);
-  const { away, reconnecting, readAgainMs } = machineAway(response);
+  const { away, reconnectingUntil } = machineAway(response);
   return {
     ok: false,
     status: response.status,
-    ...(readAgainMs === null ? {} : { readAgainMs }),
-    ...readFaultOf(failure, away, reconnecting),
+    ...readFaultOf(failure, away, reconnectingUntil),
   };
 }
 
@@ -6428,8 +6473,11 @@ export type ReadCause =
   | "follow"
   /** The machine the last read found offline is online again. */
   | "machineOnline"
-  /** The hub's reconnecting window for the last read's machine ended with it still away. */
-  | "reconnectLapsed"
+  /**
+   * The hub's reconnecting deadline for the last read's machine passed: its
+   * data read afresh. The view already says offline, on the clock.
+   */
+  | "deadline"
   /** The last read failed while the hub answered: read again on {@link READ_AGAIN_MS}. */
   | "backoff";
 
@@ -6647,20 +6695,16 @@ async function readBackToHeld(
  * the hub already lists that machine online: then the machine list has
  * nothing more to say, and its every change would read again at once, so it
  * is read again on the backoff too. One that found it reconnecting waits for
- * it as well, but only as long as the hub reads it so (`readAgainMs`, its
- * `Retry-After`): then it is read again ({@link readOnceLapsed}), and a
- * machine still away is said to be offline.
+ * it as well; the view says offline once the hub's deadline for it passes,
+ * on the clock ({@link reconnectingNow}), and the data is read again then
+ * ({@link readAtDeadline}).
  */
-function readFailed(
-  target: SessionState,
-  fault: ReadFault,
-  readAgainMs?: number
-): void {
+function readFailed(target: SessionState, fault: ReadFault): void {
   if (target.blocks.length > 0) {
     target.behind = fault;
     // A machine on its way back is a wait the line over the rows says; the
     // toast is for a read that failed.
-    if (!(fault.reason === "offline" && fault.reconnecting)) {
+    if (!reconnectingNow(fault)) {
       toastBehind(target.instanceId, fault);
     }
   } else {
@@ -6676,40 +6720,43 @@ function readFailed(
     readAgainLater(target.instanceId);
   } else if (
     fault.reason === "offline" &&
-    fault.reconnecting &&
-    readAgainMs !== undefined
+    fault.reconnectingUntil !== undefined
   ) {
-    readOnceLapsed(target.instanceId, readAgainMs);
+    readAtDeadline(target.instanceId, fault.reconnectingUntil);
   }
 }
 
-/** The read each view waits for while its machine reconnects: once the hub's window for it ends. */
-const lapsedReads = new Map<string, ReturnType<typeof setTimeout>>();
+/** The read each view waits for while its machine reconnects: at the hub's deadline for it. */
+const deadlineReads = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**
- * Reads the view again in `ms`, when the hub stops reading its machine as
- * reconnecting, unless a read has landed meanwhile (the machine back,
- * {@link readBehind}) or the view says something else by then.
+ * Reads the view's data again at `deadline`, when the hub stops reading its
+ * machine as reconnecting, unless a read has landed meanwhile (the machine
+ * back, {@link readBehind}) or a newer one answered by then. Only the data:
+ * the view turns from reconnecting to offline on the clock, read or not.
  */
-function readOnceLapsed(viewId: string, ms: number): void {
-  clearTimeout(lapsedReads.get(viewId));
-  lapsedReads.set(
+function readAtDeadline(viewId: string, deadline: number): void {
+  clearTimeout(deadlineReads.get(viewId));
+  deadlineReads.set(
     viewId,
-    setTimeout(() => {
-      lapsedReads.delete(viewId);
-      const held = state.sessions[viewId];
-      const fault = held?.behind ?? held?.readFault;
-      if (
-        held &&
-        !held.loading &&
-        fault?.reason === "offline" &&
-        fault.reconnecting &&
-        subscriptionIds().includes(viewId)
-      ) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page, or says the machine is offline
-        void readTranscript(viewId, "reconnectLapsed");
-      }
-    }, ms)
+    setTimeout(
+      () => {
+        deadlineReads.delete(viewId);
+        const held = state.sessions[viewId];
+        const fault = held?.behind ?? held?.readFault;
+        if (
+          held &&
+          !held.loading &&
+          fault?.reason === "offline" &&
+          fault.reconnectingUntil === deadline &&
+          subscriptionIds().includes(viewId)
+        ) {
+          // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page, or the machine is still away
+          void readTranscript(viewId, "deadline");
+        }
+      },
+      Math.max(0, deadline - Date.now())
+    )
   );
 }
 
@@ -6745,8 +6792,8 @@ function readAgainLater(viewId: string): void {
 function readLanded(viewId: string): void {
   clearTimeout(failedReads.get(viewId)?.timer);
   failedReads.delete(viewId);
-  clearTimeout(lapsedReads.get(viewId));
-  lapsedReads.delete(viewId);
+  clearTimeout(deadlineReads.get(viewId));
+  deadlineReads.delete(viewId);
   toasted.delete(viewId);
 }
 
@@ -6842,13 +6889,8 @@ async function readNewestPage(
     }
     if (answer.fault) {
       if (!answer.fault.ok) {
-        const {
-          ok: _ok,
-          status: _status,
-          readAgainMs,
-          ...fault
-        } = answer.fault;
-        readFailed(target, fault, readAgainMs);
+        const { ok: _ok, status: _status, ...fault } = answer.fault;
+        readFailed(target, fault);
       }
       return answer.fault;
     }
@@ -6905,8 +6947,8 @@ async function olderPage(
         if (response.ok) {
           return (await response.json()) as TranscriptPage;
         }
-        const { away, reconnecting } = machineAway(response);
-        return readFaultOf(await hubFailure(response), away, reconnecting);
+        const { away, reconnectingUntil } = machineAway(response);
+        return readFaultOf(await hubFailure(response), away, reconnectingUntil);
       },
       cancel
     );
@@ -7710,7 +7752,9 @@ export const cawco = {
     if (state.status === "connected") {
       return "connected";
     }
-    return state.outage ? "unreachable" : "connecting";
+    return state.outageAt !== null && !ahead(state.outageAt)
+      ? "unreachable"
+      : "connecting";
   },
   /**
    * Whether the last attempt to reach the hub came back empty-handed. What

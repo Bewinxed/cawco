@@ -3,7 +3,8 @@
   reader holds (client.svelte.ts `SessionState.behind`), and goes when the
   read lands. Its machine is reconnecting (the hub heard from it moments
   ago: a hub that just restarted, a dropped connection), a wait said with no
-  toast, until the hub stops reading it so (`readOnceLapsed`); or it is
+  toast, until the hub's deadline for it passes on the clock
+  (`reconnectingNow`); or it is
   offline; either way the rest comes in once the hub says it is back
   (`readBehind`). Or the read failed: "Not caught up" beside
   Try again, which reads it now, as the backoff does by itself
@@ -21,7 +22,7 @@
   import { machineLabel } from "@cawco/core";
   import { rise } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { cawco, type ReadFault } from "../client.svelte";
+  import { cawco, type ReadFault, reconnectingNow } from "../client.svelte";
 
   let {
     fault,
@@ -52,7 +53,7 @@
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
-  {#if fault.reason === "offline" && fault.reconnecting}
+  {#if reconnectingNow(fault)}
     <p>
       <span class="name">{machine}</span>
       is reconnecting. The rest comes in once it's back.
