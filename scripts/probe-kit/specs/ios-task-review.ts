@@ -40,10 +40,16 @@
  *   bun scripts/probe-kit/run.ts ios-task-review
  *
  * `PROBE_DEVICE=iPhone` (or `iPad`) runs one device.
+ *
+ * `PROBE_LIVE='<hub>|<project id>|<task id>[|<dashboard>]'` runs the same on a real task
+ * on a running hub instead of the seed, read and never written: what it
+ * expects is what that hub reads of the task (its attempts' words, its
+ * facts, its outputs), and the web half is that hub's own dashboard.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the checks are read in order, one after another.
 // biome-ignore-all lint/performance/noAwaitInLoops: one device, one theme, one step after another
 import { writeFile } from "node:fs/promises";
+import { connect, createServer } from "node:net";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
@@ -125,7 +131,139 @@ const SPACE_5 = 18;
 const SPACE_4 = 14;
 const LOG_HEAD = /^.*\] /;
 const OFFSET = /offset=([\d.-]+)/;
-const HANDED_IN = /^Attempt 2 finished .* and handed this in\.$/;
+const HANDED_IN = /^Attempt \d+ finished .* and handed this in\.$/;
+const EXTENSION = /\.([a-z0-9]+)$/i;
+const WORKING = /^Working for /;
+const ANY = /./;
+
+/** What the sheet should show for the task it opens: the seeded one's, or a live one's as its hub reads it. */
+interface Expect {
+  /** The attempts, newest first: what each's status says, and how it ended. */
+  attempts: { says: string | RegExp; how: string | null; workItemId: string }[];
+  /** The facts the header names (`task-fact-<name>`). */
+  facts: string[];
+  /** Each output and what the sheet draws it as (TaskOutputView `shown`). */
+  outputs: { name: string; drawn: string }[];
+}
+
+/** What the sheet draws an output as, by its name (result.ts `resultKind`, an SVG through WebKit). */
+const drawnAs = (name: string): string => {
+  const ext = EXTENSION.exec(name)?.[1]?.toLowerCase() ?? "";
+  if (["md", "markdown", "mdx", "txt"].includes(ext)) {
+    return "document";
+  }
+  if (["html", "htm"].includes(ext)) {
+    return "page";
+  }
+  if (ext === "json") {
+    return "data";
+  }
+  if (["csv", "tsv"].includes(ext)) {
+    return "table";
+  }
+  if (ext === "svg") {
+    return "svg";
+  }
+  return ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
+    ? "picture"
+    : "text";
+};
+
+/** A span in plain words (project-tasks.ts `spanWords`). */
+const spanWords = (ms: number): string => {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) {
+    return `${seconds} s`;
+  }
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const rest = minutes % 60;
+  return rest > 0
+    ? `${Math.floor(minutes / 60)} h ${rest} min`
+    : `${Math.floor(minutes / 60)} h`;
+};
+
+interface ReadTask {
+  attempts: {
+    endedAt: number | null;
+    endedHow: string | null;
+    startedAt: number;
+    state: string;
+    workItemId: string;
+  }[];
+  blockedBy: string[];
+  labels: string[];
+  lastAttemptFailed: boolean;
+  lastAttemptStopped: boolean;
+  liveAttempt: boolean;
+  needsYou: boolean;
+  outputs: string[];
+  queuedStart: boolean;
+  result: { headline: string | null } | null;
+}
+
+/** What the sheet should show for a task as its hub reads it (`attemptSentence`; a live attempt's count runs on). */
+const expectOf = (task: ReadTask): Expect => ({
+  attempts: task.attempts.map((a) => {
+    const took = a.endedAt === null ? null : spanWords(a.endedAt - a.startedAt);
+    const says: Record<string, string | RegExp> = {
+      starting: "Starting",
+      running: WORKING,
+      done: `Finished in ${took}`,
+      failed: `Failed after ${took}`,
+      cancelled: `Stopped after ${took}`,
+    };
+    return {
+      says: says[a.state] ?? ANY,
+      how: a.endedHow,
+      workItemId: a.workItemId,
+    };
+  }),
+  facts: [
+    "stage",
+    ...(task.needsYou ||
+    task.liveAttempt ||
+    task.lastAttemptFailed ||
+    task.lastAttemptStopped ||
+    task.queuedStart
+      ? ["status"]
+      : []),
+    ...(task.blockedBy.length > 0 ? ["waits-on"] : []),
+    ...(task.labels.length > 0 ? ["labels"] : []),
+  ],
+  outputs: task.outputs.map((name) => ({ name, drawn: drawnAs(name) })),
+});
+
+/**
+ * A dashboard on the local network, relayed to a loopback port this process
+ * holds, byte for byte: a browser Playwright downloads has no Local Network
+ * permission on macOS ("The Internet connection appears to be offline"),
+ * while this process, a command-line one, reaches the hub as curl does.
+ */
+async function relay(
+  target: string
+): Promise<{ origin: string; stop: () => void }> {
+  const to = new URL(target);
+  if (["127.0.0.1", "localhost"].includes(to.hostname)) {
+    return { origin: target, stop: () => undefined };
+  }
+  const server = createServer((client) => {
+    const upstream = connect(Number(to.port || 80), to.hostname);
+    client.pipe(upstream);
+    upstream.pipe(client);
+    upstream.on("error", () => client.destroy());
+    client.on("error", () => upstream.destroy());
+  });
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  return { origin: `http://127.0.0.1:${port}`, stop: () => server.close() };
+}
+
+const saysIt = (said: string | undefined, want: string | RegExp) =>
+  typeof want === "string" ? said === want : want.test(said ?? "");
 /** A `TaskSheet` part line: its id, where its frame is read, the frame, whether it shows, what it says. */
 const PART =
   /^part (\S+) in=(body|window) frame=([\d.-]+),([\d.-]+),([\d.-]+),([\d.-]+) shows=(\w+)(?: says=(.*))?$/;
@@ -301,9 +439,12 @@ async function device(
   kit: Kit,
   base: string,
   ids: { projectId: string; taskId: string },
-  which: (typeof DEVICES)[number]
+  which: (typeof DEVICES)[number],
+  expect: Expect
 ): Promise<void> {
   const { tag } = which;
+  const count = expect.attempts.length;
+  const [newest, older] = expect.attempts;
   let sim: MacSim | undefined;
   let stream: Subprocess | undefined;
   const lines: string[] = [];
@@ -460,7 +601,7 @@ async function device(
       kind: "attempt",
       projectId: ids.projectId,
       taskId: ids.taskId,
-      workItemId: "wi-review-2",
+      workItemId: newest?.workItemId,
     });
     await sh(
       `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${base} -push-route 'push:${route}' >/dev/null`
@@ -488,7 +629,7 @@ async function device(
     await shot("sheet-light");
     const was = (id: string) => seen.get(id);
     const loaded = () =>
-      OUTPUTS.every((o) =>
+      expect.outputs.every((o) =>
         (was(`task-output-${o.name}`)?.says ?? "state=reading").startsWith(
           `state=${o.drawn}`
         )
@@ -498,11 +639,9 @@ async function device(
     }
 
     // a. The facts, each under its name.
-    const facts = ["stage", "status", "labels"].map((name) =>
-      was(`task-fact-${name}`)
-    );
+    const facts = expect.facts.map((name) => was(`task-fact-${name}`));
     kit.check(
-      `${tag} a: the header names its facts (Stage, Status, Labels), each row at one x`,
+      `${tag} a: the header names its facts (${expect.facts.join(", ")}), each row at one x`,
       facts.every((f) => f?.shows) &&
         facts.every((f) => near(f?.x, facts[0]?.x)),
       facts.map(at).join(" | ")
@@ -511,7 +650,7 @@ async function device(
     // b. The result leads with the report.
     const hint = was("task-result-hint");
     const report = was("task-report");
-    const cards = OUTPUTS.map((o) => was(`task-output-${o.name}`));
+    const cards = expect.outputs.map((o) => was(`task-output-${o.name}`));
     kit.check(
       `${tag} b: the result says which attempt handed it in, the report card first, then the outputs in order`,
       HANDED_IN.test(hint?.says ?? "") &&
@@ -526,13 +665,14 @@ async function device(
 
     // c. Each output drawn as what it is; no file name anywhere.
     const named = [...seen.entries()]
-      .filter(([, p]) => OUTPUTS.some((o) => p.says.includes(o.name)))
+      .filter(([, p]) => expect.outputs.some((o) => p.says.includes(o.name)))
       .map(([id]) => id);
     kit.check(
-      `${tag} c: each output is drawn as what it is (${OUTPUTS.map((o) => o.drawn).join(", ")}), no part says a file name`,
-      OUTPUTS.every((o, i) => cards[i]?.says.startsWith(`state=${o.drawn} `)) &&
-        named.length === 0,
-      `${OUTPUTS.map((o, i) => `${o.name}: ${cards[i]?.says ?? "absent"}`).join(" | ")}; naming: ${named.join(", ") || "none"}`
+      `${tag} c: each output is drawn as what it is (${expect.outputs.map((o) => o.drawn).join(", ") || "none handed in"}), no part says a file name`,
+      expect.outputs.every((o, i) =>
+        cards[i]?.says.startsWith(`state=${o.drawn} `)
+      ) && named.length === 0,
+      `${expect.outputs.map((o, i) => `${o.name}: ${cards[i]?.says ?? "absent"}`).join(" | ")}; naming: ${named.join(", ") || "none"}`
     );
 
     // d. The cards' width and gaps.
@@ -557,10 +697,10 @@ async function device(
     const status = was("task-attempt-status");
     const again = was("task-try-again");
     kit.check(
-      `${tag} e: "It has had 2.", the newest tab chosen, "Finished in 1 min", Try again`,
-      (attemptsHint?.says ?? "").endsWith("It has had 2.") &&
-        tabs?.says === "selected=0" &&
-        status?.says === "Finished in 1 min" &&
+      `${tag} e: "It has had ${count}.", ${count > 1 ? "the newest tab chosen" : "no tabs"}, "${newest?.says}", Try again`,
+      (attemptsHint?.says ?? "").endsWith(`It has had ${count}.`) &&
+        (count > 1 ? tabs?.says === "selected=0" : !tabs) &&
+        saysIt(status?.says, newest?.says ?? "") &&
         again?.says === "Try again",
       [attemptsHint, tabs, status, again].map(at).join(" | ")
     );
@@ -576,28 +716,30 @@ async function device(
     );
 
     // g. The older attempt, and back.
-    await reveal("Attempt 1");
-    await tapLabel("Attempt 1");
-    await waitFor(
-      "the older attempt",
-      () => part("task-attempt-status")?.says === "Failed after 3 min",
-      15_000
-    );
-    const older = part("task-attempt-status");
-    const how = part("task-attempt-how");
-    kit.check(
-      `${tag} g: the older tab says "Failed after 3 min" and how it ended`,
-      older?.says === "Failed after 3 min" &&
-        how?.says === `Attempt failed: ${FAILED_WHY}` &&
-        part("task-attempt-tabs")?.says === "selected=1",
-      `${at(older)} | ${at(how)} | ${at(part("task-attempt-tabs"))}`
-    );
-    await tapLabel("Attempt 2");
-    await waitFor(
-      "the newest attempt",
-      () => part("task-attempt-status")?.says === "Finished in 1 min",
-      15_000
-    );
+    if (older) {
+      await reveal(`Attempt ${count - 1}`);
+      await tapLabel(`Attempt ${count - 1}`);
+      await waitFor(
+        "the older attempt",
+        () => saysIt(part("task-attempt-status")?.says, older.says),
+        15_000
+      );
+      const olderStatus = part("task-attempt-status");
+      const how = part("task-attempt-how");
+      kit.check(
+        `${tag} g: the older tab says "${older.says}" and how it ended`,
+        saysIt(olderStatus?.says, older.says) &&
+          (older.how === null ? !how : how?.says === older.how) &&
+          part("task-attempt-tabs")?.says === "selected=1",
+        `${at(olderStatus)} | ${at(how)} | ${at(part("task-attempt-tabs"))}`
+      );
+      await tapLabel(`Attempt ${count}`);
+      await waitFor(
+        "the newest attempt",
+        () => saysIt(part("task-attempt-status")?.says, newest?.says ?? ""),
+        15_000
+      );
+    }
 
     // h. Expand and collapse.
     for (const theme of THEMES) {
@@ -611,6 +753,8 @@ async function device(
         await shot("sheet-dark");
       }
       await reveal("Expand transcript");
+      // Where the pane stood, in the body's points: everything above it decides it.
+      const stood = part("task-transcript")?.y;
       await tapLabel("Expand transcript");
       const expanded = await waitFor(
         "the expanded pane",
@@ -658,13 +802,20 @@ async function device(
           !part("task-transcript-expanded") && !!part("task-transcript")?.shows,
         15_000
       );
+      // The rows above it measured again at the review's own width, not the width it passed through.
+      await waitFor(
+        "the pane where it stood",
+        () => near(part("task-transcript")?.y, stood),
+        8000
+      );
       if (theme === "light") {
         kit.check(
-          `${tag} h: Collapse puts the pane back under the attempt, the review whole again`,
+          `${tag} h: Collapse puts the pane back under the attempt where it stood, the review whole again`,
           !!back &&
+            near(part("task-transcript")?.y, stood) &&
             part("task-review")?.shows === true &&
             near(part("task-review")?.w, part("task-sheet")?.w),
-          `${at(part("task-transcript"))}; review ${at(part("task-review"))}; sheet ${at(part("task-sheet"))}`
+          `${at(part("task-transcript"))} (stood at ${stood?.toFixed(1)}); review ${at(part("task-review"))}; sheet ${at(part("task-sheet"))}`
         );
       }
     }
@@ -684,8 +835,10 @@ async function web(
   kit: Kit,
   dashboard: string,
   ids: { projectId: string; taskId: string },
-  which: (typeof DEVICES)[number]
+  which: (typeof DEVICES)[number],
+  expect: Expect
 ) {
+  const picture = expect.outputs.some((o) => o.drawn === "picture");
   for (const theme of THEMES) {
     const page = await kit.page(which.view, {
       engine: "webkit",
@@ -698,13 +851,21 @@ async function web(
       () =>
         Boolean(
           document.querySelector(".task-sheet [data-task-report]") &&
-          document.querySelector(
-            ".task-sheet [data-result-kind='picture'] img"
-          ) &&
-          document.querySelector(".task-sheet [data-task-transcript]")
+          document.querySelector(".task-sheet [data-task-transcript]") &&
+          // A picture handed in has drawn before the capture.
+          (document.querySelector(".task-sheet [data-result-kind='picture']")
+            ? document.querySelector(
+                ".task-sheet [data-result-kind='picture'] img"
+              )
+            : true)
         ),
       90_000
     );
+    if (picture) {
+      await page.waitForSelector(
+        ".task-sheet [data-result-kind='picture'] img"
+      );
+    }
     await settle(page);
     await page.screenshot({
       path: join(kit.out, `web-${which.tag}-sheet-${theme}.png`),
@@ -730,6 +891,45 @@ const spec: Spec = {
     ) {
       return;
     }
+    const only = process.env.PROBE_DEVICE;
+    const devices = DEVICES.filter((d) => !only || d.tag === only);
+    // `PROBE_LIVE=<hub>|<project id>|<task id>`: a real task on a running
+    // hub, read and never written; its dashboard is the hub's own.
+    const live = process.env.PROBE_LIVE?.split("|");
+    if (live && live.length >= 3) {
+      const [hub, projectId, taskId, dashboard = hub] = live;
+      const ids = { projectId, taskId };
+      const task = (await (
+        await fetch(`${hub}/api/projects/${projectId}/tasks/${taskId}`)
+      ).json()) as ReadTask;
+      if (
+        !kit.check(
+          `the live hub serves ${taskId} with its report (a hub past 0f5a1f451)`,
+          !!task.result && task.attempts.length > 0,
+          JSON.stringify({
+            result: task.result,
+            attempts: task.attempts.map((a) => a.state),
+            outputs: task.outputs,
+          })
+        )
+      ) {
+        return;
+      }
+      const expect = expectOf(task);
+      for (const which of devices) {
+        await device(kit, hub, ids, which, expect);
+      }
+      const relayed = await relay(dashboard);
+      try {
+        for (const which of devices) {
+          await web(kit, relayed.origin, ids, which, expect);
+        }
+      } finally {
+        relayed.stop();
+      }
+      kit.note(`live captures of ${taskId} in ${kit.out}`);
+      return;
+    }
     const fleet = await kit.fleet((_: Seen) => ({
       everyMs: 20,
       words: ["Laid the week out day by day: Monday, Wednesday and Friday."],
@@ -743,11 +943,9 @@ const spec: Spec = {
     await fleet.agentUp();
     await fleet.accountSignedIn();
     const ids = await seed(fleet);
-    const read = await fleet.api<{
-      result: { headline: string | null } | null;
-      attempts: { state: string; headline: string | null }[];
-      outputs: string[];
-    }>(`/api/projects/${ids.projectId}/tasks/${ids.taskId}`);
+    const read = await fleet.api<ReadTask>(
+      `/api/projects/${ids.projectId}/tasks/${ids.taskId}`
+    );
     if (
       !kit.check(
         "the hub reads the seeded task: its report, two attempts, five outputs",
@@ -763,14 +961,24 @@ const spec: Spec = {
     ) {
       return;
     }
-    const only = process.env.PROBE_DEVICE;
-    const devices = DEVICES.filter((d) => !only || d.tag === only);
+    // The seed's own words, beside what the hub read of it.
+    const expect: Expect = {
+      ...expectOf(read),
+      attempts: [
+        { says: "Finished in 1 min", how: null, workItemId: "wi-review-2" },
+        {
+          says: "Failed after 3 min",
+          how: `Attempt failed: ${FAILED_WHY}`,
+          workItemId: "wi-review-1",
+        },
+      ],
+    };
     for (const which of devices) {
-      await device(kit, fleet.base, ids, which);
+      await device(kit, fleet.base, ids, which, expect);
     }
     const dashboard = await fleet.dashboard();
     for (const which of devices) {
-      await web(kit, dashboard, ids, which);
+      await web(kit, dashboard, ids, which, expect);
     }
     kit.note(
       `captures in ${kit.out}: <device>-sheet-<theme>.png, <device>-expanded-<theme>.png, web-<device>-…`

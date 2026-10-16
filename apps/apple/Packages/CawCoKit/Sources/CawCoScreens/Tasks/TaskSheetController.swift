@@ -122,6 +122,8 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private var sideBeside: [NSLayoutConstraint] = []
     private var sideOver: [NSLayoutConstraint] = []
     private var laidWide: Bool?
+    /// The body's width its rows were last measured at.
+    private var laidBodyWidth: CGFloat = 0
 
     // Rows that hold a field, load or follow a session keep their view across renders.
     private lazy var descriptionPart = TaskTextPart(heading: "Description",
@@ -343,6 +345,23 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         super.viewWillLayoutSubviews()
         // The window crossed `64rem`: the expanded transcript moves beside the review or over it.
         if expanded, wide != laidWide { layoutFrame() }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // The body changed width (the transcript expanded or collapsed, the
+        // sheet resized): a document's words size to the width they were
+        // last laid at (MessageBody `laidWidth`), so once the rows have laid
+        // at this one, the list measures them again. Measured before, a
+        // report kept the height it had at the sheet's passing width.
+        let width = collection.bounds.width
+        guard abs(width - laidBodyWidth) > 0.5 else { return }
+        laidBodyWidth = width
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            collection.layoutIfNeeded()
+            collection.collectionViewLayout.invalidateLayout()
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
