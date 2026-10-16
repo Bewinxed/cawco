@@ -41907,13 +41907,12 @@
             "$ref": "#/components/schemas/ArtifactKind",
             "description": "That artifact's kind, which picks its line's glyph."
           },
-          "artifactName": {
-            "description": "That artifact's name, as its line says it.",
+          "artifactLead": {
+            "description": "The words its line says before the artifact's name, by the notice it draws (core `ARTIFACT_NOTICES`): \"Comments on\", \"Fix tray handed you\".",
             "type": "string"
           },
-          "artifactSaid": {
-            "description": "What its line says came: the person's comments (\"Comments on\"); none, their picks (\"Responses on\").",
-            "const": "comments",
+          "artifactName": {
+            "description": "That artifact's name, as its line says it.",
             "type": "string"
           },
           "askLabel": {
@@ -51469,6 +51468,7 @@
       "Law": {
         "type": "string",
         "enum": [
+          "artifact-notice-drawn",
           "caw-ask-stored-before-sent",
           "live-workspace-judge-answers",
           "owed-send-machine-has-deadline",

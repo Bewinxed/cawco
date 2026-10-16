@@ -52,6 +52,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case subagent = "branching-paths-down-bold-duotone"
     case jev = "scale-bold-duotone"
     case window = "window-frame-bold-duotone"
+    case artifactSheet = "widget-4-bold-duotone"
     case rules = "shield-check-bold-duotone"
     case report = "clipboard-check-bold-duotone"
     case reportFailed = "clipboard-remove-bold-duotone"

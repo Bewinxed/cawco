@@ -76,6 +76,24 @@ export const LAWS = {
    */
   "owed-send-machine-has-deadline":
     "A send kept for its machine waits only while that machine reads reconnecting or paused, never offline with no deadline.",
+  /**
+   * Every message CawCo sends a session under the artifact origin is drawn as
+   * one of the artifact notices (injected.ts `ARTIFACT_NOTICES`), at the send's
+   * row (transcript-rules.ts `sendRow`): one no kind reads would otherwise be
+   * drawn as the person's own words, as the sheet's saves and errors notices
+   * were until each had its kind.
+   *
+   * Born red, once (2026-10-16): the saves kind taken out of
+   * `ARTIFACT_NOTICES`, and `sendRow` given a read record on the artifact
+   * origin carrying `artifactSavesNotice` for the sheet "card-sheet". It
+   * threw: "Law broken: artifact-notice-drawn. … Send red-saves-1 to session
+   * red-session came on the artifact origin, and no artifact notice reads it,
+   * so it was about to be drawn as the person's words: "[CawCo] The person
+   * changed the sheet "card-sheet" …"". With the kind back, the same record
+   * drew `ui.system_note` `artifact_responses`, "Changes saved to card-sheet".
+   */
+  "artifact-notice-drawn":
+    "Every message CawCo sends a session on the artifact origin is drawn as an artifact notice, never as the person's words.",
 } as const;
 
 export type Law = keyof typeof LAWS;

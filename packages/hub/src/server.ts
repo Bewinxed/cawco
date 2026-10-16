@@ -16874,6 +16874,7 @@ export const createServer = (
   /** Every session's blocks, built here once, whether or not anyone watches. */
   const transcripts = createTranscripts({
     lifetime,
+    laws,
     readHistory,
     build: (machineId) =>
       db.listAgents().find((agent) => agent.machineId === machineId)?.build

@@ -122,10 +122,10 @@
    */
   const moved = $derived(message?.metadata?.subtype === MOVED_HERE);
   /**
-   * The person sent responses on one of the session's artifacts (core
-   * `ARTIFACT_RESPONSES`): one quiet line, its name opening the artifact,
-   * and whether the agent has read them yet. The sentence the agent reads
-   * is never drawn.
+   * One of CawCo's artifact notices to the session (core `ARTIFACT_NOTICES`,
+   * drawn as `ARTIFACT_RESPONSES`): one quiet line, its lead ("Comments on")
+   * and the artifact's name, which opens it, and whether the agent has read
+   * it yet. The sentence the agent reads is never drawn.
    */
   const responses = $derived(
     message?.metadata?.subtype === ARTIFACT_RESPONSES &&
@@ -134,10 +134,7 @@
           id: message.metadata.artifactId,
           name: message.metadata.artifactName ?? "",
           kind: message.metadata.artifactKind ?? "page",
-          said:
-            message.metadata.artifactSaid === "comments"
-              ? "Comments"
-              : "Responses",
+          lead: message.metadata.artifactLead ?? "",
         }
       : null
   );
@@ -273,7 +270,7 @@
     <span class="hline rail-line">
       <span data-slot="rail-cell" class="rail-cell"><ResponseGlyph /></span>
       <span data-slot="ftitle" class="ftitle"
-        >{responses.said} on
+        >{responses.lead}
         <button
           aria-busy={opening}
           class="aname"

@@ -3392,6 +3392,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/Law`.
     public enum Law: OpenEnum {
+        case artifactNoticeDrawn
         case cawAskStoredBeforeSent
         case liveWorkspaceJudgeAnswers
         case owedSendMachineHasDeadline
@@ -3402,6 +3403,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "artifact-notice-drawn": self = .artifactNoticeDrawn
             case "caw-ask-stored-before-sent": self = .cawAskStoredBeforeSent
             case "live-workspace-judge-answers": self = .liveWorkspaceJudgeAnswers
             case "owed-send-machine-has-deadline": self = .owedSendMachineHasDeadline
@@ -3413,6 +3415,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .artifactNoticeDrawn: "artifact-notice-drawn"
             case .cawAskStoredBeforeSent: "caw-ask-stored-before-sent"
             case .liveWorkspaceJudgeAnswers: "live-workspace-judge-answers"
             case .owedSendMachineHasDeadline: "owed-send-machine-has-deadline"
@@ -3426,7 +3429,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.cawAskStoredBeforeSent, .liveWorkspaceJudgeAnswers, .owedSendMachineHasDeadline, .registerSpawnedNothing, .runningSessionMachineConnected]
+        public static let allCases: [Self] = [.artifactNoticeDrawn, .cawAskStoredBeforeSent, .liveWorkspaceJudgeAnswers, .owedSendMachineHasDeadline, .registerSpawnedNothing, .runningSessionMachineConnected]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -22,6 +22,7 @@ import type {
 } from "./harness";
 import {
   ACCOUNT_MOVE,
+  ARTIFACT_ORIGIN,
   ARTIFACT_RESPONSES,
   CLI_OUTDATED,
   CONTINUATION_ORIGIN,
@@ -38,9 +39,7 @@ import {
   SESSION_STOPPED,
 } from "./harness";
 import {
-  parseArtifactComments,
-  parseArtifactHanded,
-  parseArtifactResponses,
+  parseArtifactNotice,
   parseDelegateAsk,
   parseFleetWatchNudge,
   parseForkNotice,
@@ -49,6 +48,7 @@ import {
   parseUndelivered,
   parseWorkflowNotice,
 } from "./injected";
+import { invariant } from "./invariant";
 import { parseRuleMarker } from "./rules";
 import type {
   BlockMetadata,
@@ -1625,27 +1625,6 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
       },
     };
   }
-  // The person sent responses on one of this session's artifacts: one
-  // quiet line naming it, never their bubble; the sentence to the agent is
-  // not drawn.
-  const responses = parseArtifactResponses(text);
-  const comments = responses ? null : parseArtifactComments(text);
-  const artifact = responses ?? comments;
-  if (artifact) {
-    return {
-      ...base,
-      type: "ui.system_note",
-      content: "",
-      metadata: {
-        subtype: ARTIFACT_RESPONSES,
-        noteTitle: `${comments ? "Comments" : "Responses"} on ${artifact.name}`,
-        artifactId: artifact.id,
-        artifactKind: artifact.kind,
-        artifactName: artifact.name,
-        ...(comments ? { artifactSaid: "comments" as const } : {}),
-      },
-    };
-  }
   const hubNote = hubNoteBlock(text, base);
   if (hubNote) {
     return hubNote;
@@ -1714,29 +1693,37 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
 }
 
 /**
- * A delegate put an artifact in this session's panel (core
- * `artifactHandedNotice`): one quiet note saying who and what, never the
- * person's bubble.
+ * One of CawCo's artifact notices to this session (core `ARTIFACT_NOTICES`):
+ * one quiet line, its lead and the artifact's name, which opens it; the
+ * sentence to the agent is not drawn, and never as the person's bubble.
  */
-function handedBlock(text: string, base: BlockBase): TranscriptBlock | null {
-  const handed = parseArtifactHanded(text);
-  return handed
+function artifactNoticeBlock(
+  text: string,
+  base: BlockBase
+): TranscriptBlock | null {
+  const notice = parseArtifactNotice(text);
+  return notice
     ? {
         ...base,
         type: "ui.system_note",
         content: "",
         metadata: {
-          noteTitle: `${handed.from} put the ${handed.kind} "${handed.name}" in your panel`,
+          subtype: ARTIFACT_RESPONSES,
+          noteTitle: `${notice.lead} ${notice.name}`,
+          artifactId: notice.id,
+          artifactKind: notice.kind,
+          artifactLead: notice.lead,
+          artifactName: notice.name,
         },
       }
     : null;
 }
 
 /**
- * A message sent to the session, as a row: cawco's own (a rule, a hand-off,
- * a delegate's report or ask) by its marker line, anything else as the
- * reader's words. A send's record and a stored user turn the hub has no
- * record for both come through here.
+ * A message sent to the session, as a row: cawco's own (an artifact notice,
+ * a rule, a hand-off, a delegate's report or ask) by its marker line,
+ * anything else as the reader's words. A send's record and a stored user
+ * turn the hub has no record for both come through here.
  */
 export function sentRow(
   text: string,
@@ -1744,8 +1731,8 @@ export function sentRow(
   base: BlockBase
 ): TranscriptBlock {
   return (
-    injectedBlock(text, base) ??
-    handedBlock(text, base) ?? {
+    artifactNoticeBlock(text, base) ??
+    injectedBlock(text, base) ?? {
       ...base,
       ...userBody(text, transcriptUserImages(message)),
     }
@@ -1911,13 +1898,21 @@ export function sendRow(
   sdkUuid: string | undefined = record.harnessId
 ): TranscriptBlock {
   const { message } = record.body;
-  const row = sentRow(transcriptUserText(message) ?? "", message, {
+  const text = transcriptUserText(message) ?? "";
+  const row = sentRow(text, message, {
     id: record.uuid,
     instanceId: record.instanceId,
     timestamp: isoOf(record.acceptedAt),
     ...(sdkUuid ? { sdkUuid } : {}),
   });
   const { origin } = record.body;
+  invariant(
+    !(origin?.kind === "system" && origin.name === ARTIFACT_ORIGIN) ||
+      row.metadata?.subtype === ARTIFACT_RESPONSES,
+    "artifact-notice-drawn",
+    () =>
+      `Send ${record.uuid} to session ${record.instanceId} came on the artifact origin, and no artifact notice reads it, so it was about to be drawn as the person's words: "${text.split("\n")[0].slice(0, 160)}".`
+  );
   const metadata = {
     ...row.metadata,
     ...(record.reason ? { sendFailed: record.reason } : {}),

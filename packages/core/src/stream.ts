@@ -54,12 +54,17 @@ import type { CarrySessionRequest } from "./harness";
  *    (`token-color`, `token-size`, `token-font`), its names its `options`,
  *    and the sheet's page carries no project-wide token names. A page built
  *    for 9 reloads into the inspector that reads the kinds.
+ * 11: an artifact notice's row (`ui.system_note` `artifact_responses`) says
+ *    the words before the artifact's name (`artifactLead`: "Comments on",
+ *    "Changes saved to", "Fix tray handed you") in place of `artifactSaid`,
+ *    one per notice kind (core `ARTIFACT_NOTICES`). A page built for 10 would
+ *    draw every notice as "Responses on", so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 10;
+export const WIRE_PROTOCOL = 11;
 
 /**
  * What a session's stream carries: the changes each frame made to its

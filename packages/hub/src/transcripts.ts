@@ -52,6 +52,15 @@ export interface TranscriptPorts {
   readonly followed: (instanceId: string) => boolean;
   /** The session's stream head: the seq a page is consistent with. */
   readonly head: (instanceId: string) => number;
+  /**
+   * The hub's laws (laws.ts): a law broken while a frame folds fails that
+   * frame (`hold`), while a stored transcript is built fails that read
+   * (`raise`); either way it is logged by name and raised on every dashboard.
+   */
+  readonly laws: {
+    readonly hold: <T>(read: () => T) => T | undefined;
+    readonly raise: <T>(read: () => T) => T;
+  };
   /** Runs the idle sweep until the hub closes. */
   readonly lifetime: HubLifetimeShape;
   /** Whether the session has a process the hub believes is running. */
@@ -213,11 +222,20 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         }
         entry.where = read.where;
         entry.build = ports.build(read.where.machineId);
-        entry.builder.seed(read.entries, read.records);
-        emit(instanceId, [
-          ...(reset ? [{ type: "reset" } as const] : []),
-          ...replayHeld(entry),
-        ]);
+        // A law broken building it leaves no half-built transcript: the read
+        // fails by the law's name, and the next frame or page reads again.
+        try {
+          ports.laws.raise(() => {
+            entry.builder.seed(read.entries, read.records);
+            emit(instanceId, [
+              ...(reset ? [{ type: "reset" } as const] : []),
+              ...replayHeld(entry),
+            ]);
+          });
+        } catch (error) {
+          entries.delete(instanceId);
+          throw error;
+        }
         return read;
       },
       // A read that threw is a read that failed: no transcript is left
@@ -285,7 +303,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       entry.held.push(payload);
       return;
     }
-    emit(instanceId, fold(entry, payload));
+    emit(instanceId, ports.laws.hold(() => fold(entry, payload)) ?? []);
   };
 
   const page: TranscriptsShape["page"] = async (instanceId, limit, before) => {

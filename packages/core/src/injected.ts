@@ -342,6 +342,91 @@ export function parseArtifactComments(
   };
 }
 
+const ARTIFACT_ERRORS_LINE =
+  /^\[CawCo\] The (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\) does not compile on its stage;/;
+
+const ARTIFACT_SAVES_LINE =
+  /^\[CawCo\] The person changed the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\) from its inspector,/;
+
+/** What a notice's opening line names, for the notices whose line is `kind`, `name`, `id` in that order. */
+const namedBy =
+  (line: RegExp) =>
+  (text: string): ArtifactComments | null => {
+    const found = line.exec(text);
+    return found
+      ? { kind: found[1] as ArtifactKind, name: found[2], id: found[3] }
+      : null;
+  };
+
+/** Every notice CawCo sends a session on the artifact origin, by kind. */
+export type ArtifactNoticeKind =
+  "responses" | "comments" | "errors" | "saves" | "handed";
+
+/** One artifact notice read back: what it is, the artifact it names, and the words its row says before that name. */
+export interface ArtifactNotice extends ArtifactComments {
+  /** The row's words before the artifact's name: "Comments on", "Fix tray handed you". */
+  lead: string;
+  notice: ArtifactNoticeKind;
+}
+
+/**
+ * THE ARTIFACT NOTICES: every message CawCo sends a session under the system
+ * origin {@link import("./harness").ARTIFACT_ORIGIN}, each with how it is read
+ * back and the words its row leads with. A transcript draws each as the one
+ * quiet line ({@link import("./harness").ARTIFACT_RESPONSES}), never as the
+ * person's words; a notice on that origin none of these reads is a broken law
+ * (`artifact-notice-drawn`, transcript-rules.ts `sendRow`). A new builder on
+ * that origin adds its kind here.
+ */
+export const ARTIFACT_NOTICES: readonly {
+  lead: (named: ArtifactComments & { from?: string }) => string;
+  notice: ArtifactNoticeKind;
+  read: (text: string) => (ArtifactComments & { from?: string }) | null;
+}[] = [
+  {
+    notice: "responses",
+    read: parseArtifactResponses,
+    lead: () => "Responses on",
+  },
+  {
+    notice: "comments",
+    read: parseArtifactComments,
+    lead: () => "Comments on",
+  },
+  {
+    notice: "errors",
+    read: namedBy(ARTIFACT_ERRORS_LINE),
+    lead: () => "Compile errors on",
+  },
+  {
+    notice: "saves",
+    read: namedBy(ARTIFACT_SAVES_LINE),
+    lead: () => "Changes saved to",
+  },
+  {
+    notice: "handed",
+    read: parseArtifactHanded,
+    lead: ({ from }) => `${from} handed you`,
+  },
+];
+
+/** An artifact notice read back by the kind that claims it ({@link ARTIFACT_NOTICES}); null when none does. */
+export function parseArtifactNotice(text: string): ArtifactNotice | null {
+  for (const { notice, read, lead } of ARTIFACT_NOTICES) {
+    const named = read(text);
+    if (named) {
+      return {
+        notice,
+        id: named.id,
+        kind: named.kind,
+        name: named.name,
+        lead: lead(named),
+      };
+    }
+  }
+  return null;
+}
+
 /**
  * Fleet watch's nudge to a session's lead (packages/hub `fleet-watch.ts`):
  * the line, then what the lead reads. A transcript draws it as the same
