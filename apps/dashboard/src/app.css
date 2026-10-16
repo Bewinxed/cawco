@@ -767,7 +767,11 @@
      `-block` is the same down the page. The tabs track, the board and a
      view's pane share it. A scroller may cut an edge's fade short where
      something must stay whole (`--fade-cap-start`, `--fade-cap-end`: the
-     tabs track, for the tab drawn chosen). */
+     tabs track, for the tab drawn chosen).
+     Each edge is its own animation over only the run where it moves, the
+     first and last 6% of the scroll, filled outside it: between them
+     neither changes, so a long scroll asks no restyle or repaint of the
+     scroller for its every frame (edge-fade-perf). */
   .kit-edge-fade {
     mask-image: linear-gradient(
       to right,
@@ -776,7 +780,6 @@
       #000 calc(100% - min(var(--fade-end), var(--fade-cap-end, 100vw))),
       transparent
     );
-    animation: kit-edge-fade linear both;
     animation-timeline: scroll(self inline);
   }
   .kit-edge-fade-block {
@@ -787,31 +790,41 @@
       #000 calc(100% - var(--fade-end)),
       transparent
     );
-    animation: kit-edge-fade linear both;
     animation-timeline: scroll(self block);
   }
-  /* The fade's length: a phone's narrow view keeps it short, so it reads
-     as an edge, not a band across the content. */
+  /* Spelled out, never the `animation` shorthand: the build's minifier
+     writes a shorthand's unset duration as `0s`, and a scroll-driven
+     animation of no duration jumps to its end where its range begins. The
+     fade's length: a phone's narrow view keeps it short, so it reads as an
+     edge, not a band across the content. */
   .kit-edge-fade,
   .kit-edge-fade-block {
+    animation-name: kit-edge-fade-start, kit-edge-fade-end;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-range:
+      0% 6%,
+      94% 100%;
     --fade-len: 40px;
 
     @media (max-width: 639px) {
       --fade-len: 16px;
     }
   }
-  @keyframes kit-edge-fade {
-    0% {
+  @keyframes kit-edge-fade-start {
+    from {
       --fade-start: 0px;
+    }
+    to {
+      --fade-start: var(--fade-len);
+    }
+  }
+  @keyframes kit-edge-fade-end {
+    from {
       --fade-end: var(--fade-len);
     }
-    6%,
-    94% {
-      --fade-start: var(--fade-len);
-      --fade-end: var(--fade-len);
-    }
-    100% {
-      --fade-start: var(--fade-len);
+    to {
       --fade-end: 0px;
     }
   }
