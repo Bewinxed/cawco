@@ -235,11 +235,145 @@ async function desk(kit: Kit, base: string): Promise<void> {
   );
 }
 
+/** The bench's conversation (its +page.svelte `ID`), read off its composer's tray. */
+const benchId = (page: Page) =>
+  page.evaluate(
+    () =>
+      Object.values(
+        (
+          globalThis as unknown as {
+            __cawcoDebug: {
+              state: {
+                workItems: Record<string, { parentInstanceId: string }>;
+              };
+            };
+          }
+        ).__cawcoDebug.state.workItems
+      )[0]?.parentInstanceId ?? null
+  );
+
+/**
+ * Where the preview sheet's foot stands, and the composer's top as drawn:
+ * the tray row's chips' top, or the pill's with none drawn on it. The empty
+ * suggestion row's top is read too, the box the sheet once stood on.
+ */
+const sheetFoot = (page: Page) =>
+  page.evaluate(() => {
+    const host = document.querySelector<HTMLElement>(".preview-sheet-host");
+    const dock = document.querySelector<HTMLElement>(".leaf > .dock .dock");
+    if (!(host && dock)) {
+      return null;
+    }
+    const drawn = { opacityProperty: true, visibilityProperty: true };
+    const chips = [
+      ...dock.querySelectorAll<HTMLElement>(".lift .kit-tray-chip"),
+    ].filter(
+      (chip) =>
+        chip.checkVisibility(drawn) && chip.getBoundingClientRect().height > 0
+    );
+    const pill = dock.querySelector<HTMLElement>(":scope > .composer");
+    const suggest = dock.querySelector<HTMLElement>(".suggest");
+    return {
+      chips: chips.length,
+      edge:
+        chips.length > 0
+          ? Math.min(...chips.map((chip) => chip.getBoundingClientRect().top))
+          : (pill?.getBoundingClientRect().top ?? null),
+      foot: host.getBoundingClientRect().bottom,
+      suggestTop: suggest?.getBoundingClientRect().top ?? null,
+    };
+  });
+
+/**
+ * The preview sheet on a phone stands on the composer as drawn (owner:
+ * "Thr drawer tab on the web app mobile view starts its bottom above the
+ * delegate chips, buggy"): its foot on the chips' top while the tray row
+ * shows them, on the pill's once it shows none.
+ */
+async function phone(
+  kit: Kit,
+  base: string,
+  view: "phone" | "phoneWide"
+): Promise<void> {
+  const page = await kit.page(view);
+  const width = page.viewportSize()?.width;
+  // Suggestions on, as the owner has them: the composer keeps their row
+  // laid out over the tray row, empty until a draft asks.
+  await page.route("**/api/jev", (route) =>
+    route.fulfill({ json: { route: "bench", suggestWhileTyping: true } })
+  );
+  await open(
+    page,
+    `${base}${ROUTE}`,
+    () => !!document.querySelector(".tray .row [data-key]")
+  );
+  await settle(page, 600);
+  const id = await benchId(page);
+  // The agent showing a preview, as the hub's frame would say it.
+  await page.evaluate((instanceId) => {
+    const debug = (
+      globalThis as unknown as {
+        __cawcoDebug: { state: { previews: Record<string, unknown> } };
+      }
+    ).__cawcoDebug;
+    debug.state.previews[instanceId ?? ""] = {
+      artifact: { id: "bench-preview", kind: "page", name: "bench" },
+      instanceId,
+      kind: "preview",
+      revision: "1",
+      state: "open",
+    };
+  }, id);
+  await page.waitForSelector(".preview-sheet-host", { timeout: 10_000 });
+  await settle(page, 800);
+  const shown = await sheetFoot(page);
+  kit.check(
+    `${width}px: with the delegate chips, under an empty suggestion row, the preview sheet's foot stands on their top`,
+    !!shown &&
+      shown.chips > 0 &&
+      shown.suggestTop !== null &&
+      shown.edge !== null &&
+      shown.suggestTop < shown.edge &&
+      Math.abs(shown.foot - shown.edge) <= 0.5,
+    JSON.stringify(shown)
+  );
+  // The delegates done and the plan gone: nothing on the tray row.
+  await page.evaluate((instanceId) => {
+    const debug = (
+      globalThis as unknown as {
+        __cawcoDebug: {
+          state: {
+            plans: Record<string, unknown>;
+            workItems: Record<string, unknown>;
+          };
+        };
+      }
+    ).__cawcoDebug;
+    for (const key of Object.keys(debug.state.workItems)) {
+      delete debug.state.workItems[key];
+    }
+    delete debug.state.plans[instanceId ?? ""];
+  }, id);
+  await settle(page, 800);
+  const bare = await sheetFoot(page);
+  kit.check(
+    `${width}px: with no chips on the tray row, the preview sheet's foot stands on the pill's top`,
+    !!bare &&
+      bare.chips === 0 &&
+      bare.edge !== null &&
+      Math.abs(bare.foot - bare.edge) <= 0.5,
+    JSON.stringify(bare)
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "delegate-tray",
   async run(kit) {
     const base = await kit.bench();
     await desk(kit, base);
+    await phone(kit, base, "phone");
+    await phone(kit, base, "phoneWide");
   },
 };
 export default spec;

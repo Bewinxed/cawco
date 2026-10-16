@@ -41,6 +41,29 @@
    * already open when the page loads), it rises from the bottom edge on
    * vaul's own curve.
    */
+  /**
+   * The composer's top as drawn: the highest of what it shows. The pill,
+   * the chips in the tray row, the suggestions while the row holds any,
+   * the plan's ring, Caw perched on the pill. Its rows are kept laid out whether they show anything or not
+   * (the tray row, the suggestion row: app.css `--c-tray-row`,
+   * `--c-suggest-room`), and a part steps aside for an ask by `visibility`;
+   * counted by their boxes, an empty suggestion row stood the sheet 59px
+   * over the delegate chips on a phone. Drawn is what has a box and paints:
+   * neither `visibility: hidden` nor faded to nothing.
+   */
+  const COMPOSER_PARTS =
+    ":scope > .composer, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch";
+  const DRAWN = { opacityProperty: true, visibilityProperty: true };
+  function drawnTop(composer: HTMLElement): number {
+    let top = Number.POSITIVE_INFINITY;
+    for (const part of composer.querySelectorAll<HTMLElement>(COMPOSER_PARTS)) {
+      const box = part.getBoundingClientRect();
+      if (box.height > 0 && part.checkVisibility(DRAWN)) {
+        top = Math.min(top, box.top);
+      }
+    }
+    return top;
+  }
   const share = untrack(() => `preview:${instanceId}`);
   const fromButton = untrack(() => waiting(share));
   let snap = $state<number | string | null>(null);
@@ -143,26 +166,15 @@
     // its group's composer, drawn outside the pane. A conversation that
     // cannot be written to has none, and the floor is the pane's own foot,
     // less the step the composer would have stood on.
-    const column = node
+    const composer = node
       .closest(".leaf")
-      ?.querySelector<HTMLElement>(":scope > .dock .lift");
+      ?.querySelector<HTMLElement>(":scope > .dock .lift")?.parentElement;
     const measure = () => {
       const box = node.getBoundingClientRect();
       const offset = Number.parseFloat(
         getComputedStyle(node).getPropertyValue("--space-4")
       );
-      // The composer's top is whatever stands highest on it: the tray row,
-      // the suggestions on it, the plan's ring, Caw perched on the pill.
-      const composerTop = column
-        ? Math.min(
-            column.getBoundingClientRect().top,
-            ...[
-              ...(column.parentElement?.querySelectorAll(
-                ".suggest, .progress-slot, .perch"
-              ) ?? []),
-            ].map((part) => part.getBoundingClientRect().top)
-          )
-        : box.bottom - offset;
+      const composerTop = composer ? drawnTop(composer) : box.bottom - offset;
       const viewport = window.visualViewport;
       // A keyboard that resizes the web view (Brave) reports the new visible
       // area a frame before the page is laid out in it, with the composer
@@ -187,16 +199,37 @@
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(node);
-    // The column moves with the composer's parts beside it (a draft
-    // growing the box under it, a tray row arriving in it).
-    for (const part of column?.parentElement?.children ?? []) {
+    // The composer's top moves with its parts (a draft growing the pill)
+    // and with what it shows on rows it keeps laid out whether or not they
+    // show anything: a chip arriving in the tray row, the suggestions
+    // filling theirs, another conversation's tray shown, a part stepping
+    // aside for an ask (its `visibility` going at the end of its fade). None
+    // of those changes a box's size; each is read in the frame after it.
+    for (const part of composer?.children ?? []) {
       observer.observe(part);
+    }
+    let pending = 0;
+    const remeasure = () => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(measure);
+    };
+    const shows = new MutationObserver(remeasure);
+    if (composer) {
+      shows.observe(composer, {
+        attributeFilter: ["class"],
+        childList: true,
+        subtree: true,
+      });
+      composer.addEventListener("transitionend", remeasure);
     }
     window.addEventListener("resize", measure);
     window.visualViewport?.addEventListener("resize", measure);
     window.visualViewport?.addEventListener("scroll", measure);
     return () => {
       observer.disconnect();
+      shows.disconnect();
+      cancelAnimationFrame(pending);
+      composer?.removeEventListener("transitionend", remeasure);
       window.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("scroll", measure);
