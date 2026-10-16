@@ -200,6 +200,8 @@ const shellCall = (
 };
 
 const legs = new Map<string, Leg>();
+/** The legs whose clone the spec has read: only these finish their item. */
+const released = new Set<string>();
 const steps = new Map<
   string,
   { finished?: boolean; offered?: string[]; ran?: boolean; searched?: boolean }
@@ -212,7 +214,7 @@ const call = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
-/** Each delegate runs its one command, then finishes its item if it is offered. */
+/** Each delegate runs its one command, then finishes its item once the spec has read its clone, if finish_item is offered. */
 const respond = (request: Seen): Reply => {
   const key = request.tools
     ? TAG.exec(request.all)?.[1]?.toLowerCase()
@@ -231,6 +233,11 @@ const respond = (request: Seen): Reply => {
     }
     step.ran = true;
     return call(shell.name, shell.input);
+  }
+  // The hub fails an item after three quiet turns in a row: slack enough for
+  // the spec to read the clone, half a second after the output arrives.
+  if (!released.has(key)) {
+    return text("Done.");
   }
   const finish = request.toolNames.find((name) => name.endsWith("finish_item"));
   if (!step.finished && finish) {
@@ -349,63 +356,114 @@ const unanswered = (fleet: Fleet, key: string): string => {
   return `ran: ${Boolean(step?.ran)}; offered: ${step?.offered?.join(", ") ?? "no request seen"}; ${asked.length} request(s), the last ${last?.afterTool ? "after a tool" : "not after a tool"}, ending: ${last?.body.slice(-600) ?? "none"}`;
 };
 
-/** (a) and (b) for each leg, from the request that carried its command's output. */
-const judge = async (kit: Kit, fleet: Fleet, among: readonly Leg[]) => {
-  for (const leg of among) {
-    // Any request whose body holds the command's last line, spelled whole
-    // only in its output: the result need not be the request's last message
-    // (a harness may add words of its own after it).
-    // biome-ignore lint/performance/noAwaitInLoops: each leg's answer read in turn, all running at once
-    const carried = await until(
-      `${leg.key}'s command output`,
-      () =>
-        fleet.seen.find((one) =>
-          one.body.includes(`FR|${leg.key}|end|end|done`)
-        ),
-      Boolean,
-      600_000
-    ).catch(() => undefined);
-    if (!carried) {
-      kit.check(
-        `${leg.key}: the delegate's command ran in its workspace`,
-        false,
-        unanswered(fleet, leg.key)
-      );
-      continue;
-    }
-    const answers = answersOf(carried.body, leg.key);
-    if (leg.key === "claude") {
-      const config = answers.get("env|config") ?? "";
-      kit.check(
-        "claude: the delegate runs on the account, its CLAUDE_CONFIG_DIR an account's dir",
-        config.includes("/accounts/"),
-        config || "unset"
-      );
-    }
-    for (const [root, { skill }] of Object.entries(leg.roots)) {
-      const of = (what: string) => answers.get(`${root}|${what}`) ?? "";
-      kit.check(
-        `${leg.key} (${root}): (a) ${skill}'s SKILL.md and ${DETAIL} read inside the workspace, each its own content`,
-        of("read-skill").includes(SKILL_TOKEN) &&
-          of("read-detail") === DETAIL_TOKEN,
-        `SKILL.md: ${of("read-skill").slice(-160)}; ${DETAIL}: ${of("read-detail")}`
-      );
-      kit.check(
-        `${leg.key} (${root}): (b) an append to ${DETAIL}, a new file in the skill and moving the skill's entry away are each refused (EROFS or EPERM)`,
-        REFUSED.test(of("append-detail")) &&
-          REFUSED.test(of("new-file")) &&
-          REFUSED.test(of("move-entry")),
-        `append: ${of("append-detail")}; new file: ${of("new-file")}; move: ${of("move-entry")}`
-      );
-    }
-    for (const what of Object.keys(leg.hidden ?? {})) {
-      const answer = answers.get(`hidden|${what}`) ?? "";
-      kit.check(
-        `${leg.key}: (c) the agent dir's ${PI_MODELS} stays hidden as a credential store`,
-        answer !== "" && !answer.includes("mockpi"),
-        answer || "no answer"
-      );
-    }
+/** What one leg left: its command's answers, and its clone's placed copy as the host held it then. */
+interface Answered {
+  readonly answers?: Map<string, string>;
+  readonly leg: Leg;
+  readonly placed?: {
+    readonly kept: boolean;
+    readonly layout: { ok: boolean; words: string };
+  };
+}
+
+/**
+ * Leg `leg`'s answers, once a request carries its command's output: any
+ * request whose body holds the command's last line, spelled whole only in its
+ * output (a harness may add words of its own after the tool's result). Its
+ * clone's placed copy is read then, and only then is the delegate let finish
+ * ({@link released}): an item's end retires its workspace, clone and all
+ * (hub work-items.ts `settle`).
+ */
+const watch = async (
+  fleet: Fleet,
+  leg: Leg,
+  clone: string | undefined
+): Promise<Answered> => {
+  const carried = await until(
+    `${leg.key}'s command output`,
+    () =>
+      fleet.seen.find((one) => one.body.includes(`FR|${leg.key}|end|end|done`)),
+    Boolean,
+    600_000
+  ).catch(() => undefined);
+  const copy =
+    leg.roots.placed && clone
+      ? join(clone, projectClaudeRelative("skills", PLACED))
+      : undefined;
+  const placed = copy
+    ? { layout: await linkedCopy(copy, PLACED), kept: await untouched(copy) }
+    : undefined;
+  released.add(leg.key);
+  return {
+    leg,
+    ...(carried ? { answers: answersOf(carried.body, leg.key) } : {}),
+    ...(placed ? { placed } : {}),
+  };
+};
+
+/** (a) and (b) for each leg, every leg watched at once ({@link watch}). */
+const judge = async (
+  kit: Kit,
+  fleet: Fleet,
+  among: readonly Leg[],
+  clones: ReadonlyMap<string, string>
+) => {
+  const all = await Promise.all(
+    among.map((leg) => watch(fleet, leg, clones.get(leg.key)))
+  );
+  for (const one of all) {
+    report(kit, fleet, one);
+  }
+};
+
+/** One leg's checks, from what {@link watch} read. */
+const report = (kit: Kit, fleet: Fleet, { answers, leg, placed }: Answered) => {
+  if (placed) {
+    kit.check(
+      `${leg.key}: the project's skill is placed in its clone, a link into the clone's tree store, unchanged on the host after the command`,
+      placed.layout.ok && placed.kept,
+      `${placed.layout.words}; ${placed.kept ? "kept" : "changed"}`
+    );
+  }
+  if (!answers) {
+    kit.check(
+      `${leg.key}: the delegate's command ran in its workspace`,
+      false,
+      unanswered(fleet, leg.key)
+    );
+    return;
+  }
+  if (leg.key === "claude") {
+    const config = answers.get("env|config") ?? "";
+    kit.check(
+      "claude: the delegate runs on the account, its CLAUDE_CONFIG_DIR an account's dir",
+      config.includes("/accounts/"),
+      config || "unset"
+    );
+  }
+  for (const [root, { skill }] of Object.entries(leg.roots)) {
+    const of = (what: string) => answers.get(`${root}|${what}`) ?? "";
+    kit.check(
+      `${leg.key} (${root}): (a) ${skill}'s SKILL.md and ${DETAIL} read inside the workspace, each its own content`,
+      of("read-skill").includes(SKILL_TOKEN) &&
+        of("read-detail") === DETAIL_TOKEN,
+      `SKILL.md: ${of("read-skill").slice(-160)}; ${DETAIL}: ${of("read-detail")}`
+    );
+    kit.check(
+      `${leg.key} (${root}): (b) an append to ${DETAIL}, a new file in the skill and moving the skill's entry away are each refused (EROFS or EPERM)`,
+      REFUSED.test(of("append-detail")) &&
+        REFUSED.test(of("new-file")) &&
+        REFUSED.test(of("move-entry")),
+      `append: ${of("append-detail")}; new file: ${of("new-file")}; move: ${of("move-entry")}`
+    );
+  }
+  for (const what of Object.keys(leg.hidden ?? {})) {
+    const answer = answers.get(`hidden|${what}`) ?? "";
+    kit.check(
+      `${leg.key}: (c) the agent dir's ${PI_MODELS} stays hidden as a credential store`,
+      answer !== "" && !answer.includes("mockpi"),
+      answer || "no answer"
+    );
   }
 };
 
@@ -516,25 +574,12 @@ const spec: Spec = {
         projectId: project.id,
       });
       const clones = await delegate(fleet, parent, src, LEGS);
-      await judge(kit, fleet, LEGS);
-      const placedCopies = [...clones.values()].map((clone) =>
-        join(clone, projectClaudeRelative("skills", PLACED))
-      );
-      const placedLayout = await Promise.all(
-        placedCopies.map((path) => linkedCopy(path, PLACED))
-      );
+      await judge(kit, fleet, LEGS, clones);
+      const kept = await Promise.all(copies.map(untouched));
       check(
-        "the project's skill is placed in each clone, a link into the clone's tree store",
-        placedLayout.every((row) => row.ok),
-        placedLayout.map((row) => row.words).join("; ")
-      );
-      const kept = await Promise.all(
-        [...copies, ...placedCopies].map(untouched)
-      );
-      check(
-        "(b) every copy on the host is unchanged: no byte appended, no new file, nothing moved",
+        "(b) the machine's copies are unchanged: no byte appended, no new file, nothing moved",
         kept.every(Boolean),
-        [...copies, ...placedCopies]
+        copies
           .map((path, at) => `${path}: ${kept[at] ? "kept" : "changed"}`)
           .join("; ")
       );
@@ -567,7 +612,7 @@ const spec: Spec = {
         projectId: project.id,
       });
       const envClone = await delegate(fleet, lead, src, [leg]);
-      await judge(kit, fleet, [leg]);
+      await judge(kit, fleet, [leg], envClone);
       check(
         "(c) pi's skill in the agent dir elsewhere is unchanged on the host",
         await untouched(join(elsewhere, "skills", SKILL)),
