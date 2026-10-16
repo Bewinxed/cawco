@@ -92,7 +92,7 @@ const AFTER_MOVE = /AFTER-MOVE-\d/;
 const STOPPED_LINE = /ended between turns in \d+ ms/;
 const CARRIED_LINE = /carried, \d+ entr/;
 /** The hub's and agent's lines about moves, for a failed case to show. */
-const MOVE_LINE = /\[at-limit\]|\[accounts\]|\[carry\]/;
+const MOVE_LINE = /\[at-limit\]|\[accounts\]|\[carry\]|\[rebalance\]/;
 /** The agent's lines about taking its sessions over, and its own starts. */
 const CUSTODY_LINE = /\[custody\]|\[rebalance\]|agent started|restart/i;
 /** A move pending on its machine says it goes as that machine connects again. */
@@ -354,19 +354,17 @@ const run = async (kit: Kit) => {
    * and labelled: joined, the agent's alone filled any tail cut short.
    */
   const linesAbout = async (id: string) => {
-    const about = (log: string) =>
+    const about = (log: string, kept: RegExp, last: number) =>
       log
         .split("\n")
-        .filter(
-          (line) =>
-            line.includes(id) || MOVE_LINE.test(line) || CUSTODY_LINE.test(line)
-        )
-        .slice(-30);
+        .filter((line) => line.includes(id) || kept.test(line))
+        .slice(-last);
+    // The hub's decisions last: a report that keeps only the tail keeps them.
     return [
-      "--- hub ---",
-      ...about(await fleet.logs("hub")),
       "--- agent ---",
-      ...about(await fleet.logs("agent")),
+      ...about(await fleet.logs("agent"), CUSTODY_LINE, 12),
+      "--- hub ---",
+      ...about(await fleet.logs("hub"), MOVE_LINE, 25),
     ];
   };
 
