@@ -85,6 +85,31 @@ surface, "Approved look" or "New look" on the same cropped pictures
 `--approve` command each "New look" pick runs; the manifest carries it too.
 Open the folder with `artifact_create(kind: "preview", dir)`.
 
+## The style snapshot and the hub tape
+
+```sh
+bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] [--approve]   # computed styles, boxes, overflow, forced states
+bun scripts/probe-kit/run.ts web surfaces [--surfaces=a,b] [--approve surfaces]   # the same surfaces' pixels
+bun scripts/probe-kit/run.ts style-snapshot --coverage                      # style-snapshot-coverage.json
+bun scripts/probe-kit/run.ts style-snapshot --record                        # the hub tape, again
+```
+
+`style-snapshot` reads every element of every surface (`surfaces/catalogue.ts`)
+at desk 1440, tablet 820 and phone 390, light and dark, and the desk once
+with reduced motion: its computed style, its box to 0.5px, its
+`::before`/`::after`, its look under `:hover` and `:focus-visible` (forced
+through CDP), and whether it spills or stands outside what holds it. Each
+element is keyed by its DOM path from the surface's root, never a class.
+`PASS style-snapshot: 0 differences`, or one `FAIL` line per difference.
+
+Both read a hub on tape (`hub-tape.ts`, `fixtures/style-snapshot/hub-tape.json.gz`):
+a scratch fleet's hub (`surfaces/scene.ts`) recorded once and answered back
+byte for byte, with the page's clock held at the recording's moment. No
+fleet stands up, so both run inside any workspace, and two runs read the
+same. A request the tape never saw is answered 404 and named in a `NOTE`.
+Record again (`--record`) when the scene or the dashboard's reads change,
+then approve again.
+
 ## A spec that delegates runs on the host
 
 A scratch fleet whose spec delegates cuts workspaces, and every workspace runs
