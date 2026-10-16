@@ -14,9 +14,10 @@
         return "Reading the fleet";
       case "connecting":
         return "Connecting…";
-      default:
-        return "Hub unreachable";
+      case "unreachable":
+        break;
     }
+    return "Hub unreachable";
   }
 </script>
 

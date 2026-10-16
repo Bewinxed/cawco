@@ -181,13 +181,15 @@ const resultArtifact = (written: {
         artifactId: need(written.artifactId, "artifactId"),
         ...shown,
       };
-    default:
-      return {
-        kind: written.kind,
-        path: need(written.path, "path"),
-        ...shown,
-      };
+    case "file":
+    case "post":
+      break;
   }
+  return {
+    kind: written.kind,
+    path: need(written.path, "path"),
+    ...shown,
+  };
 };
 
 const taskRef = () =>

@@ -67,9 +67,10 @@ export const wordsOf = (state: FunnelState): string => {
       return `Funnel is live at ${state.base}`;
     case "needs-owner":
       return state.step;
-    default:
-      return state.reason;
+    case "wanted":
+      break;
   }
+  return state.reason;
 };
 
 interface Ran {

@@ -743,7 +743,10 @@ export class FinderState {
         return { result: stop.result, moment: stop.moment };
       case "goto":
         return { result: stop.result, moment: null };
-      default:
+      case "act":
+      case "fold":
+      case "wait-item":
+      case "waiting":
         return null;
     }
   }

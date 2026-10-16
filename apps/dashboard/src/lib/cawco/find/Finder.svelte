@@ -173,12 +173,14 @@
       case "wait-item":
         onopenwaiting(stop.item);
         return;
-      default: {
-        const opening = finder.opening();
-        if (opening) {
-          onopen(opening);
-        }
-      }
+      case "goto":
+      case "moment":
+      case "row":
+        break;
+    }
+    const opening = finder.opening();
+    if (opening) {
+      onopen(opening);
     }
   }
 

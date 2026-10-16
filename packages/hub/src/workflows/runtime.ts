@@ -270,9 +270,12 @@ const loggedArgs = (
       return keep("slug", "inputs");
     case "sleep":
       return keep("ms");
-    default:
-      return null;
+    case "notes":
+    case "now":
+    case "trace":
+      break;
   }
+  return null;
 };
 
 /**
@@ -1290,9 +1293,14 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         return { text: String(args.text) };
       case "trace":
         return { edgeId: args.edgeId, scope: args.scope };
-      default:
-        throw new Error(`Unknown workflow effect ${kind}.`);
+      case "ask":
+      case "run":
+      case "sleep":
+      case "spawn":
+      case "workflow":
+        break;
     }
+    throw new Error(`Unknown workflow effect ${kind}.`);
   };
 
   /** A question: its step parked, its question in the ledger. */
@@ -1483,9 +1491,20 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           return {};
         case "workflow":
           return await openChild(run, seq, args);
-        default:
-          throw new Error(`${kind} is not a call a run waits on.`);
+        case "checkpoint":
+        case "exec":
+        case "exists":
+        case "jev":
+        case "log":
+        case "notes":
+        case "notify":
+        case "now":
+        case "state-get":
+        case "state-set":
+        case "trace":
+          break;
       }
+      throw new Error(`${kind} is not a call a run waits on.`);
     },
     askTimedOut(runId, seq) {
       const run = db.getWorkflowRun(runId);

@@ -470,9 +470,11 @@
         return `${ownerMachine} couldn't reach the page's server`;
       case "closed":
         return "This preview is closed";
-      default:
-        return `${ownerMachine} isn't answering`;
+      case "machine":
+      case null:
+        break;
     }
+    return `${ownerMachine} isn't answering`;
   });
   /** Open its session, beside Try again, wherever this pane is not that session's own. */
   const offerSession = $derived(!!owner && (linkSession || ownTab));
@@ -600,9 +602,11 @@
         return "Waking…";
       case "live":
         return connected || served ? null : "Compiling…";
-      default:
-        return null;
+      case "error":
+      case undefined:
+        break;
     }
+    return null;
   });
   const compileErrors = $derived(
     staged?.status === "live" ? staged.errors : []

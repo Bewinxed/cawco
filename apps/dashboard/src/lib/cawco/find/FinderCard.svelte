@@ -92,9 +92,10 @@
       case "commit":
       case "file":
         return sessionHref(result.conversation.id);
-      default:
-        return null;
+      case "machine":
+        break;
     }
+    return null;
   }
 
   async function go(href: string | null) {

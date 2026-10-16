@@ -1614,17 +1614,18 @@ const unpushed = (
         kind: "done",
         line: "Not pushed: this workspace's repository has no remote.",
       };
-    default:
-      return {
-        kind: "refused",
-        line: refusedLine(
-          pushed,
-          { head: "Not pushed", target: `branch ${branch}` },
-          workspace,
-          machine
-        ),
-      };
+    case "refused":
+      break;
   }
+  return {
+    kind: "refused",
+    line: refusedLine(
+      pushed,
+      { head: "Not pushed", target: `branch ${branch}` },
+      workspace,
+      machine
+    ),
+  };
 };
 
 /** How long a tray shows a finished item before it leaves (the dashboard's hold). */
@@ -4946,17 +4947,18 @@ export const createWorkItems = ({
           text: `The checks passed, but the work did not land: before pushing to ${base}, the hub runs the repository's lint and typecheck on your commits as they stand on top of origin/${base}, and ${failing.length > 0 ? failing.join(" and ") : "the dependency install"} failed. Your branch is now on top of origin/${base}. Fix it, commit, and call finish_item again.\n\n${lines}`,
         };
       }
-      default:
-        return {
-          kind: "refused",
-          line: refusedLine(
-            outcome,
-            { head: "Not landed", target: base },
-            workspace,
-            machineName(workspace.machineId)
-          ),
-        };
+      case "refused":
+        break;
     }
+    return {
+      kind: "refused",
+      line: refusedLine(
+        outcome,
+        { head: "Not landed", target: base },
+        workspace,
+        machineName(workspace.machineId)
+      ),
+    };
   };
 
   /**
@@ -5099,9 +5101,10 @@ export const createWorkItems = ({
       case "branch":
       case "pr":
         return landOnBranch(workspace, item, said);
-      default:
-        return landOnBase(workspace, item, checks);
+      case "main":
+        break;
     }
+    return landOnBase(workspace, item, checks);
   };
 
   /**

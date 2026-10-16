@@ -455,6 +455,9 @@ export const installFor = (lockfile: string | null): MoveInstall | null => {
         argv: ["yarn", "install", "--frozen-lockfile"],
         command: "yarn install --frozen-lockfile",
       };
+    case null:
+      return null;
+    // `lockfile` is a plain string, a file name read off the repository: no other has an install.
     default:
       return null;
   }

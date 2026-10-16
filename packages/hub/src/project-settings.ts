@@ -285,14 +285,14 @@ export const createProjectSettings = ({
         return reviewSet(project, asked);
       case "set_apple_gate":
         return appleGateSet(project, asked);
-      default: {
-        const to = asked.lands ?? refuse("set_lands names main, branch or pr.");
-        if (project.lands === to) {
-          refuse(`This project's work lands on ${to} already.`);
-        }
-        return { kind: "set_lands", lands: to };
-      }
+      case "set_lands":
+        break;
     }
+    const to = asked.lands ?? refuse("set_lands names main, branch or pr.");
+    if (project.lands === to) {
+      refuse(`This project's work lands on ${to} already.`);
+    }
+    return { kind: "set_lands", lands: to };
   };
 
   /** Every change checked, else the first refusal; two changes of one kind are refused. */
@@ -352,7 +352,7 @@ export const createProjectSettings = ({
       case "set_runs_on":
         await runsOn(project.id, change.runsOn);
         break;
-      default:
+      case "set_lands":
         await edit(project.id, { lands: change.lands });
     }
     return [projectSettingWords(change)];

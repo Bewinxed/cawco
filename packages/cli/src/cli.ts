@@ -821,9 +821,10 @@ const run = async (argv: string[]): Promise<number> => {
       return runPairing(args);
     case "service":
       return runService(args);
-    default:
-      throw new UsageError(`unknown command ${args.command}`);
+    case undefined:
+      break;
   }
+  throw new UsageError(`unknown command ${args.command}`);
 };
 
 const cliArgs = Bun.argv.slice(2);

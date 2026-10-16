@@ -34,7 +34,13 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
     }
     case "accounts":
       return cawco.accounts?.accounts.length ?? null;
-    default:
+    case "connections":
+    case "devices":
+    case "models":
+    case "phone":
+    case "previews":
+    case "spend":
+    case "updates":
       return null;
   }
 }
@@ -77,7 +83,7 @@ export function badgeOf(
       return accountFaults();
     case "updates-waiting":
       return updatesWaiting();
-    default: {
+    case "fleet-faults": {
       const path = `/config/${section.slug}`;
       return allFaults(store).filter(
         (fault) => SCOPE_ANCHOR[fault.scope] === path

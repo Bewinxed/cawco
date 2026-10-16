@@ -576,10 +576,15 @@ export function toTranscript(
         }
         break;
       }
-      default:
-        // System updates, skill activations, user shells and switches of
-        // agent, model or location: no one's words, and the live stream
-        // draws none of them.
+      // System updates, skill activations, user shells and switches of
+      // agent, model or location: no one's words, and the live stream
+      // draws none of them.
+      case "agent-switched":
+      case "location-switched":
+      case "model-switched":
+      case "shell":
+      case "skill":
+      case "system":
         break;
     }
   }

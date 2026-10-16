@@ -284,9 +284,11 @@ export const waitForMcp = async (
                 why: `still connecting after ${timeoutMs / 1000} s`,
               },
             ];
-          default:
-            return [];
+          case "connected":
+          case "disabled":
+            break;
         }
+        return [];
       });
     }
     if (over) {

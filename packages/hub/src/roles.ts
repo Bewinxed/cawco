@@ -279,15 +279,16 @@ export const refusal = (role: SessionRole, name: string): string => {
       return `${name} isn't available here: only sessions you started file, change or start tasks or change fleet settings, and this one is a delegate, work item or workflow step. Hand the change to the session that started it.`;
     case "curator":
       return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
-    default:
-      if (name === "memory_propose") {
-        return "memory_propose belongs to a project's Caw and its memory curator: write what you learned with memory_note, and the curator proposes it to the person.";
-      }
-      if (TRIAGE_TOOLS.includes(name as (typeof TRIAGE_TOOLS)[number])) {
-        return `${name} belongs to a fleet-watch triage run.`;
-      }
-      return CURATOR_OWN.includes(name as (typeof CURATOR_OWN)[number])
-        ? `${name} belongs to a project's memory curator.`
-        : `${name} belongs to a project's Caw.`;
+    case "worker":
+      break;
   }
+  if (name === "memory_propose") {
+    return "memory_propose belongs to a project's Caw and its memory curator: write what you learned with memory_note, and the curator proposes it to the person.";
+  }
+  if (TRIAGE_TOOLS.includes(name as (typeof TRIAGE_TOOLS)[number])) {
+    return `${name} belongs to a fleet-watch triage run.`;
+  }
+  return CURATOR_OWN.includes(name as (typeof CURATOR_OWN)[number])
+    ? `${name} belongs to a project's memory curator.`
+    : `${name} belongs to a project's Caw.`;
 };

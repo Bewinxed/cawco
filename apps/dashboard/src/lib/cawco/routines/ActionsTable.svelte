@@ -33,9 +33,10 @@
         return { status: "waiting", word: "Outcome unknown", at: ended };
       case "denied":
         return { status: "neutral", word: "Denied", at: ended };
-      default:
-        return { status: "neutral", word: "Cancelled", at: ended };
+      case "cancelled":
+        break;
     }
+    return { status: "neutral", word: "Cancelled", at: ended };
   }
 </script>
 

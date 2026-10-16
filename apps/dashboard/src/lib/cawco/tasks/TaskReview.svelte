@@ -217,13 +217,15 @@
         return one.url;
       case "artifact":
         return `/artifact/${encodeURIComponent(one.artifactId)}`;
-      default:
-        // One of the task's outputs is where the hub copied it; any other
-        // file is where it stands in the project's folder.
-        return task.outputs.includes(one.path)
-          ? outputUrl(projectId, task.id, one.path)
-          : folderRawHref(projectId, one.path);
+      case "file":
+      case "post":
+        break;
     }
+    // One of the task's outputs is where the hub copied it; any other
+    // file is where it stands in the project's folder.
+    return task.outputs.includes(one.path)
+      ? outputUrl(projectId, task.id, one.path)
+      : folderRawHref(projectId, one.path);
   };
   const nameOf = (one: ResultArtifact): string =>
     one.kind === "link"
@@ -235,9 +237,11 @@
         return one.url;
       case "artifact":
         return artifactName(one);
-      default:
-        return one.path;
+      case "file":
+      case "post":
+        break;
     }
+    return one.path;
   };
   const GLYPH = {
     link: IconLink,

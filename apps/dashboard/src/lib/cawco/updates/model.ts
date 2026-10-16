@@ -260,9 +260,11 @@ export function cellFor(
         text: words(v, "available"),
         buttons: ["install"],
       };
-    default:
-      return current(12, u);
+    case "installed":
+    case "none":
+      break;
   }
+  return current(12, u);
 }
 
 /** Rows 8 and 12, the build is the newest there is: blank, or the keeper handover still under way. */

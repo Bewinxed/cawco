@@ -365,17 +365,18 @@ const messageOf = (row: ThreadMessageRow): ThreadMessage => {
         ...(row.tasks?.length ? { tasks: row.tasks } : {}),
         ...(row.files?.length ? { files: row.files } : {}),
       };
-    default:
-      return {
-        ...base,
-        author: "you",
-        body: row.body,
-        ...(row.images?.length ? { images: row.images } : {}),
-        ...(row.attachments?.length ? { attachments: row.attachments } : {}),
-        ...(row.question ? { question: row.question } : {}),
-        ...(row.answer ? { answer: row.answer } : {}),
-      };
+    case "you":
+      break;
   }
+  return {
+    ...base,
+    author: "you",
+    body: row.body,
+    ...(row.images?.length ? { images: row.images } : {}),
+    ...(row.attachments?.length ? { attachments: row.attachments } : {}),
+    ...(row.question ? { question: row.question } : {}),
+    ...(row.answer ? { answer: row.answer } : {}),
+  };
 };
 
 /** How long a thread's title runs: the first line of its first message, cut. */

@@ -1196,9 +1196,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return `${subject} did not answer: ${machine} couldn't open the way to it.`;
       case "closed":
         return `${subject} did not show: the panel was closed or showed something else first.`;
-      default:
-        return `${subject} answered, but not with a page the panel can show.`;
+      case "page":
+        break;
     }
+    return `${subject} answered, but not with a page the panel can show.`;
   };
   const machineOf = (row: ArtifactRow): string => {
     const machine = deps
