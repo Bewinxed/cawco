@@ -1090,16 +1090,30 @@ async function onSimulator(
     /** The screen's height in points: an iPhone 17 Pro Max's, else an iPhone 16 Pro's. */
     const height = which === "27" ? 956 : 874;
     /** A node wholly on screen: the tree keeps rows scrolled out of view at their frames there, where a tap lands on nothing. */
-    const onScreen = (frame?: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    }) =>
-      !!frame &&
-      frame.width > 0 &&
-      frame.y >= 0 &&
-      frame.y + frame.height <= height;
+    type Node = Awaited<ReturnType<typeof labels>>[number];
+    /**
+     * A node wholly in view: on screen (the tree keeps rows scrolled out of
+     * view at their frames there), and above the drawer's account row, which
+     * stands pinned at its foot over the list (Configure's row): a tap on a
+     * row under it lands on the account ("bewinxed"), whose tap is Keep Pro,
+     * and the paywall opens in the drawer's place.
+     */
+    const onScreen = (frame: Node["frame"], all: Node[]) => {
+      const foot = Math.min(
+        height,
+        ...all.flatMap((node) =>
+          node.label === "Configure" && node.frame && node.frame.y > height / 2
+            ? [node.frame.y - 8]
+            : []
+        )
+      );
+      return (
+        !!frame &&
+        frame.width > 0 &&
+        frame.y >= 0 &&
+        frame.y + frame.height <= foot
+      );
+    };
     /**
      * Taps what passes `test` once its frame holds still between two reads:
      * read off a list still moving (a project just folded), a tap lands on
@@ -1110,7 +1124,7 @@ async function onSimulator(
         const all = await labels();
         return {
           all,
-          frame: all.find((node) => test(node.label) && onScreen(node.frame))
+          frame: all.find((node) => test(node.label) && onScreen(node.frame, all))
             ?.frame,
         };
       };
@@ -1153,8 +1167,10 @@ async function onSimulator(
         `${reached ? "" : "not reached; "}main thread busy ${(at.share * 100).toFixed(1)}%${at.frames ? `: ${at.frames}` : ""}`
       );
     /** A node whose label passes `test` is on screen. */
-    const seen = async (test: (label: string) => boolean) =>
-      (await labels()).some((node) => test(node.label) && onScreen(node.frame));
+    const seen = async (test: (label: string) => boolean) => {
+      const all = await labels();
+      return all.some((node) => test(node.label) && onScreen(node.frame, all));
+    };
     /** The probe's card stands in front: its Deny on screen. */
     const card = () => seen((label) => label === "Deny");
     /**
