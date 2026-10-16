@@ -39,6 +39,7 @@
 import {
   HARNESSES,
   type Harness,
+  MACHINE,
   MODEL,
   type Reply,
   type Seen,
@@ -558,6 +559,18 @@ const keepDocuments = async (kit: Kit, fleet: KitFleet): Promise<void> => {
       listed.memoryDocs.map(({ path, scope }) => ({ path, scope }))
     )
   );
+  // The user-scope CLAUDE.md is on the machine before any session starts:
+  // each harness reads it off disk as it launches.
+  await until(
+    "the user-scope CLAUDE.md on the machine",
+    () =>
+      fleet.query<{ fleet: string | null }>(
+        "SELECT fleet FROM agents WHERE machine_id = ?",
+        MACHINE
+      )[0]?.fleet,
+    (report) => report?.includes('"memory":{"state":"applied"') === true,
+    60_000
+  ).catch(() => undefined);
 };
 
 export default spec;
