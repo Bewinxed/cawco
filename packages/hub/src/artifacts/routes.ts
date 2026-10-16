@@ -417,6 +417,14 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
+    // A sheet's stage as its doc keeps it, for the app's panel: never wakes the stage.
+    .get("/api/instances/:id/artifacts/:artifact/stage", ({ params }) => {
+      try {
+        return artifacts.stageOf(params.id, params.artifact);
+      } catch (error) {
+        return refused(error);
+      }
+    })
     // The artifact into its project's folder at artifacts/<name>/, one commit (artifact_promote).
     .post(
       "/api/instances/:id/artifacts/:artifact/promote",

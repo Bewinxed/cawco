@@ -131,7 +131,20 @@ public enum ShownFailure: String, Sendable {
     case server, machine, workspace, reach, closed, page
 }
 
+/// A sheet's stage as the hub keeps it in the sheet's doc (core stage.ts `StageState`).
+public typealias StageState = Components.Schemas.StageState
+public typealias StageError = Components.Schemas.StageError
+
 public extension HubConnection {
+    /// A sheet's stage as its doc keeps it (`meta.stage`), as the dashboard's
+    /// pane reads it from the doc: the hub's read of the doc alone, which
+    /// neither wakes the stage nor waits on it; nil before it was ever told.
+    func sheetStage(_ artifact: String, in instanceId: String) async throws -> StageState? {
+        let output = try await api.instances.sheetStage(.init(path: .init(id: instanceId, artifact: artifact)))
+        guard case let .ok(found) = output else { throw await TaskRefusal.reading(output) }
+        return try found.body.json.stage
+    }
+
     /// Every pin on one artifact, open and resolved, and the picks the session
     /// has not heard (`comment_read`'s route with `filter=all`, and the
     /// artifact's read for its state and `sentAt`), read together.

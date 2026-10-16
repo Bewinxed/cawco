@@ -9,6 +9,7 @@
     previewEnterUrl,
     previewRoute,
     type ShownFailure,
+    sheetWords,
   } from "@cawco/core";
   import { type PreviewMode, previewMode } from "@cawco/core/comments";
   import { type Snippet, untrack } from "svelte";
@@ -631,13 +632,13 @@
     switch (staged?.status) {
       case "starting":
         return served
-          ? "Starting the server…"
-          : `Starting the dev server in ${staged.dir}…`;
+          ? sheetWords.serverStarting
+          : sheetWords.starting(staged.dir);
       case "waking":
       case "asleep":
-        return "Waking…";
+        return sheetWords.waking;
       case "live":
-        return connected || served ? null : "Compiling…";
+        return connected || served ? null : sheetWords.compiling;
       default:
         return null;
     }
@@ -1730,16 +1731,14 @@
         transition:appear
       >
         <p class="sheet-error-title">
-          Doesn't compile: <code>{errorPlace(first)}</code>
+          {sheetWords.errorTitle} <code>{errorPlace(first)}</code>
         </p>
         <p class="sheet-error-line">{first.message.split("\n")[0]}</p>
         {#if first.frame}
           <pre class="sheet-error-frame">{first.frame}</pre>
         {/if}
         <p class="sheet-error-next">
-          {compileErrors.length > 1
-            ? `${compileErrors.length - 1} more besides. `
-            : ""}The session is told; the sheet redraws once it compiles.
+          {sheetWords.errorNext(compileErrors.length - 1)}
         </p>
       </div>
     {/if}
@@ -1750,22 +1749,21 @@
       <EmptyState
         icon={IconAlert}
         title={served
-          ? `The server on port ${served.port} isn't running`
-          : `The stage for ${staged.dir} didn't start`}
+          ? sheetWords.serverDownTitle(served.port)
+          : sheetWords.downTitle(staged.dir)}
       >
         {#snippet line()}
-          {staged.message ??
-            (served
-              ? "It ended before it answered."
-              : "Vite ended before it served the sheet.")} Try again starts it again.
+          {served
+            ? sheetWords.serverDownLine(staged.message ?? null)
+            : sheetWords.downLine(staged.message ?? null)}
         {/snippet}
         {#snippet action()}
           <Button
             icon={IconRefresh}
-            label="Try again"
+            label={sheetWords.tryAgain}
             onclick={retry}
             pending={retrying}
-            pendingLabel="Starting…"
+            pendingLabel={sheetWords.tryingAgain}
             size="sm"
             variant="outline"
           />

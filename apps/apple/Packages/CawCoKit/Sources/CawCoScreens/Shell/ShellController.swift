@@ -1763,9 +1763,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case let .press(source): (instant, trigger) = (false, source)
         }
         if let open = jumpCard, open.open {
+            #if DEBUG
+            PreviewProbe.say("shell jump close")
+            #endif
             if instant { open.leaveByKey() } else { open.close() }
             return
         }
+        #if DEBUG
+        PreviewProbe.say("shell jump open")
+        #endif
         // One still fading out of the card, or folding back, comes back from where it has reached.
         let card = jumpCard ?? {
             let made = JumpCard(hub: hub, home: home)
@@ -1798,6 +1804,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     func perform(_ command: RootViewController.ShellCommand) {
         // ⌘K closes Jump at once, its own field typing or not.
         if command == .jump, let card = jumpCard, card.open {
+            #if DEBUG
+            PreviewProbe.say("shell jump close")
+            #endif
             card.leaveByKey()
             return
         }
