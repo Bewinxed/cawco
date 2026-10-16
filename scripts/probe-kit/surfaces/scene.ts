@@ -20,6 +20,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet } from "../kit";
@@ -364,7 +365,8 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   await until(
     "the machine allowing Claude Code's subagents",
     () =>
-      Bun.file(join(fleet.home, ".claude", "cawco-fleet.json"))
+      // The agent's sidecar (denied-tools.ts `SIDECAR`), in the fleet's own HOME.
+      Bun.file(join(fleet.home, CLAUDE_DIR_NAME, "cawco-fleet.json"))
         .text()
         .catch(() => ""),
     (text) => text.length > 0 && !text.includes('"Task"'),
