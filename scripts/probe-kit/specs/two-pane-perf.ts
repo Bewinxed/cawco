@@ -29,12 +29,18 @@
  * Asserted on two panes: no task over two frames' budget (`LONG_TASK_MS`
  * each) on that slower CPU while streaming and typing; the main thread's
  * CPU per hub message streaming within `MESSAGE_SHARE` of one pane's (typing
- * noted); a switch reached for first (`point`, `focus`), in either layout,
- * no longer than `SWITCH_MS` on the slower CPU, its reach's task noted; a
- * cold switch within `COLD_SHARE` of one pane's (the owner's regression: a
- * second pane made switching five times the work), its own length noted;
- * and every key typed painting within `INPUT_MS` (Event Timing, the
- * entries an `interactionId` marks). Each phase's longest task on the
+ * noted); a cold switch within `COLD_SHARE` of one pane's (the owner's
+ * regression: a second pane made switching five times the work); and every
+ * key typed painting within `INPUT_MS` (Event Timing, the entries an
+ * `interactionId` marks).
+ *
+ * A SWITCH'S WORK IS COUNTED, NOT TIMED (owner: "count the work, don't time
+ * it"). From each switch's input to the frame that shows its pane, the
+ * trace's style recalculations and layouts that did anything are counted,
+ * with the elements they restyled (`workOf`), and its interaction is read
+ * off Event Timing (noted). Two panes' passes, each way of switching, are
+ * held within `PASS_SHARE` of one pane's in the same run, and no focus
+ * switch restyles more than `FOCUS_RESTYLED` elements. Each phase's longest task on the
  * slower CPU is noted against `LONG_TASK_MS`, its longest animation frame
  * by the scripts that filled it, and the hub's messages that took 4ms or
  * more by kind; every number is written to `numbers.json` in the spec's out
@@ -105,8 +111,22 @@ const SETTLE_MS = 900;
 const LANDING_MS = 300;
 /** Between two ways of switching: every pane a reach warmed has gone cold (warm.svelte.ts `COOL_MS`). */
 const REST_MS = 2000;
-/** The longest a switch's own task may take on the slower CPU, ms: two frames. */
-const SWITCH_MS = 100;
+/**
+ * How many more style and layout passes two panes' switches may make than
+ * one pane's, its five switches all told, each way of switching. The
+ * owner's "count the work, don't time it": a second pane's multiplier,
+ * read directly. Our own call.
+ */
+const PASS_SHARE = 1.1;
+/**
+ * The most elements a focus switch may restyle, from its input to the frame
+ * that shows its pane. Its pane was laid out while the focus rested, so what
+ * the switch restyles is the strip's tabs, the composer it trades, the
+ * rail's marks and what the shown pane changes, not every element the pane
+ * holds (778 to 1,307 of them when `.pane-settling` was lifted whole). Our
+ * own call.
+ */
+const FOCUS_RESTYLED = 400;
 /** A box holding this many elements or more is named when a switch changes it. */
 const ROOT_ELEMENTS = 100;
 /** How long after its press a switch's own changes are taken to be, ms, the page's clock. */
@@ -130,6 +150,15 @@ interface Reading {
   restyled: string;
   /** The longest task a switch set off, from it to `SETTLE_MS` after, CPU ms (switch phases). */
   switchCpu: number;
+  /**
+   * Each switch's interaction as Event Timing tells it (switch phases): its
+   * longest entry from the input to `SETTLE_MS` after, or none reported
+   * (the API reports no event under 16ms; a cold switch's `click()` is no
+   * interaction).
+   */
+  switchInputs: string[];
+  /** Each switch's work, counted (switch phases). */
+  work: SwitchWork[];
   /** The longest animation frame's account of itself: what ran in it. */
   worstFrame: string;
 }
@@ -154,7 +183,8 @@ interface Changed {
 }
 
 interface Cost {
-  events: [number, number][];
+  /** Each Event Timing entry an interaction marks: start, duration, event, its `interactionId`. */
+  events: [number, number, string, number][];
   frames: Frame[];
   /** Each hub message the page took: when, how long, and what it said it was. */
   messages: [number, number, string][];
@@ -246,7 +276,12 @@ function watchCost(): void {
   new PerformanceObserver((list) => {
     for (const entry of list.getEntries() as PerformanceEventTiming[]) {
       if (entry.interactionId) {
-        w.__cost.events.push([entry.startTime, entry.duration]);
+        w.__cost.events.push([
+          entry.startTime,
+          entry.duration,
+          entry.name,
+          entry.interactionId,
+        ]);
       }
     }
   }).observe(events);
@@ -389,39 +424,73 @@ const census = (page: Page): Promise<string> =>
  * styles the page) and then the layout (a box read); the class put back.
  * `.pane-settling` reveals by `visibility`, which the pane's every element
  * inherits; `.pane-hidden` by `content-visibility`, which none does.
- * `bare`: the rules that state `visibility: inherit` (the transcript's drawn
- * rows, over virtua's hiding) are lifted for the reveal and put back: an
- * inherited property a box states, even as `inherit`, takes it out of the
- * engine's cheap hand-down of a parent's change, so this says what they
- * cost the reveal.
+ * The engine hands a parent's `visibility` down without restyling a child
+ * ("Copies the values of any independent inherited properties from the
+ * parent that are not explicitly set in this style", Blink's
+ * computed_style.h) but not to every child; `lift` takes away, for the
+ * reveal only and put back after it, what can stop it, to say which does:
+ * `visibility`, the rules that state `visibility: inherit` (the
+ * transcript's drawn rows, over virtua's hiding); `inherit`, every
+ * declaration that states any property as `inherit` (the preflight's
+ * buttons among them); `motion`, every transition and animation (an
+ * element running one was restyled whole, Blink 2117143003).
  */
+type Lift = "visibility" | "inherit" | "motion";
+const LIFTS: Lift[] = ["visibility", "inherit", "motion"];
+const LIFT_SAID: Record<Lift, string> = {
+  visibility: "every `visibility: inherit` lifted",
+  inherit: "every declaration of `inherit` lifted",
+  motion: "every transition and animation off",
+};
 const revealAlone = (
   page: Page,
   selector: string,
   hides: string,
-  bare = false
+  lift: Lift | null = null
 ): Promise<string> =>
   page.evaluate(
-    ([find, name, lift]) => {
+    ([find, name, how]) => {
       const pane = document.querySelector<HTMLElement>(find);
       if (!pane) {
         return `no ${find}`;
       }
       // Into `@layer`, `@media` and nesting too: the app's sheets keep
       // most of their rules in layers.
-      const within = (rules: CSSRuleList): CSSStyleRule[] =>
-        [...rules].flatMap((rule) => [
-          ...(rule instanceof CSSStyleRule &&
-          rule.style.getPropertyValue("visibility") === "inherit"
-            ? [rule]
-            : []),
+      const within = (list: CSSRuleList): CSSStyleRule[] =>
+        [...list].flatMap((rule) => [
+          ...(rule instanceof CSSStyleRule ? [rule] : []),
           ...("cssRules" in rule ? within(rule.cssRules as CSSRuleList) : []),
         ]);
-      const inheriting = () =>
-        [...document.styleSheets].flatMap((sheet) => within(sheet.cssRules));
-      const lifted = lift ? inheriting() : [];
-      for (const rule of lifted) {
-        rule.style.removeProperty("visibility");
+      const lifts = (property: string) =>
+        how === "inherit" ||
+        (how === "visibility" && property === "visibility");
+      // Each declaration taken off, to be put back as it was.
+      const taken = (how === "motion" || !how ? [] : [...document.styleSheets])
+        .flatMap((sheet) => within(sheet.cssRules))
+        .flatMap((rule) =>
+          [...rule.style]
+            .filter(
+              (property) =>
+                lifts(property) &&
+                rule.style.getPropertyValue(property).trim() === "inherit"
+            )
+            .map(
+              (property) =>
+                [
+                  rule,
+                  property,
+                  rule.style.getPropertyPriority(property),
+                ] as const
+            )
+        );
+      for (const [rule, property] of taken) {
+        rule.style.removeProperty(property);
+      }
+      const still = document.createElement("style");
+      if (how === "motion") {
+        still.textContent =
+          "*, *::before, *::after { transition: none !important; animation: none !important; }";
+        document.head.append(still);
       }
       const inside = pane.getElementsByTagName("*").length;
       const last = pane.querySelector<HTMLElement>("*:last-child") ?? pane;
@@ -434,13 +503,15 @@ const revealAlone = (
       last.getBoundingClientRect();
       const laid = performance.now();
       pane.classList.add(name);
-      for (const rule of lifted) {
-        rule.style.setProperty("visibility", "inherit");
+      for (const [rule, property, priority] of taken) {
+        rule.style.setProperty(property, "inherit", priority);
       }
+      still.remove();
       document.body.getBoundingClientRect();
-      return `${inside} elements (${shown})${lift ? `, ${lifted.length} inherit rules lifted` : ""}: style ${(styled - at).toFixed(1)}ms, layout ${(laid - styled).toFixed(1)}ms`;
+      const what = how === "motion" ? "motion off" : `${taken.length} lifted`;
+      return `${inside} elements (${shown})${how ? `, ${what}` : ""}: style ${(styled - at).toFixed(1)}ms, layout ${(laid - styled).toFixed(1)}ms`;
     },
-    [selector, hides, bare] as const
+    [selector, hides, lift] as const
   );
 
 /**
@@ -851,6 +922,169 @@ function noteInputToShown(
   }
 }
 
+/** A switch's work, counted: from its input to the end of the frame that shows its pane. */
+interface SwitchWork {
+  /** Its passes by what ran them: the script that forced one (its own frame), or "the frame". */
+  by: Map<string, number>;
+  /** Layout passes that laid out anything. */
+  layouts: number;
+  /** Elements its style recalculations restyled, all told. */
+  restyled: number;
+  /** Its pane was shown within 2s; the window ran to `SETTLE_MS` otherwise. */
+  shown: boolean;
+  /** Style recalculations that restyled anything. */
+  styles: number;
+}
+
+/**
+ * Each switch's work counted off the trace, over the window
+ * `noteInputToShown` reads: the tasks from its input (`two-pane:switch:<n>`)
+ * to the end of the task holding the frame that shows its pane
+ * (`two-pane:shown:<n>`).
+ */
+function workOf(
+  own: MainTask[],
+  markAt: (mark: string) => number | undefined
+): SwitchWork[] {
+  const work: SwitchWork[] = [];
+  for (let n = 0; markAt(`two-pane:switch:${n}`) !== undefined; n += 1) {
+    const made = markAt(`two-pane:switch:${n}`) ?? 0;
+    const shown = markAt(`two-pane:shown:${n}`);
+    const frame =
+      shown === undefined
+        ? undefined
+        : own.find((task) => task.at <= shown && task.end >= shown);
+    const end = frame ? frame.end : made + SETTLE_MS * 1000;
+    const tasks = own.filter((task) => task.at >= made && task.at <= end);
+    const passes = tasks
+      .flatMap((task) => task.passes)
+      .filter((pass) => pass.elements > 0);
+    const by = new Map<string, number>();
+    for (const pass of passes) {
+      const who = `${pass.name === "Layout" ? "layout" : "style"} by ${pass.at.split(" ← ")[0]}`;
+      by.set(who, (by.get(who) ?? 0) + 1);
+    }
+    work.push({
+      by,
+      layouts: passes.filter((pass) => pass.name === "Layout").length,
+      restyled: tasks.reduce((sum, task) => sum + task.restyled, 0),
+      shown: shown !== undefined,
+      styles: passes.filter((pass) => pass.name !== "Layout").length,
+    });
+  }
+  return work;
+}
+
+/** A switch phase's work as a line: each switch's style and layout passes and elements restyled. */
+const workLine = (work: SwitchWork[]): string =>
+  work
+    .map(
+      (one) =>
+        `${one.styles} style / ${one.layouts} layout passes, ${one.restyled} elements${one.shown ? "" : " (not shown in 2s)"}`
+    )
+    .join("; ");
+
+/**
+ * Each part of a switch alone, a tab of `order` at a time: the drawn pane
+ * put away (`hideAlone`), the composer's half (`composerAlone`), a pane
+ * shown from put away (`content-visibility`), the tab not yet reached for,
+ * then, once `reach` has warmed it (`visibility`), shown as it stands and
+ * again with each of `LIFTS` taken away.
+ */
+async function noteAlone(
+  kit: Kit,
+  page: Page,
+  mode: Layout,
+  order: string[],
+  reach: (id: string) => Promise<void>
+): Promise<void> {
+  const putAway: string[] = [];
+  const warmed: string[] = [];
+  const bare: Record<Lift, string[]> = {
+    visibility: [],
+    inherit: [],
+    motion: [],
+  };
+  const hidden: string[] = [];
+  const composed: string[] = [];
+  const warm = ".pane.pane-settling";
+  for (const id of order) {
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(REST_MS);
+    hidden.push(await hideAlone(page));
+    composed.push(await composerAlone(page));
+    const pane = `.pane.pane-hidden[data-pane="${id}"]`;
+    putAway.push(await revealAlone(page, pane, "pane-hidden"));
+    await reach(id);
+    warmed.push(await revealAlone(page, warm, "pane-settling"));
+    for (const lift of LIFTS) {
+      bare[lift].push(await revealAlone(page, warm, "pane-settling", lift));
+    }
+  }
+  await page.mouse.move(0, 0);
+  kit.note(
+    `${mode} pane(s), a pane shown alone by \`content-visibility\` (\`.pane-hidden\` taken off): ${putAway.join("; ")}`
+  );
+  kit.note(
+    `${mode} pane(s), a pane shown alone by \`visibility\` (\`.pane-settling\` taken off): ${warmed.join("; ")}`
+  );
+  for (const lift of LIFTS) {
+    kit.note(
+      `${mode} pane(s), the same with ${LIFT_SAID[lift]}: ${bare[lift].join("; ")}`
+    );
+  }
+  kit.note(
+    `${mode} pane(s), the drawn pane put away alone (\`.pane-hidden\` put on): ${hidden.join("; ")}`
+  );
+  kit.note(
+    `${mode} pane(s), the composer's half of a switch laid out alone: ${composed.join("; ")}`
+  );
+}
+
+/** A switch phase's work, noted; nothing for a phase that made no switch. */
+function noteWork(kit: Kit, where: string, work: SwitchWork[]): void {
+  if (work.length === 0) {
+    return;
+  }
+  kit.note(
+    `${where}: each switch's work from its input to the frame that shows its pane: ${workLine(work)}`
+  );
+  const by = new Map<string, number>();
+  for (const one of work) {
+    for (const [who, n] of one.by) {
+      by.set(who, (by.get(who) ?? 0) + n);
+    }
+  }
+  kit.note(
+    `${where}: its switches' passes by what ran them, all told: ${[...by]
+      .sort((a, b) => b[1] - a[1])
+      .map(([who, n]) => `${who} ${n}`)
+      .join("; ")}`
+  );
+}
+
+/**
+ * Each switch's interaction as Event Timing tells it: the longest entry an
+ * interaction marks from its input (`made`, the page's clock) to
+ * `SETTLE_MS` after; nothing for a phase that made no switch.
+ */
+const inputsOf = (
+  events: Cost["events"],
+  made: number[] | undefined
+): string[] =>
+  (made ?? []).map((at) => {
+    const [longestEntry] = events
+      .filter(([start]) => start >= at && start < at + SETTLE_MS)
+      .sort((a, b) => b[1] - a[1]);
+    return longestEntry
+      ? `${longestEntry[2]} ${Math.round(longestEntry[1])}ms (interaction ${longestEntry[3]})`
+      : "none reported";
+  });
+
+/** The passes a switch phase's switches made, style and layout, all told. */
+const passesOf = (work: SwitchWork[]): number =>
+  work.reduce((sum, one) => sum + one.styles + one.layouts, 0);
+
 /**
  * A stream's script by self time, and the layouts script forced either side
  * of its frame's own (`forcedAround`): in the frame's callbacks, and in the
@@ -1056,8 +1290,11 @@ async function measure(
       restyled: string;
       switchCpu: number;
       to: number;
+      work: SwitchWork[];
     }
   >;
+  /** Each switch's input on the page's clock, by phase: where its Event Timing entries are read from. */
+  const madeAts: Partial<Record<Phase, number[]>> = {};
   // The main thread's CPU, off a DevTools trace's top-level tasks; in a
   // switch phase, the longest task of each switch's reach and of the switch
   // itself (its marks, `two-pane:reach:<n>` and `two-pane:switch:<n>`); and
@@ -1114,6 +1351,8 @@ async function measure(
       madeOf.set(task, made);
     }
     noteInputToShown(kit, `${mode} pane(s), ${name}`, own, markAt);
+    const work = workOf(own, markAt);
+    noteWork(kit, `${mode} pane(s), ${name}`, work);
     if (name === "stream") {
       noteStream(kit, `${mode} pane(s), stream`, main, own);
     }
@@ -1127,6 +1366,7 @@ async function measure(
       maxCpu: longestOf(own)?.cpu ?? 0,
       reachCpu: longestOf(reaches)?.cpu ?? 0,
       switchCpu: longestSwitch?.cpu ?? 0,
+      work,
       restyled: longest
         ? `${whichTask}${longest.restyled} elements in ${Math.round(longest.styleMs)}ms of style, ${Math.round(longest.layoutMs)}ms of layout [${longest.passes
             .filter((pass) => pass.ms >= 0.5)
@@ -1381,6 +1621,8 @@ async function measure(
     const after = new Map<string, number>();
     await page.waitForTimeout(REST_MS);
     await phase(how, async () => {
+      // A leg voided for pressure runs again whole: its inputs with it.
+      madeAts[how] = [];
       for (const [n, id] of order.entries()) {
         const tab = tabOf(id);
         await marked(`two-pane:reach:${n}`);
@@ -1419,6 +1661,7 @@ async function measure(
             pane: id,
           }
         );
+        madeAts[how].push(madeAt);
         await way.make(tab);
         await page.waitForTimeout(SETTLE_MS);
         const said = await page.evaluate(
@@ -1557,46 +1800,10 @@ async function measure(
   kit.note(
     `${mode} pane(s), point: the script in its ${presses.length} switches' longest tasks, by self time, all told: ${scriptOf(sampled, presses)}`
   );
-  // A pane shown alone, both ways: put away (`content-visibility`), the
-  // tab not yet reached for; then warm (`visibility`), its tab under the
-  // pointer.
-  const putAway: string[] = [];
-  const warmed: string[] = [];
-  const warmedBare: string[] = [];
-  const hidden: string[] = [];
-  const composed: string[] = [];
-  for (const id of order) {
-    await page.mouse.move(0, 0);
-    await page.waitForTimeout(REST_MS);
-    hidden.push(await hideAlone(page));
-    composed.push(await composerAlone(page));
-    const pane = `.pane.pane-hidden[data-pane="${id}"]`;
-    putAway.push(await revealAlone(page, pane, "pane-hidden"));
+  await noteAlone(kit, page, mode, order, async (id) => {
     await ways.point.reach(tabOf(id));
     await page.waitForTimeout(REACH_MS);
-    warmed.push(
-      await revealAlone(page, ".pane.pane-settling", "pane-settling")
-    );
-    warmedBare.push(
-      await revealAlone(page, ".pane.pane-settling", "pane-settling", true)
-    );
-  }
-  await page.mouse.move(0, 0);
-  kit.note(
-    `${mode} pane(s), a pane shown alone by \`content-visibility\` (\`.pane-hidden\` taken off): ${putAway.join("; ")}`
-  );
-  kit.note(
-    `${mode} pane(s), a pane shown alone by \`visibility\` (\`.pane-settling\` taken off): ${warmed.join("; ")}`
-  );
-  kit.note(
-    `${mode} pane(s), the same with every \`visibility: inherit\` rule lifted: ${warmedBare.join("; ")}`
-  );
-  kit.note(
-    `${mode} pane(s), the drawn pane put away alone (\`.pane-hidden\` put on): ${hidden.join("; ")}`
-  );
-  kit.note(
-    `${mode} pane(s), the composer's half of a switch laid out alone: ${composed.join("; ")}`
-  );
+  });
   // Which attributes a press's switch sets slowly, past the timed switches
   // (the wrapper is not free).
   const slowSets = await slowSetsIn(page, order.slice(0, 2), async (id) => {
@@ -1642,8 +1849,9 @@ async function measure(
   await page.close();
   const readings = {} as Record<Phase, Reading>;
   for (const name of PHASES) {
-    const { from, to, cpu, maxCpu, reachCpu, restyled, switchCpu } =
+    const { from, to, cpu, maxCpu, reachCpu, restyled, switchCpu, work } =
       spans[name];
+    const switchInputs = inputsOf(seen.events, madeAts[name]);
     const tasks = seen.tasks.filter(([at]) => at >= from && at < to);
     const events = seen.events.filter(([at]) => at >= from && at < to);
     const [worst] = seen.frames
@@ -1679,6 +1887,8 @@ async function measure(
       reachCpu: Math.round(reachCpu),
       restyled,
       switchCpu: Math.round(switchCpu),
+      switchInputs,
+      work,
       worstFrame: `${worst ? `${Math.round(worst[1])}ms frame: ${worst[2]}` : "no long frame"}; hub messages of 4ms or more: ${heavy || "none"}`,
     };
   }
@@ -1859,28 +2069,38 @@ const spec: Spec = {
       two.type.maxInput < INPUT_MS,
       `${two.type.interactions} interactions, the slowest ${two.type.maxInput}ms`
     );
-    // A switch the reader reached for first (a pointer resting on its tab,
-    // the focus resting on it) only paints: its pane was laid out in the
-    // reach. In either layout.
+    // A switch's work is counted, not timed: the style and layout passes
+    // from its input to the frame that shows its pane. A second pane adds
+    // none of them: what the owner felt was a switch's work multiplied.
+    for (const how of SWITCHES) {
+      const twoPasses = passesOf(two[how].work);
+      const onePasses = passesOf(one[how].work);
+      const restyledOf = (r: Reading) =>
+        r.work.reduce((sum, w) => sum + w.restyled, 0);
+      kit.check(
+        `two panes, ${how}: a switch's style and layout passes within ${PASS_SHARE}x one pane's`,
+        twoPasses <= onePasses * PASS_SHARE,
+        `${(twoPasses / Math.max(1, onePasses)).toFixed(2)}x: two panes ${twoPasses} passes over ${two[how].work.length} switches, one pane ${onePasses} over ${one[how].work.length}; elements restyled ${restyledOf(two[how])} against ${restyledOf(one[how])}`
+      );
+    }
+    // A switch the reader reached by the keyboard only shows what is new:
+    // its pane was laid out while the focus rested, so what it restyles is
+    // the tab strip, the composer and what the shown pane changes.
     for (const mode of ["one", "two"] as Layout[]) {
-      for (const how of ["point", "focus"] as Switch[]) {
-        const r = numbers[mode][how];
-        kit.check(
-          `${mode} pane(s), ${how}: the switch's longest task within ${SWITCH_MS}ms on a CPU ${SLOWER}x slower`,
-          r.switchCpu * SLOWER <= SWITCH_MS,
-          `the switch's longest task ${r.switchCpu}ms of CPU (${r.switchCpu * SLOWER}ms ${SLOWER}x slower), restyling ${r.restyled}; the reach's ${r.reachCpu}ms`
-        );
-      }
+      const { work } = numbers[mode].focus;
+      const most = Math.max(0, ...work.map((w) => w.restyled));
+      kit.check(
+        `${mode} pane(s), focus: no switch restyles more than ${FOCUS_RESTYLED} elements`,
+        most <= FOCUS_RESTYLED && work.length > 0 && work.every((w) => w.shown),
+        `the most ${most}; ${workLine(work)}`
+      );
     }
     // A switch nobody reached for first lays its pane out in the switch:
-    // held to one pane's, its own cost noted against two frames.
+    // held to one pane's.
     kit.check(
       `two panes, cold: the switch's longest task within ${COLD_SHARE}x one pane's`,
       two.cold.switchCpu <= one.cold.switchCpu * COLD_SHARE,
       `two panes ${two.cold.switchCpu}ms of CPU, one pane ${one.cold.switchCpu}ms`
-    );
-    kit.note(
-      `a cold switch's longest task is ${two.cold.switchCpu}ms of CPU (${two.cold.switchCpu * SLOWER}ms ${SLOWER}x slower) against the ${SWITCH_MS}ms of two frames: a pane nobody reached for is laid out whole as it is shown`
     );
   },
 };
