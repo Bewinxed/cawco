@@ -13400,6 +13400,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -13519,6 +13529,16 @@
           },
           "503": {
             "description": "deleteApiProjectsByIdViewsByName 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "deleteApiProjectsByIdViewsByName 504",
             "content": {
               "text/plain": {
                 "schema": {
