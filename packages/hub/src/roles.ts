@@ -181,6 +181,9 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     // Its own project's folder, read only (caw.ts): what an earlier delegate
     // handed in, from any machine.
     "folder_read",
+    // The project's design system, the builder's one way to write it
+    // (design-system.ts).
+    "design_write",
   ]),
   lead: new Set([
     ...CORE,

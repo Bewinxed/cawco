@@ -1,0 +1,136 @@
+<!doctype html>
+<!--
+  The Foundations page: the system drawn from its own custom properties,
+  nothing else. Replace every UPPERCASE name with the project's own (its
+  name, its custom properties, a token's value and source), fill each
+  section with one specimen per token, and delete these comments.
+
+  - Colour roles come first: the person checks them before anything else.
+  - Each specimen draws its token in use (ink on its surface, a radius on a
+    card, a shadow under a panel), labelled with its custom property, its
+    value and its source from manifest.json.
+  - The two columns set color-scheme light and dark, so every light-dark()
+    role shows both schemes side by side.
+  - Motion specimens move only under prefers-reduced-motion: no-preference.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <title>PROJECT foundations</title>
+    <link href="../tokens.css" rel="stylesheet" />
+    <style>
+      @layer tokens, page;
+      @layer page {
+        .foundations {
+          /* The page's own needs, mapped once onto the project's roles. */
+          --page-surface: var(--SURFACE);
+          --page-ink: var(--INK);
+          --page-quiet: var(--QUIET-INK);
+          --page-line: var(--BORDER);
+          --page-gap: var(--SPACE-STEP);
+          --page-face: var(--BODY-FACE);
+          font-family: var(--page-face);
+          color: var(--page-ink);
+          background: var(--page-surface);
+          margin: 0;
+          padding: var(--page-gap);
+        }
+        .schemes {
+          display: grid;
+          grid-template-columns: repeat(
+            auto-fit,
+            minmax(min(100%, 36rem), 1fr)
+          );
+          gap: var(--page-gap);
+        }
+        .scheme {
+          background: var(--page-surface);
+          color: var(--page-ink);
+          padding: var(--page-gap);
+        }
+        .scheme.light {
+          color-scheme: light;
+        }
+        .scheme.dark {
+          color-scheme: dark;
+        }
+        section {
+          margin-block-end: calc(var(--page-gap) * 2);
+        }
+        h1,
+        h2 {
+          text-wrap: balance;
+        }
+        p {
+          text-wrap: pretty;
+        }
+        .specimens {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+          gap: var(--page-gap);
+        }
+        .label {
+          color: var(--page-quiet);
+          border-block-start: 1px solid var(--page-line);
+          padding-block-start: calc(var(--page-gap) / 2);
+        }
+        .label code {
+          color: var(--page-ink);
+        }
+      }
+    </style>
+  </head>
+  <body class="foundations">
+    <h1>PROJECT foundations</h1>
+    <div class="schemes">
+      <!-- The same sections in each column: light, then dark. -->
+      <div class="scheme light">
+        <section id="colour">
+          <h2>Colour roles</h2>
+          <div class="specimens">
+            <!-- One per colour role: the role in use on its surface. -->
+            <figure>
+              <div style="background: var(--SURFACE); color: var(--ROLE)">
+                Aa
+              </div>
+              <figcaption class="label">
+                <code>--ROLE</code> VALUE · SOURCE
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+        <section id="backgrounds"><h2>Backgrounds</h2></section>
+        <section id="type">
+          <h2>Type</h2>
+          <!-- each step of the scale, set in its face, largest first -->
+        </section>
+        <section id="spacing">
+          <h2>Spacing</h2>
+          <!-- each step as a bar of its length -->
+        </section>
+        <section id="radii"><h2>Radii</h2></section>
+        <section id="borders"><h2>Borders</h2></section>
+        <section id="shadows">
+          <h2>Shadows</h2>
+          <!-- each level under a panel on its surface -->
+        </section>
+        <section id="transparency"><h2>Transparency and blur</h2></section>
+        <section id="motion">
+          <h2>Motion</h2>
+          <!-- each curve and duration, moving on hover -->
+        </section>
+        <section id="states">
+          <h2>Hover and press states</h2>
+          <!-- a control at rest, hover, press, focus, disabled, error -->
+        </section>
+        <section id="imagery">
+          <h2>Imagery</h2>
+          <!-- the assets/ images and icons -->
+        </section>
+        <section id="cards"><h2>Cards</h2></section>
+      </div>
+      <div class="scheme dark"><!-- the same sections --></div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+---
+name: design-system
+description: Build a project's design system from its own material (styles, components, site, brand kit, fonts, images) into design/ — DESIGN.md, DTCG tokens with a source per value, generated tokens.css, a SKILL.md and a Foundations page. Use for a "Build the design system" task, design tokens taken from a codebase or site, or a style guide made from a brand kit.
+---
+
+# Design system
+
+A project's **design system** is its `design/` folder: what it already looks like, written down so every later session builds in its look. You **extract**; you do not invent. Every value traces to something you read in the project's material, a decision page card, or the person's edit. There are no presets and no fixed token names: tokens are named for the project's own roles, as its code and brand already name them.
+
+`design_write` is the one writer of `design/`: it puts the folder at the root of the repository you work in (or in the project's folder on the hub when that is where you work), generates `tokens.css` from `tokens.json`, refuses a token with no source, and records a fingerprint of every file it writes. A file the person edited since, or one CawCo never wrote, is **kept**: left as they have it and listed under `kept` in the answer. Read every answer's `kept` and `missing`.
+
+## Steps
+
+1. **Read the material whole**: every stylesheet and theme file in the repository (global CSS, Tailwind or other config, CSS-in-JS themes, component styles), the components that carry the look (buttons, inputs, cards, navigation), the site at the URL in the project's `knowledge/`, the brand kit in `knowledge/brand/`, and the fonts and images in the folder's `assets/` (`folder_read` for the project's folder). Note each value with where it is: `src/app.css:12`, a URL, `knowledge/brand/visual.md:8`. Done when every source is read in full and every colour, face, size, step, radius, shadow, duration and curve it uses is in your notes with its place.
+2. **Write `manifest.json` first**, from [templates/manifest.json](templates/manifest.json): `sources` maps each token path you will make (`color.ink`) to where its value came from. Write it with `design_write`. Done when every value in your notes has a token path and a source sentence.
+3. **Write `tokens.json`** in DTCG, each token named for the role the project gives it (its code's `--brand-ink` is the role `ink`), its `$value` the CSS text, to [references/css.md](references/css.md). Copy the fonts and images the system uses into `design/fonts/` and `design/assets/` in the same call (`encoding: "base64"`). Done when `design_write` answers with `design/tokens.css` among `written` and no problem.
+4. **Write `DESIGN.md`** from [templates/DESIGN.md](templates/DESIGN.md): answer every question in [references/visual-foundations.md](references/visual-foundations.md) from the material, citing where each answer comes from, then the named rules and a recipe for each component the code has. Done when every question has an answer or a card for step 5.
+5. **Raise a decision page** for what the material cannot settle: two values for one role, a face the site never names, a scale the code contradicts. Load the `decision-page` skill and build one page, "Design decisions", one card per question quoting the evidence on each side, the option the material leans to marked. Wait for the picks, then write each into `tokens.json` and `DESIGN.md` with the source `decision page card <id>`. Done when every card is picked and written; when the material settles everything, there is no page.
+6. **Write the project's `SKILL.md`** from [templates/SKILL.md](templates/SKILL.md): the system's name and when a session reads it. Done when it names this project's system and nothing in it is left from the template.
+7. **Build the Foundations page** at `design/specimens/index.html` from [templates/foundations.html](templates/foundations.html): every section of the visual-foundations list drawn with the system's own custom properties, both schemes side by side, each specimen labelled with its token name and source. Show it with `artifact_create({ kind: "page", name: "foundations", html })`, the html being the page with `tokens.css`'s text in a `<style>` in place of its `<link>`. Read it back in both schemes and fix what a role draws wrong (ink on a surface it cannot be read on, a step the scale lacks). Done when every token appears on the page and both schemes read cleanly.
+8. **Hand in** with `task_result`: the Foundations artifact first, then the decision page; the summary names the sources read, what each decision settled, and every `kept` file with what you would change in it. In a repository, commit `design/` with your work. Done when `task_result` accepts it.
+
+## Again, later
+
+A second build reads the system as it stands first. Write only what the new material changes; `design_write` keeps every file the person edited, and those go in the hand-in as kept.

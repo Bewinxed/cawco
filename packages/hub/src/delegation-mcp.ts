@@ -72,6 +72,7 @@ type HubTool = ReturnType<typeof adminTool>;
 export const HUB_TOOLS: ReadonlySet<string> = new Set([
   "archive_workspace",
   "update_machines",
+  "design_write",
 ]);
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
@@ -158,6 +159,7 @@ const PROJECT_ONLY: ReadonlySet<string> = new Set([
   ...CAW_TOOLS,
   PROJECT_SETTINGS,
   "artifact_promote",
+  "design_write",
 ]);
 
 export function createDelegationMcp(options: {

@@ -1,0 +1,9 @@
+{
+  "sources": {
+    "color.ink": "src/styles/base.css:4 (--text: #1f2430), dark from src/styles/base.css:31",
+    "color.action": "https://example.com/ (the primary button's background)",
+    "font.body": "knowledge/brand/visual.md:12 (\"Body copy is set in …\")",
+    "radius.card": "decision page card radius"
+  },
+  "files": {}
+}

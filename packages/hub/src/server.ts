@@ -434,6 +434,7 @@ import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import type { SendDelivery, SendHold } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree } from "./delegation-tree";
+import { createDesignSystem, DESIGN_WRITE_FILES } from "./design-system";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
 import {
@@ -547,6 +548,8 @@ import {
 import { createProjectEdits, ProjectEditRefusal } from "./project-edit";
 import {
   changeFolderFiles,
+  FOLDER_CONTENT_LIMIT,
+  FOLDER_ENCODINGS,
   YOU as FOLDER_YOU,
   FolderRefusal,
   folderFileNames,
@@ -17651,7 +17654,19 @@ export const createServer = (
    *   /api/agents/:id/update`: the check runs at once; installing asks the
    *   person first when the hub requires paired devices (admin-asks.ts),
    *   and runs at once while it trusts its network.
+   * - `design_write`: the project's design system, written at the root of
+   *   the caller's repository or in its project's folder (design-system.ts).
    */
+  const designSystem = createDesignSystem({
+    run: (machineId, cwd, cmd, timeoutMs) =>
+      runOnMachine(machineId, cwd, cmd, timeoutMs, undefined, {
+        what: "command",
+      }),
+    ownMachineId,
+    folderChanged: (projectId) => {
+      tasks.touched(projectId);
+    },
+  });
   const hubTools = (actor: InstanceRow | undefined) => {
     const me = (): InstanceRow => {
       if (!actor) {
@@ -17769,6 +17784,23 @@ export const createServer = (
           );
           return ok({ found, updates });
         }
+      ),
+      adminTool(
+        "design_write",
+        "Write files of the project's design system (design/, paths inside it); bytes as base64. tokens.css is generated from tokens.json; every token needs a source in manifest.json. A file the person edited is kept, not overwritten.",
+        {
+          files: z
+            .array(
+              z.object({
+                path: z.string().min(1),
+                content: z.string().max(FOLDER_CONTENT_LIMIT),
+                encoding: z.enum(FOLDER_ENCODINGS).optional(),
+              })
+            )
+            .min(1)
+            .max(DESIGN_WRITE_FILES),
+        },
+        async ({ files }) => ok(await designSystem.write(me(), files))
       ),
     ];
   };
