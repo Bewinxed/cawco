@@ -17,8 +17,9 @@
  * the owner's, with a start card per service; desk light, a card opens the
  * sign-in form in the page.
  */
-import type { ConnectionView } from "@cawco/core";
+
 import type { Page } from "playwright-core";
+import type { ConnectionView } from "../../../../packages/core/src/index";
 import { until } from "../../../scratch-fleet";
 import {
   type Kit,
@@ -115,7 +116,8 @@ async function checkRows(kit: Kit, fleet: KitFleet, page: Page, at: string) {
     const row = read.rows.find((each) => each.name === label);
     kit.check(
       `${label}: its state word is the hub's ${one.state}, its account the hub's (${at})`,
-      row?.state === one.state &&
+      row !== undefined &&
+        row.state === one.state &&
         row.word === WORD[one.state] &&
         row.meta === one.account,
       JSON.stringify(row)
