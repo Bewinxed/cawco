@@ -20,8 +20,8 @@
  * - I is interrupted by its parent (`interrupt_delegate`, the fleet's
  *   pause) mid-turn and put to sleep at rest: left alone the same way.
  *
- * Then the retire sweep, F's item's end set back past its two idle hours,
- * retires F's workspace.
+ * Then F's workspace, its item over and nothing of its own in it, retires on
+ * its own (hub work-items.ts `settle`).
  *
  * - C is in a long Bash, its open turn on record (`turn_open_at`), when the
  *   agent and the hub stop; its process is killed through the keeper while
@@ -47,8 +47,8 @@ const WAIT = "mcp__cawco__wait_item";
 const STILL_OPEN = "Your work item is still open: continue it.";
 /** Claude Code's conversation gone (core `CLAUDE_CONVERSATION_GONE`), its opening words. */
 const CONVERSATION_GONE = "This Claude Code conversation is gone";
-/** Past the retire rule's two idle hours (workspace-retire.ts `RETIRE_IDLE_MS`). */
-const BACKDATE_MS = 3 * 3_600_000;
+/** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
+const SETTLE_MS = 120_000;
 /** The hub's sweep period (work-items.ts `BUDGET_SWEEP_MS`), and two of them with room. */
 const SWEEP_MS = 30_000;
 const TWO_SWEEPS_MS = 2 * SWEEP_MS + 10_000;
@@ -421,33 +421,27 @@ const holdsStand = async ({ check, fleet, a, i }: Probe, asleepAt: number) => {
   );
 };
 
-/** The retire sweep, F's end set back past its idle hours, retires F's workspace. */
+/**
+ * F's item over, its workspace holding nothing of its own (no commit, no
+ * change), retires on its own once nothing holds it (hub work-items.ts
+ * `settle`).
+ */
 const retireF = async ({ check, fleet, f }: Probe) => {
-  const then = Date.now() - BACKDATE_MS;
-  fleet.write(
-    "UPDATE work_items SET ended_at = ? WHERE id = ?",
-    then,
-    f.workItemId
-  );
-  fleet.write(
-    "UPDATE instances SET turn_ended_at = ?, last_request_at = ? WHERE id = ?",
-    then,
-    then,
-    f.instanceId
-  );
-  const swept = await fleet.api<{
-    failed: { workspaceId: string; reason: string }[];
-    retired: { workspaceId: string }[];
-  }>("/api/workspaces/retire", {});
-  const [workspace] = fleet.query<{ state: string }>(
-    "SELECT state FROM workspaces WHERE id = ?",
-    f.workspaceId
-  );
+  const stateOf = () =>
+    fleet.query<{ state: string }>(
+      "SELECT state FROM workspaces WHERE id = ?",
+      f.workspaceId
+    )[0]?.state;
+  const state = await until(
+    "F's workspace retired",
+    stateOf,
+    (now) => now === "archived",
+    SETTLE_MS
+  ).catch(stateOf);
   check(
-    "the retire sweep retires F's workspace: its row archived",
-    swept.retired.some((one) => one.workspaceId === f.workspaceId) &&
-      workspace?.state === "archived",
-    `${JSON.stringify(swept)}; F's workspace ${workspace?.state}`
+    "F's workspace retires on its own once its item is over: its row archived",
+    state === "archived",
+    `F's workspace ${state}`
   );
 };
 

@@ -209,7 +209,7 @@
         title: "This workspace holds work that is nowhere else",
         body: [
           `Its clone ${held.path} on ${held.machine} holds ${held.holds}, ${held.size} in all.`,
-          `Save and archive writes its unlanded commits, changes and stashes to a carry on ${held.machine} (in ~/.cawco/carries), then deletes the clone, its boundary and its records.${(held.ignored ?? 0) > 0 ? " Its ignored files are not saved." : ""} Keep leaves it all where it is.`,
+          `Save and archive writes its unlanded commits, changes and stashes to a carry on ${held.machine} (in ~/.cawco/carries), then deletes the clone, its boundary and its records. Keep leaves it all where it is.`,
         ],
         cancelLabel: "Keep",
         confirmLabel: "Save and archive",

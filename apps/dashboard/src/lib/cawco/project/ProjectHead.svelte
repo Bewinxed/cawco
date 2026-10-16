@@ -25,8 +25,15 @@
    */
   import { machineLabel } from "@cawco/core";
   import { MediaQuery } from "svelte/reactivity";
-  import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
+  import AskHere from "#lib/cawco/AskHere.svelte";
+  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import type {
+    HeldPlace,
+    Machine,
+    ProjectRow,
+  } from "#lib/cawco/client.svelte.js";
   import {
+    archiveWorkspace,
     cawco,
     editProject,
     spawnSession,
@@ -127,6 +134,24 @@
       : primary.path;
   });
   const words = $derived(lead.words);
+
+  /**
+   * A held workspace's Discard asks in the places list, beside its row (The
+   * Open Page Rule); Continue opens the session its work ran in, whose next
+   * message from you carries the work on there.
+   */
+  const placeAsker = new Asker<AskHereRequest>();
+  async function askDiscard(placeId: string, held: HeldPlace, where: string) {
+    await placeAsker.ask({
+      at: placeId,
+      title: "Discard this held workspace?",
+      body: `Its clone holds ${held.holds}. Discard writes that to a carry on ${where} (in ~/.cawco/carries), then deletes the clone, its boundary and its records.`,
+      confirmLabel: "Discard",
+      destructive: true,
+      pendingLabel: "Discarding…",
+      run: () => archiveWorkspace(held.workspaceId, { discard: true }),
+    });
+  }
 
   /**
    * His slot opens and closes over --dur-panel on --ease-in-out as he comes
@@ -386,6 +411,37 @@
                       <span class="path" title={each.path}
                         ><bdi>{each.path}</bdi></span
                       >
+                      {#if each.held}
+                        {@const held = each.held}
+                        <span class="holds"
+                          >Held: {held.holds} · {held.size}</span
+                        >
+                        <span class="held-acts">
+                          {#if held.instanceId}
+                            <Button
+                              href={conversationHref(
+                                held.instanceId,
+                                cawco.instanceIndex
+                              )}
+                              size="xs"
+                              variant="secondary">Continue</Button
+                            >
+                          {/if}
+                          <Button
+                            onclick={() =>
+                              askDiscard(
+                                each.id,
+                                held,
+                                host
+                                  ? machineLabel(host.hostname)
+                                  : "its machine"
+                              )}
+                            size="xs"
+                            variant="destructive">Discard</Button
+                          >
+                        </span>
+                        <AskHere asker={placeAsker} at={each.id} />
+                      {/if}
                     </li>
                   {/each}
                 </ul>
@@ -782,6 +838,15 @@
     white-space: nowrap;
     direction: rtl;
     text-align: start;
+  }
+  .holds {
+    font: var(--type-meta);
+    color: var(--ink-strong);
+  }
+  .held-acts {
+    display: flex;
+    gap: var(--space-2);
+    padding-block-start: var(--space-1);
   }
   .acts {
     display: flex;

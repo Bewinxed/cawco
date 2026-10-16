@@ -1,18 +1,26 @@
 /**
- * A workspace's checkout as git sees it: a shared clone (`git clone
- * --shared`) of the repository it was cut from — its own `.git`, so its
- * branches, stash and index are its own, its objects read through the
- * source's — with `origin` at the source's own remote and `origin/HEAD` at
- * the remote's default branch, fetched when the clone was cut.
+ * A workspace's checkout as git sees it: a clone of its own of the
+ * repository it was cut from (`git clone --dissociate`) — its own `.git`, so
+ * its branches, stash and index are its own, and its own object store, so it
+ * depends on nothing in the source once it is cut — with `origin` at the
+ * source's own remote and `origin/HEAD` at the remote's default branch,
+ * fetched when the clone was cut. A local clone hardlinks the source's
+ * object files where the two share a filesystem (git-clone(1), `--local`:
+ * "The files under .git/objects/ directory are hardlinked to save space when
+ * possible"), so the cut costs about what a shared clone did, and a gc in
+ * the source unlinks only its own names for those files.
  *
- * Workspaces were git worktrees before they were clones. A worktree's `.git`
- * is a file pointing into the source repository, so everything a delegate
- * commits there is written into the source, which the boundary keeps
- * read-only. {@link cloneInPlace} turns such a workspace into a clone where it
- * stands: same path, branch and HEAD, the index, the working files and any
- * operation in progress exactly as they were.
+ * Workspaces were git worktrees before they were clones, and shared clones
+ * (`--shared`, objects read through the source's) before they had stores of
+ * their own. A worktree's `.git` is a file pointing into the source
+ * repository, so everything a delegate commits there is written into the
+ * source, which the boundary keeps read-only. {@link cloneInPlace} turns such
+ * a workspace into a clone where it stands: same path, branch and HEAD, the
+ * index, the working files and any operation in progress exactly as they
+ * were. A shared clone that must live on takes what it borrows into its own
+ * store as it is held (workspace.ts `closeClone`); the rest retire.
  */
-import { cp, readdir, rename, rm, stat } from "node:fs/promises";
+import { cp, lstat, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import {
@@ -119,14 +127,17 @@ export const fetchDefaultBranch = async (
 };
 
 /**
- * A shared clone of `source` (a repository or its git directory) at `dir`,
- * with no checkout and no ref of the source's, so its branch list is its own,
- * and `origin` at the source's own remote. Its one remote branch is the
- * remote's default, fetched from the remote now — so a workspace starts where
- * that branch is at the moment it is cut, whatever the source last fetched —
- * with `origin/HEAD` naming it ({@link fetchDefaultBranch}, `known` passed
- * on). Answers that branch's name. A clone that cannot be set up is deleted
- * again.
+ * A clone of its own of `source` (a repository or its git directory) at
+ * `dir`, with no checkout and no ref of the source's, so its branch list is
+ * its own, and `origin` at the source's own remote. `--dissociate`: a source
+ * that itself borrows objects (a shared clone cut before clones had stores of
+ * their own) lends none on — git-clone(1): "this option can be used to stop
+ * the borrowing", by a `git repack -a -d` it runs only where an alternates
+ * file is. Its one remote branch is the remote's default, fetched from the
+ * remote now — so a workspace starts where that branch is at the moment it
+ * is cut, whatever the source last fetched — with `origin/HEAD` naming it
+ * ({@link fetchDefaultBranch}, `known` passed on). Answers that branch's
+ * name. A clone that cannot be set up is deleted again.
  */
 export const prepareClone = async (
   source: string,
@@ -139,7 +150,7 @@ export const prepareClone = async (
     source,
     "clone",
     "--quiet",
-    "--shared",
+    "--dissociate",
     "--no-checkout",
     source,
     dir
@@ -164,7 +175,6 @@ export const prepareClone = async (
   }
 };
 
-const WHITESPACE = /\s+/;
 const BRANCH_REF = /^refs\/heads\//;
 
 /** What a worktree's git directory holds that is the source's link, not the checkout's state. */
@@ -175,50 +185,14 @@ const WORKTREE_LINKS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The objects the checkout has only through the source's worktree: its own
- * commits since `origin/HEAD`, and the blobs its index stages. Packed into
- * the clone, so a gc in the source can never take them from under it.
- */
-const packOwnObjects = async (dir: string): Promise<void> => {
-  const commits = await git(
-    dir,
-    "rev-list",
-    "--objects",
-    "HEAD",
-    "--not",
-    "refs/remotes/origin/HEAD"
-  );
-  const staged = (await git(dir, "ls-files", "--stage"))
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.split(WHITESPACE)[1] ?? "");
-  const wanted = [
-    ...commits.split("\n").map((line) => line.split(" ")[0] ?? ""),
-    ...staged,
-  ].filter(Boolean);
-  if (wanted.length === 0) {
-    return;
-  }
-  const pack = await hostGit(
-    dir,
-    ["pack-objects", "-q", join(dir, ".git", "objects", "pack", "pack")],
-    `${wanted.join("\n")}\n`
-  );
-  if (pack.exitCode !== 0) {
-    throw new Error(
-      `git pack-objects failed: ${pack.stderr.toString().trim()}`
-    );
-  }
-};
-
-/**
- * A worktree workspace made a shared clone where it stands. The clone is
- * built beside it; the worktree's own git state (HEAD, index, reflog, an
+ * A worktree workspace made a clone where it stands. The clone is built
+ * beside it, from the source's git directory, whose object store holds
+ * everything the worktree ever committed or staged, so the clone has those
+ * objects of its own; the worktree's own git state (HEAD, index, reflog, an
  * operation in progress) and the source's excludes are carried into it; its
- * branch is set where the worktree had it, tracking what it tracked; its own
- * objects are packed into it. Then the `.git` file is swapped for the clone's
- * directory, and the source forgets the worktree. The working files are never
- * touched.
+ * branch is set where the worktree had it, tracking what it tracked. Then the
+ * `.git` file is swapped for the clone's directory, and the source forgets
+ * the worktree. The working files are never touched.
  */
 const convert = async (path: string): Promise<void> => {
   const gitDir = await git(
@@ -272,7 +246,6 @@ const convert = async (path: string): Promise<void> => {
         }
       }
     }
-    await packOwnObjects(next);
     await rename(join(path, ".git"), kept);
     try {
       await rename(cloneGit, join(path, ".git"));
@@ -309,9 +282,10 @@ export interface WorktreeConversion {
 }
 
 /**
- * {@link CONTROL_WORKSPACE_MIGRATE}: each of this machine's active workspaces
- * whose `.git` is still a worktree's file, made a clone. A workspace whose
- * folder is gone is skipped and named in the log; one already a clone is left
+ * {@link CONTROL_WORKSPACE_MIGRATE}: each of this machine's workspaces that
+ * still have a clone whose `.git` is still a worktree's file, made a clone.
+ * A workspace whose folder is gone, or whose `.git` is a link (never
+ * followed), is skipped and named in the log; one already a clone is left
  * as it is.
  */
 export const convertWorktrees = async (
@@ -320,11 +294,18 @@ export const convertWorktrees = async (
   const report: WorktreeConversion = { converted: [], failed: [], missing: [] };
   for (const ref of refs as WorkspaceRef[]) {
     // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, each rewriting the same source repository's worktree list
-    const dotGit = await stat(join(ref.path, ".git")).catch(() => undefined);
+    const dotGit = await lstat(join(ref.path, ".git")).catch(() => undefined);
     if (!dotGit) {
       report.missing.push(ref.path);
       console.warn(
         `[workspace] ${ref.id}: ${ref.path} is gone, so it stays as it is`
+      );
+      continue;
+    }
+    if (dotGit.isSymbolicLink()) {
+      report.failed.push({ path: ref.path, error: "its .git is a link" });
+      console.warn(
+        `[workspace] ${ref.id}: the .git of ${ref.path} is a link, which CawCo never follows, so it stays as it is`
       );
       continue;
     }
@@ -334,7 +315,7 @@ export const convertWorktrees = async (
     try {
       await cloneInPlace(ref.path);
       report.converted.push(ref.path);
-      console.info(`[workspace] ${ref.id}: ${ref.path} is now a shared clone`);
+      console.info(`[workspace] ${ref.id}: ${ref.path} is now a clone`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       report.failed.push({ path: ref.path, error: message });

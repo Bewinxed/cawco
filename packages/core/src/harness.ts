@@ -1617,7 +1617,8 @@ export type GitChanges =
   { repo: false } | { repo: true; status: string; log: string };
 
 /**
- * Makes a delegation workspace: a shared clone (`git clone --shared`) of the
+ * Makes a delegation workspace: a clone of its own (`git clone
+ * --dissociate`: every object in its own store, none borrowed) of the
  * repository at `cwd`, at `~/.worktrees/<repo>-<id8>` on a new branch
  * `ws/<id8>` cut from the repository's default branch (what `origin` names as
  * its HEAD, fetched as the clone is cut), its `origin` the
@@ -1627,13 +1628,26 @@ export type GitChanges =
  * branch pushed there (Projects spec §5.1: "A project with no outside remote
  * gets the hub as its remote"). The boundary starts reading the user layer
  * of `account`, the Claude account the workspace's first session launches
- * on, so that session's spawn hands it over to no new generation. Args
- * `[cwd, workspaceId, projectId | null, account | null]`; answers
+ * on, so that session's spawn hands it over to no new generation. `at`, when
+ * given, cuts the branch at that commit instead ({@link WorkspaceCut}): a
+ * retired workspace cut again at the same path for its delegate to go on.
+ * Args `[cwd, workspaceId, projectId | null, account | null, at?]`; answers
  * {@link WorkspaceCheckout}. Machine-scoped; a directory that is not
  * in a git repository is refused, so is one with no `origin` and no project,
  * and so is a machine that cannot hold the boundary.
  */
 export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
+
+/**
+ * Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s
+ * `at`): the commit its last item landed, on `origin`'s branch `branch`
+ * (the default branch for work that landed there, the item's own branch for
+ * one that landed as a branch or a pull request), fetched as the clone is.
+ */
+export interface WorkspaceCut {
+  branch: string;
+  commit: string;
+}
 
 /**
  * Makes a project's place a git repository on its machine when it is not one
@@ -1750,10 +1764,13 @@ export interface WorkspaceRef {
 export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
 
 /**
- * Archives a workspace on its machine: its boundary is killed, with every
- * process in it, and its clone is deleted with everything else of its own on
- * that machine (its state and scratch dirs, its Apple build root, its
- * DerivedData and SwiftPM build dirs). Args `[WorkspaceArchive]`; answers
+ * Archives a workspace on its machine: its boundary is killed first, with
+ * every process in it (never started: one that is down, or cannot start,
+ * stays down), then what its clone holds that is nowhere else is read on
+ * the host ({@link WorkspaceHolding}), and the clone is deleted with
+ * everything else of its own on that machine (its state and scratch dirs,
+ * its Apple build root, its DerivedData and SwiftPM build dirs). The files
+ * git ignores go with it. Args `[WorkspaceArchive]`; answers
  * {@link WorkspaceArchived}. Only the hub sends it: a dashboard's control
  * naming it is refused at the relay.
  */
@@ -1773,10 +1790,11 @@ export const CONTROL_WORKSPACE_DISCARD = "workspaceDiscard";
 
 /**
  * What {@link CONTROL_WORKSPACE_ARCHIVE} does with work in the clone that
- * is nowhere else ({@link CONTROL_WORKSPACE_LANDED}, read again by the
- * machine right before it deletes anything):
- * - `keep`: any refuses the archive, in words naming it, and nothing is
- *   removed. What every archive is unless one of the others is named.
+ * is nowhere else ({@link WorkspaceHolding}, read by the machine once the
+ * boundary is closed, right before it deletes anything):
+ * - `keep`: any keeps the clone, and the answer names it
+ *   ({@link WorkspaceArchived} `held`); nothing is removed. What every
+ *   archive is unless one of the others is named.
  * - `check`: a check workspace, detached at its source workspace's commit;
  *   the commits it has are its source's, which keeps them, and what its
  *   checks wrote is theirs. Not read.
@@ -1786,7 +1804,7 @@ export const CONTROL_WORKSPACE_DISCARD = "workspaceDiscard";
  */
 export type WorkspaceUnlanded = "keep" | "check" | "unmade";
 
-/** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} are asked. `skip` as {@link CONTROL_WORKSPACE_LANDED}'s. */
+/** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} are asked. `skip`, its items' handed-over outputs, `git status` passes over. */
 export interface WorkspaceArchive {
   id: string;
   path?: string;
@@ -1794,38 +1812,32 @@ export interface WorkspaceArchive {
   unlanded: WorkspaceUnlanded;
 }
 
-/** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} answer: the carry's folder on the machine, when one was written. */
+/**
+ * What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD}
+ * answer: the carry's folder on the machine, when one was written; or, for a
+ * `keep` whose clone holds work that is nowhere else, `held`, what it holds,
+ * with nothing deleted and its boundary closed.
+ */
 export interface WorkspaceArchived {
   carry: string | null;
+  held?: WorkspaceHolding;
 }
 
 /**
- * What a workspace holds that is nowhere else, read inside its boundary:
- * commits on HEAD or any local branch that no remote-tracking ref has
- * (`git rev-list --count HEAD --branches --not --remotes`: landed work was
- * pushed, whether onto the base or to a branch of its own), entries of `git
- * status --porcelain` (untracked files included; the paths `skip` names, the
- * outputs its items handed over, left out), and stash entries. `bytes` is the
- * clone's size on disk. Args `[WorkspaceRef, skip]`; answers
- * {@link WorkspaceHolding}. Machine-scoped.
+ * What a workspace holds that is nowhere else, read with git on its machine's
+ * host once its boundary is closed (agent workspace.ts `closeClone`): commits
+ * on HEAD or any local branch that no remote-tracking ref has (`git rev-list
+ * --count HEAD --branches --not --remotes`: landed work was pushed, whether
+ * onto the base or to a branch of its own), entries of `git status
+ * --porcelain` (untracked files included; the paths `skip` names, the outputs
+ * its items handed over, left out), and stash entries. Files git ignores are
+ * none of it: they go with the clone, and a delegate keeps one by handing it
+ * in as an output. `bytes` is the clone's size on disk.
  */
-export const CONTROL_WORKSPACE_LANDED = "workspaceLanded";
-
-/** What {@link CONTROL_WORKSPACE_LANDED} answers. */
 export interface WorkspaceHolding {
   ahead: number;
   bytes: number;
   dirty: number;
-  /**
-   * Files git ignores that the clone's own work wrote (agent workspace.ts
-   * `ignoredOwn`): matched by a `.gitignore` or the person's own excludes,
-   * never by the clone's `info/exclude` (where CawCo lists what it wrote
-   * there), outside dependency and build trees, not a secret file. How many,
-   * and their size. Every archive saves them to a carry first; past
-   * {@link IGNORED_CARRY_LIMIT} they keep the workspace instead.
-   */
-  ignored?: number;
-  ignoredBytes?: number;
   stashes: number;
   /**
    * Set when the clone's folder is there and its `.git` is no repository
@@ -1841,31 +1853,12 @@ export interface WorkspaceHolding {
   strays?: number;
 }
 
-/**
- * The most of a clone's own ignored files ({@link WorkspaceHolding}
- * `ignored`) an archive saves to a carry on its own. What a delegate keeps
- * there by hand (a preview harness, probe scripts, notes, seeds) is a few
- * MB at most; past 64 MB it is a dataset, a model or a build output under a
- * name no rule knows, and carries are never pruned (`~/.cawco/carries`),
- * while a machine's disk filling with spent work is what retiring
- * workspaces is for. Past it the workspace is kept and listed, naming the
- * size, until a person moves them, or archives it with discard, which saves
- * none of them (its unlanded commits, changes and stashes are still saved).
- * Decimal, as {@link sizeWords} says sizes.
- */
-export const IGNORED_CARRY_LIMIT = 64e6;
-
-/** Whether a workspace's own ignored files are more than an archive saves on its own ({@link IGNORED_CARRY_LIMIT}). */
-const ignoredPastLimit = (holding: WorkspaceHolding): boolean =>
-  (holding.ignoredBytes ?? 0) > IGNORED_CARRY_LIMIT;
-
-/** Whether a workspace holds nothing that is nowhere else and that an archive would not save on its own. */
+/** Whether a workspace holds nothing that is nowhere else. */
 export const holdsNothing = (holding: WorkspaceHolding): boolean =>
   holding.ahead === 0 &&
   holding.dirty === 0 &&
   holding.stashes === 0 &&
-  !holding.strays &&
-  !ignoredPastLimit(holding);
+  !holding.strays;
 
 const counted = (count: number, one: string, many: string): string =>
   `${count} ${count === 1 ? one : many}`;
@@ -1880,8 +1873,6 @@ export const holdingWords = (holding: WorkspaceHolding): string =>
     holding.stashes > 0 && counted(holding.stashes, "stash", "stashes"),
     holding.strays &&
       `${counted(holding.strays, "entry", "entries")} of its own in a folder that is no git clone`,
-    ignoredPastLimit(holding) &&
-      `${counted(holding.ignored ?? 0, "ignored file", "ignored files")} of its own (${sizeWords(holding.ignoredBytes ?? 0)}), past the ${sizeWords(IGNORED_CARRY_LIMIT)} an archive saves`,
   ]
     .filter(Boolean)
     .join(", ") || "nothing unlanded";
@@ -1990,11 +1981,12 @@ export interface InputFile {
 export type InputsRead = { files: InputFile[] } | { refused: string };
 
 /**
- * At an agent's start, its machine's active workspaces: each one still a git
- * worktree from before workspaces were clones becomes a shared clone in
- * place — same path, branch, HEAD, index and working files — and the
- * repository it was cut from forgets the worktree. A workspace whose folder
- * is gone is skipped and named in the machine's log. Args `[WorkspaceRef[]]`.
+ * At an agent's start, its machine's workspaces that still have a clone
+ * (active and held): each one still a git worktree from before workspaces
+ * were clones becomes a clone in place — same path, branch, HEAD, index and
+ * working files — and the repository it was cut from forgets the worktree.
+ * A workspace whose folder is gone, or whose `.git` is a link, is skipped
+ * and named in the machine's log. Args `[WorkspaceRef[]]`.
  */
 export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
 

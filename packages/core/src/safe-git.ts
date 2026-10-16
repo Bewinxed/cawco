@@ -18,6 +18,9 @@
  *
  * A git call in a live workspace's clone also runs inside the workspace's
  * boundary, where a race on its config can only reach the workspace itself.
+ * A workspace's clone is read with git on the host only once its boundary is
+ * closed (agent workspace.ts `closeClone`), when nothing can write it any
+ * more, and through a `.git` that is a folder, never a link.
  */
 import { join } from "node:path";
 
@@ -112,12 +115,18 @@ const ownConfigs = (gitDir: string): string[] => [
 
 /**
  * Why git must not run in the repository whose git directory is `gitDir`:
- * the first key in its own config past {@link ALLOWED_KEYS}, or the config
- * git could not read. Nothing when git may run there.
+ * a `commondir` file there (a linked worktree's, gitrepository-layout(5):
+ * git then reads the config of the dir it names, which this never reads; a
+ * clone has none), the first key in its own config past
+ * {@link ALLOWED_KEYS}, or the config git could not read. Nothing when git
+ * may run there.
  */
 export const repositoryConfigProblem = async (
   gitDir: string
 ): Promise<string | undefined> => {
+  if (await Bun.file(join(gitDir, "commondir")).exists()) {
+    return `${join(gitDir, "commondir")} names another git directory, whose config CawCo does not read, so it does not run git there`;
+  }
   for (const file of ownConfigs(gitDir)) {
     // biome-ignore lint/performance/noAwaitInLoops: two small files, the second only where it exists
     if (!(await Bun.file(file).exists())) {

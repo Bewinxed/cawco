@@ -58,7 +58,6 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_LANDED,
   CONTROL_WORKSPACE_MIGRATE,
   type TranscriptQuery,
   UPDATE_CAWCO,
@@ -224,7 +223,6 @@ import {
   workspaceAt,
   workspaceBoundary,
   workspaceBundle,
-  workspaceLanded,
 } from "./workspace";
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
@@ -2642,10 +2640,10 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // A workspace is cut in this process, so a restart would cut it too: none starts behind a raised fence.
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_CREATE,
-      (cwd, id, projectId, account) =>
+      (cwd, id, projectId, account, at) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : createWorkspace(cwd, id, projectId, account)
+          : createWorkspace(cwd, id, projectId, account, at)
     );
     // A place's first commit writes its folder: none starts behind a raised fence.
     supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path) =>
@@ -2681,11 +2679,6 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : ensureStage(ref as WorkspaceRef, String(file))
-    );
-    // What a spent workspace holds that is nowhere else, before the hub retires it.
-    supervisor.registerDaemonFunction(
-      CONTROL_WORKSPACE_LANDED,
-      workspaceLanded
     );
     // A check that names another machine: the commit leaves here, and arrives there.
     supervisor.registerDaemonFunction(

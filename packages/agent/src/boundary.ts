@@ -4238,19 +4238,35 @@ const launch = async (
   return armHook(ref.id, held);
 };
 
+/** SIGKILL to every live process a keeper holds that `owned` names. */
+const signalHeld = async (
+  owned: (procId: string) => boolean
+): Promise<void> => {
+  await Promise.all(
+    (await keepers.held())
+      .filter((proc) => proc.alive && owned(proc.procId))
+      .map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
+  );
+};
+
 /**
  * Kills the workspace's boundaries, the current one and every older one
  * still beside it, with every process in them ({@link stopBoundary}), and any
  * other boundary process of the workspace; on macOS everything carrying the
- * workspace's marker. Stops serving its tool door. On Linux, once its
- * sandboxes are gone, the deny stand-ins in its clone go
- * (`stand-ins.ts`). Then its state and its scratch dir go, and on Linux
- * srt's temp dirs with the sockets srt leaves there (REPORT.md §5o).
- * Its judges go last, on every keeper that runs one: with the state dir gone
- * there is no workspace to start one again for ({@link watchJudge}); then
- * the dir its sockets were in.
+ * workspace's marker. Stops serving its doors. Its record goes
+ * (`boundary.json`, each older one's), so its executor says the boundary is
+ * not running and a judge's exit arms nothing again ({@link watchJudge});
+ * then its judges go, on every keeper that runs one. Never starts one: a
+ * boundary already down, or one that never started, leaves nothing to do.
+ * Its clone, state dir (its accounts, project, hook and policy), scratch dir
+ * and stand-ins stay, so its next {@link ensureBoundary} starts one as a
+ * quiet close leaves it. What an archive does first (workspace.ts
+ * `closeClone`): nothing writes the clone from here on. Answers the inner
+ * pids of the sandboxes it stopped (Linux).
  */
-export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
+export const stopWorkspaceBoundary = async (
+  ref: WorkspaceRef
+): Promise<number[]> => {
   forgetStale(ref.id);
   forgetRetiring(ref.id);
   forgetStubbed(ref.id);
@@ -4268,35 +4284,47 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
     }
     await stopBoundary(ref.id, boundary);
     await cleanGeneration(ref.id, boundary);
+    await rm(retiringFileOf(ref.id, boundary), { force: true });
   }
-  const signalAll = async (owned: (procId: string) => boolean) =>
-    await Promise.all(
-      (await keepers.held())
-        .filter((proc) => proc.alive && owned(proc.procId))
-        .map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
-    );
-  await signalAll((procId) => isBoundaryOf(procId, ref.id));
+  await signalHeld((procId) => isBoundaryOf(procId, ref.id));
   if (process.platform === "darwin") {
     await killMarked(ref.id);
-  } else if (await sandboxesGone(inners)) {
-    // Only once no sandbox holds a mount on them: each goes if it is still
-    // exactly as it was made (`stand-ins.ts`).
-    await removeStandIns(ref).catch((error: unknown) => {
+  }
+  await rm(join(stateDir(ref.id), "boundary.json"), { force: true });
+  await signalHeld((procId) => isJudgeOf(procId, ref.id));
+  liveAt.delete(ref.id);
+  return inners;
+};
+
+/**
+ * {@link stopWorkspaceBoundary}, then the rest of the workspace on this
+ * machine but its clone: on Linux, once its sandboxes are gone, the deny
+ * stand-ins in its clone go (`stand-ins.ts`). Then its state and its scratch
+ * dir go, and on Linux srt's temp dirs with the sockets srt leaves there
+ * (REPORT.md §5o); then the dir its sockets were in.
+ */
+export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
+  const inners = await stopWorkspaceBoundary(ref);
+  if (process.platform === "linux") {
+    if (await sandboxesGone(inners)) {
+      // Only once no sandbox holds a mount on them: each goes if it is still
+      // exactly as it was made (`stand-ins.ts`).
+      await removeStandIns(ref).catch((error: unknown) => {
+        console.warn(
+          `[workspace] ${ref.id}: its clone's deny stand-ins could not be taken away: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    } else {
       console.warn(
-        `[workspace] ${ref.id}: its clone's deny stand-ins could not be taken away: ${error instanceof Error ? error.message : String(error)}`
+        `[workspace] ${ref.id}: its sandbox was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped, so its clone's deny stand-ins are left`
       );
-    });
-  } else {
-    console.warn(
-      `[workspace] ${ref.id}: its sandbox was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped, so its clone's deny stand-ins are left`
-    );
+    }
   }
   await rm(stateDir(ref.id), { recursive: true, force: true });
   // Its scratch dir, with whatever its commands left there, and its short
   // name on macOS (the link alone: `rm` takes a link, not what it names).
   await rm(scratchOf(ref.id), { recursive: true, force: true });
   await rm(workspaceTmpDir(ref.id), { force: true });
-  await signalAll((procId) => isJudgeOf(procId, ref.id));
   // Its sockets' dir, once nothing listens there (`workspaceDoorDir`).
   await rm(workspaceDoorDir(ref.id), { recursive: true, force: true });
 };

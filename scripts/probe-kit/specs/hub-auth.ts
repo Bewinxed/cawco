@@ -38,8 +38,9 @@
  *      and at the hub, and changes nothing;
  * (p6) `POST /api/session-identities/install` without a machine's proof is
  *      refused (anonymous, the person, a session);
- * (p7) `archive_workspace` archives the caller's own delegate's workspace,
- *      and refuses another session's;
+ * (p7) `archive_workspace` archives the caller's own delegate's workspace
+ *      (held by the caller's preview, so its landed work has not retired it
+ *      first), and refuses another session's;
  * (p8) turning it off returns to trusted.
  *
  *   bun scripts/probe-kit/run.ts hub-auth
@@ -841,6 +842,20 @@ const spec: Spec = {
       cwd: src,
       checks: [{ name: "Probe check", command: "true" }],
     });
+    // The parent's preview of its server holds the workspace once its work
+    // lands (hub work-items.ts `settle`), so it is still there to archive.
+    const now = Date.now();
+    fleet.write(
+      "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', 'auth-preview', ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+      crypto.randomUUID(),
+      parent,
+      project.id,
+      MACHINE,
+      JSON.stringify({ port: 5199, workspace: delegated.workspaceId }),
+      now,
+      now,
+      now
+    );
     const item = await until(
       "work item A ended",
       () =>

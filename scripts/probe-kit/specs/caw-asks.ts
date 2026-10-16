@@ -20,18 +20,19 @@
  * newest (as the curator's does after a run), and another session is open on
  * the fleet.
  *
- * a. In thread "main" Caw starts a delegate; its report wakes him (a wake no
- *    message of yours is in). He runs the owner's exact command: no ask is
- *    parked, its row ran. The delegate's workspace is cut from the fleet's
- *    other repository: one cut from his place would make the place a shared
- *    checkout while it is active (hub server.ts `sharedPlace`), where his
- *    push is refused ("file a task") rather than asked (lead-gate.ts).
+ * a. In thread "main" Caw starts a delegate, its workspace cut from his
+ *    place; its report wakes him (a wake no message of yours is in). He runs
+ *    the owner's exact command: no ask is parked, its row ran.
  * b. In that turn, `git push origin HEAD` for "Publish the docs to origin":
  *    an ask whose presentation names Caw and the project, whose summary is
  *    his reason and whose command is the command; parked in the thread the
  *    delegate works for (main), never the routine's; on his own session
  *    (no `originInstanceId`), so on no other session's pane; and listed in
- *    `/api/pending` (Needs you).
+ *    `/api/pending` (Needs you). Asked, never refused: the delegate's
+ *    finished workspace, cut from his place and left with a file of its own
+ *    there, still stands (active or held) as he asks, and a delegate's
+ *    workspace never makes his place a shared checkout (hub server.ts
+ *    `sharedPlace`, lead-gate.ts rule 2).
  * c. Its push: visible title "Caw" under the project, sealed body the
  *    reason, its target thread main, whose title is your words.
  * d. Deny: origin did not move.
@@ -39,6 +40,7 @@
  *
  *   bun scripts/probe-kit/run.ts caw-asks
  */
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -104,8 +106,8 @@ const played: Record<"delegated" | "pushed" | "ran", boolean> = {
   pushed: false,
 };
 let finished = false;
-/** The repository Caw's delegate is cut from: never his place (see a). */
-let delegateFrom = "";
+/** What the delegate leaves in its workspace, uncommitted: its workspace is held, not retired, once its item ends. */
+const LEFT = "PROBE-LEFT";
 
 /** Caw: a delegate from your message; from its report, the owner's command, then the push. */
 const caw = (request: Seen): Reply => {
@@ -114,7 +116,6 @@ const caw = (request: Seen): Reply => {
     return useTool("mcp__cawco__delegate", {
       title: "Check the commits",
       prompt: `${CHILD}: finish your item.`,
-      cwd: delegateFrom,
       checks: [{ name: "Nothing to check", command: "true" }],
       lands: "none",
     });
@@ -130,10 +131,16 @@ const caw = (request: Seen): Reply => {
   return text("ok");
 };
 
-/** The delegate: finds finish_item, calls it once, then says ok. */
+/** The delegate: leaves a file of its own, finds finish_item, calls it once, then says ok. */
 const child = (request: Seen): Reply => {
   if (finished) {
     return text("ok");
+  }
+  if (!request.all.includes(`${LEFT}-DONE`)) {
+    return bash(
+      `echo kept > ${LEFT}.txt && echo ${LEFT}-DONE`,
+      "Leave a file of its own"
+    );
   }
   if (!request.toolNames.includes(FINISH)) {
     return request.toolNames.includes("ToolSearch")
@@ -236,7 +243,6 @@ const run = async (kit: Kit) => {
     // pane. Not in his place, which would make it a shared checkout, where a
     // push is refused rather than asked.
     const neighbour = await fleet.spawn("claude", "Neighbour", fleet.repo);
-    delegateFrom = fleet.repo;
 
     // Thread "main": your words, then Caw starts a delegate.
     const opened = await fleet.api<{ thread: { id: string; title: string } }>(
@@ -319,6 +325,25 @@ const run = async (kit: Kit) => {
     );
 
     // ── b. the push's card: who, where, why, then the command ─────────────
+    // As he asks: his delegate's workspace, cut from his place, its item over.
+    const delegated = fleet.query<{
+      item: string;
+      path: string;
+      repo_root: string;
+      state: string;
+    }>(
+      "SELECT w.path, w.repo_root, w.state, i.state AS item FROM workspaces w JOIN work_items i ON i.workspace_id = w.id WHERE i.parent_instance_id = ?",
+      leadId
+    );
+    kit.check(
+      "b: Caw's push is asked, not refused, while his finished delegate's workspace, cut from his place, stands",
+      delegated.length === 1 &&
+        delegated[0]?.item === "done" &&
+        [place, realpathSync(place)].includes(delegated[0].repo_root) &&
+        ["active", "held"].includes(delegated[0].state) &&
+        existsSync(join(delegated[0].path, `${LEFT}.txt`)),
+      JSON.stringify({ delegated, place })
+    );
     const shown = card.payload.presentation;
     kit.check(
       "b: the card's head is Caw · the project, its sentence his reason, its command whole",

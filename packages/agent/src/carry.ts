@@ -2,8 +2,9 @@
  * A carry: work that is nowhere else, saved before the checkout holding it
  * is deleted because a person chose to let it go. Two checkouts take one:
  * a workspace's clone archived with `discard` (workspace.ts
- * `archiveWorkspace`, git inside its boundary) and a spin-off's worktree
- * discarded (session.ts, git on this host, where the spin-off ran). Each is
+ * `discardWorkspace`, git on this host once its boundary is closed) and a
+ * spin-off's worktree discarded (session.ts, git on this host, where the
+ * spin-off ran). Each is
  * a folder in `~/.cawco/carries` (core paths `workspaceCarriesDir`), named
  * by the workspace or session id and the time, holding, each only when
  * there is something to put there:
@@ -15,17 +16,16 @@
  *   own is untouched;
  * - `stashes/<n>.patch`: each stash entry with its untracked files (a
  *   clone's; a worktree shares its repository's stash, which outlives it);
- * - `ignored/`: a workspace clone's own files git ignores (workspace.ts
- *   `ignoredOwn`), copied at their paths on this host once its boundary is
- *   closed; every archive of a clone holding any writes a carry for them,
- *   but a discard, which neither lists nor copies them;
  * - `head` and `branch`: the commit and branch it was on;
  * - `README.md`: what it is and how to take each part back.
  *
+ * Files git ignores are no part of one: they go with the checkout. A
+ * delegate keeps such a file by handing it in as its item's output.
+ *
  * A workspace whose folder is no git clone any more (its clone deleted by
- * hand) has no git to read and no boundary to read it in: archived with
- * `discard`, its own entries are copied into its carry as they are, on this
- * host ({@link copyStrays}), beside the README.
+ * hand) has no git to read: archived with `discard`, its own entries are
+ * copied into its carry as they are, on this host ({@link copyStrays}),
+ * beside the README.
  */
 import { constants } from "node:fs";
 import {
@@ -252,14 +252,8 @@ export const carryReadme = async ({
       () => true,
       () => false
     );
-  const [bundle, commits, uncommitted, stashes, ignored] = await Promise.all(
-    [
-      "commits.bundle",
-      "commits",
-      "uncommitted.patch",
-      "stashes",
-      "ignored",
-    ].map(has)
+  const [bundle, commits, uncommitted, stashes] = await Promise.all(
+    ["commits.bundle", "commits", "uncommitted.patch", "stashes"].map(has)
   );
   return [
     `# ${title}`,
@@ -274,8 +268,6 @@ export const carryReadme = async ({
       `- \`uncommitted.patch\`: every changed, deleted and untracked file against ${head || "HEAD"}: \`git apply ${folder}/uncommitted.patch\` at that commit.`,
     stashes &&
       "- `stashes/<n>.patch`: stash entry n, untracked files included: `git apply`.",
-    ignored &&
-      `- \`ignored/\`: the files git ignores that the work in the ${checkout} wrote (no dependency or build tree, no secret, nothing CawCo put there), each at its path in it: \`cp -a ${folder}/ignored/. <a clone>\`.`,
     ...(left.length > 0
       ? ["", "Not copied:", ...left.map((one) => `- ${one}`)]
       : []),

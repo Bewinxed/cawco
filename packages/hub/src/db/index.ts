@@ -462,7 +462,7 @@ export interface DbShape {
   ) => boolean;
   /** Approved actions: one exact tool call each, run once (actions.ts). */
   readonly actions: ActionsDb;
-  /** A machine's workspaces that still have their checkout. */
+  /** A machine's active workspaces: an item there is live, or the hub has not settled it since. */
   readonly activeWorkspacesOn: (machineId: string) => WorkspaceRow[];
   /** Adds counted capability uses, summing into any row already there. */
   readonly addCapabilityUsage: (
@@ -825,6 +825,8 @@ export interface DbShape {
    * or a turn took its place.
    */
   readonly handBackTurn: (id: string, from: number, at: number) => boolean;
+  /** Every machine's held workspaces (schema.ts `WorkspaceState`), newest first. */
+  readonly heldWorkspaces: () => WorkspaceRow[];
   readonly hiddenSession: (id: string) => boolean;
   /**
    * A move's session on the board from the move's start (moves.ts): its row
@@ -2105,10 +2107,23 @@ export interface DbShape {
       >
     >
   ) => WorkItemRow | undefined;
-  /** Records what the workspace's machine says of its boundary, or its archive. */
+  /** Records what the workspace's machine says of its boundary, its archive, what it holds, or where its last item landed. */
   readonly updateWorkspace: (
     id: string,
-    change: Partial<Pick<WorkspaceRow, "boundaryPid" | "state">>
+    change: Partial<
+      Pick<
+        WorkspaceRow,
+        | "base"
+        | "boundaryPid"
+        | "branch"
+        | "carry"
+        | "heldAt"
+        | "holding"
+        | "landed"
+        | "state"
+        | "tmp"
+      >
+    >
   ) => WorkspaceRow | undefined;
   readonly upsertAgent: (agent: {
     machineId: string;
@@ -7541,6 +7556,13 @@ const make = async (path: string): Promise<DbShape> => {
             eq(workspaces.state, "active")
           )
         )
+        .all(),
+    heldWorkspaces: () =>
+      db
+        .select()
+        .from(workspaces)
+        .where(eq(workspaces.state, "held"))
+        .orderBy(desc(workspaces.createdAt))
         .all(),
     liveWorkspacesOn: (machineId) =>
       db

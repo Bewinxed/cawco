@@ -61,7 +61,6 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_LANDED,
   cacheHit,
   type DeliveryMark,
   FLEET_STATUS,
@@ -1124,7 +1123,6 @@ export class SessionSupervisor {
     } else if (
       control?.method === CONTROL_WORKSPACE_ARCHIVE ||
       control?.method === CONTROL_WORKSPACE_DISCARD ||
-      control?.method === CONTROL_WORKSPACE_LANDED ||
       control?.method === CONTROL_WORKSPACE_BUNDLE ||
       control?.method === CONTROL_WORKSPACE_AT
     ) {

@@ -39,12 +39,15 @@ import type { CarrySessionRequest } from "./harness";
  *    and name no session. A page built for 5 reads any frame it does not
  *    know as a session's and files a blank session under no id, so it
  *    reloads first. The app logs a frame it cannot decode and goes on.
+ * 7: a workspace's held work (`GET /api/workspaces/:id/held`) names no files
+ *    git ignores (`ignored`, `ignoredBytes`): they go with the clone, and
+ *    only a held workspace has held work to read.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 6;
+export const WIRE_PROTOCOL = 7;
 
 /**
  * What a session's stream carries: the changes each frame made to its

@@ -236,6 +236,21 @@ const run = async (kit: Kit) => {
 
   // (b)
   const a = await delegate("A");
+  // The parent's preview of its server holds A's workspace once its work
+  // lands (hub work-items.ts `settle`), and with it its check workspace,
+  // which the mark below is read in.
+  const shownAt = Date.now();
+  fleet.write(
+    "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', 'gate-preview', ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+    crypto.randomUUID(),
+    parent,
+    project.id,
+    MACHINE,
+    JSON.stringify({ port: 5199, workspace: a.workspaceId }),
+    shownAt,
+    shownAt,
+    shownAt
+  );
   const aRow = await ended("A", a.workItemId);
   const aSpaces = checkSpaces(a.workspaceId);
   const aMark = aSpaces[0] ? join(aSpaces[0].path, MARK) : "";

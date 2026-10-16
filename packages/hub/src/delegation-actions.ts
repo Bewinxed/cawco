@@ -44,8 +44,11 @@ import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
-import { type QueuedDelegate, resolveSpawnType } from "./work-items";
-import type { KeptWorkspace } from "./workspace-retire";
+import {
+  type HeldWork,
+  type QueuedDelegate,
+  resolveSpawnType,
+} from "./work-items";
 
 // Every call this module makes is the hub calling its own routes, as itself
 // (hub-self.ts): `selfFetch` refuses any other origin.
@@ -609,7 +612,9 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * take it, so it waits for a sign-in or a free account (`signin`); or the
  * owner paused its machine until a time (`paused`, machine-pause.ts); or an
  * interrupt holds its work item and only its parent, its lead or the person
- * wakes it (`held`).
+ * wakes it (`held`); or its workspace retired when its work landed and the
+ * hub is cutting its clone again at the same path (`recut`, work-items.ts
+ * `recut`).
  */
 export type SendHold =
   | "agent"
@@ -619,6 +624,7 @@ export type SendHold =
   | "hub"
   | "limit"
   | "paused"
+  | "recut"
   | "resting"
   | "signin"
   | "update";
@@ -642,6 +648,8 @@ export interface SendDelivery {
 /** Each hold, in the words `handoff` answers with: queued at the hub, and until when. */
 const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
   held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
+  recut:
+    "Its workspace retired when its work landed, so the hub is cutting its clone again at the same path, at the commit it landed; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
   update:
     "Its machine is installing an update and restarting, so the message is queued at the hub and goes to the session as soon as the update is done.",
   build:
@@ -871,12 +879,12 @@ export interface HandoffActions {
   ): Promise<DelegateResult>;
   /**
    * This session's delegation tree: its delegates, theirs nested; the
-   * delegates still queued; and the fleet's spent workspaces kept for the
-   * unlanded work in them (workspace-retire.ts).
+   * delegates still queued; and the fleet's held workspaces, whose items
+   * ended with work that is nowhere else (work-items.ts `settle`).
    */
   readonly delegateList: (include: DelegateListInclude) => Promise<{
     delegates: DelegateNode[];
-    kept: KeptWorkspace[];
+    held: HeldWork[];
     queued: QueuedDelegate[];
   }>;
   /**
@@ -1327,15 +1335,15 @@ export const handoffActions = ({
       fetch(
         `${hubHttpUrl()}/api/work-items/queued?for=${encodeURIComponent(instanceId)}`
       ),
-      fetch(`${hubHttpUrl()}/api/workspaces/kept`),
+      fetch(`${hubHttpUrl()}/api/workspaces/held`),
     ]);
     const refused = [waiting, spent].find((answer) => !answer.ok);
     if (refused) {
       throw new Error(await refused.text());
     }
     const { queued } = (await waiting.json()) as { queued: QueuedDelegate[] };
-    const { kept } = (await spent.json()) as { kept: KeptWorkspace[] };
-    return { delegates, kept, queued };
+    const { held } = (await spent.json()) as { held: HeldWork[] };
+    return { delegates, held, queued };
   },
   async continueSession(input) {
     const { rows, hosts } = fleetInstances(fleet);

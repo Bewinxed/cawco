@@ -6518,6 +6518,7 @@ public enum OpenEnums {
     public enum WorkspaceState: OpenEnum {
         case active
         case archived
+        case held
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -6525,6 +6526,7 @@ public enum OpenEnums {
             switch rawValue {
             case "active": self = .active
             case "archived": self = .archived
+            case "held": self = .held
             default: self = .unrecognized(rawValue)
             }
         }
@@ -6533,6 +6535,7 @@ public enum OpenEnums {
             switch self {
             case .active: "active"
             case .archived: "archived"
+            case .held: "held"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -6541,7 +6544,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.active, .archived]
+        public static let allCases: [Self] = [.active, .archived, .held]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

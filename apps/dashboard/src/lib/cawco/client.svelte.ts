@@ -234,11 +234,33 @@ export type Machine = AgentRow;
 export type { InstanceRow } from "@cawco/core";
 
 /**
+ * A delegate's workspace whose work item ended with work that is nowhere
+ * else (hub work-items.ts `settle`): only you end it, by continuing it in
+ * its session or discarding it.
+ */
+export interface HeldPlace {
+  /** When its machine read what it holds, ISO. */
+  heldAt: string;
+  /** In words: "2 commits on no remote, 3 changed files, 1 stash". */
+  holds: string;
+  /** The session its latest work item ran in: Continue opens it. */
+  instanceId: string | null;
+  /** The clone's size on disk, in words. */
+  size: string;
+  /** Its latest work item's title. */
+  title: string | null;
+  workspaceId: string;
+}
+
+/**
  * Where a project's files are (WORDS.md: place): a checkout on a machine, a
- * delegate's workspace while it lives, or the project's folder on the hub.
+ * delegate's workspace while it lives or is held, or the project's folder on
+ * the hub.
  */
 export interface ProjectPlace {
   createdAt: string;
+  /** A held workspace's: what it holds and where it goes on; null for any other place. */
+  held?: HeldPlace | null;
   id: string;
   /** The project's primary checkout: exactly one once it has any. */
   isPrimary: boolean;
@@ -6032,7 +6054,7 @@ export async function deleteTranscript(
  * refuses any other kind and says why; that answer is thrown as it is, for
  * the confirm dialog to show under its question.
  */
-/** What a workspace's clone holds that is nowhere else, as its machine read it now (hub work-items.ts `HeldWork`). */
+/** What a held workspace's clone holds that is nowhere else, as its machine read it once its boundary was closed (hub work-items.ts `HeldWork`). */
 export interface WorkspaceHeld extends WorkspaceHolding {
   /** In words: "2 commits on no remote, 3 changed files, 1 stash". */
   holds: string;
@@ -6042,7 +6064,7 @@ export interface WorkspaceHeld extends WorkspaceHolding {
   size: string;
 }
 
-/** Reads what a workspace holds that is nowhere else (`GET /api/workspaces/:id/held`); the hub's refusal is the error. */
+/** Reads what a held workspace holds that is nowhere else (`GET /api/workspaces/:id/held`); the hub's refusal (one not held) is the error. */
 export async function workspaceHeld(
   workspaceId: string
 ): Promise<WorkspaceHeld> {
@@ -6062,9 +6084,10 @@ export async function workspaceHeld(
  * Archives a workspace through the hub (`POST /api/workspaces/:id/archive`):
  * its machine kills the boundary with everything in it and deletes the
  * clone and its records, a damaged one among them. The hub's refusal (a live
- * item there, or work in the clone that is nowhere else) is the error.
- * `discard` lets that work go: its machine saves its unlanded commits,
- * changes and stashes to a carry first, and none of its ignored files.
+ * item there, or work in the clone that is nowhere else, which holds it) is
+ * the error. `discard` lets that work go: its machine saves its unlanded
+ * commits, changes and stashes to a carry first. Files git ignores go with
+ * the clone.
  */
 export async function archiveWorkspace(
   workspaceId: string,

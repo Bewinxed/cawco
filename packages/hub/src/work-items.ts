@@ -56,6 +56,7 @@ import type {
   WorkspaceArchived,
   WorkspaceCheckout,
   WorkspaceCommit,
+  WorkspaceCut,
   WorkspaceHolding,
   WorkspaceRef,
   WorkspaceUnlanded,
@@ -72,13 +73,11 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_LANDED,
   CONTROL_WORKSPACE_MIGRATE,
   DEPS_INSTALLING,
   depsScript,
   handoffMarker,
   holdingWords,
-  holdsNothing,
   machineLabel,
   namedAmong,
   namesAmong,
@@ -244,8 +243,14 @@ export class WorkItemRefusal extends Error {
   }
 }
 
-/** What a workspace holds that is nowhere else, read on its machine now, and where it is. */
+/**
+ * What a held workspace holds that is nowhere else, as its machine read it
+ * once its boundary was closed (schema.ts `workspaces.holding`), and where
+ * it is.
+ */
 export interface HeldWork extends WorkspaceHolding {
+  /** When its machine read it, ISO. */
+  heldAt: string;
   /** What it holds, in words: "2 commits on no remote, 3 changed files, 1 stash". */
   holds: string;
   machine: string;
@@ -256,24 +261,29 @@ export interface HeldWork extends WorkspaceHolding {
   workspaceId: string;
 }
 
-/** A workspace archived: its row, and the carry its machine wrote first, when its work was discarded. */
+/**
+ * A workspace closed on its machine: its row, archived, and the carry its
+ * machine wrote first when its work was discarded; or, its clone holding
+ * work that is nowhere else, its row held and `held` naming the work.
+ */
 export interface ArchivedWorkspace {
   carry: string | null;
+  held?: HeldWork;
   workspace: WorkspaceRow;
 }
 
 /**
  * An archive refused because the clone holds work that is nowhere else: it
- * names what, and nothing is deleted. `discard` archives it anyway, its
- * unlanded commits, changes and stashes saved to a carry first and its
- * ignored files not saved.
+ * names what, the workspace is held, and nothing is deleted. `discard`
+ * archives it anyway, its unlanded commits, changes and stashes saved to a
+ * carry first.
  */
 export class WorkspaceHoldsWork extends WorkItemRefusal {
   readonly held: HeldWork;
   constructor(held: HeldWork) {
     super(
       409,
-      `Workspace ${held.workspaceId} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted. Land or push its work, or pass discard: true to archive without saving its ignored files; unlanded commits, changes and stashes are still kept, in a carry in ~/.cawco/carries on ${held.machine}.`
+      `Workspace ${held.workspaceId} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held. Continue its work, or pass discard: true to archive it with its unlanded commits, changes and stashes saved to a carry in ~/.cawco/carries on ${held.machine}.`
     );
     this.held = held;
   }
@@ -739,6 +749,14 @@ export interface WorkItemDeps {
   readonly planSteps: (instanceId: string) => Promise<PlanStep[]>;
   readonly publish: (item: WorkItemSummary) => void;
   /**
+   * The retired workspace of `instanceId`'s item is cut again
+   * ({@link WorkItems.recutFor}): what was kept at the hub for the session
+   * meanwhile goes to it now, waking it (server.ts `releaseOwed`).
+   */
+  readonly recutDone?: (instanceId: string) => void;
+  /** It could not be cut again, for `reason`: what was kept for the session fails with it. */
+  readonly recutFailed?: (instanceId: string, reason: string) => void;
+  /**
    * Hands a report to the parent of the item's session: `body` the full
    * report, `headline` its one-or-two-sentence outcome when there is one.
    */
@@ -795,6 +813,8 @@ export interface WorkItemDeps {
   };
   /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
   readonly types: (projectId?: string | null) => DelegateType[];
+  /** A workspace was settled on its machine, archived or held: the dashboards draw it so. */
+  readonly workspaceChanged?: (workspace: WorkspaceRow) => void;
 }
 
 /** A plan item's to-do id, `[td-3] Persist the choice` → `td-3`. */
@@ -1500,7 +1520,8 @@ const findingsBlock = (findings: WorkItemSubmission["findings"]): string =>
  * or found, landing `pr`), back to its session, or refused.
  */
 type Landed =
-  | { kind: "done" | "refused"; line: string; prUrl?: string }
+  | { kind: "done"; line: string; prUrl?: string; cut?: WorkspaceCut }
+  | { kind: "refused"; line: string; prUrl?: string }
   | { kind: "retry"; text: string };
 
 /** The text that hands uncommitted work back to the session, for a landing that takes only commits. */
@@ -1622,6 +1643,8 @@ export const createWorkItems = ({
   placeAhead,
   planSteps,
   publish,
+  recutDone,
+  recutFailed,
   report,
   inputRefusal,
   inTurn,
@@ -1638,6 +1661,7 @@ export const createWorkItems = ({
   taskTitle,
   todos,
   types,
+  workspaceChanged,
 }: WorkItemDeps) => {
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
   const quiet = new Map<string, number>();
@@ -2661,33 +2685,36 @@ export const createWorkItems = ({
     ),
   ];
 
-  /** What a workspace's clone holds that is nowhere else, read inside its boundary on its machine now. */
-  const heldIn = async (
-    workspace: WorkspaceRow,
-    skip: string[]
-  ): Promise<HeldWork> => {
-    const holding = (await call(workspace.machineId, CONTROL_WORKSPACE_LANDED, [
-      refOf(workspace),
-      skip,
-    ])) as WorkspaceHolding;
-    return {
-      ...holding,
-      holds: holdingWords(holding),
-      size: sizeWords(holding.bytes),
-      machine: machineName(workspace.machineId),
-      machineId: workspace.machineId,
-      path: workspace.path,
-      workspaceId: workspace.id,
-    };
-  };
+  /** A held workspace's work as its row keeps it (schema.ts `workspaces.holding`). */
+  const heldWork = (
+    workspace: WorkspaceRow & { holding: WorkspaceHolding }
+  ): HeldWork => ({
+    ...workspace.holding,
+    heldAt: (workspace.heldAt ?? workspace.createdAt).toISOString(),
+    holds: holdingWords(workspace.holding),
+    size: sizeWords(workspace.holding.bytes),
+    machine: machineName(workspace.machineId),
+    machineId: workspace.machineId,
+    path: workspace.path,
+    workspaceId: workspace.id,
+  });
+
+  /** Whether a workspace's row is held with what it holds on record. */
+  const isHeld = (
+    workspace: WorkspaceRow
+  ): workspace is WorkspaceRow & { holding: WorkspaceHolding } =>
+    workspace.state === "held" && workspace.holding !== null;
 
   /**
-   * A workspace's clone and boundary gone on its machine, its places with
-   * them, and its row archived. Its machine reads again what it holds that
-   * is nowhere else and does with it what `unlanded` says
-   * ({@link WorkspaceUnlanded}), or with `discard` saves it to a carry
-   * first ({@link CONTROL_WORKSPACE_DISCARD}, which an agent that cannot
-   * write one refuses); `skip`, its items' handed-over outputs.
+   * A workspace closed on its machine ({@link CONTROL_WORKSPACE_ARCHIVE}):
+   * its boundary killed first and never started, then what it holds that is
+   * nowhere else read on the host, and done with as `unlanded` says
+   * ({@link WorkspaceUnlanded}), or with `discard` saved to a carry first
+   * ({@link CONTROL_WORKSPACE_DISCARD}, which an agent that cannot write
+   * one refuses); `skip`, its items' handed-over outputs. Archived, its
+   * places go with it and its row says so, with the carry; holding work
+   * (only a `keep` answers so) its row is held with what it holds, its clone
+   * and places standing.
    */
   const closeWorkspace = async (
     workspace: WorkspaceRow,
@@ -2700,21 +2727,298 @@ export const createWorkItems = ({
       unlanded: discard ? "keep" : unlanded,
       skip,
     };
-    const { carry } = (await call(
+    const { carry, held } = (await call(
       workspace.machineId,
       discard ? CONTROL_WORKSPACE_DISCARD : CONTROL_WORKSPACE_ARCHIVE,
       [request]
     )) as WorkspaceArchived;
+    if (held) {
+      const kept =
+        db.updateWorkspace(workspace.id, {
+          state: "held",
+          holding: held,
+          heldAt: new Date(),
+          boundaryPid: null,
+        }) ?? workspace;
+      placesChanged(workspace.machineId);
+      workspaceChanged?.(kept);
+      const work = heldWork({ ...kept, holding: held });
+      console.log(
+        `[workspaces] ${workspace.id} on ${work.machine}: held, ${work.holds} (${work.size} at ${workspace.path}); the person continues it or discards it`
+      );
+      return { workspace: kept, carry: null, held: work };
+    }
     db.removeWorkspacePlaces(workspace.machineId, workspace.path);
     placesChanged(workspace.machineId);
-    return {
-      workspace:
-        db.updateWorkspace(workspace.id, {
-          state: "archived",
-          boundaryPid: null,
-        }) ?? workspace,
-      carry,
+    const archived =
+      db.updateWorkspace(workspace.id, {
+        state: "archived",
+        boundaryPid: null,
+        holding: null,
+        heldAt: null,
+        ...(carry ? { carry } : {}),
+      }) ?? workspace;
+    workspaceChanged?.(archived);
+    return { workspace: archived, carry };
+  };
+
+  /** Session statuses whose process may still run a command in its workspace. */
+  const ATTACHED: ReadonlySet<string> = new Set([
+    "running",
+    "starting",
+    "unknown",
+    "stopping",
+  ]);
+
+  /**
+   * What holds a workspace whose items have all ended, in words, or nothing:
+   * a session of its items whose process may still run there (one asleep,
+   * stopped or failed has none), or an artifact, any session's, showing what
+   * it serves (db artifacts.ts `previewing`: a port preview naming it, a
+   * folder preview inside its clone). On 2026-10-15 a workspace was retired
+   * while it served the owner's two open previews; a hold defers retirement
+   * until it goes, never cancels it.
+   */
+  const holdOn = (
+    workspace: WorkspaceRow,
+    items: readonly WorkItemRow[]
+  ): string | undefined => {
+    const rows = db.getInstancesByIds([
+      ...new Set(items.map((item) => item.instanceId)),
+    ]);
+    const attached = rows.find((row) => ATTACHED.has(row.status));
+    if (attached) {
+      return `its session ${attached.id} is ${attached.status === "stopping" ? "stopping" : "attached"}`;
+    }
+    const shown = db.artifacts.previewing(workspace).map((one) => one.name);
+    if (shown.length > 0) {
+      return `${shown.length === 1 ? "the artifact" : "the artifacts"} ${shown.join(", ")} ${shown.length === 1 ? "shows" : "show"} what it serves`;
+    }
+  };
+
+  /** What one {@link settle} came to. */
+  type Settled =
+    | { kind: "retired"; carry: string | null }
+    | { kind: "held"; held: HeldWork }
+    | { kind: "deferred"; hold: string }
+    | { kind: "failed"; reason: string }
+    | { kind: "none" };
+
+  /** The last failure each workspace's settle logged: one line per change, not per sweep. */
+  const settleFailures = new Map<string, string>();
+
+  /**
+   * THE end of a workspace's life (schema.ts `WorkspaceState`). An active
+   * delegate's workspace whose items have all ended is closed on its machine
+   * ({@link closeWorkspace}, a `keep`) once nothing holds it ({@link holdOn}):
+   * archived when its clone holds nothing that is nowhere else, held with
+   * what it holds otherwise. A hold defers it to the event that ends the hold
+   * (its session asleep or ended, the artifact gone), or the sweep's next
+   * look (workspace-retire.ts). Its sessions are not ended: each is asleep or
+   * gone already, and a handoff to one goes on in a clone cut again
+   * ({@link recut}). A check workspace goes with its source.
+   */
+  const settle = async (id: string): Promise<Settled> => {
+    const [workspace] = db.workspacesNamed(id);
+    if (workspace?.state !== "active" || workspace.checksFor) {
+      return { kind: "none" };
+    }
+    const items = db.workItemsIn(workspace.id);
+    if (items.length === 0 || items.some((item) => LIVE.has(item.state))) {
+      return { kind: "none" };
+    }
+    const hold = holdOn(workspace, items);
+    if (hold) {
+      return { kind: "deferred", hold };
+    }
+    const machine = machineName(workspace.machineId);
+    try {
+      const closed = await closeWorkspace(
+        workspace,
+        "keep",
+        handedOver(workspace)
+      );
+      settleFailures.delete(workspace.id);
+      if (closed.held) {
+        return { kind: "held", held: closed.held };
+      }
+      await Promise.all(
+        db
+          .checkWorkspacesOf(workspace.id)
+          .map((check) => closeWorkspace(check, "check"))
+      );
+      console.log(
+        `[workspaces] ${workspace.id} on ${machine}: retired, its work over and nothing of it anywhere but on its remote; ${workspace.path} and what it owned there are gone`
+      );
+      return { kind: "retired", carry: closed.carry };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      if (settleFailures.get(workspace.id) !== reason) {
+        console.warn(
+          `[workspaces] ${workspace.id} on ${machine}: not retired: ${reason}`
+        );
+      }
+      settleFailures.set(workspace.id, reason);
+      return { kind: "failed", reason };
+    }
+  };
+
+  /** Each workspace's settle under way, and whether one was asked for meanwhile. */
+  const settling = new Map<string, { again: boolean }>();
+
+  /**
+   * {@link settle} soon, off the caller's step, once at a time per
+   * workspace: one asked for while one runs runs again after it. Never
+   * throws.
+   */
+  const settleSoon = (id: string): void => {
+    const running = settling.get(id);
+    if (running) {
+      running.again = true;
+      return;
+    }
+    settling.set(id, { again: false });
+    const run = (): void => {
+      settle(id)
+        .catch((error: unknown) =>
+          console.warn(
+            `[workspaces] ${id}: its settle failed: ${error instanceof Error ? error.message : String(error)}`
+          )
+        )
+        .finally(() => {
+          const asked = settling.get(id);
+          if (asked?.again) {
+            asked.again = false;
+            run();
+          } else {
+            settling.delete(id);
+          }
+        });
     };
+    queueMicrotask(run);
+  };
+
+  /**
+   * Whether a workspace is retired and may be cut again: archived, not a
+   * check workspace, and its work not discarded (a discard's carry holds
+   * it, and nothing on its remote does).
+   */
+  const recuttable = (workspace: WorkspaceRow): boolean =>
+    workspace.state === "archived" &&
+    workspace.carry === null &&
+    !workspace.checksFor;
+
+  /** Each workspace's cut under way ({@link recut}): one at a time. */
+  const recutting = new Map<string, Promise<WorkspaceRow>>();
+
+  /**
+   * A retired workspace cut again on its machine, at the same path (a
+   * function of its id) with the same id and branch, at the commit its last
+   * item landed ({@link CONTROL_WORKSPACE_CREATE}'s `at`; its default
+   * branch's tip when none landed one), its boundary started on the account
+   * its latest item's session runs on: its delegate goes on in the same
+   * session, on its transcript, in the same folder. Filed active again, one
+   * of its project's places. Its installed dependencies are gone with the
+   * old clone. One cut at a time per workspace; every caller shares it.
+   * `onCut` runs in the step that files it active, before anything else
+   * can settle it: what wakes its session there.
+   */
+  const recut = (
+    workspace: WorkspaceRow,
+    onCut?: () => void
+  ): Promise<WorkspaceRow> => {
+    const pending = recutting.get(workspace.id);
+    if (pending !== undefined) {
+      return onCut
+        ? pending.then((row) => {
+            onCut();
+            return row;
+          })
+        : pending;
+    }
+    const work = (async (): Promise<WorkspaceRow> => {
+      notPaused(workspace.machineId);
+      const [latest] = db.workItemsIn(workspace.id);
+      const [session] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
+      const projectId = latest?.projectId ?? null;
+      const checkout = (await call(
+        workspace.machineId,
+        CONTROL_WORKSPACE_CREATE,
+        [
+          workspace.repoRoot,
+          workspace.id,
+          projectId,
+          session?.accountId ?? null,
+          workspace.landed ?? null,
+        ]
+      )) as WorkspaceCheckout;
+      const path = cutPath(workspace.machineId, checkout.path);
+      if (path !== workspace.path) {
+        throw new Error(
+          `workspace ${workspace.id} was cut again at ${path}, not at its own path ${workspace.path}`
+        );
+      }
+      if (projectId && db.project(projectId)) {
+        db.addPlace({
+          projectId,
+          machineId: workspace.machineId,
+          path: workspace.path,
+          kind: "workspace",
+        });
+        placesChanged(workspace.machineId, projectId);
+      }
+      const again =
+        db.updateWorkspace(workspace.id, {
+          state: "active",
+          boundaryPid: checkout.boundaryPid,
+          base: checkout.base,
+          tmp: checkout.tmp,
+        }) ?? workspace;
+      onCut?.();
+      workspaceChanged?.(again);
+      console.log(
+        `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: cut again at ${workspace.path}, at ${workspace.landed ? `${workspace.landed.commit.slice(0, 9)} on ${workspace.landed.branch}` : `the tip of ${checkout.base}`}, for its delegate to go on`
+      );
+      return again;
+    })().finally(() => recutting.delete(workspace.id));
+    recutting.set(workspace.id, work);
+    return work;
+  };
+
+  /**
+   * Whether a send from `origin` to session `instanceId` reopens a finished
+   * item whose workspace retired ({@link recuttable}): from one who may
+   * reopen it ({@link mayReopen}), to its workspace's latest item. Such a
+   * send waits at the hub while the workspace is cut again ({@link recut}).
+   */
+  const retiredFor = (instanceId: string, origin: NeutralOrigin): boolean => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const item = row ? itemOf(row) : undefined;
+    if (!item || LIVE.has(item.state) || !mayReopen(item, origin)) {
+      return false;
+    }
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    return (
+      workspace !== undefined &&
+      recuttable(workspace) &&
+      db.workItemsIn(workspace.id)[0]?.id === item.id
+    );
+  };
+
+  /** A held workspace filed active again: a follow-up, a retry or a handoff continues its work. */
+  const continued = (workspace: WorkspaceRow): WorkspaceRow => {
+    if (workspace.state !== "held") {
+      return workspace;
+    }
+    const active =
+      db.updateWorkspace(workspace.id, {
+        state: "active",
+        holding: null,
+        heldAt: null,
+      }) ?? workspace;
+    placesChanged(workspace.machineId);
+    workspaceChanged?.(active);
+    return active;
   };
 
   /**
@@ -2736,10 +3040,13 @@ export const createWorkItems = ({
       );
     }
     const [workspace] = named;
+    // A retired one was cut again before this ({@link startFollowUp}).
     if (workspace.state === "archived") {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${workspace.id} is archived: its clone and boundary are gone. Delegate without workspace to start a new one.`
+        workspace.carry
+          ? `Workspace ${workspace.id} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(workspace.machineId)}, and its clone is gone. Delegate without workspace to start a new one.`
+          : `Workspace ${workspace.id} is archived: its clone and boundary are gone. Delegate without workspace to start a new one.`
       );
     }
     if (workspace.checksFor) {
@@ -2761,13 +3068,14 @@ export const createWorkItems = ({
 
   /**
    * A follow-up's boundary, running before its item is filed: the machine
-   * starts it again when it has gone (a reboot, a sessiond restart), or says
-   * why it cannot and the follow-up is refused. A workspace that is missing or
-   * archived is left to {@link claim}, which refuses it in its own words.
+   * starts it again when it has gone (a reboot, a sessiond restart, a held
+   * workspace's settle), or says why it cannot and the follow-up is
+   * refused. A workspace that is missing or archived is left to
+   * {@link claim}, which refuses it in its own words.
    */
   const boundaryUp = async (needle: string): Promise<void> => {
     const [workspace] = db.workspacesNamed(needle.trim());
-    if (workspace?.state !== "active") {
+    if (!workspace || workspace.state === "archived") {
       return;
     }
     const boundaryPid = (await call(
@@ -3060,7 +3368,10 @@ export const createWorkItems = ({
         "a follow-up continues the same session; delegate without workspace for a different model or machine"
       );
     }
-    const { workspace, previous } = claim(needle);
+    const claimed = claim(needle);
+    const { previous } = claimed;
+    // Continuing a held workspace ends its hold: its work is live again.
+    const workspace = continued(claimed.workspace);
     const [session] = previous
       ? db.getInstancesByIds([previous.instanceId])
       : [];
@@ -3108,18 +3419,37 @@ export const createWorkItems = ({
   };
 
   /**
-   * The workspace of an earlier attempt a retry runs in again, when its clone
-   * is still on its machine: its earlier sessions stopped
-   * ({@link endEarlierSessions}) and its boundary started again (and the
-   * workspace filed as active again, should it have been archived with the
-   * clone left behind). Undefined when the clone is gone, its machine
-   * cannot say, or it is on none of the machines `on` names (the request's
-   * `reuseOn`), and the retry cuts a new workspace. Refused while an item
-   * there is live.
+   * The workspace a retry goes on in, with its clone there: a retired one
+   * cut again ({@link recut}); one that never retired as it stands, while
+   * its clone is on its machine. Undefined when that clone is gone.
+   */
+  const withClone = async (
+    workspace: WorkspaceRow
+  ): Promise<WorkspaceRow | undefined> => {
+    if (recuttable(workspace)) {
+      return await recut(workspace);
+    }
+    const there = await command(
+      workspace.machineId,
+      "/",
+      `test -d ${quote(`${workspace.path}/.git`)}`,
+      GIT_TIMEOUT_MS
+    );
+    return there.exitCode === 0 ? workspace : undefined;
+  };
+
+  /**
+   * The workspace of an earlier attempt a retry runs in again: its earlier
+   * sessions stopped ({@link endEarlierSessions}), its clone cut again by id
+   * at its own path when it retired ({@link recut}), its boundary started
+   * again, and the workspace filed active (a held one's hold ends).
+   * Undefined when its work was discarded, its clone is gone from a
+   * workspace that never retired, its machine cannot say, or it is on none
+   * of the machines `on` names (the request's `reuseOn`), and the retry cuts
+   * a new workspace. Refused while an item there is live.
    */
   const reusable = async (
     id: string,
-    projectId: string | null,
     on: string[] | undefined
   ): Promise<WorkspaceRow | undefined> => {
     const [workspace] = db.workspacesNamed(id);
@@ -3140,37 +3470,27 @@ export const createWorkItems = ({
     busy();
     // Before anything reaches the machine, as a new clone is refused.
     notPaused(workspace.machineId);
+    if (workspace.state === "archived" && !recuttable(workspace)) {
+      return;
+    }
     try {
-      const there = await command(
-        workspace.machineId,
-        "/",
-        `test -d ${quote(`${workspace.path}/.git`)}`,
-        GIT_TIMEOUT_MS
-      );
-      if (there.exitCode !== 0) {
+      await endEarlierSessions(workspace);
+      const here = await withClone(workspace);
+      if (!here) {
         return;
       }
-      await endEarlierSessions(workspace);
       const boundaryPid = (await call(
-        workspace.machineId,
+        here.machineId,
         CONTROL_WORKSPACE_BOUNDARY,
-        [refOf(workspace)]
+        [refOf(here)]
       )) as number;
       // Awaited above: the one-writer check again, in the step that files the item.
       busy();
-      if (workspace.state === "archived" && projectId) {
-        projectStands(projectId);
-        db.addPlace({
-          projectId,
-          machineId: workspace.machineId,
-          path: workspace.path,
-          kind: "workspace",
-        });
-        placesChanged(workspace.machineId, projectId);
-      }
       return (
-        db.updateWorkspace(workspace.id, { boundaryPid, state: "active" }) ??
-        workspace
+        db.updateWorkspace(continued(here).id, {
+          boundaryPid,
+          state: "active",
+        }) ?? here
       );
     } catch (error) {
       if (error instanceof WorkItemRefusal) {
@@ -3316,7 +3636,7 @@ export const createWorkItems = ({
     inputs: InputFile[]
   ): Promise<WorkItemStart> => {
     if (request.reuse) {
-      const again = await reusable(request.reuse, projectId, request.reuseOn);
+      const again = await reusable(request.reuse, request.reuseOn);
       if (again) {
         await handIn(again, inputs);
         return spawnIn(
@@ -3386,7 +3706,8 @@ export const createWorkItems = ({
   };
 
   /**
-   * The follow-up in the workspace `needle` names. Its boundary is up and its
+   * The follow-up in the workspace `needle` names. A retired one is cut
+   * again at its own path first ({@link recut}). Its boundary is up and its
    * inputs are written before the claim, which files the item in the same
    * step as its one-writer check; the inputs land only in a workspace the
    * claim would take, and the claim is made again as the item is filed.
@@ -3397,7 +3718,11 @@ export const createWorkItems = ({
     parent: Parent,
     inputs: InputFile[]
   ): Promise<WorkItemStart> => {
-    notPaused(namedWorkspace(needle).machineId);
+    const named = namedWorkspace(needle);
+    notPaused(named.machineId);
+    if (recuttable(named)) {
+      await recut(named);
+    }
     await boundaryUp(needle);
     if (inputs.length > 0) {
       await handIn(claim(needle).workspace, inputs);
@@ -3581,15 +3906,23 @@ export const createWorkItems = ({
   const itemOf = (row: InstanceRow): WorkItemRow | undefined =>
     row.workItemId ? db.workItem(row.workItemId) : undefined;
 
-  /** Moves a live item to a finished state; finished work stays as it ended. */
+  /**
+   * Moves a live item to a finished state; finished work stays as it ended.
+   * Its workspace is settled next ({@link settleSoon}): retired or held once
+   * nothing holds it, which its session, still in the turn that ended it,
+   * does until it sleeps.
+   */
   const finish = (
     item: WorkItemRow,
     change: Parameters<DbShape["updateWorkItem"]>[1]
   ): WorkItemRow => {
     passes.delete(item.id);
-    return LIVE.has(item.state)
-      ? (update(item.id, { ...change, endedAt: new Date() }) ?? item)
-      : item;
+    if (!LIVE.has(item.state)) {
+      return item;
+    }
+    const ended = update(item.id, { ...change, endedAt: new Date() }) ?? item;
+    settleSoon(item.workspaceId);
+    return ended;
   };
 
   /**
@@ -4549,6 +4882,7 @@ export const createWorkItems = ({
         return {
           kind: "done",
           line: `Landed on ${base} at ${outcome.sha.slice(0, 9)}; ${recheckSaid(base, outcome.rebased, runs.recheck)}${gateSaid(runs.gate)}.`,
+          cut: { branch: base, commit: outcome.sha },
         };
       case "nothing":
         return {
@@ -4670,12 +5004,16 @@ export const createWorkItems = ({
       );
     }
     const at = `${branch} at ${pushed.sha.slice(0, 9)}`;
-    return item.lands === "pr"
-      ? await pullRequestFor(workspace, item, said, at)
-      : {
-          kind: "done",
-          line: `Pushed to branch ${at} on origin; ${base} is untouched.`,
-        };
+    const cut: WorkspaceCut = { branch, commit: pushed.sha };
+    if (item.lands !== "pr") {
+      return {
+        kind: "done",
+        line: `Pushed to branch ${at} on origin; ${base} is untouched.`,
+        cut,
+      };
+    }
+    const opened = await pullRequestFor(workspace, item, said, at);
+    return opened.kind === "done" ? { ...opened, cut } : opened;
   };
 
   /** Opens the pull request for an item's pushed branch, or finds the open one. */
@@ -4820,6 +5158,13 @@ export const createWorkItems = ({
     }
   };
 
+  /** Where a landing put the item's commit, on its workspace's row: a retired workspace is cut again there ({@link recut}). */
+  const noteLanded = (workspace: WorkspaceRow, landing: Landed): void => {
+    if (landing.kind === "done" && landing.cut) {
+      db.updateWorkspace(workspace.id, { landed: landing.cut });
+    }
+  };
+
   /**
    * A checked item, its checks all passed, to its end: its outputs must be
    * in its workspace (else it is back to running, told which are not); then
@@ -4852,6 +5197,7 @@ export const createWorkItems = ({
       update(item.id, settled);
       return { done: false, text: landing.text };
     }
+    noteLanded(workspace, landing);
     const collected =
       landing.kind === "done"
         ? await collectOutputs(workspace, item)
@@ -5334,7 +5680,42 @@ export const createWorkItems = ({
     heldFor(instanceId: string, origin: NeutralOrigin): boolean {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      return !!item?.heldAt && LIVE.has(item.state) && !mayReopen(item, origin);
+      return (
+        (!!item?.heldAt && LIVE.has(item.state) && !mayReopen(item, origin)) ||
+        retiredFor(instanceId, origin)
+      );
+    },
+
+    /**
+     * Whether a send from `origin` waits at the hub because the session's
+     * finished item's workspace retired and is cut again first
+     * ({@link recut}): the handoff that reopens it, from its parent, its
+     * lead or the reader ({@link retiredFor}). Its hold's words say so.
+     */
+    recutHold: (instanceId: string, origin: NeutralOrigin): boolean =>
+      retiredFor(instanceId, origin),
+
+    /**
+     * A send kept for {@link recutHold}: the session's retired workspace cut
+     * again at its own path ({@link recut}), then what was kept for it goes
+     * ({@link WorkItemDeps.recutDone}), or fails with why the cut could not
+     * be made ({@link WorkItemDeps.recutFailed}). Nothing for a session
+     * whose workspace is not retired. Never throws.
+     */
+    recutFor(instanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
+      if (!(item && workspace && recuttable(workspace))) {
+        return;
+      }
+      recut(workspace, () => recutDone?.(instanceId)).catch(
+        (error: unknown) => {
+          const reason = `Its workspace ${workspace.id} retired when its work landed and could not be cut again: ${error instanceof Error ? error.message : String(error)}`;
+          console.warn(`[workspaces] ${instanceId}: ${reason}`);
+          recutFailed?.(instanceId, reason);
+        }
+      );
     },
 
     /**
@@ -5393,9 +5774,12 @@ export const createWorkItems = ({
           };
         }
         const [workspace] = db.workspacesNamed(item.workspaceId);
-        if (workspace?.state === "archived") {
+        // A retired one is cut again for the send ({@link recutHold}).
+        if (workspace?.state === "archived" && !recuttable(workspace)) {
           return {
-            reason: `${item.title} (${item.id}) is ${item.state}, and its workspace ${item.workspaceId} is archived: its clone and boundary are gone.`,
+            reason: workspace.carry
+              ? `${item.title} (${item.id}) is ${item.state}, and its workspace ${item.workspaceId} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(workspace.machineId)}, and its clone is gone.`
+              : `${item.title} (${item.id}) is ${item.state}, and its workspace ${item.workspaceId} is archived: its clone and boundary are gone.`,
             refusal: {
               kind: "workspace-archived",
               itemId: item.id,
@@ -5442,6 +5826,11 @@ export const createWorkItems = ({
         item.endedAt !== null &&
         item.endedAt.getTime() <= sentAt.getTime()
       ) {
+        // Its held workspace's hold ends: the work is live again.
+        const [workspace] = db.workspacesNamed(item.workspaceId);
+        if (workspace) {
+          continued(workspace);
+        }
         update(item.id, {
           state: "running",
           result: null,
@@ -5667,9 +6056,10 @@ export const createWorkItems = ({
      * A handoff's inputs: `paths` on `from`'s machine copied into the
      * `$TMPDIR/inputs/` of the workspace `instanceId`'s item runs in, before
      * the handoff that names them goes. Only the session that delegated the
-     * item, or its project's lead, hands it inputs; refused, too, for an
-     * archived workspace and an input that may not go ({@link readInputs}).
-     * Answers each input's name and where it was read.
+     * item, or its project's lead, hands it inputs; refused, too, for a
+     * workspace whose work was discarded and an input that may not go
+     * ({@link readInputs}). A retired workspace is cut again first
+     * ({@link recut}). Answers each input's name and where it was read.
      */
     async handInputs(
       instanceId: string,
@@ -5690,18 +6080,21 @@ export const createWorkItems = ({
           "Only the session that delegated an item, or its project's lead, hands it inputs."
         );
       }
-      const [workspace] = db.workspacesNamed(item.workspaceId);
-      if (workspace?.state !== "active") {
+      const [named] = db.workspacesNamed(item.workspaceId);
+      const [caller] = db.getInstancesByIds([from]);
+      if (!caller) {
+        throw new WorkItemRefusal(404, `unknown session ${from}`);
+      }
+      // Read before a retired workspace is cut again: an input that may not
+      // go refuses the handoff before anything is cut.
+      const inputs = await readInputs(paths, caller);
+      const workspace = named && recuttable(named) ? await recut(named) : named;
+      if (!workspace || workspace.state === "archived") {
         throw new WorkItemRefusal(
           409,
           `${item.title} (${item.id}) is in workspace ${item.workspaceId}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`
         );
       }
-      const [caller] = db.getInstancesByIds([from]);
-      if (!caller) {
-        throw new WorkItemRefusal(404, `unknown session ${from}`);
-      }
-      const inputs = await readInputs(paths, caller);
       await handIn(workspace, inputs);
       return inputs.map(({ name, from: read }) => ({ name, from: read }));
     },
@@ -5750,21 +6143,81 @@ export const createWorkItems = ({
       return workspace ? refOf(workspace) : undefined;
     },
 
-    /** What a workspace holds that is nowhere else, read on its machine now ({@link HeldWork}). */
-    held(needle: string): Promise<HeldWork> {
+    /**
+     * What a held workspace holds that is nowhere else, as its machine read
+     * it once its boundary was closed ({@link HeldWork}). Refused for one
+     * that is not held: what a workspace holds is read as it is settled,
+     * never while its boundary may run.
+     */
+    held(needle: string): HeldWork {
       const workspace = namedWorkspace(needle);
-      return heldIn(workspace, handedOver(workspace));
+      if (!isHeld(workspace)) {
+        throw new WorkItemRefusal(
+          409,
+          `Workspace ${workspace.id} is ${workspace.state}, not held: what a workspace holds is read on its machine once its work has ended and its boundary is closed, and kept with it while it is held.`
+        );
+      }
+      return heldWork(workspace);
+    },
+
+    /** Every held workspace, with what it holds and where ({@link HeldWork}), newest first. */
+    heldWorkspaces: (): HeldWork[] =>
+      db.heldWorkspaces().filter(isHeld).map(heldWork),
+
+    /**
+     * {@link settle} for each active workspace on `machineId`, one after
+     * another: the sweep's look (workspace-retire.ts). Answers each one's
+     * outcome by id.
+     */
+    async settleOn(
+      machineId: string
+    ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> {
+      const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
+      for (const workspace of db.activeWorkspacesOn(machineId)) {
+        if (settling.has(workspace.id)) {
+          continue;
+        }
+        // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, so a sweep never loads a machine with many archives at once
+        done.push({ workspace, outcome: await settle(workspace.id) });
+      }
+      return done;
     },
 
     /**
-     * Archives a workspace: its machine kills the boundary with every process
-     * in it and deletes the clone. Refused while an item there is live — stop
-     * it first — and for a workspace already archived. Refused, before any
-     * session is ended, when the clone holds work that is nowhere else
-     * ({@link WorkspaceHoldsWork}), unless `discard`: a person chose to let
-     * it go, and its machine saves it to a carry before deleting anything.
-     * The machine reads the clone again, its boundary still up, right before
-     * it deletes, and refuses on its own what appeared since.
+     * The workspace of session `instanceId`'s item settled soon
+     * ({@link settleSoon}): its session went to sleep, stopped or failed, so
+     * it may hold that workspace no longer.
+     */
+    settleFor(instanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item) {
+        settleSoon(item.workspaceId);
+      }
+    },
+
+    /**
+     * Each active workspace on `machineId` that an artifact showed settled
+     * soon ({@link settleSoon}): the artifact went, and with it a hold.
+     */
+    settleShown(machineId: string): void {
+      for (const workspace of db.activeWorkspacesOn(machineId)) {
+        if (!workspace.checksFor) {
+          settleSoon(workspace.id);
+        }
+      }
+    },
+
+    /**
+     * Archives a workspace now, a person's or a session's hand on it: its
+     * sessions are ended, then its machine kills the boundary with every
+     * process in it, never starting one, reads on the host what the clone
+     * holds that is nowhere else, and deletes the clone. Refused while an
+     * item there is live — stop it first — and for a workspace already
+     * archived. A clone that holds work that is nowhere else is kept and the
+     * workspace held ({@link WorkspaceHoldsWork}), unless `discard`: a
+     * person chose to let it go, and its machine saves it to a carry before
+     * deleting anything.
      */
     async archive(
       needle: string,
@@ -5790,14 +6243,6 @@ export const createWorkItems = ({
         );
       }
       const skip = handedOver(workspace);
-      // A discard archives whatever the clone holds: nothing to read first,
-      // and no walk of its ignored files.
-      if (!discard) {
-        const held = await heldIn(workspace, skip);
-        if (!holdsNothing(held)) {
-          throw new WorkspaceHoldsWork(held);
-        }
-      }
       // Bounded well inside the HTTP call's own idle timeout: a machine that
       // never confirms leaves the workspace active, and the answer says so.
       const stops = await Promise.allSettled(
@@ -5822,24 +6267,34 @@ export const createWorkItems = ({
           `Workspace ${workspace.id} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
         );
       }
-      // Its check workspaces on other machines go first: none outlives it.
-      // Their commits are this one's, which keeps them until it goes.
+      const closed = await closeWorkspace(
+        workspace,
+        discard ? "discard" : "keep",
+        skip
+      );
+      if (closed.held) {
+        throw new WorkspaceHoldsWork(closed.held);
+      }
+      // Its check workspaces on other machines go with it: none outlives it.
       await Promise.all(
         db
           .checkWorkspacesOf(workspace.id)
           .map((check) => closeWorkspace(check, "check"))
       );
-      return closeWorkspace(workspace, discard ? "discard" : "keep", skip);
+      return closed;
     },
 
     /**
-     * An agent has started: its machine's active workspaces go to it, and each
-     * one still a git worktree from before workspaces were clones becomes a
-     * clone in place. The machine logs each workspace it converts, skips or
-     * cannot convert.
+     * An agent has started: its machine's workspaces that still have a clone
+     * (active and held) go to it, and each one still a git worktree from
+     * before workspaces were clones becomes a clone in place. The machine
+     * logs each workspace it converts, skips or cannot convert.
      */
     async convertWorktrees(machineId: string): Promise<void> {
-      const refs = db.activeWorkspacesOn(machineId).map(refOf);
+      const refs = [
+        ...db.activeWorkspacesOn(machineId),
+        ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
+      ].map(refOf);
       if (refs.length > 0) {
         await call(machineId, CONTROL_WORKSPACE_MIGRATE, [refs]);
       }

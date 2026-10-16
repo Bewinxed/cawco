@@ -154,6 +154,7 @@ it actually means.
 | One identity for work across machines, folders and kinds of work (code, a launch, an X account) | **project** | The project page, its threads, its tasks. | "workspace" (that is a clone); "repo" when the project is more than one |
 | Where a project's files are: a checkout on a machine, a delegate's clone, the hub folder | **place** | The project's places list. | "location", "mount" |
 | A clone plus branch kept for one task | **workspace** | A delegate's or attempt's working copy, `ws-4f2a`. | "worktree" in copy (fine as the git term in code) |
+| A workspace whose work ended with work that is nowhere else (commits on no remote, changed files, stashes), kept until you continue it or discard it. One whose work landed retires on its own | **held** | The places list: "Held: 1 commit on no remote · 4 MB", then Continue and Discard. | "kept", "stale", "orphaned" |
 | The unit of work a project tracks | **task** | A task file, a card in a view, `tsk-142`. | "ticket", "card" (a card is how a view draws it), "issue" (unless it is the GitHub issue) |
 | Where a task is in its project's own lifecycle, named by the project (Draft, Scheduled, Posted) | **stage** | The task file's `stage:` and a view's columns. | "status" (status words are liveness: `working` / `idle` / `done` / `needs you`); "column" as the concept |
 | The fixed category a stage belongs to: to do, active, waiting, you, done, dropped | **kind** | `stages.md`; how CawCo knows what a stage means. | "type", "category" |

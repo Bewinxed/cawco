@@ -606,6 +606,11 @@ export interface ArtifactServiceDeps {
    * when the panel shows nothing.
    */
   relist: (instanceId: string) => void;
+  /**
+   * An artifact was taken out: a preview it was no longer holds the
+   * workspace it showed (work-items.ts `settleShown`).
+   */
+  removed?: (row: ArtifactRow) => void;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
   /**
@@ -786,6 +791,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     docs.drop(row.id);
     db.remove(row.id);
     rmSync(join(deps.root, row.id), { recursive: true, force: true });
+    deps.removed?.(row);
   };
 
   const writePage = (id: string, html: string) => {

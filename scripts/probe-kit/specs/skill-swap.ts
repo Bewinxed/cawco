@@ -22,20 +22,21 @@
  *     update (v2 → v3) is refused as edited on this machine, the script still
  *     prints v2, and the edit is still there.
  *
- * The same skill bound to a project is placed in each delegate's clone. Each
- * clone is then deleted by hand down to what CawCo placed in it (the skill's
- * link in `.claude/skills` and its tree in `.claude/.cawco-trees`), as a
- * clone deleted under its workspace leaves it, and archived:
+ * The same skill bound to a project is placed in each delegate's clone, each
+ * workspace held by the parent's preview so its landed work does not retire
+ * it first. Each clone is then deleted by hand down to what CawCo placed in
+ * it (the skill's link in `.claude/skills` and its tree in
+ * `.claude/.cawco-trees`), as a clone deleted under its workspace leaves it,
+ * and archived:
  *
  * (d) One whose skill ran its script (`__pycache__` holding the bytecode of
  *     the carried `scripts/helper.py`) and holds nothing else archives as a
  *     husk: the agent logs "its husk", and the folder is gone with no carry.
  * (e) One that also holds a `notes.md` added in the skill keeps it as
- *     someone's. An archive without `discard` refuses any folder holding an
- *     entry of its own (hub work-items.ts `archive`: `if
- *     (!holdsNothing(held)) { throw new WorkspaceHoldsWork(held); }`): 409,
- *     "1 entry of its own in a folder that is no git clone" (the note alone,
- *     the bytecode not counted), the workspace still active, and the note on
+ *     someone's. An archive without `discard` keeps any folder holding an
+ *     entry of its own (hub work-items.ts `archive`, `WorkspaceHoldsWork`):
+ *     409, "1 entry of its own in a folder that is no git clone" (the note
+ *     alone, the bytecode not counted), the workspace held, and the note on
  *     disk untouched.
  *
  *   bun scripts/probe-kit/run.ts skill-swap
@@ -348,6 +349,22 @@ const spec: Spec = {
           "SELECT path FROM workspaces WHERE id = ?",
           started.workspaceId
         )[0] as { path: string };
+        // The parent's preview of its server holds the workspace once its
+        // work lands (hub work-items.ts `settle`), so it stands for the
+        // probe's hands until the archive below.
+        const now = Date.now();
+        fleet.write(
+          "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', ?, ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+          crypto.randomUUID(),
+          parent,
+          project.id,
+          `swap-${tag}`,
+          MACHINE,
+          JSON.stringify({ port: 5199, workspace: started.workspaceId }),
+          now,
+          now,
+          now
+        );
         await until(
           `${tag}'s item ended`,
           () =>
@@ -447,12 +464,12 @@ const spec: Spec = {
         e.workspaceId
       )[0]?.state;
       check(
-        "(e) E, with a notes.md added in the skill, is refused: 409, 1 entry of its own (the note; the bytecode not counted), still active",
+        "(e) E, with a notes.md added in the skill, is refused: 409, 1 entry of its own (the note; the bytecode not counted), and held",
         e.status === 409 &&
           e.text.includes(
             "1 entry of its own in a folder that is no git clone"
           ) &&
-          eState === "active",
+          eState === "held",
         `${e.status} ${e.text.slice(0, 300)}; state ${eState}`
       );
       check(

@@ -63,6 +63,8 @@ import type {
   WorkflowOrigin,
   WorkflowRunStatus,
   WorkflowStepStatus,
+  WorkspaceCut,
+  WorkspaceHolding,
 } from "@cawco/core";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { MachinePath } from "@cawco/core/machine-path";
@@ -1032,8 +1034,15 @@ export const completedTurns = sqliteTable(
   (table) => [primaryKey({ columns: [table.instanceId, table.resultId] })]
 );
 
-/** A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone. */
-export type WorkspaceState = "active" | "archived";
+/**
+ * A workspace's life, which is its work items' (work-items.ts `settle`):
+ * `active` while an item there is live, or ended a moment ago and the hub
+ * has not settled it, or while something holds it (a session attached, an
+ * artifact showing what it serves); `held` once its item ended with work
+ * that is nowhere else, which only the person ends, by continuing it or
+ * discarding it; `archived` once its boundary and clone are gone.
+ */
+export type WorkspaceState = "active" | "held" | "archived";
 
 /** Unfiled creates owned by the hub until filed, or acknowledged discarded by their machine. */
 export const workspaceCreates = sqliteTable("workspace_creates", {
@@ -1042,11 +1051,12 @@ export const workspaceCreates = sqliteTable("workspace_creates", {
 });
 
 /**
- * Where delegated work lives: one shared clone on its own branch, on one
+ * Where delegated work lives: one clone of its own on its own branch, on one
  * machine, with the boundary every shell command of its work items runs
  * inside. A workspace has at most one work item in `starting`/`running` at a
  * time — the one writer its checkout ever has — and it owns the checkout:
- * stopping or discarding a session never removes it; archiving does.
+ * stopping or discarding a session never removes it; archiving does, which
+ * the hub does itself once the work lands ({@link WorkspaceState}).
  */
 export const workspaces = sqliteTable("workspaces", {
   id: text("id").primaryKey(),
@@ -1087,6 +1097,25 @@ export const workspaces = sqliteTable("workspaces", {
    * checks names the machine, and archived with it. Null for a delegate's.
    */
   checksFor: text("checks_for"),
+  /**
+   * What its clone held that is nowhere else when it was filed `held`, as
+   * its machine read it once its boundary was closed; null in any other
+   * state.
+   */
+  holding: text("holding", { mode: "json" }).$type<WorkspaceHolding>(),
+  /** When {@link workspaces.holding} was read. */
+  heldAt: timestamp("held_at"),
+  /**
+   * The commit its last item landed, on `origin`'s branch that holds it: a
+   * retired workspace is cut again there for its delegate to go on. Null
+   * until an item lands a commit.
+   */
+  landed: text("landed", { mode: "json" }).$type<WorkspaceCut>(),
+  /**
+   * The carry its discard wrote on its machine, the person letting its
+   * unlanded work go: such a workspace is never cut again.
+   */
+  carry: text("carry"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

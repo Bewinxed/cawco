@@ -9,9 +9,10 @@
  * 1. **Budget**: at most {@link CALLS_PER_WAKE} shell or edit calls in one
  *    wake (a turn, from the sends it read to its result); past it, refused:
  *    "delegate the rest".
- * 2. **Hard denials by argv** in a shared checkout (a place another session
- *    or a live workspace also uses, or the project's folder the hub itself
- *    commits to): `git checkout|reset|stash|clean|rebase|push`, `git add -A`
+ * 2. **Hard denials by argv** in a shared checkout (a place another live
+ *    session also uses, or the project's folder the hub itself commits to;
+ *    a delegate's workspace is a clone of its own, in no one's tree, and
+ *    never makes one): `git checkout|reset|stash|clean|rebase|push`, `git add -A`
  *    and `git add .`, wherever they sit in the command (after `&&`, in a
  *    pipe, under `sh -c`, `eval`, `xargs`, `env`, a substitution). Refused:
  *    "file a task". And anywhere, while the project keeps its sessions off
@@ -1068,7 +1069,7 @@ export interface LeadGateDeps {
   readonly db: Pick<DbShape, "leadCalls">;
   /** A note in the thread the lead's turn answers (caw.ts `noteCall`). */
   readonly note: (instanceId: string, note: ThreadNote) => void;
-  /** Whether the lead's place is a shared checkout: one another session or a live workspace uses, or the project's folder on the hub. */
+  /** Whether the lead's place is a shared checkout: one another live session uses, or the project's folder on the hub. */
   readonly shared: (lead: InstanceRow) => boolean;
   /** The thread the lead's turn answers now (caw.ts `askThread`). */
   readonly thread: (lead: InstanceRow) => string | undefined;

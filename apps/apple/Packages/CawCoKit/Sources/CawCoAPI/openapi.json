@@ -25645,6 +25645,76 @@
             "cap": {
               "$ref": "#/components/schemas/ProjectCap"
             },
+            "places": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "held": {
+                    "type": "object",
+                    "properties": {
+                      "workspaceId": {
+                        "type": "string"
+                      },
+                      "holds": {
+                        "type": "string"
+                      },
+                      "size": {
+                        "type": "string"
+                      },
+                      "heldAt": {
+                        "type": "string"
+                      },
+                      "instanceId": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "heldAt",
+                      "holds",
+                      "instanceId",
+                      "size",
+                      "title",
+                      "workspaceId"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "machineId": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "$ref": "#/components/schemas/PlaceKind"
+                  },
+                  "path": {
+                    "$ref": "#/components/schemas/PlacePath"
+                  },
+                  "isPrimary": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "createdAt",
+                  "id",
+                  "isPrimary",
+                  "kind",
+                  "machineId",
+                  "path",
+                  "projectId"
+                ]
+              }
+            },
             "primaryPlaceId": {
               "type": [
                 "null",
@@ -25748,45 +25818,6 @@
             "createdAt": {
               "type": "string",
               "format": "date-time"
-            },
-            "places": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "machineId": {
-                    "type": "string"
-                  },
-                  "createdAt": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "projectId": {
-                    "type": "string"
-                  },
-                  "kind": {
-                    "$ref": "#/components/schemas/PlaceKind"
-                  },
-                  "path": {
-                    "$ref": "#/components/schemas/PlacePath"
-                  },
-                  "isPrimary": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "createdAt",
-                  "id",
-                  "isPrimary",
-                  "kind",
-                  "machineId",
-                  "path",
-                  "projectId"
-                ]
-              }
             }
           },
           "required": [
@@ -25859,6 +25890,76 @@
           "placeAdded": {
             "type": "boolean"
           },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "held": {
+                  "type": "object",
+                  "properties": {
+                    "workspaceId": {
+                      "type": "string"
+                    },
+                    "holds": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "string"
+                    },
+                    "heldAt": {
+                      "type": "string"
+                    },
+                    "instanceId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "heldAt",
+                    "holds",
+                    "instanceId",
+                    "size",
+                    "title",
+                    "workspaceId"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                },
+                "path": {
+                  "$ref": "#/components/schemas/PlacePath"
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "createdAt",
+                "id",
+                "isPrimary",
+                "kind",
+                "machineId",
+                "path",
+                "projectId"
+              ]
+            }
+          },
           "primaryPlaceId": {
             "type": [
               "null",
@@ -25962,45 +26063,6 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "places": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "machineId": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "projectId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "$ref": "#/components/schemas/PlaceKind"
-                },
-                "path": {
-                  "$ref": "#/components/schemas/PlacePath"
-                },
-                "isPrimary": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "createdAt",
-                "id",
-                "isPrimary",
-                "kind",
-                "machineId",
-                "path",
-                "projectId"
-              ]
-            }
           }
         },
         "required": [
@@ -26060,6 +26122,76 @@
           "cap": {
             "$ref": "#/components/schemas/ProjectCap"
           },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "held": {
+                  "type": "object",
+                  "properties": {
+                    "workspaceId": {
+                      "type": "string"
+                    },
+                    "holds": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "string"
+                    },
+                    "heldAt": {
+                      "type": "string"
+                    },
+                    "instanceId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "heldAt",
+                    "holds",
+                    "instanceId",
+                    "size",
+                    "title",
+                    "workspaceId"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                },
+                "path": {
+                  "$ref": "#/components/schemas/PlacePath"
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "createdAt",
+                "id",
+                "isPrimary",
+                "kind",
+                "machineId",
+                "path",
+                "projectId"
+              ]
+            }
+          },
           "primaryPlaceId": {
             "type": [
               "null",
@@ -26163,45 +26295,6 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "places": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "machineId": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "projectId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "$ref": "#/components/schemas/PlaceKind"
-                },
-                "path": {
-                  "$ref": "#/components/schemas/PlacePath"
-                },
-                "isPrimary": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "createdAt",
-                "id",
-                "isPrimary",
-                "kind",
-                "machineId",
-                "path",
-                "projectId"
-              ]
-            }
           }
         },
         "required": [
@@ -26281,6 +26374,76 @@
           "placeAdded": {
             "type": "boolean"
           },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "held": {
+                  "type": "object",
+                  "properties": {
+                    "workspaceId": {
+                      "type": "string"
+                    },
+                    "holds": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "string"
+                    },
+                    "heldAt": {
+                      "type": "string"
+                    },
+                    "instanceId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "heldAt",
+                    "holds",
+                    "instanceId",
+                    "size",
+                    "title",
+                    "workspaceId"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                },
+                "path": {
+                  "$ref": "#/components/schemas/PlacePath"
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "createdAt",
+                "id",
+                "isPrimary",
+                "kind",
+                "machineId",
+                "path",
+                "projectId"
+              ]
+            }
+          },
           "primaryPlaceId": {
             "type": [
               "null",
@@ -26384,45 +26547,6 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "places": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "machineId": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "projectId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "$ref": "#/components/schemas/PlaceKind"
-                },
-                "path": {
-                  "$ref": "#/components/schemas/PlacePath"
-                },
-                "isPrimary": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "createdAt",
-                "id",
-                "isPrimary",
-                "kind",
-                "machineId",
-                "path",
-                "projectId"
-              ]
-            }
           }
         },
         "required": [
@@ -26454,6 +26578,76 @@
       "putApiProjectsByIdAccounts200": {
         "type": "object",
         "properties": {
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "held": {
+                  "type": "object",
+                  "properties": {
+                    "workspaceId": {
+                      "type": "string"
+                    },
+                    "holds": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "string"
+                    },
+                    "heldAt": {
+                      "type": "string"
+                    },
+                    "instanceId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "heldAt",
+                    "holds",
+                    "instanceId",
+                    "size",
+                    "title",
+                    "workspaceId"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                },
+                "path": {
+                  "$ref": "#/components/schemas/PlacePath"
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "createdAt",
+                "id",
+                "isPrimary",
+                "kind",
+                "machineId",
+                "path",
+                "projectId"
+              ]
+            }
+          },
           "primaryPlaceId": {
             "type": [
               "null",
@@ -26557,45 +26751,6 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "places": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "machineId": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "projectId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "$ref": "#/components/schemas/PlaceKind"
-                },
-                "path": {
-                  "$ref": "#/components/schemas/PlacePath"
-                },
-                "isPrimary": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "createdAt",
-                "id",
-                "isPrimary",
-                "kind",
-                "machineId",
-                "path",
-                "projectId"
-              ]
-            }
           }
         },
         "required": [
@@ -26687,6 +26842,16 @@
               "null",
               "string"
             ]
+          },
+          "holding": {
+            "$ref": "#/components/schemas/WorkspaceHolding"
+          },
+          "heldAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "landed": {
+            "$ref": "#/components/schemas/WorkspaceCut"
           },
           "path": {
             "$ref": "#/components/schemas/MachinePath"
@@ -43390,9 +43555,13 @@
         ]
       },
       "HeldWork": {
-        "description": "What a workspace holds that is nowhere else, read on its machine now, and where it is.",
+        "description": "What a held workspace holds that is nowhere else, as its machine read it\nonce its boundary was closed (schema.ts `workspaces.holding`), and where\nit is.",
         "type": "object",
         "properties": {
+          "heldAt": {
+            "description": "When its machine read it, ISO.",
+            "type": "string"
+          },
           "holds": {
             "description": "What it holds, in words: \"2 commits on no remote, 3 changed files, 1 stash\".",
             "type": "string"
@@ -43422,11 +43591,48 @@
           "dirty": {
             "type": "number"
           },
-          "ignored": {
-            "description": "Files git ignores that the clone's own work wrote (agent workspace.ts\n`ignoredOwn`): matched by a `.gitignore` or the person's own excludes,\nnever by the clone's `info/exclude` (where CawCo lists what it wrote\nthere), outside dependency and build trees, not a secret file. How many,\nand their size. Every archive saves them to a carry first; past\n{@link IGNORED_CARRY_LIMIT} they keep the workspace instead.",
+          "stashes": {
             "type": "number"
           },
-          "ignoredBytes": {
+          "strays": {
+            "description": "Set when the clone's folder is there and its `.git` is no repository\ngit can read: how many entries down its tree are not CawCo's (agent\nstand-ins.ts `straysIn`, which names each by its path relative to the\nfolder). CawCo's are a deny path's stand-in exactly as made, a mount\npoint a sandbox left on a deny path, a `.git/config` holding only\ngit-lfs's `[lfs] repositoryformatversion = 0` marker, a project skill\nexactly as CawCo placed it (agent fleet.ts `placedAsMade`), and a\ndir (`.git`, `.claude`) holding only those. None is a husk, a deleted\nclone a sandbox refilled, which holds nothing; any keeps the folder.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ahead",
+          "bytes",
+          "dirty",
+          "heldAt",
+          "holds",
+          "machine",
+          "machineId",
+          "path",
+          "size",
+          "stashes",
+          "workspaceId"
+        ]
+      },
+      "WorkspaceState": {
+        "description": "A workspace's life, which is its work items' (work-items.ts `settle`):\n`active` while an item there is live, or ended a moment ago and the hub\nhas not settled it, or while something holds it (a session attached, an\nartifact showing what it serves); `held` once its item ended with work\nthat is nowhere else, which only the person ends, by continuing it or\ndiscarding it; `archived` once its boundary and clone are gone.",
+        "type": "string",
+        "enum": [
+          "active",
+          "archived",
+          "held"
+        ]
+      },
+      "WorkspaceHolding": {
+        "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref has (`git rev-list\n--count HEAD --branches --not --remotes`: landed work was pushed, whether\nonto the base or to a branch of its own), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), and stash entries. Files git ignores are\nnone of it: they go with the clone, and a delegate keeps one by handing it\nin as an output. `bytes` is the clone's size on disk.",
+        "type": "object",
+        "properties": {
+          "ahead": {
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "dirty": {
             "type": "number"
           },
           "stashes": {
@@ -43441,21 +43647,23 @@
           "ahead",
           "bytes",
           "dirty",
-          "holds",
-          "machine",
-          "machineId",
-          "path",
-          "size",
-          "stashes",
-          "workspaceId"
+          "stashes"
         ]
       },
-      "WorkspaceState": {
-        "description": "A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone.",
-        "type": "string",
-        "enum": [
-          "active",
-          "archived"
+      "WorkspaceCut": {
+        "description": "Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s\n`at`): the commit its last item landed, on `origin`'s branch `branch`\n(the default branch for work that landed there, the item's own branch for\none that landed as a branch or a pull request), fetched as the clone is.",
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "branch",
+          "commit"
         ]
       },
       "Account": {

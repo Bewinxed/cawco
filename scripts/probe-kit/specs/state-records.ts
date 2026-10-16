@@ -19,8 +19,10 @@
  * (c) Other sessions still spawn: a plain session, and a new delegate in a
  *     new workspace C (both read every workspace's records on the way).
  * (d) B's records and clone are as they were, and its row says nothing.
- * (e) Archiving A (its session stopped first, so its item is not live)
- *     removes its state dir and clone, and its row stops saying it.
+ * (e) Archiving A (its session stopped first, so its item is not live; or
+ *     its own retirement, its item over and nothing of its own in it)
+ *     removes its state dir and clone, its damaged records never read, and
+ *     its row stops saying it.
  * (f) The hub started with its notices record damaged: the board says so
  *     with the file, an acknowledgement is refused with the same words,
  *     Reset writes a fresh record (a list again) and the board's word
@@ -452,8 +454,17 @@ const spec: Spec = {
     // (e)
     await fleet.stopSession(a.instanceId);
     const aPath = pathOf(a.workspaceId);
-    // Asked again until its stop has cancelled the item (a live item refuses it).
+    // Asked again until its stop has cancelled the item (a live item refuses
+    // it). Its item over and nothing of its own in it, A may retire on its
+    // own first (hub work-items.ts `settle`): its row says so.
     const archiveA = async (): Promise<{ state: string }> => {
+      const [row] = fleet.query<{ state: string }>(
+        "SELECT state FROM workspaces WHERE id = ?",
+        a.workspaceId
+      );
+      if (row?.state === "archived") {
+        return { state: "archived" };
+      }
       try {
         return await fleet.api<{ state: string }>(
           `/api/workspaces/${a.workspaceId}/archive`,

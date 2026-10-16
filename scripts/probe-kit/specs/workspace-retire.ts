@@ -1,52 +1,62 @@
 /**
- * A machine's disk never fills with spent work (hub workspace-retire.ts,
- * agent workspace.ts `archiveWorkspace`, scripts/lib/disk-room.sh). On a
- * scratch fleet (real hub, agent and sessiond; Claude Code against the mock
- * model), boundaries included: run it where a workspace boundary can start
- * (not inside another one), as state-records does.
+ * A workspace lives exactly as long as its work item (hub work-items.ts
+ * `settle`, workspace-retire.ts; agent workspace.ts `archiveWorkspace`,
+ * scripts/lib/disk-room.sh). On a scratch fleet (real hub, agent and
+ * sessiond; Claude Code against the mock model), boundaries included: run it
+ * where a workspace boundary can start (not inside another one), as
+ * state-records does.
  *
- * Two delegates of one parent each commit a file and leave a folder in
- * their TMPDIR (as a scratch fleet a SIGKILL cut short leaves one); the
- * probe gives each clone an Apple build root in the workspaces' cache, as
- * build-both.sh makes one (`xdg/cawco-apple/<clone's folder>` and its lock).
- * L calls finish_item and the hub lands its commit; K calls it blocked, so
- * its item fails with its commit on no remote.
+ * Each delegate of one parent commits a file and leaves a folder in its
+ * TMPDIR (as a scratch fleet a SIGKILL cut short leaves one); the probe gives
+ * L's and K's clones an Apple build root in the workspaces' cache, as
+ * build-both.sh makes one (`xdg/cawco-apple/<clone's folder>` and its lock),
+ * as each starts. Each calls finish_item and the hub lands its commit; K
+ * calls it blocked, so its item fails with its commit on no remote.
  *
- * (a) Right after both items end, a retirement sweep retires neither: the
- *     rule's two idle hours have not passed.
- * (b) Their items' ends and their sessions' last turns set back three
- *     hours, a sweep retires L: its clone, state dir, TMPDIR (the folder
- *     left there with it) and build root with its lock are gone, its row
- *     archived.
- * (c) K stays: its clone, TMPDIR and build root stand, its row active, and
- *     it is kept and listed, at GET /api/workspaces/kept and in the
- *     parent's delegate_list, with its machine, 1 commit on no remote and
- *     its clone's size.
- * (e) Every archive reads the clone first (hub work-items.ts `archive`,
- *     agent `archiveWorkspace`). K given a changed and an untracked file: a
- *     dashboard's raw `workspaceDiscard` control (an archive with a carry),
- *     is refused at the hub's relay; POST /api/workspaces/K/archive answers
- *     409 naming "1 commit on no remote, 2 changed files" and the clone's
- *     size, and the clone, its files and its row stand. With `discard: true`
- *     it answers 200 naming a carry in ~/.cawco/carries that holds the
- *     commit (a bundle listing K's branch, a patch with its file) and the
- *     uncommitted diff (both files), then the clone is gone and the row
- *     archived. A third delegate M, landed and clean, archives with 200 and
- *     no carry, its clone gone.
+ * (b) L's work lands and its workspace retires with no archive call, once its
+ *     session sleeps: its clone, state dir, TMPDIR (the folder left there
+ *     with it) and build root with its lock are gone, its row archived, no
+ *     boundary or judge of it on the keeper.
+ * (c) K's failed item leaves its workspace held: its clone, state dir,
+ *     TMPDIR and build root stand, its row held with its holding words ("1
+ *     commit on no remote") and size at GET /api/workspaces/K/held, in GET
+ *     /api/workspaces/held, and under held in the parent's delegate_list.
+ * (e) K given a changed and an untracked file: a dashboard's raw
+ *     `workspaceDiscard` control (an archive with a carry) is refused at the
+ *     hub's relay; POST /api/workspaces/K/archive answers 409 naming "1
+ *     commit on no remote, 2 changed files" and the clone's size, the
+ *     clone, its files and its held row stand, and its held words are read
+ *     again. With `discard: true` it answers 200 naming a carry in
+ *     ~/.cawco/carries that holds the commit (a bundle listing K's branch, a
+ *     patch with its file) and the uncommitted diff (both files), then the
+ *     clone is gone and the row archived.
+ * (r) M lands and retires; a handoff from its parent waits at the hub while
+ *     M's clone is cut again at the same path, at the commit it landed, and
+ *     the same session goes on there (same work item, same transcript): its
+ *     shell reads that path and M's landed file. It finishes again and its
+ *     workspace retires again.
+ * (p) P's workspace, shown in the parent's preview artifact, stays active
+ *     after its work lands and its session sleeps, a sweep naming the
+ *     artifact; deleting the artifact retires it, with no sweep or archive
+ *     call.
+ * (u) B's workspace, held by a preview, its boundary killed and its
+ *     accounts record damaged so no boundary of it can start (a follow-up
+ *     there is refused naming the record): deleting the preview retires it
+ *     anyway, no boundary of it started, its clone and state dir gone.
  * (f) Nothing CawCo runs makes anything at a gone clone's path. Three more
- *     delegates H, G and S land and finish, their boundaries up. Each clone
- *     is deleted under its running sandbox: each boundary closes and
- *     nothing is at any of the three paths; after an agent restart, still
- *     nothing.
+ *     delegates H, G and S land and finish, each held by a preview, their
+ *     boundaries up. Each clone is deleted under its running sandbox: each
+ *     boundary closes and nothing is at any of the three paths; after an
+ *     agent restart, still nothing.
  * (g) A husk is retired. G's path refilled as an earlier build left one on
  *     obelisk (cockpit-95d26a37: `.git/hooks`, `.git/modules`, `.vscode`, a
  *     read-only `.opencode`, empty `.bashrc`, `.bash_profile` and
  *     `.ripgreprc`, the stand-in `opencode.json`), S's the same plus a file
- *     of a user's. Set past the idle hours, a sweep retires H (gone) and G
- *     (its husk gone too) and fails on neither; S is kept and listed, "1
- *     entry of its own in a folder that is no git clone", its file standing.
- *     A second sweep changes nothing, and the hub's log holds no "not
- *     retired" line for any of the three and one "kept" line for S.
+ *     of a user's. With the previews deleted, H (gone) and G (its husk gone
+ *     too) retire and S is held, "1 entry of its own in a folder that is no
+ *     git clone", its file standing. A sweep then changes nothing, and the
+ *     hub's log holds no "not retired" line for any of the three and one
+ *     "held" line for S.
  * (d) A heavy run, and build-both.sh, refuse to start below the free-space
  *     threshold (here forced up with CAWCO_MIN_FREE_GB), exit 3, with one
  *     sentence naming the free space and the biggest folders. build-both.sh
@@ -56,24 +66,29 @@
  *   bun scripts/probe-kit/run.ts workspace-retire
  */
 import { existsSync } from "node:fs";
-import { chmod, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { cloneDenies } from "../../../packages/core/src/workspace-policy";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
-const TAG = /PROBE-RETIRE-([LKMHGS])/;
+const TAG = /PROBE-RETIRE-([LKMPBHGS])/;
 /** A size in words (core `sizeWords`), alone and as the 409 places it before the clone's path. */
 const SIZE = /^\d+(\.\d)? (GB|MB|KB)$/;
 const SIZE_AT = /\(\d+(\.\d)? (GB|MB|KB) at /;
 const FINISH = "mcp__cawco__finish_item";
-/** Past the rule's two idle hours (workspace-retire.ts `RETIRE_IDLE_MS`). */
-const BACKDATE_MS = 3 * 3_600_000;
+/** The parent's handoff to M once its workspace retired. */
+const RECUT = "PROBE-RECUT-M";
+/** What M's shell prints in the clone cut again: its folder, its landed file, and a mark the command's own text never holds. */
+const RECUT_PWD = /RECUT-PWD=([^\s\\"]+)/;
+const RECUT_FILE = /RECUT-FILE:([^\n\\"]*)/;
+const RECUT_RAN = "RECUT-42";
 /** A free-space threshold no disk meets. */
 const UNREACHABLE_GB = "100000";
 const REFUSAL = new RegExp(
   `did not start: \\S+ has [0-9.]+ GB free, under the ${UNREACHABLE_GB} GB .*; the biggest folders under CawCo's workspace roots here are .+\\.$`
 );
+/** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
+const SETTLE_MS = 120_000;
 
 /** What each delegate runs in its workspace: a folder left in its TMPDIR, a commit. */
 const commitCommand = (tag: string) =>
@@ -85,54 +100,116 @@ const commitCommand = (tag: string) =>
     `echo DONE-COMMIT-${tag}`,
   ].join(" && ");
 
-const steps: Record<string, { finish?: boolean; searched?: boolean }> = {};
+const steps: Record<
+  string,
+  {
+    finish?: boolean;
+    searched?: boolean;
+    againFinish?: boolean;
+    againSearched?: boolean;
+  }
+> = {};
+
+/** What M's shell read in its clone cut again. */
+const recutSeen: { pwd?: string; file?: string } = {};
+
+const tool = (name: string, input: object): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name, input },
+});
+const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+
+/** finish_item once it is offered, after a ToolSearch for it when it is not. */
+const finishing = (
+  request: Seen,
+  state: { finished: boolean; searched: boolean },
+  done: () => void,
+  searched: () => void,
+  input: object
+): Reply => {
+  if (!state.finished && request.toolNames.includes(FINISH)) {
+    done();
+    return tool(FINISH, input);
+  }
+  if (
+    !(state.finished || state.searched) &&
+    request.toolNames.includes("ToolSearch")
+  ) {
+    searched();
+    return tool("ToolSearch", { query: `select:${FINISH}`, max_results: 1 });
+  }
+  return text("done");
+};
+
+/** M, handed off after its workspace retired: its shell in the clone cut again, then finish_item again. */
+const recutTurn = (
+  request: Seen,
+  step: { againFinish?: boolean; againSearched?: boolean }
+): Reply => {
+  if (!request.all.includes(RECUT_RAN)) {
+    return tool("Bash", {
+      command: `printf 'RECUT-PWD=%s\\n' "$(pwd)"; printf 'RECUT-FILE:%s\\n' "$(cat retire-M.txt 2>&1)"; echo RECUT-$((40+2))`,
+      description: "Where am I",
+    });
+  }
+  recutSeen.pwd = RECUT_PWD.exec(request.all)?.[1];
+  recutSeen.file = RECUT_FILE.exec(request.all)?.[1];
+  return finishing(
+    request,
+    {
+      finished: step.againFinish === true,
+      searched: step.againSearched === true,
+    },
+    () => {
+      step.againFinish = true;
+    },
+    () => {
+      step.againSearched = true;
+    },
+    {
+      headline: "Went on in the clone cut again.",
+      summary: "Went on in the clone cut again.",
+    }
+  );
+};
 
 const respond = (request: Seen): Reply => {
-  const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   const tag = request.tools ? TAG.exec(request.all)?.[1] : undefined;
   if (!tag) {
     return text("ok");
   }
   steps[tag] ??= {};
   const step = steps[tag];
-  const tool = (name: string, input: object): Reply => ({
-    everyMs: 5,
-    words: [],
-    tool: { name, input },
-  });
   if (!request.all.includes(`DONE-COMMIT-${tag}`)) {
     return tool("Bash", {
       command: commitCommand(tag),
       description: "Commit",
     });
   }
-  if (!step.finish && request.toolNames.includes(FINISH)) {
-    step.finish = true;
-    return tool(
-      FINISH,
-      tag === "K"
-        ? {
-            headline: "Committed retire-K.txt and stopped.",
-            summary: "Committed retire-K.txt and stopped.",
-            blocked: { command: "probe", error: "K stops here on purpose" },
-          }
-        : {
-            headline: `Committed retire-${tag}.txt.`,
-            summary: `Committed retire-${tag}.txt.`,
-          }
-    );
+  if (tag === "M" && step.finish && request.all.includes(RECUT)) {
+    return recutTurn(request, step);
   }
-  if (
-    !(step.finish || step.searched) &&
-    request.toolNames.includes("ToolSearch")
-  ) {
-    step.searched = true;
-    return tool("ToolSearch", {
-      query: `select:${FINISH}`,
-      max_results: 1,
-    });
-  }
-  return text("done");
+  return finishing(
+    request,
+    { finished: step.finish === true, searched: step.searched === true },
+    () => {
+      step.finish = true;
+    },
+    () => {
+      step.searched = true;
+    },
+    tag === "K"
+      ? {
+          headline: "Committed retire-K.txt and stopped.",
+          summary: "Committed retire-K.txt and stopped.",
+          blocked: { command: "probe", error: "K stops here on purpose" },
+        }
+      : {
+          headline: `Committed retire-${tag}.txt.`,
+          summary: `Committed retire-${tag}.txt.`,
+        }
+  );
 };
 
 interface Workspace {
@@ -142,17 +219,19 @@ interface Workspace {
   tmp: string | null;
 }
 
-interface Kept {
+interface Held {
   ahead: number;
   bytes: number;
   holds: string;
   machine: string;
+  size: string;
   workspaceId: string;
 }
 
 interface Sweep {
   failed: { workspaceId: string; reason: string }[];
-  kept: Kept[];
+  held: Held[];
+  kept: { workspaceId: string; hold: string }[];
   retired: { workspaceId: string }[];
 }
 
@@ -206,40 +285,80 @@ const diskPhase = async (kit: Kit): Promise<void> => {
 
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
-/** An archive asked over HTTP: its status and its answer's text. */
-const archiveOver = async (
+/** A delegate this spec started, and how its item ended. */
+interface Delegated {
+  instanceId: string;
+  item: { state: string; error: string | null };
+  workItemId: string;
+  workspaceId: string;
+}
+
+/** What the phases share: the fleet, the parent and the reads every phase makes. */
+interface Scene {
+  /** An archive asked over HTTP: its status and its answer's text. */
+  archiveOver: (
+    id: string,
+    body?: object
+  ) => Promise<{ status: number; text: string }>;
+  /** A tool of the parent's, called as the parent: its status and its answer's text. */
+  callAsParent: (
+    name: string,
+    args: object
+  ) => Promise<{ status: number; text: string }>;
+  /** Deletes the parent's artifact: its status. */
+  closePreview: (id: string) => Promise<number>;
+  delegate: (
+    tag: "L" | "K" | "M" | "P" | "B" | "H" | "G" | "S",
+    onStart?: (workspace: Workspace) => Promise<void> | void
+  ) => Promise<Delegated>;
+  fleet: Fleet;
+  /** The parent's session id. */
+  parentId: string;
+  /** A preview artifact of the parent's naming the workspace's server: its id. */
+  showPreview: (workspace: Workspace, name: string) => string;
+  /** The workspace's row once its state is `state`, or as it stands when that does not come. */
+  stateBecomes: (id: string, state: string) => Promise<Workspace>;
+  workspaceOf: (id: string) => Workspace;
+}
+
+/** Whether a boundary or judge of the workspace runs on the keeper. */
+const runsOnKeeper = async (fleet: Fleet, id: string): Promise<string[]> =>
+  (await fleet.heldProcs())
+    .map(({ procId }) => procId)
+    .filter(
+      (procId) =>
+        procId.startsWith(`boundary-${id}`) || procId.startsWith(`judge-${id}`)
+    );
+
+/** Nothing of an archived workspace is left on the machine: no boundary or judge of it on the keeper, and no state dir. */
+const nothingOfItLeft = async (
+  kit: Kit,
   fleet: Fleet,
-  id: string,
-  body?: object
-): Promise<{ status: number; text: string }> => {
-  const response = await fetch(`${fleet.base}/api/workspaces/${id}/archive`, {
-    method: "POST",
-    ...(body && {
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
-  return { status: response.status, text: await response.text() };
+  label: string,
+  workspace: Workspace
+): Promise<void> => {
+  const left = await until(
+    `${label}'s boundary and judge gone from the keeper`,
+    () => runsOnKeeper(fleet, workspace.id),
+    (procs) => procs.length === 0,
+    60_000
+  ).catch(() => undefined);
+  const stateDir = join(fleet.home, ".cawco", "workspaces", workspace.id);
+  kit.check(
+    `${label}: no boundary or judge of it runs on the keeper, and its state dir is gone`,
+    left !== undefined && !existsSync(stateDir),
+    `${left === undefined ? "a boundary or judge still runs" : "none runs"}; state dir ${existsSync(stateDir) ? "stands" : "gone"}`
+  );
 };
 
 /** (e) No archive deletes unlanded work unless a person discards it, and then a carry holds it. */
 const archivePhase = async (
   kit: Kit,
-  fleet: Fleet,
-  {
-    k,
-    workspaceOf,
-    delegate,
-  }: {
-    k: Workspace;
-    workspaceOf: (id: string) => Workspace;
-    delegate: (
-      tag: "M"
-    ) => Promise<{ workspaceId: string; item: { state: string } }>;
-  }
+  scene: Scene,
+  k: Workspace
 ): Promise<void> => {
   const { check } = kit;
+  const { fleet, workspaceOf, archiveOver } = scene;
   await writeFile(join(k.path, "README.md"), "changed by the probe\n");
   await writeFile(join(k.path, "uncommitted-K.txt"), "dirty K\n");
 
@@ -255,16 +374,7 @@ const archivePhase = async (
     },
   });
 
-  const held = await fleet.api<{ holds: string; size: string }>(
-    `/api/workspaces/${k.id}/held`
-  );
-  check(
-    "(e) GET held names what K holds: 1 commit on no remote, 2 changed files, and its size",
-    held.holds === "1 commit on no remote, 2 changed files" &&
-      SIZE.test(held.size),
-    JSON.stringify(held)
-  );
-  const kept = await archiveOver(fleet, k.id);
+  const kept = await archiveOver(k.id);
   check(
     "(e) POST archive on K answers 409 naming its commit, its changed files and its size; nothing deleted",
     kept.status === 409 &&
@@ -274,17 +384,26 @@ const archivePhase = async (
       kept.text.includes("nothing was deleted"),
     `${kept.status} ${kept.text}`
   );
+  const held = await fleet.api<{ holds: string; size: string }>(
+    `/api/workspaces/${k.id}/held`
+  );
   check(
-    "(e) after the raw control and the refused POST, K's clone, its commit, its changed files and its row stand",
+    "(e) GET held names what K holds now, read again by the refused archive: 1 commit on no remote, 2 changed files, and its size",
+    held.holds === "1 commit on no remote, 2 changed files" &&
+      SIZE.test(held.size),
+    JSON.stringify(held)
+  );
+  check(
+    "(e) after the raw control and the refused POST, K's clone, its commit, its changed files and its held row stand",
     existsSync(join(k.path, "retire-K.txt")) &&
       existsSync(join(k.path, "uncommitted-K.txt")) &&
       (await Bun.file(join(k.path, "README.md")).text()) ===
         "changed by the probe\n" &&
-      workspaceOf(k.id).state === "active",
+      workspaceOf(k.id).state === "held",
     workspaceOf(k.id).state
   );
 
-  const discarded = await archiveOver(fleet, k.id, { discard: true });
+  const discarded = await archiveOver(k.id, { discard: true });
   const carry =
     discarded.status === 200
       ? ((JSON.parse(discarded.text) as { carry: string | null }).carry ?? "")
@@ -335,121 +454,183 @@ const archivePhase = async (
     !existsSync(k.path) && workspaceOf(k.id).state === "archived",
     `${existsSync(k.path) ? "clone stands" : "clone gone"}, ${workspaceOf(k.id).state}`
   );
+};
 
-  const m = await delegate("M");
+/** (r) A handoff to a retired delegate cuts its clone again at the same path, and the same session goes on there. */
+const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { check } = kit;
+  const { fleet, workspaceOf, stateBecomes, callAsParent } = scene;
+  const m = await scene.delegate("M");
   const wm = workspaceOf(m.workspaceId);
-  await cloneReadsClean(kit, wm);
-  const landed = await archiveOver(fleet, wm.id);
+  const retired = await stateBecomes(wm.id, "archived");
   check(
-    "(e) M, landed and clean, archives with 200 and no carry; its clone is gone",
+    "(r) M's work lands and its workspace retires, its clone gone",
     m.item.state === "done" &&
-      landed.status === 200 &&
-      (JSON.parse(landed.text) as { carry: string | null }).carry === null &&
-      !existsSync(wm.path) &&
-      workspaceOf(wm.id).state === "archived",
-    `${m.item.state}; ${landed.status} ${landed.text.slice(0, 400)}`
+      retired.state === "archived" &&
+      !existsSync(wm.path),
+    `${m.item.state} ${m.item.error ?? ""}; ${retired.state}; clone ${existsSync(wm.path) ? "stands" : "gone"}`
   );
-  await nothingOfItLeft(kit, fleet, wm);
-};
-
-/**
- * (e) A clone after its boundary ran a session: no stand-in left a broken file
- * there (bwrap's mount point, an empty file with no write bits and one link,
- * srt's own isStaleBwrapMountPoint; at each path the policy guards, an empty
- * file where a config with content stands in, which a host harness would read
- * as its config, or a file where a dir stands in), and git reads it as it left
- * it.
- */
-const cloneReadsClean = async (
-  kit: Kit,
-  workspace: Workspace
-): Promise<void> => {
-  // Anywhere in the clone: what a sandbox leaves where nothing stood.
-  const mountPoints = (
-    await Bun.$`find ${workspace.path} -path ${join(workspace.path, ".git", "objects")} -prune -o -type f -size 0 ! -perm /222 -links 1 -print`
-      .quiet()
-      .nothrow()
-  ).stdout
-    .toString()
-    .split("\n")
-    .filter(Boolean)
-    .map(
-      (path) =>
-        `${path}: an empty file with no write bits, as a sandbox leaves a mount point`
-    );
-  // At each path the workspace's policy guards (core workspace-policy.ts
-  // `cloneDenies`): where a dir stands in, a dir; where a config file with
-  // content stands in, never an empty one, which its reader would take as its
-  // config.
-  const standIns = (
-    await Promise.all(
-      cloneDenies(workspace.path).map(async ({ path, empty }) => {
-        const found = await stat(path).catch(() => undefined);
-        if (!found) {
-          return [];
-        }
-        if (empty.kind === "dir" && !found.isDirectory()) {
-          return [`${path}: not a dir, where a dir stands in`];
-        }
-        if (
-          empty.kind === "file" &&
-          empty.text !== "" &&
-          found.isFile() &&
-          found.size === 0
-        ) {
-          return [`${path}: an empty file at a harness or git config name`];
-        }
-        return [];
-      })
-    )
-  ).flat();
-  const broken = [...mountPoints, ...standIns].join("\n");
-  const status = (
-    await Bun.$`git -C ${workspace.path} -c core.hooksPath=/dev/null -c core.fsmonitor=false status --porcelain`
-      .quiet()
-      .nothrow()
-  ).stdout
-    .toString()
-    .trim();
-  kit.check(
-    "(e) M's clone, its boundary having run, holds no broken stand-in and reads clean to git status",
-    broken === "" && status === "",
-    `broken: ${broken || "(none)"}; status: ${status || "(clean)"}`
+  const message = `${RECUT}: go on in your workspace and say where you are.`;
+  let handed = await callAsParent("handoff", {
+    target: m.instanceId,
+    message,
+  });
+  // A cold target is refused once with the cost considerations; the repeat goes.
+  if (!handed.text.includes("cutting its clone again")) {
+    handed = await callAsParent("handoff", { target: m.instanceId, message });
+  }
+  check(
+    "(r) the handoff waits at the hub while M's clone is cut again, and says so",
+    handed.status === 200 && handed.text.includes("cutting its clone again"),
+    `${handed.status} ${handed.text.slice(0, 800)}`
+  );
+  const ended = await until(
+    "M's reopened item ended again",
+    () =>
+      fleet.query<{ state: string; error: string | null }>(
+        "SELECT state, error FROM work_items WHERE id = ?",
+        m.workItemId
+      )[0],
+    (row) =>
+      row !== undefined &&
+      recutSeen.pwd !== undefined &&
+      ["done", "failed", "cancelled"].includes(row.state),
+    300_000
+  ).catch(
+    () =>
+      fleet.query<{ state: string; error: string | null }>(
+        "SELECT state, error FROM work_items WHERE id = ?",
+        m.workItemId
+      )[0]
+  );
+  const items = fleet.query<{ id: string; instance_id: string }>(
+    "SELECT id, instance_id FROM work_items WHERE workspace_id = ?",
+    wm.id
+  );
+  check(
+    "(r) the same session went on in a clone cut again at the same path: its shell's folder is that path, and it holds M's landed file",
+    recutSeen.pwd === wm.path && recutSeen.file === "made by M",
+    JSON.stringify({ seen: recutSeen, path: wm.path })
+  );
+  check(
+    "(r) it is the same work item and session, reopened, not a new one; it ended done again",
+    items.length === 1 &&
+      items[0]?.instance_id === m.instanceId &&
+      ended?.state === "done",
+    `${JSON.stringify(items)}; ${ended?.state} ${ended?.error ?? ""}`
+  );
+  const again = await stateBecomes(wm.id, "archived");
+  check(
+    "(r) with its work over again, the workspace retires again: row archived, clone gone",
+    again.state === "archived" && !existsSync(wm.path),
+    `${again.state}; clone ${existsSync(wm.path) ? "stands" : "gone"}`
   );
 };
 
-/** (e) Nothing of an archived workspace is left on the machine: no boundary or judge of it on the keeper, and no state dir. */
-const nothingOfItLeft = async (
-  kit: Kit,
-  fleet: Fleet,
-  workspace: Workspace
-): Promise<void> => {
-  const left = await until(
-    "M's boundary and judge gone from the keeper",
+/** (p) A preview holds a landed workspace; its deletion retires it. */
+const previewPhase = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { check } = kit;
+  const { fleet, workspaceOf, stateBecomes } = scene;
+  let artifact = "";
+  const p = await scene.delegate("P", (workspace) => {
+    artifact = scene.showPreview(workspace, "task-review");
+  });
+  const wp = workspaceOf(p.workspaceId);
+  await until(
+    "P's session asleep",
+    () => fleet.instance(p.instanceId)?.status,
+    (now) => now === "sleeping",
+    SETTLE_MS
+  ).catch(() => undefined);
+  const swept = await fleet.api<Sweep>("/api/workspaces/retire", {});
+  const hold = swept.kept.find((one) => one.workspaceId === wp.id)?.hold ?? "";
+  check(
+    "(p) P's work lands and its session sleeps, and its workspace stays active, the sweep naming the artifact that shows it",
+    p.item.state === "done" &&
+      fleet.instance(p.instanceId)?.status === "sleeping" &&
+      workspaceOf(wp.id).state === "active" &&
+      existsSync(wp.path) &&
+      hold.includes("task-review"),
+    `${p.item.state}; ${fleet.instance(p.instanceId)?.status}; ${workspaceOf(wp.id).state}; ${JSON.stringify(swept)}`
+  );
+  const status = await scene.closePreview(artifact);
+  const retired = await stateBecomes(wp.id, "archived");
+  check(
+    "(p) the artifact deleted, P's workspace retires on its own: row archived, clone gone",
+    status === 200 && retired.state === "archived" && !existsSync(wp.path),
+    `DELETE ${status}; ${retired.state}; clone ${existsSync(wp.path) ? "stands" : "gone"}`
+  );
+};
+
+/** (u) A workspace whose boundary cannot start archives all the same: its boundary is never started to read it. */
+const unstartablePhase = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { check } = kit;
+  const { fleet, workspaceOf, stateBecomes } = scene;
+  let artifact = "";
+  const b = await scene.delegate("B", (workspace) => {
+    artifact = scene.showPreview(workspace, "task-split");
+  });
+  const wb = workspaceOf(b.workspaceId);
+  await until(
+    "B's session asleep",
+    () => fleet.instance(b.instanceId)?.status,
+    (now) => now === "sleeping",
+    SETTLE_MS
+  ).catch(() => undefined);
+  // The record first, so no start after the kill can succeed: every start
+  // builds the workspace's policy, which reads it (core workspace-policy.ts
+  // `accountLayers`).
+  const stateDir = join(fleet.home, ".cawco", "workspaces", wb.id);
+  await mkdir(stateDir, { recursive: true });
+  await writeFile(join(stateDir, "accounts.json"), '{"damaged":true}\n');
+  for (const proc of await fleet.heldProcs()) {
+    if (proc.procId.startsWith(`boundary-${wb.id}`)) {
+      process.kill(proc.pid, "SIGKILL");
+    }
+  }
+  const down = await until(
+    "B's boundary gone",
     async () =>
-      (await fleet.heldProcs()).filter(
-        ({ procId }) =>
-          procId.startsWith(`boundary-${workspace.id}`) ||
-          procId.startsWith(`judge-${workspace.id}`)
+      (await fleet.heldProcs()).filter(({ procId }) =>
+        procId.startsWith(`boundary-${wb.id}`)
       ),
     (procs) => procs.length === 0,
-    60_000
-  ).catch(() => undefined);
-  const stateDir = join(fleet.home, ".cawco", "workspaces", workspace.id);
-  kit.check(
-    "(e) after M's archive no boundary or judge of it runs on the keeper, and its state dir is gone",
-    left !== undefined && !existsSync(stateDir),
-    `${left === undefined ? "a boundary or judge of M still runs" : "none runs"}; state dir ${existsSync(stateDir) ? "stands" : "gone"}`
+    30_000
+  ).catch(() => ["still running"]);
+  const followUp = await fetch(`${fleet.base}/api/work-items`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      parentInstanceId: scene.parentId,
+      title: "Go on in B",
+      prompt: "PROBE-RETIRE-B: go on.",
+      workspace: wb.id,
+      checks: [{ name: "Probe check", command: "true" }],
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+  const refusedText = await followUp.text();
+  check(
+    "(u) B's boundary is down and cannot start: a follow-up there is refused naming its damaged accounts record",
+    down.length === 0 &&
+      !followUp.ok &&
+      refusedText.includes("accounts.json") &&
+      workspaceOf(wb.id).state === "active",
+    `boundaries: ${down.join(", ") || "none"}; follow-up ${followUp.status} ${refusedText.slice(0, 600)}; ${workspaceOf(wb.id).state}`
+  );
+  const status = await scene.closePreview(artifact);
+  const retired = await stateBecomes(wb.id, "archived");
+  const started = await runsOnKeeper(fleet, wb.id);
+  check(
+    "(u) its preview deleted, B archives all the same: row archived, clone and state dir gone, no boundary of it started",
+    status === 200 &&
+      retired.state === "archived" &&
+      !existsSync(wb.path) &&
+      !existsSync(stateDir) &&
+      started.filter((procId) => procId.startsWith("boundary-")).length === 0,
+    `DELETE ${status}; ${retired.state}; clone ${existsSync(wb.path) ? "stands" : "gone"}; state dir ${existsSync(stateDir) ? "stands" : "gone"}; on the keeper: ${started.join(", ") || "nothing"}`
   );
 };
-
-/** A delegate this spec started, and how its item ended. */
-interface Delegated {
-  instanceId: string;
-  item: { state: string; error: string | null };
-  workItemId: string;
-  workspaceId: string;
-}
 
 /** The text of OpenCode's stand-in config (core workspace-policy.ts `OPENCODE_EMPTY`). */
 const OPENCODE_EMPTY = '{"$schema":"https://opencode.ai/config.json"}\n';
@@ -468,20 +649,19 @@ const makeHusk = async (path: string): Promise<void> => {
   await writeFile(join(path, "opencode.json"), OPENCODE_EMPTY);
 };
 
-/** (f) A gone clone stays gone, (g) a husk is retired and anything else in one keeps it. */
-const huskPhase = async (
-  kit: Kit,
-  fleet: Fleet,
-  {
-    workspaceOf,
-    delegate,
-  }: {
-    workspaceOf: (id: string) => Workspace;
-    delegate: (tag: "H" | "G" | "S") => Promise<Delegated>;
-  }
-): Promise<void> => {
+/** (f) A gone clone stays gone, (g) a husk is retired and anything else in one holds it. */
+const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const { check } = kit;
-  const runs = [await delegate("H"), await delegate("G"), await delegate("S")];
+  const { fleet, workspaceOf, stateBecomes } = scene;
+  const previews: string[] = [];
+  const hold = (workspace: Workspace) => {
+    previews.push(scene.showPreview(workspace, `husk-${previews.length}`));
+  };
+  const runs = [
+    await scene.delegate("H", hold),
+    await scene.delegate("G", hold),
+    await scene.delegate("S", hold),
+  ];
   const [wh, wg, ws] = runs.map((run) => workspaceOf(run.workspaceId)) as [
     Workspace,
     Workspace,
@@ -496,12 +676,14 @@ const huskPhase = async (
       );
   const before = await boundaries();
   check(
-    "(f) H, G and S are done, each with its boundary up",
+    "(f) H, G and S are done, each held by a preview, each with its boundary up",
     runs.every((run) => run.item.state === "done") &&
-      three.every((workspace) =>
-        before.some((procId) => procId.startsWith(`boundary-${workspace.id}`))
+      three.every(
+        (workspace) =>
+          workspaceOf(workspace.id).state === "active" &&
+          before.some((procId) => procId.startsWith(`boundary-${workspace.id}`))
       ),
-    `${runs.map((run) => `${run.item.state} ${run.item.error ?? ""}`).join("; ")}; boundaries: ${before.join(", ")}`
+    `${runs.map((run) => `${run.item.state} ${run.item.error ?? ""}`).join("; ")}; ${three.map((workspace) => workspaceOf(workspace.id).state).join(", ")}; boundaries: ${before.join(", ")}`
   );
   const at = () =>
     three.filter((workspace) => existsSync(workspace.path)).map(({ id }) => id);
@@ -554,72 +736,151 @@ const huskPhase = async (
   await makeHusk(wg.path);
   await makeHusk(ws.path);
   await writeFile(join(ws.path, "notes.txt"), "a user's own\n");
-  const then = Date.now() - BACKDATE_MS;
-  for (const run of runs) {
-    fleet.write(
-      "UPDATE work_items SET ended_at = ? WHERE id = ?",
-      then,
-      run.workItemId
-    );
-    fleet.write(
-      "UPDATE instances SET turn_ended_at = ?, last_request_at = ? WHERE id = ?",
-      then,
-      then,
-      run.instanceId
-    );
+  const statuses: number[] = [];
+  for (const preview of previews) {
+    // biome-ignore lint/performance/noAwaitInLoops: three artifacts
+    statuses.push(await scene.closePreview(preview));
   }
-  const swept = await fleet.api<Sweep>("/api/workspaces/retire", {});
-  const retired = swept.retired.map(({ workspaceId }) => workspaceId);
+  const [h, g, s] = [
+    await stateBecomes(wh.id, "archived"),
+    await stateBecomes(wg.id, "archived"),
+    await stateBecomes(ws.id, "held"),
+  ];
   check(
-    "(g) the sweep retires H (gone) and G (a husk), fails on none of the three, and leaves S",
-    retired.includes(wh.id) &&
-      retired.includes(wg.id) &&
-      !retired.includes(ws.id) &&
-      !swept.failed.some(({ workspaceId }) =>
-        three.some((workspace) => workspace.id === workspaceId)
-      ),
-    JSON.stringify(swept)
+    "(g) with the previews deleted, H (gone) and G (a husk, gone too) retire, and S is held",
+    statuses.every((status) => status === 200) &&
+      h.state === "archived" &&
+      g.state === "archived" &&
+      !existsSync(wg.path) &&
+      s.state === "held",
+    `DELETE ${statuses.join(", ")}; H ${h.state}; G ${g.state} ${existsSync(wg.path) ? "husk stands" : "gone"}; S ${s.state}`
   );
+  const heldS = await fleet
+    .api<Held>(`/api/workspaces/${ws.id}/held`)
+    .catch((error: unknown) => ({ holds: String(error) }) as Held);
   check(
-    "(g) G's husk is gone and its row archived, as H's",
-    !existsSync(wg.path) &&
-      workspaceOf(wg.id).state === "archived" &&
-      workspaceOf(wh.id).state === "archived",
-    `G ${existsSync(wg.path) ? "husk stands" : "gone"} ${workspaceOf(wg.id).state}; H ${workspaceOf(wh.id).state}`
-  );
-  const keptS = swept.kept.find((entry) => entry.workspaceId === ws.id);
-  check(
-    "(g) S, a husk with a user's file, is kept and listed, the file standing",
-    keptS?.holds === "1 entry of its own in a folder that is no git clone" &&
-      existsSync(join(ws.path, "notes.txt")) &&
-      workspaceOf(ws.id).state === "active",
-    JSON.stringify(keptS)
+    "(g) S, a husk with a user's file, is held with what it holds, the file standing",
+    heldS.holds === "1 entry of its own in a folder that is no git clone" &&
+      existsSync(join(ws.path, "notes.txt")),
+    JSON.stringify(heldS)
   );
   const again = await fleet.api<Sweep>("/api/workspaces/retire", {});
   const hub = (await fleet.logs("hub"))
     .split("\n")
-    .filter((line) => line.includes("[workspace-retire]"));
+    .filter((line) => line.includes("[workspaces]"));
   const of = (id: string, words: string) =>
     hub.filter((line) => line.includes(`${id} on `) && line.includes(words))
       .length;
   check(
-    '(g) a second sweep changes nothing; the hub\'s log has no "not retired" line for any of the three, and one "kept" line for S',
+    '(g) a sweep then changes nothing; the hub\'s log has no "not retired" line for any of the three, and one "held" line for S',
     again.retired.length === 0 &&
+      again.held.length === 0 &&
       again.failed.length === 0 &&
-      again.kept.some((entry) => entry.workspaceId === ws.id) &&
       three.every((workspace) => of(workspace.id, ": not retired:") === 0) &&
-      of(ws.id, ": kept,") === 1,
+      of(ws.id, ": held,") === 1,
     `${JSON.stringify(again)}; ${hub.filter((line) => three.some((workspace) => line.includes(workspace.id))).join(" | ")}`
   );
+};
+
+/** (b) A landed workspace retires with no archive call; (c) a failed item's workspace is held. */
+const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
+  const { check } = kit;
+  const { fleet, workspaceOf, stateBecomes } = scene;
+  const { home } = fleet;
+  const apple = join(home, ".cawco", "workspace-cache", "xdg", "cawco-apple");
+  // Each clone's Apple build root, as build-both.sh leaves one, as it starts.
+  const buildRoot = async (workspace: Workspace) => {
+    await mkdir(join(apple, basename(workspace.path), "DerivedData"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(apple, basename(workspace.path), "DerivedData", "build.db"),
+      "x"
+    );
+    await mkdir(join(apple, ".locks"), { recursive: true });
+    await writeFile(join(apple, ".locks", basename(workspace.path)), "1");
+  };
+  const l = await scene.delegate("L", buildRoot);
+  const k = await scene.delegate("K", buildRoot);
+  check(
+    "L's item is done, its commit landed; K's failed, blocked",
+    l.item.state === "done" && k.item.state === "failed",
+    `L ${l.item.state} ${l.item.error ?? ""}; K ${k.item.state} ${k.item.error ?? ""}`
+  );
+  const wl = workspaceOf(l.workspaceId);
+  const wk = workspaceOf(k.workspaceId);
+  const owned = (workspace: Workspace, tag: string) => ({
+    clone: workspace.path,
+    state: join(home, ".cawco", "workspaces", workspace.id),
+    tmp: workspace.tmp ?? "",
+    left: join(workspace.tmp ?? "", `scratch-fleet-left-${tag}`),
+    buildRoot: join(apple, basename(workspace.path)),
+    buildLock: join(apple, ".locks", basename(workspace.path)),
+  });
+  const standing = (workspace: Workspace, tag: string) =>
+    Object.entries(owned(workspace, tag))
+      .filter(([, path]) => path && existsSync(path))
+      .map(([name]) => name);
+  const all = Object.keys(owned(wl, "L"));
+
+  // ── (b) landed: retired with no archive call ─────────────────────────
+  const retired = await stateBecomes(wl.id, "archived");
+  check(
+    "(b) L's work landed and its workspace retires with no archive call: its row archived",
+    retired.state === "archived",
+    retired.state
+  );
+  check(
+    "(b) L's clone, state dir, TMPDIR with the folder left there, build root and its lock are gone",
+    standing(wl, "L").length === 0,
+    `still there: ${standing(wl, "L").join(", ") || "nothing"}`
+  );
+  await nothingOfItLeft(kit, fleet, "(b) L", wl);
+
+  // ── (c) failed: held, with its words ─────────────────────────────────
+  const held = await stateBecomes(wk.id, "held");
+  check(
+    "(c) K's item failed with its commit on no remote, and its workspace is held",
+    held.state === "held",
+    held.state
+  );
+  check(
+    "(c) K's clone, state dir, TMPDIR, left folder and build root all stand",
+    standing(wk, "K").length === all.length,
+    `standing: ${standing(wk, "K").join(", ")}`
+  );
+  const words = await fleet
+    .api<Held>(`/api/workspaces/${wk.id}/held`)
+    .catch((error: unknown) => ({ holds: String(error) }) as Held);
+  const { held: list } = await fleet.api<{ held: Held[] }>(
+    "/api/workspaces/held"
+  );
+  check(
+    "(c) K's holding words: 1 commit on no remote, its size and machine, at GET held and in GET /api/workspaces/held (K alone)",
+    words.holds === "1 commit on no remote" &&
+      words.ahead === 1 &&
+      SIZE.test(words.size) &&
+      words.machine.length > 0 &&
+      list.length === 1 &&
+      list[0]?.workspaceId === wk.id,
+    `${JSON.stringify(words)}; ${JSON.stringify(list)}`
+  );
+  const said = await scene.callAsParent("delegate_list", {});
+  check(
+    "(c) the parent's delegate_list lists K under held",
+    said.status === 200 &&
+      said.text.includes(wk.id) &&
+      said.text.includes("1 commit on no remote"),
+    `${said.status} ${said.text.slice(0, 1500)}`
+  );
+  return wk;
 };
 
 const spec: Spec = {
   name: "workspace-retire",
   run: async (kit: Kit) => {
-    const { check } = kit;
     const fleet = await kit.fleet(respond);
     const home = fleet.env.HOME as string;
-    const apple = join(home, ".cawco", "workspace-cache", "xdg", "cawco-apple");
 
     fleet.launch("sessiond");
     await fleet.sessiondUp();
@@ -648,172 +909,118 @@ const spec: Spec = {
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
+    const credential =
+      (await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text())
+        .split("\0")
+        .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
+        ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
 
     const workspaceOf = (id: string) =>
       fleet.query<Workspace>(
         "SELECT id, path, state, tmp FROM workspaces WHERE id = ?",
         id
       )[0] as Workspace;
-    const delegate = async (
-      tag: "L" | "K" | "M" | "H" | "G" | "S"
-    ): Promise<Delegated> => {
-      const started = await fleet.api<{
-        instanceId: string;
-        workItemId: string;
-        workspaceId: string;
-      }>("/api/work-items", {
-        parentInstanceId: parent,
-        title: `Commit and end ${tag}`,
-        prompt: `PROBE-RETIRE-${tag}: commit a file.`,
-        harness: "claude",
-        model: "claude-haiku-4-5",
-        cwd: src,
-        checks: [{ name: "Probe check", command: "true" }],
-      });
-      const item = await until(
-        `work item ${tag} ended`,
-        () =>
-          fleet.query<{ state: string; error: string | null }>(
-            "SELECT state, error FROM work_items WHERE id = ?",
-            started.workItemId
-          )[0],
-        (row) =>
-          row !== undefined &&
-          ["done", "failed", "cancelled"].includes(row.state),
-        300_000
-      );
-      return { ...started, item };
-    };
-    const [l, k] = [await delegate("L"), await delegate("K")];
-    check(
-      "L's item is done, its commit landed; K's failed, blocked",
-      l.item.state === "done" && k.item.state === "failed",
-      `L ${l.item.state} ${l.item.error ?? ""}; K ${k.item.state} ${k.item.error ?? ""}`
-    );
-    const wl = workspaceOf(l.workspaceId);
-    const wk = workspaceOf(k.workspaceId);
-    // Each clone's Apple build root, as build-both.sh leaves one.
-    for (const clone of [wl.path, wk.path]) {
-      // biome-ignore lint/performance/noAwaitInLoops: two folders
-      await mkdir(join(apple, basename(clone), "DerivedData"), {
-        recursive: true,
-      });
-      await writeFile(
-        join(apple, basename(clone), "DerivedData", "build.db"),
-        "x"
-      );
-      await mkdir(join(apple, ".locks"), { recursive: true });
-      await writeFile(join(apple, ".locks", basename(clone)), "1");
-    }
-    const owned = (workspace: Workspace) => ({
-      clone: workspace.path,
-      state: join(home, ".cawco", "workspaces", workspace.id),
-      tmp: workspace.tmp ?? "",
-      left: join(
-        workspace.tmp ?? "",
-        `scratch-fleet-left-${workspace.id === wl.id ? "L" : "K"}`
-      ),
-      buildRoot: join(apple, basename(workspace.path)),
-      buildLock: join(apple, ".locks", basename(workspace.path)),
-    });
-    const standing = (workspace: Workspace) =>
-      Object.entries(owned(workspace))
-        .filter(([, path]) => path && existsSync(path))
-        .map(([name]) => name);
-    const all = Object.keys(owned(wl));
-    check(
-      "before: each workspace's clone, state dir, TMPDIR, left folder and build root stand",
-      standing(wl).length === all.length && standing(wk).length === all.length,
-      `L: ${standing(wl).join(", ")}; K: ${standing(wk).join(", ")}`
-    );
-
-    // ── (a) the rule's delay ────────────────────────────────────────────
-    const early = await fleet.api<Sweep>("/api/workspaces/retire", {});
-    check(
-      "(a) a sweep right after the items end retires neither: the two idle hours have not passed",
-      early.retired.length === 0 &&
-        workspaceOf(wl.id).state === "active" &&
-        existsSync(wl.path),
-      JSON.stringify(early)
-    );
-
-    // ── (b) idle past the rule's delay ──────────────────────────────────
-    const then = Date.now() - BACKDATE_MS;
-    for (const id of [l.workItemId, k.workItemId]) {
-      fleet.write("UPDATE work_items SET ended_at = ? WHERE id = ?", then, id);
-    }
-    for (const id of [l.instanceId, k.instanceId]) {
-      fleet.write(
-        "UPDATE instances SET turn_ended_at = ?, last_request_at = ? WHERE id = ?",
-        then,
-        then,
-        id
-      );
-    }
-    const swept = await fleet.api<Sweep>("/api/workspaces/retire", {});
-    check(
-      "(b) the sweep retires L, and only L",
-      swept.retired.length === 1 && swept.retired[0]?.workspaceId === wl.id,
-      JSON.stringify(swept)
-    );
-    check(
-      "(b) L's clone, state dir, TMPDIR with the folder left there, build root and its lock are gone",
-      standing(wl).length === 0,
-      `still there: ${standing(wl).join(", ") || "nothing"}`
-    );
-    check(
-      "(b) L's row is archived",
-      workspaceOf(wl.id).state === "archived",
-      workspaceOf(wl.id).state
-    );
-
-    // ── (c) unlanded work stays, listed ─────────────────────────────────
-    check(
-      "(c) K's clone, state dir, TMPDIR, left folder and build root all stand",
-      standing(wk).length === all.length,
-      `standing: ${standing(wk).join(", ")}`
-    );
-    check(
-      "(c) K's row is active",
-      workspaceOf(wk.id).state === "active",
-      workspaceOf(wk.id).state
-    );
-    const { kept } = await fleet.api<{ kept: Kept[] }>("/api/workspaces/kept");
-    const listed = kept.find((entry) => entry.workspaceId === wk.id);
-    check(
-      "(c) K is kept and listed: its machine, 1 commit on no remote, its clone's size",
-      kept.length === 1 &&
-        listed?.ahead === 1 &&
-        listed.holds === "1 commit on no remote" &&
-        listed.bytes > 0 &&
-        listed.machine.length > 0,
-      JSON.stringify(kept)
-    );
-    const credential = (
-      await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text()
-    )
-      .split("\0")
-      .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-      ?.slice("CAWCO_SESSION_CREDENTIAL=".length);
-    const listing = await fetch(`${fleet.base}/api/delegation/call/${parent}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${credential ?? ""}`,
+    const scene: Scene = {
+      fleet,
+      parentId: parent,
+      workspaceOf,
+      stateBecomes: (id, state) =>
+        until(
+          `workspace ${id} ${state}`,
+          () => workspaceOf(id),
+          (row) => row.state === state,
+          SETTLE_MS
+        ).catch(() => workspaceOf(id)),
+      delegate: async (tag, onStart) => {
+        const started = await fleet.api<{
+          instanceId: string;
+          workItemId: string;
+          workspaceId: string;
+        }>("/api/work-items", {
+          parentInstanceId: parent,
+          title: `Commit and end ${tag}`,
+          prompt: `PROBE-RETIRE-${tag}: commit a file.`,
+          harness: "claude",
+          model: "claude-haiku-4-5",
+          cwd: src,
+          checks: [{ name: "Probe check", command: "true" }],
+        });
+        await onStart?.(workspaceOf(started.workspaceId));
+        const item = await until(
+          `work item ${tag} ended`,
+          () =>
+            fleet.query<{ state: string; error: string | null }>(
+              "SELECT state, error FROM work_items WHERE id = ?",
+              started.workItemId
+            )[0],
+          (row) =>
+            row !== undefined &&
+            ["done", "failed", "cancelled"].includes(row.state),
+          300_000
+        );
+        return { ...started, item };
       },
-      body: JSON.stringify({ name: "delegate_list", arguments: {} }),
-    });
-    const said = await listing.text();
-    check(
-      "(c) the parent's delegate_list lists K under kept",
-      listing.ok &&
-        said.includes(wk.id) &&
-        said.includes("1 commit on no remote"),
-      `${listing.status} ${said.slice(0, 1500)}`
-    );
+      showPreview: (workspace, name) => {
+        const id = crypto.randomUUID();
+        const now = Date.now();
+        fleet.write(
+          "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', ?, ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+          id,
+          parent,
+          project.id,
+          name,
+          MACHINE,
+          JSON.stringify({ port: 5199, workspace: workspace.id }),
+          now,
+          now,
+          now
+        );
+        return id;
+      },
+      closePreview: async (id) =>
+        (
+          await fetch(`${fleet.base}/api/instances/${parent}/artifacts/${id}`, {
+            method: "DELETE",
+            signal: AbortSignal.timeout(60_000),
+          })
+        ).status,
+      archiveOver: async (id, body) => {
+        const response = await fetch(
+          `${fleet.base}/api/workspaces/${id}/archive`,
+          {
+            method: "POST",
+            ...(body && {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            }),
+            signal: AbortSignal.timeout(120_000),
+          }
+        );
+        return { status: response.status, text: await response.text() };
+      },
+      callAsParent: async (name, args) => {
+        const response = await fetch(
+          `${fleet.base}/api/delegation/call/${parent}`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              Authorization: `Bearer ${credential}`,
+            },
+            body: JSON.stringify({ name, arguments: args }),
+            signal: AbortSignal.timeout(300_000),
+          }
+        );
+        return { status: response.status, text: await response.text() };
+      },
+    };
 
-    await archivePhase(kit, fleet, { k: wk, workspaceOf, delegate });
-    await huskPhase(kit, fleet, { workspaceOf, delegate });
+    const wk = await landedAndFailed(kit, scene);
+    await archivePhase(kit, scene, wk);
+    await recutPhase(kit, scene);
+    await previewPhase(kit, scene);
+    await unstartablePhase(kit, scene);
+    await huskPhase(kit, scene);
     await diskPhase(kit);
   },
 };

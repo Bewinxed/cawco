@@ -5,7 +5,10 @@
  * and sessiond; Claude Code against the mock model), boundaries included:
  * run it where a workspace boundary can start (not inside another one).
  *
- * Twenty delegates (I0–I19) each run one command and finish; a twenty-first
+ * Twenty delegates (I0–I19) each run one command and finish, each kept by a
+ * preview artifact of the parent's that no server answers (the hub holds the
+ * workspace, hub work-items.ts `settle`; nothing on its machine holds its
+ * boundary, so it is idle there); a twenty-first
  * (P) starts a server in its workspace, shows it as a preview, and finishes;
  * a twenty-second (W) starts a `setsid` server in its workspace and declares
  * a {@link WAIT_MINUTES}-minute wait (`wait_item`), its item live, its
@@ -436,6 +439,24 @@ const standUp = async (kit: Kit) => {
       cwd: src,
       checks: [{ name: "Probe check", command: "true" }],
     });
+    // An idle one stays, its work over: the parent's preview artifact of it
+    // holds it at the hub (work-items.ts `settle`) while no server of it is
+    // served, so nothing on its machine holds its boundary (`liveWhy`).
+    if (tag.startsWith("I")) {
+      const now = Date.now();
+      fleet.write(
+        "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', ?, ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+        crypto.randomUUID(),
+        parent,
+        project.id,
+        `quiet-${tag}`,
+        MACHINE,
+        JSON.stringify({ port: 5199, workspace: started.workspaceId }),
+        now,
+        now,
+        now
+      );
+    }
     return { ...started, tag };
   };
   const tags = [...Array.from({ length: IDLE }, (_, at) => `I${at}`), "P", "W"];
@@ -720,11 +741,16 @@ const waiterCloses = async (
     (left) => left.length === 0,
     Math.max(endedAt + W_CLOSE_MS - Date.now(), 0)
   ).catch(() => boundariesOf(fleet, w.workspaceId));
-  const said = (await fleet.logs("agent")).includes(
-    `${w.workspaceId}${CLOSED_LINE}`
-  );
+  // Closed quietly, or with its workspace as the hub settles it once its
+  // item is over (hub work-items.ts `settle`): retired, or held.
+  const logged = await fleet.logs("agent");
+  const said = [
+    CLOSED_LINE,
+    ": archived; its ",
+    ": not archived: its clone ",
+  ].some((line) => logged.includes(`${w.workspaceId}${line}`));
   kit.check(
-    `8: within ${W_CLOSE_MS / 60_000} min of W's item ending, its boundary closes, said in the agent's log`,
+    `8: within ${W_CLOSE_MS / 60_000} min of W's item ending, its boundary closes (quietly, or as its workspace is settled), said in the agent's log`,
     open.length === 0 && said,
     `open: ${open.join(",") || "none"}; said: ${said}; ${Math.round((Date.now() - endedAt) / 1000)} s after the end`
   );

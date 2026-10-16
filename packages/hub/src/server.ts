@@ -182,7 +182,6 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_LANDED,
   CONTROL_WORKSPACE_MIGRATE,
   type CommandQueue,
   type CommandQueueFrame,
@@ -647,6 +646,7 @@ import {
 } from "./wire-socket";
 import {
   createWorkItems,
+  type HeldWork,
   type ItemPlacement,
   LEAF_DELEGATE_REFUSAL,
   SESSION_TITLE_DESCRIPTION,
@@ -1019,7 +1019,6 @@ const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_LANDED,
   CONTROL_WORKSPACE_MIGRATE,
 ]);
 /** Why a dashboard's control naming `method` is the hub's alone, or nothing when it may go to the machine. */
@@ -1028,7 +1027,7 @@ const hubOwnedControl = (method: string): string | undefined => {
     return "Skills reload when synced fleet content changes.";
   }
   if (HUB_WORKSPACE_CONTROLS.has(method)) {
-    return `${method} is the hub's to send. Archive a workspace with POST /api/workspaces/:id/archive, which refuses while its clone holds work that is nowhere else.`;
+    return `${method} is the hub's to send. A workspace retires on its own once its work lands; a held one is discarded with POST /api/workspaces/:id/archive and discard: true.`;
   }
 };
 /**
@@ -2704,7 +2703,9 @@ export const createServer = (
   /**
    * Whether a lead's place is a shared checkout: the project's folder on the
    * hub (the hub commits to it), or a folder another live session on its
-   * machine works in or above, or a live workspace there was cut from.
+   * machine works in or above. A delegate's workspace is never one: it is a
+   * clone of its own, in no one's tree, borrowing nothing from the folder it
+   * was cut from (agent clone.ts).
    */
   const sharedPlace = (row: InstanceRow): boolean => {
     const place = posix.resolve(row.cwd);
@@ -2713,17 +2714,12 @@ export const createServer = (
     if (row.projectId && place === posix.resolve(projectRoot(row.projectId))) {
       return true;
     }
-    return (
-      db
-        .liveInstancesOn(row.machineId)
-        .some(
-          (other) =>
-            other.id !== row.id && nested(posix.resolve(other.cwd), place)
-        ) ||
-      db
-        .activeWorkspacesOn(row.machineId)
-        .some((workspace) => nested(posix.resolve(workspace.repoRoot), place))
-    );
+    return db
+      .liveInstancesOn(row.machineId)
+      .some(
+        (other) =>
+          other.id !== row.id && nested(posix.resolve(other.cwd), place)
+      );
   };
   pending.onSettled((parked, outcome, why) => {
     if (!(parked.requestId && parked.instanceId)) {
@@ -6072,6 +6068,8 @@ export const createServer = (
     processEvent(instanceId);
     releaseOwed({ instanceId });
     publishInstances(machineId);
+    // Asleep, it holds its finished item's workspace no longer.
+    workItems.settleFor(instanceId);
   };
 
   /**
@@ -6911,6 +6909,10 @@ export const createServer = (
       !(refused || keepAlive) && machinePause.until(machineId) !== undefined;
     const held =
       !(refused || keepAlive) && workItems.heldFor(instanceId, message.origin);
+    // Kept while a retired workspace is cut again for it: the cut starts now.
+    if (held) {
+      workItems.recutFor(instanceId);
+    }
     const agent = refused ? undefined : registry.agent(machineId);
     const away =
       !(refused || agent || keepAlive) && awaitingMachine.has(machineId);
@@ -7110,17 +7112,21 @@ export const createServer = (
    * owed before it. Undefined for a send its machine has.
    */
   /**
-   * A send kept for its machine's pause, or for an interrupt's hold on its
-   * session's item against this sender ({@link deliverToSession}).
+   * A send kept for its machine's pause, for an interrupt's hold on its
+   * session's item against this sender, or while its retired workspace is
+   * cut again ({@link deliverToSession}).
    */
   const pausedOrHeld = (
     row: InstanceRow,
     origin: SentMessage["origin"] | undefined
-  ): "paused" | "held" | undefined => {
+  ): "paused" | "held" | "recut" | undefined => {
     if (machinePause.until(row.machineId) !== undefined) {
       return "paused";
     }
-    return origin && workItems.heldFor(row.id, origin) ? "held" : undefined;
+    if (!(origin && workItems.heldFor(row.id, origin))) {
+      return;
+    }
+    return workItems.recutHold(row.id, origin) ? "recut" : "held";
   };
 
   const holdOf = (record: SentMessageRow): SendHold | undefined => {
@@ -9571,6 +9577,12 @@ export const createServer = (
         publishPreview(instanceId, "open", target);
       }
     },
+    // A preview gone holds the workspace it showed no longer.
+    removed: (row) => {
+      if (row.kind === "preview" && row.machineId) {
+        workItems.settleShown(row.machineId);
+      }
+    },
     previewAddress: (instanceId) => {
       let refusal: PreviewRefusal;
       try {
@@ -10805,6 +10817,8 @@ export const createServer = (
       if (row.workflowStepId && row.workflowRunId) {
         workflowRuntime.endConfirmed(row.workflowRunId);
       }
+      // Ended, it holds its finished item's workspace no longer.
+      workItems.settleFor(row.id);
     },
     ready: (machineId) =>
       registry.agent(machineId)
@@ -16386,10 +16400,42 @@ export const createServer = (
    * A project as the API answers it: its places, and its primary checkout's
    * id (`primaryPlaceId`, null while it has none).
    */
-  const projectOut = (project: ProjectRow) => ({
-    ...project,
-    primaryPlaceId: checkoutOf(project)?.id ?? null,
-  });
+  /** What a held workspace's place says in the places list (work-items.ts `settle`). */
+  const heldPlace = (work: HeldWork) => {
+    const [latest] = db.workItemsIn(work.workspaceId);
+    return {
+      workspaceId: work.workspaceId,
+      holds: work.holds,
+      size: work.size,
+      heldAt: work.heldAt,
+      instanceId: latest?.instanceId ?? null,
+      title: latest?.title ?? null,
+    };
+  };
+
+  /**
+   * A project as the dashboards read it: each place says, as `held`, what a
+   * held workspace there holds and which session goes on with it, for the
+   * places list's Continue and Discard; null for every other place.
+   */
+  const projectOut = (project: ProjectRow) => {
+    const held = new Map(
+      workItems
+        .heldWorkspaces()
+        .map((work) => [`${work.machineId}\n${work.path}`, work])
+    );
+    return {
+      ...project,
+      places: project.places.map((place) => {
+        const work =
+          place.kind === "workspace"
+            ? held.get(`${place.machineId}\n${place.path}`)
+            : undefined;
+        return { ...place, held: work ? heldPlace(work) : null };
+      }),
+      primaryPlaceId: checkoutOf(project)?.id ?? null,
+    };
+  };
 
   // Each project's spend cap: what holds its attempts and its Caw back (project-caps.ts).
   const caps = createCaps({
@@ -16407,7 +16453,6 @@ export const createServer = (
       method === CONTROL_WORKSPACE_CREATE ||
       method === CONTROL_WORKSPACE_ARCHIVE ||
       method === CONTROL_WORKSPACE_DISCARD ||
-      method === CONTROL_WORKSPACE_LANDED ||
       method === CONTROL_WORKSPACE_BUNDLE ||
       method === CONTROL_WORKSPACE_AT ||
       method === CONTROL_HOST_CHECKOUT ||
@@ -16540,6 +16585,23 @@ export const createServer = (
         tasks.todos(projectId, taskId, changes, hubActor(reason)),
     },
     call: callMachine,
+    // A handoff to a delegate whose workspace retired waited at the hub
+    // while the clone was cut again; it goes now, waking the session.
+    recutDone: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const agent = row ? registry.agent(row.machineId) : undefined;
+      if (row && agent && wakesForSend(row) && !keptAsleep(row)) {
+        wakeForSend(agent, row.machineId, instanceId);
+      }
+      releaseOwed({ instanceId });
+    },
+    recutFailed: (instanceId, reason) => {
+      for (const send of db.owedSends({ instanceId })) {
+        db.takeOwedSend(send.uuid);
+        failSend(send, reason);
+      }
+    },
+    workspaceChanged: (workspace) => publishInstances(workspace.machineId),
   });
   // A hub crash after intent persistence cannot leave its work item reading
   // live. Who asked for the stop was not kept with its intent.
@@ -17454,11 +17516,9 @@ export const createServer = (
     }
     publishInstances(workspace.machineId);
   };
-  // Spent workspaces retired on their own (workspace-retire.ts).
+  // A workspace lives as long as its work item; the sweep settles what no
+  // event reached (workspace-retire.ts).
   const workspaceRetire = createWorkspaceRetire({
-    archived: workspaceArchived,
-    db,
-    inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     lifetime,
     machineName,
     online: onlineMachines,
@@ -23072,18 +23132,20 @@ export const createServer = (
       // process in it and deletes the clone. Refused while an item runs there.
       // Spent workspaces kept for unlanded work, as the last sweep read them
       // (workspace-retire.ts); `delegate_list` shows the same list.
-      .get("/api/workspaces/kept", hidden, () => ({
-        kept: workspaceRetire.kept(),
+      // Every held workspace: its item ended with work that is nowhere else,
+      // and only the person continues it or discards it.
+      .get("/api/workspaces/held", hidden, () => ({
+        held: workItems.heldWorkspaces(),
       }))
-      // A retirement sweep now, rather than at its next tick: what it retired,
-      // kept and could not retire.
+      // A settling sweep now, rather than at its next tick: what it retired,
+      // held, left for what holds it, and could not settle.
       .post("/api/workspaces/retire", hidden, () => workspaceRetire.sweep())
-      // What a workspace's clone holds that is nowhere else, read on its
-      // machine now: what an archive would refuse over, or with `discard`
-      // save to a carry before deleting.
-      .get("/api/workspaces/:id/held", async ({ params, status }) => {
+      // What a held workspace's clone holds that is nowhere else, as its
+      // machine read it once its boundary was closed: what a discard saves
+      // to a carry before deleting.
+      .get("/api/workspaces/:id/held", ({ params, status }) => {
         try {
-          return await workItems.held(params.id);
+          return workItems.held(params.id);
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -23094,10 +23156,11 @@ export const createServer = (
         }
       })
       // Refused (409, in words naming what and how big) when its clone holds
-      // work that is nowhere else, and nothing is deleted. `discard: true` is
-      // a person letting that work go: its machine writes its unlanded
-      // commits, changes and stashes to a carry first, whose folder the
-      // answer names as `carry`, and neither walks nor saves its ignored files.
+      // work that is nowhere else: nothing is deleted, and the workspace is
+      // held. `discard: true` is a person letting that work go: its machine
+      // writes its unlanded commits, changes and stashes to a carry first,
+      // whose folder the answer names as `carry`. Files git ignores go with
+      // the clone either way.
       .post(
         "/api/workspaces/:id/archive",
         { body: t.Optional(t.Object({ discard: t.Optional(t.Boolean()) })) },
