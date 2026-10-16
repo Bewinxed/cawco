@@ -1163,7 +1163,11 @@ async function onSimulator(
     let drawer = await tap((label) => label === "Open navigation");
     if (drawer) {
       await pause(2000);
-      drawer = await tap((label) => label.includes("Probe: long ask"));
+      // The live probe's own row, which says it needs you: not an earlier probe's
+      // stopped row, nor any other session that needs you.
+      drawer = await tap(
+        (label) => label === "Needs you: Probe: long ask (ios-long-ask)"
+      );
     }
     await pause(3000);
     report(
