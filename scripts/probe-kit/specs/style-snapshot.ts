@@ -11,6 +11,8 @@
  *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] --approve    writes them
  *   bun scripts/probe-kit/run.ts style-snapshot --coverage                    the coverage map
  *   bun scripts/probe-kit/run.ts style-snapshot --record                      the hub tape, again
+ *   bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate   in a workspace: no delegate,
+ *                                                                             its states left out with a NOTE
  *
  * `PASS style-snapshot: 0 differences` or one `FAIL` line per difference:
  * `<surface>/<state> · <width> <theme>[ reduced] · <element key> [<data-slot>] · <property> · <before> → <after>`.
@@ -180,7 +182,9 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const scene = await seedScene(kit, fleet);
+  const scene = await seedScene(kit, fleet, {
+    delegate: !has("without-delegate"),
+  });
   const tape: Tape = {
     at: Date.now(),
     http: [],

@@ -91,8 +91,15 @@ Open the folder with `artifact_create(kind: "preview", dir)`.
 bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] [--approve]   # computed styles, boxes, overflow, forced states
 bun scripts/probe-kit/run.ts web surfaces [--surfaces=a,b] [--approve surfaces]   # the same surfaces' pixels
 bun scripts/probe-kit/run.ts style-snapshot --coverage                      # style-snapshot-coverage.json
-bun scripts/probe-kit/run.ts style-snapshot --record                        # the hub tape, again
+bun scripts/probe-kit/run.ts style-snapshot --record                        # the hub tape, again (on the host)
+bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate     # in a workspace: no delegate
 ```
+
+The scene's delegate needs a workspace of its own, which only the host can
+make (a workspace has no user namespaces). A tape recorded with
+`--without-delegate` holds none, and every walk over it leaves out the states
+that stand on it (`hostOnly` in the catalogue), each said once in a `NOTE`:
+`session/delegate: host only, not in this tape`.
 
 `style-snapshot` reads every element of every surface (`surfaces/catalogue.ts`)
 at desk 1440, tablet 820 and phone 390, light and dark, and the desk once

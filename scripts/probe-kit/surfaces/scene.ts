@@ -557,7 +557,11 @@ export interface Scene {
   /** The session that started a workflow run (its RunBlock). */
   runner: string;
   second: string;
-  /** The session that started a delegate. */
+  /**
+   * The session that started a delegate; "" in a tape recorded without one
+   * (`--record --without-delegate`: a workspace has no user namespaces, so
+   * only a host makes a delegate's workspace).
+   */
   split: string;
   task: string;
   /** The project with Caw on, its board empty. */
@@ -579,8 +583,16 @@ export function sceneHub(fleet: KitFleet): () => void {
   return jev.stop;
 }
 
-/** Stands the scene up on `fleet` (its services up, the account signed in; `sceneHub` heard by the hub). */
-export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
+/**
+ * Stands the scene up on `fleet` (its services up, the account signed in;
+ * `sceneHub` heard by the hub), with its delegate when `delegate` (a host
+ * only: a delegate's workspace needs user namespaces).
+ */
+export async function seedScene(
+  kit: Kit,
+  fleet: KitFleet,
+  { delegate }: { delegate: boolean }
+): Promise<Scene> {
   await writeFile(
     join(fleet.repo, "README.md"),
     "# Tray\n\nThe tray holds a session's chips: its branch, its machine and its count.\n"
@@ -651,11 +663,15 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
     "Ask me what the hang card's states are called. PROBE-STEP:named"
   );
   // A delegate it starts, which reports back: its card, transcript inline.
-  const split = await fleet.spawn("claude", "Split the chip audit", fleet.repo);
-  await fleet.send(
-    split,
-    "Hand the chip row's check to a delegate. PROBE-STEP:split"
-  );
+  const split = delegate
+    ? await fleet.spawn("claude", "Split the chip audit", fleet.repo)
+    : "";
+  if (split) {
+    await fleet.send(
+      split,
+      "Hand the chip row's check to a delegate. PROBE-STEP:split"
+    );
+  }
 
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "cawco",
@@ -1069,21 +1085,23 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   );
 
   // The delegate done and its report heard: the parent's turns at rest.
-  await until(
-    "the delegate's item done",
-    () =>
-      fleet.query<{ state: string }>(
-        "SELECT state FROM work_items WHERE parent_instance_id = ? AND task_id IS NULL",
-        split
-      )[0]?.state,
-    (state) => state === "done",
-    300_000
-  );
+  if (split) {
+    await until(
+      "the delegate's item done",
+      () =>
+        fleet.query<{ state: string }>(
+          "SELECT state FROM work_items WHERE parent_instance_id = ? AND task_id IS NULL",
+          split
+        )[0]?.state,
+      (state) => state === "done",
+      300_000
+    );
+  }
   for (const [what, id] of [
-    ["the split session's turn done", split],
-    ["the runner session's turn done", runner],
-    ["the review attempt's turn done", reviewDone],
-  ] as const) {
+    ...(split ? [["the split session's turn done", split] as const] : []),
+    ["the runner session's turn done", runner] as const,
+    ["the review attempt's turn done", reviewDone] as const,
+  ]) {
     // biome-ignore lint/performance/noAwaitInLoops: one session at a time
     await until(
       what,

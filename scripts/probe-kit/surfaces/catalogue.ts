@@ -21,6 +21,12 @@ export type Width = "desk" | "tablet" | "phone";
 export interface State {
   /** What opens it, on its route freshly loaded (the walk loads each state's route anew). */
   act?: (page: Page) => Promise<unknown>;
+  /**
+   * It stands on the scene's delegate, which only a host records (a
+   * workspace has no user namespaces): read only from a tape whose scene
+   * holds one (`split`), and left out, with a NOTE, from any other.
+   */
+  hostOnly?: true;
   name: string;
   /**
    * What is read: a selector, the largest visible match when several match
@@ -407,6 +413,7 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.split}`,
         act: press(DELEGATE_CARD),
         root: MAIN,
+        hostOnly: true,
       },
       {
         // The workflow run it started: the RunBlock and its steps.

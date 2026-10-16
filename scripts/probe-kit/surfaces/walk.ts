@@ -240,6 +240,14 @@ export async function walk(
 ): Promise<Map<string, number>> {
   const seconds = new Map<string, number>();
   const scene = tape.scene as Scene;
+  // A tape recorded without the delegate (`--record --without-delegate`)
+  // holds nothing for a state that stands on it: said once, then left out.
+  const absent = (state: State) => state.hostOnly === true && !scene.split;
+  for (const surface of surfaces) {
+    for (const state of surface.states.filter(absent)) {
+      kit.note(`${surface.name}/${state.name}: host only, not in this tape`);
+    }
+  }
   for (const surface of surfaces) {
     const started = performance.now();
     // biome-ignore lint/performance/noAwaitInLoops: one surface at a time
@@ -247,7 +255,7 @@ export async function walk(
     // A surface's passes side by side, each on its own page and context.
     await pool(passes, PARALLEL, async (pass) => {
       const states = surface.states.filter(
-        (s) => !s.widths || s.widths.includes(pass.width)
+        (s) => !(absent(s) || (s.widths && !s.widths.includes(pass.width)))
       );
       if (states.length === 0) {
         return;
