@@ -3862,8 +3862,11 @@ export const createWorkItems = ({
   };
 
   /** The workspace's last commit, read inside its boundary. */
-  const headOf = async (workspace: WorkspaceRow): Promise<string> => {
-    const read = await runIn(workspace)(
+  const headOf = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<string> => {
+    const read = await runIn(workspace, item)(
       "git rev-parse --verify 'HEAD^{commit}'",
       GIT_TIMEOUT_MS
     );
@@ -4034,7 +4037,7 @@ export const createWorkItems = ({
       once(cloned, machineId, async () => {
         const { source, head } =
           machineId === workspace.machineId
-            ? { source: refOf(workspace), head: await headOf(workspace) }
+            ? { source: refOf(workspace), head: await headOf(workspace, item) }
             : await atCommit(machineId).then((ready) => ({
                 source: refOf(ready.at),
                 head: ready.head,
