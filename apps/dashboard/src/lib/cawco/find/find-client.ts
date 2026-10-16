@@ -1,8 +1,8 @@
 /**
  * The finder's one door to the hub: `GET /api/find` (names per keystroke,
- * then the machines on a settle), `GET /api/find/waiting` and
- * `POST /api/find/seen`. Every surface in this folder reads the fleet
- * through here and nowhere else.
+ * then the machines on a settle) and `GET /api/find/waiting`. Every surface
+ * in this folder reads the fleet through here and nowhere else. What it
+ * answers is the engine's own contract (`@cawco/core`, find.ts).
  *
  * A failed read is said as one of two things and never turned into an empty
  * answer (The Claim Of Nothing Rule): the hub did not answer (`unreached`),
@@ -10,162 +10,30 @@
  * (a newer keystroke took its place) resolves `null` and is dropped by the
  * caller.
  */
+import type { FindAnswer, FindBy, FindKind, WaitingAnswer } from "@cawco/core";
 import { hubFailure, unreachable, unreachedAnswer } from "../hub-read";
 
-// PENDING-CORE: the engine's contract (packages/core/src/find.ts, ws
-// 0a6da208), declared here until it lands on main; then these become
-// `export type { … } from "@cawco/core"`.
-export type FindKind =
-  | "conversation"
-  | "thread"
-  | "task"
-  | "routine"
-  | "project"
-  | "machine"
-  | "artifact"
-  | "decision"
-  | "commit"
-  | "file";
-export type FindField =
-  | "title"
-  | "purpose"
-  | "project"
-  | "dir"
-  | "machine"
-  | "report"
-  | "id"
-  | "kind"
-  | "path"
-  | "transcript";
-export type FindBy = "me" | "agent" | "report" | "caw";
-export type FindLiveState =
-  "working" | "needs-you" | "idle" | "sleeping" | "ended" | "unknown";
-
-interface FindCommon {
-  handle: string | null;
-  id: string;
-  /** ms */
-  lastActivity: number | null;
-  matched: FindField[];
-  project: { id: string; name: string } | null;
-  score: number;
-  title: string;
-}
-export type MomentAuthor = "owner" | "agent" | "report" | "injected" | "caw";
-export interface FindMoment {
-  at: number | null;
-  author: MomentAuthor;
-  docId: string;
-  /** The matched terms stand between 「 and 」. */
-  excerpt: string;
-}
-export interface FindConversation extends FindCommon {
-  children: { count: number; needsYou: number };
-  dir: string | null;
-  harness: string;
-  instanceId: string | null;
-  kind: "conversation";
-  lastReport: {
-    at: number;
-    headline: string;
-    outcome: "done" | "failed" | "blocked" | null;
-  } | null;
-  machine: { id: string; name: string };
-  moments: FindMoment[];
-  parent: { id: string; title: string } | null;
-  purpose: string | null;
-  role: "session" | "delegate" | "attempt" | "spin-off";
-  sessionId: string;
-  state: FindLiveState;
-  /** What an attempt is an attempt at. */
-  task: { id: string; taskId: string; title: string } | null;
-}
-export interface FindThread extends FindCommon {
-  kind: "thread";
-  moments: FindMoment[];
-  state: "working" | "needs-you" | "ready";
-}
-export interface FindTask extends FindCommon {
-  kind: "task";
-  stage: string;
-  /** Null until the project's stages.md is read, and for a stage it doesn't name. */
-  stageKind: "todo" | "active" | "waiting" | "you" | "done" | "dropped" | null;
-  taskId: string;
-  todos: { done: number; total: number };
-}
-export interface FindRoutine extends FindCommon {
-  enabled: boolean;
-  kind: "routine";
-  lastOutcome: string | null;
-  nextRun: number;
-}
-export interface FindProject extends FindCommon {
-  kind: "project";
-}
-export interface FindMachine extends FindCommon {
-  kind: "machine";
-  online: boolean;
-}
-export interface FindArtifact extends FindCommon {
-  artifactKind: "page" | "canvas" | "preview";
-  conversation: { id: string; title: string };
-  kind: "artifact" | "decision";
-  picksToMake: boolean;
-  revision: number;
-  seen: boolean;
-}
-export interface FindChange extends FindCommon {
-  branch: string;
-  conversation: { id: string; title: string };
-  kind: "commit" | "file";
-  landed: boolean;
-  what: string;
-  workItemId: string;
-}
-export type FindResult =
-  | FindConversation
-  | FindThread
-  | FindTask
-  | FindRoutine
-  | FindProject
-  | FindMachine
-  | FindArtifact
-  | FindChange;
-export interface FindCoverage {
-  asked: boolean;
-  machines: {
-    answered: boolean;
-    indexAgeMs: number | null;
-    /** It answered while its index was still catching up: its moments may be short. */
-    indexing: boolean;
-    machineId: string;
-    name: string;
-    reason: string | null;
-    tookMs: number | null;
-  }[];
-}
-export interface FindAnswer {
-  coverage: FindCoverage;
-  next: string | null;
-  query: string;
-  results: FindResult[];
-  timing: { namesMs: number; transcriptsMs: number | null };
-}
-export interface WaitingItem {
-  artifactKind?: "page" | "canvas" | "preview";
-  conversation: { id: string; title: string } | null;
-  id: string;
-  kind: "artifact" | "decision" | "report" | "task";
-  project: { id: string; name: string } | null;
-  revision?: number;
-  since: number;
-  title: string;
-  why: string;
-}
-export interface WaitingAnswer {
-  days: number;
-  items: WaitingItem[];
-}
+export type {
+  FindAnswer,
+  FindArtifact,
+  FindBy,
+  FindChange,
+  FindConversation,
+  FindCoverage,
+  FindField,
+  FindKind,
+  FindLiveState,
+  FindMachine,
+  FindMoment,
+  FindProject,
+  FindResult,
+  FindRoutine,
+  FindTask,
+  FindThread,
+  MomentAuthor,
+  WaitingAnswer,
+  WaitingItem,
+} from "@cawco/core";
 
 /** How a read ended. */
 export type Read<T> =
@@ -237,27 +105,3 @@ export const findEverywhere = (q: string, ask: Ask = {}) =>
 
 export const findWaiting = (signal?: AbortSignal) =>
   read<WaitingAnswer>("/api/find/waiting", signal);
-
-/** Marks a report read: it leaves Waiting for you. */
-export async function markReportRead(workItemId: string): Promise<Read<null>> {
-  try {
-    const response = await fetch("/api/find/seen", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "report", id: workItemId }),
-    });
-    if (unreachedAnswer(response)) {
-      return { ok: false, unreached: true };
-    }
-    if (!response.ok) {
-      const { detail } = await hubFailure(response);
-      return { ok: false, unreached: false, detail };
-    }
-    return { ok: true, value: null };
-  } catch (error) {
-    if (unreachable(error)) {
-      return { ok: false, unreached: true };
-    }
-    throw error;
-  }
-}

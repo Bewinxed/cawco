@@ -38916,6 +38916,13 @@
             "description": "Its next run, ms epoch.",
             "type": "number"
           },
+          "threadId": {
+            "description": "The thread its runs are noted in, where it opens; null before its first note.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "handle": {
             "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
             "type": [
@@ -38976,6 +38983,7 @@
           "matched",
           "nextRun",
           "score",
+          "threadId",
           "title"
         ]
       },

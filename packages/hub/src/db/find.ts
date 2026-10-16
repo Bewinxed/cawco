@@ -72,6 +72,8 @@ export interface FindRoutineRow {
   nextSlot: Date;
   projectId: string | null;
   prompt: string;
+  /** The thread its runs are noted in; null before its first note. */
+  threadId: string | null;
 }
 
 export interface FindDb {
@@ -198,6 +200,7 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
           name: row.name,
           prompt: row.prompt,
           projectId: row.projectId,
+          threadId: row.threadId,
           enabled: row.enabled,
           nextSlot: row.nextSlot,
           lastOutcome: run?.outcome ?? null,

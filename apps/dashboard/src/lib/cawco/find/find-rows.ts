@@ -10,6 +10,7 @@
  * Stopped, Failed, Unreachable) and WORDS.md's nouns (session, delegate,
  * thread, task, routine, preview, decision, report, machine, project).
  */
+import type { ArtifactKind } from "@cawco/core";
 import type { Component } from "svelte";
 import Routine from "~icons/solar/calendar-bold-duotone";
 import Task from "~icons/solar/checklist-minimalistic-bold-duotone";
@@ -27,6 +28,7 @@ import Canvas from "~icons/solar/pen-new-square-bold-duotone";
 import Unreachable from "~icons/solar/question-circle-bold-duotone";
 import Working from "~icons/solar/refresh-circle-bold-duotone";
 import Machine from "~icons/solar/server-bold-duotone";
+import Sheet from "~icons/solar/widget-4-bold-duotone";
 import Preview from "~icons/solar/window-frame-bold-duotone";
 import type {
   FindArtifact,
@@ -225,13 +227,11 @@ function finish(
   };
 }
 
-const ARTIFACT: Record<
-  "page" | "canvas" | "preview",
-  { glyph: Component; noun: string }
-> = {
+const ARTIFACT: Record<ArtifactKind, { glyph: Component; noun: string }> = {
   page: { glyph: Page, noun: "page" },
   canvas: { glyph: Canvas, noun: "canvas" },
   preview: { glyph: Preview, noun: "preview" },
+  sheet: { glyph: Sheet, noun: "sheet" },
 };
 
 const STAGE_KIND_WORD: Record<string, string> = {
@@ -326,7 +326,12 @@ function routineRow(r: FindRoutine): Drawn {
       word,
       tone: r.lastOutcome && WENT_WRONG.test(r.lastOutcome) ? "fail" : "quiet",
     },
-    meta: words(r.project?.name, r.enabled ? `next ${next}` : null),
+    // It opens into the thread its runs are noted in; before its first note it has none to open.
+    meta: words(
+      r.project?.name,
+      r.enabled ? `next ${next}` : null,
+      r.threadId ? null : "no thread yet"
+    ),
     reason: null,
   };
 }

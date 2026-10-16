@@ -97,6 +97,9 @@ export type FindField =
  */
 export type MomentAuthor = TranscriptAuthor | "caw";
 
+/** Who said it, as `GET /api/find`'s `by` names it: `me` is the owner's own words. */
+export type FindBy = "me" | "agent" | "report" | "caw";
+
 /** A moment inside a conversation or thread: a jump target, and why it matched. */
 export interface FindMoment {
   /** When it was said, ms epoch; null when the transcript kept no time. */
@@ -192,6 +195,8 @@ export interface FindRoutine extends FindBase {
   lastOutcome: string | null;
   /** Its next run, ms epoch. */
   nextRun: number;
+  /** The thread its runs are noted in, where it opens; null before its first note. */
+  threadId: string | null;
 }
 
 export interface FindProject extends FindBase {

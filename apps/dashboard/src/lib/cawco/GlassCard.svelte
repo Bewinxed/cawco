@@ -33,7 +33,9 @@
    * and every other close, gives it back to what had it before the first
    * card opened, or, opened from inside the phone's sheet, which goes as it
    * opens, to what invoked the sheet: the burger (bar-glass `invoker`).
-   * ⌘K in Jump's own field closes it (Shell). Non-modal: no scrim, no trap, and a press outside closes it
+   * ⌘K in Jump's own field closes it (Shell). Jump's Escape is the finder's:
+   * it folds an open peek first and closes only with nothing folded open.
+   * Non-modal: no scrim, no trap, and a press outside closes it
    * and still lands; the glass's own items open, swap or shut it themselves.
    *
    * Mounted from the start and kept (`forceMount`), up behind the cut and
@@ -56,9 +58,9 @@
     glassElement,
     glassPlacement,
   } from "./bar-glass.svelte";
+  import FinderCard from "./find/FinderCard.svelte";
   import CawPanel from "./home/CawPanel.svelte";
   import { liveFeed } from "./home/caw-feed.svelte";
-  import JumpPalette from "./JumpPalette.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { dur, ease } from "./motion/curves.svelte";
   import { FOLDED, GROWN } from "./motion/hang";
@@ -407,6 +409,7 @@
     class={[FRAME[shown], rehearsing && "invisible"]}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
+    escapeKeydownBehavior={shown === "jump" ? "ignore" : "close"}
     folded={() => barGlass.instant}
     forceMount
     glass
@@ -512,7 +515,7 @@
         {:else if one.card === "machines"}
           <MachinesList onleave={close} />
         {:else}
-          <JumpPalette onclose={close} />
+          <FinderCard onclose={close} {phone} />
         {/if}
       </div>
     {/each}

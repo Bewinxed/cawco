@@ -611,6 +611,7 @@ export const routineEntry = (
     enabled: routine.enabled,
     lastOutcome: routine.lastOutcome,
     nextRun: routine.nextSlot.getTime(),
+    threadId: routine.threadId,
     lastActivity: routine.lastRunAt?.getTime() ?? null,
     matched: [],
     score: 0,

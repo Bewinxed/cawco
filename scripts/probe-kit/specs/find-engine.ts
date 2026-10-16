@@ -379,6 +379,22 @@ const insertThread = (db: Database, projectId: string): string => {
   return threadId;
 };
 
+/** A routine of the project whose runs are noted in `threadId`: where it opens. */
+const ROUTINE = "Weekly lantern audit";
+const insertRoutine = (db: Database, projectId: string, threadId: string) => {
+  const now = Date.now();
+  db.query(
+    "INSERT INTO routines (id, project_id, name, cron, time_zone, target, prompt, lands, enabled, created_by, keep, next_slot, thread_id, created_at) VALUES (?, ?, ?, '0 6 * * *', 'UTC', 'delegate', 'Audit the lanterns.', 'none', 1, 'owner', 0, ?, ?, ?)"
+  ).run(
+    crypto.randomUUID(),
+    projectId,
+    ROUTINE,
+    now + DAY,
+    threadId,
+    now - DAY
+  );
+};
+
 /**
  * A delegate's report an hour ago to the person's own session (the
  * orchestrator, `rows[0]`), from one of its children; answers the work
@@ -499,10 +515,9 @@ const standUp = async (kit: Kit): Promise<Probe> => {
   const rows = seedFleet();
   const { threadId, report } = withDb(dbPath, (db) => {
     insertRows(db, rows, project.id);
-    return {
-      threadId: insertThread(db, project.id),
-      report: insertReport(db, rows),
-    };
+    const thread = insertThread(db, project.id);
+    insertRoutine(db, project.id, thread);
+    return { threadId: thread, report: insertReport(db, rows) };
   });
   await writeTranscripts(
     rows.filter((row) => row.machine === MACHINE),
@@ -851,13 +866,15 @@ const checkWaiting = async (
   );
 };
 
-/** The composer's field, Jump's field, Jump's names (not its transcript lines), the composer's `@` rows. */
+/** The composer's field, the finder's field in the glass's card, its rows' titles in drawn order, the composer's `@` rows. */
 const FIELD = "form.cin textarea";
-const JUMP_FIELD = ".jump-field";
+const JUMP_FIELD = ".glass-face[data-face='jump'] input";
 const JUMP_NAMES = () =>
-  [...document.querySelectorAll(".jump-list .jump-name")]
-    .filter((name) => !name.closest(".jump-hit"))
-    .map((name) => name.textContent?.trim() ?? "");
+  [
+    ...document.querySelectorAll(
+      ".glass-face[data-face='jump'] .slot:not([inert] *) .title"
+    ),
+  ].map((title) => title.textContent?.trim() ?? "");
 const AT_ROWS = () =>
   [
     ...document.querySelectorAll(
@@ -865,12 +882,19 @@ const AT_ROWS = () =>
     ),
   ].map((row) => row.getAttribute("data-value") ?? "");
 
-/** Whether Jump stands open with its field focused, and how many groups the workspace has. */
-const SHELL_STATE = () => ({
-  jump: document.activeElement?.classList.contains("jump-field") ?? false,
-  open: !!document.querySelector(".jump-field"),
-  groups: document.querySelectorAll("[data-leaf]").length,
-});
+/** Whether the finder stands open in the glass's card with its field focused, and how many groups the workspace has. */
+const SHELL_STATE = () => {
+  const face = document.querySelector(".glass-face[data-face='jump']");
+  const standing = !!face && face.closest("[inert]") === null;
+  return {
+    jump:
+      standing &&
+      document.activeElement?.tagName === "INPUT" &&
+      !!face?.contains(document.activeElement),
+    open: standing,
+    groups: document.querySelectorAll("[data-leaf]").length,
+  };
+};
 
 /** The frame of the panel's `title`d iframe, once it stands with `ready` in it. */
 const frameOf = async (page: Page, title: string, ready: string) => {
@@ -897,7 +921,7 @@ const frameOf = async (page: Page, title: string, ready: string) => {
  * shell from there.
  */
 const checkScreens = async (
-  { kit, fleet, sender, live, find }: Probe,
+  { kit, fleet, sender, live, find, threadId }: Probe,
   call: (name: string, input: object) => Promise<string>
 ) => {
   const base = await fleet.dashboard();
@@ -1040,6 +1064,28 @@ const checkScreens = async (
       keys.some((key) => key.startsWith("\\:")) &&
       afterSplit.groups === before.groups + 1,
     JSON.stringify({ keys, before, afterK, afterSplit })
+  );
+  // A routine opens into the thread its runs are noted in.
+  await page.click("[data-share='jump']");
+  await page.waitForSelector(JUMP_FIELD);
+  await page.fill(JUMP_FIELD, "routine lantern");
+  const listed = await until(
+    "the routine in Go-to",
+    () => page.evaluate(JUMP_NAMES),
+    (names) => names[0] === ROUTINE,
+    20_000
+  ).catch(() => page.evaluate(JUMP_NAMES));
+  await page.press(JUMP_FIELD, "Enter");
+  const landed = await until(
+    "the routine's thread",
+    () => new URL(page.url()).pathname,
+    (path) => path === `/session/thread:${threadId}`,
+    20_000
+  ).catch(() => new URL(page.url()).pathname);
+  kit.check(
+    "h. ↵ on a routine in the finder opens the thread its runs are noted in",
+    listed[0] === ROUTINE && landed === `/session/thread:${threadId}`,
+    JSON.stringify({ listed: listed.slice(0, 3), landed })
   );
 };
 

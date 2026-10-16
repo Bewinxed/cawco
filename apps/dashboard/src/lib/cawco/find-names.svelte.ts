@@ -2,9 +2,9 @@ import type { FindAnswer, FindKind, FindResult } from "@cawco/core";
 
 /**
  * The hub's finding engine read for names alone (`/api/find?transcripts=0`,
- * the hub's find.ts): what the Jump palette lists and what the composer's
- * `@` offers, ranked at the hub as every find is, so a name found and a
- * name mentioned come from one ranking. It answers in milliseconds, so it
+ * the hub's find.ts): what the composer's `@` offers, ranked at the hub as
+ * every find is, so a name mentioned and a name found (the finder,
+ * find/finder.svelte.ts) come from one ranking. It answers in milliseconds, so it
  * runs on every key: each new query aborts the one in flight, and the last
  * answer stands until the next lands, so a list never blanks between keys.
  */
@@ -72,36 +72,4 @@ export class FindNames {
     this.#controller = undefined;
     this.#asked = null;
   }
-}
-
-/** A `[start, end)` slice of a string that the query matched. */
-export type Range = [number, number];
-
-const SPACES = /\s+/;
-
-/**
- * Where the query's words sit in `text`, merged into runs: what a row marks
- * to say why it is there. The hub ranked the row; this only shows it.
- */
-export function wordRanges(text: string, query: string): Range[] {
-  const lower = text.toLowerCase();
-  const found: Range[] = [];
-  for (const word of query.toLowerCase().split(SPACES).filter(Boolean)) {
-    let at = lower.indexOf(word);
-    while (at !== -1) {
-      found.push([at, at + word.length]);
-      at = lower.indexOf(word, at + word.length);
-    }
-  }
-  found.sort((a, b) => a[0] - b[0]);
-  const merged: Range[] = [];
-  for (const range of found) {
-    const last = merged.at(-1);
-    if (last && range[0] <= last[1]) {
-      last[1] = Math.max(last[1], range[1]);
-    } else {
-      merged.push([range[0], range[1]]);
-    }
-  }
-  return merged;
 }
