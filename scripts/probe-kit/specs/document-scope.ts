@@ -139,6 +139,16 @@ const WAITS = ["mcp__cawco__wait_item", "cawco_wait_item", "wait_item"];
 const WAIT_INPUT = { minutes: 60, reason: "The probe drives this delegate." };
 
 /**
+ * A delegate's request: its brief is in its history, or the hub's word to a
+ * work item is, or (once it has compacted) the turn the probe is driving is
+ * a delegate's.
+ */
+const delegates = (request: Seen, now: Step | undefined): boolean =>
+  request.all.includes(DELEGATE_MARK) ||
+  request.all.includes(STILL_OPEN) ||
+  now?.delegate === true;
+
+/**
  * A delegate's turn: a `wait_item` call, then its words. A work item whose
  * session ends three turns in a row without `finish_item` fails (hub
  * work-items.ts `QUIET_TURNS`), and a declared wait keeps it running
@@ -230,6 +240,16 @@ const spec: Spec = {
     };
     const respond = (request: Seen): Reply => {
       const now = step;
+      // The hub's quiet-turn word to a delegate is answered with its wait,
+      // even while a compaction's summary is being written: three quiet
+      // turns in a row fail its item (work-items.ts `QUIET_TURNS`), and the
+      // mock answers in milliseconds.
+      if (request.tools && request.last.includes(STILL_OPEN)) {
+        return delegateTurn(
+          request,
+          now?.delegate && !now.summary ? now : undefined
+        );
+      }
       if (now?.summary) {
         now.done = true;
         return say(now.summary);
@@ -237,15 +257,13 @@ const spec: Spec = {
       if (!request.tools) {
         return say("Probe title");
       }
-      // A delegate's request: its brief is in its history, or (once it has
-      // compacted) the turn the probe is driving is a delegate's.
-      if (
-        request.all.includes(DELEGATE_MARK) ||
-        request.all.includes(STILL_OPEN) ||
-        now?.delegate
-      ) {
+      if (delegates(request, now)) {
         return delegateTurn(request, now?.delegate ? now : undefined);
       }
+      return orchestratorTurn(request, now);
+    };
+    /** An orchestrator's turn: words, or its `delegate` call and then words. */
+    const orchestratorTurn = (request: Seen, now: Step | undefined): Reply => {
       if (!now) {
         return say("ok");
       }
@@ -487,6 +505,31 @@ const spec: Spec = {
           leafAfter,
           loads(harness, OWN.high)
         );
+        {
+          // What the delegate is when its next turn is due: said whole when
+          // that turn never reached the model.
+          const [row] = fleet.query<{
+            status: string;
+            last_error: string | null;
+            turn_open_at: number | null;
+          }>(
+            "SELECT status, last_error, turn_open_at FROM instances WHERE id = ?",
+            high
+          );
+          const [item] = fleet.query<{ state: string; error: string | null }>(
+            "SELECT state, error FROM work_items WHERE instance_id = ?",
+            high
+          );
+          kit.check(
+            `3: ${harness}, high delegate takes its next turn after a compaction`,
+            leafAfter !== undefined,
+            JSON.stringify({
+              row,
+              item,
+              lastAsked: fleet.seen.at(-1)?.last.slice(0, 200),
+            })
+          );
+        }
       } else {
         kit.check(
           `3: ${harness}, high delegate after a compaction`,
