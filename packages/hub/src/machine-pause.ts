@@ -49,6 +49,14 @@ export interface CommandOptions {
    */
   readonly movable?: boolean;
   /**
+   * The run never waits: on a paused machine it does not start, and one that
+   * begins to wait for a shared slot (any but its boundary's start), or that
+   * a pause cancels, is cancelled there; each throws {@link WouldWait}. A
+   * landing turn's checks run so (landing.ts): an item there steps out to
+   * gate again rather than hold the queue.
+   */
+  readonly noWait?: boolean;
+  /**
    * Each change of what the run waits for, as its status says it ("queued
    * for the Mac's build slot behind …", "waiting: Omars-MacBook-Pro is
    * paused until 00:57"); null once it waits no more.
@@ -57,6 +65,13 @@ export interface CommandOptions {
   /** What it is, as a pause that stops it counts it; a plain command when not said. */
   readonly what?: RunKind;
 }
+
+/**
+ * A `noWait` run ({@link CommandOptions}) that would have waited: `message`
+ * is what for, as a status says it ("queued for a heavy-run slot behind …",
+ * "Omars-MacBook-Pro is paused until 00:57").
+ */
+export class WouldWait extends Error {}
 
 /** The longest a single timer is armed for; a later end is armed again from there. */
 const TIMER_MAX_MS = 24 * 60 * 60 * 1000;

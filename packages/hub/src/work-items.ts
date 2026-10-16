@@ -121,6 +121,7 @@ import type {
 import { leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
+  type Failed,
   GATE_COVERS,
   type LandingTurn,
   land,
@@ -133,7 +134,7 @@ import {
   statusCommand,
 } from "./landing";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import type { CommandOptions } from "./machine-pause";
+import { type CommandOptions, WouldWait } from "./machine-pause";
 import {
   FOLDER_FILE_LIMIT,
   FolderRefusal,
@@ -1254,8 +1255,8 @@ interface CheckOutcome {
 
 /**
  * A check command that passed on a tree, with the `expect` it passed with
- * and the stage it ran in (`at finish_item`, `after the rebase`, `in the
- * land gate`), for the line of a check its pass lets skip.
+ * and the stage it ran in (`at finish_item`, `while gating on top of main`,
+ * `in its turn to land on main`), for the line of a check its pass lets skip.
  */
 interface Passed {
   command: string;
@@ -1371,6 +1372,54 @@ interface CheckRun {
   outcomes: CheckOutcome[];
 }
 
+/**
+ * How a check run waits. At finish_item and while an item gates (`inTurn`
+ * false) its checks wait out their machine's pause and the shared slots they
+ * need, `say` hearing each wait with the name of the check that waits (null
+ * once none does). In the landing turn (`inTurn` true) nothing waits: a
+ * check due there that runs on another machine or on the host, or one (or its
+ * dependency install) that would wait for a pause or a slot, throws
+ * {@link WouldWait}, and the item steps out of its turn (landing.ts).
+ */
+interface CheckHow {
+  inTurn: boolean;
+  say: (words: string | null, check?: string) => void;
+}
+
+/**
+ * The turn runs only what runs in the workspace itself: a due check that
+ * runs on another machine (the Apple gate's build on a Mac) or on the host is
+ * the gate's, outside the queue. Throws {@link WouldWait} naming the first
+ * such check, before any of them runs; nothing when there is none.
+ */
+const refuseAway = (
+  checks: WorkItemCheck[],
+  machineId: string,
+  named: (machineId: string) => string
+): void => {
+  const away = checks.find(
+    (check) => check.host || (check.machine && check.machine !== machineId)
+  );
+  if (away) {
+    throw new WouldWait(
+      `${away.name} runs on ${named(away.machine ?? machineId)}${away.host ? ", outside its workspace" : ""}`
+    );
+  }
+};
+
+/**
+ * Rethrows `error`: a {@link WouldWait} from `what`'s run saying that it was
+ * `what` that would have waited, any other as it was.
+ */
+function waitedIn(error: unknown, what: string): never {
+  if (error instanceof WouldWait) {
+    throw new WouldWait(`${what} would have waited: ${error.message}`, {
+      cause: error,
+    });
+  }
+  throw error;
+}
+
 /** One check that ran to its end, and where, when on another machine. */
 interface Ran {
   complete: CommandResult;
@@ -1468,33 +1517,10 @@ const installedSaid = (run: CheckRun): string =>
     .map((each) => `, installing dependencies first: ${each.said}`)
     .join("");
 
-/**
- * The landing line on the item's checks after the fetch: not run again when
- * the base had not moved, else which ran again on the rebased tree.
- */
-const recheckSaid = (
-  base: string,
-  rebased: boolean,
-  run: CheckRun | undefined
-): string => {
-  if (!(rebased && run)) {
-    return `${base} had not moved, so the checks were not run again`;
-  }
-  const ran = run.outcomes.filter((each) => !each.skipped);
-  if (ran.length === 0) {
-    return `rebased onto the newer ${base}, which left the checked tree as it was, so the checks were not run again`;
-  }
-  const which =
-    ran.length === run.outcomes.length
-      ? "the checks"
-      : ran.map((each) => each.check.name).join(" and ");
-  return `rebased onto the newer ${base} with ${which} run again on the rebased tree${installedSaid(run)}`;
-};
-
-/** The landing line on the land gate: each script, run or not and why; empty with no gate. */
-const gateSaid = (run: CheckRun | undefined): string =>
+/** A gate's or a turn's run as the landing line says it: each check, run or not and why. */
+const ranSaid = (run: CheckRun | undefined): string =>
   run && run.outcomes.length > 0
-    ? `; gate: ${run.outcomes
+    ? `: ${run.outcomes
         .map((each) =>
           each.skipped
             ? `${each.check.name} not run again (${each.skipped})`
@@ -1502,6 +1528,28 @@ const gateSaid = (run: CheckRun | undefined): string =>
         )
         .join(", ")}${installedSaid(run)}`
     : "";
+
+/**
+ * The landing line of an item that landed: where, what its last gate on top
+ * of the branch ran, and what its turn ran again after the turn's rebase
+ * (nothing when the branch had not moved since), and each time it stepped
+ * out of its turn.
+ */
+const landedLine = (
+  base: string,
+  landed: { rebased: boolean; sha: string },
+  runs: { gate?: CheckRun; turn?: CheckRun },
+  steps: string[]
+): string => {
+  const turn = landed.rebased
+    ? `${base} had moved by its turn, so it rebased again${ranSaid(runs.turn) || ", with no checks to run"}`
+    : `${base} had not moved by its turn, so nothing ran again`;
+  const stepped =
+    steps.length > 0
+      ? `; it stepped out of its turn ${steps.length === 1 ? "once" : `${steps.length} times`} to gate again, the last time because ${steps.at(-1)}`
+      : "";
+  return `Landed on ${base} at ${landed.sha.slice(0, 9)}; gated on top of ${base}${ranSaid(runs.gate)}; ${turn}${stepped}.`;
+};
 
 /** A check as the delegate reads it: a failure carries its stderr too. */
 const checkResultLine = (outcome: CheckOutcome): string =>
@@ -1713,7 +1761,9 @@ export const createWorkItems = ({
    * What an item's checks wait for, as its status says it (WorkItemSummary
    * `checkQueue`): a shared slot ("queued for …"), its machine's pause
    * ("waiting: Omars-MacBook-Pro is paused until 00:57"), another command in
-   * its folder, or its turn to land ("queued to land on main behind …"); null
+   * its folder, its gate on top of the branch ("gating on top of main: iOS
+   * build compiles queued for the Mac's build slot behind …"), or its turn
+   * to land ("queued to land on main behind …"); null
    * once it waits no more. Every wait between `finish_item` and the item's
    * outcome comes here: before 2026-10-16 only a check's own slot and pause
    * waits did, and items queued to land sat "checking" with nothing said.
@@ -4317,21 +4367,37 @@ export const createWorkItems = ({
   const runChecks = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    checks: WorkItemCheck[]
+    checks: WorkItemCheck[],
+    how: CheckHow
   ): Promise<CheckRun> => {
     let commit: Promise<WorkspaceCommit> | undefined;
-    /** What a check waits for, as the item's status says it ({@link checkWait}). */
-    const queued = (words: string | null): void => checkWait(item.id, words);
-    /** How a check's commands run: a pause that cancels one hands it back here. */
-    const asCheck = { onWait: queued, what: "check", movable: true } as const;
+    /** The check running now, for the words of its waits. */
+    let current: WorkItemCheck | undefined;
+    /** What a check waits for, as the item's status says it ({@link CheckHow}). */
+    const queued = (words: string | null): void =>
+      how.say(words, current?.name);
+    /**
+     * How a check's commands run: a pause that cancels one hands it back
+     * here; in the turn, one that would wait throws {@link WouldWait}.
+     */
+    const asCheck = {
+      onWait: queued,
+      what: "check",
+      movable: true,
+      noWait: how.inTurn,
+    } as const;
     /**
      * Waits out a pause of the machine a check runs on, the item's status
-     * saying it; at once when it is not paused.
+     * saying it; at once when it is not paused. In the turn it throws
+     * {@link WouldWait} instead.
      */
     const unpaused = async (machineId: string): Promise<void> => {
       const words = machinePaused(machineId);
       if (!words) {
         return;
+      }
+      if (how.inTurn) {
+        throw new WouldWait(words);
       }
       queued(`waiting: ${words}`);
       await machineFree(machineId);
@@ -4625,6 +4691,9 @@ export const createWorkItems = ({
           (check.machine && check.machine !== workspace.machineId)
         )
     );
+    if (how.inTurn) {
+      refuseAway(checks, workspace.machineId, machineName);
+    }
     try {
       // A failed install is the run's one line: no check can pass without it.
       if (local && !(await installHere())) {
@@ -4632,6 +4701,7 @@ export const createWorkItems = ({
       }
       const outcomes: CheckOutcome[] = [];
       for (const check of checks) {
+        current = check;
         const limit = (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000;
         let started = 0;
         // A check a pause cancels is no outcome and no attempt: it waits the
@@ -4663,6 +4733,8 @@ export const createWorkItems = ({
         });
       }
       return { installs, outcomes };
+    } catch (error) {
+      waitedIn(error, current?.name ?? "the dependency install");
     } finally {
       // Every host checkout goes with its run, whatever its checks came to;
       // one its machine could not remove goes with that machine's next
@@ -4687,11 +4759,12 @@ export const createWorkItems = ({
    * its inputs (`git rev-parse HEAD:<path>`), while nothing else is
    * uncommitted; landing.ts lands only such a tree. Undefined while
    * something else is uncommitted: those checks read files no tree names, so
-   * their passes are neither kept nor matched.
+   * their passes are neither kept nor matched. `noWait` in a landing turn.
    */
   const checkedState = async (
     workspace: WorkspaceRow,
-    item: WorkItemRow
+    item: WorkItemRow,
+    noWait: boolean
   ): Promise<Checked | undefined> => {
     const outputs = item.outputs ?? [];
     const hashed =
@@ -4704,7 +4777,8 @@ export const createWorkItems = ({
         : "";
     const read = await runIn(workspace, item)(
       `left=$(${statusCommand(outputs)}) && test -z "$left" && git rev-parse --verify 'HEAD^{tree}'${hashed}${declared}`,
-      GIT_TIMEOUT_MS
+      GIT_TIMEOUT_MS,
+      noWait
     );
     const lines = read.stdout
       .split("\n")
@@ -4737,16 +4811,18 @@ export const createWorkItems = ({
    * rebase that left them alone does not run it again: the Apple gate's iOS
    * compile once per apps/apple tree, where it ran twice (at finish_item and
    * after the rebase) on every landing behind another. `stage` names this run
-   * for the lines of the checks it lets skip later. A pass is kept only when
-   * the workspace held the same trees before and after the run.
+   * for the lines of the checks it lets skip later; `how`, whether its checks
+   * may wait ({@link CheckHow}). A pass is kept only when the workspace held
+   * the same trees before and after the run.
    */
   const checkOnce = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
     checks: WorkItemCheck[],
-    stage: string
+    stage: string,
+    how: CheckHow
   ): Promise<CheckRun> => {
-    const state = await checkedState(workspace, item);
+    const state = await checkedState(workspace, item, how.inTurn);
     const kept = passes.get(item.id);
     const prior = checks.map((check): string | undefined => {
       if (!state) {
@@ -4758,7 +4834,7 @@ export const createWorkItems = ({
     const due = checks.filter((_, at) => prior[at] === undefined);
     const run =
       due.length > 0
-        ? await runChecks(workspace, item, due)
+        ? await runChecks(workspace, item, due, how)
         : { installs: [], outcomes: [] };
     if (due.length > 0 && run.outcomes.length === 0) {
       // The workspace's install failed: no check ran.
@@ -4767,7 +4843,7 @@ export const createWorkItems = ({
     if (
       state &&
       due.length > 0 &&
-      (await checkedState(workspace, item))?.stamp === state.stamp
+      (await checkedState(workspace, item, how.inTurn))?.stamp === state.stamp
     ) {
       const byKey = kept ?? new Map<string, Passed[]>();
       for (const each of run.outcomes.filter((outcome) => outcome.passed)) {
@@ -4840,19 +4916,48 @@ export const createWorkItems = ({
    * `git` in it run as `safe-git.ts` says: no hook or config the workspace
    * wrote runs for the hub. Each wait it makes (its machine's pause, another
    * command in the folder, a boundary starting) is the item's status
-   * ({@link checkWait}).
+   * ({@link checkWait}); `noWait`, in a landing turn, it makes none and
+   * throws {@link WouldWait} instead.
    */
   const runIn =
     (workspace: WorkspaceRow, item: WorkItemRow) =>
-    (cmd: string, timeoutMs: number): Promise<CommandResult> =>
+    (cmd: string, timeoutMs: number, noWait = false): Promise<CommandResult> =>
       command(
         workspace.machineId,
         workspace.path,
         `${SAFE_GIT_SHELL}${cmd}`,
         timeoutMs,
         refOf(workspace),
-        { onWait: (words) => checkWait(item.id, words) }
+        { onWait: (words) => checkWait(item.id, words), noWait }
       );
+
+  /**
+   * How an item's checks run in its landing on `base` (landing.ts): in its
+   * turn they never wait; while it gates on top of the branch, its status
+   * says so (and why, when it stepped out of its turn: `stepped`), with what
+   * each check waits for there.
+   */
+  const landingHow = (
+    itemId: string,
+    base: string,
+    turning: boolean,
+    stepped: string | undefined
+  ): CheckHow => {
+    if (turning) {
+      return { inTurn: true, say: (words) => checkWait(itemId, words) };
+    }
+    const gating = stepped
+      ? `stepped out of its turn to land (${stepped}), so gating again on top of ${base}`
+      : `gating on top of ${base}`;
+    return {
+      inTurn: false,
+      say: (words, check) =>
+        checkWait(
+          itemId,
+          words ? `${gating}: ${check ? `${check} ` : ""}${words}` : gating
+        ),
+    };
+  };
 
   /** The item in the landing queue: named as `“title” (id)`, its wait its status. */
   const turnOf = (item: WorkItemRow): LandingTurn => ({
@@ -4862,10 +4967,12 @@ export const createWorkItems = ({
 
   /**
    * Lands a checked item's commits on its workspace's base branch
-   * (landing.ts). Answers the line the report and the delegate read when the
-   * item can be done; the text that hands it back to its delegate (`retry`:
-   * uncommitted work, a conflict, checks that fail after a rebase); or the line
-   * that says why it could not land (`refused`).
+   * (landing.ts): it gates on top of the branch outside the queue, its
+   * status saying so and what each check waits for there, then takes its
+   * turn. Answers the line the report and the delegate read when the item can
+   * be done; the text that hands it back to its delegate (`retry`:
+   * uncommitted work, a conflict, checks that fail on the rebased tree); or
+   * the line that says why it could not land (`refused`).
    */
   const landOnBase = async (
     workspace: WorkspaceRow,
@@ -4873,33 +4980,53 @@ export const createWorkItems = ({
     checks: WorkItemCheck[]
   ): Promise<Landed> => {
     const { base } = workspace;
-    /** The recheck after a rebase and the gate's run, for the landing line. */
-    const runs: { gate?: CheckRun; recheck?: CheckRun } = {};
+    /** The last gate's run and the turn's, for the landing line. */
+    const runs: { gate?: CheckRun; turn?: CheckRun } = {};
+    /** The times it stepped out of its turn, and why the last time. */
+    const steps: string[] = [];
+    /**
+     * The item's checks, then the repository's lint and typecheck
+     * (landing.ts LAND_GATE_SCRIPTS), on the tree the workspace holds: run
+     * as checks are, so a lockfile the rebase moved is installed first.
+     */
+    const onBaseChecks = async (
+      turning: boolean
+    ): Promise<Failed<CheckRun> | undefined> => {
+      const how = landingHow(item.id, base, turning, steps.at(-1));
+      const stage = turning
+        ? `in its turn to land on ${base}`
+        : `while gating on top of ${base}`;
+      how.say(null);
+      const recheck = await checkOnce(workspace, item, checks, stage, how);
+      if (runFailed(recheck)) {
+        return { kind: "recheck-failed", failing: recheck };
+      }
+      const gate = await checkOnce(
+        workspace,
+        item,
+        await landGateChecks((cmd, timeoutMs) =>
+          runIn(workspace, item)(cmd, timeoutMs, turning)
+        ),
+        stage,
+        how
+      );
+      if (runFailed(gate)) {
+        return { kind: "gate-failed", failing: gate };
+      }
+      runs[turning ? "turn" : "gate"] = {
+        installs: [...recheck.installs, ...gate.installs],
+        outcomes: [...recheck.outcomes, ...gate.outcomes],
+      };
+      // Gated, it says next that it waits its turn, or nothing when it takes
+      // it at once. A failure's or an error's words go as settleChecks ends.
+      checkWait(item.id, null);
+    };
     const outcome = await land<CheckRun>(base, {
       run: runIn(workspace, item),
       turn: turnOf(item),
-      recheck: async () => {
-        const run = await checkOnce(
-          workspace,
-          item,
-          checks,
-          "after the rebase"
-        );
-        runs.recheck = run;
-        return runFailed(run) ? run : undefined;
-      },
-      // The repository's lint and typecheck on the commit about to be
-      // pushed (landing.ts LAND_GATE_SCRIPTS): run as checks are, so a
-      // lockfile the rebase moved is installed first.
-      gate: async () => {
-        const run = await checkOnce(
-          workspace,
-          item,
-          await landGateChecks(runIn(workspace, item)),
-          "in the land gate"
-        );
-        runs.gate = run;
-        return runFailed(run) ? run : undefined;
+      check: onBaseChecks,
+      onStepOut: (words) => {
+        steps.push(words);
       },
       queue: landings,
       skip: item.outputs ?? [],
@@ -4909,7 +5036,7 @@ export const createWorkItems = ({
       case "landed":
         return {
           kind: "done",
-          line: `Landed on ${base} at ${outcome.sha.slice(0, 9)}; ${recheckSaid(base, outcome.rebased, runs.recheck)}${gateSaid(runs.gate)}.`,
+          line: landedLine(base, outcome, runs, steps),
           cut: { branch: base, commit: outcome.sha },
         };
       case "nothing":
@@ -4933,7 +5060,7 @@ export const createWorkItems = ({
         const { head, lines } = failedRun(outcome.failing);
         return {
           kind: "retry",
-          text: `${base} had moved, so the hub rebased your commits onto it and ran the checks again. ${head} Your branch is now on top of origin/${base}. Fix the cause and call finish_item again.\n\n${lines}`,
+          text: `The hub rebased your commits onto origin/${base} and ran the checks again there. ${head} Your branch is now on top of origin/${base}. Fix the cause and call finish_item again.\n\n${lines}`,
         };
       }
       case "gate-failed": {
@@ -5374,7 +5501,10 @@ export const createWorkItems = ({
         return { done: false, text: gate.refusal };
       }
       const { checks } = gate;
-      const run = await checkOnce(workspace, item, checks, "at finish_item");
+      const run = await checkOnce(workspace, item, checks, "at finish_item", {
+        inTurn: false,
+        say: (words) => checkWait(item.id, words),
+      });
       if (runFailed(run)) {
         update(item.id, settled);
         const { head, lines } = failedRun(run);

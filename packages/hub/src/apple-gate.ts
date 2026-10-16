@@ -43,18 +43,23 @@ export const APPLE_GATE_COMMAND =
  * version its committed `apps/apple/Package.resolved` names, resolution off
  * (build-both.sh `PINNED`). So one apps/apple tree is one compile: a pass
  * the gate made on it holds wherever that tree is again, a rebase that left
- * it alone included (work-items.ts `checkOnce`). The Mac's Xcode toolchain is
- * not in it, as it is not in a whole-tree pass either.
+ * it alone included (work-items.ts `checkOnce`); with it, the one script
+ * outside apps/apple that build-both.sh sources ({@link BUILD_SCRIPTS}). The
+ * Mac's Xcode toolchain is not in it, as it is not in a whole-tree pass
+ * either.
  */
-export const APPLE_GATE_INPUTS: readonly string[] = ["apps/apple"];
+const BUILD_SCRIPTS: ReadonlySet<string> = new Set([
+  "scripts/lib/heavy-run.sh",
+]);
+export const APPLE_GATE_INPUTS: readonly string[] = [
+  "apps/apple",
+  ...BUILD_SCRIPTS,
+];
 
 /** The build waits for the Mac's one build slot, then compiles: half an hour at most. */
 export const APPLE_GATE_TIMEOUT_SEC = 1800;
 
 const APP_PREFIX = "apps/apple/";
-const BUILD_SCRIPTS: ReadonlySet<string> = new Set([
-  "scripts/lib/heavy-run.sh",
-]);
 
 /** The diff's paths that the Swift build reads; empty when it reads none. */
 export const appPaths = (paths: readonly string[]): string[] =>

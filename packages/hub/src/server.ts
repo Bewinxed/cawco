@@ -499,6 +499,7 @@ import {
   type CommandOptions,
   createMachinePause,
   PAUSE_ORIGIN,
+  WouldWait,
 } from "./machine-pause";
 import { MeaningJudge } from "./meaning";
 import {
@@ -16296,7 +16297,9 @@ export const createServer = (
    * before it starts, `onWait` saying so. One running as a pause begins is
    * cancelled there ({@link stopCommands}) and runs again from the start
    * once the pause is over; a `movable` one answers `cancelled` instead, for
-   * its caller to run again where it chooses.
+   * its caller to run again where it chooses. A `noWait` one waits for
+   * nothing: a pause, or a slot it begins to wait for (it is cancelled
+   * there), throws WouldWait with the words of what it would have waited for.
    */
   const runOnMachine = async (
     machineId: string,
@@ -16307,6 +16310,10 @@ export const createServer = (
     how: CommandOptions = {}
   ): Promise<CommandResult> => {
     for (;;) {
+      const paused = how.noWait ? machinePause.words(machineId) : undefined;
+      if (paused) {
+        throw new WouldWait(paused);
+      }
       // biome-ignore lint/performance/noAwaitInLoops: a run cancelled by a pause runs again once it is over
       await pauseOver(machineId, how.onWait);
       const result = await runOnce(
@@ -16319,6 +16326,11 @@ export const createServer = (
       );
       if (!result.cancelled || how.movable) {
         return result;
+      }
+      if (how.noWait) {
+        throw new WouldWait(
+          machinePause.words(machineId) ?? "its machine's pause"
+        );
       }
       console.log(
         `[pause] ${machineId}: a ${how.what ?? "command"} it stopped waits for the pause's end, then runs again`
@@ -16399,10 +16411,32 @@ export const createServer = (
       queueMaxMs: QUEUE_WAIT_MAX_MS,
     };
     const { onWait } = how;
-    if (onWait) {
-      commandQueues.set(run.id, (queue) =>
-        onWait(queue ? queueWords(queue) : null)
-      );
+    /** A `noWait` run's slot wait, which cancelled it: its words. */
+    let waited: string | undefined;
+    if (onWait || how.noWait) {
+      commandQueues.set(run.id, (queue) => {
+        if (!(how.noWait && queue) || queue.slot === "boundary") {
+          onWait?.(queue ? queueWords(queue) : null);
+          return;
+        }
+        if (waited !== undefined) {
+          return;
+        }
+        waited = queueWords(queue);
+        callAgent(machineId, CONTROL_CANCEL_COMMAND, [run.id], 15_000)
+          .then((answer) => {
+            if (typeof answer === "string" || answer.error) {
+              throw new Error(
+                typeof answer === "string" ? answer : String(answer.error)
+              );
+            }
+          })
+          .catch((error: unknown) =>
+            console.warn(
+              `[command] ${machineId}: a run that may not wait (${waited}) could not be cancelled: ${error instanceof Error ? error.message : String(error)}`
+            )
+          );
+      });
     }
     commandsInFlight.set(run.id, { machineId, what: how.what ?? "command" });
     try {
@@ -16418,7 +16452,11 @@ export const createServer = (
       if (response.error) {
         throw new Error(String(response.error));
       }
-      return response.result as CommandResult;
+      const result = response.result as CommandResult;
+      if (waited !== undefined && result.cancelled) {
+        throw new WouldWait(waited);
+      }
+      return result;
     } finally {
       commandQueues.delete(run.id);
       commandsInFlight.delete(run.id);
