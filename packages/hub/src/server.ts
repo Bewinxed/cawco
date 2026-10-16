@@ -1596,18 +1596,23 @@ interface ServingPreview {
   instanceId: string;
   port: number;
   source: PreviewSource;
-  /** The hub's token for the start that opened it. */
-  token?: string;
+  /** The hub's token for the start that opened it: the relay carries it (core `RELAY_HEADER`). */
+  token: string;
 }
 
-/** The preview listeners a registering daemon is still serving. */
+/**
+ * The preview listeners a registering daemon is still serving. One reported
+ * without its start's token can't be relayed to (core `RELAY_HEADER`), so it
+ * is not one: its target starts a listener again.
+ */
 const peekPreviews = (payload: unknown): ServingPreview[] => {
   const value = (payload as { previews?: unknown } | null)?.previews;
   return Array.isArray(value)
     ? value.filter(
         (item): item is ServingPreview =>
           typeof (item as Partial<ServingPreview>).instanceId === "string" &&
-          typeof (item as Partial<ServingPreview>).port === "number"
+          typeof (item as Partial<ServingPreview>).port === "number" &&
+          typeof (item as Partial<ServingPreview>).token === "string"
       )
     : [];
 };
@@ -8767,9 +8772,7 @@ export const createServer = (
           [
             {
               instanceId,
-              ...(before.upstream?.token === undefined
-                ? {}
-                : { token: before.upstream.token }),
+              ...(before.upstream ? { token: before.upstream.token } : {}),
             },
           ],
           BUSY_TIMEOUT_MS
@@ -9613,7 +9616,7 @@ export const createServer = (
           upstream: {
             address,
             port: listener.port,
-            ...(listener.token === undefined ? {} : { token: listener.token }),
+            token: listener.token,
           },
         });
         continue;

@@ -216,6 +216,16 @@ export function injectOverlay(
   return html + script;
 }
 
+/**
+ * The header the hub's relay carries to a machine's preview listener, and the
+ * listener answers nothing without: the token the hub made for the start that
+ * opened that listener, handed to the agent in `preview start` on its hub
+ * socket and to no one else. So a preview is reached only through its hub,
+ * behind the hub's lock; a request straight to the listener's port is
+ * refused, on HTTP and on WebSocket upgrades alike.
+ */
+export const RELAY_HEADER = "x-cawco-relay";
+
 // The DOM ambient declaration hides Bun's headers-and-protocols overload.
 const ProxyWebSocket = WebSocket as typeof WebSocket & {
   new (url: string, options: Bun.WebSocketOptions): WebSocket;

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { PreviewSource } from "@cawco/core";
@@ -9,6 +10,7 @@ import {
   previewFailed,
   previewWebSocket,
   proxyHeaders,
+  RELAY_HEADER,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
 import type { Server, WebSocketHandler } from "bun";
@@ -27,7 +29,7 @@ import {
  */
 const previews = new Map<
   string,
-  { listener: Server<PreviewSocket>; source: PreviewSource; token?: string }
+  { listener: Server<PreviewSocket>; source: PreviewSource; token: string }
 >();
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -145,6 +147,19 @@ const listenerSocket: WebSocketHandler<PreviewSocket> = {
   },
 };
 
+/** What a request its hub didn't relay gets: CawCo's refusal, named as such. */
+const notRelayed = (): Response =>
+  new Response(
+    "CawCo refused this request: a preview opens only through its hub. Open it from the CawCo dashboard or app.\n",
+    {
+      status: 403,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    }
+  );
+
 /** What a request for a machine route gets: CawCo's refusal, named as such. */
 const refusal = (route: string): Response =>
   new Response(
@@ -232,13 +247,13 @@ export function servingPreviews(): {
   instanceId: string;
   port: number;
   source: PreviewSource;
-  token?: string;
+  token: string;
 }[] {
   return [...previews].map(([instanceId, { listener, source, token }]) => ({
     instanceId,
     port: listener.port as number,
     source,
-    ...(token === undefined ? {} : { token }),
+    token,
   }));
 }
 
@@ -255,8 +270,11 @@ export function startPreview(options: {
   dir?: string;
   /** The workspace whose network the port is in; none, the host's. */
   workspace?: string;
-  /** The hub's name for this start, which a stop of it alone names. */
-  token?: string;
+  /**
+   * The hub's name for this start, which a stop of it alone names, and the
+   * one credential the listener answers (core `RELAY_HEADER`).
+   */
+  token: string;
 }): Promise<{ port: number }> {
   return inTurn(options.instanceId, () => start(options));
 }
@@ -268,6 +286,10 @@ async function start(
   if ((port === undefined) === (dir === undefined)) {
     throw new Error("Pass exactly one of port or dir.");
   }
+  if (typeof token !== "string" || token.length === 0) {
+    throw new Error("A preview start names the hub's token for it.");
+  }
+  const relayToken = Buffer.from(token);
   if (workspace !== undefined && port === undefined) {
     throw new Error("A workspace goes with a port, not a dir.");
   }
@@ -302,6 +324,22 @@ async function start(
       // `/__cawco/*` (the overlay among it) is the hub listener's own and
       // never reaches here.
       const url = new URL(request.url);
+      // The hub's relay alone, before anything here acts on the request or
+      // tells the app it comes from its own localhost: a request straight to
+      // this port (it binds 0.0.0.0 so the hub can reach it) would pass the
+      // hub's lock and every dev server's same-origin check.
+      const given = Buffer.from(request.headers.get(RELAY_HEADER) ?? "");
+      if (
+        given.length !== relayToken.length ||
+        !timingSafeEqual(given, relayToken)
+      ) {
+        previewFailed(
+          "agent listener",
+          instanceId,
+          `refused a request to ${url.pathname} that its hub didn't relay`
+        );
+        return notRelayed();
+      }
       let response: Response;
       if ("port" in source) {
         const route = machineRoute(url.pathname);
@@ -314,6 +352,8 @@ async function start(
           return refusal(route);
         }
         const headers = proxyHeaders(request.headers);
+        // The relay's credential is this listener's, never the app's.
+        headers.delete(RELAY_HEADER);
         // A preview always asks for bytes, never a cached representation.
         headers.delete("if-none-match");
         headers.delete("if-modified-since");
@@ -488,7 +528,7 @@ async function start(
   previews.set(instanceId, {
     listener,
     source: "port" in source ? source : { dir: dir as string },
-    ...(token === undefined ? {} : { token }),
+    token,
   });
   return { port: listener.port as number };
 }

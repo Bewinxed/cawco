@@ -37,11 +37,15 @@
  *    the page loads, its HMR socket carries its own custom events, an edit
  *    updates it in place, `/@fs/` inside `fs.allow` answers; the RPC frame,
  *    as the page's text and as a socket's bytes, never reaches the plugin.
+ *    Straight to the agent's listener for it (its 0.0.0.0 port), not
+ *    through the hub: HTTP with no relay token or a wrong one answers
+ *    CawCo's 403, and a WebSocket never opens.
  *
  *   bun scripts/probe-kit/run.ts preview-socket
  */
 import { chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { $ } from "bun";
 import type { Page } from "playwright-core";
 import { publicOrigin } from "../../../apps/dashboard/public-origin.js";
 import { crossSiteRefusal } from "../../../packages/core/src/browser-gate";
@@ -49,6 +53,7 @@ import {
   type PreviewTicket,
   previewEnterUrl,
 } from "../../../packages/core/src/frames";
+import { RELAY_HEADER } from "../../../packages/core/src/preview-proxy";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -288,6 +293,20 @@ export default { plugins: [{ name: "probe", configureServer(server) {
   );
   return proc;
 };
+
+/** The ports something listens on at 0.0.0.0 now, as `ss` lists them. */
+const listeningOnAll = async (): Promise<Set<string>> =>
+  new Set(
+    (await $`ss -ltnH`.text())
+      .split("\n")
+      .flatMap((line) => line.match(WILDCARD_PORT)?.slice(1, 2) ?? [])
+  );
+const WILDCARD_PORT = /\s0\.0\.0\.0:(\d+)\s/;
+/** A request straight to a listener: with no relay token, and with one that isn't its start's. */
+const STRAIGHT_HEADERS: Record<string, string>[] = [
+  {},
+  { [RELAY_HEADER]: "00000000-0000-4000-8000-000000000000" },
+];
 
 /** What the Vite page shows: its mark, its load, whether its hot channel is up, its pongs. */
 const vitePage = (page: Page) =>
@@ -552,12 +571,56 @@ const probe = async (kit: Kit) => {
     name: CREATE,
     input: { kind: "preview", name: "vite", port: vitePort },
   });
+  const wildcards = await listeningOnAll();
   await fleet.send(session, "PROBE-CALL:2");
   await until(
     "the Vite preview made",
     () => answered.get("2"),
     Boolean,
     180_000
+  );
+  // The agent's listener for it: the one 0.0.0.0 port the start opened.
+  const opened = [...(await listeningOnAll())].filter(
+    (port) => !wildcards.has(port)
+  );
+  const straightTo = opened.length === 1 ? opened[0] : undefined;
+  const straightAnswers = straightTo
+    ? await Promise.all(
+        STRAIGHT_HEADERS.map(async (headers) => {
+          const answer = await fetch(`http://127.0.0.1:${straightTo}/`, {
+            headers,
+          });
+          return {
+            status: answer.status,
+            body: (await answer.text()).trim(),
+          };
+        })
+      )
+    : [];
+  const straightSocket = straightTo
+    ? await new Promise<string>((done) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${straightTo}/`, ["vite-hmr"]);
+        ws.onopen = () => {
+          ws.close();
+          done("opened");
+        };
+        ws.onclose = (event) => done(`closed ${event.code} unopened`);
+      })
+    : "no port";
+  const straightLine = (await fleet.logs("agent"))
+    .split("\n")
+    .find((text) => text.includes("that its hub didn't relay"));
+  kit.check(
+    "7e: straight to the agent's preview listener, not through the hub: an HTTP request (with no relay token, and with a wrong one) answers CawCo's 403, and a WebSocket never opens",
+    straightAnswers.length === 2 &&
+      straightAnswers.every(
+        (reply) =>
+          reply.status === 403 &&
+          reply.body.startsWith("CawCo refused this request")
+      ) &&
+      straightSocket.endsWith("unopened") &&
+      !!straightLine,
+    `new 0.0.0.0 ports ${JSON.stringify(opened)}; ${straightAnswers.map((reply) => reply.status).join(", ")}; body ${JSON.stringify(straightAnswers[0]?.body)}; socket ${straightSocket}; journal ${straightLine ?? "none"}`
   );
   const refusedForms = await Promise.all(
     [

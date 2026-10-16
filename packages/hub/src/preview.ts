@@ -24,6 +24,7 @@ import {
   previewFailed,
   previewWebSocket,
   proxyHeaders,
+  RELAY_HEADER,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
@@ -73,7 +74,7 @@ export interface PreviewTarget {
   revision: string;
   source: PreviewSource;
   /** The machine's listener, and the token of the start that opened it. */
-  upstream?: { address: string; port: number; token?: string };
+  upstream?: { address: string; port: number; token: string };
 }
 
 export const previewTargets = new Map<string, PreviewTarget>();
@@ -358,6 +359,8 @@ async function relay(
   const address = at.address.includes(":") ? `[${at.address}]` : at.address;
   const upstream = `${address}:${at.port}${url.pathname}${url.search}`;
   const headers = upstreamHeaders(request);
+  // The listener's start token: it answers the hub's relay and nothing else.
+  headers.set(RELAY_HEADER, at.token);
   if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
     // A machine listener that is gone (its agent restarted) is forgotten, as
     // a request's is below: a page whose socket alone reconnects (a live
