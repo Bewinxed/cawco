@@ -95,13 +95,21 @@ function tool<T extends z.ZodRawShape>(
   annotations?: ToolAnnotations,
   inputError?: string
 ) {
+  // A tool with its own input error refuses unknown keys itself, as it
+  // parses. What a harness is shown never says `additionalProperties: false`:
+  // OpenCode 2.0.29's own `opencode.tool.input.repair` hook deletes every key
+  // such a schema does not name, so a call would reach the hub without the
+  // `__cawco` credential the CawCo plugin stamps into it, and be refused.
   const schema = inputError
     ? z.strictObject(input, { error: inputError })
     : z.object(input);
   return {
     name,
     description,
-    inputSchema: z.toJSONSchema(schema, { target: "draft-07", io: "input" }),
+    inputSchema: z.toJSONSchema(z.object(input), {
+      target: "draft-07",
+      io: "input",
+    }),
     ...(annotations ? { annotations } : {}),
     handler: (args: unknown) => handler(schema.parse(args)),
   };
