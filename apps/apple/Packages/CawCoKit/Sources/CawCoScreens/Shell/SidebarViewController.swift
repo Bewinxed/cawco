@@ -752,22 +752,12 @@ final class SidebarViewController: ObservedViewController {
         var keptBlocks: [String: ProjectBlock] = [:]
         var keptRows: [String: SessionRailRow] = [:]
         guard !lists.isEmpty else {
-            // `text-meta text-muted-foreground`; the command's name in the
-            // mono face at label size, in the foreground ink.
+            // `text-meta text-muted-foreground` (Sidebar.svelte).
             let note = KitLabel(TypeScale.typeMeta, ink: Palette.mutedForeground, lines: 0)
             // A `<p>`: running text avoids a one-word last line (app.css).
             note.wrap = .pretty
-            let said = hub.fleet.machines.isEmpty
-                ? "Run cawco on a machine, then group its checkouts here."
-                : "No projects yet — name a checkout to group its sessions."
-            let words = NSMutableAttributedString(string: said, attributes: TypeScale.typeMeta.attributes(color: Palette.mutedForeground))
-            let command = (said as NSString).range(of: "cawco")
-            if command.location != NSNotFound {
-                words.addAttributes([.font: TypeScale.typeCode.with(points: TypeScale.typeLabel.points).font,
-                                     .foregroundColor: Palette.foreground], range: command)
-            }
-            note.attributedText = words
             note.lineBreakMode = .byWordWrapping
+            note.text = hub.fleet.machines.isEmpty ? Words.Sidebar.noProjectsNoMachines : Words.Sidebar.noProjects
             let box = UIStackView(arrangedSubviews: [note])
             box.isLayoutMarginsRelativeArrangement = true
             box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10)

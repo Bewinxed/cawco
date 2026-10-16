@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { machineLabel, projectsFor, topsIn } from "@cawco/core";
+  import { machineLabel, projectsFor, sidebarWords, topsIn } from "@cawco/core";
   /**
    * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives
    * (ui/sidebar/*), following the Fluid Functionalism inset preset pattern:
@@ -1003,12 +1003,9 @@
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
           <p class="px-2.5 text-meta text-muted-foreground" data-flip>
-            {#if cawco.machines.length === 0}
-              No projects yet — start one with New project. Once CawCo runs on a
-              machine, its checkouts group here too.
-            {:else}
-              No projects yet — name a checkout to group its sessions.
-            {/if}
+            {cawco.machines.length === 0
+              ? sidebarWords.noProjectsNoMachines
+              : sidebarWords.noProjects}
           </p>
         {:else}
           <Sidebar.Menu

@@ -1750,6 +1750,7 @@ export * from "./image-generation";
 export * from "./words/accounts";
 export * from "./words/configure";
 export * from "./words/helpers";
+export * from "./words/sidebar";
 export * from "./workflow";
 export * from "./workflow-compile";
 

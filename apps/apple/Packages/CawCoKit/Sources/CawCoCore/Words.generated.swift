@@ -663,4 +663,13 @@ public enum Words {
             public static let termsUrl = "https://code.claude.com/docs/en/legal-and-compliance"
         }
     }
+
+    public enum Sidebar {
+        // packages/core/src/words/sidebar.ts `sidebarWords`
+        /// The projects list is empty and no machine runs CawCo yet.
+        public static let noProjectsNoMachines = "No projects yet — start one with New project. Once CawCo runs on a machine, its checkouts group here too."
+
+        /// The projects list is empty while machines are joined.
+        public static let noProjects = "No projects yet — name a checkout to group its sessions."
+    }
 }
