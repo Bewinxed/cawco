@@ -19,9 +19,23 @@
  * row's applied effort (`effort`, the CLI's `get_settings` read back) and the
  * row's chosen effort (`chosen_effort`, what every launch asks for).
  *
+ * 7. An OpenCode `high` delegate (its own workspace, on the mock's OpenCode
+ *    model) is compacted by a plain `/compact` send, as the dashboard sends
+ *    it, and its next marked send is answered on the same work item, which
+ *    is still running, with no error on its row.
+ *
+ * Its delegate cuts a workspace, so it runs as a `host` check (README, "A
+ * spec that delegates is a `host` check").
+ *
  *   bun scripts/probe-kit/run.ts effort-relaunch
  */
-import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  ACCOUNT,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { B, furnishAccount } from "./account-move";
 
@@ -36,9 +50,77 @@ const PS_LINE = /^(\d+)\s+(\d+)\s+(.*)$/;
 
 const words = (text: string): Reply => ({ everyMs: 5, words: [text] });
 
+/** What every turn of the OpenCode delegate carries (its brief, then each send): the mock knows its requests by it. */
+const OC_DELEGATE = "RELAUNCH-OC-DELEGATE";
+const OC_MARK = /RELAUNCH-OC-DELEGATE-\w+/;
+/** OpenCode's instruction to summarize, which only its summarizing request carries (its binary; document-scope). */
+const OC_SUMMARIZING =
+  "Summarize only what the user and the assistant said and did";
+/** What the hub tells a work item's session whose turn ended without `finish_item` (work-items.ts `quietTurn`). */
+const STILL_OPEN = "Your work item is still open";
+/** OpenCode's Code Mode tool, which runs MCP tools from a script. */
+const CODE_MODE = "execute";
+const HEADING = /^##\s.+$/gm;
+
+/**
+ * OpenCode's summary: each `##` heading its template names, filled. OpenCode
+ * takes a summary only when it fills its template (document-scope
+ * `templateHeadings`). The summary names the delegate, as its brief did.
+ */
+const summary = (body: string): Reply => {
+  const texts: string[] = [];
+  const walk = (value: unknown): void => {
+    if (typeof value === "string") {
+      texts.push(value);
+    } else if (Array.isArray(value)) {
+      value.forEach(walk);
+    } else if (value && typeof value === "object") {
+      Object.values(value).forEach(walk);
+    }
+  };
+  walk(JSON.parse(body));
+  const said = `${OC_DELEGATE}-SUMMARY`;
+  const headings = [
+    ...new Set(texts.flatMap((text) => text.match(HEADING) ?? [])),
+  ];
+  return words(
+    [...headings.map((heading) => `${heading}\n\n${said}`), said].join("\n\n")
+  );
+};
+
+/**
+ * A turn of the OpenCode delegate: its `wait_item` through Code Mode, then
+ * its words. A work item whose session ends three turns in a row without
+ * `finish_item` fails (hub work-items.ts `QUIET_TURNS`); a declared wait keeps
+ * it running, so the leg's own turns never fail it.
+ */
+const delegateTurn = (request: Seen): Reply => {
+  if (request.afterTool || !request.toolNames.includes(CODE_MODE)) {
+    const mark = OC_MARK.exec(request.last);
+    return words(mark ? `${mark[0]}-ANSWERED` : "Waiting for the probe.");
+  }
+  const wait = { minutes: 60, reason: "The probe drives this delegate." };
+  return {
+    everyMs: 5,
+    words: [],
+    tool: {
+      name: CODE_MODE,
+      input: {
+        code: `return await tools.cawco.wait_item(${JSON.stringify(wait)});`,
+      },
+    },
+  };
+};
+
 const respond = (request: Seen): Reply => {
+  if (request.body.includes(OC_SUMMARIZING)) {
+    return summary(request.body);
+  }
   if (!request.tools) {
     return words("Probe title");
+  }
+  if (request.all.includes(OC_DELEGATE) || request.all.includes(STILL_OPEN)) {
+    return delegateTurn(request);
   }
   const mark = MARK.exec(request.last);
   return words(mark ? `${mark[0]}-ANSWERED` : "ok");
@@ -286,6 +368,115 @@ const run = async (kit: Kit) => {
     targetInstanceId: string;
   };
   await reads("continued in a new session", targetInstanceId, CHOSEN);
+
+  await compactedDelegate(kit, fleet, id);
+};
+
+/** A turn of session `session` ended: its row holds no open turn. */
+const turnEnded = (fleet: Fleet, session: string, label: string) =>
+  until(
+    label,
+    () => !fleet.instance(session)?.turn_open_at,
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+
+/** The compactions session `session`'s transcript shows: its `compact_boundary` blocks. */
+const compactions = async (fleet: Fleet, session: string): Promise<number> => {
+  const response = await fetch(
+    `${fleet.base}/api/instances/${session}/transcript?limit=1000`,
+    { signal: AbortSignal.timeout(30_000) }
+  ).catch(() => undefined);
+  const text = response?.ok ? await response.text() : "";
+  return text.split('"system.compact_boundary"').length - 1;
+};
+
+/**
+ * 7. An OpenCode `high` delegate of `parent`'s, compacted by a plain
+ * `/compact` send, answers its next send on the same work item.
+ */
+const compactedDelegate = async (kit: Kit, fleet: Fleet, parent: string) => {
+  const delegated = await fleet.api<{
+    instanceId: string;
+    workItemId: string;
+  }>("/api/work-items", {
+    parentInstanceId: parent,
+    title: "OpenCode relaunch probe",
+    prompt: `${OC_DELEGATE}: say ok.`,
+    type: "high",
+    harness: "opencode",
+    model: MODEL.opencode,
+    cwd: fleet.repo,
+    checks: [{ name: "Nothing to check", command: "true" }],
+    lands: "none",
+  });
+  const high = delegated.instanceId;
+  const first = await until(
+    "OpenCode delegate: its first request",
+    () => fleet.seen.find((one) => one.tools && one.all.includes(OC_DELEGATE)),
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  kit.check(
+    "OpenCode delegate: its first turn reaches the model",
+    first !== undefined,
+    first ? "asked" : "no request seen"
+  );
+  await turnEnded(fleet, high, "OpenCode delegate: its first turn ended");
+
+  const before = await compactions(fleet, high);
+  await fleet.send(high, "/compact");
+  const compacted = await until(
+    "OpenCode delegate: the compaction's boundary in its transcript",
+    () => compactions(fleet, high),
+    (count) => count > before,
+    180_000
+  ).catch(() => before);
+  kit.check(
+    "OpenCode delegate: a /compact send compacts it (its transcript shows the boundary)",
+    compacted > before,
+    `${compacted - before} new compact_boundary`
+  );
+  await turnEnded(
+    fleet,
+    high,
+    "OpenCode delegate: the compaction's turn ended"
+  );
+
+  const mark = `${OC_DELEGATE}-AFTER`;
+  const from = fleet.seen.length;
+  await fleet.send(high, `${mark} carry on`);
+  const after = await until(
+    "OpenCode delegate: its send after the compaction at the model",
+    () =>
+      fleet.seen
+        .slice(from)
+        .find((one) => one.tools && one.last.includes(mark)),
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  await turnEnded(
+    fleet,
+    high,
+    "OpenCode delegate: its turn after the compaction ended"
+  );
+  const [row] = fleet.query<{
+    status: string;
+    last_error: string | null;
+    turn_open_at: number | null;
+  }>(
+    "SELECT status, last_error, turn_open_at FROM instances WHERE id = ?",
+    high
+  );
+  const [item] = fleet.query<{ state: string; error: string | null }>(
+    "SELECT state, error FROM work_items WHERE id = ?",
+    delegated.workItemId
+  );
+  kit.check(
+    "OpenCode delegate after compaction: its next send reaches the model, its item still running, no error on its row",
+    after !== undefined && item?.state === "running" && !row?.last_error,
+    JSON.stringify({ asked: after !== undefined, row, item })
+  );
 };
 
 export default { name: "effort-relaunch", run } satisfies Spec;
