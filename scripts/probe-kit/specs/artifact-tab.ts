@@ -410,7 +410,7 @@ const run = async (kit: Kit) => {
   kit.check(
     "4: the pin's card names it by the element's text, its selector only in the tooltip, and draws no picture",
     head?.name === "A tab of its own" &&
-      head.tip === "h1" &&
+      !!head.tip?.endsWith("h1:nth-of-type(1)") &&
       head.pictures === 0,
     JSON.stringify(head)
   );
