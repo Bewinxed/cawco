@@ -375,7 +375,8 @@ would ever need to touch. Harness adapters are the opposite: they are the highes
 in the whole system, because every provider (Claude Code, OpenCode, pi) ships its own wire
 format and its own idea of what a tool call looks like, and that surface changes on the
 provider's schedule, not CawCo's. Anthropic's own SDK acknowledges this exact seam at the
-transport level — `@anthropic-ai/claude-agent-sdk` (pinned `0.3.220`) exposes a
+transport level — `@anthropic-ai/claude-agent-sdk` (pinned `0.3.296` in packages/agent; the CLI it
+drives is not pinned: it is the Claude Code installed on each machine, which updates itself) exposes a
 `spawnClaudeCodeProcess` option (`sdk.d.ts`, `ClaudeAgentOptions`) specifically so the caller can
 substitute *how* the child process is launched without the SDK needing to know anything about
 where that process actually lives — the same custody/interpretation seam `sessiond` draws,

@@ -143,6 +143,7 @@ import {
   launchedHook,
   workspaceHook,
 } from "../boundary";
+import { toolVersion } from "../capabilities";
 import {
   mcpConfigOffArgv,
   removeMcpConfig,
@@ -3648,20 +3649,24 @@ export class ClaudeHarness implements Harness {
   auth: AuthState = "authenticated";
 
   /**
-   * The machine's Claude Code: installed or not, and every account dir's
-   * sign-in, which is also the machine's word on Claude (signed in when any
-   * account is). No model catalog: that is each account's, which its
-   * sessions' initialize responses report and the hub keeps.
+   * The machine's Claude Code: installed or not, the version it says it is
+   * (its `--version`, read as the capabilities probe reads it: sessions run
+   * this one, which updates itself), and every account dir's sign-in, which
+   * is also the machine's word on Claude (signed in when any account is). No
+   * model catalog: that is each account's, which its sessions' initialize
+   * responses report and the hub keeps.
    */
   async detect(): Promise<HarnessReport> {
     const accounts = await accountReports();
     const auth = await claudeAuth(accounts);
     this.auth = auth;
-    const installed = resolveClaudeExecutable() !== undefined;
+    const executable = resolveClaudeExecutable();
+    const installed = executable !== undefined;
+    const version = executable ? await toolVersion(executable) : undefined;
     return {
       harness: "claude",
       installed,
-      version: undefined,
+      ...(version ? { version } : {}),
       auth,
       ...(installed ? {} : { authReason: CLAUDE_NOT_INSTALLED }),
       capabilities: CLAUDE_CAPABILITIES,

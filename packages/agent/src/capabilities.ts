@@ -95,11 +95,8 @@ const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/;
  * read (and under Bun, spawnSync's private loop misplaces the agent's own
  * polls: oven-sh/bun#34069).
  */
-async function readVersion(item: MachineCapability): Promise<void> {
-  if (!(item.available && item.path && VERSIONED.includes(item.id))) {
-    return;
-  }
-  const child = Bun.spawn([item.path, "--version"], {
+export async function toolVersion(path: string): Promise<string | undefined> {
+  const child = Bun.spawn([path, "--version"], {
     // Never the embedded pi's package dir: `pi --version` would read CawCo's pi as its own.
     env: hostEnvironment(),
     stdout: "pipe",
@@ -111,8 +108,16 @@ async function readVersion(item: MachineCapability): Promise<void> {
     child.exited,
   ]);
   const text = stdout.trim();
-  if (exitCode === 0) {
-    item.version = VERSION.exec(text)?.[0] ?? text;
+  return exitCode === 0 ? (VERSION.exec(text)?.[0] ?? text) : undefined;
+}
+
+async function readVersion(item: MachineCapability): Promise<void> {
+  if (!(item.available && item.path && VERSIONED.includes(item.id))) {
+    return;
+  }
+  const version = await toolVersion(item.path);
+  if (version) {
+    item.version = version;
   } else {
     item.reason = "Installed tool did not answer its version command";
   }
