@@ -396,15 +396,19 @@ async function motion(kit: Kit, url: string) {
       );
     }
   });
+  // Alpha's row the chosen one before Enter: the rows are the hub's answer
+  // to the query, and the list before it can name Alpha with another row
+  // chosen (JumpPalette `names`).
   const toSession = async () => {
     await page.keyboard.press("Control+k");
-    const field = page.locator(".glass-face[data-face='jump'] input");
+    const jump = page.locator(".glass-face[data-face='jump']");
+    const field = jump.locator("input");
     await field.waitFor();
     await field.fill("Alpha");
-    await page
-      .locator(".glass-face[data-face='jump']")
-      .getByText("Alpha", { exact: true })
-      .first()
+    await jump
+      .locator("[data-slot='command-item'][data-selected]", {
+        has: page.getByText("Alpha", { exact: true }),
+      })
       .waitFor();
   };
   // The first visit mounts the session's surface, and its strip with it.

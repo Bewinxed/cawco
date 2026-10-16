@@ -209,16 +209,22 @@ async function openByJump(page: Page, title: string) {
   await page.keyboard.press("Enter");
 }
 
-/** Jump (⌘K) open with `title` found, its row ready for Enter. */
+/**
+ * Jump (⌘K) open with `title` found, its row the chosen one, ready for
+ * Enter. The rows are the hub's answer to the query (JumpPalette `names`),
+ * and until it comes the list is the last one, which can name `title` too
+ * with another row chosen: Enter opened that one.
+ */
 async function findInJump(page: Page, title: string) {
   await page.keyboard.press("Control+k");
-  const field = page.locator(".glass-face[data-face='jump'] input");
+  const jump = page.locator(".glass-face[data-face='jump']");
+  const field = jump.locator("input");
   await field.waitFor();
   await field.fill(title);
-  await page
-    .locator(".glass-face[data-face='jump']")
-    .getByText(title, { exact: true })
-    .first()
+  await jump
+    .locator("[data-slot='command-item'][data-selected]", {
+      has: page.getByText(title, { exact: true }),
+    })
     .waitFor();
 }
 
