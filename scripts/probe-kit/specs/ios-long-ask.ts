@@ -276,7 +276,10 @@ const ENTRY =
 const mainThread = (report: string): { share: number; frames: string } => {
   const lines = report.split("\n");
   const start = lines.findIndex(
-    (line) => line.includes("Thread_") && line.includes("main-thread")
+    // `sample` heads the main thread "Main Thread", or names it by its queue (`com.apple.main-thread`).
+    (line) =>
+      line.includes("Thread_") &&
+      (line.includes("main-thread") || line.includes("Main Thread"))
   );
   if (start < 0) {
     return { share: Number.NaN, frames: "no main thread in the sample" };
@@ -471,6 +474,22 @@ async function run(kit: Kit): Promise<void> {
       }
       const frame = found.find((node) => (node.frame?.width ?? 0) > 0)?.frame;
       if (!frame) {
+        // What the screen offered instead, for the reading.
+        const labels: string[] = [];
+        const list = (node: Record<string, unknown>) => {
+          const text = node.AXLabel ?? node.label;
+          if (typeof text === "string" && text) {
+            labels.push(text);
+          }
+          for (const kid of (node.children as
+            Record<string, unknown>[] | undefined) ?? []) {
+            list(kid);
+          }
+        };
+        for (const root of roots) {
+          list(root);
+        }
+        writeFileSync(join(kit.out, "untapped-labels.txt"), labels.join("\n"));
         return false;
       }
       await sh(
@@ -598,10 +617,23 @@ async function run(kit: Kit): Promise<void> {
               args: "",
               reach: async () => {
                 await pause(6000);
-                return await tap(
-                  (label) =>
-                    label.includes("Long ask") || label.includes("Probe title")
-                );
+                // The row by the session's title as the hub has it now (a resumed session's may be its history's).
+                const rows = (await (
+                  await fetch(`${base}/api/instances`)
+                ).json()) as
+                  | { id?: string; instanceId?: string; title?: string }[]
+                  | {
+                      instances?: {
+                        id?: string;
+                        instanceId?: string;
+                        title?: string;
+                      }[];
+                    };
+                const all = Array.isArray(rows) ? rows : (rows.instances ?? []);
+                const title =
+                  all.find((row) => (row.instanceId ?? row.id) === asker)
+                    ?.title ?? "Long ask";
+                return await tap((label) => label.includes(title));
               },
             },
           ]
