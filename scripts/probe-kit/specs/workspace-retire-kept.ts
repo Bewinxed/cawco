@@ -7,14 +7,22 @@
  * `task-split` and `task-review`, and its git-ignored preview harness
  * `.probe/preview/` went with it, no carry written.
  *
+ * Rebuilt output is no one's own: a folder tagged as a cache directory
+ * (agent workspace.ts `cacheTagged`) goes with the clone. On 2026-10-16
+ * about 30 cockpit workspaces were kept for the dashboard build's
+ * `.build-next` (about 3,450 files, 91 MB, past the 64 MB a carry takes).
+ *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model), boundaries included. The project ignores `.probe/`,
- * `node_modules` and `.env*`. Two delegates of one parent each commit a
- * file and land it; I also leaves `.probe/x.ts`, `.probe/node_modules/dep.js`
- * and `.env.local` in its clone. The parent holds a preview artifact of P's
- * workspace, shown in its panel (its rows written as the hub keeps them: a
- * preview of a port starts only with a server there to answer). Both set
- * past the two idle hours:
+ * `.build-next`, `node_modules` and `.env*`. Four delegates of one parent
+ * each commit a file and land it; I also leaves `.probe/x.ts`,
+ * `.probe/node_modules/dep.js` and `.env.local` in its clone; R leaves only
+ * a 70 MB `.build-next/` holding a cache directory tag; K leaves a 70 MB
+ * `.probe/` of its own, whose `CACHEDIR.TAG` has no signature and whose
+ * `notes/CACHEDIR.TAG` is a link to a signed one. The parent holds a preview
+ * artifact of P's workspace, shown in its panel (its rows written as the hub
+ * keeps them: a preview of a port starts only with a server there to
+ * answer). All set past the two idle hours:
  *
  * (a) A sweep leaves P, its clone and row standing, and keeps it listed
  *     with `previewedBy: ["task-review"]` in the sweep's `kept`, at GET
@@ -25,32 +33,55 @@
  *     the secret file; its README names `ignored/`; I's clone is gone.
  * (c) DELETE /api/instances/<parent>/artifacts/<id> answers `showing: null`,
  *     its artifact and shown-preview rows gone; the next sweep retires P,
- *     its clone gone, and nothing is kept.
+ *     its clone gone, and only K is kept.
+ * (d) The first sweep retires R with no carry, its clone gone.
+ * (e) The first sweep keeps K for its 5 ignored files of its own (70 MB),
+ *     past the 64 MB an archive saves; its clone and `.probe/notes/note.md`
+ *     stand.
  *
  *   bun scripts/probe-kit/run.ts workspace-retire-kept
  */
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-const TAG = /PROBE-KEPT-([PI])/;
+const TAG = /PROBE-KEPT-([PIRK])/;
 const FINISH = "mcp__cawco__finish_item";
 const BACKDATE_MS = 3 * 3_600_000;
 /** A size in words (core `sizeWords`). */
 const SIZE = /^\d+(\.\d)? (GB|MB|KB)$/;
+/** A cache directory tag's first line (https://bford.info/cachedir/). */
+const SIGNED = "Signature: 8a477f597d28d172789f06886806bc55";
+/** 70 MB: past core `IGNORED_CARRY_LIMIT` (64e6). */
+const BIG = 70_000_000;
+
+const leaves: Record<string, string[]> = {
+  I: [
+    "mkdir -p .probe/node_modules",
+    "echo 'export const seed = 1;' > .probe/x.ts",
+    "echo dep > .probe/node_modules/dep.js",
+    "echo SECRET=1 > .env.local",
+  ],
+  R: [
+    "mkdir -p .build-next/server",
+    `printf '${SIGNED}\\n# made by the probe build\\n' > .build-next/CACHEDIR.TAG`,
+    `head -c ${BIG} /dev/zero > .build-next/server/big.bin`,
+  ],
+  K: [
+    "mkdir -p .probe/notes",
+    "echo 'my own note' > .probe/notes/note.md",
+    "printf 'Signature: none\\n' > .probe/CACHEDIR.TAG",
+    `printf '${SIGNED}\\n' > .probe/signed`,
+    "ln -s ../signed .probe/notes/CACHEDIR.TAG",
+    `head -c ${BIG} /dev/zero > .probe/notes/big.bin`,
+  ],
+};
 
 const commitCommand = (tag: string) =>
   [
-    ...(tag === "I"
-      ? [
-          "mkdir -p .probe/node_modules",
-          "echo 'export const seed = 1;' > .probe/x.ts",
-          "echo dep > .probe/node_modules/dep.js",
-          "echo SECRET=1 > .env.local",
-        ]
-      : []),
+    ...(leaves[tag] ?? []),
     `echo 'made by ${tag}' > kept-${tag}.txt`,
     `git add kept-${tag}.txt`,
     `git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit ${tag}'`,
@@ -134,7 +165,7 @@ const spec: Spec = {
       join(home, ".gitconfig"),
       "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
     );
-    await Bun.$`sh -c ${"git init -q -b main && echo kept > README.md && printf '.probe/\\nnode_modules\\n.env*\\n' > .gitignore && git add -A && git commit -qm 'First commit'"}`
+    await Bun.$`sh -c ${"git init -q -b main && echo kept > README.md && printf '.probe/\\n.build-next\\nnode_modules\\n.env*\\n' > .gitignore && git add -A && git commit -qm 'First commit'"}`
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
@@ -151,7 +182,7 @@ const spec: Spec = {
         "SELECT id, path, state FROM workspaces WHERE id = ?",
         id
       )[0] as Workspace;
-    const delegate = async (tag: "P" | "I") => {
+    const delegate = async (tag: "P" | "I" | "R" | "K") => {
       const started = await fleet.api<{
         instanceId: string;
         workItemId: string;
@@ -179,17 +210,32 @@ const spec: Spec = {
       );
       return { ...started, item };
     };
-    const [p, i] = [await delegate("P"), await delegate("I")];
+    const p = await delegate("P");
+    const i = await delegate("I");
+    const r = await delegate("R");
+    const k = await delegate("K");
     const wp = workspaceOf(p.workspaceId);
     const wi = workspaceOf(i.workspaceId);
+    const wr = workspaceOf(r.workspaceId);
+    const wk = workspaceOf(k.workspaceId);
     check(
-      "P and I are done, their commits landed; I's clone holds .probe/x.ts, .probe/node_modules/dep.js and .env.local",
-      p.item.state === "done" &&
-        i.item.state === "done" &&
+      "P, I, R and K are done, their commits landed; I's clone holds .probe/x.ts, .probe/node_modules/dep.js and .env.local; R's .build-next/CACHEDIR.TAG and big.bin; K's .probe/notes/note.md, big.bin and the linked tag",
+      [p, i, r, k].every((run) => run.item.state === "done") &&
         existsSync(join(wi.path, ".probe", "x.ts")) &&
         existsSync(join(wi.path, ".probe", "node_modules", "dep.js")) &&
-        existsSync(join(wi.path, ".env.local")),
-      `P ${p.item.state} ${p.item.error ?? ""}; I ${i.item.state} ${i.item.error ?? ""}`
+        existsSync(join(wi.path, ".env.local")) &&
+        existsSync(join(wr.path, ".build-next", "CACHEDIR.TAG")) &&
+        existsSync(join(wr.path, ".build-next", "server", "big.bin")) &&
+        existsSync(join(wk.path, ".probe", "notes", "note.md")) &&
+        existsSync(join(wk.path, ".probe", "notes", "big.bin")) &&
+        lstatSync(
+          join(wk.path, ".probe", "notes", "CACHEDIR.TAG")
+        ).isSymbolicLink(),
+      [p, i, r, k]
+        .map(
+          (run, at) => `${"PIRK"[at]} ${run.item.state} ${run.item.error ?? ""}`
+        )
+        .join("; ")
     );
 
     // The parent's preview of P's dev server, shown in its panel.
@@ -213,7 +259,7 @@ const spec: Spec = {
     );
 
     const then = Date.now() - BACKDATE_MS;
-    for (const run of [p, i]) {
+    for (const run of [p, i, r, k]) {
       fleet.write(
         "UPDATE work_items SET ended_at = ? WHERE id = ?",
         then,
@@ -315,6 +361,31 @@ const spec: Spec = {
       `${readme.slice(0, 900)} | clone ${existsSync(wi.path) ? "stands" : "gone"}, ${workspaceOf(wi.id).state}`
     );
 
+    // ── (d) rebuilt output goes with the clone ──────────────────────────
+    check(
+      "(d) the first sweep retires R, holding only a tagged 70 MB .build-next, with no carry; its clone gone, its row archived",
+      first.retired.some(
+        (one) => one.workspaceId === wr.id && one.carry === null
+      ) &&
+        !first.kept.some((one) => one.workspaceId === wr.id) &&
+        !existsSync(wr.path) &&
+        workspaceOf(wr.id).state === "archived",
+      JSON.stringify(first)
+    );
+
+    // ── (e) a person's ignored files past the limit keep it ─────────────
+    const keptK = first.kept.find((one) => one.workspaceId === wk.id);
+    check(
+      "(e) the first sweep keeps K for 5 ignored files of its own (70 MB) past the 64 MB an archive saves: neither an unsigned CACHEDIR.TAG nor a linked one tags a folder; its clone and .probe/notes/note.md stand",
+      keptK?.holds.includes(
+        "5 ignored files of its own (70 MB), past the 64 MB an archive saves"
+      ) === true &&
+        !first.retired.some((one) => one.workspaceId === wk.id) &&
+        existsSync(join(wk.path, ".probe", "notes", "note.md")) &&
+        workspaceOf(wk.id).state === "active",
+      JSON.stringify(first)
+    );
+
     // ── (c) the artifact gone, P goes ───────────────────────────────────
     const deleted = await fetch(
       `${fleet.base}/api/instances/${parent}/artifacts/${artifactId}`,
@@ -340,11 +411,11 @@ const spec: Spec = {
     );
     const second = await fleet.api<Sweep>("/api/workspaces/retire", {});
     check(
-      "(c) with the artifact deleted, the next sweep retires P, with no carry; nothing kept, its clone gone, its row archived",
+      "(c) with the artifact deleted, the next sweep retires P, with no carry; only K kept, P's clone gone, its row archived",
       second.retired.some(
         (one) => one.workspaceId === wp.id && one.carry === null
       ) &&
-        second.kept.length === 0 &&
+        second.kept.map((one) => one.workspaceId).join(",") === wk.id &&
         !existsSync(wp.path) &&
         workspaceOf(wp.id).state === "archived",
       JSON.stringify(second)

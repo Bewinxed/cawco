@@ -672,6 +672,57 @@ const REBUILT_TREES: ReadonlySet<string> = new Set([
 ]);
 const REBUILT_FILE = /^\.DS_Store$|\.pyc$|\.tsbuildinfo$/;
 
+/**
+ * The first 43 octets of a cache directory tag, as the Cache Directory
+ * Tagging Specification (https://bford.info/cachedir/) fixes them.
+ */
+const CACHE_TAG_SIGNATURE = "Signature: 8a477f597d28d172789f06886806bc55";
+
+/**
+ * Whether a folder of the clone says of itself that it is rebuilt output: it
+ * holds a cache directory tag, a regular file `CACHEDIR.TAG` whose first 43
+ * octets are {@link CACHE_TAG_SIGNATURE}. The spec: "the *entire* contents of
+ * that directory, including any and all subdirectories underneath it,
+ * consists of cached information that can be re-generated if necessary from
+ * appropriate source material located elsewhere". The tool that writes a
+ * folder tags it (cargo its `target/`, pytest and ruff their caches; the
+ * dashboard's build its `.svelte-kit` and `.build-next`, dashboard
+ * vite.config.ts `cacheTagged`), and tar, borg and restic leave tagged
+ * folders out of an archive with `--exclude-caches`. The tag is opened
+ * without following a link or waiting on a FIFO, and checked as the spec
+ * asks: "verify that any file it finds named `CACHEDIR.TAG` is a regular
+ * file and actually contains the 43-byte header".
+ */
+const cacheTagged = async (dir: string): Promise<boolean> => {
+  const file = await open(
+    join(dir, "CACHEDIR.TAG"),
+    // biome-ignore lint/suspicious/noBitwiseOperators: open(2) takes its flags as one bit set
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+  ).catch((error: NodeJS.ErrnoException) => {
+    // ELOOP: the tag is a link, which the spec says it must not be.
+    if (error.code === "ENOENT" || error.code === "ELOOP") {
+      return null;
+    }
+    throw error;
+  });
+  if (!file) {
+    return false;
+  }
+  try {
+    if (!(await file.stat()).isFile()) {
+      return false;
+    }
+    const head = Buffer.alloc(CACHE_TAG_SIGNATURE.length);
+    const { bytesRead } = await file.read(head, 0, head.length, 0);
+    return (
+      bytesRead === head.length &&
+      head.toString("latin1") === CACHE_TAG_SIGNATURE
+    );
+  } finally {
+    await file.close();
+  }
+};
+
 /** Whether an entry by this name is never the clone's own work: rebuilt, or a secret file `createWorkspace` copied in. */
 const notOwnName = (name: string): boolean =>
   REBUILT_TREES.has(name) || REBUILT_FILE.test(name) || isSecretFileName(name);
@@ -689,7 +740,11 @@ const notOwnName = (name: string): boolean =>
  * secret, and none of `skip`, its items' handed-over outputs. git lists
  * them inside the boundary, a wholly ignored folder as one entry; such a
  * folder is walked here, by `lstat`, never through a link. A link is
- * listed as it is, and the carry names it without following it.
+ * listed as it is, and the carry names it without following it. A folder
+ * tagged as a cache directory ({@link cacheTagged}) is passed over whole:
+ * the tool that wrote it says it is rebuilt, and it goes with the clone
+ * (2026-10-16: workspaces kept for the dashboard build's `.build-next`,
+ * about 3,450 files and 91 MB, past the 64 MB a carry takes).
  *
  * Nothing at or under a path `info/exclude` names (checkout-exclude.ts
  * `excludedPaths`) is the clone's own, down a walked folder too: a
@@ -744,6 +799,9 @@ const ignoredOwn = async (
     if (!found.isDirectory()) {
       files.push(entry);
       bytes += found.isFile() ? found.size : 0;
+      return;
+    }
+    if (await cacheTagged(join(workspace.path, entry))) {
       return;
     }
     const names = await unlessGone(readdir(join(workspace.path, entry)));

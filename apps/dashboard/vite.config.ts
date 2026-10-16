@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import type http from "node:http";
 import { join } from "node:path";
 import {
@@ -8,6 +8,7 @@ import {
   PAGE_ORIGIN_HEADER,
 } from "@cawco/core/browser-gate";
 import adapter from "@sveltejs/adapter-node";
+import type { Adapter } from "@sveltejs/kit";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
@@ -36,6 +37,38 @@ import { publicOrigin } from "./public-origin.js";
  * The refusal is the servers' own (`hubProxy`'s hooks), not the config's:
  * svelte-check loads this config as a `serve` too, and starts no server.
  */
+/**
+ * adapter-node's output tree. scripts/publish-build.ts renames it to `build/`,
+ * and the build that one replaces to `.build-old/`.
+ */
+const BUILD_OUT = ".build-next";
+
+/**
+ * A cache directory tag (https://bford.info/cachedir/): its first 43 octets
+ * are the signature, and the tagged folder's "entire contents ... consists of
+ * cached information that can be re-generated if necessary".
+ */
+const CACHE_TAG =
+  "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by the CawCo dashboard's build (vite.config.ts).\n# For information about cache directory tags, see:\n#\thttps://bford.info/cachedir/\n";
+
+/**
+ * The adapter, writing a cache directory tag into each tree the build writes
+ * once it has: SvelteKit's `outDir` (`.svelte-kit`) and adapter-node's `out`,
+ * which its `adapt` empties first. The tag goes with `out` through both
+ * renames, so `build/` and `.build-old/` are tagged too. A workspace's
+ * archive deletes a tagged folder with the clone rather than counting or
+ * carrying it (agent workspace.ts `cacheTagged`).
+ */
+const cacheTagged = (inner: Adapter): Adapter => ({
+  ...inner,
+  adapt: async (builder) => {
+    await inner.adapt(builder);
+    for (const dir of [builder.config.outDir, BUILD_OUT]) {
+      writeFileSync(join(dir, "CACHEDIR.TAG"), CACHE_TAG);
+    }
+  },
+});
+
 const DEV_HUB_ENV = "CAWCO_DEV_HUB_URL";
 const DEV_HUB = process.env[DEV_HUB_ENV];
 const devHub = (): URL => {
@@ -274,7 +307,7 @@ export default defineConfig(({ command }) => {
       sveltekit({
         preprocess: vitePreprocess(),
         compilerOptions: { experimental: { async: true } },
-        adapter: adapter({ out: ".build-next" }),
+        adapter: cacheTagged(adapter({ out: BUILD_OUT })),
         experimental: { remoteFunctions: true },
         version: { name: BUILD_VERSION },
         // The dashboard's one CSRF rule is its own gate (hooks.server.ts,
