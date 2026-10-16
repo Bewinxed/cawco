@@ -31,6 +31,7 @@ import Ajv from "ajv";
 import type {
   DbShape,
   WorkflowAttemptRow,
+  WorkflowHeldStop,
   WorkflowRunRow,
   WorkflowStepRow,
 } from "../db";
@@ -96,19 +97,10 @@ const MAX_HOLDS = 2;
 const AGENT_LAUNCH = "agent:";
 
 const active = (run: WorkflowRunRow) =>
-  !run.state.__ending && (run.status === "running" || run.status === "waiting");
+  run.endingStatus === null &&
+  (run.status === "running" || run.status === "waiting");
 const reason = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
-
-interface HeldStop {
-  action?: "fail" | "retry";
-  deadline: number;
-  error?: string;
-  failure: string;
-}
-
-const heldStops = (run: WorkflowRunRow): Record<string, HeldStop> =>
-  (run.state.__heldStops as Record<string, HeldStop> | undefined) ?? {};
 
 /** The StepError a failed step hands its program, after `attempts` attempts. */
 export function stepError(
@@ -151,6 +143,9 @@ export function durationText(ms: number): string {
 
 export function createSteps(ctx: StepContext) {
   const { db } = ctx;
+  /** A run's held stops, by step id, as their rows stand (`workflow_held_stops`). */
+  const heldStops = (run: WorkflowRunRow): Record<string, WorkflowHeldStop> =>
+    db.workflowHeldStops(run.id);
   const ajv = new Ajv({ allErrors: true, strict: false });
   const timers = new Map<string, HubTimer>();
   /** Each armed attempt's deadline (ms epoch), by step, beside its timer. */
@@ -244,8 +239,7 @@ export function createSteps(ctx: StepContext) {
       return;
     }
     const number = (latest(step)?.number ?? 0) + 1;
-    const notes = (run.state.__notes as string[] | undefined) ?? [];
-    run.state = { ...run.state, __notes: [] };
+    const notes = db.takeWorkflowNotes(run.id);
     let body = spec.prompt;
     let unbriefed = "";
     try {
@@ -535,12 +529,11 @@ export function createSteps(ctx: StepContext) {
     if (!active(runOf(run.id)) || step.status !== "running") {
       return;
     }
-    const held = heldStops(run);
-    const decision = held[step.id] ?? { deadline, failure };
+    const decision = heldStops(run)[step.id] ?? { deadline, failure };
     if (action) {
       decision.action = action;
     }
-    run.state = { ...run.state, __heldStops: { ...held, [step.id]: decision } };
+    db.putWorkflowHeldStop(run.id, step.id, decision);
     clearTimer(step.id);
     ctx.write(run, step);
     try {
@@ -557,6 +550,7 @@ export function createSteps(ctx: StepContext) {
       step.failure = receipt;
       const tell = decision.error !== refusal || !!action;
       decision.error = refusal;
+      db.putWorkflowHeldStop(run.id, step.id, decision);
       ctx.write(run, step);
       if (tell) {
         ctx.notify(
@@ -569,9 +563,7 @@ export function createSteps(ctx: StepContext) {
     if (!active(runOf(run.id))) {
       return;
     }
-    const remaining = { ...heldStops(run) };
-    delete remaining[step.id];
-    run.state = { ...run.state, __heldStops: remaining };
+    db.dropWorkflowHeldStop(step.id);
     step.failure = null;
     ctx.write(run, step);
     if (!decision.action) {

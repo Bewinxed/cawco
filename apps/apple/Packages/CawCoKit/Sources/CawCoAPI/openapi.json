@@ -24170,9 +24170,6 @@
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
           },
-          "state": {
-            "type": "object"
-          },
           "result": {},
           "endedAt": {
             "type": "string",
@@ -24230,6 +24227,9 @@
               "null",
               "string"
             ]
+          },
+          "state": {
+            "type": "object"
           },
           "edges": {
             "type": "object"
@@ -24337,9 +24337,6 @@
               "graph": {
                 "$ref": "#/components/schemas/WorkflowGraph"
               },
-              "state": {
-                "type": "object"
-              },
               "result": {},
               "endedAt": {
                 "type": "string",
@@ -24404,7 +24401,6 @@
               "rerunOfRunId",
               "result",
               "startedAt",
-              "state",
               "status",
               "supervisorInstanceId",
               "workflowId",
@@ -24420,6 +24416,9 @@
                   "null",
                   "string"
                 ]
+              },
+              "state": {
+                "type": "object"
               },
               "edges": {
                 "type": "object"
@@ -24439,6 +24438,7 @@
               "edges",
               "loops",
               "planned",
+              "state",
               "waiting"
             ]
           }

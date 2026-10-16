@@ -108,8 +108,20 @@ export interface WorkflowRuntimeDeps {
   ) => Promise<string>;
 }
 
-export type PublicRun = WorkflowRunRow &
-  Pick<WorkflowRun, "edges" | "loops" | "planned" | "waiting">;
+/**
+ * A run as every surface reads it: its row but the engine's own bookkeeping
+ * (a stop under way, where a re-run starts), its graph's reading, what it
+ * waits for, and its `state`: the named slots its program set.
+ */
+export type PublicRun = Omit<
+  WorkflowRunRow,
+  | "endingStatus"
+  | "endingFailure"
+  | "endingResult"
+  | "rerunFromRunId"
+  | "rerunBefore"
+> &
+  Pick<WorkflowRun, "edges" | "loops" | "planned" | "state" | "waiting">;
 
 /** What the call that opened a step named it, read off the spec it recorded. */
 function stepTitleOf(row: WorkflowStepRow): string | null {
@@ -176,7 +188,7 @@ export interface LaunchOptions {
   workspace?: { path: string; machineId: string };
 }
 
-/** Where a re-run's own calls start: kept in its state as `__rerun`. */
+/** Where a re-run's own calls start: kept on its row (`rerun_from_run_id`, `rerun_before`). */
 interface RerunFrom {
   before: number;
   runId: string;
@@ -192,18 +204,24 @@ const WAITS: ReadonlySet<WorkflowEffectKind> = new Set([
 ]);
 
 const active = (run: WorkflowRunRow) =>
-  !run.state.__ending && (run.status === "running" || run.status === "waiting");
+  run.endingStatus === null &&
+  (run.status === "running" || run.status === "waiting");
 
+/** A stop under way: what the run ends as once its sessions and children are ended. */
 interface Ending {
-  children: string[];
   failure: string | null;
-  pending: string[];
   result: unknown;
   status: "done" | "failed" | "cancelled";
 }
 
 const endingOf = (run: WorkflowRunRow): Ending | undefined =>
-  run.state.__ending as Ending | undefined;
+  run.endingStatus === null
+    ? undefined
+    : {
+        status: run.endingStatus,
+        failure: run.endingFailure,
+        result: run.endingResult,
+      };
 const reason = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
@@ -263,9 +281,17 @@ const loggedArgs = (
  * lays its graph out from the log instead.
  */
 export function publicRun(
-  run: WorkflowRunRow,
+  {
+    endingStatus: _endingStatus,
+    endingFailure: _endingFailure,
+    endingResult: _endingResult,
+    rerunFromRunId: _rerunFromRunId,
+    rerunBefore: _rerunBefore,
+    ...run
+  }: WorkflowRunRow,
   log: WorkflowLogRow[],
-  waiting: string | null
+  waiting: string | null,
+  state: Record<string, unknown>
 ): PublicRun {
   const edges: Record<string, Record<string, "fired" | "skipped">> = {};
   const loops: Record<string, Record<string, number>> = {};
@@ -300,7 +326,14 @@ export function publicRun(
       run.graph.edges.map((edge) => [edge.id, "skipped" as const])
     );
   }
-  return { ...run, edges, loops, planned: plannedOf(run.graph), waiting };
+  return {
+    ...run,
+    edges,
+    loops,
+    planned: plannedOf(run.graph),
+    state,
+    waiting,
+  };
 }
 
 /**
@@ -405,7 +438,18 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
   const waits = new Map<string, string>();
   /** A run as it is shown: its row, its graph's reading, and what it waits for. */
   const shown = (run: WorkflowRunRow): PublicRun =>
-    publicRun(run, db.listWorkflowLog(run.id), waits.get(run.id) ?? null);
+    publicRun(
+      run,
+      db.listWorkflowLog(run.id),
+      waits.get(run.id) ?? null,
+      Object.fromEntries(
+        db
+          .workflowSlots(run.id)
+          .flatMap((each) =>
+            "value" in each ? [[each.name, each.value] as const] : []
+          )
+      )
+    );
 
   const runOf = (id: string): WorkflowRunRow => {
     const run = db.getWorkflowRun(id);
@@ -477,13 +521,16 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     attempt?: WorkflowAttemptRow,
     checkpoint?: { data: unknown; label: string }
   ) => {
+    // A copy read before a stop began never writes over it.
     const stored = db.getWorkflowRun(run.id);
     if (
-      stored?.state.__ending &&
-      !run.state.__ending &&
+      stored?.endingStatus &&
+      !run.endingStatus &&
       ["running", "waiting"].includes(run.status)
     ) {
-      run.state = { ...run.state, __ending: stored.state.__ending };
+      run.endingStatus = stored.endingStatus;
+      run.endingFailure = stored.endingFailure;
+      run.endingResult = stored.endingResult;
       run.status = "waiting";
       run.endedAt = null;
     }
@@ -907,16 +954,10 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       ),
     ];
     // Rewrite first. No synchronous stop callback may overwrite this decision.
-    run.state = {
-      ...run.state,
-      __ending: {
-        status,
-        failure,
-        result,
-        pending,
-        children: children.map((child) => child.id),
-      } satisfies Ending,
-    };
+    run.endingStatus = status;
+    run.endingFailure = failure;
+    run.endingResult = result;
+    db.setWorkflowPendingEnds(run.id, pending);
     run.status = "waiting";
     run.failure = null;
     run.result = null;
@@ -939,13 +980,12 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
 
   const endRunSessions = async (runId: string): Promise<void> => {
     let run = runOf(runId);
-    const ending = endingOf(run);
-    if (!ending) {
+    if (!endingOf(run)) {
       return;
     }
     const pending = (
       await Promise.all(
-        ending.pending.map(async (instanceId) => {
+        db.workflowPendingEnds(runId).map(async (instanceId) => {
           try {
             await deps.halt(run.machineId, instanceId);
             return null;
@@ -964,20 +1004,21 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     if (!current) {
       return;
     }
-    current.pending = pending;
-    run.state = { ...run.state, __ending: current };
+    db.setWorkflowPendingEnds(runId, pending);
+    // Its children still ending or live: those its stop began with, since an
+    // ending run launches no more.
     if (
       pending.length ||
-      current.children.some((id) => {
-        const child = db.getWorkflowRun(id);
-        return child && (endingOf(child) || active(child));
-      })
+      db
+        .listLiveWorkflowRuns({ parentRunId: runId })
+        .some((child) => endingOf(child) || active(child))
     ) {
       write(run);
       return;
     }
-    const { __ending: _ending, ...state } = run.state;
-    run.state = state;
+    run.endingStatus = null;
+    run.endingFailure = null;
+    run.endingResult = null;
     run.status = current.status;
     run.failure = current.failure;
     run.result = current.result;
@@ -1114,7 +1155,11 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       status: "running",
       result: null,
       failure: null,
-      state: options.rerunFrom ? { __rerun: options.rerunFrom } : {},
+      endingStatus: null,
+      endingFailure: null,
+      endingResult: null,
+      rerunFromRunId: options.rerunFrom?.runId ?? null,
+      rerunBefore: options.rerunFrom?.before ?? null,
       startedAt: new Date(),
       endedAt: null,
       rerunOfRunId: options.rerunOfRunId ?? null,
@@ -1157,23 +1202,24 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     writing: boolean
   ) => {
     const name = String(args.name);
-    const slots = (run.state.slots ?? {}) as Record<string, unknown>;
+    const schema = (args.schema ?? {}) as Record<string, unknown>;
     if (writing) {
-      const validate = ajv.compile(args.schema as Record<string, unknown>);
+      const validate = ajv.compile(schema);
       if (!validate(args.value)) {
         throw new Error(ajv.errorsText(validate.errors));
       }
     }
-    run.state = {
-      ...run.state,
-      schemas: {
-        ...((run.state.schemas ?? {}) as Record<string, unknown>),
-        [name]: args.schema,
-      },
-      ...(writing ? { slots: { ...slots, [name]: args.value } } : {}),
-    };
-    write(run);
-    return writing ? null : (slots[name] ?? null);
+    const held = db
+      .workflowSlots(run.id)
+      .find((each) => each.name === name)?.value;
+    db.putWorkflowSlot(
+      run.id,
+      name,
+      schema,
+      writing ? { value: args.value } : undefined
+    );
+    announce(run);
+    return writing ? null : (held ?? null);
   };
 
   /** A call whose answer is immediate, performed for real. */
@@ -1238,12 +1284,8 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         }
         return null;
       }
-      case "notes": {
-        const notes = (run.state.__notes as string[] | undefined) ?? [];
-        run.state = { ...run.state, __notes: [] };
-        write(run);
-        return notes;
-      }
+      case "notes":
+        return db.takeWorkflowNotes(run.id);
       case "log":
         return { text: String(args.text) };
       case "trace":
@@ -1476,7 +1518,10 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     },
     async seed(runId, seq, kind, args, hash) {
       const run = runOf(runId);
-      const from = run.state.__rerun as RerunFrom | undefined;
+      const from: RerunFrom | undefined =
+        run.rerunFromRunId !== null && run.rerunBefore !== null
+          ? { runId: run.rerunFromRunId, before: run.rerunBefore }
+          : undefined;
       if (!from || seq >= from.before) {
         return;
       }
@@ -1542,46 +1587,37 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     specFor: (stepId: string) => steps.specFor(stepId),
     /** The named slots a program declared, for the step-facing state tools. */
     stateSchemas(runId: string) {
-      return (db.getWorkflowRun(runId)?.state.schemas ?? {}) as Record<
-        string,
-        Record<string, unknown>
-      >;
+      return Object.fromEntries(
+        db.workflowSlots(runId).map(({ name, schema }) => [name, schema])
+      );
     },
     readState(runId: string, name: string) {
-      const run = runOf(runId);
-      const schemas = (run.state.schemas ?? {}) as Record<string, unknown>;
-      if (!Object.hasOwn(schemas, name)) {
+      runOf(runId);
+      const slots = db.workflowSlots(runId);
+      const declared = slots.find((each) => each.name === name);
+      if (!declared) {
         throw new Error(
-          `This workflow's program never declared a state slot called ${name}. Declared: ${Object.keys(schemas).join(", ") || "none"}.`
+          `This workflow's program never declared a state slot called ${name}. Declared: ${slots.map((each) => each.name).join(", ") || "none"}.`
         );
       }
-      return ((run.state.slots ?? {}) as Record<string, unknown>)[name];
+      return declared.value;
     },
     writeState(runId: string, name: string, value: unknown) {
       return serial(runId, () => {
         const run = runOf(runId);
-        const schemas = (run.state.schemas ?? {}) as Record<
-          string,
-          Record<string, unknown>
-        >;
-        const schema = schemas[name];
+        const slots = db.workflowSlots(runId);
+        const schema = slots.find((each) => each.name === name)?.schema;
         if (!schema) {
           throw new Error(
-            `This workflow's program never declared a state slot called ${name}. Declared: ${Object.keys(schemas).join(", ") || "none"}.`
+            `This workflow's program never declared a state slot called ${name}. Declared: ${slots.map((each) => each.name).join(", ") || "none"}.`
           );
         }
         const validate = ajv.compile(schema);
         if (!validate(value)) {
           throw new Error(ajv.errorsText(validate.errors, { separator: "\n" }));
         }
-        run.state = {
-          ...run.state,
-          slots: {
-            ...((run.state.slots ?? {}) as Record<string, unknown>),
-            [name]: value,
-          },
-        };
-        write(run);
+        db.putWorkflowSlot(runId, name, schema, { value });
+        announce(run);
         return `Recorded ${name}.`;
       });
     },
@@ -1756,14 +1792,8 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         }
         switch (action.type) {
           case "note":
-            run.state = {
-              ...run.state,
-              __notes: [
-                ...((run.state.__notes as string[] | undefined) ?? []),
-                action.text,
-              ],
-            };
-            write(run);
+            db.addWorkflowNote(id, action.text);
+            announce(run);
             return "Noted: the next step to start gets it in its prompt, and the program reads it with w.notes().";
           case "cancel":
             finish(run, "cancelled");

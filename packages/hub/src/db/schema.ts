@@ -75,6 +75,7 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import {
+  type AnySQLiteColumn,
   customType,
   foreignKey,
   index,
@@ -167,9 +168,26 @@ export const workflowRuns = sqliteTable(
     status: text("status").$type<WorkflowRunStatus>().notNull(),
     result: text("result", { mode: "json" }).$type<unknown>(),
     failure: text("failure"),
-    state: text("state", { mode: "json" })
-      .$type<Record<string, unknown>>()
-      .notNull(),
+    /**
+     * A stop under way: what the run ends as once its sessions
+     * (`workflow_run_pending_ends`) and children are confirmed ended. Null
+     * while it is not ending; it launches nothing more while it is.
+     */
+    endingStatus: text("ending_status").$type<
+      "done" | "failed" | "cancelled"
+    >(),
+    endingFailure: text("ending_failure"),
+    /** The program's value it ends with: opaque. */
+    endingResult: text("ending_result", { mode: "json" }).$type<unknown>(),
+    /**
+     * A re-run from a step: every call before effect `rerunBefore` is
+     * answered with what run `rerunFromRunId` got there.
+     */
+    rerunFromRunId: text("rerun_from_run_id").references(
+      (): AnySQLiteColumn => workflowRuns.id,
+      { onDelete: "set null" }
+    ),
+    rerunBefore: integer("rerun_before"),
     startedAt: timestamp("started_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -183,6 +201,50 @@ export const workflowRuns = sqliteTable(
     seenAt: timestamp("seen_at"),
   },
   (table) => [index("workflow_runs_parent").on(table.parentRunId)]
+);
+
+/** The sessions an ending run waits to see ended before it ends (`ending_status`). */
+export const workflowRunPendingEnds = sqliteTable(
+  "workflow_run_pending_ends",
+  {
+    runId: text("run_id")
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.runId, table.instanceId] })]
+);
+
+/** A supervisor's notes for a run (`steer` note): the next step to start takes them, or the program with `w.notes()`. */
+export const workflowRunNotes = sqliteTable(
+  "workflow_run_notes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    runId: text("run_id")
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [index("workflow_run_notes_run").on(table.runId, table.id)]
+);
+
+/** A run's named state slots: each one's schema as the program declared it, and its value once set. */
+export const workflowRunSlots = sqliteTable(
+  "workflow_run_slots",
+  {
+    runId: text("run_id")
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** The JSON Schema it was declared with: opaque. */
+    schema: text("schema", { mode: "json" }).$type<Record<string, unknown>>(),
+    /** Its value as JSON, the program's: null while never set. */
+    value: text("value"),
+  },
+  (table) => [primaryKey({ columns: [table.runId, table.name] })]
 );
 export const workflowSteps = sqliteTable("workflow_steps", {
   childRunId: text("child_run_id"),
@@ -207,6 +269,27 @@ export const workflowSteps = sqliteTable("workflow_steps", {
   mapIndex: integer("map_index"),
   startedAt: timestamp("started_at"),
   endedAt: timestamp("ended_at"),
+});
+
+/**
+ * A step whose stop is held: its attempt is over (it timed out, or its
+ * supervisor said fail or retry) and its session is not yet confirmed
+ * ended, so nothing it decided runs until it is.
+ */
+export const workflowHeldStops = sqliteTable("workflow_held_stops", {
+  stepId: text("step_id")
+    .primaryKey()
+    .references(() => workflowSteps.id, { onDelete: "cascade" }),
+  runId: text("run_id")
+    .notNull()
+    .references(() => workflowRuns.id, { onDelete: "cascade" }),
+  /** When the attempt was due, ms. */
+  deadline: integer("deadline").notNull(),
+  failure: text("failure").notNull(),
+  /** What the supervisor decided, taking effect once the stop is confirmed. */
+  action: text("action").$type<"fail" | "retry">(),
+  /** Why its session could not be ended, last time it was asked. */
+  error: text("error"),
 });
 /**
  * A run's log: every `w.*` call its program made, what it asked and what it
