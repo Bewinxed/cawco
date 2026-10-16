@@ -7,12 +7,13 @@
  *   bun scripts/probe-kit/run.ts web edge-fade-perf
  *
  * The list is the longest the fade masks: a project's Table view, `ROWS`
- * tasks in the pane (`.pane.kit-edge-fade-block`), on a scratch fleet, at
- * desk 1440 and phone 390. Each leg scrolls the list's scroller (the pane on
- * a desk; on a phone the pane grows to its rows and what holds it scrolls)
- * from its top to its foot and back as a person does
- * (`Input.synthesizeScrollGesture`: a wheel on the desk, a finger on the
- * phone, at `SPEED`), under a trace, and reads:
+ * tasks, on a scratch fleet, at desk 1440 and phone 390. The fade belongs to
+ * the box that scrolls the list: the pane on a desk; on a phone the page
+ * (`.project-page`), where the pane grows to its rows, its foot's fade ending
+ * at the views bar's top edge. Each leg scrolls that box from its top to its
+ * foot and back as a person does
+ * (`Input.synthesizeScrollGesture`, a wheel, at `SPEED`; `WIDTHS` says why
+ * not a finger on the phone), under a trace, and reads:
  *
  *  - its frames: the page's `requestAnimationFrame` timestamps, one per frame
  *    the page drew, and every interval over the 16.7ms budget (`OVER_MS`);
@@ -30,9 +31,10 @@
  *  - `off`: no fade (`OFF`, this spec's own style).
  * Neither style ships.
  *
- * Asserted, at the desk (where the pane scrolls and its fade is live), on
- * what the engine counts, not on the wall clock, so a loaded host reads the
- * same:
+ * Asserted at each width, on what the engine counts, not on the wall clock,
+ * so a loaded host reads the same:
+ *  - the box that scrolls the list wears the fade; on a phone its foot's
+ *    fade ends at the views bar's top edge, within a pixel;
  *  - the look is the fade's, the same at every point of the scroll as the
  *    one animation drew it (`--fade-start`, `--fade-end` and the mask at 0,
  *    3, 50, 97 and 100% of the scroll timeline);
@@ -72,17 +74,20 @@ const LOAD_EVERY_MS = 1000;
 /**
  * The most of a long scroll's frames the shipped fade may restyle the
  * scroller on: its edges move over 12% of the scroll, the first and last
- * 6%, and only there (11.4% and 12.5% measured in two runs, 438 of 3847
- * and 503 of 4032 frames). Our own call, with room for the frames the
- * gesture spends turning at the foot.
+ * 6%, and only there (11.4% to 12.5% at the desk over five runs, 12.4% on
+ * the phone's page, 639 of 5156 frames; the whole-scroll form over 99%). Our
+ * own call, with room for the frames the gesture spends turning at the foot.
  */
 const RESTYLE_SHARE = 0.2;
 /**
  * How much more of the main thread's CPU a long scroll may take with the
- * fade than without it: 1.32x and 1.40x measured in two runs, where the
- * whole-scroll form took 2.31x and 2.46x. Our own call, between the two.
+ * fade than without it, the mask's own drawing included: at the desk
+ * 1.32x to 1.55x over five runs on a host loaded 15 to 97, the whole-scroll
+ * form 2.18x to 2.48x; at the phone 1.41x, the whole-scroll form 1.71x. Our
+ * own call, past the noise; the restyle share is what tells the forms apart
+ * on a phone.
  */
-const CPU_SHARE = 1.5;
+const CPU_SHARE = 1.75;
 /** Where along the scroll the look is read, as fractions of it. */
 const LOOK_AT = [0, 0.03, 0.5, 0.97, 1];
 /** Where each edge's fade moves: the first and last 6% of the scroll. */
@@ -95,7 +100,9 @@ const SAME_PX = 0.01;
 /** A computed value with every number in it to a hundredth. */
 const hundredths = (value: string) =>
   value.replace(/\d+\.\d+/g, (n) => Number.parseFloat(n).toFixed(2));
-const PANE = ".pane.kit-edge-fade-block";
+const PANE = ".pane";
+/** The box that scrolls the list, as `markScroller` found it. */
+const SCROLLER = "[data-probe-scroller]";
 const ROW = ".ledger tr.row";
 /** No fade: this spec's own style, never shipped. */
 const OFF =
@@ -115,9 +122,15 @@ const WHOLE = `
 const STYLES = { on: "", whole: WHOLE, off: OFF } as const;
 type Fade = keyof typeof STYLES;
 const ROUND: Fade[] = ["on", "whole", "off"];
+/**
+ * Each width and the gesture that scrolls it: a wheel on both. A
+ * synthesized touch gesture never moved the phone's page here (0 of its
+ * 21403px in nine legs), and a scroll the fade rides is the same whichever
+ * input made it.
+ */
 const WIDTHS = [
   ["desk", "mouse"],
-  ["phone", "touch"],
+  ["phone", "mouse"],
 ] as const;
 
 interface TraceEvent {
@@ -134,6 +147,8 @@ interface TraceEvent {
 
 interface Leg {
   fade: Fade;
+  /** Where the scroller stood after the gesture down and after it back up, against its run, px. */
+  reached: { foot: number; run: number; top: number };
   /** Frames drawn over the leg. */
   frames: number;
   /** The load through it: at its start, and the most. */
@@ -190,12 +205,43 @@ const markScroller = (page: Page) =>
       at ?? (document.scrollingElement as HTMLElement | null) ?? document.body;
     scroller.setAttribute("data-probe-scroller", "");
     return {
+      animations: scroller
+        .getAnimations()
+        .map((a) => (a as CSSAnimation).animationName)
+        .join(", "),
+      fades: scroller.classList.contains("kit-edge-fade-block"),
       scroller:
-        scroller === from ? "the pane" : scroller.className || scroller.tagName,
+        scroller === from
+          ? "the pane"
+          : `.${[...scroller.classList].filter((c) => !c.startsWith("svelte-")).join(".")}`,
       run: scroller.scrollHeight - scroller.clientHeight,
       view: scroller.clientHeight,
     };
   }, PANE);
+
+/**
+ * On a phone, where the foot's fade ends against the views bar's top edge:
+ * the scroller's foot less its `--fade-inset-end`, read off a box that
+ * length tall.
+ */
+const footFade = (page: Page) =>
+  page.evaluate((scrollerSel) => {
+    const scroller = document.querySelector<HTMLElement>(scrollerSel);
+    const bar = document.querySelector(".view-bar");
+    if (!(scroller && bar)) {
+      return null;
+    }
+    const ruler = document.createElement("div");
+    ruler.style.cssText =
+      "position:absolute;inline-size:0;block-size:var(--fade-inset-end, 0px)";
+    scroller.append(ruler);
+    const inset = ruler.getBoundingClientRect().height;
+    ruler.remove();
+    return {
+      ends: scroller.getBoundingClientRect().bottom - inset,
+      bar: bar.getBoundingClientRect().top,
+    };
+  }, SCROLLER);
 
 /** The fade as `fade` names it, by this spec's own style. */
 const setFade = (page: Page, fade: Fade): Promise<void> =>
@@ -318,6 +364,7 @@ async function leg(
   const cdp = await page.context().newCDPSession(page);
   let begun = 0;
   let rafs: number[] = [];
+  const reached: number[] = [];
   const { main, mark } = await traced(cdp, async () => {
     begun = await page.evaluate(() => {
       const w = window as unknown as {
@@ -336,6 +383,12 @@ async function leg(
         speed: SPEED,
         gestureSourceType: source,
       });
+      reached.push(
+        await page.evaluate(
+          (sel) => document.querySelector(sel)?.scrollTop ?? -1,
+          SCROLLER
+        )
+      );
     }
     rafs = await page.evaluate(() => {
       const w = window as unknown as {
@@ -359,6 +412,7 @@ async function leg(
     list.reduce((sum, e) => sum + (e.tdur ?? e.dur ?? 0) / 1000, 0);
   return {
     fade,
+    reached: { foot: reached[0] ?? -1, top: reached[1] ?? -1, run: box.run },
     frames: rafs.length,
     load: { at: startLoad, most: Math.max(...loads) },
     mainCpu: Math.round(
@@ -389,7 +443,7 @@ async function leg(
 }
 
 /**
- * The fade's look along the pane's scroll, as `fade` draws it: its two
+ * The fade's look along the scroller's scroll, as `fade` draws it: its two
  * lengths and the mask they make, at each of `LOOK_AT`.
  */
 const lookOf = (page: Page, fade: Fade) =>
@@ -404,21 +458,21 @@ const lookOf = (page: Page, fade: Fade) =>
             el.scrollTop = (el.scrollHeight - el.clientHeight) * f;
           }
         },
-        [PANE, at] as const
+        [SCROLLER, at] as const
       );
       await frames(page);
       read.push({
         at,
-        ...(await page.evaluate((pane) => {
+        ...(await page.evaluate((scroller) => {
           const style = getComputedStyle(
-            document.querySelector(pane) as Element
+            document.querySelector(scroller) as Element
           );
           return {
             start: style.getPropertyValue("--fade-start"),
             end: style.getPropertyValue("--fade-end"),
             mask: style.maskImage,
           };
-        }, PANE)),
+        }, SCROLLER)),
       });
     }
     return read;
@@ -427,15 +481,15 @@ const lookOf = (page: Page, fade: Fade) =>
 const describe = (l: Leg) =>
   `${l.frames} frames, ${l.over.length} over ${BUDGET_MS.toFixed(1)}ms (p95 ${l.p95Ms}ms, longest ${l.maxMs}ms); main thread ${l.mainCpu}ms CPU, ${l.style.n} style recalcs ${l.style.ms}ms CPU (${l.style.elements} elements), paint ${l.paintMs}ms CPU; load ${l.load.at} at its start, ${l.load.most} at most`;
 
-/** The fade's look at the desk: the shipped fade's equals the whole-scroll form's, and the lengths its keyframes give. */
-async function checkLook(kit: Kit, page: Page) {
+/** The fade's look at `view`: the shipped fade's equals the whole-scroll form's, and the lengths its keyframes give. */
+async function checkLook(kit: Kit, page: Page, view: string) {
   const len = Number.parseFloat(
     await page.evaluate(
-      (pane) =>
-        getComputedStyle(document.querySelector(pane) as Element)
+      (scroller) =>
+        getComputedStyle(document.querySelector(scroller) as Element)
           .getPropertyValue("--fade-len")
           .trim(),
-      PANE
+      SCROLLER
     )
   );
   const shipped = await lookOf(page, "on");
@@ -467,7 +521,7 @@ async function checkLook(kit: Kit, page: Page) {
     return wrong;
   });
   kit.check(
-    `desk: the fade's look is the whole-scroll form's at ${LOOK_AT.map((f) => `${f * 100}%`).join(", ")} of the scroll`,
+    `${view}: the fade's look is the whole-scroll form's at ${LOOK_AT.map((f) => `${f * 100}%`).join(", ")} of the scroll`,
     faults.length === 0,
     faults.join("; ") ||
       shipped
@@ -510,31 +564,29 @@ const spec: Spec = {
     for (const [view, source] of WIDTHS) {
       const page = await kit.page(view, { init: [frameClock] });
       page.setDefaultTimeout(120_000);
-      await open(page, url, `${PANE} .ledger tr:nth-child(${ROWS} of .row)`);
+      await open(page, url, `.ledger tr:nth-child(${ROWS} of .row)`);
       await settle(page);
       const where = await markScroller(page);
-      const fade = await page.evaluate((pane) => {
-        const el = document.querySelector<HTMLElement>(pane);
-        return el
-          ? el
-              .getAnimations()
-              .map((a) => (a as CSSAnimation).animationName)
-              .join(", ")
-          : "";
-      }, PANE);
-      kit.check(
-        `${view}: the Table view scrolls a long list, its pane under the edge fade`,
-        where.run > where.view * 5 && fade.includes("kit-edge-fade"),
-        `${await page.locator(ROW).count()} rows; ${where.scroller} scrolls ${where.run}px past its ${where.view}px; the pane's animations ${fade}`
+      const masked = await page.evaluate(
+        () => document.querySelectorAll(".kit-edge-fade-block").length
       );
-      const live = where.scroller === "the pane";
-      if (live) {
-        await checkLook(kit, page);
-      } else {
-        kit.note(
-          `${view}: the pane grows to its rows and ${where.scroller} scrolls, so the pane's own scroll timeline is inactive and its fade draws nothing here`
+      kit.check(
+        `${view}: the box that scrolls the Table view's long list wears the edge fade, and no other box round it`,
+        where.run > where.view * 5 &&
+          where.fades &&
+          where.animations.includes("kit-edge-fade") &&
+          masked === 1,
+        `${await page.locator(ROW).count()} rows; ${where.scroller} scrolls ${where.run}px past its ${where.view}px, its animations ${where.animations || "none"}; ${masked} box(es) wear the fade`
+      );
+      if (view === "phone") {
+        const foot = await footFade(page);
+        kit.check(
+          `${view}: the foot's fade ends at the views bar's top edge`,
+          foot !== null && Math.abs(foot.ends - foot.bar) <= 1,
+          JSON.stringify(foot)
         );
       }
+      await checkLook(kit, page, view);
       const legs: Leg[] = [];
       for (let round = 0; round < PAIRS; round += 1) {
         // Each round starts one later, so no leg always runs first.
@@ -561,22 +613,32 @@ const spec: Spec = {
             `fade ${one} ${sum(one, (l) => l.over.length)} of ${intervals(one)} frames over budget (${((sum(one, (l) => l.over.length) / Math.max(1, intervals(one))) * 100).toFixed(1)}%), ${sum(one, (l) => l.style.n)} style recalcs ${sum(one, (l) => l.style.ms).toFixed(0)}ms, paint ${sum(one, (l) => l.paintMs).toFixed(0)}ms, main-thread CPU ${sum(one, (l) => l.mainCpu)}ms`
         ).join("; ")}`
       );
-      if (live) {
-        const share =
-          sum("on", (l) => l.style.n) / Math.max(1, intervals("on"));
-        kit.check(
-          `${view}: the fade restyles the scroller on no more than ${RESTYLE_SHARE * 100}% of a long scroll's frames`,
-          share <= RESTYLE_SHARE,
-          `${sum("on", (l) => l.style.n)} style recalcs over ${intervals("on")} frames (${(share * 100).toFixed(1)}%); the whole-scroll form ${sum("whole", (l) => l.style.n)} over ${intervals("whole")}; none ${sum("off", (l) => l.style.n)}`
-        );
-        const cpu = (one: Fade) => sum(one, (l) => l.mainCpu);
-        const ratio = cpu("on") / Math.max(1, cpu("off"));
-        kit.check(
-          `${view}: a long scroll's main-thread CPU with the fade within ${CPU_SHARE}x of the same run's without it`,
-          ratio <= CPU_SHARE,
-          `${ratio.toFixed(2)}x: ${cpu("on")}ms with it, ${cpu("off")}ms without; the whole-scroll form ${cpu("whole")}ms (${(cpu("whole") / Math.max(1, cpu("off"))).toFixed(2)}x)`
-        );
-      }
+      const short = legs.filter(
+        (l) => l.reached.foot < l.reached.run - 2 || l.reached.top > 2
+      );
+      kit.check(
+        `${view}: every leg's gesture scrolls the scroller to its foot and back to its top`,
+        short.length === 0,
+        legs
+          .map(
+            (l) =>
+              `${l.fade} ${l.reached.foot}/${l.reached.run} → ${l.reached.top}`
+          )
+          .join("; ")
+      );
+      const share = sum("on", (l) => l.style.n) / Math.max(1, intervals("on"));
+      kit.check(
+        `${view}: the fade restyles the scroller on no more than ${RESTYLE_SHARE * 100}% of a long scroll's frames`,
+        share <= RESTYLE_SHARE,
+        `${sum("on", (l) => l.style.n)} style recalcs over ${intervals("on")} frames (${(share * 100).toFixed(1)}%); the whole-scroll form ${sum("whole", (l) => l.style.n)} over ${intervals("whole")}; none ${sum("off", (l) => l.style.n)}`
+      );
+      const cpu = (one: Fade) => sum(one, (l) => l.mainCpu);
+      const ratio = cpu("on") / Math.max(1, cpu("off"));
+      kit.check(
+        `${view}: a long scroll's main-thread CPU with the fade within ${CPU_SHARE}x of the same run's without it`,
+        ratio <= CPU_SHARE,
+        `${ratio.toFixed(2)}x: ${cpu("on")}ms with it, ${cpu("off")}ms without; the whole-scroll form ${cpu("whole")}ms (${(cpu("whole") / Math.max(1, cpu("off"))).toFixed(2)}x)`
+      );
       await page.close();
     }
     await writeFile(

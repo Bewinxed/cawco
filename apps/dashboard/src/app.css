@@ -782,13 +782,17 @@
     );
     animation-timeline: scroll(self inline);
   }
+  /* `--fade-inset-end` stands the foot's fade clear of a bar docked over
+     the scroller's foot (a phone's views bar), so it ends at the bar's top
+     edge and what passes under the bar is the fade's, as a footer's
+     (DESIGN.md: the house edge fade above it so the notes pass under it). */
   .kit-edge-fade-block {
     mask-image: linear-gradient(
       to bottom,
       transparent,
       #000 var(--fade-start),
-      #000 calc(100% - var(--fade-end)),
-      transparent
+      #000 calc(100% - var(--fade-inset-end, 0px) - var(--fade-end)),
+      transparent calc(100% - var(--fade-inset-end, 0px))
     );
     animation-timeline: scroll(self block);
   }

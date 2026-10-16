@@ -346,6 +346,8 @@
   const narrowQuery = new MediaQuery(NARROW_QUERY);
   /** Under 900px a task is its own page, not the split beside the view (`phone`). */
   const sheetQuery = new MediaQuery("(max-width: 899px)");
+  /** Under 640px the page is the one scroller, not the pane (the styles' own line). */
+  const pageScrollsQuery = new MediaQuery("(max-width: 639px)", false);
   const hosted = $derived(
     !(browser ? narrowQuery.current : Boolean(page.data.narrow))
   );
@@ -1167,6 +1169,27 @@
       ? "decisions-graph"
       : "decisions";
   });
+  /**
+   * Which box wears the house edge fade: the one that scrolls the view. On a
+   * phone that is the page (the board's columns included, which stand at
+   * their height in it); elsewhere the pane, where the board scrolls its
+   * columns sideways under its own. None while a view fills its pane (the
+   * canvas, a decision page, the decisions' graph) or the next project is read.
+   */
+  const fadeOn = $derived.by((): "page" | "pane" | null => {
+    if (
+      reading ||
+      current === "canvas" ||
+      paneView === "decisions-page" ||
+      paneView === "decisions-graph"
+    ) {
+      return null;
+    }
+    if (pageScrollsQuery.current) {
+      return "page";
+    }
+    return current === "board" ? null : "pane";
+  });
 
   /**
    * When he sits down (the first task landed, or the view moved off the
@@ -1449,7 +1472,6 @@
       tasks={shownTasks}
       bind:adding
     />
-    {@render bulkBar()}
   {:else if value === "table"}
     <div class="table-wrap">
       {#if adding}
@@ -1476,7 +1498,6 @@
         tasks={shownTasks}
       />
     </div>
-    {@render bulkBar()}
   {:else if value === "pipeline"}
     <ViewPipeline stages={stageList} tasks={shownTasks} />
   {:else if value === "canvas"}
@@ -1528,7 +1549,7 @@
   {:else}
     <!-- The frame the phone's views bar docks in, over the page's foot. -->
     <div class="project-frame">
-      <div class="project-page">
+      <div class={["project-page", fadeOn === "page" && "kit-edge-fade-block"]}>
         <ProjectHead
           bind:this={head}
           {lead}
@@ -1633,6 +1654,11 @@
           {/snippet}
         </ViewBar>
       {/if}
+      <!-- Outside the scroller, whose edge fade would mask it where it
+           floats: a fixed box is drawn under its ancestors' masks. -->
+      {#if shown === "board" || shown === "table"}
+        {@render bulkBar()}
+      {/if}
     </div>
   {/if}
 
@@ -1659,15 +1685,7 @@
 {#snippet viewPane()}
   <div
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
-    class={[
-      "pane",
-      current !== "board" &&
-        current !== "canvas" &&
-        paneView !== "decisions-page" &&
-        paneView !== "decisions-graph" &&
-        !reading &&
-        "kit-edge-fade-block",
-    ]}
+    class={["pane", fadeOn === "pane" && "kit-edge-fade-block"]}
     data-view={reading ? "board" : paneView}
   >
     {#if reading}
@@ -2018,6 +2036,9 @@
         var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) +
           var(--space-3)
       );
+      /* The foot's edge fade ends at the bar's top edge, a step of air
+         under the reach. */
+      --fade-inset-end: calc(var(--bar-reach) - var(--space-3));
       container-type: size;
       overflow-x: hidden;
       overflow-y: auto;
