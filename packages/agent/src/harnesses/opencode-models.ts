@@ -29,6 +29,7 @@ import { createHash } from "node:crypto";
 import { readFile, stat, utimes } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
 import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "../delegation";
 
@@ -148,11 +149,31 @@ class OpencodeModels {
 
   /** One read of the source: unchanged (`304`), or the new copy written. */
   async #readOnce(): Promise<void> {
-    const response = await fetch(`${OPENCODE_MODELS_SOURCE}/api.json`, {
-      headers:
-        this.#etag && this.#catalog ? { "if-none-match": this.#etag } : {},
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    const read = await readWithin(FETCH_TIMEOUT_MS, async (signal) => {
+      const response = await fetch(`${OPENCODE_MODELS_SOURCE}/api.json`, {
+        headers:
+          this.#etag && this.#catalog ? { "if-none-match": this.#etag } : {},
+        signal,
+      });
+      return {
+        response,
+        text: response.status === 304 ? "" : await response.text(),
+      };
     });
+    let response: Response;
+    let text: string;
+    switch (read.kind) {
+      case "answered":
+        ({ response, text } = read.value);
+        break;
+      case "unanswered":
+        // The held copy stays: the caller says this read failed and keeps it.
+        throw new Error(`no answer within ${Math.round(read.after / 1000)} s`);
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     const file = opencodeModelsFile();
     if (response.status === 304 && this.#catalog) {
       const now = new Date();
@@ -163,7 +184,6 @@ class OpencodeModels {
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
-    const text = await response.text();
     const catalog = this.#parse(text);
     await writeStateFile(file, text);
     this.#catalog = catalog;

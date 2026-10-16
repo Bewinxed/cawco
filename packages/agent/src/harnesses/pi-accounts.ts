@@ -16,6 +16,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mcpGatewayPort } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { accountCredentialPath, credentialAccountIds } from "@cawco/core/paths";
 import type {
   AuthOperationOptions,
@@ -80,14 +81,29 @@ const readAccount = (
 
 /** Asks the agent to refresh the account's credential; it answers once it has, or why not. */
 const askFresh = async (accountId: string): Promise<void> => {
-  const response = await fetch(
-    `http://127.0.0.1:${mcpGatewayPort()}/accounts/${encodeURIComponent(accountId)}/fresh`,
-    { method: "POST", signal: AbortSignal.timeout(60_000) }
-  );
-  if (!response.ok) {
-    throw new Error(
-      `The agent did not refresh the account's sign-in: ${await response.text()}`
+  const asked = await readWithin(60_000, async (signal) => {
+    const response = await fetch(
+      `http://127.0.0.1:${mcpGatewayPort()}/accounts/${encodeURIComponent(accountId)}/fresh`,
+      { method: "POST", signal }
     );
+    return { ok: response.ok, text: response.ok ? "" : await response.text() };
+  });
+  switch (asked.kind) {
+    case "answered":
+      if (!asked.value.ok) {
+        throw new Error(
+          `The agent did not refresh the account's sign-in: ${asked.value.text}`
+        );
+      }
+      return;
+    case "unanswered":
+      throw new Error(
+        `The agent did not answer the refresh of the account's sign-in within ${Math.round(asked.after / 1000)} s.`
+      );
+    default: {
+      const unhandled: never = asked;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 };
 

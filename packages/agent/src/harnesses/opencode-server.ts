@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   commandLines,
   listeningPorts,
@@ -70,7 +71,8 @@ export const isV1 = (identity: ServerIdentity): boolean =>
 export type V1Activity =
   | { kind: "read"; running: string[] }
   | { kind: "refused"; reason: string }
-  | { kind: "unreachable"; reason: string };
+  | { kind: "unreachable"; reason: string }
+  | { kind: "unanswered"; after: number };
 
 /** The `x-next-cursor` of a 1.x session inventory page. */
 const NEXT_CURSOR = "x-next-cursor";
@@ -86,8 +88,9 @@ const V1_READ_TIMEOUT_MS = 60_000;
  * since it started (`GET /experimental/session?start=<its birth>`, paged by
  * `x-next-cursor`): a turn updates its session as it starts. Reading only
  * those keeps the read from booting every directory the database ever saw.
- * An answer that is no answer (401, an error) is `refused`; no answer at all
- * is `unreachable`.
+ * An answer that is no answer (401, an error) is `refused`; a request that
+ * never reached it is `unreachable`; none within {@link V1_READ_TIMEOUT_MS}
+ * is `unanswered`.
  */
 export const readV1Activity = async (
   identity: ServerIdentity
@@ -101,39 +104,56 @@ export const readV1Activity = async (
         authorization: `Basic ${Buffer.from(`opencode:${identity.password}`).toString("base64")}`,
       }
     : {};
-  const signal = AbortSignal.timeout(V1_READ_TIMEOUT_MS);
-  const get = async (path: string): Promise<Response> =>
-    await fetch(new URL(path, identity.url), { headers, signal });
-  try {
-    const directories = await v1Directories(get, born);
-    if (typeof directories === "string") {
-      return { kind: "refused", reason: directories };
-    }
-    const running: string[] = [];
-    for (const directory of directories) {
-      // biome-ignore lint/performance/noAwaitInLoops: one directory at a time; each read boots its instance on the server
-      const status = await get(
-        `/session/status?directory=${encodeURIComponent(directory)}`
-      );
-      if (!status.ok) {
+  const read = await readWithin(
+    V1_READ_TIMEOUT_MS,
+    async (signal): Promise<V1Activity> => {
+      const get = async (path: string): Promise<Response> =>
+        await fetch(new URL(path, identity.url), { headers, signal });
+      try {
+        const directories = await v1Directories(get, born);
+        if (typeof directories === "string") {
+          return { kind: "refused", reason: directories };
+        }
+        const running: string[] = [];
+        for (const directory of directories) {
+          // biome-ignore lint/performance/noAwaitInLoops: one directory at a time; each read boots its instance on the server
+          const status = await get(
+            `/session/status?directory=${encodeURIComponent(directory)}`
+          );
+          if (!status.ok) {
+            return {
+              kind: "refused",
+              reason: `its status of ${directory} answered HTTP ${status.status}`,
+            };
+          }
+          const states = (await status.json()) as Record<
+            string,
+            { type?: string }
+          >;
+          running.push(
+            ...Object.entries(states)
+              .filter(([, state]) => state.type !== "idle")
+              .map(([id]) => id)
+          );
+        }
+        return { kind: "read", running };
+      } catch (error) {
         return {
-          kind: "refused",
-          reason: `its status of ${directory} answered HTTP ${status.status}`,
+          kind: "unreachable",
+          reason: error instanceof Error ? error.message : String(error),
         };
       }
-      const states = (await status.json()) as Record<string, { type?: string }>;
-      running.push(
-        ...Object.entries(states)
-          .filter(([, state]) => state.type !== "idle")
-          .map(([id]) => id)
-      );
     }
-    return { kind: "read", running };
-  } catch (error) {
-    return {
-      kind: "unreachable",
-      reason: error instanceof Error ? error.message : String(error),
-    };
+  );
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      return { kind: "unanswered", after: read.after };
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 };
 
@@ -229,6 +249,19 @@ const startRefused = (error: unknown, account: string | undefined): Error => {
   );
 };
 
+/**
+ * A start that did not answer within its time: no refusal, so nothing holds
+ * the next start back.
+ */
+const startUnanswered = (
+  what: string,
+  after: number,
+  account: string | undefined
+): Error =>
+  new Error(
+    `${account === undefined ? "OpenCode's server" : `Account ${account}'s OpenCode server`} did not answer ${what} within ${Math.round(after / 1000)} s. Its next start is tried at the next OpenCode session or message.`
+  );
+
 interface ServerRecord {
   active: ServerIdentity | null;
   retired: ServerIdentity[];
@@ -240,17 +273,6 @@ type Attach = (
   spec: ProcSpec,
   signal: AbortSignal
 ) => Promise<string>;
-
-function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
-  signal.throwIfAborted();
-  return new Promise((resolve, reject) => {
-    const abort = () => reject(signal.reason);
-    signal.addEventListener("abort", abort, { once: true });
-    pending
-      .then(resolve, reject)
-      .finally(() => signal.removeEventListener("abort", abort));
-  });
-}
 
 /** OS start identity plus sessiond epoch/procId/pid prevents signalling a reused PID. */
 const processStart = async (pid: number): Promise<string> =>
@@ -759,16 +781,29 @@ export class OpencodeServerOwner {
       if (!start.attempt && this.#refused?.inputs === start.inputs) {
         throw this.#refused.error;
       }
-      const signal = AbortSignal.timeout(SERVER_CUTOVER_TIMEOUT_MS);
-      let identity: ServerIdentity;
+      let launched: Bounded<ServerIdentity>;
       try {
-        identity = await this.#launch(launch, signal);
+        launched = await readWithin(SERVER_CUTOVER_TIMEOUT_MS, (signal) =>
+          this.#launch(launch, signal)
+        );
       } catch (error) {
         this.#refused = {
           error: startRefused(error, this.account),
           inputs: start.inputs,
         };
         throw this.#refused.error;
+      }
+      let identity: ServerIdentity;
+      switch (launched.kind) {
+        case "answered":
+          identity = launched.value;
+          break;
+        case "unanswered":
+          throw startUnanswered("its start", launched.after, this.account);
+        default: {
+          const unhandled: never = launched;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
       this.#refused = null;
       const current = await this.#load();
@@ -806,8 +841,25 @@ export class OpencodeServerOwner {
       }
       const record = await this.#load();
       const old = record.active;
-      const signal = AbortSignal.timeout(SERVER_CUTOVER_TIMEOUT_MS);
-      const candidate = await abortable(this.#launch(launch, signal), signal);
+      // One time for the whole cutover: the launch and the candidate's verification share it.
+      const started = performance.now();
+      const left = () =>
+        Math.max(0, SERVER_CUTOVER_TIMEOUT_MS - (performance.now() - started));
+      const launched = await readWithin(left(), (signal) =>
+        this.#launch(launch, signal)
+      );
+      let candidate: ServerIdentity;
+      switch (launched.kind) {
+        case "answered":
+          candidate = launched.value;
+          break;
+        case "unanswered":
+          throw startUnanswered("its start", launched.after, this.account);
+        default: {
+          const unhandled: never = launched;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
       this.#candidateProcId = candidate.procId;
       try {
         // An unselected candidate is durable cleanup work if the agent crashes.
@@ -817,8 +869,23 @@ export class OpencodeServerOwner {
           retired: [...preparing.retired, candidate],
         };
         await this.#save();
-        await abortable(verify(candidate, signal), signal);
-        signal.throwIfAborted();
+        const verified = await readWithin(left(), (signal) =>
+          verify(candidate, signal)
+        );
+        switch (verified.kind) {
+          case "answered":
+            break;
+          case "unanswered":
+            throw startUnanswered(
+              "its verification",
+              SERVER_CUTOVER_TIMEOUT_MS,
+              this.account
+            );
+          default: {
+            const unhandled: never = verified;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
         const retired = this.#record.retired.filter(
           (row) => row.procId !== candidate.procId
         );

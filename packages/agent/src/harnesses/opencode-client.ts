@@ -14,10 +14,34 @@
  * as a `ClientError` with reason `Transport`.
  */
 import { toolSpec } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { toolBinary } from "../tools";
 
 export type OpencodeClient = OpenCodeClient;
+
+/** A read that was given its time and not answered in it. */
+export type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
+
+/** An OpenCode read not answered, in the harness's words: `what` names what was asked, as "the session list". */
+export const notAnswered = (what: string, unanswered: Unanswered): string =>
+  unanswered.reason === "dead"
+    ? `OpenCode ended before it answered ${what}.`
+    : `OpenCode did not answer ${what} within ${Math.round(unanswered.after / 1000)} s.`;
+
+/** A read's answer; one not answered is said to the caller as its own error ({@link notAnswered}), never a value. */
+export const answerOf = <T>(read: Bounded<T>, what: string): T => {
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(notAnswered(what, read));
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 const OPENCODE_TOOL = toolSpec("opencode");
 if (!OPENCODE_TOOL) {
@@ -142,13 +166,6 @@ export const errorText = (error: unknown): string => {
  */
 export const PLUGIN_LOAD_TIMEOUT_MS = 30_000;
 
-/** How long one read of a wait below may take: a read that hangs ends as the wait's own deadline would. */
-const WAIT_READ_TIMEOUT_MS = 10_000;
-
-/** `signal`, or the end of one read's {@link WAIT_READ_TIMEOUT_MS}. */
-const oneRead = (signal: AbortSignal): AbortSignal =>
-  AbortSignal.any([signal, AbortSignal.timeout(WAIT_READ_TIMEOUT_MS)]);
-
 /**
  * The gate, failing closed: a location whose plugin list does not carry
  * CawCo's plugin, active, takes no session. The list is read until the
@@ -158,7 +175,8 @@ const oneRead = (signal: AbortSignal): AbortSignal =>
  * all by 2.0 ("Plugin must export a default definition with an id and an
  * effect or setup function", a warning only), so without this every guard
  * the plugin carries (the workspace judge, the credential stamp, the bounded
- * shell) would be gone while sessions ran on.
+ * shell) would be gone while sessions ran on. The whole wait is one read
+ * given `timeoutMs`: a list that hangs is let go at that deadline too.
  */
 export const assertPluginLoaded = async (
   client: OpencodeClient,
@@ -166,28 +184,43 @@ export const assertPluginLoaded = async (
   signal: AbortSignal,
   timeoutMs = PLUGIN_LOAD_TIMEOUT_MS
 ): Promise<void> => {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
-    const listed = await client.plugin.list(at(directory), {
-      signal: oneRead(signal),
-    });
-    const ours = listed.data.find((plugin) => plugin.id === CAWCO_PLUGIN_ID);
-    if (ours?.state.status === "active") {
+  const loaded = await readWithin(
+    timeoutMs,
+    async (within) => {
+      for (;;) {
+        within.throwIfAborted();
+        // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
+        const listed = await client.plugin.list(at(directory), {
+          signal: within,
+        });
+        const ours = listed.data.find(
+          (plugin) => plugin.id === CAWCO_PLUGIN_ID
+        );
+        if (ours?.state.status === "active") {
+          return;
+        }
+        if (ours) {
+          const failed = ours.state as { error?: string };
+          throw new Error(
+            `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${failed.error ?? ours.state.status}`
+          );
+        }
+        await Bun.sleep(250);
+      }
+    },
+    { signal }
+  );
+  switch (loaded.kind) {
+    case "answered":
       return;
-    }
-    if (ours) {
-      const failed = ours.state as { error?: string };
-      throw new Error(
-        `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${failed.error ?? ours.state.status}`
-      );
-    }
-    if (Date.now() >= deadline) {
+    case "unanswered":
       throw new Error(
         `OpenCode at ${directory} has not loaded CawCo's plugin (${CAWCO_PLUGIN_ID}) within ${timeoutMs / 1000} s, so it takes no session: its workspace judge, credential stamp and bounded shell would not run.`
       );
+    default: {
+      const unhandled: never = loaded;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
-    await Bun.sleep(250);
   }
 };
 
@@ -226,6 +259,11 @@ export interface McpNotConnected {
  * one that failed is dialled again until the deadline, and one not connected
  * at the deadline refuses then, as Claude's harness refuses a launch whose
  * CawCo slot never connects (claude.ts `#connectedCawcoSnapshot`).
+ *
+ * The whole wait is one read given `timeoutMs`; when it is not answered in
+ * that time, the last list the server gave decides, as the deadline did:
+ * CawCo's server connected settles with the others still `pending` said as
+ * still connecting, anything else refuses.
  */
 export const waitForMcp = async (
   client: OpencodeClient,
@@ -233,67 +271,86 @@ export const waitForMcp = async (
   signal: AbortSignal,
   timeoutMs = MCP_CONNECT_TIMEOUT_MS
 ): Promise<McpNotConnected[]> => {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    signal.throwIfAborted();
-    // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
-    const listed = await client.mcp.list(at(directory), {
-      signal: oneRead(signal),
-    });
-    const cawco = listed.data.find(
-      (server) => server.name === CAWCO_MCP_SERVER
-    )?.status;
-    if (cawco?.status === "needs_auth" || cawco?.status === "disabled") {
-      throw new Error(
-        `CawCo's MCP server at ${directory} is not connected (${cawco.status}${"error" in cawco ? `: ${cawco.error}` : ""}).`
-      );
-    }
-    const over = Date.now() >= deadline;
-    // The hub away (a restart) or slow to answer is no refusal: CawCo's
-    // server is dialled again until the deadline, as Claude's launch gate
-    // dials its slot (claude.ts `#readCawcoSlot`).
-    if (cawco?.status === "failed") {
-      if (over) {
-        throw new Error(
-          `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds (failed: ${cawco.error}).`
-        );
+  type Listed = Awaited<ReturnType<OpencodeClient["mcp"]["list"]>>["data"];
+  const notConnected = (listed: Listed): McpNotConnected[] =>
+    listed.flatMap((server): McpNotConnected[] => {
+      const { status } = server;
+      switch (status.status) {
+        case "failed":
+        case "needs_auth":
+          return [{ name: server.name, why: status.error }];
+        case "pending":
+          return [
+            {
+              name: server.name,
+              why: `still connecting after ${timeoutMs / 1000} s`,
+            },
+          ];
+        default:
+          return [];
       }
-      await client.mcp
-        .connect(
-          { server: CAWCO_MCP_SERVER, ...at(directory) },
-          { signal: oneRead(signal) }
-        )
-        .catch(() => undefined);
-      await Bun.sleep(1000);
-      continue;
-    }
-    const connecting = listed.data.some(
-      (server) => server.status.status === "pending"
-    );
-    if (cawco?.status === "connected" && (over || !connecting)) {
-      return listed.data.flatMap((server): McpNotConnected[] => {
-        const { status } = server;
-        switch (status.status) {
-          case "failed":
-          case "needs_auth":
-            return [{ name: server.name, why: status.error }];
-          case "pending":
-            return [
-              {
-                name: server.name,
-                why: `still connecting after ${timeoutMs / 1000} s`,
-              },
-            ];
-          default:
-            return [];
+    });
+  const cawcoOf = (listed: Listed) =>
+    listed.find((server) => server.name === CAWCO_MCP_SERVER)?.status;
+  let last: Listed | undefined;
+  const settled = await readWithin(
+    timeoutMs,
+    async (within) => {
+      for (;;) {
+        within.throwIfAborted();
+        // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
+        const response = await client.mcp.list(at(directory), {
+          signal: within,
+        });
+        const listed = response.data;
+        last = listed;
+        const cawco = cawcoOf(listed);
+        if (cawco?.status === "needs_auth" || cawco?.status === "disabled") {
+          throw new Error(
+            `CawCo's MCP server at ${directory} is not connected (${cawco.status}${"error" in cawco ? `: ${cawco.error}` : ""}).`
+          );
         }
-      });
-    }
-    if (over) {
+        // The hub away (a restart) or slow to answer is no refusal: CawCo's
+        // server is dialled again until the deadline, as Claude's launch gate
+        // dials its slot (claude.ts `#readCawcoSlot`).
+        if (cawco?.status === "failed") {
+          await client.mcp
+            .connect(
+              { server: CAWCO_MCP_SERVER, ...at(directory) },
+              { signal: within }
+            )
+            .catch(() => undefined);
+          await Bun.sleep(1000);
+          continue;
+        }
+        const connecting = listed.some(
+          (server) => server.status.status === "pending"
+        );
+        if (cawco?.status === "connected" && !connecting) {
+          return notConnected(listed);
+        }
+        await Bun.sleep(250);
+      }
+    },
+    { signal }
+  );
+  switch (settled.kind) {
+    case "answered":
+      return settled.value;
+    case "unanswered": {
+      const cawco = last ? cawcoOf(last) : undefined;
+      if (last && cawco?.status === "connected") {
+        return notConnected(last);
+      }
       throw new Error(
-        `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds.`
+        cawco?.status === "failed"
+          ? `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds (failed: ${cawco.error}).`
+          : `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds.`
       );
     }
-    await Bun.sleep(250);
+    default: {
+      const unhandled: never = settled;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 };

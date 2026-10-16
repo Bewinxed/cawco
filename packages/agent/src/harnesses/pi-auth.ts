@@ -4,6 +4,7 @@
  * permanent-refresh marker. Source: https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.13/internal/api/handlers/management/auth_files.go
  */
 import { join } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
 import { piAgentDir } from "@cawco/core/paths";
 
 export const PI_AUTH_CHECK_INTERVAL_MS = 15 * 60 * 1000;
@@ -83,27 +84,43 @@ export async function checkPiProxyCredential(model: {
     if (new URL(model.baseUrl).origin !== endpoint.origin) {
       return undefined;
     }
-    const response = await fetch(
-      new URL("/v1/messages/count_tokens", endpoint),
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "anthropic-version": "2023-06-01",
-          "x-api-key": config.proxy.apiKey ?? "",
-        },
-        body: JSON.stringify({
-          model: model.id,
-          messages: [{ role: "user", content: "ping" }],
-        }),
-        signal: AbortSignal.timeout(10_000),
+    const apiKey = config.proxy.apiKey ?? "";
+    const checked = await readWithin(10_000, async (signal) => {
+      const response = await fetch(
+        new URL("/v1/messages/count_tokens", endpoint),
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "anthropic-version": "2023-06-01",
+            "x-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            model: model.id,
+            messages: [{ role: "user", content: "ping" }],
+          }),
+          signal,
+        }
+      );
+      return { status: response.status, text: await response.text() };
+    });
+    switch (checked.kind) {
+      case "answered":
+        return classifyProxyCredential(
+          checked.value.status,
+          checked.value.text,
+          name
+        );
+      case "unanswered":
+        return {
+          state: "unknown",
+          reason: `pi: ${name} sign-in status unknown — the proxy did not answer within ${Math.round(checked.after / 1000)} s`,
+        };
+      default: {
+        const unhandled: never = checked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
-    );
-    return classifyProxyCredential(
-      response.status,
-      await response.text(),
-      name
-    );
+    }
   } catch {
     return {
       state: "unknown",

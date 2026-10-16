@@ -103,6 +103,7 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { LineSplitter } from "@cawco/core/lines";
 import {
   accountConfigDir,
@@ -991,12 +992,14 @@ class Turn {
     this.#ended = Promise.withResolvers<void>();
   }
 
-  async settle(ms: number): Promise<void> {
+  /** The end of the turn in flight, given `ms`: `unanswered` while it still runs after them. */
+  settle(ms: number): Promise<Bounded<void>> {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: busy is set true by start() elsewhere in this class; the checker doesn't see that cross-method mutation
     if (!this.busy) {
-      return;
+      return Promise.resolve({ kind: "answered", value: undefined });
     }
-    await Promise.race([this.#ended.promise, Bun.sleep(ms)]);
+    const ended = this.#ended.promise;
+    return readWithin(ms, () => ended);
   }
 }
 
@@ -2807,8 +2810,10 @@ class ClaudeSession implements HarnessSession {
    * Each background task as its process ends for a move, with the last of
    * its output read through the CLI's `get_task_output` (on the `Query` at
    * runtime, missing from its type); a task whose output it does not keep (a
-   * subagent's) goes without. Each read is bounded: the process ends next
-   * whatever they answer.
+   * subagent's) goes without. Each read is given {@link TASK_OUTPUT_READ_MS}:
+   * the process ends next whatever they answer, and a task whose output was
+   * not read in that time says so (`outputUnread`), apart from one that
+   * printed nothing.
    */
   async endedForMove(): Promise<MoveEnded> {
     const handle = this.#handle as unknown as {
@@ -2816,14 +2821,33 @@ class ClaudeSession implements HarnessSession {
     };
     const tasks = await Promise.all(
       [...this.#background].map(async ([taskId, task]): Promise<EndedTask> => {
-        const output = await Promise.race([
-          handle
-            .getTaskOutput?.(taskId)
-            .then((read) => read.output)
-            .catch(() => undefined),
-          Bun.sleep(TASK_OUTPUT_READ_MS).then(() => undefined),
-        ]);
-        return { taskId, ...task, ...(output ? { output } : {}) };
+        const { getTaskOutput } = handle;
+        if (!getTaskOutput) {
+          return { taskId, ...task };
+        }
+        let read: Bounded<{ output: string }>;
+        try {
+          read = await readWithin(TASK_OUTPUT_READ_MS, () =>
+            getTaskOutput.call(handle, taskId)
+          );
+        } catch {
+          // The CLI refused the read (it keeps no output for this task).
+          return { taskId, ...task };
+        }
+        switch (read.kind) {
+          case "answered":
+            return {
+              taskId,
+              ...task,
+              ...(read.value.output ? { output: read.value.output } : {}),
+            };
+          case "unanswered":
+            return { taskId, ...task, outputUnread: { after: read.after } };
+          default: {
+            const unhandled: never = read;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
       })
     );
     return { tasks, wakeups: this.#crons?.once ?? 0 };
@@ -3530,7 +3554,20 @@ class ClaudeSession implements HarnessSession {
     this.#openQuestions.clear();
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the child may already be gone
     await this.#handle.interrupt().catch(() => {});
-    await this.#turn.settle(SETTLE_TIMEOUT_MS);
+    const settled = await this.#turn.settle(SETTLE_TIMEOUT_MS);
+    switch (settled.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        console.warn(
+          `[claude] ${this.instanceId}: its turn still ran ${settled.after} ms after the interrupt; the stop closes it`
+        );
+        break;
+      default: {
+        const unhandled: never = settled;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     this.#handle.close();
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — stop() already tore everything down; only a pump that was still mid-await needs waiting for
     await this.#pump.catch(() => {});

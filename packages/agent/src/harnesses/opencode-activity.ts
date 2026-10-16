@@ -15,7 +15,13 @@
  * broken server holds its own sessions, never the machine. One that never
  * reached it is `unreachable`, and leaves activity unknown.
  */
-import { errorText, type OpencodeClient, unreachable } from "./opencode-client";
+import { readWithin } from "@cawco/core/bounded";
+import {
+  errorText,
+  notAnswered,
+  type OpencodeClient,
+  unreachable,
+} from "./opencode-client";
 
 /**
  * A session's activity as its generation's server last said it. `failed` is
@@ -40,8 +46,14 @@ type Reading = { read: number; sampledAt: number } & (
   | { kind: "available"; running: ReadonlySet<string> }
   | { kind: "refused"; reason: string }
   | { kind: "unreachable"; reason: string }
+  | { kind: "unanswered"; reason: string }
 );
 
+/**
+ * A session's activity as one read says it: `unanswered` is a read the
+ * server did not answer within {@link READ_TIMEOUT_MS}, which decides
+ * nothing, as `unreachable` does not.
+ */
 export type CustodyObservation = {
   generation: string;
   sessionId: string;
@@ -50,6 +62,7 @@ export type CustodyObservation = {
   | { kind: "decided"; state: "busy" | "idle"; sequence: number }
   | { kind: "refused"; reason: string }
   | { kind: "unreachable"; reason: string }
+  | { kind: "unanswered"; reason: string }
 );
 
 export interface ActivitySnapshot {
@@ -66,6 +79,8 @@ export class OpencodeActivity {
   /** Reads issued so far; each live observation remembers the newest. */
   #issued = 0;
   #latest: Reading | undefined;
+  /** Since when reads have gone unanswered, said once at the first; undefined while they are answered. */
+  #unansweredSince: number | undefined;
   #pending: Promise<Reading> | undefined;
   readonly #waves = new WeakMap<object, Promise<Reading>>();
   #nextSampleAt = 0;
@@ -143,15 +158,29 @@ export class OpencodeActivity {
     const read = this.#issued;
     this.#pending = (async (): Promise<Reading> => {
       try {
-        const active = await client.session.active({
-          signal: AbortSignal.timeout(READ_TIMEOUT_MS),
-        });
-        return {
-          read,
-          sampledAt: Date.now(),
-          kind: "available",
-          running: new Set(Object.keys(active)),
-        };
+        const active = await readWithin(READ_TIMEOUT_MS, (signal) =>
+          client.session.active({ signal })
+        );
+        switch (active.kind) {
+          case "answered":
+            return {
+              read,
+              sampledAt: Date.now(),
+              kind: "available",
+              running: new Set(Object.keys(active.value)),
+            };
+          case "unanswered":
+            return {
+              read,
+              sampledAt: Date.now(),
+              kind: "unanswered",
+              reason: `OpenCode active sessions: ${notAnswered("which sessions run", active)}`,
+            };
+          default: {
+            const unhandled: never = active;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
       } catch (error) {
         return {
           read,
@@ -168,8 +197,22 @@ export class OpencodeActivity {
     return this.#pending;
   }
 
-  /** A reading taken in: every session it is newer than takes its word. */
+  /**
+   * A reading taken in: every session it is newer than takes its word. An
+   * unanswered one says nothing: the last reading stays, and that is said
+   * once until a read is answered again.
+   */
   #apply(reading: Reading): void {
+    if (reading.kind === "unanswered") {
+      if (this.#unansweredSince === undefined) {
+        this.#unansweredSince = reading.sampledAt;
+        console.warn(
+          `[opencode] ${this.#generation}: ${reading.reason}; its last reading stays`
+        );
+      }
+      return;
+    }
+    this.#unansweredSince = undefined;
     this.#latest = reading;
     if (reading.kind === "unreachable") {
       return;

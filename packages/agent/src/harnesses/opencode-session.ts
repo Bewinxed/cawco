@@ -70,6 +70,7 @@ import {
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { userLayerPath } from "@cawco/core/paths";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import type {
@@ -91,6 +92,7 @@ import {
   errorTag,
   errorText,
   type McpNotConnected,
+  notAnswered,
   type OpencodeClient,
 } from "./opencode-client";
 import {
@@ -109,6 +111,22 @@ import {
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 export const RECOVERY_TIMEOUT_MS = 10_000;
+
+/**
+ * One OpenCode read given {@link RECOVERY_TIMEOUT_MS} to answer: `read` gets
+ * the `{ signal }` a client call takes, and `signal` (a session's lifetime,
+ * a caller's own) lets go of it sooner. A few calls that share the time go
+ * in one `read`. Answers `unanswered` when the time ran out (Law A).
+ */
+export const askOpencode = <T>(
+  read: (options: { signal: AbortSignal }) => Promise<T>,
+  signal?: AbortSignal
+): Promise<Bounded<T>> =>
+  readWithin(
+    RECOVERY_TIMEOUT_MS,
+    (within) => read({ signal: within }),
+    signal ? { signal } : {}
+  );
 
 /**
  * How long a turn may go with no server event at all before the wait itself
@@ -307,6 +325,9 @@ const DELEGATION_TOOLS = [
 /** What OpenCode makes of a server's name in its tools' ids. */
 const MCP_NAME_UNSAFE = /[^a-zA-Z0-9_-]/g;
 
+/** How long a fenced session's read of its location's MCP servers may take. */
+const MCP_FENCE_READ_MS = 65_000;
+
 /**
  * A fenced session on OpenCode (a memory curator or fleet-watch triage run,
  * `SpawnPayload.fence`): every tool of every MCP server the location has,
@@ -319,12 +340,25 @@ const mcpFence = async (
   client: OpencodeClient,
   directory: string
 ): Promise<OpencodeRule[]> => {
-  const listed = await client.mcp.list(at(directory), {
-    signal: AbortSignal.timeout(65_000),
-  });
-  return listed.data
-    .filter((server) => server.name !== CAWCO_MCP_SERVER)
-    .map((server) => deny(`${server.name.replace(MCP_NAME_UNSAFE, "_")}_*`));
+  const listed = await readWithin(MCP_FENCE_READ_MS, (signal) =>
+    client.mcp.list(at(directory), { signal })
+  );
+  switch (listed.kind) {
+    case "answered":
+      return listed.value.data
+        .filter((server) => server.name !== CAWCO_MCP_SERVER)
+        .map((server) =>
+          deny(`${server.name.replace(MCP_NAME_UNSAFE, "_")}_*`)
+        );
+    case "unanswered":
+      throw new Error(
+        `A fenced session runs no turn without its fence: ${notAnswered("the location's MCP servers", listed)}`
+      );
+    default: {
+      const unhandled: never = listed;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 /** The instruction entry keys the owner's and the project's `CLAUDE.md` go under (settled #11: `^[a-z0-9][a-z0-9._-]*$`). */
@@ -932,23 +966,36 @@ export class OpencodeSession implements HarnessSession {
    */
   async #applySettings(): Promise<void> {
     const sessionID = this.#opencodeSessionId();
-    const options = { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) };
     const model = this.#modelRef();
     const wanted = model ? JSON.stringify(model) : undefined;
-    if (model && wanted !== this.#applied.model) {
-      await this.#client.session.switchModel({ sessionID, model }, options);
-      this.#applied.model = wanted;
-    }
     const agent = this.#permissionMode === "plan" ? "plan" : "build";
-    if (agent !== this.#applied.agent) {
-      await this.#client.session.switchAgent({ sessionID, agent }, options);
-      this.#applied.agent = agent;
-    }
     const permissions = await this.#rules();
     const rules = JSON.stringify(permissions);
-    if (rules !== this.#applied.rules) {
-      await this.#client.session.update({ sessionID, permissions }, options);
-      this.#applied.rules = rules;
+    const applied = await askOpencode(async (options) => {
+      if (model && wanted !== this.#applied.model) {
+        await this.#client.session.switchModel({ sessionID, model }, options);
+        this.#applied.model = wanted;
+      }
+      if (agent !== this.#applied.agent) {
+        await this.#client.session.switchAgent({ sessionID, agent }, options);
+        this.#applied.agent = agent;
+      }
+      if (rules !== this.#applied.rules) {
+        await this.#client.session.update({ sessionID, permissions }, options);
+        this.#applied.rules = rules;
+      }
+    });
+    switch (applied.kind) {
+      case "answered":
+        return;
+      case "unanswered":
+        throw new Error(
+          notAnswered("the session's model, agent and permissions", applied)
+        );
+      default: {
+        const unhandled: never = applied;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
   }
 
@@ -965,51 +1012,65 @@ export class OpencodeSession implements HarnessSession {
    */
   async #syncInstructions(): Promise<void> {
     const sessionID = this.#opencodeSessionId();
-    const options = { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) };
     const entries = await instructionEntries(
       this.#directory,
       this.#roleInstructions
     );
-    this.#projectEntries ??= new Set(
-      (
-        await this.#client.session.instructions.entry.list(
-          { sessionID },
-          options
+    const synced = await askOpencode(async (options) => {
+      this.#projectEntries ??= new Set(
+        (
+          await this.#client.session.instructions.entry.list(
+            { sessionID },
+            options
+          )
         )
-      )
-        .map((entry) => entry.key)
-        .filter((key) => key.startsWith(PROJECT_ENTRY))
-    );
-    for (const key of [...this.#projectEntries]) {
-      if (!(key in entries)) {
-        // biome-ignore lint/performance/noAwaitInLoops: a few entries, taken off in turn
-        await this.#client.session.instructions.entry.remove(
-          { sessionID, key },
+          .map((entry) => entry.key)
+          .filter((key) => key.startsWith(PROJECT_ENTRY))
+      );
+      const placed = this.#projectEntries;
+      for (const key of [...placed]) {
+        if (!(key in entries)) {
+          // biome-ignore lint/performance/noAwaitInLoops: a few entries, taken off in turn
+          await this.#client.session.instructions.entry.remove(
+            { sessionID, key },
+            options
+          );
+          placed.delete(key);
+          this.#instructions.delete(key);
+        }
+      }
+      for (const [key, value] of Object.entries(entries)) {
+        const hash = createHash("sha256").update(value).digest("hex");
+        if (this.#instructions.get(key) === hash) {
+          continue;
+        }
+        const bytes = Buffer.byteLength(JSON.stringify(value));
+        if (bytes > INSTRUCTION_ENTRY_MAX) {
+          throw new Error(
+            `${key} is ${bytes} bytes as an OpenCode instruction entry; OpenCode takes at most ${INSTRUCTION_ENTRY_MAX}.`
+          );
+        }
+        // biome-ignore lint/performance/noAwaitInLoops: a few entries, put in turn
+        await this.#client.session.instructions.entry.put(
+          { sessionID, key, value },
           options
         );
-        this.#projectEntries.delete(key);
-        this.#instructions.delete(key);
+        this.#instructions.set(key, hash);
+        if (key.startsWith(PROJECT_ENTRY)) {
+          placed.add(key);
+        }
       }
-    }
-    for (const [key, value] of Object.entries(entries)) {
-      const hash = createHash("sha256").update(value).digest("hex");
-      if (this.#instructions.get(key) === hash) {
-        continue;
-      }
-      const bytes = Buffer.byteLength(JSON.stringify(value));
-      if (bytes > INSTRUCTION_ENTRY_MAX) {
+    });
+    switch (synced.kind) {
+      case "answered":
+        return;
+      case "unanswered":
         throw new Error(
-          `${key} is ${bytes} bytes as an OpenCode instruction entry; OpenCode takes at most ${INSTRUCTION_ENTRY_MAX}.`
+          notAnswered("the session's instruction entries", synced)
         );
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: a few entries, put in turn
-      await this.#client.session.instructions.entry.put(
-        { sessionID, key, value },
-        options
-      );
-      this.#instructions.set(key, hash);
-      if (key.startsWith(PROJECT_ENTRY)) {
-        this.#projectEntries.add(key);
+      default: {
+        const unhandled: never = synced;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
     }
   }
@@ -1763,45 +1824,54 @@ export class OpencodeSession implements HarnessSession {
   /** One kind of the session's pending gates read back and raised, tried up to three times. */
   async #snapshotGates(kind: "form" | "permission"): Promise<void> {
     const sessionID = this.#opencodeSessionId();
+    const missed = (why: string): void => {
+      if (!this.#gateFailures.has(kind)) {
+        this.#gateFailures.add(kind);
+        console.warn(
+          `[opencode] ${this.instanceId}: ${kind} snapshot failed: ${why}`
+        );
+      }
+    };
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const options = {
-        signal: AbortSignal.any([
-          this.#lifetime.signal,
-          AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-        ]),
-      };
       try {
-        if (kind === "permission") {
-          for (const ask of await this.#client.permission.list(
-            { sessionID },
-            options
-          )) {
-            this.#asked(ask);
+        // biome-ignore lint/performance/noAwaitInLoops: bounded retry of this endpoint, independently of the other
+        const read = await askOpencode(async (options): Promise<void> => {
+          if (kind === "permission") {
+            for (const ask of await this.#client.permission.list(
+              { sessionID },
+              options
+            )) {
+              this.#asked(ask);
+            }
+          } else {
+            for (const form of await this.#client.session.form.list(
+              { sessionID },
+              options
+            )) {
+              this.#formAsked(form);
+            }
           }
-        } else {
-          for (const form of await this.#client.session.form.list(
-            { sessionID },
-            options
-          )) {
-            this.#formAsked(form);
+        }, this.#lifetime.signal);
+        switch (read.kind) {
+          case "answered":
+            this.#gateFailures.delete(kind);
+            return;
+          case "unanswered":
+            missed(notAnswered(`the session's pending ${kind}s`, read));
+            break;
+          default: {
+            const unhandled: never = read;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
           }
         }
-        this.#gateFailures.delete(kind);
-        return;
       } catch (error) {
         if (this.#lifetime.signal.aborted) {
           return;
         }
-        if (!this.#gateFailures.has(kind)) {
-          this.#gateFailures.add(kind);
-          console.warn(
-            `[opencode] ${this.instanceId}: ${kind} snapshot failed: ${errorText(error)}`
-          );
-        }
-        if (attempt < 2) {
-          // biome-ignore lint/performance/noAwaitInLoops: bounded retry of this endpoint, independently of the other
-          await Bun.sleep(250 * 2 ** attempt);
-        }
+        missed(errorText(error));
+      }
+      if (attempt < 2) {
+        await Bun.sleep(250 * 2 ** attempt);
       }
     }
   }
@@ -1848,12 +1918,30 @@ export class OpencodeSession implements HarnessSession {
     const sessionID = this.#opencodeSessionId();
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #replyPermission itself is not awaited by its callers
     void withRestartHold("write", `permission:${requestId}`, () =>
-      this.#client.permission.reply(
-        { sessionID, requestID: requestId, decision },
-        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      askOpencode((options) =>
+        this.#client.permission.reply(
+          { sessionID, requestID: requestId, decision },
+          options
+        )
       )
-    ).catch((error: unknown) =>
-      console.warn(`[opencode] permission reply failed: ${errorText(error)}`)
+    ).then(
+      (replied) => {
+        switch (replied.kind) {
+          case "answered":
+            return;
+          case "unanswered":
+            console.warn(
+              `[opencode] permission reply failed: ${notAnswered(`the reply to ${requestId}`, replied)}`
+            );
+            return;
+          default: {
+            const unhandled: never = replied;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
+      },
+      (error: unknown) =>
+        console.warn(`[opencode] permission reply failed: ${errorText(error)}`)
     );
   }
 
@@ -1870,35 +1958,52 @@ export class OpencodeSession implements HarnessSession {
     result: PermissionResult
   ): Promise<void> {
     const sessionID = this.#opencodeSessionId();
-    const options = { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) };
     try {
-      await withRestartHold("write", `form:${formID}`, async () => {
-        if (result.behavior === "deny") {
-          await this.#client.session.form.cancel(
-            {
-              sessionID,
-              formID,
-              ...(result.message ? { message: result.message } : {}),
-            },
+      const replied = await withRestartHold("write", `form:${formID}`, () =>
+        askOpencode(async (options) => {
+          if (result.behavior === "deny") {
+            await this.#client.session.form.cancel(
+              {
+                sessionID,
+                formID,
+                ...(result.message ? { message: result.message } : {}),
+              },
+              options
+            );
+            return;
+          }
+          const given =
+            (result as { updatedInput?: { answers?: UserAnswers } })
+              .updatedInput?.answers ?? {};
+          const answer: Record<string, string | number | boolean | string[]> =
+            {};
+          for (const [question, field] of asked.keys) {
+            const value = fieldAnswer(field, given[question]);
+            if (value !== undefined) {
+              answer[field.key] = value;
+            }
+          }
+          await this.#client.session.form.reply(
+            { sessionID, formID, answer },
             options
           );
+        })
+      );
+      switch (replied.kind) {
+        case "answered":
           return;
+        case "unanswered":
+          this.#ctx.failed(
+            new Error(
+              `OpenCode form reply failed: ${notAnswered(`the reply to form ${formID}`, replied)}`
+            )
+          );
+          return;
+        default: {
+          const unhandled: never = replied;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
         }
-        const given =
-          (result as { updatedInput?: { answers?: UserAnswers } }).updatedInput
-            ?.answers ?? {};
-        const answer: Record<string, string | number | boolean | string[]> = {};
-        for (const [question, field] of asked.keys) {
-          const value = fieldAnswer(field, given[question]);
-          if (value !== undefined) {
-            answer[field.key] = value;
-          }
-        }
-        await this.#client.session.form.reply(
-          { sessionID, formID, answer },
-          options
-        );
-      });
+      }
     } catch (error) {
       if (errorTag(error) === "FormAlreadySettledError") {
         return;
@@ -2184,15 +2289,27 @@ export class OpencodeSession implements HarnessSession {
    * has just sent and the server has not delivered yet is left to its events.
    */
   async #endMissedTurn(revision: number): Promise<void> {
-    const listed = await this.#client.message.list(
-      { sessionID: this.#opencodeSessionId(), order: "desc", limit: 100 },
-      {
-        signal: AbortSignal.any([
-          this.#lifetime.signal,
-          AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-        ]),
-      }
+    const read = await askOpencode(
+      (options) =>
+        this.#client.message.list(
+          { sessionID: this.#opencodeSessionId(), order: "desc", limit: 100 },
+          options
+        ),
+      this.#lifetime.signal
     );
+    let listed: (typeof read & { kind: "answered" })["value"];
+    switch (read.kind) {
+      case "answered":
+        listed = read.value;
+        break;
+      case "unanswered":
+        // The turn stays as it is; the caller says why.
+        throw new Error(notAnswered("the session's last messages", read));
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     if (!this.#snapshotCurrent(revision)) {
       return;
     }
@@ -2683,10 +2800,19 @@ export class OpencodeSession implements HarnessSession {
         );
       }
       // biome-ignore lint/performance/noAwaitInLoops: skills load in order, before the first prompt
-      await this.#client.session.skill(
-        { sessionID, id, resume: false },
-        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      const loaded = await askOpencode((options) =>
+        this.#client.session.skill({ sessionID, id, resume: false }, options)
       );
+      switch (loaded.kind) {
+        case "answered":
+          break;
+        case "unanswered":
+          throw new Error(notAnswered(`the skill “${name}”`, loaded));
+        default: {
+          const unhandled: never = loaded;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     }
   }
 
@@ -2960,17 +3086,31 @@ export class OpencodeSession implements HarnessSession {
       const id = messageId();
       const line = mcpNotConnectedLine(server.name, server.why);
       // biome-ignore lint/performance/noAwaitInLoops: one note per server, in the order the server listed them
-      await this.#client.session.synthetic(
-        {
-          sessionID,
-          id,
-          text: line,
-          description: `${server.name} didn't connect`,
-          metadata: { cawco: MCP_NOT_CONNECTED, server: server.name, line },
-          resume: false,
-        },
-        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      const written = await askOpencode((options) =>
+        this.#client.session.synthetic(
+          {
+            sessionID,
+            id,
+            text: line,
+            description: `${server.name} didn't connect`,
+            metadata: { cawco: MCP_NOT_CONNECTED, server: server.name, line },
+            resume: false,
+          },
+          options
+        )
       );
+      switch (written.kind) {
+        case "answered":
+          break;
+        case "unanswered":
+          throw new Error(
+            notAnswered(`the note that ${server.name} didn't connect`, written)
+          );
+        default: {
+          const unhandled: never = written;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
       console.warn(`[opencode] ${this.instanceId}: ${line}`);
       this.#ctx.frame({
         type: "system",

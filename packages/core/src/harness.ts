@@ -1583,6 +1583,8 @@ export interface EndedTask {
   description: string;
   /** The last of what it printed (at most 8 KiB), when the CLI could read it. */
   output?: string;
+  /** Its output was asked for and not read within this many ms (distinct from no output). */
+  outputUnread?: { after: number };
   /** Its id in the conversation the session resumes (a tool_use's background task). */
   taskId: string;
   /** Its kind as Claude Code names it: `local_bash`, `monitor`, `local_agent`, … */
