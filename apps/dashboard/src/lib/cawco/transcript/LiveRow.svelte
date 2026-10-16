@@ -21,11 +21,11 @@
   import { untrack } from "svelte";
   import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import MessageBody from "../MessageBody.svelte";
+  import { useVoice } from "../turn/voice";
+  import Who from "../turn/Who.svelte";
   import { useLedger } from "./arrivals.svelte";
   import type { Row } from "./rows";
   import Thinking from "./Thinking.svelte";
-  import { useVoice } from "./voice";
-  import Who from "./Who.svelte";
 
   type Live = Extract<Row, { kind: "live" }>;
   /** The answer this row streamed, landed as its message (rows.ts `streamed`). */
@@ -177,7 +177,7 @@
       />
     </section>
   {:else if voice.face}
-    <!-- A voice with a face of its own (a project's Caw, transcript/voice.ts)
+    <!-- A voice with a face of its own (a project's Caw, turn/voice.ts)
          is on his speaker line from the first beat of a turn: his working
          still over what he is thinking. -->
     <section class="turn" class:grouped={live.grouped}>

@@ -22,6 +22,7 @@
     IconWindow,
   } from "#lib/icons.js";
   import MessageBody from "../MessageBody.svelte";
+  import { CAW_EVENT, useVoice } from "../turn/voice";
   /**
    * The quiet ledger's non-turn lines: a command's output in a recessed well, a
    * system note folded on the rail, and a failure or refusal as a named card
@@ -31,7 +32,6 @@
   import type { Message } from "../types";
   import RoutineMadeActions from "./RoutineMadeActions.svelte";
   import type { HarnessNote } from "./rows";
-  import { CAW_EVENT, useVoice } from "./voice";
 
   let {
     message,

@@ -8,7 +8,7 @@
  */
 import type { ThreadMessage } from "@cawco/core";
 import { routineMadeOf } from "./thread-tabs";
-import { CAW_EVENT } from "./transcript/voice";
+import { CAW_EVENT } from "./turn/voice";
 import type { Message } from "./types";
 
 /** What rode with your words, as a send's row carries it (MessageRow); none when nothing did. */

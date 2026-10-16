@@ -96,7 +96,7 @@
   import HeadFade from "./transcript/HeadFade.svelte";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
-  import { setVoice } from "./transcript/voice";
+  import { setVoice } from "./turn/voice";
   import type { Message } from "./types";
   import {
     type ComposerBinding,

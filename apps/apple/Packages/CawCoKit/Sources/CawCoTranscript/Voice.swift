@@ -3,7 +3,7 @@ import CawCoDesign
 import UIKit
 
 /// Who answers in a transcript when it is not a harness session's agent
-/// (transcript/voice.ts): a pane hosting one (a project's Caw thread) says
+/// (turn/voice.ts): a pane hosting one (a project's Caw thread) says
 /// so here, and the rows draw it. His face stands in the speaker line's
 /// mark; `accessory` draws what a reply carries under it (the tasks it is
 /// about as cards, the files it wrote as chips), by the reply's block id. A

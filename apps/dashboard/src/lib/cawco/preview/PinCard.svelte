@@ -6,7 +6,8 @@
    * well's foot as the house drawer does. What the pin stands on, in words
    * (pin-name.ts), its file:line dim under it and its selector only in the
    * tooltip; no picture: the pin it would show stands beside the card. Its
-   * thread in the transcript's two voices (MessageRow itself): the
+   * thread in the transcript's two voices (its turn/ pieces: Turn, Well,
+   * Who): the
    * person's words in the reader's well, the agent's bare under its mark and
    * the session's name; the reply field and Reply.
    * Its head carries what acts on the pin, as Figma's, Vercel's and Miro's
@@ -27,7 +28,7 @@
    * presses this document never hears, says its own (`cawco:press`). What
    * the field holds is the pin's draft, which the pane keeps with the pin.
    */
-  import type { Pin, ThreadEntry } from "@cawco/core/comments";
+  import type { Pin } from "@cawco/core/comments";
   import { tick, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
@@ -42,9 +43,11 @@
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import RowMenu from "../config/RowMenu.svelte";
   import { copyToClipboard } from "../copy";
+  import MessageBody from "../MessageBody.svelte";
   import { pressOutside } from "../press-outside";
-  import MessageRow from "../transcript/MessageRow.svelte";
-  import type { Message } from "../types";
+  import Turn from "../turn/Turn.svelte";
+  import Well from "../turn/Well.svelte";
+  import Who from "../turn/Who.svelte";
   import PinDisc from "./PinDisc.svelte";
   import { pinName, pinSelector } from "./pin-name";
 
@@ -200,21 +203,6 @@
     return pin.thread.length > 0 ? "Reply" : "Say what to change here";
   });
 
-  /**
-   * A thread entry as the transcript's row for it: the person's as a sent
-   * turn, the agent's as its turn. Under the pin, not a session, so the row
-   * offers none of a session turn's actions (edit, fork, send again).
-   */
-  function asMessage(entry: ThreadEntry): Message {
-    return {
-      id: `pin:${pin.id}:${entry.id}`,
-      instanceId: `pin:${pin.id}`,
-      type: entry.by === "agent" ? "assistant" : "user",
-      content: entry.text,
-      timestamp: entry.at,
-    };
-  }
-
   function reply() {
     const text = draft.trim();
     if (!text) {
@@ -348,19 +336,32 @@
       onscroll={readAt}
       bind:this={roomEl}
     >
-      <!-- The transcript's own rows: a run of one speaker's entries is one
-           turn (its later entries grouped under the first's speaker line),
-           the person's run one well. -->
+      <!-- The transcript's turns (turn/: Turn, Well, Who): a run of one
+           speaker's entries is one turn (its later entries grouped under the
+           first's speaker line), the person's run one well. -->
       <ol class="thread">
         {#each pin.thread as entry, i (entry.id)}
+          {@const grouped = pin.thread[i - 1]?.by === entry.by}
           <li class="entry" data-by={entry.by}>
-            <MessageRow
-              {agentName}
-              grouped={pin.thread[i - 1]?.by === entry.by}
-              message={asMessage(entry)}
-              runsOn={entry.by === "person" &&
-                pin.thread[i + 1]?.by === "person"}
-            />
+            {#if entry.by === "person"}
+              {@const runsOn = pin.thread[i + 1]?.by === "person"}
+              <Turn {grouped} {runsOn} you>
+                {#if !grouped}
+                  <Who name="You" timestamp={entry.at} you />
+                {/if}
+                <Well {grouped} {runsOn}>
+                  {#if grouped}
+                    <Who grouped name="You" timestamp={entry.at} you />
+                  {/if}
+                  <MessageBody source={entry.text} />
+                </Well>
+              </Turn>
+            {:else}
+              <Turn {grouped}>
+                <Who {grouped} name={agentName} timestamp={entry.at} />
+                <MessageBody source={entry.text} />
+              </Turn>
+            {/if}
             {#if entry.by === "agent" && entry.files?.length}
               <p class="files">
                 {#each entry.files as file (file)}

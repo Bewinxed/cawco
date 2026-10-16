@@ -36,6 +36,10 @@
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { newSession } from "../spawn/new-session.svelte";
+  import Turn from "../turn/Turn.svelte";
+  import { useVoice } from "../turn/voice";
+  import Well from "../turn/Well.svelte";
+  import Who from "../turn/Who.svelte";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
   import type { Message } from "../types";
   import { liftedIds } from "./composer-draft.svelte";
@@ -51,8 +55,6 @@
     type SendRecovery,
   } from "./send-recovery.svelte";
   import Thinking from "./Thinking.svelte";
-  import { useVoice } from "./voice";
-  import Who from "./Who.svelte";
 
   /** A token-dressed micro count badge — shadcn Badge, off the stock 4/8/12
    *  ladder and onto the DESIGN.md scale so it never reads as stock shadcn. */
@@ -541,12 +543,12 @@
   <!-- Sent from this tab, the turn is the composer's text landing (motion/share,
        departed by Composer's submit under the message's own id): the whole
        turn when it starts a run, its words when it joins one. -->
-  <section
-    class="turn you"
+  <Turn
+    class={ghost || waiting ? "ghost" : undefined}
     data-message={message.id}
-    class:ghost={ghost || waiting}
-    class:grouped
-    class:runs-on={runsOn}
+    {grouped}
+    {runsOn}
+    you
     {@attach touchActions}
     {@attach land(() => (grouped ? undefined : sent), {
       ms: dur("--dur-pop"),
@@ -561,7 +563,7 @@
         you
       />
     {/if}
-    <div class="well" class:lifted {@attach openWell}>
+    <Well {grouped} {lifted} {runsOn} {@attach openWell}>
       <div
         class="words"
         bind:this={words}
@@ -824,10 +826,10 @@
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </Well>
+  </Turn>
 {:else if kind === "assistant"}
-  <section class="turn" class:grouped>
+  <Turn {grouped}>
     <Who {grouped} name={agentName} timestamp={message.timestamp} />
     <MessageBody source={message.content} />
     {#if voice?.tasks && message.metadata?.tasks?.length}
@@ -838,7 +840,7 @@
       <!-- The files of the project's folder the turn wrote (a project's Caw). -->
       {@render voice.files(message.metadata.files, message.id)}
     {/if}
-  </section>
+  </Turn>
 {:else if kind === "thinking"}
   {#if message.content.trim()}
     <Thinking {folding} text={message.content} />
@@ -850,140 +852,8 @@
 {/if}
 
 <style>
-  .turn {
-    margin-block-start: var(--space-4);
-
-    /* A later turn in the same speaker's group sits closer to the one above,
-       and holds its floated clock inside its own box. */
-    &.grouped {
-      display: flow-root;
-      margin-block-start: var(--space-2);
-    }
-  }
-  /* The well's start edge is the reader's mark's edge (--well-x), with no
-     bleed into the gutter; the words sit inside at its padding: --space-3,
-     or --space-2 at the narrow breakpoint. */
-  .turn.you {
-    position: relative;
-    /* The seam's inset (app.css .kit-seam): one value for both. */
-    --pad: var(--seam-inset);
-
-    /* The run's later messages: the row above ends on its own padding and
-       the hairline, so there is no gap of the turn's own. */
-    &.grouped {
-      margin-block-start: 0;
-    }
-  }
-  /* One row's part of the well. The surface and its edge are painted by
-     ::before, under the words, so a part can open without clipping the words
-     landing in it; ::after is the hairline from the message above. The box is
-     the same for every part — padding above (--space-2, plus the edge on a
-     run's first part) and --space-2 plus the edge's 1px below — so a part
-     becoming the last, or no longer the last, repaints and never reflows. */
-  .well {
-    position: relative;
-    isolation: isolate;
-    margin-inline-start: var(--well-x);
-    padding-block: calc(var(--space-2) + 1px);
-    padding-inline: var(--pad);
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border: 1px solid var(--well-edge);
-      border-radius: var(--well-r);
-      background: var(--surface-recess-deep);
-
-      /* A run growing or shrinking: the edge and corners follow. */
-      @media (prefers-reduced-motion: no-preference) {
-        transition:
-          border-color var(--dur-pop) var(--ease-out),
-          border-radius var(--dur-pop) var(--ease-out),
-          opacity var(--dur-panel) var(--ease-drawer);
-      }
-    }
-    /* Drawn by the LOWER message, across the text column only, on the pixel
-       row the part above leaves for its edge. The list places rows at
-       fractional offsets, so a later row's surface can cover the last pixel
-       of the row above: a hairline painted by the row above went missing.
-       Painted by the row below, it is painted last. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset-inline: var(--pad);
-      inset-block-start: -1px;
-      block-size: 1px;
-      background: var(--seam);
-      opacity: 0;
-
-      @media (prefers-reduced-motion: no-preference) {
-        transition: opacity var(--dur-pop) var(--ease-out);
-      }
-    }
-
-    /* The words run to the well's edge, not the prose measure. */
-    & :global(.msg) {
-      max-inline-size: none;
-    }
-    /* The well is the deepest step, so a code span lifts to the raised
-       surface instead of vanishing into it. */
-    & :global(.msg code) {
-      background: var(--surface-raised);
-    }
-  }
-  /* Its words lifted into the composer, the well folds away with them (the
-     note beside "You" says where they went), on the words' own curve; an
-     empty well would stay behind as a sliver. */
-  .well {
-    @media (prefers-reduced-motion: no-preference) {
-      transition: padding-block var(--dur-panel) var(--ease-drawer);
-    }
-  }
-  /* A later message: open at the top, the hairline over the part above's
-     bottom edge. */
-  .grouped .well {
-    padding-block-start: var(--space-2);
-
-    /* Its surface starts on the pixel row the part above leaves for its
-       edge, as the hairline does. The two parts are snapped to the pixel
-       grid each on its own, and at some offsets the part above stopped a
-       row short of this one: the row between was painted by neither, the
-       page showed through it at the well's two insets, and the hairline
-       stood on the page instead of on the well. */
-    &::before {
-      inset-block-start: -1px;
-      border-block-start-width: 0;
-      border-start-start-radius: 0;
-      border-start-end-radius: 0;
-    }
-    &::after {
-      opacity: 1;
-    }
-  }
-  .well.lifted {
-    padding-block: 0;
-
-    &::before,
-    &::after {
-      opacity: 0;
-    }
-  }
-  /* Another message follows: no bottom edge or corners. */
-  .runs-on .well::before {
-    border-block-end-color: transparent;
-    border-end-start-radius: 0;
-    border-end-end-radius: 0;
-  }
-  /* A theme switch is one cross-fade of the whole page (theme.svelte.ts):
-     the well's edge does not fade on its own under it. The page's rule
-     (app.css `theme-flip`) leaves pseudo-elements out for what a universal
-     pseudo-element selector costs, so the well's two are named here. */
-  :global(:root.theme-flip) .well::before,
-  :global(:root.theme-flip) .well::after {
-    transition: none !important;
-  }
+  /* The turn (Turn), its well (Well) and its speaker line (Who) are drawn by
+     the turn/ components; what this row adds to them is below. */
   /* The words of a queued message while they are in the composer, and on
      their way back: the flight is them, so the bubble draws none. */
   .away {
@@ -997,8 +867,9 @@
      note instead of a clock. The well stays at full strength, so the run
      reads as one surface. Not colour alone — the note text and the missing
      clock carry the state too, so it survives grayscale and reduced motion. */
-  .ghost > :global(.who),
-  .ghost .words {
+  /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
+  :global(.turn.ghost > .who),
+  :global(.turn.ghost) .words {
     opacity: var(--ghost-presence);
   }
   .chips {
@@ -1027,7 +898,8 @@
   /* Motion is opt-in. Without it every state above still lands — the note,
      the reason line — it simply lands at once. */
   @media (prefers-reduced-motion: no-preference) {
-    .turn.you > :global(.who),
+    /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
+    :global(.turn.you > .who),
     .words {
       transition: opacity var(--dur-menu) var(--ease-out);
     }
@@ -1069,7 +941,7 @@
     pointer-events: none;
     transition: opacity var(--dur-control) var(--ease-out);
   }
-  .grouped .turn-actions {
+  :global(.turn.grouped) .turn-actions {
     transform: translateY(calc(var(--space-2) - 100%));
     background: var(--surface-raised);
     border-radius: var(--radius-md);
@@ -1079,8 +951,8 @@
     }
   }
   @media (hover: hover) and (pointer: fine) {
-    .turn.you:hover .turn-actions,
-    .turn.you:focus-within .turn-actions,
+    :global(.turn.you:hover) .turn-actions,
+    :global(.turn.you:focus-within) .turn-actions,
     .turn-actions.pending {
       opacity: 1;
       pointer-events: auto;

@@ -9,7 +9,7 @@
  *
  * A delegate works in a workspace cut from this checkout. It installs the
  * repository, then calls `artifact_create({ kind: "sheet", file:
- * "apps/dashboard/src/lib/cawco/transcript/Who.stories.ts" })`, the real
+ * "apps/dashboard/src/lib/cawco/turn/Who.stories.ts" })`, the real
  * Who.svelte's three stories. Read from the engine (computed values, the
  * overlay's doc, the agent's own lines), never a picture:
  *
@@ -42,11 +42,11 @@ import { docOf, type On, pageFrame, screenBox } from "./ink";
 const CREATE = "mcp__cawco__artifact_create";
 const READ = "mcp__cawco__artifact_read";
 const FINISH = "mcp__cawco__finish_item";
-const STORY = "apps/dashboard/src/lib/cawco/transcript/Who.stories.ts";
-const COMPONENT = "apps/dashboard/src/lib/cawco/transcript/Who.svelte";
+const STORY = "apps/dashboard/src/lib/cawco/turn/Who.stories.ts";
+const COMPONENT = "apps/dashboard/src/lib/cawco/turn/Who.svelte";
 /** The files as the stage names them, from its Vite root. */
-const STORY_AT_ROOT = "src/lib/cawco/transcript/Who.stories.ts";
-const COMPONENT_AT_ROOT = "src/lib/cawco/transcript/Who.svelte";
+const STORY_AT_ROOT = "src/lib/cawco/turn/Who.stories.ts";
+const COMPONENT_AT_ROOT = "src/lib/cawco/turn/Who.svelte";
 const ROLE = '<span class="role">{name}</span>';
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
