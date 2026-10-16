@@ -1179,7 +1179,32 @@ export const createIngress = ({
     return pollView(row);
   };
 
-  const updatePoll = async (
+  /** Edits of one poll under way, by its id: one at a time each. */
+  const editing = new Map<string, Promise<unknown>>();
+
+  /**
+   * An edit of a poll, made from the row as the edit before it left it: its
+   * check awaits the connection's tools, and an edit that read the row
+   * before another's write would put that one's fields back.
+   */
+  const updatePoll = (
+    id: string,
+    patch: Partial<Omit<ConnectorPollInput, "connection" | "tool">>,
+    by: IngressActor
+  ): Promise<ConnectorPollView> => {
+    const before = editing.get(id) ?? Promise.resolve();
+    const edit = before
+      .catch(() => undefined)
+      .then(() => editPoll(id, patch, by));
+    editing.set(id, edit);
+    return edit.finally(() => {
+      if (editing.get(id) === edit) {
+        editing.delete(id);
+      }
+    });
+  };
+
+  const editPoll = async (
     id: string,
     patch: Partial<Omit<ConnectorPollInput, "connection" | "tool">>,
     by: IngressActor
