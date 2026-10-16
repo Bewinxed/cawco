@@ -161,7 +161,7 @@ function session(
 /**
  * What Claude reports on this machine, as the real Claude harness reports it:
  * every CawCo account dir (`~/.cawco/accounts/<id>/claude`) and what the
- * bundled Claude Code's own `claude auth status` says of it there, and the
+ * installed Claude Code's own `claude auth status` says of it there, and the
  * machine's Claude word from those. A proof machine is signed in by giving it
  * an account dir holding a credential and `oauthAccount`, as `claude auth
  * login` would leave it. The other harnesses report no sign-in.

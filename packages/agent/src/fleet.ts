@@ -60,6 +60,7 @@ import {
 } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
+import { resolveClaudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
 import {
   convergeDeniedTools,
@@ -70,7 +71,7 @@ import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
 import { placedMemoryDir } from "./placed-memory";
 import { noRepositoryAt } from "./stand-ins";
-import { claudeHomeEnv, resolveBin, toolEnv, toolPath } from "./tools";
+import { claudeHomeEnv, toolEnv, toolPath } from "./tools";
 import {
   CARRIED,
   carriedList,
@@ -538,15 +539,6 @@ const syncPlacedMcp = async (
   return placed;
 };
 
-/** The CLI the skill half drives — on PATH, or where the local installer puts it. */
-const claudeBin = async (): Promise<string | undefined> => {
-  const onPath = resolveBin("claude");
-  if (onPath) {
-    return onPath;
-  }
-  return (await Bun.file(LOCAL_CLAUDE).exists()) ? LOCAL_CLAUDE : undefined;
-};
-
 /**
  * Where a `claude` ends up when it is not the one PATH answers with. Every
  * entry is a real installer's destination: the CLI's own local installer, bun's
@@ -659,7 +651,7 @@ export const machineToolchain = async (
   if (!fresh && toolchainCache) {
     return toolchainCache;
   }
-  const claude = await claudeInstalls(await claudeBin());
+  const claude = await claudeInstalls(resolveClaudeExecutable());
   toolchainCache = claude.length > 0 ? { claude } : {};
   return toolchainCache;
 };
@@ -909,7 +901,8 @@ const syncPlugins = async (
 ): Promise<PluginRecords> => {
   const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
   const hubOnly = config.hubOnlyMarketplaces ?? [];
-  const bin = await claudeBin();
+  // The Claude Code sessions run: its plugins are the ones they load.
+  const bin = resolveClaudeExecutable();
   if (!bin) {
     for (const { name } of config.marketplaces) {
       report.marketplaces[name] = {

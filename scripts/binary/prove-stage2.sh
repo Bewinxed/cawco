@@ -143,6 +143,11 @@ EOF
   # manager", and private allocates "a new session keyring" with "the unique invocation ID … added as a protected key".
   # A rootless container's root is the host user, so every service of every machine took keys from that one user's
   # kernel.keys.maxkeys (200): run A of 2026-10-15 booted three machines, and the rest never got user@1000.service's bus.
+  # Each machine has Claude Code installed as a person installs it, with its own installer, for the user that runs
+  # CawCo (https://code.claude.com/docs/en/setup: "curl -fsSL https://claude.ai/install.sh | bash"; "bash -s <version>"
+  # pins one): CawCo ships none, and a machine is signed in by that Claude Code's `auth status` reading the account dir
+  # (account-dir.sh). Pinned to the CLI the SDK in this tree is built against, so the image's recipe names it.
+  claude_version=$(cd "$here/../../packages/agent" && bun -e 'console.log(require("@anthropic-ai/claude-agent-sdk/package.json").claudeCodeVersion)')
   cat > "$out/images/machine.Containerfile" <<EOF
 FROM $BASE_LOCAL
 ENV DEBIAN_FRONTEND=noninteractive
@@ -163,6 +168,7 @@ RUN apt-get update \\
  && printf '[Service]\\nTasksMax=infinity\\n' > /etc/systemd/system/user@.service.d/proof-tasks.conf \\
  && printf '[Slice]\\nTasksMax=infinity\\n' > /etc/systemd/system/user-.slice.d/proof-tasks.conf \\
  && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE\\n' > /etc/systemd/user.conf.d/proof.conf
+RUN su - cawco -c 'curl -fsSL https://claude.ai/install.sh | bash -s $claude_version' && test -x /home/cawco/.local/bin/claude
 EOF
 
   # ---------------------------------------------------------------- what every rig reads: fixtures and feeds
@@ -329,7 +335,7 @@ fi
 EOF
 # Signs a machine in to the CawCo account $1 the way `claude auth login` in that account's dir leaves it: the dir
 # ~/.cawco/accounts/$1/claude holding a credential (Linux keeps it in .credentials.json) and the account's
-# oauthAccount in the dir's own .claude.json. The token is fake; the bundled Claude Code's `auth status` reads the
+# oauthAccount in the dir's own .claude.json. The token is fake; the installed Claude Code's `auth status` reads the
 # dir as signed in without asking anyone, which is all a proof machine's sessions (a held `sleep`) need.
 cat > "$dir/account-dir.sh" <<'EOF'
 set -eu

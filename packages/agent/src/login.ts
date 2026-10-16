@@ -26,7 +26,7 @@ import {
   probeAccount,
   removeAccountDir,
 } from "./accounts";
-import { resolveClaudeExecutable } from "./auth";
+import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
 
 /**
  * Signing an account in on a machine from the dashboard, over the tunnel, in
@@ -223,7 +223,7 @@ const beginSignIn = async (
   }
   const executable = resolveClaudeExecutable();
   if (!executable) {
-    throw new Error("Claude Code is not installed on this machine.");
+    throw new Error(CLAUDE_NOT_INSTALLED);
   }
   const decoder = new TextDecoder();
   let signIn: SignIn | undefined;

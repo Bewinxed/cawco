@@ -42,7 +42,7 @@ import {
 } from "./service";
 
 /** Tools offered at install: what CawCo uses, none of it required to start. */
-const OFFERED = ["git", "opencode", "pi"] as const;
+const OFFERED = ["git", "claude", "opencode", "pi"] as const;
 const JOIN_TIMEOUT_MS = 90_000;
 /** How long a machine waits for the person to admit it, once the hub says it requires paired devices. */
 const ADMISSION_TIMEOUT_MS = 10 * 60_000;

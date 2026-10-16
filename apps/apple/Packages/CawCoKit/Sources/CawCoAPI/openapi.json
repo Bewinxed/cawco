@@ -50399,6 +50399,7 @@
         "type": "string",
         "enum": [
           "browser",
+          "claude",
           "git",
           "node",
           "opencode",

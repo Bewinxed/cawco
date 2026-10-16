@@ -130,7 +130,11 @@ import {
   probeAccount,
   projectMemoryRoot,
 } from "../accounts";
-import { claudeExecutableOptions, resolveClaudeExecutable } from "../auth";
+import {
+  CLAUDE_NOT_INSTALLED,
+  claudeExecutableOptions,
+  resolveClaudeExecutable,
+} from "../auth";
 import {
   claudeBoundaryOptions,
   hookFailsOpen,
@@ -3653,11 +3657,13 @@ export class ClaudeHarness implements Harness {
     const accounts = await accountReports();
     const auth = await claudeAuth(accounts);
     this.auth = auth;
+    const installed = resolveClaudeExecutable() !== undefined;
     return {
       harness: "claude",
-      installed: resolveClaudeExecutable() !== undefined,
+      installed,
       version: undefined,
       auth,
+      ...(installed ? {} : { authReason: CLAUDE_NOT_INSTALLED }),
       capabilities: CLAUDE_CAPABILITIES,
       accounts,
     };

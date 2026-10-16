@@ -6,6 +6,7 @@ import type {
   MachineCapability,
 } from "@cawco/core/capabilities";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
 import { opencodeBinary } from "./harnesses/opencode-client";
 import { installAdvice, resolveBin } from "./tools";
 
@@ -77,7 +78,13 @@ function linuxInstall(pkg: string): string {
   return `Install ${pkg} with this Linux distribution's package manager`;
 }
 
-const VERSIONED: readonly string[] = ["git", "opencode", "pi", "node"];
+const VERSIONED: readonly string[] = [
+  "git",
+  "claude",
+  "opencode",
+  "pi",
+  "node",
+];
 const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/;
 
 /**
@@ -115,6 +122,7 @@ async function readVersion(item: MachineCapability): Promise<void> {
 export async function probeCapabilities(): Promise<MachineCapabilities> {
   const mac = platform() === "darwin";
   const git = resolveBin("git");
+  const claude = resolveClaudeExecutable();
   const node = resolveBin("node");
   const browser = browserExecutable();
   let service: string | undefined;
@@ -133,6 +141,16 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       available: !!git,
       path: git,
       installCommand: mac ? "xcode-select --install" : linuxInstall("git"),
+    },
+    {
+      // The Claude Code sessions run (auth.ts), so the same lookup reports it.
+      id: "claude",
+      available: !!claude,
+      path: claude,
+      // Claude Code's native installer for macOS, Linux and WSL
+      // (https://code.claude.com/docs/en/setup).
+      installCommand: "curl -fsSL https://claude.ai/install.sh | bash",
+      ...(claude ? {} : { reason: CLAUDE_NOT_INSTALLED }),
     },
     {
       id: "opencode",

@@ -1,9 +1,5 @@
-import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
 import { platform } from "node:os";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { extractFromBunfs } from "@anthropic-ai/claude-agent-sdk/extract";
-import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
 
 /**
@@ -20,49 +16,33 @@ export const idle: AsyncIterable<SDKUserMessage> = {
   }),
 };
 
-/** The native CLI selected by the SDK's default platform-package resolution. */
-export const resolveClaudeExecutable = (): string | undefined => {
-  if (standalone) {
-    const path = extractFromBunfs(embeddedFile("native/claude"));
-    if (path.includes("$bunfs") || !existsSync(path)) {
-      throw new Error("Embedded Claude CLI extraction failed");
-    }
-    return path;
-  }
-  const require = createRequire(
-    import.meta.resolve("@anthropic-ai/claude-agent-sdk")
-  );
-  const name = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
-  const report =
-    process.platform === "linux" ? process.report?.getReport() : null;
-  const musl =
-    report !== null &&
-    typeof report === "object" &&
-    (report as { header?: { glibcVersionRuntime?: string } }).header
-      ?.glibcVersionRuntime === undefined;
-  let packages = [name];
-  if (process.platform === "android") {
-    packages = [`@anthropic-ai/claude-agent-sdk-linux-${process.arch}-android`];
-  } else if (process.platform === "linux") {
-    packages = musl ? [`${name}-musl`, name] : [name, `${name}-musl`];
-  }
-  const binary = process.platform === "win32" ? "claude.exe" : "claude";
-  for (const pkg of packages) {
-    try {
-      const path = require.resolve(`${pkg}/${binary}`);
-      if (existsSync(path)) {
-        return path;
-      }
-    } catch {
-      // An optional platform package that is not installed is not a CLI.
-    }
-  }
-  return undefined;
-};
+/** What a machine with no `claude` on the agent's PATH says, wherever it is asked. */
+export const CLAUDE_NOT_INSTALLED =
+  "Claude Code is not installed on this machine";
 
-/** Source callers retain SDK options; binaries always select their embedded CLI. */
-export const claudeExecutableOptions = () =>
-  standalone ? { pathToClaudeCodeExecutable: resolveClaudeExecutable() } : {};
+/**
+ * The Claude Code installed on this machine: the absolute path of the
+ * `claude` on the agent's PATH. CawCo carries no Claude Code of its own: the
+ * installed one holds the person's login (on macOS its Keychain item is tied
+ * to it), carries their plugins and updates itself.
+ */
+export const resolveClaudeExecutable = (): string | undefined =>
+  Bun.which("claude") ?? undefined;
+
+/**
+ * The one way every SDK call finds its CLI. Absolute, because the SDK
+ * rejects a bare name (it checks the path exists); without it the SDK would
+ * reach for its own platform package instead.
+ */
+export const claudeExecutableOptions = (): {
+  pathToClaudeCodeExecutable: string;
+} => {
+  const path = resolveClaudeExecutable();
+  if (!path) {
+    throw new Error(CLAUDE_NOT_INSTALLED);
+  }
+  return { pathToClaudeCodeExecutable: path };
+};
 
 /**
  * `errSecAuthFailed` (-25293), as `security` exits with it: the OSStatus's

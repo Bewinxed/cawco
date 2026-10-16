@@ -3097,6 +3097,7 @@ public enum OpenEnums {
     /// `#/components/schemas/MachineCapabilityId`.
     public enum MachineCapabilityId: OpenEnum {
         case browser
+        case claude
         case git
         case node
         case opencode
@@ -3108,6 +3109,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "browser": self = .browser
+            case "claude": self = .claude
             case "git": self = .git
             case "node": self = .node
             case "opencode": self = .opencode
@@ -3120,6 +3122,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .browser: "browser"
+            case .claude: "claude"
             case .git: "git"
             case .node: "node"
             case .opencode: "opencode"
@@ -3133,7 +3136,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.browser, .git, .node, .opencode, .pi, .serviceManager]
+        public static let allCases: [Self] = [.browser, .claude, .git, .node, .opencode, .pi, .serviceManager]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

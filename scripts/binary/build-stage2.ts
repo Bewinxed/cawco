@@ -29,14 +29,24 @@
  * its whole life, waiting for one when all are held.
  */
 import { copyFile, mkdir, rename, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { agentSdkVersion, buildBinary } from "../build-binary";
+import { buildBinary, packageDir } from "../build-binary";
 import { heavySlot } from "../lib/heavy-run";
 import { stageNativeClaude } from "./native-tarball";
 
 /** The commit before keepers ran side by side (packages/core/src/keepers.ts). */
 const BEFORE_SIDE_BY_SIDE = "eedffee6d89def230ba998aae49f289269abab43";
+
+/** The Claude Agent SDK version installed in the tree whose agent package is `agentManifest`. */
+const agentSdkVersion = async (agentManifest: string): Promise<string> => {
+  const manifest = join(
+    packageDir("@anthropic-ai/claude-agent-sdk", createRequire(agentManifest)),
+    "package.json"
+  );
+  return JSON.parse(await Bun.file(manifest).text()).version;
+};
 
 const [, , output] = Bun.argv;
 if (!output?.startsWith("/")) {
@@ -131,8 +141,10 @@ if (!(await exists(buildOne))) {
   ]);
   try {
     await run([process.execPath, "install", "--frozen-lockfile"], before);
-    // That commit's build script downloads the native binary unless it finds one
-    // already extracted in its work dir; put it there from the verified cache.
+    // That commit predates CawCo using the installed Claude Code: its build
+    // script still embeds the SDK's native CLI, and downloads it unless it
+    // finds one already extracted in its work dir. Put it there from the
+    // verified cache, so a dropped npm connection never fails the proof.
     const beforeSdk = await agentSdkVersion(
       join(before, "packages/agent/package.json")
     );

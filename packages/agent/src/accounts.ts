@@ -188,7 +188,7 @@ export const accountReports = async (): Promise<AccountReport[]> => {
 /**
  * The user name Claude Code files its Keychain item under: `$USER`, else the
  * login's, and `claude-code-user` when that is not `[a-zA-Z0-9._-]+`. Read
- * from Claude Code 2.1.289's own `I9()` (its bundled CLI) and
+ * from Claude Code 2.1.289's own `I9()` (its CLI's source) and
  * https://github.com/musistudio/claude-code-router/issues/1601.
  */
 export const keychainUser = (): string => {

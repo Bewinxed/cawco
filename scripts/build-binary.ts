@@ -6,7 +6,6 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
-import { nativeTarball, stageNativeClaude } from "./binary/native-tarball";
 
 export const PINNED_BUN = "1.4.2";
 export const TARGETS = [
@@ -19,7 +18,7 @@ const ROOT = resolve(import.meta.dir, "..");
 const requireAgent = createRequire(join(ROOT, "packages/agent/package.json"));
 const requireCore = createRequire(join(ROOT, "packages/core/package.json"));
 
-function packageDir(
+export function packageDir(
   name: string,
   require: ReturnType<typeof createRequire>
 ): string {
@@ -70,26 +69,6 @@ async function filesUnder(
   }
   return files;
 }
-/** The Claude Agent SDK version installed in the tree whose agent package is `agentManifest`. */
-export async function agentSdkVersion(
-  agentManifest = join(ROOT, "packages/agent/package.json")
-): Promise<string> {
-  const manifest = join(
-    packageDir("@anthropic-ai/claude-agent-sdk", createRequire(agentManifest)),
-    "package.json"
-  );
-  return JSON.parse(await Bun.file(manifest).text()).version;
-}
-
-async function nativeClaude(target: string, work: string): Promise<string> {
-  const version = await agentSdkVersion();
-  return await stageNativeClaude(
-    target,
-    version,
-    join(work, "native", version, target)
-  );
-}
-
 /** Builds one target at a time; release.ts owns locking, gates, signing and archives. */
 export async function buildBinary(options: {
   target: string;
@@ -264,7 +243,6 @@ export async function buildBinary(options: {
       join(ROOT, "packages/agent/src/upstream-shim.ts"),
     ],
     ["boundary/upstream-guard.ts", join(work, "upstream-guard.ts")],
-    ["native/claude", await nativeClaude(options.target, work)],
   ] as [string, string][];
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;
   const [platform, arch] = options.target.split("-");
@@ -419,14 +397,7 @@ export async function buildBinary(options: {
   );
 }
 
-const prefetch = Bun.argv.indexOf("--prefetch");
-if (import.meta.main && prefetch !== -1) {
-  // Fills the native tarball cache for every release target while npm is healthy.
-  const version = Bun.argv[prefetch + 1] ?? (await agentSdkVersion());
-  for (const target of TARGETS) {
-    console.log(`${target}: ${await nativeTarball(target, version)}`);
-  }
-} else if (import.meta.main) {
+if (import.meta.main) {
   const [
     target = "linux-x64",
     outfile = join(ROOT, ".context/binary-build/cawco"),

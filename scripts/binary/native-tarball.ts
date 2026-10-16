@@ -1,7 +1,9 @@
 /**
- * The Claude Agent SDK's native tarballs, fetched from npm at most once per
- * version and read from a local cache by every later build (release, proof,
- * stage 2). A cached file is used only while its SHA-512 matches npm's
+ * The Claude Agent SDK's native tarballs, for stage 2's build 1 alone
+ * (build-stage2.ts): that commit's build script embeds the CLI, which no build
+ * of this tree does (CawCo runs the Claude Code installed on the machine).
+ * Fetched from npm at most once per version and read from a local cache by
+ * every later run. A cached file is used only while its SHA-512 matches npm's
  * published `dist.integrity`; a download is written beside it and renamed in
  * only once verified, so a partial file is never read as a tarball.
  */

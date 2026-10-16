@@ -37,7 +37,7 @@ import { ensureDeps } from "./lib/deps";
 
 // The dependencies first (lib/deps.ts): what needs them loads after.
 await ensureDeps();
-const { idle, resolveClaudeExecutable } =
+const { claudeExecutableOptions, idle } =
   await import("../packages/agent/src/auth");
 const { scratchFleet, until } = await import("./scratch-fleet");
 
@@ -290,7 +290,7 @@ const freshSession = async () => {
     options: {
       persistSession: false,
       env,
-      pathToClaudeCodeExecutable: resolveClaudeExecutable(),
+      ...claudeExecutableOptions(),
     },
   });
   try {

@@ -24,7 +24,7 @@ Add a project from the projects rail: name it, choose a machine, and pick its di
 
 ## What it works with
 
-CawCo runs Claude Code, OpenCode, and pi sessions. Keep the hub on your own trusted network or tailnet. Never expose it publicly or port-forward it. CawCo has no sign-in of its own: anyone who can reach the hub can operate the fleet.
+CawCo runs Claude Code, OpenCode, and pi sessions. Claude sessions use the Claude Code installed on each machine, the `claude` on the daemon's PATH; CawCo ships none of its own. Install it with `curl -fsSL https://claude.ai/install.sh | bash` ([Claude Code setup](https://code.claude.com/docs/en/setup)). Keep the hub on your own trusted network or tailnet. Never expose it publicly or port-forward it. CawCo has no sign-in of its own: anyone who can reach the hub can operate the fleet.
 
 ## Development
 
