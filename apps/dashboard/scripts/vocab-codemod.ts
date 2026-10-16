@@ -19,11 +19,13 @@
  *   `leading-normal`, `max-w-sm`, `sm:`, `@md/field-group:`). A class under
  *   a breakpoint the theme lacks (`md:`) goes where the same class without
  *   it always stands beside it, and otherwise keeps its width
- *   (`min-[48rem]:`);
- * - shadcn-svelte's state variants to the named ones: `data-checked:`
- *   matched `[data-state="checked"]`, which is what bits-ui writes, so it
- *   becomes `state-checked:`; the sidebar's buttons write
- *   `data-active="true|false"`, so `data-active:` becomes `active-true:`.
+ *   (`min-[48rem]:`).
+ *
+ * shadcn-svelte's state variants (`data-checked:`, `data-active:` …) stay as
+ * written: variants.css carries them as shadcn-svelte's stylesheet wrote
+ * them, each a zero-specificity `:where()` over two attributes. A named
+ * variant (`state-checked:`) is one attribute at an attribute's specificity,
+ * so it would win a tie `hover:` used to win, and match fewer elements.
  *
  * `text-<role>` stays as written: the theme makes it, with today's
  * declarations.
@@ -56,8 +58,6 @@ const THEME = join(DASHBOARD, "src/lib/tokens/theme.css");
 const DECLARATION = /--([a-z0-9-]+):\s*([^;]+);/g;
 const SPACES = /\s+/g;
 const VAR = /var\(--([a-z0-9-]+)\)/g;
-const STATE_VARIANT =
-  /^((?:group|peer|has|not|in)-)?data-(checked|unchecked|open|closed|active)(\/[\w-]+)?$/;
 const CONTAINER_VARIANT = /^@(max-)?([\w-]+)\/([\w-]+)$/;
 const MAX = /^max-/;
 const OPACITY = /\/[\w.]+$/;
@@ -228,15 +228,6 @@ const LOST_BREAKPOINTS: Record<string, string> = {
   xl: "80rem",
   "2xl": "96rem",
 };
-/** shadcn-svelte's state variants, by the attribute state the kit's elements carry. */
-const STATE_VARIANTS: Record<string, string> = {
-  checked: "state-checked",
-  unchecked: "state-unchecked",
-  open: "state-open",
-  closed: "state-closed",
-  active: "active-true",
-};
-
 /**
  * Tailwind's default scales, by the theme namespace that would give each a
  * value: a class from one whose key the theme lacks has no value, and is a
@@ -271,11 +262,6 @@ function renameVariant(
   v: string,
   containers: Map<string, string>
 ): string | { none: string } | undefined {
-  const state = STATE_VARIANT.exec(v);
-  if (state) {
-    const [, prefix = "", name, label = ""] = state;
-    return `${prefix}${STATE_VARIANTS[name]}${label}`;
-  }
   const bare = v.replace(MAX, "");
   const max = v.startsWith("max-") ? "max-" : "";
   if (BREAKPOINTS[bare]) {

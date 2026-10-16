@@ -2215,6 +2215,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- A scroller that draws no scrollbar (the command list, the sidebar's
+   content). It came with shadcn-svelte's stylesheet, unchanged here. */
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* ---- The sweep across a thinking line: the kit's thinking indicator's
    words and an active reasoning step's, each a `.shimmer` span. The words
    are drawn by a band of their own ink, at a fifth of its strength by day
