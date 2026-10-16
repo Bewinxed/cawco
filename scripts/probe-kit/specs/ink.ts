@@ -96,9 +96,7 @@ const shownTestMap = (on: On) =>
     async () => {
       const shown = await pageFrame(on);
       return (await shown
-        .locator(
-          'article:is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
-        )
+        .locator("article.card")
         .count()
         .catch(() => 0)) > 100
         ? shown
@@ -1473,11 +1471,7 @@ const mapChecks = async (on: On) => {
 
     // One card, then every card in view: the same lag after the lift, the same wait for its picture.
     const card = await frame.evaluate(() => {
-      const cards = [
-        ...document.querySelectorAll(
-          'article:is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
-        ),
-      ];
+      const cards = [...document.querySelectorAll("article.card")];
       const one = cards[Math.floor(cards.length / 2)];
       one?.scrollIntoView({ block: "center" });
       const r = one?.getBoundingClientRect();

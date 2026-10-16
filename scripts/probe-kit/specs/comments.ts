@@ -1453,7 +1453,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
     }
     openCard = now;
   }
-  const tall = await screenBox(on, frame, "[data-tall]");
+  const tall = await screenBox(on, frame, ".tall");
   tapped.push(
     await tapPin(
       tall.x + 20,
@@ -1629,9 +1629,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
           .evaluate(
             ([kind, cards]) =>
               document.body?.dataset.scroller === kind &&
-              document.querySelectorAll(
-                ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
-              ).length === cards &&
+              document.querySelectorAll(".card").length === cards &&
               "cawcoArtifact" in window,
             [scroller, CARDS] as const
           )
@@ -1661,15 +1659,11 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
       const r = one.getBoundingClientRect();
       return Math.abs(r.top + r.height / 2 - mid);
     };
-    const cards = [
-      ...document.querySelectorAll<HTMLElement>(
-        ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
-      ),
-    ];
+    const cards = [...document.querySelectorAll<HTMLElement>(".card")];
     const nearest = cards.reduce((a, b) => (away(b) < away(a) ? b : a));
     return Number(nearest.dataset.n);
   });
-  const selector = `:is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])[data-n="${n}"]`;
+  const selector = `.card[data-n="${n}"]`;
   // How far the scroller moved from `start`, at any frame or scroll event, from here on.
   await frame.evaluate(
     ([top, y]) => {
@@ -1886,11 +1880,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
     () =>
       reloaded.evaluate(
         () =>
-          document
-            .querySelectorAll(
-              ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
-            )[2]
-            ?.getAttribute("data-n") ?? null
+          document.querySelectorAll(".card")[2]?.getAttribute("data-n") ?? null
       ),
     (third) => third === String(n),
     15_000
@@ -1920,12 +1910,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
         return el
           ? {
               n: el.getAttribute("data-n"),
-              at:
-                [
-                  ...document.querySelectorAll(
-                    ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
-                  ),
-                ].indexOf(el) + 1,
+              at: [...document.querySelectorAll(".card")].indexOf(el) + 1,
             }
           : null;
       }, keptAnchor.anchor.selector)
@@ -1998,9 +1983,7 @@ const dismissChecks = async (on: On) => {
    * from its pin, leaves the other's disc clear to press.
    */
   const n = await frame.evaluate(() => {
-    const eight = document.querySelector(
-      ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])[data-n="8"]'
-    );
+    const eight = document.querySelector('.card[data-n="8"]');
     eight?.scrollIntoView({ block: "center" });
     const next = eight?.nextElementSibling as HTMLElement | null | undefined;
     const r = next?.getBoundingClientRect();
@@ -2014,10 +1997,7 @@ const dismissChecks = async (on: On) => {
   const tapNew = async () => {
     const held = Object.keys(await pinsNow()).length;
     const pane = await on.page.locator(FRAME).boundingBox();
-    const box = await boxIn(
-      frame,
-      `:is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])[data-n="${n}"]`
-    );
+    const box = await boxIn(frame, `.card[data-n="${n}"]`);
     const at = {
       x: (pane?.x ?? 0) + box.x + box.w * 0.7,
       y: (pane?.y ?? 0) + box.y + box.h * 0.5,
@@ -2119,9 +2099,7 @@ const dismissChecks = async (on: On) => {
   ) as { number: number } | undefined;
   await frame.evaluate(() =>
     document
-      .querySelector(
-        ':is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])[data-n="8"]'
-      )
+      .querySelector('.card[data-n="8"]')
       ?.scrollIntoView({ block: "center" })
   );
   await settle(on.page, 300);
