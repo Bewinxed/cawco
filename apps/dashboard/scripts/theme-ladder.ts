@@ -14,6 +14,7 @@ import type {
 const VARIANTS = "src/lib/tokens/variants.css";
 const REFERENCE = /^\{([^}]+)\}$/;
 const VAR = /var\(--([a-z0-9-]+)\)/g;
+const TOKEN_REFERENCE = /\{([a-z0-9.-]+)\}/g;
 const CUSTOM_VARIANT = /@custom-variant ([a-z0-9-]+)/g;
 
 /** A token's value at rest: its DTCG value, references followed to the value they name. */
@@ -31,12 +32,17 @@ function restingValue(token: ViewToken, view: TokenView): string {
   return JSON.stringify(raw);
 }
 
-/** What a context's CSS for a token comes to, its references followed. */
+/** What a context's CSS for a token comes to, its references (`var(--x)`, `{group.x}`) followed. */
 function contextValue(css: string, view: TokenView): string {
-  return css.replace(VAR, (whole, name: string) => {
-    const token = view.tokens.find((t) => t.name === name);
-    return token ? restingValue(token, view) : whole;
-  });
+  return css
+    .replace(VAR, (whole, name: string) => {
+      const token = view.tokens.find((t) => t.name === name);
+      return token ? restingValue(token, view) : whole;
+    })
+    .replace(TOKEN_REFERENCE, (whole, path: string) => {
+      const token = view.byPath.get(path);
+      return token ? restingValue(token, view) : whole;
+    });
 }
 
 export async function printLadder(
