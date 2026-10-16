@@ -254,6 +254,11 @@ export const SURFACES: Surface[] = [
       },
       { name: "question", route: (s) => `/session/${s.ask}`, root: MAIN },
       {
+        name: "answered",
+        route: (s) => `/session/${s.answered}`,
+        root: MAIN,
+      },
+      {
         name: "permission",
         route: (s) => `/session/${s.permission}`,
         root: MAIN,
