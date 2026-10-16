@@ -6661,36 +6661,40 @@ const make = async (path: string): Promise<DbShape> => {
     listAgents: () => {
       const toolCells = toolsByMachine();
       const reports = harnessesByMachine();
-      return db
-        .select()
-        .from(agents)
-        .all()
-        .map(
-          ({
-            addressContract: _addressContract,
-            fleet,
-            build,
-            home,
-            machineCapabilities,
-            pausedUntil,
-            pauseStopped,
-            ...agent
-          }) => {
-            const harnesses = reports.get(agent.machineId);
-            return {
-              ...agent,
-              tools: toolCells.get(agent.machineId) ?? {},
-              pausedUntil: pausedUntil?.getTime() ?? null,
-              pauseStopped:
-                (pauseStopped && stoppedWords(pauseStopped)) || null,
-              ...(fleet ? { fleet } : {}),
-              ...(build ? { build } : {}),
-              ...(harnesses ? { harnesses } : {}),
-              ...(home ? { home } : {}),
-              ...(machineCapabilities ? { machineCapabilities } : {}),
-            };
-          }
-        );
+      return (
+        db
+          .select()
+          .from(agents)
+          // Join order: core `namedAmong` numbers machines that share a name by it.
+          .orderBy(asc(agents.createdAt), asc(agents.machineId))
+          .all()
+          .map(
+            ({
+              addressContract: _addressContract,
+              fleet,
+              build,
+              home,
+              machineCapabilities,
+              pausedUntil,
+              pauseStopped,
+              ...agent
+            }) => {
+              const harnesses = reports.get(agent.machineId);
+              return {
+                ...agent,
+                tools: toolCells.get(agent.machineId) ?? {},
+                pausedUntil: pausedUntil?.getTime() ?? null,
+                pauseStopped:
+                  (pauseStopped && stoppedWords(pauseStopped)) || null,
+                ...(fleet ? { fleet } : {}),
+                ...(build ? { build } : {}),
+                ...(harnesses ? { harnesses } : {}),
+                ...(home ? { home } : {}),
+                ...(machineCapabilities ? { machineCapabilities } : {}),
+              };
+            }
+          )
+      );
     },
     // A discarded spin-off is gone for good, and a row that has not moved in a
     // day is history no rail has a use for — a running one stays whatever its

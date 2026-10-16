@@ -900,21 +900,23 @@ export interface NamedMachine {
 
 /**
  * A machine as a sentence names it among `fleet`: its {@link machineLabel},
- * and its machine id after it when another machine of the fleet shows the
- * same name (machines on one host do, a scratch fleet's all of them), so
- * the sentence never names two machines alike.
+ * never its id. Machines that show the same name (machines on one host do, a
+ * scratch fleet's all of them) are told apart by their place in `fleet`,
+ * which the hub lists in join order: the first is "obelisk", the next
+ * "obelisk · 2", so the sentence never names two machines alike.
  */
 export function namedAmong(
   machine: NamedMachine,
   fleet: readonly NamedMachine[]
 ): string {
   const name = machineLabel(machine.hostname);
-  const shared = fleet.some(
-    (other) =>
-      other.machineId !== machine.machineId &&
-      machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
+  const alike = fleet.filter(
+    (other) => machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
   );
-  return shared ? `${name} (${machine.machineId})` : name;
+  const place = alike.findIndex(
+    (other) => other.machineId === machine.machineId
+  );
+  return place > 0 ? `${name} · ${place + 1}` : name;
 }
 
 /** Machines as a sentence lists them, each by {@link namedAmong} among `fleet`, or `none`. */

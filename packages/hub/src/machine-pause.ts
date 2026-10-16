@@ -28,7 +28,7 @@
  * hub's restart and its agent's; the timer is armed again as the hub starts.
  */
 import {
-  namedAmong,
+  machineCalled,
   pauseClock,
   type RunKind,
   type StoppedCommands,
@@ -187,9 +187,7 @@ export const createMachinePause = (deps: MachinePauseDeps): MachinePause => {
       if (at === undefined) {
         return;
       }
-      const agents = db.listAgents();
-      const agent = agents.find((each) => each.machineId === machineId);
-      const name = agent ? namedAmong(agent, agents) : machineId;
+      const name = machineCalled(machineId, db.listAgents());
       return `${name} is paused until ${pauseClock(at)}`;
     },
     free: (machineId) =>
