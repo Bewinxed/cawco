@@ -90,6 +90,26 @@ const tool = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
+/** The text of the tool result a request's final message carries (Anthropic messages: a `tool_result` block, its content a string or text blocks). */
+const toolResultOf = (body: string): string => {
+  const sent = JSON.parse(body) as {
+    messages?: { content?: unknown }[];
+  };
+  const content = sent.messages?.at(-1)?.content;
+  const block = Array.isArray(content)
+    ? (content as { content?: unknown; type?: string }[]).find(
+        (one) => one.type === "tool_result"
+      )
+    : undefined;
+  const result = block?.content;
+  if (typeof result === "string") {
+    return result;
+  }
+  return Array.isArray(result)
+    ? (result as { text?: string }[]).map((one) => one.text ?? "").join("\n")
+    : "";
+};
+
 /** The delegate: installs the checkout first, then calls whatever tool the probe asks (`PROBE-CALL:<n>`), loading it through ToolSearch when deferred. */
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
@@ -106,18 +126,27 @@ const respond = (request: Seen): Reply => {
       timeout: 600_000,
     });
   }
+  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
+  const ask = marker ? asks.get(marker) : undefined;
+  // The call's result, from its own block: words the hub delivers mid-turn
+  // (the errors notice, a burst of marks) can ride the same message, and
+  // then they, not the result, are `last`.
+  if (
+    marker &&
+    issued.has(marker) &&
+    !answered.has(marker) &&
+    request.afterTool
+  ) {
+    answered.set(marker, toolResultOf(request.body));
+    return text("done");
+  }
   if (ERRORS_NOTICE.test(request.last)) {
     return text("Heard the compile error.");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
   if (!(marker && ask)) {
     return text("Installed.");
   }
   if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
     return text("done");
   }
   if (request.toolNames.includes(ask.name)) {
@@ -377,7 +406,7 @@ const errorChecks = async (
   kit.check(
     "3: the fix clears it: the card goes, and artifact_read lists no error",
     cleared && errors === "[]",
-    `card ${cleared ? "gone" : "still there"}; artifact_read errors ${errors}`
+    `card ${cleared ? "gone" : "still there"}; artifact_read errors ${errors}${errors === "missing" ? `; it answered ${JSON.stringify(read.slice(0, 300))}` : ""}`
   );
 };
 
