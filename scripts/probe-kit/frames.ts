@@ -658,7 +658,15 @@ export async function traceMain(
   };
   const trackedAs = (name: string) =>
     events.filter((event) => event.name === name && event.pid === first.pid);
-  const restyleAsks = trackedAs("StyleRecalcInvalidationTracking");
+  // A container's whole subtree restyled is asked for here, not by the
+  // element-by-element invalidations above: the node it names is where the
+  // restyle starts.
+  const restyleAsks = [
+    ...trackedAs("StyleRecalcInvalidationTracking"),
+    ...trackedAs("StyleInvalidatorInvalidationTracking").filter((one) =>
+      /subtree/i.test(one.args?.data?.reason ?? "")
+    ),
+  ];
   const relayoutAsks = trackedAs("LayoutInvalidationTracking");
   const askedIn = (
     asks: TraceEvent[],
@@ -675,7 +683,11 @@ export async function traceMain(
         counted.set(key, (counted.get(key) ?? 0) + 1);
       }
     }
-    return [...counted].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    // A whole subtree asked for once outweighs an element asked for often.
+    const whole = (key: string) => (/subtree/i.test(key) ? 1 : 0);
+    return [...counted]
+      .sort((a, b) => whole(b[0]) - whole(a[0]) || b[1] - a[1])
+      .slice(0, 8);
   };
   const passesIn = (from: number, to: number) =>
     [...recalcs, ...layouts]
