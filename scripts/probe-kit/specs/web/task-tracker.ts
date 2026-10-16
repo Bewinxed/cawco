@@ -121,17 +121,20 @@ async function sheet(
   await open(page, `${url}?task=${task}`, () =>
     Boolean(
       document.querySelector("[data-task-pane] .activity .change") &&
-      document.querySelector("[data-task-pane] .activity textarea")
+      document.querySelector(
+        '[data-task-pane] .activity [contenteditable="true"][role="combobox"]'
+      )
     )
   );
   await settle(page);
 
   // a. A comment, posted in the composer.
   const said = `Lead with the pricing change (${view}).`;
-  // By its name: the field keeps a hidden twin it measures its rows by.
+  // The session Composer's field: an editable combobox (its @ offers names),
+  // named by the sheet's placeholder; Enter sends it.
   const composer = page
     .locator(`${SHEET} .activity`)
-    .getByRole("textbox", { name: "Comment on this task" });
+    .getByRole("combobox", { name: "Add a comment" });
   await composer.fill(said);
   await composer.press("Enter");
   await page.waitForFunction(
