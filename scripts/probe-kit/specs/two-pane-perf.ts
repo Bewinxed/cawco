@@ -360,31 +360,40 @@ const census = (page: Page): Promise<string> =>
   );
 
 /**
- * What showing the warm pane costs alone, the page's clock: its class taken
- * off with the page otherwise settled, the style that asks for (a computed
- * style read, which styles the page) and then the layout (a box read), and
- * the class put back. Whether a switch's restyle is the reveal's own.
+ * What showing a pane costs alone, the page's clock: `hides` (the class that
+ * keeps it from view) taken off the pane `selector` finds, with the page
+ * otherwise settled; the style that asks for (a computed style read, which
+ * styles the page) and then the layout (a box read); the class put back.
+ * `.pane-settling` reveals by `visibility`, which the pane's every element
+ * inherits; `.pane-hidden` by `content-visibility`, which none does.
  */
-const revealAlone = (page: Page): Promise<string> =>
-  page.evaluate(() => {
-    const pane = document.querySelector<HTMLElement>(".pane.pane-settling");
-    if (!pane) {
-      return "no warm pane";
-    }
-    const inside = pane.getElementsByTagName("*").length;
-    const last = pane.querySelector<HTMLElement>("*:last-child") ?? pane;
-    document.body.getBoundingClientRect();
-    const at = performance.now();
-    pane.classList.remove("pane-settling");
-    const shown = getComputedStyle(last).visibility;
-    const styled = performance.now();
-    pane.getBoundingClientRect();
-    last.getBoundingClientRect();
-    const laid = performance.now();
-    pane.classList.add("pane-settling");
-    document.body.getBoundingClientRect();
-    return `${inside} elements (${shown}): style ${(styled - at).toFixed(1)}ms, layout ${(laid - styled).toFixed(1)}ms`;
-  });
+const revealAlone = (
+  page: Page,
+  selector: string,
+  hides: string
+): Promise<string> =>
+  page.evaluate(
+    ([find, name]) => {
+      const pane = document.querySelector<HTMLElement>(find);
+      if (!pane) {
+        return `no ${find}`;
+      }
+      const inside = pane.getElementsByTagName("*").length;
+      const last = pane.querySelector<HTMLElement>("*:last-child") ?? pane;
+      document.body.getBoundingClientRect();
+      const at = performance.now();
+      pane.classList.remove(name);
+      const shown = getComputedStyle(last).visibility;
+      const styled = performance.now();
+      pane.getBoundingClientRect();
+      last.getBoundingClientRect();
+      const laid = performance.now();
+      pane.classList.add(name);
+      document.body.getBoundingClientRect();
+      return `${inside} elements (${shown}): style ${(styled - at).toFixed(1)}ms, layout ${(laid - styled).toFixed(1)}ms`;
+    },
+    [selector, hides] as const
+  );
 
 /**
  * The script in each press's longest task (the one a switch is held to),
@@ -736,15 +745,28 @@ async function measure(
   kit.note(
     `${mode} pane(s), point: the script in its ${presses.length} switches' longest tasks, by self time, all told: ${scriptOf(sampled, presses)}`
   );
-  const reveals: string[] = [];
+  // A pane shown alone, both ways: put away (`content-visibility`), the
+  // tab not yet reached for; then warm (`visibility`), its tab under the
+  // pointer.
+  const putAway: string[] = [];
+  const warmed: string[] = [];
   for (const id of order) {
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(REST_MS);
+    const pane = `.pane.pane-hidden[data-pane="${id}"]`;
+    putAway.push(await revealAlone(page, pane, "pane-hidden"));
     await ways.point.reach(tabOf(id));
     await page.waitForTimeout(REACH_MS);
-    reveals.push(await revealAlone(page));
+    warmed.push(
+      await revealAlone(page, ".pane.pane-settling", "pane-settling")
+    );
   }
   await page.mouse.move(0, 0);
   kit.note(
-    `${mode} pane(s), a warm pane shown alone (its \`.pane-settling\` taken off, nothing else): ${reveals.join("; ")}`
+    `${mode} pane(s), a pane shown alone by \`content-visibility\` (\`.pane-hidden\` taken off): ${putAway.join("; ")}`
+  );
+  kit.note(
+    `${mode} pane(s), a pane shown alone by \`visibility\` (\`.pane-settling\` taken off): ${warmed.join("; ")}`
   );
   const seen = await page.evaluate(
     () => (window as unknown as { __cost: Cost }).__cost
