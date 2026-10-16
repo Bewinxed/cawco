@@ -88,21 +88,21 @@ import {
 } from "../kit";
 import { emulateMotion } from "../motion";
 
-const PILL = "form.cin";
+const PILL = 'form[data-slot="cin"]';
 const FIELD = COMPOSER;
-const STAGE = ".canvas-stage:not([hidden])";
-const FRAME = ".canvas-stage iframe";
-const SLOT = ".composer > .canvas-slot";
-const CHIP = ".canvas-chip";
+const STAGE = '[data-slot="canvas-stage"]:not([hidden])';
+const FRAME = '[data-slot="canvas-stage"] iframe';
+const SLOT = '[data-slot="composer"] > [data-slot="canvas-slot"]';
+const CHIP = '[data-slot="canvas-chip"]';
 /** The composer's own dock (the pane draws a `.dock` of its own around it). */
-const DOCK = ".dock[data-keeps-draft]";
+const DOCK = '[data-slot="dock"][data-keeps-draft]';
 /**
  * What the canvas's motion runs on, and only that: its stage and the grown
  * shape's outline in the composer's dock. The dock's own Svelte transitions
  * (unnamed runs that may end before the page reads them) are not the
  * canvas's clock, so a catch never holds them.
  */
-const MOTION = `.canvas-stage, ${DOCK} .grown-halo`;
+const MOTION = `[data-slot="canvas-stage"], ${DOCK} [data-slot="grown-halo"]`;
 const DRAWER = "cubic-bezier(0.32, 0.72, 0, 1)";
 const EASE_OUT = "cubic-bezier(0.23, 1, 0.32, 1)";
 
@@ -482,7 +482,7 @@ const column = (page: Page) =>
   page.evaluate((sel) => {
     const dock = document.querySelector(sel)?.getBoundingClientRect();
     const composer = document
-      .querySelector(`${sel} .composer`)
+      .querySelector(`${sel} [data-slot="composer"]`)
       ?.getBoundingClientRect();
     const space = Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue("--space-3")
@@ -593,8 +593,8 @@ const probe = async (kit: Kit) => {
 };
 
 /** The Send/Stop button and the glyph carriers it swaps. */
-const SEND = ".ctrls .stop";
-const SWAP = ".stop .swap";
+const SEND = '[data-slot="ctrls"] :is([data-stop], [data-slot="stop"])';
+const SWAP = ':is([data-stop], [data-slot="stop"]) [data-slot="swap"]';
 
 /**
  * Each run moving a glyph carrier in the button, by its own kind: `out` for
@@ -697,7 +697,7 @@ const swapCheck = async (on: On, clock: Clock) => {
     const held = await page.evaluate((sel) => {
       const send = document.querySelector(sel);
       return {
-        carriers: send?.querySelectorAll(".swap").length ?? 0,
+        carriers: send?.querySelectorAll('[data-slot="swap"]').length ?? 0,
         label: send?.getAttribute("aria-label"),
         html: send?.innerHTML.slice(0, 160) ?? "no button",
       };
@@ -717,7 +717,9 @@ const swapCheck = async (on: On, clock: Clock) => {
     const button = () =>
       page.evaluate((sel) => {
         const send = document.querySelector(sel);
-        const carriers = [...(send?.querySelectorAll(".swap") ?? [])];
+        const carriers = [
+          ...(send?.querySelectorAll('[data-slot="swap"]') ?? []),
+        ];
         return {
           label: send?.getAttribute("aria-label") ?? null,
           busy: send?.getAttribute("aria-busy") ?? null,
@@ -919,7 +921,7 @@ const touchCheck = async (on: On) => {
   await settle(page);
   const seen = await page.evaluate(
     ([stage]) => ({
-      wheel: !!document.querySelector(".shell.rolling"),
+      wheel: !!document.querySelector('[data-slot="shell"][data-rolling]'),
       canvas: !!document.querySelector(stage as string),
     }),
     [STAGE]
@@ -961,9 +963,9 @@ const openCheck = async (
   // whole, never cut by a clip of its own.
   await seekCanvas(page, 0.2);
   const halfway = await page.evaluate((sel) => {
-    const halo = document.querySelector(`${sel} .grown-halo`);
+    const halo = document.querySelector(`${sel} [data-slot="grown-halo"]`);
     const path = halo?.querySelector("path");
-    const field = document.querySelector(`${sel} form.cin`);
+    const field = document.querySelector(`${sel} form[data-slot="cin"]`);
     return halo && path && field
       ? {
           height: halo.getBoundingClientRect().height,
@@ -979,8 +981,9 @@ const openCheck = async (
   const room = await column(page);
   const whole = await page.evaluate(
     (sel) =>
-      document.querySelector(`${sel} .grown-halo`)?.getBoundingClientRect()
-        .height ?? 0,
+      document
+        .querySelector(`${sel} [data-slot="grown-halo"]`)
+        ?.getBoundingClientRect().height ?? 0,
     DOCK
   );
   await clock.release();
@@ -1057,7 +1060,7 @@ const strokes = async (on: On, pen: ReturnType<typeof penOf>) => {
 const resizeCheck = async (on: On, clock: Clock) => {
   const { kit, page } = on;
   const room = await column(page);
-  const grab = await box(page, ".canvas-stage .grab");
+  const grab = await box(page, '[data-slot="canvas-stage"] [data-slot="grab"]');
   if (!(room && grab)) {
     kit.check("4: the canvas has a grab on its top edge", false);
     return;
@@ -1092,7 +1095,10 @@ const resizeCheck = async (on: On, clock: Clock) => {
     `settled ${floored}, floor ${room.min}; ${JSON.stringify(runs)}`
   );
   // Up past the column: the column less the field.
-  const top = (await box(page, ".canvas-stage .grab")) as Box;
+  const top = (await box(
+    page,
+    '[data-slot="canvas-stage"] [data-slot="grab"]'
+  )) as Box;
   await page.mouse.move(gx, top.top + top.height / 2);
   await page.mouse.down();
   await page.mouse.move(gx, room.top - 200, { steps: 16 });
@@ -1107,9 +1113,11 @@ const resizeCheck = async (on: On, clock: Clock) => {
   );
 };
 
-const CORNER_LEFT = ".canvas-stage .grab-top-left";
-const CORNER_RIGHT = ".canvas-stage .grab-top-right";
-const TOP_GRAB = ".canvas-stage .grab-top";
+const CORNER_LEFT =
+  '[data-slot="canvas-stage"] [data-canvas-stages-grab="top-left"]';
+const CORNER_RIGHT =
+  '[data-slot="canvas-stage"] [data-canvas-stages-grab="top-right"]';
+const TOP_GRAB = '[data-slot="canvas-stage"] [data-canvas-stages-grab="top"]';
 
 /** The column's sides the width holds to (less --space-3 each side) and the pill's box. */
 const sides = (page: Page) =>
@@ -1122,7 +1130,7 @@ const sides = (page: Page) =>
         .querySelector(pill as string)
         ?.getBoundingClientRect();
       const shell = document
-        .querySelector(`${sel} .shell`)
+        .querySelector(`${sel} [data-slot="shell"]`)
         ?.getBoundingClientRect();
       const space = Number.parseFloat(
         getComputedStyle(document.documentElement).getPropertyValue("--space-3")
@@ -1397,7 +1405,7 @@ const removeCheck = async (
   const { kit, page, fleet, session } = on;
   const exit = await ms(page, "--dur-grow-exit");
   // The reduced-motion check left its canvas folded to its chip: open it and draw.
-  await page.click(`${CHIP} .canvas-open`);
+  await page.click(`${CHIP} [data-slot="canvas-open"]`);
   await settle(page, 300);
   const id = await page.getAttribute(STAGE, "data-artifact");
   const frame = await (
@@ -1427,7 +1435,9 @@ const removeCheck = async (
     ([stage, chip]) => ({
       stage: !!document.querySelector(stage as string),
       chip: !!document.querySelector(chip as string),
-      atts: document.querySelectorAll(".composer .atts [data-artifact]").length,
+      atts: document.querySelectorAll(
+        '[data-slot="composer"] [data-slot="atts"] [data-artifact]'
+      ).length,
     }),
     [STAGE, CHIP]
   );
@@ -1538,14 +1548,14 @@ const syncCheck = async (on: On) => {
   };
   /** Send with the canvas standing: the line it says under the field, or the row it became. */
   const send = async (words: string) => {
-    const rows = await page.locator(".turn.you").count();
+    const rows = await page.locator('[data-slot="turn"][data-you]').count();
     await page.fill(FIELD, words);
     await page.focus(FIELD);
     await page.keyboard.press("Enter");
     // The last refusal leaves first (Send clears it; it folds away): the answer is this Send's.
     await until(
       "the last refusal gone",
-      () => page.locator(".send-error").count(),
+      () => page.locator('[data-slot="send-error"]').count(),
       (count) => count === 0,
       5000
     ).catch(() => undefined);
@@ -1553,12 +1563,18 @@ const syncCheck = async (on: On) => {
       "Send's answer",
       () =>
         page.evaluate(
-          () => document.querySelector(".send-error")?.textContent?.trim() ?? ""
+          () =>
+            document
+              .querySelector('[data-slot="send-error"]')
+              ?.textContent?.trim() ?? ""
         ),
       Boolean,
       20_000
     ).catch(() => "");
-    return { said, sent: (await page.locator(".turn.you").count()) - rows };
+    return {
+      said,
+      sent: (await page.locator('[data-slot="turn"][data-you]').count()) - rows,
+    };
   };
   const linked = () => page.evaluate(() => window.kitLinks ?? []);
 
@@ -1729,7 +1745,7 @@ const heldExportCheck = async (on: On) => {
     held += 1;
   });
   const words = "The canvas with its export held";
-  const rows = await page.locator(".turn.you").count();
+  const rows = await page.locator('[data-slot="turn"][data-you]').count();
   await page.fill(FIELD, words);
   await page.focus(FIELD);
   const pressed = performance.now();
@@ -1738,7 +1754,10 @@ const heldExportCheck = async (on: On) => {
     "Send's answer",
     () =>
       page.evaluate(
-        () => document.querySelector(".send-error")?.textContent?.trim() ?? ""
+        () =>
+          document
+            .querySelector('[data-slot="send-error"]')
+            ?.textContent?.trim() ?? ""
       ),
     Boolean,
     20_000
@@ -1748,7 +1767,7 @@ const heldExportCheck = async (on: On) => {
   const after2 = await page.evaluate(
     ([field, stage]) => {
       const button = document.querySelector<HTMLButtonElement>(
-        "form.cin button.stop"
+        'form[data-slot="cin"] button:is([data-stop], [data-slot="stop"])'
       );
       return {
         field: document.querySelector(field)?.textContent,
@@ -1759,7 +1778,8 @@ const heldExportCheck = async (on: On) => {
     },
     [FIELD, STAGE] as const
   );
-  const sent = (await page.locator(".turn.you").count()) - rows;
+  const sent =
+    (await page.locator('[data-slot="turn"][data-you]').count()) - rows;
   kit.check(
     "17: the hub's export held, Send says why over the field within the 5 s wait, keeps the words and the canvas, and the box is Send again",
     held > 0 &&
@@ -2016,7 +2036,9 @@ const dockCheck = async (on: On, clock: Clock) => {
     ([sel]) => {
       const node = document.querySelector(sel as string);
       const well = document
-        .querySelector(".preview-pane .side-well")
+        .querySelector(
+          ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="side-well"]'
+        )
         ?.getBoundingClientRect();
       const at = node?.getBoundingClientRect();
       return {
@@ -2059,7 +2081,10 @@ const dockCheck = async (on: On, clock: Clock) => {
 
   // Undock from the panel's head.
   await clock.catchRuns(
-    () => page.click('.preview-pane button[aria-label="Undock"]'),
+    () =>
+      page.click(
+        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Undock"]'
+      ),
     MOTION,
     8000
   );
@@ -2083,7 +2108,9 @@ const dockCheck = async (on: On, clock: Clock) => {
           node === (window as unknown as { __canvas: Element | null }).__canvas,
         frame: at ? [at.left, at.top, at.width, at.height] : null,
         slot: place ? [place.left, place.top, place.width, place.height] : null,
-        panel: !!document.querySelector(".preview-pane"),
+        panel: !!document.querySelector(
+          ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])'
+        ),
       };
     },
     [FRAME, SLOT]
@@ -2128,7 +2155,9 @@ const chipCheck = async (on: On): Promise<string | null> => {
   const exported = await fleet.api<{ png: string | null }>(
     `/api/artifacts/${id}/export`
   );
-  const name = (await page.textContent(`${CHIP} .att-name`))?.trim();
+  const name = (
+    await page.textContent(`${CHIP} [data-slot="att-name"]`)
+  )?.trim();
   kit.check(
     "6: Done leaves a chip named Canvas whose thumbnail is the export's PNG bytes",
     !!exported.png &&
@@ -2137,7 +2166,7 @@ const chipCheck = async (on: On): Promise<string | null> => {
       !(await page.$(STAGE)),
     `${name}; thumbnail ${thumb ? `${thumb.length} chars` : "none"}; export ${exported.png ? `${exported.png.length} chars` : "none"}; same ${thumb === `data:image/png;base64,${exported.png}`}`
   );
-  await page.click(`${CHIP} .canvas-open`);
+  await page.click(`${CHIP} [data-slot="canvas-open"]`);
   await settle(page, 300);
   const reopened = await page.evaluate(
     ([stage, chip]) =>
@@ -2155,18 +2184,20 @@ const sendCheck = async (on: On, id: string) => {
   const read = () =>
     fleet.api<Read>(`/api/instances/${session}/artifacts/${id}`);
   const before = await read();
-  const rows = await page.locator(".turn.you").count();
+  const rows = await page.locator('[data-slot="turn"][data-you]').count();
   await page.focus(FIELD);
   await page.keyboard.type("The canvas");
   await page.keyboard.press("Enter");
-  const row = page.locator(".turn.you").nth(rows);
-  await row.locator(".chips").waitFor({ timeout: 20_000 });
+  const row = page.locator('[data-slot="turn"][data-you]').nth(rows);
+  await row.locator('[data-slot="chips"]').waitFor({ timeout: 20_000 });
   await settle(page, 300);
   const carried = await row.evaluate((node) => ({
-    names: [...node.querySelectorAll(".chips .doc .name")].map(
-      (name) => name.textContent
-    ),
-    images: node.querySelectorAll(".chips img").length,
+    names: [
+      ...node.querySelectorAll(
+        '[data-slot="chips"] :is([data-slot="doc"], [data-doc]) :is([data-slot="name"], [data-transcript-skeleton-name])'
+      ),
+    ].map((name) => name.textContent),
+    images: node.querySelectorAll('[data-slot="chips"] img').length,
   }));
   const after = await until(
     "the draft mark cleared",
@@ -2353,7 +2384,8 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
   await open(page, `${on.base}/session/${on.session}`, FIELD);
   await settle(page);
   /** This page's own canvas, once Draw has made it (the panel may show another the session docked). */
-  let mine = ".canvas-stage.standing iframe";
+  let mine =
+    '[data-slot="canvas-stage"]:is([data-standing], [data-slot="standing"]) iframe';
   /** A tap on `selector`'s centre: Playwright's box of an element in a frame is already in the page's terms. */
   const tap = async (selector: string, within = page.mainFrame()) => {
     const at = await within.locator(selector).first().boundingBox();
@@ -2362,17 +2394,24 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
     }
     await page.touchscreen.tap(at.x + at.width / 2, at.y + at.height / 2);
   };
-  await tap(".att-btn");
+  await tap(':is([data-att-btn], [data-slot="att-btn"])');
   await page.getByRole("menuitem", { name: "Draw" }).waitFor();
   await tap('[role="menuitem"]:has-text("Draw")');
   const standing = await until(
     "the canvas over the field",
-    () => box(page, ".canvas-stage.standing"),
+    () =>
+      box(
+        page,
+        '[data-slot="canvas-stage"]:is([data-standing], [data-slot="standing"])'
+      ),
     (at) => !!at && at.height > 300,
     20_000
   ).catch(() => null);
-  const id = await page.getAttribute(".canvas-stage.standing", "data-artifact");
-  mine = `.canvas-stage[data-artifact="${id}"] iframe`;
+  const id = await page.getAttribute(
+    '[data-slot="canvas-stage"]:is([data-standing], [data-slot="standing"])',
+    "data-artifact"
+  );
+  mine = `[data-slot="canvas-stage"][data-artifact="${id}"] iframe`;
   const room = await column(page);
   await page.evaluate((sel) => {
     (window as unknown as { __canvas: Element | null }).__canvas =
@@ -2415,7 +2454,7 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
       page.evaluate((sel) => {
         const node = document.querySelector(sel);
         const well = document
-          .querySelector(".side-well")
+          .querySelector('[data-slot="side-well"]')
           ?.getBoundingClientRect();
         const at = node?.getBoundingClientRect();
         return well && at && at.width > 0
@@ -2441,7 +2480,9 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
     `10 (${label}): the rail's Dock sends the same iframe into the panel's well`,
     !!docked?.same,
     `${JSON.stringify(docked)}; said under the field: ${await page.evaluate(
-      () => document.querySelector(".send-error")?.textContent ?? "nothing"
+      () =>
+        document.querySelector('[data-slot="send-error"]')?.textContent ??
+        "nothing"
     )}`
   );
   if (frame) {

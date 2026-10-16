@@ -17,9 +17,9 @@
  * `ALL PASS` or `N FAILED`. Exits 0 only when every assertion passed.
  *
  * `--approve <spec>` writes every baseline that spec keeps from this run
- * (diff.ts's captures, a spec's own file such as project-bar's legs);
+ * (diff.ts's captures, a spec's own file of legs);
  * `--approve <spec>:<entry>,…` writes only the entries named (a capture's
- * name, or a leg's as a slug: `project-bar:phone-390`), every other entry
+ * name, or a leg's as a slug: `<spec>:phone-390`), every other entry
  * left as it is to the byte. Only after the owner has approved what they
  * show. `PROBE_BASELINES=<dir>` reads and writes the baselines under `<dir>`
  * instead: a scratch copy, to prove an approve on.
@@ -46,8 +46,8 @@ const { sweepDeadFleets } = await import("../scratch-fleet");
 const { Run } = await import("./kit");
 
 const args = process.argv.slice(2);
-// A web spec named on its own (`run.ts menus-fit`) runs as
-// `run.ts web menus-fit`.
+// A web spec named on its own (`run.ts safari-blurs`) runs as
+// `run.ts web safari-blurs`.
 if (
   args[0] &&
   args[0] !== "web" &&

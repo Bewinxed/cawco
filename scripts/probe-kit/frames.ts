@@ -185,7 +185,7 @@ export function watch(): void {
       '[aria-label="Session transcript"]'
     );
     const container = document.querySelector<HTMLElement>(
-      ".listing > :first-child"
+      '[data-slot="listing"] > :first-child'
     );
     if (scroller) {
       const view = scroller.getBoundingClientRect();

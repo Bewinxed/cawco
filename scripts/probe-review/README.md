@@ -7,7 +7,7 @@ decisions, never crops in a folder. `index.html` is backlot's
 ## Make one
 
 ```sh
-bun scripts/probe-kit/run.ts web tab-strip --review .probe-review/tab-strip
+bun scripts/probe-kit/run.ts web <spec> --review .probe-review/<spec>
 ```
 
 When a capture differs from its approved baseline, `--review <dir>` writes

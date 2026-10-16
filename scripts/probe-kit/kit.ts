@@ -60,8 +60,8 @@ export const SCALE = 2;
  * combobox, so this finds the field alone.
  */
 export const COMPOSER_FIELD = '[role="combobox"][contenteditable="true"]';
-/** A composer's field in its pill. */
-export const COMPOSER = `form.cin ${COMPOSER_FIELD}`;
+/** A composer's field in its pill (Composer.svelte's `data-slot="cin"` form). */
+export const COMPOSER = `form[data-slot="cin"] ${COMPOSER_FIELD}`;
 
 export interface PageOptions {
   /** WebKit for a spec that reads Safari's engine; Chromium otherwise. */
@@ -631,7 +631,12 @@ export async function settle(page: Page, ms = 150): Promise<void> {
                     run instanceof CSSTransition
                       ? `transition ${run.transitionProperty}`
                       : `${run.constructor.name} ${run.id}`;
-                  return `${what} on ${target?.tagName.toLowerCase()}.${String(target?.className).split(" ")[0]}`;
+                  // The element by its hook, when it has one; its first class otherwise.
+                  const slot = target?.getAttribute("data-slot");
+                  const name = slot
+                    ? `[data-slot="${slot}"]`
+                    : `.${String(target?.className).split(" ")[0]}`;
+                  return `${what} on ${target?.tagName.toLowerCase()}${name}`;
                 })
             ),
           10_000

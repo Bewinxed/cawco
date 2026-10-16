@@ -258,7 +258,7 @@ const run = async (kit: Kit) => {
   }
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
-  await open(page, `${base}/session/${session}`, ".artifact-trigger");
+  await open(page, `${base}/session/${session}`, "[data-artifact-trigger]");
   const frame = page.frameLocator('iframe[title="Preview"]');
   await frame.locator('[data-option="cover"]').waitFor({ timeout: 60_000 });
   await until(
@@ -327,7 +327,9 @@ const run = async (kit: Kit) => {
     JSON.stringify(firstSend)
   );
   // The pane's head offers Send picks only while the page has unsent picks: none now.
-  const sendControl = page.locator(".preview-pane .send");
+  const sendControl = page.locator(
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="send"]'
+  );
   const afterSend = await until(
     "the head's Send picks gone",
     () => sendControl.count(),
@@ -376,7 +378,7 @@ const run = async (kit: Kit) => {
       document.querySelectorAll<HTMLElement>("[data-artifact-responses]")
     );
     const own = Array.from(
-      document.querySelectorAll<HTMLElement>(".turn.you")
+      document.querySelectorAll<HTMLElement>('[data-slot="turn"][data-you]')
     ).map((row) => row.innerText);
     return {
       lines: rows.map((row) => ({
@@ -443,7 +445,7 @@ const run = async (kit: Kit) => {
   );
 
   // 6. The line says the agent has read it.
-  const state = line.first().locator(".hstatus");
+  const state = line.first().locator('[data-slot="hstatus"]');
   await until(
     "the line saying read",
     () => state.innerText(),
@@ -460,7 +462,7 @@ const run = async (kit: Kit) => {
 
   // 7. A pick after the Send is offered again.
   await frame.locator('[data-option="original"]').click();
-  const label = sendControl.locator(".send-label");
+  const label = sendControl.locator('[data-slot="send-label"]');
   const labelNow = async () =>
     (await label.count()) > 0 ? await label.innerText() : "no Send control";
   const afterPick = await until(

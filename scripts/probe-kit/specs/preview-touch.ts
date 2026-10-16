@@ -29,8 +29,8 @@ import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
-const FRAME = '.preview-sheet iframe[title="Preview"]';
-const SHEET = ".preview-sheet";
+const FRAME = '[data-preview-sheet] iframe[title="Preview"]';
+const SHEET = "[data-preview-sheet]";
 
 const PAGE = `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -196,9 +196,11 @@ const drag = async (
 /** The drawer as the engine draws it: how much of it shows over its host, the host, the snap it says. */
 const drawerState = (page: Page) =>
   page.evaluate(() => {
-    const host = document.querySelector(".preview-sheet-host");
-    const sheet = document.querySelector(".preview-sheet .sheet");
-    const content = document.querySelector<HTMLElement>(".preview-sheet");
+    const host = document.querySelector('[data-slot="preview-sheet-host"]');
+    const sheet = document.querySelector(
+      '[data-preview-sheet] :is([data-slot="sheet"], [data-sheet])'
+    );
+    const content = document.querySelector<HTMLElement>("[data-preview-sheet]");
     const hostBox = host?.getBoundingClientRect();
     const sheetBox = sheet?.getBoundingClientRect();
     return {
@@ -307,7 +309,7 @@ const probe = async (kit: Kit) => {
   );
 
   // 4. The grabber drags the drawer; a drag in the page scrolls the page.
-  const grab = await page.locator(".preview-grab").boundingBox();
+  const grab = await page.locator("[data-preview-grab]").boundingBox();
   if (!grab) {
     throw new Error("the drawer has no grabber");
   }
@@ -402,7 +404,10 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
   await tapIn(on, pinning, "#count");
   const card = await until(
     "the new pin's card",
-    () => page.locator(".pin-card.sheet").count(),
+    () =>
+      page
+        .locator('[data-slot="pin-card"]:is([data-slot="sheet"], [data-sheet])')
+        .count(),
     (count) => count > 0,
     5000
   ).catch(() => 0);
@@ -418,7 +423,9 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
     `counter unchanged ${unchanged}; cards ${card}`
   );
   await tapBox(
-    await page.locator('.pin-card button[aria-label="Close"]').boundingBox()
+    await page
+      .locator('[data-slot="pin-card"] button[aria-label="Close"]')
+      .boundingBox()
   );
   await tapBox(await interact.boundingBox());
   await page.waitForTimeout(300);
@@ -443,8 +450,8 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
     await page.waitForTimeout(300);
     return hit;
   };
-  const menuHit = await tapOn(`${SHEET} .artifact-trigger`);
-  const menu = await page.locator(".artifact-list").count();
+  const menuHit = await tapOn(`${SHEET} [data-artifact-trigger]`);
+  const menu = await page.locator("[data-artifact-list]").count();
   await page.keyboard.press("Escape");
   await settle(page, 300);
   const loads = Number(await textIn(await pageFrame(page), "#loads"));

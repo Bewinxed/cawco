@@ -80,7 +80,9 @@ const CROP_PAD = 24;
  */
 export const testMapFrame = async (on: On) => {
   await shownTestMap(on);
-  const expand = on.page.locator('.side-head button[aria-label="Expand"]');
+  const expand = on.page.locator(
+    '[data-slot="side-head"] button[aria-label="Expand"]'
+  );
   if ((await expand.count()) > 0) {
     await expand.click();
     await settle(on.page, 600);
@@ -94,7 +96,9 @@ const shownTestMap = (on: On) =>
     async () => {
       const shown = await pageFrame(on);
       return (await shown
-        .locator("article.card")
+        .locator(
+          'article:is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
+        )
         .count()
         .catch(() => 0)) > 100
         ? shown
@@ -155,7 +159,9 @@ export const mouseLoop = async (desk: Page, box: Rect, ms = 2000) => {
 /** The pane's mode, by its head's segment (V, C, D), once the page has heard it. */
 export const paneMode = async (on: On, frame: Frame, key: "V" | "C" | "D") => {
   await on.page
-    .locator(`.preview-pane [role='tab'][aria-keyshortcuts='${key}']`)
+    .locator(
+      `:is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [role='tab'][aria-keyshortcuts='${key}']`
+    )
     .click();
   const want = { V: "", C: "comment", D: "draw" }[key];
   await until(
@@ -225,7 +231,8 @@ const UPDATE = "mcp__cawco__artifact_update";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const FRAME = 'iframe[title="Preview"]';
-const CANVAS_FRAME = ".canvas-stage.docked iframe";
+const CANVAS_FRAME =
+  '[data-slot="canvas-stage"][data-canvas-stages-docked] iframe';
 /** A mark's section in what the session hears. */
 const SECTION = /^## /m;
 /** A pen stroke in a canvas's outline. */
@@ -771,7 +778,7 @@ const menuChecks = async (on: On, frame: Frame) => {
   await strokeOver(on, frame, "#second");
   await on.page.waitForTimeout(350);
   await dragFromIcon(on, frame, 0, 40);
-  const commentCard = on.page.locator(".pin-card");
+  const commentCard = on.page.locator('[data-slot="pin-card"]');
   await commentCard.waitFor({ timeout: 5000 });
   await commentCard.getByRole("textbox").fill("This one, thicker.");
   await commentCard.getByRole("button", { name: "Reply" }).click();
@@ -1466,7 +1473,11 @@ const mapChecks = async (on: On) => {
 
     // One card, then every card in view: the same lag after the lift, the same wait for its picture.
     const card = await frame.evaluate(() => {
-      const cards = [...document.querySelectorAll("article.card")];
+      const cards = [
+        ...document.querySelectorAll(
+          'article:is([data-slot="connections-page-card"], [data-slot="updates-page-card"], [data-slot="finder-page-card"], [data-slot="tree-mark-card"], [data-slot="post-card-card"], [data-slot="update-card-card"], [data-slot="move-wait-card"], [data-card], [data-slot="history-card"], [data-slot="sessions-chip-card"], [data-slot="limits-block-card"], [data-slot="where-it-goes-card"], [data-slot="cw-task-card-card"], [data-slot="mk-card-card"], [data-slot="pane-deck-card"], [data-slot="strategy-picker-card"])'
+        ),
+      ];
       const one = cards[Math.floor(cards.length / 2)];
       one?.scrollIntoView({ block: "center" });
       const r = one?.getBoundingClientRect();

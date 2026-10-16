@@ -31,8 +31,8 @@ read from Playwright's browser cache, installed with
 Only after the owner has approved what it shows. `--approve <spec>` writes
 every baseline the spec keeps from this run. `--approve <spec>:<entry>,…`
 writes the entries named and leaves every other one as it is, to the byte:
-a capture by its name (`--approve tab-strip:rest-light,rest-dark`), a leg by
-its name as a slug (`--approve project-bar:phone-390` for "phone 390"). An
+a capture by its name (`--approve <spec>:rest-light,rest-dark`), a leg by
+its name as a slug (`--approve <spec>:phone-390` for "phone 390"). An
 entry the spec doesn't write fails the run. `PROBE_BASELINES=<dir>` reads and
 writes the baselines under `<dir>/web/<spec>/` instead of `baselines/`: a
 scratch copy, to prove an approve on.

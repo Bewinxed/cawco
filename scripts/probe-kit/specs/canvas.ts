@@ -68,7 +68,8 @@ const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const NO_SCREEN =
   "No screen is showing this canvas. Open it on a dashboard (artifact_show), then try again.";
 /** The panel's canvas: its one iframe, on the stage over the panel's well (dashboard canvas/). */
-const PANEL_CANVAS = ".canvas-stage.docked iframe";
+const PANEL_CANVAS =
+  '[data-slot="canvas-stage"][data-canvas-stages-docked] iframe';
 /** A path of Solar's pen-new-square, the canvas's glyph in the menu. */
 const CANVAS_GLYPH = "M1 12C1 6.81455";
 
@@ -391,7 +392,7 @@ const NOT_IMAGE =
 
 /** A canvas's frame in a page's panel, by its artifact id, once its host page has drawn. */
 const frameOf = async (page: Page, id: string): Promise<Frame> => {
-  const sel = `.canvas-stage.docked[data-artifact="${id}"] iframe`;
+  const sel = `[data-slot="canvas-stage"][data-docked][data-artifact="${id}"] iframe`;
   await until(
     "the canvas in the panel",
     () => page.frameLocator(sel).locator(".canvas-host .excalidraw").count(),
@@ -512,7 +513,9 @@ const imageChecks = async (on: OnCanvas) => {
   // a person's paste follows one: Excalidraw takes a paste only while it
   // has the focus, and places it at the pointer.
   const well = (await page
-    .locator(`.canvas-stage.docked[data-artifact="${id}"] iframe`)
+    .locator(
+      `[data-slot="canvas-stage"][data-docked][data-artifact="${id}"] iframe`
+    )
     .boundingBox()) as { x: number; y: number; width: number; height: number };
   await frame.click('.rail-box[aria-label^="Select"]');
   await page.mouse.click(
@@ -1285,13 +1288,13 @@ const fitChecks = async (on: OnCanvas) => {
     await open(
       page,
       `${new URL(on.page.url()).origin}/artifact/${id}`,
-      ".canvas-stage iframe"
+      '[data-slot="canvas-stage"] iframe'
     );
     const frame = await until(
       `the far canvas on the ${view}`,
       async () => {
         const handle = await page
-          .locator(".canvas-stage iframe")
+          .locator('[data-slot="canvas-stage"] iframe')
           .elementHandle();
         const found = await handle?.contentFrame();
         return found &&
@@ -1363,13 +1366,13 @@ const themeChecks = async (on: OnCanvas, id: string) => {
     await open(
       page,
       `${new URL(on.page.url()).origin}/artifact/${id}`,
-      ".canvas-stage iframe"
+      '[data-slot="canvas-stage"] iframe'
     );
     const frame = await until(
       `the canvas, dashboard ${dashboard}`,
       async () => {
         const handle = await page
-          .locator(".canvas-stage iframe")
+          .locator('[data-slot="canvas-stage"] iframe')
           .elementHandle();
         const found = await handle?.contentFrame();
         return found &&
@@ -2510,8 +2513,8 @@ const created = async (
       arrow?.[3] === agent.id,
     `outline:\n${outline}\nanswer: ${answer.slice(0, 200)}`
   );
-  await page.click(".artifact-trigger");
-  const row = page.locator(`.artifact-row[data-artifact="${id}"]`);
+  await page.click("[data-artifact-trigger]");
+  const row = page.locator(`[data-artifact-row][data-artifact="${id}"]`);
   await row.waitFor();
   await settle(page);
   const glyph = await row.evaluate(
@@ -2523,7 +2526,7 @@ const created = async (
     "1: the panel's menu lists the canvas with its glyph (pen-new-square)",
     (await row.count()) === 1 &&
       glyph &&
-      (await row.locator(".row-name").textContent()) === "flow",
+      (await row.locator('[data-slot="row-name"]').textContent()) === "flow",
     `glyph ${glyph}`
   );
   await page.keyboard.press("Escape");

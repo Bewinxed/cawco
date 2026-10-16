@@ -136,7 +136,7 @@ async function recallWheel(kit: Kit, bench: string) {
     async () => {
       await page.locator(FIELD).tap();
       await page.keyboard.press("ArrowUp");
-      const up = await present(page, ".ghosts[role='listbox']");
+      const up = await present(page, "[data-slot=\"ghosts\"][role='listbox']");
       for (const _step of [1, 2, 3, 4]) {
         await page.keyboard.press("ArrowUp");
         await page.waitForTimeout(250);
@@ -145,7 +145,7 @@ async function recallWheel(kit: Kit, bench: string) {
         () =>
           [
             ...document.querySelectorAll<HTMLElement>(
-              ".ghosts [role='option']"
+              "[data-slot=\"ghosts\"] [role='option']"
             ),
           ].filter((row) => row.style.filter.includes("blur")).length
       );
@@ -170,12 +170,12 @@ async function cawFolds(kit: Kit, bench: string) {
   for (const [what, toggle, fold] of [
     [
       "the update notice's notes fold shut and open",
-      ".caw-pop .actions .toggle",
+      ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"]) :is([data-slot="actions"], [data-actions]) [data-toggle]',
       "#update-notes",
     ],
     [
       "the moved logins fold open and shut",
-      ".caw-pop .more .toggle",
+      ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"]) :is([data-slot="more"], [data-more]) [data-toggle]',
       "#moved-done",
     ],
   ] as const) {
@@ -227,7 +227,9 @@ async function compactionChevron(kit: Kit, bench: string) {
     traffic.compaction.idle();
     traffic.assistant("Carrying on.");
   });
-  const divider = page.locator("button.divider:not([disabled])").first();
+  const divider = page
+    .locator('button[data-slot="divider"]:not([disabled])')
+    .first();
   await divider.waitFor();
   await settle(page);
   await drive(
@@ -310,11 +312,13 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
     async () => {
       await page.locator(FIELD).tap();
       await page.keyboard.press("ArrowUp");
-      const row = await present(page, ".edit-row");
+      const row = await present(page, '[data-slot="edit-row"]');
       await page.waitForTimeout(800);
       const words = await page.evaluate(
         () =>
-          document.querySelector(".edit-row .what")?.textContent?.trim() ?? ""
+          document
+            .querySelector('[data-slot="edit-row"] [data-slot="what"]')
+            ?.textContent?.trim() ?? ""
       );
       await page.keyboard.press("Escape");
       await page.waitForTimeout(800);
@@ -338,7 +342,9 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
   page = await phone(kit);
   await open(page, `${base}/session/${asker}`, FIELD, 90_000);
   await fleet.send(asker, `${QUESTION} pick a voice`);
-  const minimize = page.locator(".ask button[aria-label='Minimize question']");
+  const minimize = page.locator(
+    "[data-slot=\"ask\"] button[aria-label='Minimize question']"
+  );
   await minimize.waitFor({ timeout: 120_000 });
   await page.waitForTimeout(1000);
   await drive(
@@ -347,9 +353,9 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
     "a minimized question's bar comes up, and the card again",
     async () => {
       await minimize.tap();
-      const bar = await present(page, ".asked-chip");
+      const bar = await present(page, '[data-slot="asked-chip"]');
       await page.waitForTimeout(800);
-      await page.locator(".asked-chip").tap();
+      await page.locator('[data-slot="asked-chip"]').tap();
       const card = await settled(minimize.waitFor({ timeout: 10_000 }));
       await page.waitForTimeout(800);
       return {
@@ -372,11 +378,11 @@ async function sheetCases(kit: Kit, fleet: KitFleet, base: string) {
     await fleet.spawn("claude", title, fleet.repo, { projectId: project.id });
   }
   const page = await phone(kit);
-  await open(page, `${base}/session`, ".burger", 90_000);
+  await open(page, `${base}/session`, '[data-slot="burger"]', 90_000);
   await settle(page);
-  await page.tap(".burger");
+  await page.tap('[data-slot="burger"]');
   const row = page.locator(
-    `.rail-sheet a[data-sidebar="menu-button"][href="/project/${project.id}"]`
+    `[data-rail-sheet] a[data-sidebar="menu-button"][href="/project/${project.id}"]`
   );
   await row.waitFor();
   await settle(page);
@@ -385,7 +391,7 @@ async function sheetCases(kit: Kit, fleet: KitFleet, base: string) {
     page,
     "a tree mark's face and chevron swap as its rows fold and open",
     async () => {
-      const hit = row.locator(".tree-mark .hit");
+      const hit = row.locator('[data-slot="tree-mark"] [data-slot="hit"]');
       const flips: string[] = [];
       for (const _press of [1, 2]) {
         await hit.tap();
@@ -482,10 +488,12 @@ async function unlockMark(kit: Kit, base: string) {
       });
     }
   );
-  await open(page, `${base}/session`, ".burger", 90_000);
+  await open(page, `${base}/session`, '[data-slot="burger"]', 90_000);
   await settle(page);
-  await page.tap(".burger");
-  const row = page.locator(`.rail-sheet [data-machine="${MACHINE}"] .row`);
+  await page.tap('[data-slot="burger"]');
+  const row = page.locator(
+    `[data-rail-sheet] [data-machine="${MACHINE}"] :is([data-slot="row"], [data-task-table-row], [data-project-spend-row], [data-view-routines-row], [data-view-table-row], [data-layout-row], [data-account-name-row], [data-session-row-row])`
+  );
   await row.waitFor();
   await settle(page);
   await drive(kit, page, "the keychain unlock's mark comes in", async () => {
@@ -502,7 +510,10 @@ async function unlockMark(kit: Kit, base: string) {
     const field = page.locator("input[type='password']");
     await field.fill("probe");
     await field.press("Enter");
-    const mark = await present(page, ".unlock .mark.enter");
+    const mark = await present(
+      page,
+      '[data-slot="unlock"] :is([data-slot="mark"], [data-needs-card-mark], [data-transcript-skeleton-mark], [data-os-mark-class~="mark"]):is([data-enter], [data-slot="enter"])'
+    );
     await page.waitForTimeout(800);
     return {
       happened: asked && mark,
@@ -522,13 +533,13 @@ async function recordFold(kit: Kit, fleet: KitFleet, base: string) {
   await open(
     page,
     `${base}/project/${seeded.projectId}?view=decisions&page=pricing`,
-    ".decisions .record",
+    '[data-slot="decisions"] [data-slot="record"]',
     90_000
   );
   await settle(page);
   const toggle = page
-    .locator(".record", { hasText: "How long is the trial?" })
-    .locator(".fold-row button");
+    .locator('[data-slot="record"]', { hasText: "How long is the trial?" })
+    .locator('[data-slot="fold-row"] button');
   await drive(
     kit,
     page,

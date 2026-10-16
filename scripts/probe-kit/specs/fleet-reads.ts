@@ -316,7 +316,7 @@ const untouched = async (path: string): Promise<boolean> =>
     () => true,
     () => false
   )) &&
-  !(await lstat(`${path}.moved`).then(
+  !(await lstat(`${path}:is([data-moved], [data-slot="moved"])`).then(
     () => true,
     () => false
   ));

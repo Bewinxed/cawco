@@ -228,8 +228,9 @@ const spec: Spec = {
       opened.push(
         await page.evaluate(
           () =>
-            document.querySelector(".caw-pop[data-state=open][data-shown]") !==
-            null
+            document.querySelector(
+              ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"])[data-state=open][data-shown]'
+            ) !== null
         )
       );
       await page.touchscreen.tap(at.x, at.y);

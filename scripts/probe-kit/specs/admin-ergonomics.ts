@@ -213,18 +213,22 @@ const run = async (kit: Kit) => {
   });
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
-  await open(page, `${base}/session/${session}`, ".artifact-trigger");
+  await open(page, `${base}/session/${session}`, "[data-artifact-trigger]");
   const on = { page } as On;
   const frame = await pageFrame(on);
   await frame.waitForSelector("#p", { timeout: 60_000 });
   await settle(page, 600);
   const before = (await status()).find((one) => one.name === PREVIEW);
-  await page.locator(".preview-pane button[aria-keyshortcuts='C']").focus();
+  await page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .focus();
   await page.keyboard.press("c");
   await settle(page, 300);
   const box = await screenBox(on, frame, "#p");
   await page.mouse.click(box.x + box.w * 0.3, box.y + box.h / 2);
-  const card = page.locator('.pin-card[data-pin-card="1"]');
+  const card = page.locator('[data-slot="pin-card"][data-pin-card="1"]');
   await card.waitFor({ timeout: 5000 });
   await card.getByRole("textbox").fill("Bolder, please.");
   await card.getByRole("button", { name: "Reply" }).click();

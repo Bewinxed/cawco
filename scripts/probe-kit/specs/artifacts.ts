@@ -393,7 +393,7 @@ const run = async (kit: Kit) => {
   page.on("websocket", (socket) =>
     socket.on("close", () => said.push(`socket closed: ${socket.url()}`))
   );
-  await open(page, `${base}/session/${session}`, ".artifact-trigger");
+  await open(page, `${base}/session/${session}`, "[data-artifact-trigger]");
   // The shell's rail, in a browser with no width of its own, is drawn at the
   // `c-sidebar-w` token (DESIGN.md: "228px by default"), its one source.
   const width = (
@@ -406,7 +406,11 @@ const run = async (kit: Kit) => {
     css: getComputedStyle(document.documentElement)
       .getPropertyValue("--c-sidebar-w")
       .trim(),
-    drawn: document.querySelector("aside.rail")?.getBoundingClientRect().width,
+    drawn: document
+      .querySelector(
+        'aside:is([data-slot="rail"], [data-home-variant~="rail"])'
+      )
+      ?.getBoundingClientRect().width,
     viewport: innerWidth,
   }));
   kit.check(
@@ -416,12 +420,12 @@ const run = async (kit: Kit) => {
       rail.drawn === Number.parseFloat(token),
     `token ${token}, css ${rail.css}, drawn ${rail.drawn}px at ${rail.viewport}`
   );
-  await page.click(".artifact-trigger");
-  await page.locator(`.artifact-row[data-artifact="${id}"]`).waitFor();
+  await page.click("[data-artifact-trigger]");
+  await page.locator(`[data-artifact-row][data-artifact="${id}"]`).waitFor();
   // The menu rises from 0.92 as it opens: read its geometry once it has landed.
   await settle(page);
   const listed = await page
-    .locator(`.artifact-row[data-artifact="${id}"]`)
+    .locator(`[data-artifact-row][data-artifact="${id}"]`)
     .count();
   kit.check(
     "1, 12: the panel's menu lists it once a page opens",
@@ -431,15 +435,15 @@ const run = async (kit: Kit) => {
   // DESIGN.md (Artifact panel, canvas and ink): a 44px row, the kind's 16px
   // glyph, the name in the label role, its age in meta ink.
   const row = await page
-    .locator(`.artifact-row[data-artifact="${id}"]`)
+    .locator(`[data-artifact-row][data-artifact="${id}"]`)
     .evaluate((node) => {
       const probe = document.createElement("span");
       probe.style.font = "var(--type-label)";
       probe.style.color = "var(--ink-muted)";
       document.body.append(probe);
       const label = getComputedStyle(probe);
-      const name = node.querySelector(".row-name");
-      const age = node.querySelector(".row-age");
+      const name = node.querySelector('[data-slot="row-name"]');
+      const age = node.querySelector('[data-slot="row-age"]');
       const glyph = node.querySelector("svg")?.getBoundingClientRect();
       const out = {
         height: node.getBoundingClientRect().height,
@@ -463,7 +467,7 @@ const run = async (kit: Kit) => {
   // The open menu holds the page's pointer events until it has gone.
   await page.keyboard.press("Escape");
   await page
-    .locator(`.artifact-row[data-artifact="${id}"]`)
+    .locator(`[data-artifact-row][data-artifact="${id}"]`)
     .waitFor({ state: "detached" });
   await settle(page);
 
@@ -497,7 +501,7 @@ const run = async (kit: Kit) => {
 
   // 3. A reload of the dashboard still marks the pick.
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector(".artifact-trigger");
+  await page.waitForSelector("[data-artifact-trigger]");
   const afterReload = await until(
     "the page marking its stored pick",
     () => picked(page),
@@ -633,7 +637,7 @@ const promoteChecks = async ({
   }
   // Its panel, as check 1 opens one: the page in its frame, a screen for the canvas.
   const page = await kit.page("desk");
-  await open(page, `${base}/session/${inProject}`, ".artifact-trigger");
+  await open(page, `${base}/session/${inProject}`, "[data-artifact-trigger]");
   const at = `/api/instances/${inProject}/artifacts/${keptId}`;
   const frame = page.frameLocator('iframe[title="Preview"]');
   await until(
@@ -715,9 +719,11 @@ const promoteChecks = async ({
   );
 
   // 15. The panel's menu tags the row with the commit.
-  await page.click(".artifact-trigger");
+  await page.click("[data-artifact-trigger]");
   const tag = await page
-    .locator(`.artifact-row[data-artifact="${keptId}"] .row-promoted`)
+    .locator(
+      `[data-artifact-row][data-artifact="${keptId}"] [data-slot="row-promoted"]`
+    )
     .textContent({ timeout: 10_000 })
     .catch(() => null);
   kit.check(
@@ -1131,7 +1137,9 @@ const fieldChecks = async ({
   const deadId = dead.match(ANSWERED_ID)?.[1];
   const failed = shownPosts.find((post) => post.artifact === deadId);
   const band = await page
-    .locator(".preview-pane .down[role=alert]")
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="down"][role=alert]'
+    )
     .textContent({ timeout: 5000 })
     .catch(() => null);
   kit.check(
