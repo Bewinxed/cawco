@@ -126,6 +126,12 @@ interface Changed {
   added: Node[];
   at: number;
   name: string | null;
+  /**
+   * For rows put into a transcript's list: whose pane, in what state as
+   * they went in, and where they stand (virtua's inline `top`, read
+   * without laying anything out).
+   */
+  rows: string | null;
   target: Node;
   was: string | null;
 }
@@ -605,13 +611,36 @@ async function measure(
   // into the page, by where: each is styled whole as it goes in.
   await page.evaluate(() => {
     const kept: Changed[] = [];
+    const rowsOf = (target: Node, added: Node[]): string | null => {
+      const pane =
+        target instanceof Element && target.closest(".listing")
+          ? target.closest<HTMLElement>("[data-pane]")
+          : null;
+      const tops = added.flatMap((node) =>
+        node instanceof HTMLElement && node.style.top
+          ? [Number.parseFloat(node.style.top)]
+          : []
+      );
+      if (!pane || tops.length === 0) {
+        return null;
+      }
+      let state = "drawn";
+      if (pane.classList.contains("pane-hidden")) {
+        state = "put away";
+      } else if (pane.classList.contains("pane-settling")) {
+        state = "settling";
+      }
+      return `${tops.length} rows into ${pane.dataset.pane?.slice(0, 8)} (${state}) at ${Math.min(...tops)}-${Math.max(...tops)}px`;
+    };
     new MutationObserver((records) => {
       const at = performance.now();
       for (const { addedNodes, target, attributeName, oldValue } of records) {
+        const added = [...addedNodes];
         kept.push({
-          added: [...addedNodes],
+          added,
           at,
           name: attributeName,
+          rows: rowsOf(target, added),
           target,
           was: oldValue,
         });
@@ -669,9 +698,12 @@ async function measure(
               `inserted into ${
                 regions.find(([where]) => box.closest(where))?.[1] ?? "the page"
               }: ${boxOf(box)}`;
-            for (const { added, at, name, target, was } of kept) {
+            for (const { added, at, name, rows, target, was } of kept) {
               if (!(at >= since && at < since + within)) {
                 continue;
+              }
+              if (rows) {
+                ours.push(rows);
               }
               if (target instanceof Element && added.length > 0) {
                 const elements = added.reduce(

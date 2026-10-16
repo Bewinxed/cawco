@@ -466,7 +466,35 @@ export function sessionIdOf(url: URL): string | null {
  * before the router has initialised — a throw here would take the whole
  * synchronous mutation down with it, and the URL is the one part of this
  * that is allowed to be best-effort.
+ *
+ * Written after the frame that draws the move, in the order the moves were
+ * made. A pushed entry keeps the scroll it leaves (SvelteKit's
+ * `capture_scroll` reads `pageXOffset`), and read in the switch's own task
+ * that laid out the pane coming in, in the middle of the switch, for a
+ * second time before its frame did. With no frame coming (the page hidden)
+ * nothing is drawn to wait for, and it is written at once — so is what was
+ * waiting on a frame when the page was hidden, which no frame will come for.
  */
+const unwritten: { url: string; mode: "push" | "replace" }[] = [];
+if (browser) {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      writeUrls();
+    }
+  });
+}
+
+function writeUrls(): void {
+  for (const { url, mode } of unwritten.splice(0)) {
+    try {
+      goto(url, { shallow: true, replace: mode === "replace" });
+    } catch {
+      // Before the router is ready the URL is already correct — this is a
+      // no-op, not a failure.
+    }
+  }
+}
+
 function project(sessionId: string | null, mode: "push" | "replace"): void {
   if (!browser) {
     return;
@@ -476,15 +504,11 @@ function project(sessionId: string | null, mode: "push" | "replace"): void {
     machineId: ctx?.machine,
     cwd: ctx?.cwd,
   });
-  try {
-    if (mode === "push") {
-      goto(url, { shallow: true });
-    } else {
-      goto(url, { shallow: true, replace: true });
-    }
-  } catch {
-    // Before the router is ready the URL is already correct — this is a
-    // no-op, not a failure.
+  unwritten.push({ url, mode });
+  if (document.hidden) {
+    writeUrls();
+  } else if (unwritten.length === 1) {
+    requestAnimationFrame(() => setTimeout(writeUrls));
   }
 }
 
