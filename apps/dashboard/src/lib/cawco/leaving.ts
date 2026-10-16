@@ -6,8 +6,9 @@
  * own console line ("… due to access control checks."), and fails every
  * fetch still in flight with "Load failed", which the page's readers would
  * report as their own error. Neither is a failure: nobody is left to read the
- * answer. So once the page is leaving, a new fetch never starts, and an
- * in-flight one that fails, or whose body read fails, never settles.
+ * answer. So once the page is leaving, a new fetch does not start, and an
+ * in-flight one that fails, or whose body read fails, is not told: each is
+ * held until the page comes back, which a page that goes never does.
  *
  * What closes the gate, each the first word a browser gives that the page is
  * going:
@@ -42,10 +43,26 @@
 /** The ways the page reads a response's body: each one's failure while leaving is held too. */
 const BODY_READS = ["arrayBuffer", "blob", "json", "text"] as const;
 
-/** What a read the page will never hear the end of returns. */
-const held = new Promise<never>(() => undefined);
-
 let leaving = false;
+
+/**
+ * What each held read does if the page comes back: a failure held while
+ * leaving is told then, and a fetch held before it started starts then.
+ * WebKit restores a page from the back/forward cache at the point its reads
+ * failed (WebKit bug 282506), so a held read is deferred, never dropped: the
+ * readers that mark a read as made and unmark it only on failure read again.
+ * A page that goes for good runs none of them.
+ */
+const onReturn: (() => void)[] = [];
+
+/** Defers `settle` until the page comes back; the returned read settles as it does. */
+function heldUntilBack<T>(settle: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    onReturn.push(() => {
+      settle().then(resolve, reject);
+    });
+  });
+}
 
 /** Installs the gate on the page's `fetch`; the client's init hook calls it once. */
 export function holdReadsWhileLeaving(): void {
@@ -65,18 +82,25 @@ export function holdReadsWhileLeaving(): void {
   addEventListener("pageshow", (event) => {
     if (event.persisted) {
       leaving = false;
+      for (const told of onReturn.splice(0)) {
+        told();
+      }
     }
   });
   const heardWhileHere = <T>(promise: Promise<T>): Promise<T> =>
-    promise.catch((error: unknown) => (leaving ? held : Promise.reject(error)));
-  globalThis.fetch = (input, init) => {
+    promise.catch((error: unknown) =>
+      leaving
+        ? heldUntilBack<T>(() => Promise.reject(error))
+        : Promise.reject(error)
+    );
+  const gated: typeof fetch = (input, init) => {
     const outlivesThePage =
       init?.keepalive ?? (input instanceof Request && input.keepalive);
     if (outlivesThePage) {
       return native(input, init);
     }
     if (leaving) {
-      return held;
+      return heldUntilBack(() => gated(input, init));
     }
     return heardWhileHere(native(input, init)).then((response) => {
       // A body larger than its first packet streams after the headers, and
@@ -90,6 +114,7 @@ export function holdReadsWhileLeaving(): void {
       return response;
     });
   };
+  globalThis.fetch = gated;
 }
 
 /**
