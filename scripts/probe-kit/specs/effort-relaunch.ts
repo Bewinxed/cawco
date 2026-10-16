@@ -29,6 +29,8 @@
  *
  *   bun scripts/probe-kit/run.ts effort-relaunch
  */
+import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
+import { join } from "node:path";
 import {
   ACCOUNT,
   MODEL,
@@ -36,7 +38,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import { type Kit, ROOT, type Spec } from "../kit";
 import { B, furnishAccount } from "./account-move";
 
 /** A model whose effort scale reaches `max`: the scratch fleet's Haiku sends none. */
@@ -60,7 +62,13 @@ const OC_SUMMARIZING =
 const STILL_OPEN = "Your work item is still open";
 /** OpenCode's Code Mode tool, which runs MCP tools from a script. */
 const CODE_MODE = "execute";
+/** `wait_item` as each harness offers it by name (document-scope `WAITS`). */
+const WAITS = ["mcp__cawco__wait_item", "cawco_wait_item", "wait_item"];
+const WAIT_INPUT = { minutes: 60, reason: "The probe drives this delegate." };
 const HEADING = /^##\s.+$/gm;
+/** Where a failed OpenCode leg keeps the scratch fleet's logs, in this checkout. */
+const KEPT = join(ROOT, ".probe", "effort-relaunch");
+const OPENCODE_LOG = /\/opencode\/log\/[^/]+\.log$/;
 
 /**
  * OpenCode's summary: each `##` heading its template names, filled. OpenCode
@@ -88,28 +96,31 @@ const summary = (body: string): Reply => {
   );
 };
 
+const call = (name: string, input: object): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name, input },
+});
+
 /**
- * A turn of the OpenCode delegate: its `wait_item` through Code Mode, then
- * its words. A work item whose session ends three turns in a row without
- * `finish_item` fails (hub work-items.ts `QUIET_TURNS`); a declared wait keeps
- * it running, so the leg's own turns never fail it.
+ * A turn of the OpenCode delegate: its `wait_item`, by the name OpenCode
+ * offers it or else through Code Mode, then its words. A work item whose
+ * session ends three turns in a row without `finish_item` fails (hub
+ * work-items.ts `QUIET_TURNS`); a declared wait keeps it running (its
+ * `waitingTurn`), so the leg's own turns never fail it.
  */
 const delegateTurn = (request: Seen): Reply => {
-  if (request.afterTool || !request.toolNames.includes(CODE_MODE)) {
-    const mark = OC_MARK.exec(request.last);
-    return words(mark ? `${mark[0]}-ANSWERED` : "Waiting for the probe.");
+  const wait = request.toolNames.find((name) => WAITS.includes(name));
+  if (!request.afterTool && wait) {
+    return call(wait, WAIT_INPUT);
   }
-  const wait = { minutes: 60, reason: "The probe drives this delegate." };
-  return {
-    everyMs: 5,
-    words: [],
-    tool: {
-      name: CODE_MODE,
-      input: {
-        code: `return await tools.cawco.wait_item(${JSON.stringify(wait)});`,
-      },
-    },
-  };
+  if (!request.afterTool && request.toolNames.includes(CODE_MODE)) {
+    return call(CODE_MODE, {
+      code: `return await tools.cawco.wait_item(${JSON.stringify(WAIT_INPUT)});`,
+    });
+  }
+  const mark = OC_MARK.exec(request.last);
+  return words(mark ? `${mark[0]}-ANSWERED` : "Waiting for the probe.");
 };
 
 const respond = (request: Seen): Reply => {
@@ -480,23 +491,39 @@ const compactedDelegate = async (kit: Kit, fleet: Fleet, parent: string) => {
     answered,
     JSON.stringify({ asked: after !== undefined, row, item })
   );
-  if (!answered) {
-    // What the agent and its keeper said of the delegate's workspace and
-    // session: the one record of a boundary start that failed.
-    const ws = delegated.workspaceId.slice(0, 8);
-    const said = (await fleet.logs("agent"))
-      .split("\n")
-      .filter(
-        (line) =>
-          line.includes(ws) ||
-          line.includes(high) ||
-          line.includes("[sessiond]")
-      )
-      .slice(-120);
-    kit.note(`agent log, workspace ${ws} and the keeper:\n${said.join("\n")}`);
-    const keeper = (await fleet.logs("sessiond")).split("\n").slice(-60);
-    kit.note(`sessiond log, last lines:\n${keeper.join("\n")}`);
+  if (!(answered && compacted > before)) {
+    await keepLogs(kit, fleet);
   }
+};
+
+/**
+ * The scratch fleet's own record of a failed OpenCode leg, kept in this
+ * checkout's `.probe/effort-relaunch/` (the rig deletes its temp dir on
+ * teardown): the agent's, sessiond's and the hub's logs, and every OpenCode
+ * server's log under the fleet's home (the machine's and each account's data
+ * home).
+ */
+const keepLogs = async (kit: Kit, fleet: Fleet): Promise<void> => {
+  await rm(KEPT, { recursive: true, force: true });
+  await mkdir(KEPT, { recursive: true });
+  for (const role of ["agent", "sessiond", "hub"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: three files, one after the other
+    await Bun.write(join(KEPT, `${role}.log`), await fleet.logs(role));
+  }
+  const found = (await readdir(fleet.home, { recursive: true })).filter(
+    (path) => OPENCODE_LOG.test(`/${path}`)
+  );
+  await Promise.all(
+    found.map((path) =>
+      copyFile(
+        join(fleet.home, path),
+        join(KEPT, `opencode-${path.replaceAll("/", "_")}`)
+      )
+    )
+  );
+  kit.note(
+    `the OpenCode leg failed: the agent's, sessiond's and hub's logs and ${found.length} OpenCode log(s) are in ${KEPT}`
+  );
 };
 
 export default { name: "effort-relaunch", run } satisfies Spec;
