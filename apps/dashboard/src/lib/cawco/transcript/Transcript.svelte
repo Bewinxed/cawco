@@ -1465,8 +1465,8 @@
    * `visibility` coming back on each (2,366 elements, 26.7ms, for a view and
    * a screen above and below it); it holds the view's rows alone now. The
    * screens either side mount a step a task once the shown pane's first
-   * frame has painted (`buffer`), and are let go a task after it is put
-   * away, so none of it lands in a switch's frame (web.dev, "Optimize long
+   * frame has painted (`buffer`), and are let go a step a task once it is
+   * put away, so none of it lands in a switch's frame (web.dev, "Optimize long
    * tasks"). What is on screen never moves: virtua keeps the view where it
    * stands as rows mount above it.
    */
@@ -1486,32 +1486,42 @@
   });
   /**
    * How far either side of the view virtua mounts rows (its `bufferSize`):
-   * none while the view is all that is mounted (`narrow`, `unseen`), and
-   * back up to a screen (`viewHeight`) by a quarter of one a task, each step
-   * once a frame has painted. Back up in one task, the screens either side
-   * of a pane just shown mounted together, 1,189 elements and 23ms of style
-   * in one 46ms task 73ms after the switch (two-pane-perf); a quarter at a
-   * time each task holds a quarter of them.
+   * none at once for a far landing (`narrow`), and otherwise stepped an
+   * eighth of a screen (`viewHeight`) a task, each step once a frame has
+   * painted: up to a screen while the pane is seen, down to none once it is
+   * put away (`unseen`). Back up in one task, the screens either side of a
+   * pane just shown mounted together, 1,189 elements and 23ms of style in
+   * one 46ms task 73ms after the switch; a quarter a step, the frame after
+   * each step still styled 626 of them (a 36ms frame, two-pane-perf's one
+   * pane point switch). Let go in one task, a pane put away unmounted its 79
+   * rows in a 42ms timer (its two pane point switch).
    */
-  const BUFFER_STEPS = 4;
+  const BUFFER_STEPS = 8;
   let buffer = $state(0);
   $effect(() => {
     const full = viewHeight;
-    if (narrow || unseen) {
+    if (narrow) {
       buffer = 0;
       return;
     }
-    if (untrack(() => buffer) >= full) {
+    const to = unseen ? 0 : full;
+    const now = untrack(() => buffer);
+    if (!unseen && now >= full) {
       buffer = full;
       return;
     }
+    if (now === to) {
+      return;
+    }
+    const by = Math.max(1, full / BUFFER_STEPS);
     let frame = 0;
     let task: ReturnType<typeof setTimeout> | undefined;
     const grow = () => {
       frame = requestAnimationFrame(() => {
         task = setTimeout(() => {
-          buffer = Math.min(full, buffer + full / BUFFER_STEPS);
-          if (buffer < full) {
+          buffer =
+            to > buffer ? Math.min(to, buffer + by) : Math.max(to, buffer - by);
+          if (buffer !== to) {
             grow();
           }
         });
