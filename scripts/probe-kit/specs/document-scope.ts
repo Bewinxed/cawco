@@ -128,6 +128,12 @@ const messageBack = (body: string, back = 1): string => {
 };
 const lastMessage = (body: string): string => messageBack(body);
 
+/**
+ * What the hub tells a work item's session whose turn ended without
+ * `finish_item` (work-items.ts `quietTurn`, and the sweep's wake): a
+ * delegate's request, whatever its compaction left of its brief.
+ */
+const STILL_OPEN = "Your work item is still open";
 /** `wait_item` as each harness offers it. */
 const WAITS = ["mcp__cawco__wait_item", "cawco_wait_item", "wait_item"];
 const WAIT_INPUT = { minutes: 60, reason: "The probe drives this delegate." };
@@ -233,7 +239,11 @@ const spec: Spec = {
       }
       // A delegate's request: its brief is in its history, or (once it has
       // compacted) the turn the probe is driving is a delegate's.
-      if (request.all.includes(DELEGATE_MARK) || now?.delegate) {
+      if (
+        request.all.includes(DELEGATE_MARK) ||
+        request.all.includes(STILL_OPEN) ||
+        now?.delegate
+      ) {
         return delegateTurn(request, now?.delegate ? now : undefined);
       }
       if (!now) {
@@ -324,7 +334,9 @@ const spec: Spec = {
       step = {
         kind: "say",
         delegate,
-        summary: `DOCSCOPE-SUMMARY-${crypto.randomUUID().slice(0, 8)}`,
+        // A delegate's summary carries its mark: the brief that did is
+        // summarized away on Claude Code and pi.
+        summary: `${delegate ? DELEGATE_MARK : "DOCSCOPE-"}SUMMARY-${crypto.randomUUID().slice(0, 8)}`,
       };
       await fleet.send(session, "/compact");
       const compacted = await until(
