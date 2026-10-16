@@ -1166,20 +1166,26 @@ async function onSimulator(
       await pause(2000);
       // The live probe's own row, which says it needs you: not an earlier probe's
       // stopped row, nor any other session that needs you.
-      // It stands under every project above cockpit's: the drawer scrolled
-      // a little at a time until it is on screen.
+      // It stands under every project above cockpit's, out of view (a
+      // swipe there moved the list none): each project but cockpit folded
+      // ("Hide <project>'s sessions", this simulator's own view of the
+      // drawer), so cockpit's rows rise into view.
       const probeRow = (label: string) =>
         label === "Needs you: Probe: long ask (ios-long-ask)";
-      drawer = false;
-      for (let swipe = 0; swipe < 16 && !drawer; swipe += 1) {
-        // biome-ignore lint/performance/noAwaitInLoops: one step down the drawer after another
-        drawer = await tap(probeRow);
-        if (!drawer) {
-          await sh(
-            `${AXE} swipe --start-x 150 --start-y 650 --end-x 150 --end-y 400 --duration 1.2 --udid ${udid}`
-          );
-          await pause(1200);
+      drawer = await tap(probeRow);
+      for (let fold = 0; fold < 30 && !drawer; fold += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: one project folded after another
+        const folded = await tap(
+          (label) =>
+            label.startsWith("Hide ") &&
+            label.endsWith("'s sessions") &&
+            label !== `Hide ${PROJECT}'s sessions`
+        );
+        if (!folded) {
+          break;
         }
+        await pause(800);
+        drawer = await tap(probeRow);
       }
     }
     await pause(3000);
