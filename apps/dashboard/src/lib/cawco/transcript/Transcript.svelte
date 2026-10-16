@@ -1453,9 +1453,9 @@
    * shows a warm pane restyles every element it holds, the inherited
    * `visibility` coming back on each (2,366 elements, 26.7ms, for a view and
    * a screen above and below it); it holds the view's rows alone now. The
-   * screens either side mount in a task of their own once the shown pane's
-   * first frame has painted, and are let go the same way once it is put
-   * away, so neither lands in a switch's frame (web.dev, "Optimize long
+   * screens either side mount a step a task once the shown pane's first
+   * frame has painted (`buffer`), and are let go a task after it is put
+   * away, so none of it lands in a switch's frame (web.dev, "Optimize long
    * tasks"). What is on screen never moves: virtua keeps the view where it
    * stands as rows mount above it.
    */
@@ -1468,6 +1468,45 @@
         unseen = !now;
       });
     });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(task);
+    };
+  });
+  /**
+   * How far either side of the view virtua mounts rows (its `bufferSize`):
+   * none while the view is all that is mounted (`narrow`, `unseen`), and
+   * back up to a screen (`viewHeight`) by a quarter of one a task, each step
+   * once a frame has painted. Back up in one task, the screens either side
+   * of a pane just shown mounted together, 1,189 elements and 23ms of style
+   * in one 46ms task 73ms after the switch (two-pane-perf); a quarter at a
+   * time each task holds a quarter of them.
+   */
+  const BUFFER_STEPS = 4;
+  let buffer = $state(0);
+  $effect(() => {
+    const full = viewHeight;
+    if (narrow || unseen) {
+      buffer = 0;
+      return;
+    }
+    if (untrack(() => buffer) >= full) {
+      buffer = full;
+      return;
+    }
+    let frame = 0;
+    let task: ReturnType<typeof setTimeout> | undefined;
+    const grow = () => {
+      frame = requestAnimationFrame(() => {
+        task = setTimeout(() => {
+          buffer = Math.min(full, buffer + full / BUFFER_STEPS);
+          if (buffer < full) {
+            grow();
+          }
+        });
+      });
+    };
+    grow();
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(task);
@@ -3365,7 +3404,7 @@
     {@attach wholeHeight}
   >
     <Virtualizer
-      bufferSize={narrow || unseen ? 0 : viewHeight}
+      bufferSize={buffer}
       {cache}
       data={renderedRows}
       getKey={(r) => r.key}
