@@ -4277,7 +4277,7 @@ export const createWorkItems = ({
       outputs.length > 0
         ? ` && git hash-object -- ${outputs.map(quote).join(" ")}`
         : "";
-    const read = await runIn(workspace)(
+    const read = await runIn(workspace, item)(
       `left=$(${statusCommand(outputs)}) && test -z "$left" && git rev-parse --verify 'HEAD^{tree}'${hashed}`,
       GIT_TIMEOUT_MS
     );
