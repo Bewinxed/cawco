@@ -43,8 +43,9 @@
    */
   /**
    * The composer's top as drawn: the highest of what it shows. The pill,
-   * the chips in the tray row, the suggestions while the row holds any,
-   * the plan's ring, Caw perched on the pill. Its rows are kept laid out whether they show anything or not
+   * an ask's card grown out of it, the chips in the tray row, the
+   * suggestions while the row holds any, the plan's ring, Caw perched on
+   * the pill. Its rows are kept laid out whether they show anything or not
    * (the tray row, the suggestion row: app.css `--c-tray-row`,
    * `--c-suggest-room`), and a part steps aside for an ask by `visibility`;
    * counted by their boxes, an empty suggestion row stood the sheet 59px
@@ -52,7 +53,17 @@
    * neither `visibility: hidden` nor faded to nothing.
    */
   const COMPOSER_PARTS =
-    ":scope > .composer, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch";
+    ":scope > .composer, .ask, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch";
+  /**
+   * The sheet folded to its tab: as tall as its grabber's touch area
+   * (`[data-vaul-handle-hitarea]`, below), the one part of it a finger
+   * needs. An ask raised on the composer (a question, a permission) is the
+   * reader's to answer, and the sheet standing over it hid it: while it is
+   * up the sheet folds to its tab on its floor, the ask card's top, and
+   * opens again to the height it had once the ask is gone. Opened from the
+   * tab meanwhile, it stands above the card.
+   */
+  const TAB = "44px";
   const DRAWN = { opacityProperty: true, visibilityProperty: true };
   function drawnTop(composer: HTMLElement): number {
     let top = Number.POSITIVE_INFINITY;
@@ -101,9 +112,50 @@
         : Number.parseFloat(snap);
     return Math.max(0, availableHeight - visible);
   });
+  /** An ask stands on the composer (its `.dock.asking`): the sheet is folded to its tab. */
+  let asking = $state(false);
+  /** Where the sheet stood as the ask came up: the middle snap, the full height, or the tab. */
+  let beforeAsk: "middle" | number | string | null = null;
+  /** A snap the ask's coming or going moves the sheet to, once the snaps hold it. */
+  let moveTo: "middle" | number | string | null = null;
+  $effect(() => {
+    const up = asking;
+    untrack(() => {
+      if (!placed) {
+        return;
+      }
+      if (up) {
+        // By its snap, not its pixels: the middle is a height in pixels,
+        // and the ask's card has already moved it by the time this runs.
+        beforeAsk = snap === 1 || snap === TAB ? snap : "middle";
+        moveTo = TAB;
+      } else if (beforeAsk !== null) {
+        moveTo = beforeAsk;
+        beforeAsk = null;
+      }
+    });
+  });
+  /**
+   * The ask came or went: vaul moves the sheet there on its own curve, from
+   * the snaps as they now stand (it moves only to a snap it holds). Says
+   * whether it did.
+   */
+  function movedForAsk(nextMiddle: string): boolean {
+    if (moveTo === null) {
+      return false;
+    }
+    const to = moveTo === "middle" ? nextMiddle : moveTo;
+    moveTo = null;
+    if (!snapPoints.includes(to)) {
+      return false;
+    }
+    snap = to;
+    return true;
+  }
   $effect(() => {
     const dimensions = viewportHeight + availableHeight;
     const nextMiddle = middle;
+    const tabbed = asking;
     if (dimensions) {
       tick().then(async () => {
         if (snap === previousMiddle) {
@@ -111,8 +163,12 @@
         }
         previousMiddle = nextMiddle;
         // The middle snap is viewport-relative; the composer shortens the host.
-        snapPoints = [nextMiddle, 1];
+        // The tab is a snap only while an ask is up.
+        snapPoints = tabbed ? [TAB, nextMiddle, 1] : [nextMiddle, 1];
         await tick();
+        if (movedForAsk(nextMiddle)) {
+          return;
+        }
         if (drawer && host && snap !== null) {
           const { height } = host.getBoundingClientRect();
           const visibleHeight =
@@ -175,6 +231,7 @@
         getComputedStyle(node).getPropertyValue("--space-4")
       );
       const composerTop = composer ? drawnTop(composer) : box.bottom - offset;
+      asking = composer?.classList.contains("asking") ?? false;
       const viewport = window.visualViewport;
       // A keyboard that resizes the web view (Brave) reports the new visible
       // area a frame before the page is laid out in it, with the composer

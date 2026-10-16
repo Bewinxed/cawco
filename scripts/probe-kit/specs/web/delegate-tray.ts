@@ -285,6 +285,196 @@ const sheetFoot = (page: Page) =>
   });
 
 /**
+ * The preview drawer as drawn: the part of it its host shows (the host
+ * clips what stands below the composer), and the ask card's box if one is
+ * up.
+ */
+const drawerNow = (page: Page) =>
+  page.evaluate(() => {
+    const host = document.querySelector<HTMLElement>(".preview-sheet-host");
+    const drawer = document.querySelector<HTMLElement>(
+      ".preview-sheet[data-vaul-drawer]"
+    );
+    if (!(host && drawer)) {
+      return null;
+    }
+    const clip = host.getBoundingClientRect();
+    const box = drawer.getBoundingClientRect();
+    const top = Math.max(box.top, clip.top);
+    const bottom = Math.min(box.bottom, clip.bottom);
+    const ask = document.querySelector<HTMLElement>(".leaf > .dock .dock .ask");
+    const card = ask?.checkVisibility({
+      opacityProperty: true,
+      visibilityProperty: true,
+    })
+      ? ask.getBoundingClientRect()
+      : null;
+    const style = ask ? getComputedStyle(ask) : null;
+    return {
+      ask: card ? { bottom: card.bottom, top: card.top } : null,
+      // The card as it stands, drawn or not, and the sheet's own state.
+      askBox: ask
+        ? `top ${Math.round(ask.getBoundingClientRect().top)} opacity ${style?.opacity} ${style?.visibility} animations ${ask.getAnimations({ subtree: true }).length}`
+        : "none",
+      bottom,
+      height: Math.max(0, bottom - top),
+      host: `${host.style.height} snap ${host.dataset.activeSnap}`,
+      top,
+    };
+  });
+
+/** A permission parked on the bench's conversation, as the hub parks one; and taken back. */
+const ASK_ID = "bench-ask";
+const raiseAsk = (page: Page, instanceId: string | null) =>
+  page.evaluate(
+    ({ instanceId: id, requestId }) => {
+      const debug = (
+        globalThis as unknown as {
+          __cawcoDebug: {
+            state: { sessions: Record<string, { pending: unknown[] }> };
+          };
+        }
+      ).__cawcoDebug;
+      debug.state.sessions[id ?? ""]?.pending.push({
+        heard: Date.now(),
+        input: { command: "bun run check", description: "Run the checks" },
+        instanceId: id,
+        // The bench's conversation is no live row (no hub): an ask with no
+        // origin there would be taken for one made in no conversation, its
+        // pane the ask's card alone (SessionPane `askAlone`), closed once
+        // answered. Made in this conversation, as a session's own ask is.
+        originInstanceId: id,
+        presentation: {
+          asker: "Bench",
+          changes: [],
+          command: "bun run check",
+          fields: [],
+          summary: "Run the checks",
+        },
+        raisedAt: Date.now(),
+        requestId,
+        toolName: "Bash",
+      });
+    },
+    { instanceId, requestId: ASK_ID }
+  );
+const answerAsk = (page: Page, instanceId: string | null) =>
+  page.evaluate(
+    ({ instanceId: id, requestId }) => {
+      const session = (
+        globalThis as unknown as {
+          __cawcoDebug: {
+            state: {
+              sessions: Record<string, { pending: { requestId: string }[] }>;
+            };
+          };
+        }
+      ).__cawcoDebug.state.sessions[id ?? ""];
+      if (session) {
+        session.pending = session.pending.filter(
+          (one) => one.requestId !== requestId
+        );
+      }
+    },
+    { instanceId, requestId: ASK_ID }
+  );
+
+/** The tab a folded drawer keeps: its grabber's touch area (SideSheet `TAB`). */
+const TAB_PX = 44;
+
+/**
+ * An ask raised under the open drawer (a question or a permission is the
+ * reader's to answer): the drawer folds to its tab, clear of the ask's card;
+ * opened from the tab meanwhile it stands on the card's top; and once the
+ * ask is answered it stands where it stood.
+ */
+async function overAsk(
+  kit: Kit,
+  page: Page,
+  width: number | undefined,
+  id: string | null
+): Promise<void> {
+  const before = await drawerNow(page);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message.split("\n")[0]));
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      errors.push(message.text().split("\n").slice(0, 3).join(" / "));
+    }
+  });
+  await raiseAsk(page, id);
+  await page
+    .waitForSelector(".leaf > .dock .dock.asking", { timeout: 10_000 })
+    .catch(async () => {
+      const seen = await page.evaluate((instanceId) => {
+        const session = (
+          globalThis as unknown as {
+            __cawcoDebug: {
+              state: { sessions: Record<string, { pending: unknown[] }> };
+            };
+          }
+        ).__cawcoDebug.state.sessions[instanceId ?? ""];
+        const dock = document.querySelector(".leaf > .dock .dock");
+        return `pending ${session?.pending.length ?? "no session"}, .ask ${!!dock?.querySelector(".ask")}, composer "${dock?.getAttribute("class")}"`;
+      }, id);
+      throw new Error(
+        `no ask raised on the composer: ${seen}, at ${page.url()}; page errors: ${errors.join(" | ") || "none"}; the page reads "${(await page.evaluate(() => document.body.innerText)).slice(0, 160)}"`
+      );
+    });
+  await settle(page, 1200);
+  const folded = await drawerNow(page);
+  kit.check(
+    `${width}px: an ask raised, the drawer folds to its tab, clear of the ask's card`,
+    !!folded?.ask &&
+      Math.abs(folded.height - TAB_PX) <= 1 &&
+      folded.bottom <= folded.ask.top + 0.5,
+    JSON.stringify({ before, folded })
+  );
+  // The tab's grabber pressed: its click, which a tap on it sends (vaul's
+  // handle, SideSheet `cycleSnap`). The bench is a fixed layer over the
+  // whole window (its `.bench`, at the top of the stack) and the drawer is
+  // portalled under it to the body, so a finger at the grabber's place
+  // lands on the bench's transcript; on the app's page the drawer stands
+  // over the pane, where preview-touch taps it.
+  await page.evaluate(() =>
+    document.querySelector<HTMLElement>(".preview-sheet .preview-grab")?.click()
+  );
+  await settle(page, 1200);
+  const opened = await drawerNow(page);
+  kit.check(
+    `${width}px: opened from its tab under an ask, the drawer's foot stands on the ask card's top`,
+    !!opened?.ask &&
+      opened.height > TAB_PX + 1 &&
+      Math.abs(opened.bottom - opened.ask.top) <= 0.5,
+    JSON.stringify(opened)
+  );
+  await answerAsk(page, id);
+  await page.waitForFunction(
+    () => !document.querySelector(".leaf > .dock .dock.asking"),
+    undefined,
+    { timeout: 10_000 }
+  );
+  await settle(page, 1200);
+  const after = await drawerNow(page);
+  kit.check(
+    `${width}px: the ask answered, the drawer stands at the height it had`,
+    !!before &&
+      !!after &&
+      after.ask === null &&
+      Math.abs(after.height - before.height) <= 1 &&
+      Math.abs(after.bottom - before.bottom) <= 0.5,
+    JSON.stringify({
+      after,
+      before,
+      composer: await page.evaluate(
+        () => document.querySelector(".leaf > .dock .dock")?.className ?? null
+      ),
+      errors,
+    })
+  );
+}
+
+/**
  * The preview sheet on a phone stands on the composer as drawn (owner:
  * "Thr drawer tab on the web app mobile view starts its bottom above the
  * delegate chips, buggy"): its foot on the chips' top while the tray row
@@ -337,6 +527,7 @@ async function phone(
       Math.abs(shown.foot - shown.edge) <= 0.5,
     JSON.stringify(shown)
   );
+  await overAsk(kit, page, width, id);
   // The delegates done and the plan gone: nothing on the tray row.
   await page.evaluate((instanceId) => {
     const debug = (
