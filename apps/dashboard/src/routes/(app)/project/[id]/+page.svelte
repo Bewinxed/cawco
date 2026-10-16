@@ -24,11 +24,23 @@
    * swapping the task in place; under 900px it is its own page, with Back
    * (a history entry of its own, so the browser's back is Back too).
    */
-  import type { ProjectView } from "@cawco/core";
-  import { untrack } from "svelte";
+  import {
+    BLOCK_PAGES,
+    type BlockPage as BlockPageId,
+    type ProjectView,
+    viewOfBlock,
+  } from "@cawco/core";
+  import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { barStrip } from "#lib/cawco/bar-strip.svelte.js";
+  import {
+    isBlockPage,
+    ProjectBlocks,
+  } from "#lib/cawco/blocks/arrangement.svelte.js";
+  import BlockPage, {
+    type BlockItem,
+  } from "#lib/cawco/blocks/BlockPage.svelte";
   import { cawco, requestView, threadsOf } from "#lib/cawco/client.svelte.js";
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import {
@@ -119,7 +131,9 @@
   } from "#lib/cawco/views-api.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     TabItem,
@@ -130,7 +144,17 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { IconPlus, IconSparkles, IconToolTodo } from "#lib/icons.js";
+  import {
+    IconArtifactSheet,
+    IconColumns,
+    IconFileTable,
+    IconLayers,
+    IconMore,
+    IconPlus,
+    IconSparkles,
+    IconToolTodo,
+    IconWorkflow,
+  } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { navigating, page } from "$app/state";
@@ -277,6 +301,18 @@
   /** The tasks with their dates, as the `tasks` view tool answers them: what the Calendar places. */
   let dated = $state<ViewTaskRow[] | null>(null);
 
+  /**
+   * Pages are blocks (blocks/): each page's arrangement, as the hub keeps
+   * it, and the kept views placed on a page as blocks there.
+   */
+  const blocks = new ProjectBlocks(
+    () => projectId,
+    () =>
+      viewsRead
+        ? views.filter((view) => !view.draft).map((view) => view.name)
+        : null
+  );
+
   async function readViews() {
     const id = projectId;
     try {
@@ -388,11 +424,14 @@
     ...(tasks.some((task) => task.outputs.length > 0)
       ? [{ value: "made", label: "Made", draft: false }]
       : []),
-    ...views.map((view) => ({
-      value: `view:${view.name}`,
-      label: viewLabel(view.name),
-      draft: view.draft,
-    })),
+    // A view placed on a page stands there as a block, and is no tab.
+    ...views
+      .filter((view) => view.draft || blocks.pageOfView(view.name) === null)
+      .map((view) => ({
+        value: `view:${view.name}`,
+        label: viewLabel(view.name),
+        draft: view.draft,
+      })),
   ]);
   /** The views as a phone's bar lists them: Decisions with the pages waiting on picks. */
   const barViews = $derived(
@@ -945,6 +984,96 @@
     }
   }
 
+  // --- the pages' blocks ----------------------------------------------------------
+
+  const PAGE_LABELS: Record<BlockPageId, string> = {
+    board: "Board",
+    table: "Table",
+    pipeline: "Pipeline",
+    routines: "Routines",
+  };
+  const TASK_GLYPHS = {
+    board: IconColumns,
+    table: IconFileTable,
+    pipeline: IconWorkflow,
+  } as const;
+
+  /** The kept views placed on `on`, each a block there. */
+  function viewItemsOf(on: BlockPageId): Record<string, BlockItem> {
+    return Object.fromEntries(
+      blocks.placesOf(on).flatMap((place): [string, BlockItem][] => {
+        const name = viewOfBlock(place.block);
+        const view = name
+          ? views.find((each) => each.name === name && !each.draft)
+          : undefined;
+        return view
+          ? [
+              [
+                place.block,
+                {
+                  title: viewLabel(view.name),
+                  glyph: IconArtifactSheet,
+                  content: viewBody,
+                  measure: "--c-block-view",
+                  hideable: true,
+                  body: "natural",
+                  card: false,
+                  view: view.name,
+                },
+              ],
+            ]
+          : [];
+      })
+    );
+  }
+
+  /**
+   * A task view's page: the view itself, drawn alone as it always was until
+   * a view is placed beside it; then the view's block spans the row, and
+   * the board fills the page's height.
+   */
+  function taskPageItems(
+    view: "board" | "table" | "pipeline",
+    content: Snippet<[string]>
+  ): Record<string, BlockItem> {
+    return {
+      [view]: {
+        title: PAGE_LABELS[view],
+        glyph: TASK_GLYPHS[view],
+        meta: taskCount,
+        content,
+        alone: true,
+        wideOnly: true,
+        hideable: false,
+        body: view === "board" ? "fill" : "natural",
+        card: false,
+        measure: "--c-block-view",
+      },
+      ...viewItemsOf(view),
+    };
+  }
+
+  /** A task view's page with blocks beside its view: the pane scrolls them. */
+  const framed = $derived(
+    isBlockPage(current) &&
+      current !== "routines" &&
+      blocks.placesOf(current).length > 1
+  );
+
+  /** A kept view placed on a page: it leaves the strip, and the page shows it. */
+  async function placeView(name: string, on: BlockPageId) {
+    if (await blocks.place(name, on)) {
+      if (current !== on) {
+        choose(on);
+      }
+      tab = on;
+      remember();
+    } else {
+      // Refused, the view stays where it is: its tab, which says why.
+      toast.error(blocks.refused[on] ?? "The hub did not place the view.");
+    }
+  }
+
   // --- Ask Caw for a view -------------------------------------------------------
 
   let stagesOpen = $state(false);
@@ -1003,6 +1132,7 @@
     untrack(() => {
       lead.read();
       readViews();
+      blocks.read();
       readDated();
       readArchived();
       decisions.read();
@@ -1051,6 +1181,20 @@
     decisionsSeen = changes;
   });
 
+  // The arrangement changed (here, or on another screen): it is read again,
+  // and the views with it, since a view placed or made a tab moves the strip.
+  let blocksSeen = -1;
+  $effect(() => {
+    const changes = cawco.blocksChangedOf(projectId);
+    if (blocksSeen !== -1 && changes !== blocksSeen) {
+      untrack(() => {
+        blocks.read();
+        readViews();
+      });
+    }
+    blocksSeen = changes;
+  });
+
   // Another hand may have changed the tasks while the tab was away.
   $effect(() => {
     const back = () => {
@@ -1059,6 +1203,8 @@
         void refresh();
         // biome-ignore lint/complexity/noVoid: the re-read sets its own state
         void decisions.read();
+        // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+        void blocks.read();
       }
     };
     document.addEventListener("visibilitychange", back);
@@ -1160,7 +1306,8 @@
   /** What the pane holds, as its layout reads it: a decision page or the graph fills it. */
   const paneView = $derived.by(() => {
     if (current !== "decisions") {
-      return current;
+      // A task view with views placed beside it is a page of blocks.
+      return framed ? "blocks" : current;
     }
     if (decisionPage) {
       return "decisions-page";
@@ -1188,7 +1335,9 @@
     if (pageScrollsQuery.current) {
       return "page";
     }
-    return current === "board" ? null : "pane";
+    // The board alone scrolls its columns sideways; a board page with
+    // blocks beside it scrolls in the pane.
+    return paneView === "board" ? null : "pane";
   });
 
   /**
@@ -1317,6 +1466,74 @@
   {@render strip(true)}
 {/snippet}
 
+<!-- The task views, each its page's own block (blocks/BlockPage). -->
+{#snippet boardBody(_block: string)}
+  <TaskBoard
+    {allowedFrom}
+    archived={applyFilter(archived, filter, find.ids)}
+    {dateOf}
+    hrefOf={(id) => hrefOf(id)}
+    {kindOf}
+    moving={(id) => id in moving}
+    {newIn}
+    oncreate={create}
+    onmove={drop}
+    onopen={openOne}
+    onpick={pick}
+    picked={isPicked}
+    refused={refusedMove}
+    stages={shownStages}
+    tasks={shownTasks}
+    bind:adding
+  />
+{/snippet}
+{#snippet tableBody(_block: string)}
+  <div class="table-wrap">
+    {#if adding}
+      <div class="table-new">
+        <NewTaskForm
+          oncreate={create}
+          stage={newIn ?? ""}
+          stages={stageList}
+          bind:open={adding}
+        />
+      </div>
+    {/if}
+    <TaskTable
+      hrefOf={(id) => hrefOf(id)}
+      onopen={openOne}
+      onpick={pick}
+      onpickall={(ids, on) => {
+        if (!bulkRun) {
+          pickAll(ids, on);
+        }
+      }}
+      picked={isPicked}
+      stages={stageList}
+      tasks={shownTasks}
+    />
+  </div>
+{/snippet}
+{#snippet pipelineBody(_block: string)}
+  <ViewPipeline stages={stageList} tasks={shownTasks} />
+{/snippet}
+<!-- A task view's block counts the tasks it shows. -->
+{#snippet taskCount()}
+  <span class="block-count num">{shownTasks.length}</span>
+{/snippet}
+<!-- A kept view placed on a page, drawn as its tab draws it. -->
+{#snippet viewBody(block: string)}
+  {@const view = views.find((each) => `view:${each.name}` === block)}
+  {#if view}
+    <ViewOpenUi
+      hrefOf={(id) => hrefOf(id)}
+      onopen={openOne}
+      {projectId}
+      {view}
+    />
+  {/if}
+{/snippet}
+
 {#snippet pane(value: string)}
   {#if value.startsWith("view:")}
     {@const view = views.find((each) => `view:${each.name}` === value)}
@@ -1348,6 +1565,43 @@
               />
             </div>
           </div>
+        {:else}
+          <!-- A kept view's head: its ⋯ places it on a page, as a block. -->
+          <div class="view-head mark-line">
+            <span aria-hidden="true" class="view-glyph" data-box
+              ><IconArtifactSheet /></span
+            >
+            <h2 class="view-title">{viewLabel(view.name)}</h2>
+            <span data-box>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger
+                  aria-label="More for {viewLabel(view.name)}"
+                  class="{buttonVariants({
+                    variant: 'ghost',
+                    size: 'icon-sm',
+                  })} touch-hit"
+                >
+                  <IconMore />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end" class="w-auto min-w-48">
+                  <DropdownMenu.Sub>
+                    <DropdownMenu.SubTrigger>
+                      <IconLayers />
+                      <span>Place on a page</span>
+                    </DropdownMenu.SubTrigger>
+                    <DropdownMenu.SubContent class="w-auto min-w-40">
+                      {#each BLOCK_PAGES as target (target)}
+                        <DropdownMenu.Item
+                          onSelect={() => placeView(view.name, target)}
+                          >{PAGE_LABELS[target]}</DropdownMenu.Item
+                        >
+                      {/each}
+                    </DropdownMenu.SubContent>
+                  </DropdownMenu.Sub>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            </span>
+          </div>
         {/if}
         <ViewOpenUi
           hrefOf={(id) => hrefOf(id)}
@@ -1360,12 +1614,14 @@
       <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
     {/if}
   {:else if value === "routines" && project}
-    <!-- The routines, the strip's fourth tab. -->
+    <!-- The routines, the strip's fourth tab: a page of blocks. -->
     <ViewRoutines
+      {blocks}
       {canTalk}
       cawProblem={lead.view?.problem ?? null}
       project={{ id: project.id, name: project.name }}
       starters={stages?.routineStarters ?? []}
+      viewItems={viewItemsOf("routines")}
     />
   {:else if value === "decisions"}
     <DecisionsView
@@ -1454,52 +1710,23 @@
       </div>
     {/if}
   {:else if value === "board"}
-    <TaskBoard
-      {allowedFrom}
-      archived={applyFilter(archived, filter, find.ids)}
-      {dateOf}
-      hrefOf={(id) => hrefOf(id)}
-      {kindOf}
-      moving={(id) => id in moving}
-      {newIn}
-      oncreate={create}
-      onmove={drop}
-      onopen={openOne}
-      onpick={pick}
-      picked={isPicked}
-      refused={refusedMove}
-      stages={shownStages}
-      tasks={shownTasks}
-      bind:adding
+    <BlockPage
+      {blocks}
+      items={taskPageItems("board", boardBody)}
+      page="board"
     />
   {:else if value === "table"}
-    <div class="table-wrap">
-      {#if adding}
-        <div class="table-new">
-          <NewTaskForm
-            oncreate={create}
-            stage={newIn ?? ""}
-            stages={stageList}
-            bind:open={adding}
-          />
-        </div>
-      {/if}
-      <TaskTable
-        hrefOf={(id) => hrefOf(id)}
-        onopen={openOne}
-        onpick={pick}
-        onpickall={(ids, on) => {
-          if (!bulkRun) {
-            pickAll(ids, on);
-          }
-        }}
-        picked={isPicked}
-        stages={stageList}
-        tasks={shownTasks}
-      />
-    </div>
+    <BlockPage
+      {blocks}
+      items={taskPageItems("table", tableBody)}
+      page="table"
+    />
   {:else if value === "pipeline"}
-    <ViewPipeline stages={stageList} tasks={shownTasks} />
+    <BlockPage
+      {blocks}
+      items={taskPageItems("pipeline", pipelineBody)}
+      page="pipeline"
+    />
   {:else if value === "canvas"}
     <ViewCanvas
       hrefOf={(id) => hrefOf(id)}
@@ -1905,15 +2132,6 @@
     :is(.swap, .current) {
     flex: 1 1 auto;
   }
-  /* The routines bento fills the pane, as the board does, and its panels
-     scroll in themselves. */
-  .pane:has(:global(.routines-view[data-layout="bento"])) {
-    overflow: hidden;
-  }
-  .pane:has(:global(.routines-view[data-layout="bento"])) .swap,
-  .pane:has(:global(.routines-view[data-layout="bento"])) .current {
-    flex: 1 1 auto;
-  }
   .pane:is([data-view="canvas"], [data-view="decisions-graph"]) {
     padding-block-end: var(--space-5);
   }
@@ -1929,6 +2147,39 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+  }
+  /* A kept view's head on its tab: its glyph, its title, its ⋯ (the block
+     frame's head, Block.svelte, without the drag). */
+  .view-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: var(--c-btn-h-sm);
+    padding-inline: var(--space-1);
+  }
+  .view-glyph {
+    display: grid;
+    flex: none;
+    place-items: center;
+    color: var(--ink-muted);
+  }
+  .view-glyph :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
+  .view-title {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    margin: 0;
+    overflow: clip;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .block-count {
+    font: var(--type-meta);
+    color: var(--ink-subtle);
   }
   .draft-bar {
     display: flex;
@@ -2028,8 +2279,8 @@
      the board's columns stand at their natural height (TaskBoard). The
      page's foot clears the bar by its reach: the bar, its inset from the
      foot and a step of air. A view that fills its pane (the canvas, a
-     decision page, the decisions' graph, the routines' bento) stands the
-     scroller's height less that reach, whole once the head has gone. */
+     decision page, the decisions' graph) stands the scroller's height less
+     that reach, whole once the head has gone. */
   @media (max-width: 639px) {
     .project-page {
       --bar-reach: calc(
@@ -2057,8 +2308,7 @@
       [data-view="canvas"],
       [data-view="decisions-page"],
       [data-view="decisions-graph"]
-    ),
-    .pane:has(:global(.routines-view[data-layout="bento"])) {
+    ) {
       flex: 1 0 auto;
       overflow: visible;
     }
@@ -2066,8 +2316,7 @@
       [data-view="canvas"],
       [data-view="decisions-page"],
       [data-view="decisions-graph"]
-    ),
-    .pane:has(:global(.routines-view[data-layout="bento"])) {
+    ) {
       /* The page's content box: its height less the foot it pads. */
       block-size: 100cqb;
     }

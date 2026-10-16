@@ -371,6 +371,7 @@ import {
   type Summarised,
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
+import { blockRoutes, createBlocks } from "./blocks";
 import { bodyLimitRefusal } from "./body-limits";
 import {
   attemptTry,
@@ -16894,6 +16895,19 @@ export const createServer = (
     projectName: (id) => db.project(id)?.name,
     tasks,
   });
+  // Pages are blocks (blocks.ts): each project page's arrangement, and the
+  // views placed on it; every dashboard showing the project reads it again.
+  const blocks = createBlocks({
+    db,
+    projectName: (id) => db.project(id)?.name,
+    keptViews: (id) => views.kept(id),
+    changed: (projectId) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "blocks.changed", projectId },
+      }),
+  });
   // A project's memory (memory.ts): the agents' inbox, its curator's
   // proposals as your asks, and "Make a note" into AGENTS.md.
   const projectMemory = createMemory({
@@ -19606,6 +19620,7 @@ export const createServer = (
         caps.routes(),
         sessionLimitRoutes(db),
         viewRoutes(views),
+        blockRoutes(blocks),
         mockupRoutes((id) => db.project(id) !== undefined),
         noticesSeen.routes,
         joinRoutes({

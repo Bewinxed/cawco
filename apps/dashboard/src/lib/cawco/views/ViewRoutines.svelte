@@ -1,5 +1,9 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
+  import BlockPage, {
+    type BlockItem,
+  } from "#lib/cawco/blocks/BlockPage.svelte";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import {
@@ -11,21 +15,13 @@
   /**
    * A project's routines: what runs on its own (Routines), what fires it
    * (Event sources), and what its runs asked you to approve (Approved
-   * actions). Linked views of one page, Notion's way, held two ways by the
-   * width of the page:
-   *
-   * - Under --c-routines-bento-at: a row of view tabs, each with its count
-   *   and the needs-you mark when something in it waits on you (a failing
-   *   routine or source, an action awaiting you), so nothing is found by
-   *   scrolling. One view at a time, a full table at --c-routines-w; the
-   *   view is in the URL (`part`), so a reload or a link opens it.
-   * - From it: a bento of all three filling the page's height, Routines in
-   *   two thirds, Event sources over Approved actions in the last, each
-   *   panel headed as its tab is and scrolling in itself, so forty routines
-   *   never push the other two out of view.
-   *
-   * The same tables, heads, counts and marks in both. The open routine
-   * stays open across them.
+   * actions). Three blocks of the page (blocks/BlockPage), in the person's
+   * arrangement, beside any custom view placed here: each headed with its
+   * count and the needs-you mark when something in it waits on you (a
+   * failing routine or source, an action awaiting you). Side by side on a
+   * wide screen, stacked on a phone; on a desk a block's rows scroll inside
+   * it past --c-block-body-max, so forty routines never push the other two
+   * out of view.
    *
    * Routines is a ledger, one shape for every row (Hex, Snowflake, Cursor):
    * its state glyph; its name over its schedule in words on your clock,
@@ -74,11 +70,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "#lib/components/ui/table/index.js";
@@ -91,6 +82,7 @@
     IconPauseCircle,
     IconPin,
     IconPlay,
+    IconShield,
     IconTrash,
   } from "#lib/icons.js";
   import { goto, replaceState } from "$app/navigation";
@@ -101,6 +93,8 @@
     starters,
     canTalk,
     cawProblem = null,
+    blocks,
+    viewItems,
   }: {
     /** The project: its id and its name. */
     project: { id: string; name: string };
@@ -110,6 +104,10 @@
     canTalk: boolean;
     /** Why Caw can't start, said on the empty page instead. */
     cawProblem?: string | null;
+    /** The project's arrangement of blocks. */
+    blocks: ProjectBlocks;
+    /** The custom views placed on this page, as blocks, by block id. */
+    viewItems: Record<string, BlockItem>;
   } = $props();
 
   // --- the hub's page, and what keeps it live -------------------------------------
@@ -209,43 +207,11 @@
     return () => clearInterval(tick);
   });
 
-  // --- the parts, and how the page holds them ------------------------------------
+  // --- the three blocks: their counts and what waits on you -----------------------
 
   type Part = "routines" | "sources" | "actions";
-  const PARTS: { id: Part; title: string }[] = [
-    { id: "routines", title: "Routines" },
-    { id: "sources", title: "Event sources" },
-    { id: "actions", title: "Approved actions" },
-  ];
-  const partOf = (value: string | null): Part =>
-    value === "sources" || value === "actions" ? value : "routines";
-  /** The view on screen under the tabs, as the URL names it. */
-  let part = $state<Part>(
-    partOf(untrack(() => here.url.searchParams.get("part")))
-  );
-  function choose(next: Part) {
-    part = next;
-    const url = new URL(here.url.href);
-    if (next === "routines") {
-      url.searchParams.delete("part");
-    } else {
-      url.searchParams.set("part", next);
-    }
-    replaceState(url, here.state);
-  }
-
-  /** The page's width, and the token's width from which it is a bento. */
+  /** Where the page stands: a link's routine is found in it. */
   let place = $state<HTMLElement | null>(null);
-  let placeWidth = $state(0);
-  let bentoAt = $state(Number.POSITIVE_INFINITY);
-  $effect(() => {
-    if (place) {
-      bentoAt = Number.parseFloat(
-        getComputedStyle(place).getPropertyValue("--c-routines-bento-at")
-      );
-    }
-  });
-  const bento = $derived(placeWidth >= bentoAt);
 
   const sourceCount = $derived(routes.length + polls.length);
   const failingSources = $derived(
@@ -261,13 +227,7 @@
   const relayLive = $derived(
     (page?.relays ?? []).some((relay) => relay.state === "live")
   );
-  /** A view tab's name read out: its title first, as it shows, then its count and what waits. */
-  function tabName(id: Part, title: string): string {
-    const said = metaOf(id);
-    return said.needs > 0
-      ? `${title}, ${said.count}, ${said.said}`
-      : `${title}, ${said.count}`;
-  }
+  /** A block's count, and how many in it wait on you, in words. */
   function metaOf(id: Part): { count: number; needs: number; said: string } {
     if (id === "routines") {
       return {
@@ -318,7 +278,6 @@
       if (id && id !== open) {
         open = id;
         bring = id;
-        choose("routines");
       }
     });
   });
@@ -602,10 +561,47 @@
     const hours = Math.round(minutes / 60);
     return hours === 1 ? "Read hourly" : `Read every ${hours} hours`;
   }
+
+  /** The page's blocks: its three, then the views placed on it. */
+  const items = $derived<Record<string, BlockItem>>({
+    routines: {
+      title: "Routines",
+      glyph: IconClock,
+      meta: routinesMeta,
+      action: routinesAction,
+      content: routinesBody,
+      measure: "--c-block-routines",
+      hideable: true,
+      body: "capped",
+      card: true,
+    },
+    sources: {
+      title: "Event sources",
+      glyph: IconHook,
+      meta: sourcesMeta,
+      action: sourcesAction,
+      content: sourcesBody,
+      measure: "--c-block-ledger",
+      hideable: true,
+      body: "capped",
+      card: true,
+    },
+    actions: {
+      title: "Approved actions",
+      glyph: IconShield,
+      meta: actionsMeta,
+      content: actionsBody,
+      measure: "--c-block-ledger",
+      hideable: true,
+      body: "capped",
+      card: true,
+    },
+    ...viewItems,
+  });
 </script>
 
-<!-- A part's count, and the needs-you mark while something in it waits on
-     you: the tab's trail and the panel's head alike. -->
+<!-- A block's count, and the needs-you mark while something in it waits on
+     you, after its title. -->
 {#snippet meta(id: Part)}
   {@const said = metaOf(id)}
   <span class="count num">{said.count}</span>
@@ -617,10 +613,19 @@
     >
   {/if}
 {/snippet}
+{#snippet routinesMeta()}
+  {@render meta("routines")}
+{/snippet}
+{#snippet sourcesMeta()}
+  {@render meta("sources")}
+{/snippet}
+{#snippet actionsMeta()}
+  {@render meta("actions")}
+{/snippet}
 
-<!-- What acts on a part, at its head's trailing end. -->
-{#snippet partAction(id: Part)}
-  {#if id === "routines" && !empty && canTalk}
+<!-- What acts on a block, at its head's trailing end. -->
+{#snippet routinesAction()}
+  {#if !empty && canTalk}
     <Button
       aria-expanded={asking}
       onclick={() => {
@@ -630,7 +635,10 @@
       size="sm"
       variant="outline">New routine</Button
     >
-  {:else if id === "sources" && page}
+  {/if}
+{/snippet}
+{#snippet sourcesAction()}
+  {#if page}
     <Badge
       title={relayLive
         ? undefined
@@ -830,7 +838,7 @@
   {:else}
     {#if asking}
       <!-- New routine: the composer stands over the ledger it will land in. -->
-      {@render askCaw()}
+      <div class="new-routine">{@render askCaw()}</div>
     {/if}
     <div class="ledger">
       <Table.Root
@@ -968,19 +976,8 @@
   {/if}
 {/snippet}
 
-{#snippet body(id: Part)}
-  {#if id === "routines"}
-    {@render routinesBody()}
-  {:else if id === "sources"}
-    {@render sourcesBody()}
-  {:else}
-    {@render actionsBody()}
-  {/if}
-{/snippet}
-
-<!-- Drawn once its width is known, so a wide page never shows the tabs a
-     frame before its bento; held as a skeleton until the hub's first read. -->
-<div bind:this={place} bind:clientWidth={placeWidth} class="routines-place">
+<!-- Held as a skeleton until the hub's first read. -->
+<div bind:this={place} class="routines-place">
   {#if page === null && problem !== null}
     <div class="unread">
       <EmptyState
@@ -994,60 +991,10 @@
       </EmptyState>
     </div>
   {:else if page === null}
-    <Skeleton
-      class="h-64 w-full max-w-[var(--c-routines-w)] rounded-[var(--radius-lg)]"
-    />
-  {:else if placeWidth === 0 || !Number.isFinite(bentoAt)}
-    <!-- Its width, then which way it holds its parts. -->
-  {:else if bento}
-    <div class="routines-view bento" data-layout="bento">
-      {#each PARTS as each (each.id)}
-        <section
-          aria-labelledby="part-{each.id}"
-          class="panel"
-          data-part={each.id}
-        >
-          <header class="panel-head">
-            <h2 class="panel-title" id="part-{each.id}">
-              {each.title}
-              {@render meta(each.id)}
-            </h2>
-            {@render partAction(each.id)}
-          </header>
-          <div class="panel-body">{@render body(each.id)}</div>
-        </section>
-      {/each}
-    </div>
+    <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
   {:else}
-    <div class="routines-view tabbed" data-layout="tabs">
-      <div class="view-head">
-        <Tabs onValueChange={(next) => choose(partOf(next))} value={part}>
-          <TabsList aria-label="Routines page" scrollable>
-            {#each PARTS as each (each.id)}
-              <!-- The count and mark trail the tab's button: its name says them. -->
-              <TabItem
-                aria-label={tabName(each.id, each.title)}
-                label={each.title}
-                value={each.id}
-              >
-                {#snippet trail()}
-                  <span aria-hidden="true" class="tab-meta"
-                    >{@render meta(each.id)}</span
-                  >
-                {/snippet}
-              </TabItem>
-            {/each}
-          </TabsList>
-        </Tabs>
-        {@render partAction(part)}
-      </div>
-      <section
-        aria-label={PARTS.find((each) => each.id === part)?.title}
-        class="view"
-        data-part={part}
-      >
-        {@render body(part)}
-      </section>
+    <div class="routines-view">
+      <BlockPage {blocks} {items} page="routines" />
     </div>
   {/if}
 </div>
@@ -1058,92 +1005,6 @@
     flex: 1 1 auto;
     flex-direction: column;
     min-block-size: 0;
-  }
-
-  /* Tabs: one view at a time, at the ledger's widest. */
-  .tabbed {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    inline-size: 100%;
-    max-inline-size: var(--c-routines-w);
-  }
-  .view-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    min-inline-size: 0;
-  }
-  .view {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-inline-size: 0;
-  }
-  .tab-meta {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin-inline-start: var(--space-1);
-  }
-
-  /* Bento: all three at once, filling the page's height, each panel
-     scrolling in itself; Routines two thirds, the quiet two stacked. */
-  .bento {
-    display: grid;
-    flex: 1 1 auto;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--space-group);
-    min-block-size: 0;
-  }
-  .panel {
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .panel[data-part="routines"] {
-    grid-row: 1 / span 2;
-  }
-  .panel-head {
-    display: flex;
-    flex: none;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    min-block-size: calc(var(--c-btn-h-sm) + var(--space-3) * 2);
-    padding: var(--space-2) var(--space-3);
-    border-block-end: 1px solid var(--border-hairline);
-  }
-  .panel-title {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .panel-body {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-block-size: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  /* A panel's table head stays while its rows scroll under it. */
-  .bento :global(table.routines > thead th),
-  .bento :global(table.quiet > thead th) {
-    position: sticky;
-    inset-block-start: 0;
-    z-index: 2;
-    background: var(--surface-band);
   }
 
   .count {
@@ -1159,16 +1020,17 @@
     block-size: var(--icon-sm);
   }
 
-  /* A ledger: the task table's (TaskTable) band and rows. */
+  /* A ledger: the task table's (TaskTable) band and rows, in its block's
+     card. */
   .ledger {
     container: routines-ledger / inline-size;
   }
-  /* Under tabs the ledger is its own card; in the bento the panel is. */
-  .tabbed .ledger {
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
+  /* Its head stays while its rows scroll under it in the block. */
+  .ledger :global(table > thead th) {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    background: var(--surface-band);
   }
   .ledger :global(table.routines),
   .ledger :global(table.quiet) {
@@ -1330,7 +1192,9 @@
   }
 
   /* A narrow ledger: Last and Next fold into the schedule's line, in the
-     same order, and the name takes the width. */
+     same order, and the name takes the width. 34rem is --c-block-routines
+     (a container query takes no var()): the Routines block takes the
+     columns that keep them unfolded on a desk; a phone folds them. */
   @container routines-ledger (width < 34rem) {
     .ledger :global(table.routines .col-last),
     .ledger :global(table.routines .col-next) {
@@ -1383,9 +1247,11 @@
     flex: none;
     inline-size: 100%;
   }
-  /* In a bento panel, words and starters stand in from its edges. */
-  .panel-body > .purpose,
-  .panel-body > .starters {
+  /* In a block's card, words, starters and the composer stand in from its
+     edges. */
+  .purpose,
+  .starters,
+  .new-routine {
     padding: var(--space-3);
   }
 </style>

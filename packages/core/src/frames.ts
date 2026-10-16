@@ -587,6 +587,17 @@ export interface DecisionsChangedFrame {
   projectId: string;
 }
 
+export interface BlocksChangedFrame {
+  instanceId?: undefined;
+  /**
+   * Hub-originated: a project's arrangement of blocks changed (a block
+   * moved, resized, hidden or shown, a view placed or made a tab): read it
+   * again.
+   */
+  kind: "blocks.changed";
+  projectId: string;
+}
+
 export interface ThreadMessageFrame {
   instanceId?: undefined;
   /** Hub-originated: a message was added to a thread. */

@@ -885,6 +885,12 @@ const state = $state({
    * again when it moves.
    */
   decisionsChanged: {} as Record<string, number>,
+  /**
+   * How many times each project's arrangement of blocks has changed since
+   * this page connected (`blocks.changed` frames): its pages read it again
+   * when it moves.
+   */
+  blocksChanged: {} as Record<string, number>,
   sessions: {} as Record<string, SessionState>,
   /**
    * Each instance's coarse now-state, pushed by the daemon ~1/sec (broadcast).
@@ -3029,6 +3035,12 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "decisions.changed") {
     state.decisionsChanged[frame.projectId] =
       (state.decisionsChanged[frame.projectId] ?? 0) + 1;
+    return;
+  }
+
+  if (frame.kind === "blocks.changed") {
+    state.blocksChanged[frame.projectId] =
+      (state.blocksChanged[frame.projectId] ?? 0) + 1;
     return;
   }
 
@@ -7866,6 +7878,9 @@ export const cawco = {
   /** A count that moves each time the project's decision pages change (`decisions.changed`). */
   decisionsChangedOf: (projectId: string): number =>
     state.decisionsChanged[projectId] ?? 0,
+  /** A count that moves each time the project's arrangement of blocks changes (`blocks.changed`). */
+  blocksChangedOf: (projectId: string): number =>
+    state.blocksChanged[projectId] ?? 0,
   threadMessagesOf: (threadId: string): ThreadMessage[] | null =>
     state.threadMessages[threadId] ?? null,
   session: (instanceId: string): SessionState | null =>

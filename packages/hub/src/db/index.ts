@@ -99,6 +99,7 @@ import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
 import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
+import { type BlocksDb, blocksDb } from "./blocks";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import { type FindDb, findDb } from "./find";
@@ -627,6 +628,8 @@ export interface DbShape {
   readonly atLimit: AtLimitDb;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
   readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
+  /** Each project page's arrangement of blocks (blocks.ts). */
+  readonly blocks: BlocksDb;
   /** Books what one Caw turn cost, to the thread that woke it (null: none did). */
   readonly bookCawTurn: (turn: {
     harness: string;
@@ -8900,6 +8903,7 @@ const make = async (path: string): Promise<DbShape> => {
     turnUsage: turnUsageDb(db),
     atLimit: atLimitDb(db),
     designOffers: designOffersDb(db),
+    blocks: blocksDb(db),
     routines: routinesDb(db),
     connections: connectionsDb(db),
     ingress: ingressDb(db),

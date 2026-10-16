@@ -697,6 +697,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/BlockWidth`.
+    public enum BlockWidth: OpenEnum {
+        case narrow
+        case wide
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "narrow": self = .narrow
+            case "wide": self = .wide
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .narrow: "narrow"
+            case .wide: "wide"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.narrow, .wide]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/CallerKind`.
     public enum CallerKind: OpenEnum {
         case anonymous

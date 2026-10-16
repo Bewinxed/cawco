@@ -4,13 +4,12 @@
  * 1. "the 'tomorrow, failed xx on the right ... don't line up at all, and
  *    they don't follow a consistent structure": the routines are a ledger
  *    whose Last run and Next run are fixed columns, on one clock.
- * 2. "this bento looks terrible on wider screens", "how would a
- *    professional notion template guy design it?", "if there are many
- *    routines the user has to scroll down to even find out there are event
- *    sources", "what about if the screen is big enough? a bento?": linked
- *    views behind tabs with counts and needs-you marks under
- *    --c-routines-bento-at, each a table at --c-routines-w; from it a bento
- *    of all three filling the page's height, each panel scrolling in itself.
+ * 2. "if there are many routines the user has to scroll down to even find
+ *    out there are event sources", "what about if the screen is big
+ *    enough? a bento?": the three are blocks of the page (pages are
+ *    blocks, `blocks.ts` reads their arrangement), each headed with its
+ *    count and needs-you mark, side by side on a wide screen, each block's
+ *    rows scrolling inside it past --c-block-body-max on a desk.
  * 3. "why are you repeating this info that is already up there", "this
  *    should be a proper table", "why is this not formatted?": the detail
  *    holds no schedule line, its runs are a table, its instruction markdown.
@@ -26,15 +25,14 @@
  * then given their real one through the hub, which works out each next slot
  * and starts no run.
  *
- * Tabs at 1024 and 1440 (cawco): the three view tabs with their counts;
- * Last and Next start on one edge in every row (≤ 0.5px) and compute
- * tabular-nums; the view is no wider than --c-routines-w and shares the
- * tabs' leading edge; switching views keeps both, puts the view in the URL,
- * and a reload opens it.
- * Bento at 1920 and 2560 (Fleet ops): the three panels with their counts
- * and needs-you marks; every panel inside the viewport; the routines
- * panel's own body scrolls (scrollHeight > clientHeight) while the page
- * does not; Last and Next still on one edge.
+ * Heads at 1024 and 1440 (cawco): the three blocks with their counts, the
+ * needs-you mark on Routines; at 1440, where the Routines block takes two
+ * columns, Last and Next start on one edge in every row (≤ 0.5px) and
+ * compute tabular-nums.
+ * Busy at 1920 and 2560 (Fleet ops): the three blocks with their counts
+ * and needs-you marks, side by side; every block inside the viewport; the
+ * Routines block's own body scrolls (scrollHeight > clientHeight) while the
+ * page does not; Last and Next still on one edge.
  * An open routine stays open from 1440 to 1920.
  * Detail at 1440 (cawco's memory curator): no schedule line; the
  * instruction renders markdown (its list a <ul>) clamped until More; the
@@ -63,10 +61,10 @@ const ARCHIVED = 3;
 const FOLDED = /^· Last .+ · Next .+$/;
 /** A time at the end of words: "Daily at 13:30", "Tomorrow 13:30". */
 const CLOCK = /(\d\d:\d\d)$/;
-/** A tab's or panel head's words: its title, then its count. */
+/** A block head's words: its title, then its count. */
 const TITLED = /^(.*?)\s*(\d+)/;
-const SOURCES_TAB = /Event sources/;
-const ROUTINES_TAB = /Routines/;
+/** The Routines block. */
+const ROUTINES_BLOCK = ".block[data-block='routines']";
 
 const spread = (values: number[]) =>
   values.some(Number.isNaN) || values.length === 0
@@ -94,50 +92,54 @@ const ledgerIn = (page: Page, scope: string) =>
         "[data-cell='last'] .time, [data-cell='next'] .time"
       ),
     ]);
-    const table = root?.querySelector(".ledger")?.getBoundingClientRect();
     return {
-      layout:
-        document.querySelector(".routines-view")?.getAttribute("data-layout") ??
-        null,
       rows: rows.length,
       last: lefts("last"),
       next: lefts("next"),
       tabular: times.map((t) => getComputedStyle(t).fontVariantNumeric),
-      table: table ? { left: table.left, width: table.width } : null,
-      cap: Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue(
-          "--c-routines-w"
-        )
-      ),
     };
   }, scope);
 
-/** The view tabs: each one's words, whether chosen, and the strip's edge. */
-const tabsOf = (page: Page) =>
+/** The page's blocks: each one's head words, mark, box, and whose scroll is whose. */
+const blocksOf = (page: Page) =>
   page.evaluate(() => {
-    const list = document.querySelector(".view-head [role='tablist']");
+    const pane =
+      document.querySelector<HTMLElement>(".pane") ?? document.scrollingElement;
     return {
-      left: list?.getBoundingClientRect().left ?? Number.NaN,
-      // A tab's segment: its button (role tab) and the count trailing it.
-      tabs: [...(list?.querySelectorAll(".ff-tab") ?? [])].map((segment) => {
-        const tab = segment.querySelector("[role='tab']");
-        return {
-          words: (segment as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
-          name: tab?.getAttribute("aria-label") ?? null,
-          chosen: tab?.getAttribute("aria-selected") === "true",
-          needs: segment.querySelector(".needs") !== null,
-        };
-      }),
-      part: new URL(location.href).searchParams.get("part"),
-      view: document.querySelector(".view")?.getAttribute("data-part") ?? null,
-      viewBox: (() => {
-        const r = document.querySelector(".view")?.getBoundingClientRect();
-        return r ? { left: r.left, width: r.width } : null;
-      })(),
+      vh: innerHeight,
+      page: {
+        scroll: document.scrollingElement?.scrollHeight ?? 0,
+        client: document.scrollingElement?.clientHeight ?? 0,
+        paneScroll: pane?.scrollHeight ?? 0,
+        paneClient: pane?.clientHeight ?? 0,
+      },
+      blocks: [...document.querySelectorAll<HTMLElement>(".blocks > .block")]
+        .filter((block) => !block.hasAttribute("data-reflow-ghost"))
+        .map((block) => {
+          const box = block.getBoundingClientRect();
+          const scroller = block.querySelector<HTMLElement>(".block-body");
+          const head = block.querySelector<HTMLElement>(".block-head");
+          return {
+            part: block.dataset.block ?? null,
+            head: [
+              head?.querySelector<HTMLElement>(".title")?.innerText,
+              head?.querySelector<HTMLElement>(".meta")?.innerText,
+            ]
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim(),
+            needs: head?.querySelector(".needs") !== null,
+            top: box.top,
+            bottom: box.bottom,
+            overflowY: scroller ? getComputedStyle(scroller).overflowY : null,
+            scroll: scroller?.scrollHeight ?? 0,
+            client: scroller?.clientHeight ?? 0,
+          };
+        }),
     };
   });
 
-async function tabs(kit: Kit, base: string, projectId: string) {
+async function heads(kit: Kit, base: string, projectId: string) {
   const page = await kit.page("desk");
   page.setDefaultTimeout(60_000);
   for (const width of [1024, 1440]) {
@@ -148,127 +150,41 @@ async function tabs(kit: Kit, base: string, projectId: string) {
       () => document.querySelectorAll("tbody.routine").length >= 4
     );
     await settle(page);
-    const at = `tabs ${width}`;
+    const at = `blocks ${width}`;
     // What a reviewer reads: the page as it stands.
     await page.screenshot({
-      path: join(kit.out, `routines-tabs-${width}.png`),
+      path: join(kit.out, `routines-blocks-${width}.png`),
     });
-    const g = await ledgerIn(page, ".view");
-    const t = await tabsOf(page);
-    const titled = t.tabs.map((tab) => tab.words.match(TITLED)?.slice(1, 3));
+    const b = await blocksOf(page);
     kit.check(
-      `${at}: the page is the view tabs, Routines ${ROUTINES} chosen, Event sources 0 and Approved actions 0 beside it; Routines carries the needs-you mark for its failing routine`,
-      g.layout === "tabs" &&
-        JSON.stringify(titled) ===
-          JSON.stringify([
-            ["Routines", String(ROUTINES)],
-            ["Event sources", "0"],
-            ["Approved actions", "0"],
-          ]) &&
-        t.tabs[0]?.chosen === true &&
-        t.tabs[0]?.needs === true &&
-        t.tabs[0]?.name === `Routines, ${ROUTINES}, 1 failing` &&
-        t.tabs[1]?.name === "Event sources, 0",
-      JSON.stringify(t.tabs)
+      `${at}: the page is three blocks, Routines ${ROUTINES}, Event sources 0 and Approved actions 0; Routines carries the needs-you mark for its failing routine`,
+      JSON.stringify(
+        b.blocks.map((block) => block.head.match(TITLED)?.slice(1, 3))
+      ) ===
+        JSON.stringify([
+          ["Routines", String(ROUTINES)],
+          ["Event sources", "0"],
+          ["Approved actions", "0"],
+        ]) && b.blocks[0]?.needs === true,
+      JSON.stringify(b.blocks)
     );
-    kit.check(
-      `${at}: every row's Last and Next time starts on one edge (≤ 0.5px), in tabular figures`,
-      g.rows === ROUTINES &&
-        spread(g.last) <= 0.5 &&
-        spread(g.next) <= 0.5 &&
-        g.tabular.length === ROUTINES * 2 &&
-        g.tabular.every((v) => v.includes("tabular-nums")),
-      `last ${edges(g.last)}; next ${edges(g.next)}; ${[...new Set(g.tabular)].join(" | ")}`
-    );
-    kit.check(
-      `${at}: the ledger is no wider than --c-routines-w and starts on the tabs' edge`,
-      g.table !== null &&
-        g.cap > 0 &&
-        g.table.width <= g.cap + 0.5 &&
-        Math.abs(g.table.left - t.left) <= 0.5,
-      `ledger ${JSON.stringify(g.table)}, cap ${g.cap}, tabs at ${t.left}`
-    );
-
-    // Another view: the same cap and edge, its name in the URL, kept on reload.
-    await page
-      .locator(".view-head")
-      .getByRole("tab", { name: SOURCES_TAB })
-      .click();
-    await settle(page);
-    const sources = await tabsOf(page);
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForSelector(".view[data-part='sources']");
-    await settle(page);
-    const reloaded = await tabsOf(page);
-    kit.check(
-      `${at}: Event sources is its own view, on the same edge and no wider than the cap; the URL names it and a reload opens it`,
-      sources.view === "sources" &&
-        sources.part === "sources" &&
-        sources.tabs[1]?.chosen === true &&
-        sources.viewBox !== null &&
-        Math.abs(sources.viewBox.left - t.left) <= 0.5 &&
-        sources.viewBox.width <= g.cap + 0.5 &&
-        reloaded.view === "sources" &&
-        reloaded.tabs[1]?.chosen === true,
-      `${JSON.stringify(sources)}; reloaded ${JSON.stringify(reloaded)}`
-    );
-    await page
-      .locator(".view-head")
-      .getByRole("tab", { name: ROUTINES_TAB })
-      .click();
-    await settle(page);
-    const back = await tabsOf(page);
-    const again = await ledgerIn(page, ".view");
-    kit.check(
-      `${at}: back on Routines, the URL drops the view and the ledger keeps its edges`,
-      back.part === null &&
-        back.view === "routines" &&
-        spread([...again.last, ...g.last]) <= 0.5 &&
-        spread([...again.next, ...g.next]) <= 0.5,
-      `${JSON.stringify(back)}; last ${edges(again.last)}`
-    );
+    if (width === 1440) {
+      const g = await ledgerIn(page, ROUTINES_BLOCK);
+      kit.check(
+        `${at}: in the two-column Routines block every row's Last and Next time starts on one edge (≤ 0.5px), in tabular figures`,
+        g.rows === ROUTINES &&
+          spread(g.last) <= 0.5 &&
+          spread(g.next) <= 0.5 &&
+          g.tabular.length === ROUTINES * 2 &&
+          g.tabular.every((v) => v.includes("tabular-nums")),
+        `last ${edges(g.last)}; next ${edges(g.next)}; ${[...new Set(g.tabular)].join(" | ")}`
+      );
+    }
   }
   await page.close();
 }
 
-/** The bento: each panel's box, its head's words, and whose scroll is whose. */
-const bentoOf = (page: Page) =>
-  page.evaluate(() => {
-    const pane =
-      document.querySelector<HTMLElement>(".pane") ?? document.scrollingElement;
-    return {
-      layout:
-        document.querySelector(".routines-view")?.getAttribute("data-layout") ??
-        null,
-      vh: innerHeight,
-      page: {
-        scroll: document.scrollingElement?.scrollHeight ?? 0,
-        client: document.scrollingElement?.clientHeight ?? 0,
-        paneScroll: pane?.scrollHeight ?? 0,
-        paneClient: pane?.clientHeight ?? 0,
-      },
-      panels: [...document.querySelectorAll(".bento > .panel")].map((panel) => {
-        const box = panel.getBoundingClientRect();
-        const scroller = panel.querySelector<HTMLElement>(".panel-body");
-        return {
-          part: panel.getAttribute("data-part"),
-          head: (
-            panel.querySelector(".panel-title") as HTMLElement | null
-          )?.innerText
-            .replace(/\s+/g, " ")
-            .trim(),
-          needs: panel.querySelector(".panel-title .needs") !== null,
-          top: box.top,
-          bottom: box.bottom,
-          overflowY: scroller ? getComputedStyle(scroller).overflowY : null,
-          scroll: scroller?.scrollHeight ?? 0,
-          client: scroller?.clientHeight ?? 0,
-        };
-      }),
-    };
-  });
-
-async function bento(kit: Kit, base: string, busyId: string) {
+async function busyBlocks(kit: Kit, base: string, busyId: string) {
   const page = await kit.page("desk");
   page.setDefaultTimeout(60_000);
   for (const width of [1920, 2560]) {
@@ -276,53 +192,58 @@ async function bento(kit: Kit, base: string, busyId: string) {
     await open(
       page,
       `${base}/project/${busyId}?view=routines`,
-      () => document.querySelectorAll(".bento tbody.routine").length >= 40
+      () => document.querySelectorAll(".blocks tbody.routine").length >= 40
     );
     await settle(page);
-    const at = `bento ${width}`;
+    const at = `busy ${width}`;
     await page.screenshot({
-      path: join(kit.out, `routines-bento-${width}.png`),
+      path: join(kit.out, `routines-busy-${width}.png`),
     });
-    const b = await bentoOf(page);
-    const heads = b.panels.map((panel) =>
-      panel.head?.match(TITLED)?.slice(1, 3)
+    const b = await blocksOf(page);
+    const titled = b.blocks.map((block) =>
+      block.head.match(TITLED)?.slice(1, 3)
     );
     kit.check(
-      `${at}: Fleet ops is a bento of Routines ${BUSY}, Event sources 7 (four routes, two connector polls, the GitHub poller) and Approved actions 6, each head with its needs-you mark (failing routines, a failing source, actions waiting)`,
-      b.layout === "bento" &&
-        JSON.stringify(heads) ===
-          JSON.stringify([
-            ["Routines", String(BUSY)],
-            ["Event sources", "7"],
-            ["Approved actions", "6"],
-          ]) &&
-        b.panels.every((panel) => panel.needs),
+      `${at}: Fleet ops is three blocks side by side, Routines ${BUSY}, Event sources 7 (four routes, two connector polls, the GitHub poller) and Approved actions 6, each head with its needs-you mark (failing routines, a failing source, actions waiting)`,
+      JSON.stringify(titled) ===
+        JSON.stringify([
+          ["Routines", String(BUSY)],
+          ["Event sources", "7"],
+          ["Approved actions", "6"],
+        ]) &&
+        b.blocks.every((block) => block.needs) &&
+        b.blocks.every((block) => block.top === b.blocks[0]?.top),
       JSON.stringify(
-        b.panels.map(({ part, head, needs }) => ({ part, head, needs }))
+        b.blocks.map(({ part, head, needs, top }) => ({
+          part,
+          head,
+          needs,
+          top,
+        }))
       )
     );
     kit.check(
-      `${at}: every panel is inside the viewport at load`,
-      b.panels.length === 3 &&
-        b.panels.every((panel) => panel.top >= 0 && panel.bottom <= b.vh + 0.5),
+      `${at}: every block is inside the viewport at load`,
+      b.blocks.length === 3 &&
+        b.blocks.every((block) => block.top >= 0 && block.bottom <= b.vh + 0.5),
       JSON.stringify(
-        b.panels.map(({ part, top, bottom }) => ({ part, top, bottom }))
+        b.blocks.map(({ part, top, bottom }) => ({ part, top, bottom }))
       )
     );
-    const routines = b.panels.find((panel) => panel.part === "routines");
+    const routines = b.blocks.find((block) => block.part === "routines");
     kit.check(
-      `${at}: the ${BUSY} routines scroll in their own panel while the page does not`,
+      `${at}: the ${BUSY} routines scroll in their own block while the page does not`,
       routines !== undefined &&
         routines.overflowY === "auto" &&
         routines.scroll > routines.client &&
-        b.panels.every((panel) => panel.overflowY === "auto") &&
+        b.blocks.every((block) => block.overflowY === "auto") &&
         b.page.scroll <= b.page.client + 1 &&
         b.page.paneScroll <= b.page.paneClient + 1,
-      JSON.stringify({ page: b.page, panels: b.panels })
+      JSON.stringify({ page: b.page, blocks: b.blocks })
     );
-    const g = await ledgerIn(page, ".panel[data-part='routines']");
+    const g = await ledgerIn(page, ROUTINES_BLOCK);
     kit.check(
-      `${at}: in the bento's Routines panel every row's Last and Next time starts on one edge, in tabular figures`,
+      `${at}: in the Routines block every row's Last and Next time starts on one edge, in tabular figures`,
       g.rows === BUSY &&
         spread(g.last) <= 0.5 &&
         spread(g.next) <= 0.5 &&
@@ -331,12 +252,12 @@ async function bento(kit: Kit, base: string, busyId: string) {
     );
   }
 
-  // The open routine stays open from tabs to the bento.
+  // The open routine stays open from 1440 to 1920, the blocks reflowed.
   await page.setViewportSize({ width: 1440, height: 1000 });
   await open(
     page,
     `${base}/project/${busyId}?view=routines`,
-    () => document.querySelectorAll(".view tbody.routine").length >= 40
+    () => document.querySelectorAll(".blocks tbody.routine").length >= 40
   );
   await settle(page);
   // Its weekly schedule sorts it far down the forty: bring it into view first.
@@ -357,11 +278,11 @@ async function bento(kit: Kit, base: string, busyId: string) {
         ?.getAttribute("data-routine") ?? null
   );
   await page.setViewportSize({ width: 1920, height: 1000 });
-  await page.waitForSelector(".bento");
+  await page.waitForSelector(".block-page[data-columns='4']");
   await settle(page);
   const after = await page.evaluate(() => {
     const body = document.querySelector(
-      ".bento tbody.routine[data-state='open']"
+      ".blocks tbody.routine[data-state='open']"
     );
     const rows = body?.querySelectorAll(".detail table.actions tr.action");
     return {
@@ -371,12 +292,12 @@ async function bento(kit: Kit, base: string, busyId: string) {
     };
   });
   kit.check(
-    "1440 → 1920: the routine open under the tabs is open in the bento",
+    "1440 → 1920: the routine open at 1440 is open at 1920",
     before === "busy-2" && after.open === "busy-2",
     `before ${before}, after ${JSON.stringify(after)}`
   );
   kit.check(
-    "bento 1920: an open routine's detail lists the actions its runs proposed, without its own name",
+    "busy 1920: an open routine's detail lists the actions its runs proposed, without its own name",
     after.actions === 1 && !after.from,
     JSON.stringify(after)
   );
@@ -384,13 +305,13 @@ async function bento(kit: Kit, base: string, busyId: string) {
   // What the hub records, read back: an action's routine, a route's last delivery.
   const read = await page.evaluate(() => ({
     actions: [
-      ...document.querySelectorAll(".panel[data-part='actions'] tr.action"),
+      ...document.querySelectorAll(".block[data-block='actions'] tr.action"),
     ].map((row) => ({
       what: row.querySelector(".what")?.textContent?.trim() ?? "",
       from: row.querySelector(".from")?.textContent?.trim() ?? null,
     })),
     routes: [
-      ...document.querySelectorAll(".panel[data-part='sources'] tr.row"),
+      ...document.querySelectorAll(".block[data-block='sources'] tr.row"),
     ].map((row) => ({
       name: row.querySelector(".name")?.textContent?.trim() ?? "",
       sub: row.querySelector(".sub")?.textContent?.trim() ?? "",
@@ -404,7 +325,7 @@ async function bento(kit: Kit, base: string, busyId: string) {
   }));
   const fromRun = read.actions.find((row) => row.what === PROPOSED);
   kit.check(
-    "bento 1920: the action busy-4's delegate run proposed says it came from that routine",
+    "busy 1920: the action busy-4's delegate run proposed says it came from that routine",
     fromRun?.from === "From Check the relay's health",
     JSON.stringify(read.actions)
   );
@@ -415,7 +336,7 @@ async function bento(kit: Kit, base: string, busyId: string) {
   const plain = toMerge.find((row) => !row.sub.includes(RELEASE));
   const quiet = read.routes.find((row) => row.name === "Triage new issues");
   kit.check(
-    "bento 1920: two routes to one routine that differ only by a label filter show their own Last read: the labelled one's three hours ago, the other's just now; a route with none says No events yet",
+    "busy 1920: two routes to one routine that differ only by a label filter show their own Last read: the labelled one's three hours ago, the other's just now; a route with none says No events yet",
     toMerge.length === 2 &&
       labelled?.last === "Delivered, 3h ago" &&
       plain?.last.startsWith("Delivered, ") === true &&
@@ -1388,8 +1309,8 @@ const spec: Spec = {
       JSON.stringify(proposed)
     );
     const base = await fleet.dashboard();
-    await tabs(kit, base, project.id);
-    await bento(kit, base, busy.id);
+    await heads(kit, base, project.id);
+    await busyBlocks(kit, base, busy.id);
     await detail(kit, base, project.id);
     await oneClock(kit, base, project.id);
     await asks(kit, base, project.id, empty.id);

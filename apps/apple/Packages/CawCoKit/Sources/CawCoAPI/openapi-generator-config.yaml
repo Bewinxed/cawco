@@ -25,6 +25,7 @@ typeOverrides:
     BlockMetadataReportKind: OpenEnums.BlockMetadataReportKind
     BlockMetadataToolStatus: OpenEnums.BlockMetadataToolStatus
     BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
+    BlockWidth: OpenEnums.BlockWidth
     CallerKind: OpenEnums.CallerKind
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource

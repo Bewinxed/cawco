@@ -7,6 +7,8 @@ import type {
   AtLimit,
   AttemptResult,
   AuthState,
+  BlockPage,
+  BlockWidth,
   BuildInfo,
   CapPeriod,
   ClaudeModelUsage,
@@ -4029,4 +4031,33 @@ export const parkedAsks = sqliteTable(
     envelope: text("envelope", { mode: "json" }).$type<Envelope>().notNull(),
   },
   (table) => [index("parked_asks_instance").on(table.instanceId)]
+);
+
+/**
+ * Pages are blocks (Projects spec §5.2): each block a project page holds, in
+ * the person's arrangement. One row per block: the page it stands on, its
+ * place in that page's order, its width, and whether it is hidden. A custom
+ * view placed as a block is `view:<name>`, on one page at most (the key); a
+ * view no row names is its own tab. A page with no rows shows its built-in
+ * blocks in their own order (`blocks.ts`).
+ */
+export const projectBlocks = sqliteTable(
+  "project_blocks",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** `board`, `table`, `pipeline` or `routines` (core `BLOCK_PAGES`). */
+    page: text("page").$type<BlockPage>().notNull(),
+    /** A built-in block's word, or `view:<name>`. */
+    block: text("block").notNull(),
+    /** Its place in its page's order, from 0. */
+    position: integer("position").notNull(),
+    width: text("width").$type<BlockWidth>().notNull(),
+    hidden: integer("hidden", { mode: "boolean" }).notNull().default(false),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.block] }),
+    index("project_blocks_page").on(table.projectId, table.page),
+  ]
 );

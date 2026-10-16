@@ -299,6 +299,12 @@ export const createViews = ({ db, projectName, tasks }: ViewsDeps) => {
       ]);
     },
 
+    /** The names of the project's kept views: what may stand as a block (blocks.ts). */
+    kept(projectId: string): Promise<string[]> {
+      known(projectId);
+      return filesIn(projectId, KEPT);
+    },
+
     /** Caw's draft (`view_draft`), checked, then written as a commit by `author`. */
     async draft(
       projectId: string,

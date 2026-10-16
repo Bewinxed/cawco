@@ -11,6 +11,8 @@ export * from "./actions";
 export * from "./archive";
 // Files and texts a turn carries, and the line naming each attached file.
 export * from "./attachments";
+// Pages are blocks: a project page's arrangement, kept by the hub.
+export * from "./blocks";
 // An artifact's `state`: one entry per choice or field, and its bounds.
 export * from "./choices";
 // Claude Code's dir names, as a screen, a message or a shell script names them (paths.ts owns the paths).
@@ -1414,6 +1416,7 @@ export type FramePayload =
   | import("./frames").ThreadMessageFrame
   | import("./frames").TasksChangedFrame
   | import("./frames").DecisionsChangedFrame
+  | import("./frames").BlocksChangedFrame
   | import("./frames").ProjectsChangedFrame
   | import("./frames").FleetUpstreamFrame
   | import("./frames").FleetFetchFrame

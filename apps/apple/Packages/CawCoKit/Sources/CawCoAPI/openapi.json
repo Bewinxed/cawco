@@ -12977,6 +12977,302 @@
         }
       }
     },
+    "/api/projects/{id}/blocks": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdBlocks",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdBlocks 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockArrangement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdBlocks 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdBlocks 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdBlocks 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdBlocks 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdBlocks 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdBlocks 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdBlocks 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdBlocks 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdBlocks 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/blocks/{page}": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "board",
+                "table",
+                "pipeline",
+                "routines"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "blocks": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "block": {
+                          "pattern": "^(?:[a-z][a-z-]{0,31}|view:[a-z0-9][a-z0-9-]{0,62})$",
+                          "type": "string"
+                        },
+                        "width": {
+                          "type": "string",
+                          "enum": [
+                            "narrow",
+                            "wide"
+                          ]
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "block",
+                        "width",
+                        "hidden"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "blocks"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdBlocksByPage",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdBlocksByPage 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockArrangement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdBlocksByPage 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiProjectsByIdBlocksByPage 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdBlocksByPage 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiProjectsByIdBlocksByPage 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiProjectsByIdBlocksByPage 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiProjectsByIdBlocksByPage 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdBlocksByPage 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiProjectsByIdBlocksByPage 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiProjectsByIdBlocksByPage 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/mockups/library": {
       "get": {
         "parameters": [
@@ -28603,6 +28899,9 @@
             "$ref": "#/components/schemas/DecisionsChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/BlocksChangedFrame"
+          },
+          {
             "$ref": "#/components/schemas/ProjectsChangedFrame"
           },
           {
@@ -28673,6 +28972,7 @@
             "thread.message": "#/components/schemas/ThreadMessageFrame",
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "decisions.changed": "#/components/schemas/DecisionsChangedFrame",
+            "blocks.changed": "#/components/schemas/BlocksChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
             "fleet.upstream": "#/components/schemas/FleetUpstreamFrame",
             "fleet.fetch": "#/components/schemas/FleetFetchFrame",
@@ -36451,6 +36751,74 @@
           "receivedAt",
           "routedTo",
           "source"
+        ]
+      },
+      "BlockArrangement": {
+        "description": "A project's arrangement, as `GET /api/projects/:id/blocks` answers it:\neach page the person has arranged, its blocks in order. A page never\narranged is absent, and shows its built-in blocks in their own order.",
+        "type": "object",
+        "properties": {
+          "pages": {
+            "type": "object",
+            "properties": {
+              "routines": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BlockPlace"
+                }
+              },
+              "board": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BlockPlace"
+                }
+              },
+              "table": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BlockPlace"
+                }
+              },
+              "pipeline": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BlockPlace"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "pages"
+        ]
+      },
+      "BlockPlace": {
+        "description": "One block in a page's arrangement.",
+        "type": "object",
+        "properties": {
+          "block": {
+            "description": "A built-in block's word, or `view:<name>`.",
+            "type": "string"
+          },
+          "hidden": {
+            "description": "Folded off the page; it keeps its place and comes back from the page's end.",
+            "type": "boolean"
+          },
+          "width": {
+            "$ref": "#/components/schemas/BlockWidth",
+            "description": "Narrow takes the columns its measure needs; wide spans the row."
+          }
+        },
+        "required": [
+          "block",
+          "hidden",
+          "width"
+        ]
+      },
+      "BlockWidth": {
+        "type": "string",
+        "enum": [
+          "narrow",
+          "wide"
         ]
       },
       "ProjectMockups": {
@@ -49313,6 +49681,25 @@
             "type": "string",
             "enum": [
               "decisions.changed"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "projectId"
+        ]
+      },
+      "BlocksChangedFrame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Hub-originated: a project's arrangement of blocks changed (a block\nmoved, resized, hidden or shown, a view placed or made a tab): read it\nagain.",
+            "type": "string",
+            "enum": [
+              "blocks.changed"
             ]
           },
           "projectId": {
