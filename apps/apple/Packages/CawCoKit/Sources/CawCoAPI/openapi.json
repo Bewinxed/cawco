@@ -9136,6 +9136,19 @@
                 "properties": {
                   "text": {
                     "type": "string"
+                  },
+                  "page": {
+                    "type": "string",
+                    "enum": [
+                      "board",
+                      "table",
+                      "pipeline",
+                      "routines"
+                    ]
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
                   }
                 },
                 "required": [
@@ -9209,6 +9222,119 @@
           },
           "502": {
             "description": "postApiProjectsByIdViewRequests 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/views/{name}/asks": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdViewsByNameAsks",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdViewsByNameAsks 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewAsked"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdViewsByNameAsks 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdViewsByNameAsks 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdViewsByNameAsks 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdViewsByNameAsks 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdViewsByNameAsks 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiProjectsByIdViewsByNameAsks 502",
             "content": {
               "text/plain": {
                 "schema": {
@@ -12751,6 +12877,258 @@
           },
           "503": {
             "description": "deleteApiProjectsByIdViewsDraftsByName 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/views/{name}/removal": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdViewsByNameRemoval",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewRemoval"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/views/{name}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiProjectsByIdViewsByName",
+        "responses": {
+          "200": {
+            "description": "deleteApiProjectsByIdViewsByName 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewRemoved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiProjectsByIdViewsByName 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiProjectsByIdViewsByName 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiProjectsByIdViewsByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiProjectsByIdViewsByName 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "deleteApiProjectsByIdViewsByName 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "deleteApiProjectsByIdViewsByName 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiProjectsByIdViewsByName 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "deleteApiProjectsByIdViewsByName 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "deleteApiProjectsByIdViewsByName 503",
             "content": {
               "text/plain": {
                 "schema": {
@@ -33133,10 +33511,10 @@
           "styles": {
             "type": "object",
             "properties": {
-              "color": {
+              "position": {
                 "type": "string"
               },
-              "position": {
+              "color": {
                 "type": "string"
               },
               "backgroundColor": {
@@ -35708,6 +36086,26 @@
           "thread"
         ]
       },
+      "ViewAsked": {
+        "description": "\"Ask Caw to change it\" (`POST /api/projects/:id/views/:name/asks`): the\nthread your words and the view went to Caw in, and whether he is on. Off,\nhe still answers your words (WORDS.md: \"Off is never 'can't be\nmessaged'\"); the page says so.",
+        "type": "object",
+        "properties": {
+          "caw": {
+            "$ref": "#/components/schemas/ViewAskedCaw"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ThreadMessage"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/ThreadSummary"
+          }
+        },
+        "required": [
+          "caw",
+          "message",
+          "thread"
+        ]
+      },
       "PhoneDone": {
         "description": "What the hub did for a phone request.",
         "type": "object",
@@ -36810,6 +37208,62 @@
           "source"
         ]
       },
+      "ViewRemoval": {
+        "description": "What removing a kept view does, in the hub's words, before it is done\n(`GET /api/projects/:id/views/:name/removal`): the person's confirm on\nthe block or the tab says this.",
+        "type": "object",
+        "properties": {
+          "ask": {
+            "description": "The question the confirm asks: what goes, and the block it leaves.",
+            "type": "string"
+          },
+          "file": {
+            "description": "The view's file, deleted as a commit.",
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/BlockPage",
+            "description": "The page it stands on as a block, or null: it is its own tab."
+          },
+          "view": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ask",
+          "file",
+          "view"
+        ]
+      },
+      "ViewRemoved": {
+        "description": "A kept view removed (`DELETE /api/projects/:id/views/:name`): what went.",
+        "type": "object",
+        "properties": {
+          "commit": {
+            "description": "The commit that deleted its file.",
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/BlockPage",
+            "description": "The page whose block it was, or null: it was its own tab."
+          },
+          "said": {
+            "description": "What went, in the hub's words.",
+            "type": "string"
+          },
+          "view": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "commit",
+          "file",
+          "said",
+          "view"
+        ]
+      },
       "ViewTaskRow": {
         "description": "One task as the `tasks` tool answers it: the board's row, and its dates.",
         "allOf": [
@@ -37173,7 +37627,7 @@
         ]
       },
       "BlockArrangement": {
-        "description": "A project's arrangement, as `GET /api/projects/:id/blocks` answers it:\neach page the person has arranged, its blocks in order. A page never\narranged is absent, and shows its built-in blocks in their own order.",
+        "description": "A project's arrangement, as `GET /api/projects/:id/blocks` answers it:\neach page the person has arranged, its blocks in order, and the drafts\nstanding on a page as proposed blocks. A page never arranged is absent,\nand shows its built-in blocks in their own order.",
         "type": "object",
         "properties": {
           "pages": {
@@ -37204,10 +37658,17 @@
                 }
               }
             }
+          },
+          "proposed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposedBlock"
+            }
           }
         },
         "required": [
-          "pages"
+          "pages",
+          "proposed"
         ]
       },
       "BlockPlace": {
@@ -37238,6 +37699,45 @@
         "enum": [
           "narrow",
           "wide"
+        ]
+      },
+      "ProposedBlock": {
+        "description": "A draft view standing on a page as a proposed block: where it asked to\nstand, and who drafted it. Keep places it there; Remove discards the\ndraft. It is no tab while it stands.",
+        "type": "object",
+        "properties": {
+          "by": {
+            "description": "Who drafted it: \"Caw\", or a session's name.",
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/components/schemas/BlockPage"
+          },
+          "position": {
+            "description": "Its place in the page's order (every block of the page, hidden ones\nincluded, counted from 0), or null: the page's end.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "view": {
+            "description": "The draft view's name (`views/drafts/<view>.oui`).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "by",
+          "page",
+          "position",
+          "view"
+        ]
+      },
+      "BlockPage": {
+        "type": "string",
+        "enum": [
+          "board",
+          "pipeline",
+          "routines",
+          "table"
         ]
       },
       "JoinInfo": {
@@ -51383,6 +51883,13 @@
           "text",
           "thinking",
           "tool"
+        ]
+      },
+      "ViewAskedCaw": {
+        "type": "string",
+        "enum": [
+          "off",
+          "on"
         ]
       },
       "WorkflowAskAnsweredBy": {

@@ -1548,6 +1548,13 @@
       "when": 1792175473846,
       "tag": "0220_design_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 221,
+      "version": "6",
+      "when": 1792179595288,
+      "tag": "0221_view_proposals",
+      "breakpoints": true
     }
   ]
 }

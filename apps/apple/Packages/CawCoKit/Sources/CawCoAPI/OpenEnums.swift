@@ -697,6 +697,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/BlockPage`.
+    public enum BlockPage: OpenEnum {
+        case board
+        case pipeline
+        case routines
+        case table
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "board": self = .board
+            case "pipeline": self = .pipeline
+            case "routines": self = .routines
+            case "table": self = .table
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .board: "board"
+            case .pipeline: "pipeline"
+            case .routines: "routines"
+            case .table: "table"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.board, .pipeline, .routines, .table]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/BlockWidth`.
     public enum BlockWidth: OpenEnum {
         case narrow
@@ -6245,6 +6289,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.admission, .control, .frames, .fs, .heartbeat, .launch, .register, .send, .spawn, .stop, .usage]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/ViewAskedCaw`.
+    public enum ViewAskedCaw: OpenEnum {
+        case off
+        case on
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "off": self = .off
+            case "on": self = .on
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .off: "off"
+            case .on: "on"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.off, .on]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -4275,3 +4275,29 @@ export const projectBlocks = sqliteTable(
     index("project_blocks_page").on(table.projectId, table.page),
   ]
 );
+
+/**
+ * Drafts standing on a page as proposed blocks (blocks.ts): one row per
+ * draft view a session drafted for a page, where it asked to stand. Its own
+ * table, beside the arrangement: a page the person writes whole never
+ * touches a proposal, and a draft never takes the place of the kept view
+ * it may revise. Keep turns the row into the page's block; Remove (the
+ * draft discarded) drops it; so does the project going.
+ */
+export const viewProposals = sqliteTable(
+  "view_proposals",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The draft view's name (`views/drafts/<view>.oui`). */
+    view: text("view").notNull(),
+    page: text("page").$type<BlockPage>().notNull(),
+    /** Its place in the page's order, from 0, or null: the page's end. */
+    position: integer("position"),
+    /** Who drafted it: "Caw", or a session's name. */
+    proposedBy: text("proposed_by").notNull(),
+    proposedAt: timestamp("proposed_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.view] })]
+);

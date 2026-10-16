@@ -18176,6 +18176,7 @@ export const createServer = (
   // Each project's Caw: its lead session, woken by events only (caw.ts).
   const caw = createCaw({
     asks: () => pending.list(),
+    blocks,
     makeNote: (projectId, text) => projectMemory.makeNote(projectId, text),
     inTurn: (instanceId) => pulses.get(instanceId)?.busy === true,
     caps,
@@ -20916,7 +20917,7 @@ export const createServer = (
         actionRoutes(actions),
         caps.routes(),
         sessionLimitRoutes(db),
-        viewRoutes(views),
+        viewRoutes(views, blocks),
         blockRoutes(blocks),
         noticesSeen.routes,
         joinRoutes({

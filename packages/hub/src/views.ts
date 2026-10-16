@@ -5,7 +5,12 @@
  *
  * - **Files are the truth**: a draft is `views/drafts/<name>.oui` in the
  *   project's hub folder, written by Caw's `view_draft`; keeping it moves it
- *   to `views/<name>.oui` as one commit; discarding deletes it.
+ *   to `views/<name>.oui` as one commit (over the kept one, for a change);
+ *   discarding deletes it. A draft written for a page stands there as a
+ *   proposed block (blocks.ts): Keep places it, discarding drops it.
+ * - **Removing a kept view** deletes its file as a commit, and its block
+ *   leaves its page; the confirm that asks first reads what goes from the
+ *   hub (`removal`), in its words.
  * - **Checked on the way in** (`openui.ts`): parsed over the library, its
  *   Queries naming only the view tools, no mutation, no action, no URL and
  *   no code. Keeping checks again: a draft edited by hand since is held to
@@ -18,18 +23,24 @@
  *   else; there are no mutations.
  */
 import {
+  BLOCK_PAGE_TITLES,
+  type BlockPage,
   type ProjectView,
   STAGE_KINDS,
   type StageKind,
   VIEW_TOOLS,
   type ViewEventsOutput,
+  type ViewRemoval,
+  type ViewRemoved,
   type ViewRoutinesOutput,
   type ViewSpendOutput,
   type ViewStagesOutput,
   type ViewToolName,
+  viewTitle,
 } from "@cawco/core";
 import { viewToolInput } from "@cawco/core/views-library";
 import { Elysia, t } from "elysia";
+import type { Blocks } from "./blocks";
 import type { DbShape } from "./db";
 import { checkView, readView } from "./openui";
 import {
@@ -140,6 +151,22 @@ export const createViews = ({ db, projectName, tasks }: ViewsDeps) => {
       draft ? draftPath(name) : keptPath(name)
     );
     return { name, draft, source: content, ...readView(content) };
+  };
+
+  /** One kept view, as written; refused when the project keeps no view by that name. */
+  const keptView = async (
+    projectId: string,
+    rawName: string
+  ): Promise<ProjectView> => {
+    known(projectId);
+    const name = nameOf(rawName);
+    if (!(await filesIn(projectId, KEPT)).includes(name)) {
+      throw new FolderRefusal(
+        404,
+        `The project keeps no view “${name}”; a draft is kept or discarded first.`
+      );
+    }
+    return await readOne(projectId, name, false);
   };
 
   // --- the view tools ----------------------------------------------------------
@@ -305,6 +332,24 @@ export const createViews = ({ db, projectName, tasks }: ViewsDeps) => {
       return filesIn(projectId, KEPT);
     },
 
+    /** One kept view, as written; refused when the project keeps no view by that name. */
+    view: keptView,
+
+    /** Removes a kept view: its file is deleted as a commit, yours. */
+    async remove(
+      projectId: string,
+      rawName: string
+    ): Promise<{ file: string; sha: string; view: string }> {
+      const kept = await keptView(projectId, rawName);
+      const deleted = await deleteFolderFile(projectId, keptPath(kept.name), {
+        message: `Remove the view ${kept.name}`,
+      });
+      return { view: kept.name, file: deleted.path, sha: deleted.sha };
+    },
+
+    /** Where a kept view's file is. */
+    fileOf: keptPath,
+
     /** Caw's draft (`view_draft`), checked, then written as a commit by `author`. */
     async draft(
       projectId: string,
@@ -363,8 +408,27 @@ const VIEW_NAME_PARAM = t.Object({
 });
 const STAGE_KIND = t.Union(STAGE_KINDS.map((kind) => t.Literal(kind)));
 
+/**
+ * What removing a kept view does, in the hub's words: its file goes as a
+ * commit, and its block leaves its page (or its tab goes). The draft of a
+ * change Caw may have written stays to be kept or discarded on its own.
+ */
+const removalOf = (
+  view: string,
+  file: string,
+  page: BlockPage | null
+): ViewRemoval => ({
+  view,
+  file,
+  page,
+  ask: `Remove “${viewTitle(view)}”? ${file} is deleted as a commit, and ${page ? `its block leaves the ${BLOCK_PAGE_TITLES[page]} page` : "its tab goes"}. Nothing else changes.`,
+});
+
 /** The routes for a project's views and the view tools they read. */
-export const viewRoutes = (views: Views) =>
+export const viewRoutes = (
+  views: Views,
+  blocks: Pick<Blocks, "discarded" | "kept" | "pageOf" | "removed">
+) =>
   new Elysia()
     .get("/api/projects/:id/views", async ({ params }) => {
       try {
@@ -373,24 +437,67 @@ export const viewRoutes = (views: Views) =>
         return refused(error);
       }
     })
+    // Keep: the draft becomes the view; a draft proposed on a page is
+    // placed there, where it asked to stand.
     .post(
       "/api/projects/:id/views/:name/keep",
       { params: VIEW_NAME_PARAM },
       async ({ params }) => {
         try {
-          return await views.keep(params.id, params.name);
+          const kept = await views.keep(params.id, params.name);
+          await blocks.kept(params.id, kept.name);
+          return kept;
         } catch (error) {
           return refused(error);
         }
       }
     )
+    // Discard, a proposed block's Remove: the draft goes, and its proposal.
     .delete(
       "/api/projects/:id/views/drafts/:name",
       { params: VIEW_NAME_PARAM },
       async ({ params }) => {
         try {
           await views.discard(params.id, params.name);
+          blocks.discarded(params.id, params.name);
           return { ok: true as const };
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // What removing a kept view does, for the confirm that asks first.
+    .get(
+      "/api/projects/:id/views/:name/removal",
+      { params: VIEW_NAME_PARAM },
+      async ({ params }): Promise<ViewRemoval | ReturnType<typeof refused>> => {
+        try {
+          const kept = await views.view(params.id, params.name);
+          return removalOf(
+            kept.name,
+            views.fileOf(kept.name),
+            blocks.pageOf(params.id, kept.name)
+          );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // A kept view removed: its file deleted as a commit, its block off its page.
+    .delete(
+      "/api/projects/:id/views/:name",
+      { params: VIEW_NAME_PARAM },
+      async ({ params }): Promise<ViewRemoved | ReturnType<typeof refused>> => {
+        try {
+          const removed = await views.remove(params.id, params.name);
+          const page = blocks.removed(params.id, removed.view);
+          return {
+            view: removed.view,
+            file: removed.file,
+            commit: removed.sha,
+            page,
+            said: `Removed “${viewTitle(removed.view)}”: ${removed.file} is deleted as your commit ${removed.sha.slice(0, 9)}, and ${page ? `its block left the ${BLOCK_PAGE_TITLES[page]} page` : "its tab is gone"}.`,
+          };
         } catch (error) {
           return refused(error);
         }

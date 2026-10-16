@@ -45,13 +45,19 @@
  * - **Views**: Caw drafts a view with `view_draft` (views.ts), an OpenUI
  *   Lang program written to the prompt generated from CawCo's library
  *   (openui.ts `VIEW_PROMPT`, which your ask for a view carries), reading the
- *   view tools he can try with `view_query`; you keep or discard it.
+ *   view tools he can try with `view_query`; you keep or discard it. Asked
+ *   for from a page's end, his draft stands on that page as a proposed
+ *   block (blocks.ts); asked to change a kept view (`view-change`), he drafts
+ *   the change under its name, and keeping it keeps the view's place.
  * - Each lead shows its spend: what every Caw session of the project has
  *   cost, from the usage buckets budgets already read.
  */
 
 import { createHash } from "node:crypto";
 import {
+  BLOCK_PAGE_TITLES,
+  BLOCK_PAGES,
+  type BlockPage,
   BOARD_ONLY_DENIED_TOOLS,
   CAW_DENIED_TOOLS,
   type CawHarness,
@@ -70,6 +76,7 @@ import {
   type PermissionResult,
   type ProjectSpend,
   type ProjectStopFrame,
+  type ProjectView,
   questionsOf,
   type SendPayload,
   type SpawnPayload,
@@ -86,6 +93,8 @@ import {
   type ThreadUpsertFrame,
   type UserAnswers,
   VIEW_TOOLS,
+  type ViewAsked,
+  viewTitle,
   type WorkspaceRef,
 } from "@cawco/core";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
@@ -93,6 +102,7 @@ import { LEAD_PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
+import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
 import type {
   DbShape,
@@ -128,6 +138,15 @@ import {
 } from "./stages";
 import type { TaskEvent, TaskView } from "./tasks";
 import type { Views } from "./views";
+
+/**
+ * Where a view asked for from a page's end stands once drafted: that page,
+ * at `position` in its order (null: its end).
+ */
+interface ViewPlace {
+  page: BlockPage;
+  position: number | null;
+}
 
 /**
  * The model Caw runs after a change: the one it names (blank is the
@@ -510,7 +529,7 @@ const briefOf = (projectName: string): string =>
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer them in plain text: what you say in the turn after reading their words is posted in that thread as your reply when the turn ends, and they watch it in the thread as you write it, so say nothing in plain text you would not say to them. When a reply names tasks (its `tasks`, shown as cards) or files you wrote, or belongs in another thread, send it with thread_reply instead: a thread_reply to their thread is your reply there, and what you say in plain text after it stays in your session.",
     "When you need the person's decision, ask with AskUserQuestion, with options; it shows as a card in the thread and their pick comes back to you. Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with the card.",
-    "A view-request event is the person asking for a view of the project: it carries how to write one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
+    "A view-request event is the person asking for a view of the project: it carries how to write one, and the page to stand it on when they asked from one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it. A view-change event is the person asking to change a kept view: it carries the view's program; draft the change under the same name.",
     "When the person asks for a design system, look for design/ first (your folder's and the repository root's). With one there, answer: \"This project has one; say what to change.\" Without one, say what the build will read (the repository's styles and components, the site named in knowledge/, the brand kit in knowledge/brand/, the fonts and pictures in assets/: the ones the project has), then file one task, “Build the design system”, in the first to-do stage, its description naming the design-system skill, and say you filed it. Never build one yourself, and never start one the person did not ask for: the hub asks them once when the work needs one.",
     'Judgments go to Jev while the person has connected it; while Jev is off some are yours, and never about your own work. Mark a task `fields: { ready: "yes" }` when an agent can do it from its file alone: the dispatcher starts no other. Rank tasks with `rank`: the dispatcher starts them in that order. Triage the tasks a wake lists for triage. Judge an attempt\'s acceptance criteria when a wake asks you to.',
   ].join("\n\n");
@@ -518,6 +537,8 @@ const briefOf = (projectName: string): string =>
 export interface CawDeps {
   /** The asks parked on the hub now (pending.ts). */
   readonly asks: () => Envelope[];
+  /** Stands a draft Caw writes for a page there, as a proposed block (blocks.ts). */
+  readonly blocks: Pick<Blocks, "propose">;
   /** The project's spend cap and the fleet's default for it (project-caps.ts). */
   readonly caps: Pick<Caps, "capOf" | "quiets">;
   readonly db: Pick<
@@ -619,8 +640,11 @@ export interface CawDeps {
   readonly turnEnded: (instanceId: string, why?: string, gone?: string) => void;
   /** Whether the fleet's upstream choice was ever answered (the setup page asks it until it is). */
   readonly upstreamAnswered: () => boolean;
-  /** Writes Caw's draft views, and answers the view tools he tries (views.ts). */
-  readonly views: Pick<Views, "draft" | "query">;
+  /**
+   * Writes Caw's draft views, answers the view tools he tries, and reads a
+   * kept view to change (views.ts).
+   */
+  readonly views: Pick<Views, "draft" | "kept" | "query" | "view">;
   /**
    * A wake went out as send `uuid`: your words alone (`owner`), or with
    * outside text, an event's or a routine's (`outside`). His gate reads it
@@ -631,6 +655,7 @@ export interface CawDeps {
 
 export const createCaw = ({
   asks,
+  blocks,
   caps,
   db,
   end,
@@ -1779,9 +1804,88 @@ export const createCaw = ({
   const yourWords = (thread: ThreadRow, body: string, first: boolean) =>
     `${first ? "You started a thread" : "You wrote in the thread"} “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nAnswer in plain text: it is posted in this thread as your reply, and the person watches it as you write it. When your reply names tasks or files, send it with thread_reply({ thread: "${thread.id}", body, tasks, files }) instead.`;
 
-  /** What Caw reads when you ask for a view: your words, then how a view is written. */
-  const viewRequest = (thread: ThreadRow, body: string) =>
-    `Event view-request: you asked for a view in the thread “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nDraft it with view_draft({ name, source }), then tell the person in that thread with thread_reply.\n\n# How a view is written\n\n${VIEW_PROMPT}`;
+  /**
+   * What Caw reads when you ask for a view: your words, where you asked
+   * from (a page's end: the draft stands there as a proposed block; the
+   * strip: a draft tab), then how a view is written.
+   */
+  const viewRequest = (
+    thread: ThreadRow,
+    body: string,
+    place: ViewPlace | null
+  ) => {
+    const draft = place
+      ? `You asked from the ${BLOCK_PAGE_TITLES[place.page]} page: draft it with view_draft({ name, source, page: "${place.page}"${place.position === null ? "" : `, position: ${place.position}`} }), and it stands there as a block the person keeps or removes.`
+      : "Draft it with view_draft({ name, source }).";
+    return `Event view-request: you asked for a view in the thread “${thread.title}” (thread ${thread.id}):\n\n${body}\n\n${draft} Then tell the person in that thread with thread_reply.\n\n# How a view is written\n\n${VIEW_PROMPT}`;
+  };
+
+  /** What Caw reads when you ask him to change a kept view: your words, its program, then how a view is written. */
+  const viewChange = (thread: ThreadRow, kept: ProjectView, body: string) =>
+    `Event view-change: you asked to change the view “${viewTitle(kept.name)}” (views/${kept.name}.oui) in the thread “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nIts program now:\n\n${kept.source}\n\nDraft the change with view_draft({ name: "${kept.name}", source }): the person keeps it where the view stands, or discards it. Then tell the person in that thread with thread_reply.\n\n# How a view is written\n\n${VIEW_PROMPT}`;
+
+  /**
+   * Caw's draft written (`view_draft`), as view_draft answers it. For a
+   * page, a name that is a kept view's is refused (a change keeps the view's
+   * place, so it is drafted without one); with a page, the draft stands
+   * there as a proposed block.
+   */
+  const draftView = async (
+    projectId: string,
+    input: {
+      name: string;
+      page?: BlockPage;
+      position?: number;
+      source: string;
+    }
+  ) => {
+    if (
+      input.page &&
+      (await folderCall(() => views.kept(projectId))).includes(input.name)
+    ) {
+      throw new Error(
+        `“${input.name}” is a kept view already, standing where the person put it: draft its change without a page.`
+      );
+    }
+    const drafted = await folderCall(() =>
+      views.draft(projectId, input.name, input.source, { name: "Caw" })
+    );
+    const proposed = input.page
+      ? blocks.propose(
+          projectId,
+          drafted.name,
+          input.page,
+          input.position ?? null,
+          "Caw"
+        )
+      : null;
+    return {
+      ok: true as const,
+      view: drafted.name,
+      draft: true as const,
+      ...(proposed
+        ? { proposed: { page: proposed.page, position: proposed.position } }
+        : {}),
+      ...(drafted.dropped.length
+        ? {
+            dropped: drafted.dropped,
+            note: `CawCo's views have no ${drafted.dropped.join(", ")}: ${drafted.dropped.length > 1 ? "they are" : "it is"} left out of the view. Use only the components listed.`,
+          }
+        : {}),
+    };
+  };
+
+  /** A folder's refusal (a view the project does not keep) as Caw's, with its sentence. */
+  const refusedBy = (error: unknown): never => {
+    if (error instanceof FolderRefusal) {
+      const code = error.status;
+      return refuse(
+        code === 400 || code === 404 || code === 409 ? code : 400,
+        error.message
+      );
+    }
+    throw error;
+  };
 
   /**
    * Refuses your words before they are kept when Caw cannot read them: he
@@ -2453,17 +2557,55 @@ export const createCaw = ({
       noteIn(thread.projectId, threadId, note);
     },
 
-    /** "Ask Caw for a view": a new thread with your words, answered once kept, and Caw woken by `view-request` behind it. */
-    requestView(projectId: string, raw: string): ThreadSaid {
+    /**
+     * "Ask Caw for a view": a new thread with your words, answered once
+     * kept, and Caw woken by `view-request` behind it. Asked from a page's
+     * end (`place`), his draft stands on that page as a proposed block;
+     * from the strip, it is a draft tab.
+     */
+    requestView(
+      projectId: string,
+      raw: string,
+      place: ViewPlace | null = null
+    ): ThreadSaid {
       const body = bodyOf(raw);
       listening(projectId);
       const opened = open(projectId, body);
       wakeForYou(projectId, opened.row.id, opened.said.message.id, {
         by: "you",
-        text: viewRequest(opened.row, body),
+        text: viewRequest(opened.row, body, place),
         threadId: opened.row.id,
       });
       return { ...opened.said, thread: summaryOf(opened.row) };
+    },
+
+    /**
+     * "Ask Caw to change it", on a kept view: a new thread with your words,
+     * and Caw woken by `view-change` behind it with the view's program. Your
+     * words wake him on or off, as they always do (WORDS.md: "Off is never
+     * 'can't be messaged'"); only a Caw who cannot start, or the spend cap,
+     * refuses them, before they are kept. Answers the thread, and whether he
+     * is on, which the page says.
+     */
+    async askAboutView(
+      projectId: string,
+      name: string,
+      raw: string
+    ): Promise<ViewAsked> {
+      const body = bodyOf(raw);
+      listening(projectId);
+      const kept = await views.view(projectId, name).catch(refusedBy);
+      const opened = open(projectId, body);
+      wakeForYou(projectId, opened.row.id, opened.said.message.id, {
+        by: "you",
+        text: viewChange(opened.row, kept, body),
+        threadId: opened.row.id,
+      });
+      return {
+        ...opened.said,
+        thread: summaryOf(opened.row),
+        caw: projectOf(projectId).caw ? "on" : "off",
+      };
     },
 
     /**
@@ -3018,35 +3160,28 @@ export const createCaw = ({
         ),
         tool(
           "view_draft",
-          "Draft a view for the person to keep or discard, written as the view-request event says. Components outside CawCo's library are dropped and named in the answer.",
+          "Draft a view for the person to keep or discard, as the event says. Components outside CawCo's library are dropped and named in the answer.",
           {
             name: z.string().describe("Like weekly-review."),
             source: z.string().min(1).describe("openui-lang, no fences."),
+            page: z
+              .enum(BLOCK_PAGES)
+              .optional()
+              .describe("Stands there as a block; else a tab."),
+            position: z.number().int().min(0).optional(),
           },
-          async ({ name, source }) => {
+          async (input) => {
             const projectId = mine();
-            const drafted = await folderCall(() =>
-              views.draft(projectId, name, source, { name: "Caw" })
-            );
+            const drafted = await draftView(projectId, input);
             noteIn(
               projectId,
               actor ? turns.get(actor.id)?.threadId : undefined,
               {
-                title: `View · Caw drafted “${drafted.name}”`,
-                event: { kind: "view", name: drafted.name },
+                title: `View · Caw drafted “${drafted.view}”`,
+                event: { kind: "view", name: drafted.view },
               }
             );
-            return ok({
-              ok: true,
-              view: drafted.name,
-              draft: true,
-              ...(drafted.dropped.length
-                ? {
-                    dropped: drafted.dropped,
-                    note: `CawCo's views have no ${drafted.dropped.join(", ")}: ${drafted.dropped.length > 1 ? "they are" : "it is"} left out of the view. Use only the components listed.`,
-                  }
-                : {}),
-            });
+            return ok(drafted);
           }
         ),
         tool(
@@ -3079,6 +3214,7 @@ const answer = (error: unknown) => {
 };
 
 const HARNESS = t.Union(CAW_HARNESSES.map((harness) => t.Literal(harness)));
+const BLOCK_PAGE = t.Union(BLOCK_PAGES.map((page) => t.Literal(page)));
 
 /**
  * Your words to Caw, the id the dashboard sent them as (its own, like a
@@ -3219,13 +3355,43 @@ export const cawRoutes = (caw: Caw) =>
         return answer(error);
       }
     })
+    // "Ask Caw for a view": from the strip a draft tab; from a page's end
+    // (`page`, and a `position` in its order) a proposed block on that page.
     .post(
       "/api/projects/:id/view-requests",
-      { body: t.Object({ text: t.String() }) },
+      {
+        body: t.Object({
+          text: t.String(),
+          page: t.Optional(BLOCK_PAGE),
+          position: t.Optional(t.Integer({ minimum: 0 })),
+        }),
+      },
       async ({ params, body, request, server }) => {
         server?.timeout(request, 0);
         try {
-          return await caw.requestView(params.id, body.text);
+          return await caw.requestView(
+            params.id,
+            body.text,
+            body.page
+              ? { page: body.page, position: body.position ?? null }
+              : null
+          );
+        } catch (error) {
+          return answer(error);
+        }
+      }
+    )
+    // "Ask Caw to change it", on a kept view's tab or block.
+    .post(
+      "/api/projects/:id/views/:name/asks",
+      {
+        params: t.Object({ id: t.String(), name: t.String() }),
+        body: t.Object({ text: t.String() }),
+      },
+      async ({ params, body, request, server }) => {
+        server?.timeout(request, 0);
+        try {
+          return await caw.askAboutView(params.id, params.name, body.text);
         } catch (error) {
           return answer(error);
         }

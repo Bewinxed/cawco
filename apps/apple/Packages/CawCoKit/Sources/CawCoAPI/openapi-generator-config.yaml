@@ -25,6 +25,7 @@ typeOverrides:
     BlockMetadataReportKind: OpenEnums.BlockMetadataReportKind
     BlockMetadataToolStatus: OpenEnums.BlockMetadataToolStatus
     BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
+    BlockPage: OpenEnums.BlockPage
     BlockWidth: OpenEnums.BlockWidth
     CallerKind: OpenEnums.CallerKind
     CapPeriod: OpenEnums.CapPeriod
@@ -149,6 +150,7 @@ typeOverrides:
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
     Verb: OpenEnums.Verb
+    ViewAskedCaw: OpenEnums.ViewAskedCaw
     WaitReason: OpenEnums.WaitReason
     WaitingKind: OpenEnums.WaitingKind
     WorkItemState: OpenEnums.WorkItemState
