@@ -510,6 +510,23 @@ const keepLogs = async (kit: Kit, fleet: Fleet): Promise<void> => {
     // biome-ignore lint/performance/noAwaitInLoops: three files, one after the other
     await Bun.write(join(KEPT, `${role}.log`), await fleet.logs(role));
   }
+  // The delegate's requests as the mock saw them: what it was offered, and
+  // each tool call's result (a refusal's own words among them).
+  const asked = fleet.seen
+    .filter(
+      (one) => one.all.includes(OC_DELEGATE) || one.all.includes(STILL_OPEN)
+    )
+    .map((one) => ({
+      afterTool: one.afterTool,
+      offered: one.toolNames.filter(
+        (name) => name === CODE_MODE || name.includes("cawco")
+      ),
+      last: one.last.slice(0, 4000),
+    }));
+  await Bun.write(
+    join(KEPT, "delegate-requests.json"),
+    `${JSON.stringify(asked, null, 2)}\n`
+  );
   const found = (await readdir(fleet.home, { recursive: true })).filter(
     (path) => OPENCODE_LOG.test(`/${path}`)
   );
