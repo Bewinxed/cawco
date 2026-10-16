@@ -402,6 +402,33 @@ const revealAlone = (
   );
 
 /**
+ * What putting the pane on screen away costs alone, the switch's other half:
+ * `.pane-hidden` (`content-visibility: hidden`) put on the drawn pane, the
+ * style and then the layout that asks for, the class taken off again.
+ */
+const hideAlone = (page: Page): Promise<string> =>
+  page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>(
+      ".pane:not(.pane-hidden, .pane-settling)"
+    );
+    if (!pane) {
+      return "no drawn pane";
+    }
+    const inside = pane.getElementsByTagName("*").length;
+    document.body.getBoundingClientRect();
+    const at = performance.now();
+    pane.classList.add("pane-hidden");
+    const skipped = getComputedStyle(pane).contentVisibility;
+    const styled = performance.now();
+    pane.getBoundingClientRect();
+    document.body.getBoundingClientRect();
+    const laid = performance.now();
+    pane.classList.remove("pane-hidden");
+    document.body.getBoundingClientRect();
+    return `${inside} elements (${skipped}): style ${(styled - at).toFixed(1)}ms, layout ${(laid - styled).toFixed(1)}ms`;
+  });
+
+/**
  * The script in each press's longest task (the one a switch is held to),
  * by self time across the presses, the most first.
  */
@@ -889,9 +916,11 @@ async function measure(
   // pointer.
   const putAway: string[] = [];
   const warmed: string[] = [];
+  const hidden: string[] = [];
   for (const id of order) {
     await page.mouse.move(0, 0);
     await page.waitForTimeout(REST_MS);
+    hidden.push(await hideAlone(page));
     const pane = `.pane.pane-hidden[data-pane="${id}"]`;
     putAway.push(await revealAlone(page, pane, "pane-hidden"));
     await ways.point.reach(tabOf(id));
@@ -906,6 +935,9 @@ async function measure(
   );
   kit.note(
     `${mode} pane(s), a pane shown alone by \`visibility\` (\`.pane-settling\` taken off): ${warmed.join("; ")}`
+  );
+  kit.note(
+    `${mode} pane(s), the drawn pane put away alone (\`.pane-hidden\` put on): ${hidden.join("; ")}`
   );
   const seen = await page.evaluate(
     () => (window as unknown as { __cost: Cost }).__cost
