@@ -48,7 +48,5 @@ export function shellShortcutOf(press: ShortcutPress): ShellShortcut | null {
 
 /** A shortcut's name as a message carries it, or null when it names none. */
 export function shellShortcutNamed(value: unknown): ShellShortcut | null {
-  return (
-    SHELL_SHORTCUTS.find((each) => each.name === value)?.name ?? null
-  );
+  return SHELL_SHORTCUTS.find((each) => each.name === value)?.name ?? null;
 }

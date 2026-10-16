@@ -992,7 +992,9 @@ const checkScreens = async (
     name: "find-sketch",
     mermaid: "flowchart LR; A --> B",
   });
-  const canvas = await frameOf(page, "Canvas", "canvas");
+  // Excalidraw draws on two canvases; the interactive one, on top, takes the pointer.
+  const DRAWING = "canvas.excalidraw__canvas.interactive";
+  const canvas = await frameOf(page, "Canvas", DRAWING);
   // What the canvas itself made of each key: read after every listener of
   // its own, before the overlay's own last word (page.ts `leftToShell`).
   await canvas.evaluate(() => {
@@ -1004,8 +1006,8 @@ const checkScreens = async (
       }
     });
   });
-  const box = await (await canvas.$("canvas"))?.boundingBox();
-  await canvas.click("canvas", {
+  const box = await (await canvas.$(DRAWING))?.boundingBox();
+  await canvas.click(DRAWING, {
     position: { x: 12, y: Math.max(12, (box?.height ?? 200) - 12) },
   });
   const before = await page.evaluate(SHELL_STATE);
