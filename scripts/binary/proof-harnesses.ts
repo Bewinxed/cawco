@@ -232,6 +232,22 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
         ),
       };
     },
+    custodyKeepers: async () => {
+      await keepers.current();
+      return await keepers.endpoints();
+    },
+    custodyReading: async (keeper) => {
+      const reading = await keepers.read(keeper);
+      return reading.kind === "listed"
+        ? {
+            kind: "listed",
+            procs: reading.procs.filter(
+              (proc) =>
+                held !== undefined && parseProcId(proc.procId).kind === held
+            ),
+          }
+        : reading;
+    },
     turnRunning: () => Promise.resolve(false),
   };
   const adapter: Harness = {

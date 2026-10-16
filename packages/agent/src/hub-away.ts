@@ -14,7 +14,7 @@
  * credential gate's every step that needs the hub (the slot's connect,
  * claude.ts `#connectedCawcoSnapshot`; the ACK; pi's tool list) waits this
  * long from its first try. Ours: the bound the launch's ask for its
- * credential already has (session.ts `CUSTODY_BOUND_MS`, 90 s), three times
+ * credential already has (core handover.ts `CUSTODY_BOUND_MS`, 90 s), three times
  * the 30.5 s hub outage measured on 2026-10-09.
  */
 export const HUB_AWAY_BOUND_MS = 90_000;

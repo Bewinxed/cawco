@@ -7,7 +7,9 @@
  * The checks: every workspace package's own `typecheck` script; the
  * generated-artifact checks (openapi, hub migrations, role budgets, openui views, the Swift
  * tool presentation, Claude Code paths, Apple operations, the Swift words);
- * the root, scripts and probe-kit TypeScript projects; and typecheck coverage,
+ * the machine handover protocol's sweep (protocol-sweep.ts: its laws over
+ * every short schedule of the reducer, and each named mutant caught); the
+ * root, scripts and probe-kit TypeScript projects; and typecheck coverage,
  * after the dashboard's (its project extends the config `svelte-kit sync`
  * writes there).
  *
@@ -103,6 +105,7 @@ const checks: Check[] = [
   script("packages/core", "tools:check"),
   script(".", "apple-ops:check"),
   script(".", "words:check"),
+  script(".", "protocol:sweep"),
   { ...script(".", "typecheck:coverage"), after: DASHBOARD },
 ];
 if (!checks.some((check) => check.name === DASHBOARD)) {

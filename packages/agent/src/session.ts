@@ -129,7 +129,7 @@ import {
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
-import { withKeepers } from "./keepers";
+import { type KeeperReading, withKeepers } from "./keepers";
 import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { gaugeGroup, gaugeTables } from "./memory";
@@ -185,6 +185,12 @@ export interface SessiondAdoption {
       pid: number;
     }[];
   }>;
+  /** The keepers there for custody to read, the current one first. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
+  custodyKeepers(): Promise<string[]>;
+  /** One keeper's word on this harness's children ({@link KeeperPool.read}): its listing of them, its end, or why it could not be read. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
+  custodyReading(keeper: string): Promise<KeeperReading>;
   /** Whether the child is mid-turn as its ring stands up to `head`. */
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   turnRunning(instanceId: string, head: number): Promise<boolean>;
@@ -210,17 +216,6 @@ interface Claimed {
   /** Lets go of the claim, for a reattach waiting on this row. */
   settle: () => void;
 }
-
-/**
- * One held session's custody, known: its child already carried here
- * (`attached`); taken, its child this agent's from now on and attached as it
- * answers (`held`, {@link SessionSupervisor.#holdChild}); or absent, sessiond
- * holding no child for it, so its spawn starts one.
- */
-export type CustodyDecided = (
-  instanceId: string,
-  outcome: "attached" | "held" | "absent"
-) => void;
 
 /**
  * The context the supervisor hands an adapter, plus the one thing only an
@@ -277,18 +272,6 @@ const accountReading = (message: NeutralMessage): boolean =>
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
 };
-
-/**
- * How long one part of taking a session into this agent's hands may take
- * before what waits on it stops waiting: one harness's custody unit reading
- * what its keepers hold (daemon `takeCustody`), and the hub's answer to a
- * launch's ask for its credential. Ours: nearly four times the 23 s obelisk's
- * Claude reattach of 138 rows took (2026-10-01). It bounds what this agent
- * asks of its keepers and its hub, never a held child's answer: a child that
- * is taken is this agent's until it answers or ends
- * ({@link SessionSupervisor.#holdChild}).
- */
-export const CUSTODY_BOUND_MS = 90_000;
 
 /**
  * The bounds of a carry's steps ({@link SessionSupervisor.carrySessions}):
@@ -2279,7 +2262,7 @@ export class SessionSupervisor {
    * nothing — the deploy path restarts this process on every push to main.
    *
    * So only this daemon's bookkeeping is dropped. The procs stay where they
-   * are, and the next daemon adopts them through {@link reattachFrom}, which
+   * are, and the next daemon adopts them through {@link takeHeld}, which
    * is the hand-back this detach exists to leave possible.
    *
    * An operator ending a session still goes through `stop`, and sessiond going
@@ -3292,86 +3275,6 @@ export class SessionSupervisor {
   }
 
   /**
-   * One harness's held children taken into custody ({@link reattachFrom}).
-   * Only the keepers' listing is waited on here, and `signal` bounds it; what
-   * the children themselves answer is waited on by each one's own attach
-   * ({@link #holdChild}), which nothing here or in any other session waits
-   * for.
-   */
-  async #reattachHarness(
-    kind: HarnessKind,
-    rows: Claimed["row"][],
-    ingested: Record<string, IngestMark> | undefined,
-    signal: AbortSignal,
-    decided: CustodyDecided
-  ): Promise<string[]> {
-    const adapter = this.#adapter(kind);
-    const candidate = adapter as Harness & Partial<SessiondAdoption>;
-    if (
-      typeof candidate.adopt !== "function" ||
-      typeof candidate.custodyCandidates !== "function" ||
-      typeof candidate.turnRunning !== "function"
-    ) {
-      return [];
-    }
-    const claude = candidate as Harness & SessiondAdoption;
-    const welcome = await custodyProbe(claude.custodyCandidates(), signal);
-    signal.throwIfAborted();
-    // Every keeper's, the current keeper's first: an id two keepers hold
-    // alive (a relaunch caught half-way) is the current keeper's.
-    const held = new Map<string, (typeof welcome.procs)[number]>();
-    for (const proc of welcome.procs) {
-      const id = parseProcId(proc.procId);
-      if (
-        proc.alive &&
-        (id.kind === "claude" || id.kind === "pi") &&
-        id.kind === kind &&
-        !held.has(id.instanceId)
-      ) {
-        held.set(id.instanceId, proc);
-      }
-    }
-
-    // ONE OWNER PER CHILD, ONE QUERY ON IT. A hub reconnect while a child is
-    // still being attached hands it over again; a second adopt put a second
-    // `Query` on the child, whose subscribe took over the first's listener
-    // while both had initialised the CLI. A child already carried, being
-    // attached, or being started is this daemon's already. Nothing in this
-    // loop yields, so no other reattach takes a row between its check and
-    // its hold.
-    const taken: string[] = [];
-    const absent: string[] = [];
-    for (const row of rows) {
-      const proc = held.get(row.instanceId);
-      if (!proc) {
-        absent.push(row.instanceId);
-        continue;
-      }
-      if (row.keepAliveTurn) {
-        this.#keepAlive.set(row.instanceId, row.keepAliveTurn);
-      }
-      taken.push(row.instanceId);
-      if (this.#sessions.has(row.instanceId)) {
-        decided(row.instanceId, "attached");
-        continue;
-      }
-      if (!(
-        this.#adopting.has(row.instanceId) ||
-        this.#attaching.has(row.instanceId)
-      )) {
-        this.#holdChild(claude, row, proc, ingested);
-      }
-      decided(row.instanceId, "held");
-    }
-    // Held, every child sessiond holds: what it does not hold has no process
-    // to take back, and is decided now.
-    for (const instanceId of absent) {
-      decided(instanceId, "absent");
-    }
-    return taken;
-  }
-
-  /**
    * A HELD CHILD IS THIS AGENT'S FROM THE MOMENT IT IS TAKEN, AND STAYS SO
    * UNTIL IT IS ATTACHED OR ENDS. Its attach (deciding its turn, putting a
    * `Query` on it, its credential and mode) is the first thing in its
@@ -3660,26 +3563,72 @@ export class SessionSupervisor {
    *     (2026-10-01), and a busy answer that waited for it, or read `#busy`
    *     before it reached a working row, read 0 while two sessions worked.
    *
-   * `decided` hears each row the moment its custody is known: attached,
-   * failed (its child is held but could not be attached; the hub tries again),
-   * or absent (sessiond holds no child for it). What waits on one session
-   * waits for that alone, never for the rows after it or another harness.
-   * Rows `signal` cuts off are the caller's to settle.
+   * Which keeper holds each row is the handover's to decide (core
+   * handover.ts, the daemon's `takeCustody`), from each keeper's own word
+   * read through {@link custodyReader}; this takes one held child the moment
+   * that is decided ({@link takeHeld}). What waits on one session waits for
+   * that alone, never for the rows after it or another harness.
    */
-  async reattachFrom(
+  custodyReader(kind: (typeof SESSION_PROC_KINDS)[number]):
+    | {
+        keepers: () => Promise<string[]>;
+        read: (keeper: string) => Promise<KeeperReading>;
+      }
+    | undefined {
+    const adoption = this.#adoption(kind);
+    return adoption
+      ? {
+          keepers: () => adoption.custodyKeepers(),
+          read: (keeper) => adoption.custodyReading(keeper),
+        }
+      : undefined;
+  }
+
+  /** The harness's adoption, when it keeps its children on sessiond. */
+  #adoption(kind: HarnessKind): (Harness & SessiondAdoption) | undefined {
+    const candidate = this.#adapter(kind) as Harness &
+      Partial<SessiondAdoption>;
+    return typeof candidate.adopt === "function" &&
+      typeof candidate.custodyKeepers === "function" &&
+      typeof candidate.custodyReading === "function" &&
+      typeof candidate.turnRunning === "function"
+      ? (candidate as Harness & SessiondAdoption)
+      : undefined;
+  }
+
+  /**
+   * ONE OWNER PER CHILD, ONE QUERY ON IT. One held child taken into custody,
+   * the moment the handover decides which keeper holds it: already carried
+   * here (`attached`), or held from now on and attached as it answers
+   * (`held`, {@link #holdChild}). A hub reconnect while a child is still
+   * being attached hands it over again; a second adopt put a second `Query`
+   * on the child, whose subscribe took over the first's listener while both
+   * had initialised the CLI. A child already carried, being attached, or
+   * being started is this daemon's already. Nothing here yields, so no other
+   * reattach takes a row between its check and its hold.
+   */
+  takeHeld(
     kind: (typeof SESSION_PROC_KINDS)[number],
     ackPayload: unknown,
-    rows: Claimed["row"][],
-    signal: AbortSignal,
-    decided: CustodyDecided
-  ): Promise<string[]> {
-    return await this.#reattachHarness(
-      kind,
-      rows,
-      readIngested(ackPayload),
-      signal,
-      decided
-    );
+    row: Claimed["row"],
+    proc: Claimed["proc"]
+  ): "attached" | "held" {
+    const adoption = this.#adoption(kind);
+    if (!adoption) {
+      throw new Error(`${kind} keeps no children on sessiond to take back`);
+    }
+    if (row.keepAliveTurn) {
+      this.#keepAlive.set(row.instanceId, row.keepAliveTurn);
+    }
+    if (this.#sessions.has(row.instanceId)) {
+      return "attached";
+    }
+    if (!(
+      this.#adopting.has(row.instanceId) || this.#attaching.has(row.instanceId)
+    )) {
+      this.#holdChild(adoption, row, proc, readIngested(ackPayload));
+    }
+    return "held";
   }
 
   /** The harness session a spin-off turned out to be writing, from its init frame. */

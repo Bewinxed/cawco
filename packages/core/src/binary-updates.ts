@@ -166,7 +166,7 @@ export const waitedOut = (since: number, now = Date.now()): boolean =>
  * at all answers in seconds (the hub's first 200 on obelisk's data is under a
  * second), and a migration moves the deadline for as long as it runs. The
  * hub reads a machine whose connection ended mid-install as on its way back
- * for this long, and its reconnect after it (hub server.ts `awaitMachine`).
+ * for this long, and its reconnect after it (handover.ts `agent-close`).
  */
 export const UPDATE_TRIAL_MS = 180_000;
 

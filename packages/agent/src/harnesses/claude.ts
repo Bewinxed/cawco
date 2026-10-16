@@ -174,7 +174,7 @@ import {
   type TurnExtras,
 } from "../harness";
 import { HUB_AWAY_BOUND_MS } from "../hub-away";
-import { type HeldProc, KeeperPool } from "../keepers";
+import { type HeldProc, KeeperPool, type KeeperReading } from "../keepers";
 import {
   beginAccountLogin,
   completeAccountLogin,
@@ -4086,10 +4086,29 @@ export class ClaudeHarness implements Harness {
     return session;
   }
 
+  /** The keepers there for custody to read, the current one first. */
+  async custodyKeepers(): Promise<string[]> {
+    await this.sessiond();
+    return await this.#keepers.endpoints();
+  }
+
+  /** One keeper's word on Claude's children: its listing of them, its end, or why it could not be read. */
+  async custodyReading(keeper: string): Promise<KeeperReading> {
+    const reading = await this.#keepers.read(keeper);
+    return reading.kind === "listed"
+      ? {
+          kind: "listed",
+          procs: reading.procs.filter(
+            (proc) => parseProcId(proc.procId).kind === "claude"
+          ),
+        }
+      : reading;
+  }
+
   /**
    * What every keeper is still holding for this machine, the current one's
-   * first — the reattach's first read. Each child carries its keeper's
-   * epoch, the space its seqs count in.
+   * first. Each child carries its keeper's epoch, the space its seqs count
+   * in.
    */
   async custodyCandidates(): Promise<{ procs: HeldProc[] }> {
     await this.sessiond();

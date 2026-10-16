@@ -88,6 +88,14 @@ import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
 import { isGitDir } from "@cawco/core/git-dir";
 import {
+  type HandoverCommand,
+  type HandoverEvent,
+  step as handoverStep,
+  initialHandover,
+  KEEPERS_ASK_AGAIN_MS,
+  type ListedWorkspace,
+} from "@cawco/core/handover";
+import {
   currentEndpoint,
   currentKeeper,
   machineEndpoint,
@@ -688,15 +696,17 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
     exit: (code, signal) => {
       watchedJudges.delete(procId);
       client.unsubscribe(procId);
+      // Counted as arming from its exit until it is started again, as the
+      // handover decides ({@link armStep}).
       whileArming(id, async () => {
         const held = await readHeld(id);
-        if (!held) {
-          return;
+        if (held) {
+          console.warn(
+            `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
+          );
         }
-        console.warn(
-          `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
-        );
-        await armHook(id, held);
+        armStep({ kind: "judge-exit", id, held: held !== undefined });
+        await rearming.get(id);
       }).catch((error: unknown) => {
         console.warn(
           `[workspace] ${id}: its judge could not be started again: ${error instanceof Error ? error.message : String(error)}`
@@ -1267,27 +1277,146 @@ const rearmOne = async (id: string): Promise<boolean> => {
  */
 const REARM_CONCURRENCY = 16;
 
-/** Each workspace's rewrite in this build's form, once begun, by id ({@link hookArmed}). */
+/**
+ * THIS AGENT'S ARMING, AS THE HANDOVER DECIDES IT (core handover.ts): the
+ * start-up reading of its workspaces, and which of them are armed now,
+ * started again, or left until a session there needs them. This module only
+ * reads the workspaces and the keepers, arms, and runs what the reducer says.
+ */
+let armState = initialHandover();
+/** Each workspace's arming under way or done, by id ({@link hookArmed}). */
 const rearming = new Map<string, Promise<void>>();
-/** The workspaces with nothing running at start-up: each is armed when a session there first needs it. */
-const unarmed = new Set<string>();
-/** The start-up reading every gate waits for first: until it is read, no workspace is known armed or not. */
-let rearmListed: Promise<void> = Promise.resolve();
+/** Settled each time the start-up reading moves, for a gate waiting on it. */
+let readingMoved = Promise.withResolvers<void>();
+/** The workspaces the last whole reading found, with the clone each runs in. */
+let readRefs = new Map<string, WorkspaceRef>();
+const armLimit = atMost(REARM_CONCURRENCY);
+
+/**
+ * A SESSION START IN A WORKSPACE IS REFUSED BY NAME WHILE THE AGENT'S
+ * START-UP READING IS NOT WHOLE: until it is, no workspace is known armed or
+ * not, and a keeper that could not be read is never read as holding nothing.
+ * Its reading is tried again every {@link KEEPERS_ASK_AGAIN_MS}, and the
+ * refusal lasts until one is whole.
+ */
+export class ArmingBlocked extends Error {
+  readonly workspace: string;
+  constructor(workspace: string, why: string) {
+    super(
+      `Sessions in this workspace can't start yet: this machine's workspaces could not be read at its start (${why}). Nothing was changed; they're read again every ${KEEPERS_ASK_AGAIN_MS / 1000} s, and a start goes once a reading is whole.`
+    );
+    this.name = "ArmingBlocked";
+    this.workspace = workspace;
+  }
+}
+
+/** One step of the arming, its commands run in order. */
+const armStep = (event: HandoverEvent): void => {
+  const before = armState.arming;
+  const stepped = handoverStep(armState, event);
+  armState = stepped.state;
+  for (const command of stepped.commands) {
+    obeyArming(command);
+  }
+  if (armState.arming !== before) {
+    readingMoved.resolve();
+    readingMoved = Promise.withResolvers<void>();
+  }
+};
+
+const obeyArming = (command: HandoverCommand): void => {
+  switch (command.kind) {
+    case "arm-read":
+      readWorkspaces().then(
+        ({ listed, refs }) => {
+          readRefs = refs;
+          armStep({ kind: "arm-listed", workspaces: listed });
+        },
+        (error: unknown) =>
+          armStep({
+            kind: "arm-unread",
+            why: error instanceof Error ? error.message : String(error),
+            now: Date.now(),
+          })
+      );
+      return;
+    case "arm":
+      rearming.set(command.id, armOne(command.id, command.how));
+      return;
+    case "say":
+      console.warn(command.words);
+      return;
+    case "wake": {
+      const { at } = command;
+      setTimeout(
+        () => armStep({ kind: "tick", now: Math.max(Date.now(), at) }),
+        Math.max(0, at - Date.now())
+      );
+      return;
+    }
+    default:
+      return;
+  }
+};
+
+/**
+ * Arms one workspace as the handover says: its hook rewritten in this
+ * build's form ({@link rearmOne}), its boundary started again where a
+ * session's process runs with none, or its judge started again after it
+ * exited ({@link armHook}). What fails is said here and by the arming
+ * itself; the workspace is armed as far as it went.
+ */
+const armOne = async (
+  id: string,
+  how: "hook" | "revive" | "judge"
+): Promise<void> => {
+  try {
+    if (how === "hook") {
+      await armLimit(() => rearmOne(id));
+    } else if (how === "judge") {
+      const held = await readHeld(id);
+      if (held) {
+        await armHook(id, held);
+      }
+    } else {
+      const ref = readRefs.get(id);
+      if (ref) {
+        await armLimit(() => ensureNow(ref));
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `[workspace] ${id}: ${
+        how === "revive"
+          ? "a session's process runs in it with no boundary, and its boundary could not be started again"
+          : "its judge could not be started again"
+      }: ${error instanceof Error ? error.message : String(error)}`
+    );
+  } finally {
+    armStep({ kind: "armed", id });
+  }
+};
 
 /**
  * Waits until workspace `id`'s hook is in this build's form, arming it now
  * when the start left it for later. Every session there waits on it before
  * it is adopted or launched (`#adoptClaimed`, {@link ensureBoundary}), and
- * on its own workspace's alone.
+ * on its own workspace's alone. While the start-up reading is blocked it
+ * refuses by name ({@link ArmingBlocked}).
  */
 export const hookArmed = async (id: string): Promise<void> => {
-  await rearmListed;
-  if (unarmed.delete(id)) {
-    rearming.set(
-      id,
-      rearmOne(id).then(() => undefined)
-    );
+  for (;;) {
+    const phase = armState.arming;
+    if (phase.kind === "blocked") {
+      throw new ArmingBlocked(id, phase.why);
+    }
+    if (phase.kind !== "listing") {
+      break;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: waits for the start-up reading to move, then reads it again
+    await readingMoved.promise;
   }
+  armStep({ kind: "arm-need", id });
   await rearming.get(id);
 };
 
@@ -1304,123 +1433,93 @@ export const hookArmed = async (id: string): Promise<void> => {
  * runs, on any keeper, read once from the keepers' listing, and in which a
  * session's process is attached or a command is on its way in
  * ({@link inUse}), are armed now, {@link REARM_CONCURRENCY} at a time: that
- * is where a CLI runs, and one of an older form is handed over there. Any
- * other has no command to run: it is armed the moment a session there is
- * adopted or launched, or anything else ensures its boundary, so the start
- * neither starts a boundary for an idle workspace nor hands one over; an
- * idle one still running closes once quiet ({@link sweepQuiet}). What it
- * returns settles once those armed now are done.
+ * is where a CLI runs, and one of an older form is handed over there. One a
+ * session's process runs in with no boundary is started again. Any other has
+ * no command to run: it is armed the moment a session there is adopted or
+ * launched, or anything else ensures its boundary, so the start neither
+ * starts a boundary for an idle workspace nor hands one over; an idle one
+ * still running closes once quiet ({@link sweepQuiet}). A reading that could
+ * not be made whole blocks every gate by name and is read again. What this
+ * returns settles once the first whole reading's arming is done.
  */
-export const rearmHooks = (): Promise<void> => {
+export const rearmHooks = async (): Promise<void> => {
   const started = Date.now();
-  const listing = (async () => {
-    const ids = await readdir(workspacesDir()).catch(
-      (error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") {
-          return [] as string[];
-        }
-        throw error;
-      }
-    );
-    const live = (await keepers.held()).filter((proc) => proc.alive);
-    const running = ids.filter((id) =>
-      live.some((proc) => isBoundaryOf(proc.procId, id))
-    );
-    const commands = await commandsNow();
-    const now: string[] = [];
-    for (const id of running) {
-      // biome-ignore lint/performance/noAwaitInLoops: one small record read per workspace whose boundary runs
-      const held = await readHeld(id).catch(() => undefined);
-      if (held && inUse(id, held.path, live, commands)) {
-        now.push(id);
-      }
-    }
-    const revive = await cliWithoutBoundary(
-      ids.filter((id) => !running.includes(id)),
-      live,
-      commands
-    );
-    for (const id of ids) {
-      if (!(now.includes(id) || revive.some((ref) => ref.id === id))) {
-        unarmed.add(id);
-      }
-    }
-    return {
-      now,
-      revive,
-      idle: running.length - now.length,
-      later: ids.length - running.length - revive.length,
-    };
-  })();
-  let armed = 0;
-  const limit = atMost(REARM_CONCURRENCY);
-  const armNow = async (id: string): Promise<void> => {
-    if (await limit(() => rearmOne(id))) {
-      armed += 1;
-    }
-  };
-  /** A workspace a CLI runs in with no boundary: started again, which arms its hook and starts its judge. */
-  const reviveNow = async (ref: WorkspaceRef): Promise<void> => {
-    await limit(() =>
-      ensureNow(ref).then(
-        () => {
-          armed += 1;
-        },
-        (error: unknown) => {
-          console.warn(
-            `[workspace] ${ref.id}: a session's process runs in it with no boundary, and its boundary could not be started again: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      )
-    );
-  };
-  rearmListed = listing.then(({ now, revive }) => {
-    for (const id of now) {
-      rearming.set(id, armNow(id));
-    }
-    for (const ref of revive) {
-      rearming.set(ref.id, reviveNow(ref));
-    }
-  });
-  return listing.then(async ({ now, revive, idle, later }) => {
-    await Promise.all(
-      [...now, ...revive.map((ref) => ref.id)].map((id) => rearming.get(id))
-    );
-    console.info(
-      `[workspace] boundary hooks written for ${armed} of ${now.length + revive.length} workspace(s) with a session or command in it (${revive.length} of them with no boundary running, started again), in ${Date.now() - started} ms; ${idle} with a boundary running and nothing in it are left as they are and close once quiet; ${later} with none are armed when a session there starts`
-    );
-  });
+  armStep({ kind: "arm-start" });
+  while (armState.arming.kind !== "listed") {
+    // biome-ignore lint/performance/noAwaitInLoops: waits for the first whole reading, however many it takes
+    await readingMoved.promise;
+  }
+  const now = Object.entries(armState.workspaces).flatMap(([id, arm]) =>
+    arm.kind === "later" ? [] : [id]
+  );
+  await Promise.all(now.map((id) => rearming.get(id)));
+  const later = Object.values(armState.workspaces).filter(
+    (arm) => arm.kind === "later"
+  ).length;
+  console.info(
+    `[workspace] boundary hooks written for ${now.length} workspace(s) with a session or command in it, or a session's process with no boundary, in ${Date.now() - started} ms; ${later} with nothing in them are armed when a session there starts`
+  );
 };
 
 /**
+ * One reading of the workspaces for the handover's arming: each one's
+ * boundary running on some keeper, whether a session's process or a command
+ * is in it, and, where none runs, whether a session's process runs in its
+ * clone. Throws when the folders or the keepers cannot be read whole: a
+ * keeper that could not be read is {@link KeepersUnanswered}, never a keeper
+ * read as holding nothing.
+ *
  * EVERY WORKSPACE A SESSION'S PROCESS RUNS IN HAS ITS JUDGE, WHATEVER BECAME
- * OF THAT SESSION'S ATTACH. Of `ids`, workspaces whose boundary no keeper
- * runs, each clone a keeper still holds a Claude Code or pi process in
- * ({@link attachedIn}): its hook names a judge that is gone, and refuses
- * every call the process makes (b895ec57, 2026-10-16: closed as quiet while
- * its session's attach had failed, its process still running on the keeper
- * before the update). A project lead's place has no clone record, and is
- * armed as its session starts.
+ * OF THAT SESSION'S ATTACH: one whose boundary no keeper runs, with a clone a
+ * keeper still holds a Claude Code or pi process in ({@link attachedIn}), has
+ * a hook naming a judge that is gone, which refuses every call the process
+ * makes (b895ec57, 2026-10-16: closed as quiet while its session's attach
+ * had failed, its process still running on the keeper before the update). A
+ * project lead's place has no clone record, and is armed as its session
+ * starts.
  */
-const cliWithoutBoundary = async (
-  ids: readonly string[],
-  live: readonly HeldProc[],
-  commands: Commands
-): Promise<WorkspaceRef[]> => {
-  const found: WorkspaceRef[] = [];
+const readWorkspaces = async (): Promise<{
+  listed: ListedWorkspace[];
+  refs: Map<string, WorkspaceRef>;
+}> => {
+  const ids = await readdir(workspacesDir()).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        return [] as string[];
+      }
+      throw error;
+    }
+  );
+  const live = (await keepers.held()).filter((proc) => proc.alive);
+  const commands = await commandsNow();
+  const listed: ListedWorkspace[] = [];
+  const refs = new Map<string, WorkspaceRef>();
   for (const id of ids) {
-    if (isLeadPlace(id)) {
+    if (live.some((proc) => isBoundaryOf(proc.procId, id))) {
+      // biome-ignore lint/performance/noAwaitInLoops: one small record read per workspace
+      const held = await readHeld(id).catch(() => undefined);
+      listed.push({
+        id,
+        boundary: true,
+        inUse: held !== undefined && inUse(id, held.path, live, commands),
+        cli: false,
+      });
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one small record read per workspace with no boundary running
-    const created = await readRecord<{ path?: string }>(
-      join(stateDir(id), "create.json")
-    ).catch(() => undefined);
-    if (created?.path && attachedIn(id, created.path, live, commands)) {
-      found.push({ id, path: created.path });
+    const created = isLeadPlace(id)
+      ? undefined
+      : await readRecord<{ path?: string }>(
+          join(stateDir(id), "create.json")
+        ).catch(() => undefined);
+    const cli =
+      created?.path !== undefined &&
+      attachedIn(id, created.path, live, commands);
+    if (cli && created?.path) {
+      refs.set(id, { id, path: created.path });
     }
+    listed.push({ id, boundary: false, inUse: false, cli });
   }
-  return found;
+  return { listed, refs };
 };
 
 /**
@@ -3641,8 +3740,9 @@ const settling = (id: string): boolean =>
  * judge that answers as this build's ({@link judgeBuildOf}). Its hook is
  * read on every call that process makes, and a judge that is gone, or of
  * another build, refuses or misjudges each one. A workspace between states
- * ({@link settling}) is looked at on the next beat; the start's arming is
- * waited out first.
+ * ({@link settling}) is looked at on the next beat; so is every workspace
+ * while the start-up reading is not whole (blocked is its own named state,
+ * {@link ArmingBlocked}), and the start's arming is waited out first.
  *
  * Born red, once: dad89261b^ (the start before it revived a workspace a CLI
  * runs in with no boundary), with this check laid on, a keeper holding a
@@ -3657,7 +3757,9 @@ const settling = (id: string): boolean =>
  * "0\n0fc17cf98658ab74".
  */
 const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
-  await rearmListed;
+  if (armState.arming.kind !== "listed") {
+    return;
+  }
   await Promise.all(rearming.values());
   const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
   if (ids.length === 0) {

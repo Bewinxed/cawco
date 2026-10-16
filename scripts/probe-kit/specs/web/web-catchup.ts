@@ -46,7 +46,7 @@ const ROWS = 820;
 const BEHIND = "Not caught up";
 const OFFLINE_NEXT = "is offline. The rest comes in once it's back.";
 const RECONNECTING_NEXT = "is reconnecting. The rest comes in once it's back.";
-/** How long the hub reads a machine it heard from as reconnecting (hub server.ts `RECONNECTING_MS`). */
+/** How long the hub reads a machine it heard from as reconnecting (core handover.ts `RECONNECTING_MS`). */
 const RECONNECTING_MS = 60_000;
 /** A failed history read whose body is a long stack, as a machine's error can be: the reader is told its first line. */
 const FAILED = `Error: the transcript could not be read\n${"    at readHistory (/opt/cawco/agent.js:1:1)\n".repeat(400)}`;

@@ -29,6 +29,7 @@
     "./file-hash": "./src/file-hash.ts",
     "./binary-installation": "./src/binary-installation.ts",
     "./keepers": "./src/keepers.ts",
+    "./handover": "./src/handover.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
     "./browser-gate": "./src/browser-gate.ts",

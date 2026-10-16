@@ -310,7 +310,6 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
   RESTART_WAIT_CAP_MS,
-  UPDATE_TRIAL_MS,
   waitedOut,
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
@@ -318,6 +317,13 @@ import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
+import {
+  type HandoverCommand,
+  type HandoverEvent,
+  step as handoverStep,
+  initialHandover,
+  presenceOf,
+} from "@cawco/core/handover";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
@@ -988,19 +994,6 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
-
-/**
- * THE RECONNECTING WINDOW: how long a machine whose agent is away reads as on
- * its way back, not offline, from its connection's end or this hub's start
- * (`awaitMachine`). Inside it a send to one of its sessions is taken and
- * waits for it, and a read says when to ask again; past it, the machine is
- * offline. Our choice: two of the agent's longest waits between tries (30 s,
- * agent daemon.ts `reconnect`). An update restarts the agent within its
- * trial ({@link UPDATE_TRIAL_MS}), and the hub with it on the hub's machine,
- * so a connection that ended while its machine installed an update, and
- * every machine at this hub's start, gets the trial before this.
- */
-const RECONNECTING_MS = 60_000;
 
 /**
  * Statuses a session's row holds once its process has ended, or once its end
@@ -1831,7 +1824,7 @@ const custodyReason = (hours: string): string =>
  * stops sending the `restore` spawns that are the daemon's ONLY source of a
  * surviving child's `cwd`. So the hub answers it instead, from the one place
  * that already knows both halves: the sessions it just told this daemon to
- * restore are precisely the rows the daemon will hand to `reattachFrom`, and a
+ * restore are precisely the rows the daemon will hand to `takeHeld`, and a
  * mark for anything else is a mark it could never act on.
  *
  * Union, de-duplicated, order preserved: `reported` covers the sessions the
@@ -2585,6 +2578,60 @@ export const createServer = (
     writeFrame(socket, frame);
   };
 
+  /**
+   * THE HUB'S HALF OF THE HANDOVER (core handover.ts): each machine's
+   * presence, read from one deadline, and the order an ask is parked and
+   * shown in. This hub only turns its sockets and timers into the reducer's
+   * events and runs the commands that come back, in order: a window's end
+   * fails what was held for its machine, a register hands it over. A send to
+   * a machine inside its window is held for it ({@link deliverSend}), and a
+   * read of one says when to ask again ({@link reconnectingFor}).
+   */
+  let handover = initialHandover();
+  const hubStep = (event: HandoverEvent): HandoverCommand[] => {
+    const stepped = handoverStep(handover, event);
+    handover = stepped.state;
+    for (const command of stepped.commands) {
+      if (command.kind === "wake") {
+        const { at } = command;
+        lifetime.after(Math.max(0, at - Date.now()), () =>
+          hubStep({ kind: "tick", now: Math.max(Date.now(), at) })
+        );
+      } else if (command.kind === "fail-owed") {
+        console.warn(
+          `[hub] ${command.machineId} did not come back within its reconnecting window: what was kept for it fails`
+        );
+        failOwedAway(command.machineId);
+      } else if (command.kind === "release-owed") {
+        releaseOwed({ machineId: command.machineId });
+      }
+    }
+    return stepped.commands;
+  };
+  /** A machine as everything that reads its presence reads it now. */
+  const machinePresence = (machineId: string) =>
+    presenceOf(handover, machineId, Date.now());
+  /**
+   * An ask parked, then shown, in the order the handover says: what a screen
+   * is shown is on the pending ledger first, so a hub restart keeps it.
+   * Whether it was parked (`park` says no to a replay it already holds).
+   */
+  const askInOrder = (
+    requestId: string,
+    park: () => boolean,
+    publish: () => void
+  ): boolean => {
+    for (const command of hubStep({ kind: "ask", requestId })) {
+      if (command.kind === "park" && !park()) {
+        return false;
+      }
+      if (command.kind === "publish") {
+        publish();
+      }
+    }
+    return true;
+  };
+
   // An ask that leaves the hub's pending list is over on every screen: one
   // frame, whichever path settled it (an answer from any device, Telegram, a
   // parent session or a workflow; a harness settling it itself; a timeout; its
@@ -2616,18 +2663,22 @@ export const createServer = (
     if (!envelope.requestId) {
       throw new Error("An ask for the person has no request id.");
     }
-    const existed = pending.get(envelope.requestId);
-    if (!pending.remember(envelope.requestId, envelope, outlivesHub)) {
-      return;
-    }
-    registry.broadcast(clientCopy(envelope));
-    if (
-      !existed &&
-      (envelope.payload as { routedTo?: string }).routedTo !== "parent"
-    ) {
-      telegram?.onAsk(envelope);
-      push.onAsk(envelope);
-    }
+    const { requestId } = envelope;
+    const existed = pending.get(requestId);
+    askInOrder(
+      requestId,
+      () => pending.remember(requestId, envelope, outlivesHub),
+      () => {
+        registry.broadcast(clientCopy(envelope));
+        if (
+          !existed &&
+          (envelope.payload as { routedTo?: string }).routedTo !== "parent"
+        ) {
+          telegram?.onAsk(envelope);
+          push.onAsk(envelope);
+        }
+      }
+    );
   };
   // The relay (relay.ts), made further down with ingress; an approved
   // `relay_create` kept across a restart reaches it through this.
@@ -6974,8 +7025,8 @@ export const createServer = (
    * drawn queued like any pending send, and goes once the hold ends
    * ({@link releaseOwed}), in the order accepted. The holds: the session's
    * start held while its machine installs an update ({@link holdingStarts}),
-   * its machine's agent away within its reconnect grace
-   * ({@link awaitingMachine}), its account at its limit or its continuation
+   * its machine's agent away within its reconnecting window
+   * ({@link machinePresence}), its account at its limit or its continuation
    * from a summary under way ({@link heldAtLimit}), and a send owed before it
    * to the same session, which it never overtakes — but the opening of a
    * continuation in place (`ahead`), which its fresh conversation opens on.
@@ -7152,8 +7203,14 @@ export const createServer = (
       workItems.recutFor(instanceId);
     }
     const agent = refused ? undefined : registry.agent(machineId);
+    // Held for a machine inside its window, never failed there (core
+    // handover.ts `send`).
     const away =
-      !(refused || agent || keepAlive) && awaitingMachine.has(machineId);
+      !(refused || agent || keepAlive) &&
+      hubStep({ kind: "send", machineId, now: Date.now() }).some(
+        (command) =>
+          command.kind === "send-verdict" && command.verdict === "hold"
+      );
     const accepted = Boolean(agent) || away || kept || paused || held;
     const from =
       message.origin.kind === "peer" ? message.origin.fromSession : undefined;
@@ -7322,42 +7379,6 @@ export const createServer = (
   };
 
   /**
-   * Machines whose agent is away inside its reconnecting window
-   * ({@link RECONNECTING_MS}), why, and until when: its socket closed
-   * (`agent`, restarting) or this hub has just started and not heard it yet
-   * (`hub`); from then until it registers or the window ends. A send to one
-   * of their sessions is owed ({@link deliverSend}), and a read of one says
-   * when to ask again ({@link reconnectingFor}). Each window is its own: the
-   * timer of one that ended (the machine came back and went again) leaves a
-   * newer one alone.
-   */
-  const awaitingMachine = new Map<
-    string,
-    { why: "agent" | "hub"; until: number; window: symbol }
-  >();
-  /** Opens `machineId`'s window, the update's trial first when `updating`. */
-  const awaitMachine = (
-    machineId: string,
-    why: "agent" | "hub",
-    updating: boolean
-  ): void => {
-    const window = Symbol(machineId);
-    const ms = (updating ? UPDATE_TRIAL_MS : 0) + RECONNECTING_MS;
-    awaitingMachine.set(machineId, { why, until: Date.now() + ms, window });
-    lifetime.after(ms, () => {
-      if (awaitingMachine.get(machineId)?.window !== window) {
-        return;
-      }
-      awaitingMachine.delete(machineId);
-      if (!registry.agent(machineId)) {
-        console.warn(
-          `[hub] ${machineId} did not come back within its reconnecting window (${ms / 1000} s): what was kept for it fails`
-        );
-        failOwedAway(machineId);
-      }
-    });
-  };
-  /**
    * A send to a machine past its window, as the person reads it (WORDS.md's
    * error formula): the machine by its name, never its id; what is safe;
    * what to do.
@@ -7430,8 +7451,12 @@ export const createServer = (
     record: SentMessageRow,
     row: InstanceRow | undefined
   ): SendHold => {
-    const away = row ? awaitingMachine.get(row.machineId) : undefined;
-    if (row && away && !registry.agent(row.machineId)) {
+    const away = row ? machinePresence(row.machineId) : undefined;
+    if (
+      row &&
+      away?.kind === "reconnecting" &&
+      !registry.agent(row.machineId)
+    ) {
       return away.why;
     }
     if (!db.owesSpawn(record.instanceId)) {
@@ -7634,12 +7659,14 @@ export const createServer = (
       )
     );
   // A hub that just started has heard no machine yet: each gets the window a
-  // machine that is updating gets, since a hub's start is most often its own
-  // machine's update, which restarts that machine's agent too, so a send to
-  // any of them waits for its register.
-  db.listAgents().map((machine) =>
-    awaitMachine(machine.machineId, "hub", true)
-  );
+  // machine that is updating gets (core handover.ts `hub-start`), since a
+  // hub's start is most often its own machine's update, which restarts that
+  // machine's agent too, so a send to any of them waits for its register.
+  hubStep({
+    kind: "hub-start",
+    machines: db.listAgents().map((machine) => machine.machineId),
+    now: Date.now(),
+  });
   /**
    * Each session's final message of the turn in flight: the text frames that
    * followed its last tool call. A tool call empties it, so what came before
@@ -16212,14 +16239,14 @@ export const createServer = (
 
   /**
    * Whether a machine that is not connected is on its way back: the ms left
-   * in its reconnecting window ({@link awaitingMachine}, the one window sends
-   * wait in too), 0 when it is offline now. A refused read says it as its
-   * `Retry-After`, so a reader asks again once the hub's word on the machine
-   * changes rather than holding "reconnecting" for good.
+   * in its reconnecting window ({@link machinePresence}, the one deadline
+   * sends wait on too), 0 when it is offline now. A refused read says it as
+   * its `Retry-After`, so a reader asks again once the hub's word on the
+   * machine changes rather than holding "reconnecting" for good.
    */
   const reconnectingFor = (machineId: string): number => {
-    const away = awaitingMachine.get(machineId);
-    return away && !registry.agent(machineId)
+    const away = machinePresence(machineId);
+    return away.kind === "reconnecting" && !registry.agent(machineId)
       ? Math.max(0, away.until - Date.now())
       : 0;
   };
@@ -24998,9 +25025,13 @@ export const createServer = (
                 false
               );
               // Behind the restores and the ack, so the agent reads each send
-              // after the spawn it waits on.
-              awaitingMachine.delete(message.machineId);
-              releaseOwed({ machineId: message.machineId });
+              // after the spawn it waits on: the register ends its window and
+              // hands over what was held for it (core handover.ts).
+              hubStep({
+                kind: "agent-register",
+                machineId: message.machineId,
+                now: Date.now(),
+              });
               // Moves that waited for it go now, ahead of any start.
               takeUpMovesOn(message.machineId);
               // Behind what it was owed, which is its next turn when it has
@@ -26119,7 +26150,16 @@ export const createServer = (
                 if (threadId) {
                   askPayload.threadId = threadId;
                 }
-                if (!pending.remember(message.requestId, message, true)) {
+                const { requestId } = message;
+                // Its publish is the fan-out below, which every frame no
+                // transcript folds goes out by, after its routing here.
+                if (
+                  !askInOrder(
+                    requestId,
+                    () => pending.remember(requestId, message, true),
+                    () => undefined
+                  )
+                ) {
                   break;
                 }
                 if (alreadyParked) {
@@ -26889,11 +26929,12 @@ export const createServer = (
           }
           // Sends to it wait for its next register, within its window: one
           // that went while installing an update has the update's trial too.
-          awaitMachine(
+          hubStep({
+            kind: "agent-close",
             machineId,
-            "agent",
-            binaryUpdateStates.get(machineId)?.phase === "installing"
-          );
+            updating: binaryUpdateStates.get(machineId)?.phase === "installing",
+            now: Date.now(),
+          });
           // A summariser's turn cannot end where nobody hears it: its
           // continuation waits for the machine's next register instead.
           for (const waiter of turnWaiters.values()) {

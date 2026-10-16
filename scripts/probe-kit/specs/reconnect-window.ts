@@ -1,6 +1,6 @@
 /**
  * Right after the hub restarts, a machine it heard from within its
- * reconnecting window (hub server.ts `RECONNECTING_MS`) reads as
+ * reconnecting window (core handover.ts `RECONNECTING_MS`) reads as
  * reconnecting, never offline: a hub restart is the case that window exists
  * for, and every deploy restarts the hub. Once the window ends, it reads
  * offline. The transcript route is the one route that answers a machine's
@@ -28,7 +28,7 @@
 import { type Reply, until } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 
-/** How long the hub reads a machine it heard from as reconnecting (hub server.ts `RECONNECTING_MS`). */
+/** How long the hub reads a machine it heard from as reconnecting (core handover.ts `RECONNECTING_MS`). */
 const RECONNECTING_MS = 60_000;
 /** Longer than the window, so the window's start is the agent's heartbeats, not its register. */
 const CONNECTED_MS = RECONNECTING_MS + 30_000;

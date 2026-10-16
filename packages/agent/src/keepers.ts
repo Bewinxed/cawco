@@ -6,6 +6,7 @@
  * it runs there; what a restarted agent takes back, it takes back from
  * whichever keeper holds it.
  */
+import { holderOf, type KeeperWord } from "@cawco/core/handover";
 import {
   currentEndpoint,
   type KeeperName,
@@ -13,12 +14,7 @@ import {
   machineEndpoint,
 } from "@cawco/core/keepers";
 import type { SessiondProcInfo } from "@cawco/core/sessiond";
-import {
-  ensureSessiond,
-  KeeperEnded,
-  SessiondClient,
-  type SessiondWelcomeInfo,
-} from "./sessiond-client";
+import { ensureSessiond, KeeperEnded, SessiondClient } from "./sessiond-client";
 
 /** A dial that found no keeper there: a file left by one that is gone, or none at all. */
 const NOBODY_THERE = new Set(["ECONNREFUSED", "ENOENT"]);
@@ -47,18 +43,32 @@ export class KeepersUnanswered extends Error {
   }
 }
 
-/** One keeper's answer to a reading of all of them ({@link KeeperPool}). */
-interface Listing {
-  client: SessiondClient;
-  welcome: SessiondWelcomeInfo;
-}
-
 /** One held child, with the keeper that holds it and the epoch its seqs count in. */
 export interface HeldProc extends SessiondProcInfo {
   client: SessiondClient;
   /** Its keeper's boot epoch: with its pid, the space its ring's seqs count in. */
   epoch: string;
 }
+
+/**
+ * One keeper's word for one reading (core handover.ts {@link KeeperWord},
+ * with each child it lists): its listing, its end, or why it could not be read.
+ */
+export type KeeperReading =
+  | { kind: "listed"; procs: HeldProc[] }
+  | { kind: "ended" }
+  | { kind: "unanswered"; why: string };
+
+/** A reading as the handover reads it: the live children's ids, the end, or why not. */
+export const keeperWord = (reading: KeeperReading): KeeperWord =>
+  reading.kind === "listed"
+    ? {
+        kind: "listed",
+        alive: reading.procs
+          .filter((proc) => proc.alive)
+          .map((proc) => proc.procId),
+      }
+    : reading;
 
 /**
  * One connection per keeper, by the keeper's own endpoint, dialled lazily and
@@ -128,70 +138,98 @@ export class KeeperPool {
    * listing unknown: {@link KeepersUnanswered}, never a listing without it.
    */
   async held(): Promise<HeldProc[]> {
-    const { listings, unanswered } = await this.#survey();
+    const readings = await this.#survey();
+    const unanswered = readings.flatMap(({ reading }) =>
+      reading.kind === "unanswered" ? [reading.why] : []
+    );
     if (unanswered.length > 0) {
       throw new KeepersUnanswered("what the keepers hold", unanswered);
     }
-    return listings.flatMap(({ client, welcome }) =>
-      welcome.procs.map((proc) => ({ ...proc, client, epoch: welcome.epoch }))
+    return readings.flatMap(({ reading }) =>
+      reading.kind === "listed" ? reading.procs : []
     );
   }
 
   /**
-   * The keeper holding a live child under `procId`, the current one's answer
-   * first; undefined only once every keeper there answered and none holds
-   * it. A keeper that could not be read makes it unknown: {@link
+   * The keeper holding a live child under `procId`, as the handover decides
+   * it (core handover.ts {@link holderOf}): the current one's answer first;
+   * undefined only once every keeper there has listed or ended and none
+   * holds it. A keeper that could not be read makes it unknown: {@link
    * KeepersUnanswered}, naming each.
    */
   async holding(procId: string): Promise<HeldProc | undefined> {
-    const { listings, unanswered } = await this.#survey();
-    for (const { client, welcome } of listings) {
-      const proc = welcome.procs.find(
-        (one) => one.procId === procId && one.alive
+    const readings = await this.#survey();
+    const holder = holderOf(
+      procId,
+      readings.map(({ endpoint }) => endpoint),
+      Object.fromEntries(
+        readings.map(({ endpoint, reading }) => [endpoint, keeperWord(reading)])
+      )
+    );
+    if (holder.kind === "absent") {
+      return;
+    }
+    if (holder.kind === "unknown") {
+      throw new KeepersUnanswered(
+        `which keeper holds ${procId}`,
+        readings.flatMap(({ reading }) =>
+          reading.kind === "unanswered" ? [reading.why] : []
+        )
       );
-      if (proc) {
-        return { ...proc, client, epoch: welcome.epoch };
-      }
     }
-    if (unanswered.length > 0) {
-      throw new KeepersUnanswered(`which keeper holds ${procId}`, unanswered);
-    }
-    return undefined;
+    const listed = readings.find(({ endpoint }) => endpoint === holder.keeper);
+    return listed?.reading.kind === "listed"
+      ? listed.reading.procs.find(
+          (proc) => proc.procId === procId && proc.alive
+        )
+      : undefined;
+  }
+
+  /** The keepers there, the current one first. */
+  async endpoints(): Promise<string[]> {
+    return (await keeperEndpoints()).map(({ endpoint }) => endpoint);
   }
 
   /**
-   * One reading of every keeper there, the current one first, each waited
-   * on for its own word: its listing, or its end. A keeper that ended before
-   * it answered, or an endpoint nothing listens on (`ECONNREFUSED`,
-   * `ENOENT`: a file a keeper that is gone left, {@link keeperEndpoints}),
-   * holds nothing; its end is said once, with why. One that is there and
-   * could not be read for another reason is named with it, unanswered.
+   * One keeper's word, waited on for as long as it takes: its listing, or
+   * its end. A keeper that ended before it answered, or an endpoint nothing
+   * listens on (`ECONNREFUSED`, `ENOENT`: a file a keeper that is gone left,
+   * {@link keeperEndpoints}), holds nothing; its end is said once, with why.
+   * One that is there and could not be read for another reason is
+   * unanswered, with why. Never rejects.
    */
-  async #survey(): Promise<{ listings: Listing[]; unanswered: string[] }> {
-    const found = await keeperEndpoints();
-    const read = await Promise.all(
-      found.map(async ({ endpoint }): Promise<Listing | string | undefined> => {
-        try {
-          const client = await this.#client(endpoint);
-          return { client, welcome: await client.list() };
-        } catch (error) {
-          if (keeperGone(error)) {
-            this.#sayGone(endpoint, error);
-            return;
-          }
-          console.warn(
-            `[sessiond] ${endpoint} could not be read: ${reasonOf(error)}`
-          );
-          return `${endpoint}: ${reasonOf(error)}`;
-        }
-      })
+  async read(endpoint: string): Promise<KeeperReading> {
+    try {
+      const client = await this.#client(endpoint);
+      const welcome = await client.list();
+      return {
+        kind: "listed",
+        procs: welcome.procs.map((proc) => ({
+          ...proc,
+          client,
+          epoch: welcome.epoch,
+        })),
+      };
+    } catch (error) {
+      if (keeperGone(error)) {
+        this.#sayGone(endpoint, error);
+        return { kind: "ended" };
+      }
+      console.warn(
+        `[sessiond] ${endpoint} could not be read: ${reasonOf(error)}`
+      );
+      return { kind: "unanswered", why: `${endpoint}: ${reasonOf(error)}` };
+    }
+  }
+
+  /** One reading of every keeper there, the current one first, each {@link read}. */
+  async #survey(): Promise<{ endpoint: string; reading: KeeperReading }[]> {
+    return await Promise.all(
+      (await this.endpoints()).map(async (endpoint) => ({
+        endpoint,
+        reading: await this.read(endpoint),
+      }))
     );
-    return {
-      listings: read.filter(
-        (one): one is Listing => typeof one === "object" && one !== undefined
-      ),
-      unanswered: read.filter((one): one is string => typeof one === "string"),
-    };
   }
 
   /** The endpoints already said to be a keeper that is gone, each said once. */

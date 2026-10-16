@@ -40,7 +40,7 @@ const SIM = {
 /** PaneState's titles for a read that found the machine away. */
 const RECONNECTING = "This machine is reconnecting";
 const OFFLINE = "This machine is offline";
-/** The hub's longest window (server.ts RECONNECTING_MS), and slack past it. */
+/** The hub's longest window (core handover.ts RECONNECTING_MS), and slack past it. */
 const WINDOW_MS = 60_000;
 const SLACK_MS = 20_000;
 const TITLE = "Reconnect probe";

@@ -1,6 +1,7 @@
 /** Pi's agent adapter owns only custody and transport, never a running SDK turn. */
 import { resumeCursor, type SpawnPayload } from "@cawco/core";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
+import type { KeeperReading } from "../keepers";
 import { parseProcId, procIdFor } from "../proc-id";
 import { readAccountSoon } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
@@ -40,6 +41,25 @@ export class PiHarness extends PiProfile implements Harness {
       }
     }
     return await spawnPi(spec, withAccountReads(spec, ctx));
+  }
+
+  /** The keepers there for custody to read, the current one first. */
+  async custodyKeepers(): Promise<string[]> {
+    await piKeepers.current();
+    return await piKeepers.endpoints();
+  }
+
+  /** One keeper's word on pi's children: its listing of them, its end, or why it could not be read. */
+  async custodyReading(keeper: string): Promise<KeeperReading> {
+    const reading = await piKeepers.read(keeper);
+    return reading.kind === "listed"
+      ? {
+          kind: "listed",
+          procs: reading.procs.filter(
+            (proc) => parseProcId(proc.procId).kind === "pi"
+          ),
+        }
+      : reading;
   }
 
   /** What every keeper holds of pi's, the current keeper's first, each with its keeper's epoch. */

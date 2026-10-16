@@ -28,6 +28,7 @@
     "machine-paths:check": "bun scripts/machine-paths-check.ts",
     "mark-line:check": "bun apps/dashboard/scripts/mark-line-check.ts",
     "prepare": "bun scripts/git-hooks/install.ts",
+    "protocol:sweep": "bun scripts/protocol-sweep.ts",
     "typecheck": "bun scripts/typecheck.ts",
     "typecheck:coverage": "bun scripts/typecheck-coverage.ts",
     "words": "bun scripts/words-swift.ts",

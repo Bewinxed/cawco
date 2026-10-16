@@ -70,6 +70,15 @@ import {
   AGENT_RESTARTING,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import {
+  CUSTODY_BOUND_MS,
+  type HandoverCommand,
+  type HandoverEvent,
+  type HandoverState,
+  step as handoverStep,
+  initialHandover,
+  type KeeperWord,
+} from "@cawco/core/handover";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import {
@@ -128,7 +137,7 @@ import { serveHubCredential } from "./hub-git";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import { readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
-import { withKeepers } from "./keepers";
+import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { isMachineAgent } from "./machine-agent";
 import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
@@ -149,7 +158,7 @@ import { placePush } from "./place-push";
 import { placeRepo } from "./place-repo";
 import { servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
-import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
+import { parseProcId, procIdFor, SESSION_PROC_KINDS } from "./proc-id";
 import {
   accountLent,
   beginProviderLogin,
@@ -178,12 +187,7 @@ import {
 import { outbound, redactConsole } from "./redaction";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
-import {
-  CUSTODY_BOUND_MS,
-  type CustodyDecided,
-  resumableSessions,
-  SessionSupervisor,
-} from "./session";
+import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
 import {
   ensureServed,
@@ -346,26 +350,20 @@ class LaunchAsks {
 const errorWords = (error: unknown): string =>
   error instanceof Error ? error.message || error.name : String(error);
 
-/**
- * `pending`'s outcome, or `signal`'s reason once it is aborted, whichever is
- * first. The work itself runs on: this bounds the wait, not the work, and the
- * caller settles what the work had not decided.
- */
-const untilAborted = <T>(
-  pending: Promise<T>,
-  signal: AbortSignal
-): Promise<T> =>
-  new Promise<T>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(signal.reason);
-      return;
-    }
-    const abort = () => reject(signal.reason);
-    signal.addEventListener("abort", abort, { once: true });
-    pending
-      .then(resolve, reject)
-      .finally(() => signal.removeEventListener("abort", abort));
-  });
+/** A keeper's reading as one harness's custody reads it: the sessions whose children of that harness it holds alive. */
+const custodyWord = (
+  kind: (typeof SESSION_PROC_KINDS)[number],
+  reading: KeeperReading
+): KeeperWord =>
+  reading.kind === "listed"
+    ? {
+        kind: "listed",
+        alive: reading.procs.flatMap((proc) => {
+          const id = parseProcId(proc.procId);
+          return proc.alive && id.kind === kind ? [id.instanceId] : [];
+        }),
+      }
+    : reading;
 
 /** OpenCode, told the machine's provider accounts changed, when it takes such a change. */
 const tellOpencodeAccountsChanged = (): void => {
@@ -1092,7 +1090,7 @@ export const adoptable = (
   payload.bootstrap === undefined &&
   payload.scratch === undefined;
 
-/** That restore as `reattachFrom` wants it: where it runs, and its conversation. */
+/** That restore as `SessionSupervisor.takeHeld` wants it: where it runs, and its conversation. */
 export const custodyRow = (
   payload: SpawnPayload
 ): {
@@ -1340,6 +1338,18 @@ const attach = (
       ...(latestBinaryUpdate() ? { binaryUpdate: latestBinaryUpdate() } : {}),
     });
     let payload = registerPayload({ custody, catalog });
+    /**
+     * This connection's half of the handover (core handover.ts): its link,
+     * and the custody its register hands back. The connection only turns its
+     * socket, its keepers' words and its timers into the reducer's events,
+     * and runs what comes back.
+     */
+    let handover: HandoverState = initialHandover();
+    const agentStep = (event: HandoverEvent): HandoverCommand[] => {
+      const stepped = handoverStep(handover, event);
+      handover = stepped.state;
+      return stepped.commands;
+    };
     // NO BUSY ANSWER BEFORE CUSTODY HAS SAID. From the register until the
     // sessions this connection takes custody of have each said whether their
     // turn is running (`takeCustody` below), a busy question waits: before
@@ -1405,6 +1415,7 @@ const attach = (
         // that has ended and says nothing.
         supervisor.loseCustody();
         recoveryController?.abort(new Error("Custody connection was lost."));
+        agentStep({ kind: "link-lost" });
         Effect.runFork(
           Effect.logInfo(
             "hub connection lost: custody is recovered on the next register"
@@ -1413,27 +1424,14 @@ const attach = (
       },
       { once: true }
     );
-    firstRegisterSpawnedNothing(url);
-    send(socket, { verb: "register", machineId: identity.machineId, payload });
-    yield* Effect.logInfo(`registered with ${url}`);
-    markLive();
-    reportServedCatalog(
-      socket,
-      identity.machineId,
-      () => supervisor.instanceIds
-    ).catch((error: unknown) =>
-      Effect.runFork(
-        Effect.logWarning(`server catalog not reported: ${String(error)}`)
-      )
-    );
 
     // What the machine can do goes out once its probes finish, on a beat of
-    // its own, and not inside the register above. The probes spawn processes
-    // (claude's starts a real Claude Code to ask for the account), and a
-    // register that waited for them kept this machine out of the hub's
-    // registry, and so reading offline, for most of the 2.7–3.2s the journal
-    // showed between `Connection ended` and `registered with` on every hub
-    // restart.
+    // its own, and not inside the register (below, the link's first command).
+    // The probes spawn processes (claude's starts a real Claude Code to ask
+    // for the account), and a register that waited for them kept this machine
+    // out of the hub's registry, and so reading offline, for most of the
+    // 2.7–3.2s the journal showed between `Connection ended` and `registered
+    // with` on every hub restart. Nothing up to the register starts one.
     let reportedHarnesses: MachineHarnessReport[] = [];
     /** Whether this connection's harnesses have been read once ({@link supervisor.reannounce}). */
     let announced = false;
@@ -1643,7 +1641,31 @@ const attach = (
         stopToolsWatch();
       })
     );
-    supervisor.reannounce();
+    // The link's commands, in the handover's order: the register, then the
+    // probes (core handover.ts `link-open`, ea944761a).
+    for (const command of agentStep({ kind: "link-open" })) {
+      if (command.kind === "register") {
+        firstRegisterSpawnedNothing(url);
+        send(socket, {
+          verb: "register",
+          machineId: identity.machineId,
+          payload,
+        });
+        yield* Effect.logInfo(`registered with ${url}`);
+        markLive();
+        reportServedCatalog(
+          socket,
+          identity.machineId,
+          () => supervisor.instanceIds
+        ).catch((error: unknown) =>
+          Effect.runFork(
+            Effect.logWarning(`server catalog not reported: ${String(error)}`)
+          )
+        );
+      } else if (command.kind === "announce") {
+        supervisor.reannounce();
+      }
+    }
 
     // This probe counts tokens through pi's proxy; it never starts a Claude SDK
     // query or rotates Claude Code's own login. The initial detect already ran it.
@@ -1963,20 +1985,23 @@ const attach = (
     );
 
     /**
-     * THE CUSTODY TRANSACTION, ONE HARNESS AT A TIME. What sessiond hands
-     * back is taken by one unit per harness, Claude's held children in one
-     * reattach and pi's in another, each built here, fresh. A unit reads what
-     * the keepers hold, bounded by {@link CUSTODY_BOUND_MS}, and takes every
-     * held child into custody at once: from then each is this agent's, its
-     * attach the first thing in its session's queue, however long its child
-     * takes to answer (`SessionSupervisor.#holdChild`). So each session is let
-     * go ({@link release}) the moment it is taken, and what waited for it
-     * waits behind its attach, never on a timer. A unit that fails or runs
-     * out of time reading its keepers settles only its own sessions: a held
-     * child stays for the hub to attach again (`session-lifecycle.ts`), and a
-     * session with no child starts. Custody is complete once every unit has
-     * settled, and nothing waits past that on any one of them. An OpenCode
-     * reattach is no unit of it: it is its own session's ({@link reattaching}).
+     * THE CUSTODY TRANSACTION, AS THE HANDOVER DECIDES IT (core handover.ts).
+     * What sessiond hands back is taken by one unit per harness, Claude's
+     * held children in one and pi's in another. Each keeper there is read for
+     * its own word, the reducer decides each session from those words, and
+     * this runs what it decides: a child a keeper holds is taken into custody
+     * the moment it is known ({@link SessionSupervisor.takeHeld}), its attach
+     * the first thing in its session's queue however long the child takes to
+     * answer; a session no keeper holds, once every keeper has listed or
+     * ended, starts afresh; each is let go ({@link release}) as it is decided.
+     * A session whose keeper has not answered is neither: it waits for that
+     * keeper's word or its end, asked again while it could not be read, and
+     * past {@link CUSTODY_BOUND_MS} the wait is said, never ended (an
+     * unanswered keeper never reads as holding nothing: 2026-10-16, the
+     * keeper of the build before answered past 2 s and its sessions were
+     * started afresh). Custody is complete once every session is decided. An
+     * OpenCode reattach is no unit of it: it is its own session's
+     * ({@link reattaching}).
      */
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
       clearTimeout(registrationDeadline);
@@ -2003,89 +2028,115 @@ const attach = (
       /** The connection ended: the next register's custody decides instead. */
       const ended = (): boolean =>
         takeover.signal.aborted || socket.readyState !== WebSocket.OPEN;
-      const settle = (instanceId: string): void => {
-        supervisor.custodySettled(epoch, instanceId);
-        release(instanceId);
-      };
-      const bounded = (): AbortSignal =>
-        AbortSignal.any([
-          takeover.signal,
-          AbortSignal.timeout(CUSTODY_BOUND_MS),
-        ]);
-      /** A held spawn whose session has no child to take back starts one, ahead of what waited for it; a reattach launches nothing. */
-      const startUnheld = (envelope: Envelope): void => {
-        if (!(envelope.payload as SpawnPayload).reattachOnly) {
-          supervisor.dispatch(envelope);
-        }
-      };
-      /** A unit that could not read what its keepers hold, said once with why. */
-      const sayUndecided = (
-        unit: string,
-        signal: AbortSignal,
-        problem: unknown,
-        ids: string[]
-      ): void => {
-        const why = signal.aborted
-          ? `got no listing from its keepers within ${CUSTODY_BOUND_MS / 1000} s`
-          : `could not read its keepers: ${errorWords(problem)}`;
-        Effect.runFork(
-          Effect.logWarning(
-            `custody: ${unit} ${why}; left for the hub to attach again: ${ids.join(", ")}`
-          )
-        );
-      };
+      const byId = new Map(
+        spawns.map((envelope) => [
+          (envelope.payload as SpawnPayload).instanceId,
+          envelope,
+        ])
+      );
+      /** Each keeper's listing of each harness's children, this custody: what a `hold` takes. */
+      const listings = new Map<string, HeldProc[]>();
+      const listed = (unit: string, keeper: string): string =>
+        `${unit}\0${keeper}`;
       const adopted: string[] = [];
-      const unsettled: string[] = [];
 
-      /** Claude's or pi's held children, taken back from sessiond in one reattach. */
-      const sessiondUnit = async (
-        kind: (typeof SESSION_PROC_KINDS)[number],
-        envelopes: Envelope[]
-      ): Promise<void> => {
-        const left = new Map(
-          envelopes.map((envelope) => [
-            (envelope.payload as SpawnPayload).instanceId,
-            envelope,
-          ])
-        );
-        const rows = [...left.values()].map((envelope) =>
-          custodyRow(envelope.payload as SpawnPayload)
-        );
-        const decided: CustodyDecided = (instanceId, outcome) => {
-          const envelope = left.get(instanceId);
-          if (!envelope) {
-            return;
-          }
-          left.delete(instanceId);
-          if (outcome === "absent") {
-            startUnheld(envelope);
-          }
-          settle(instanceId);
-        };
-        const signal = bounded();
-        try {
-          adopted.push(
-            ...(await untilAborted(
-              supervisor.reattachFrom(kind, ackPayload, rows, signal, decided),
-              signal
-            ))
-          );
-        } catch (problem) {
-          if (ended()) {
-            return;
-          }
-          sayUndecided(`the ${kind} reattach`, signal, problem, [
-            ...left.keys(),
-          ]);
+      /** One step of this custody, its commands run in order; nothing once its connection has ended. */
+      const custodyStep = (event: HandoverEvent): void => {
+        if (ended()) {
+          return;
         }
-        // What the reattach did not decide: a held child stays for the hub
-        // to attach again (session-lifecycle.ts); a session it starts
-        // afresh starts.
-        for (const [instanceId, envelope] of [...left]) {
-          left.delete(instanceId);
-          unsettled.push(instanceId);
-          startUnheld(envelope);
-          settle(instanceId);
+        for (const command of agentStep(event)) {
+          obeyCustody(command);
+        }
+      };
+      const obeyCustody = (command: HandoverCommand): void => {
+        switch (command.kind) {
+          case "read-keeper": {
+            const kind = command.unit as (typeof SESSION_PROC_KINDS)[number];
+            const reader = supervisor.custodyReader(kind);
+            reader
+              ?.read(command.keeper)
+              .then((answer) => {
+                if (answer.kind === "listed") {
+                  listings.set(
+                    listed(command.unit, command.keeper),
+                    answer.procs
+                  );
+                }
+                custodyStep({
+                  kind: "keeper-word",
+                  epoch: command.epoch,
+                  unit: command.unit,
+                  keeper: command.keeper,
+                  word: custodyWord(kind, answer),
+                  now: Date.now(),
+                });
+              })
+              .catch((problem: unknown) =>
+                supervisor.failCustody(epoch, problem)
+              );
+            return;
+          }
+          case "hold": {
+            const envelope = byId.get(command.id);
+            const proc = listings
+              .get(listed(command.unit, command.keeper))
+              ?.find(
+                (one) =>
+                  one.alive &&
+                  one.procId ===
+                    procIdFor(
+                      command.unit as (typeof SESSION_PROC_KINDS)[number],
+                      command.id
+                    )
+              );
+            if (envelope && proc) {
+              supervisor.takeHeld(
+                command.unit as (typeof SESSION_PROC_KINDS)[number],
+                ackPayload,
+                custodyRow(envelope.payload as SpawnPayload),
+                proc
+              );
+              adopted.push(command.id);
+            }
+            return;
+          }
+          case "start": {
+            // A held spawn whose session has no child to take back starts
+            // one, ahead of what waited for it.
+            const envelope = byId.get(command.id);
+            if (envelope) {
+              supervisor.dispatch(envelope);
+            }
+            return;
+          }
+          case "settle":
+            supervisor.custodySettled(epoch, command.id);
+            release(command.id);
+            return;
+          case "say":
+            Effect.runFork(
+              command.level === "warn"
+                ? Effect.logWarning(command.words)
+                : Effect.logInfo(command.words)
+            );
+            return;
+          case "wake": {
+            const { at } = command;
+            setTimeout(
+              () =>
+                custodyStep({ kind: "tick", now: Math.max(Date.now(), at) }),
+              Math.max(0, at - Date.now())
+            );
+            return;
+          }
+          case "custody-complete":
+            complete().catch((problem: unknown) =>
+              supervisor.failCustody(epoch, problem)
+            );
+            return;
+          default:
+            return;
         }
       };
 
@@ -2094,13 +2145,6 @@ const attach = (
           Effect.runFork(
             Effect.logInfo(
               `took custody of ${adopted.length} surviving session(s), each attached as it answers: ${adopted.join(", ")}`
-            )
-          );
-        }
-        if (unsettled.length > 0) {
-          Effect.runFork(
-            Effect.logWarning(
-              `custody: ${unsettled.length} held session(s) settled without being taken back: ${unsettled.join(", ")}`
             )
           );
         }
@@ -2140,16 +2184,38 @@ const attach = (
         custodyRecovered();
       };
 
-      // biome-ignore lint/complexity/noVoid: each unit settles its own sessions; no control reply waits for the transaction
-      void Promise.all([
-        ...SESSION_PROC_KINDS.flatMap((kind) => {
+      // One unit per harness whose children sessiond keeps, each read from
+      // the keepers there now; no control reply waits for the transaction. A
+      // harness that keeps none has no keeper to ask, and its rows start.
+      // biome-ignore lint/complexity/noVoid: each unit settles its own sessions as its keepers answer
+      void Promise.all(
+        SESSION_PROC_KINDS.flatMap((kind) => {
           const mine = spawns.filter(
             (envelope) => harnessOf(envelope) === kind
           );
-          return mine.length > 0 ? [sessiondUnit(kind, mine)] : [];
-        }),
-      ])
-        .then(complete)
+          if (mine.length === 0) {
+            return [];
+          }
+          return [
+            (async () => ({
+              unit: kind,
+              keepers: (await supervisor.custodyReader(kind)?.keepers()) ?? [],
+              rows: mine.map((envelope) => ({
+                id: (envelope.payload as SpawnPayload).instanceId,
+                fresh: !(envelope.payload as SpawnPayload).reattachOnly,
+              })),
+            }))(),
+          ];
+        })
+      )
+        .then((begun) =>
+          custodyStep({
+            kind: "custody-begin",
+            epoch,
+            units: begun,
+            now: Date.now(),
+          })
+        )
         .catch((problem: unknown) => supervisor.failCustody(epoch, problem));
     };
 
