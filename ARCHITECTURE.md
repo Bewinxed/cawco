@@ -314,7 +314,10 @@ setting, "Require paired devices" (Configure › Devices):
   8628's shape, approved from a paired device or the pinned Telegram chat; the hub keeps
   each token's sha256. The CLI's owner commands ask for one approval per run and keep the
   token in memory. Sessions keep their tools: their harnesses reach the hub through their
-  machine's loopback gateway, which signs each call with the machine's key.
+  machine's loopback gateway, which signs each call with the machine's key. The last paired
+  device cannot be removed; with none left that can turn it off (and no Telegram chat
+  pinned), `cawco pairing off` on the hub's own machine, as the hub's user, writes the
+  setting into its database, which the hub reads on every request.
 
 What a session once did on the person's routes is its own tool now: `archive_workspace`
 for its own delegates' workspaces, and `update_machines`, which asks the person first in

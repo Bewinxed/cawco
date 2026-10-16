@@ -19,6 +19,7 @@ import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { ConnectionKeyError } from "./connections";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
+import { PairingError, pairingOff } from "./pairing";
 import { RelayError } from "./relay";
 import {
   isServiceAction,
@@ -72,6 +73,9 @@ Usage
   cawco relay off <relay> | list <project>
   cawco relay set-secret <relay>          give a relay its provider's signing secret,
                                           typed unseen or piped, never through a session
+  cawco pairing off                       on the hub's machine: stop requiring paired
+                                          devices when no paired device is left to
+                                          turn it off in Configure › Devices
   cawco git-credential <get|store|erase>  git's credential helper for the hub's git
                                           remote, as this session; set up for every
                                           session, not run by hand
@@ -630,6 +634,14 @@ const runConnections = async (args: Args): Promise<number> => {
   return signedIn ? 0 : 1;
 };
 
+/** `cawco pairing off`: the hub trusts its network again, from its own machine (pairing.ts). */
+const runPairing = (args: Args): number => {
+  if (args.action !== "off") {
+    throw new UsageError("cawco pairing takes one verb: off");
+  }
+  return pairingOff();
+};
+
 /** `cawco jev <set-key|remove-key>`: the TypeSafe key Jev is reached with, from this terminal to the hub. */
 const runJev = async (args: Args): Promise<number> => {
   if (args.action !== "set-key" && args.action !== "remove-key") {
@@ -796,6 +808,8 @@ const run = async (argv: string[]): Promise<number> => {
       return runJev(args);
     case "relay":
       return runRelayCommand(args);
+    case "pairing":
+      return runPairing(args);
     case "service":
       return runService(args);
     default:
@@ -812,7 +826,8 @@ const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
     error instanceof ServiceError ||
     error instanceof ToolError ||
     error instanceof ConnectionKeyError ||
-    error instanceof RelayError
+    error instanceof RelayError ||
+    error instanceof PairingError
   ) {
     console.error(`cawco: ${error.message}`);
     return 1;
