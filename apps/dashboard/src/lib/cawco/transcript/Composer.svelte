@@ -2999,7 +2999,14 @@
   let lift = $state(0);
   /** The plan's ring's width: the delegate tray's row keeps clear of it. */
   let ringWidth = $state(0);
-  let stack = $state(0);
+  /**
+   * Each conversation's offer as it is laid out, by id, kept as it stands
+   * whether shown or not: handed the next conversation, the stack is the
+   * height its offer already has, and no offer moves in or out of the
+   * column to say so.
+   */
+  const offerHeights: Record<string, number> = $state({});
+  const stack = $derived(offerHeights[showing] ?? 0);
 
   /** The rows with an offer to stand on the tray row, and those with a tray. */
   const offered = $derived(trayRows.filter((row) => row.prompts));
@@ -3059,11 +3066,15 @@
       bind:this={offers}
       {@attach reflow()}
     >
-      <!-- Each conversation's offer, built; the one written to is in the
-           column, the rest stand out of it, hidden. -->
-      <div class="stack" bind:clientHeight={stack}>
+      <!-- Each conversation's offer, built, standing on the stack's foot;
+           the one written to is seen, and the stack is as tall as it. -->
+      <div class="stack" style:block-size="{stack}px">
         {#each offered as row (row.id)}
-          <div class="offer" class:away={row.id !== showing}>
+          <div
+            class="offer"
+            class:away={row.id !== showing}
+            bind:clientHeight={offerHeights[row.id]}
+          >
             {@render row.prompts?.()}
           </div>
         {/each}
@@ -3623,30 +3634,30 @@
   }
   /* What the column measures into the composer's height: the cards and
      the step under them, and nothing at all with no card parked. */
+  /* What the column measures into the composer's height: the offer shown,
+     and its step. Every offer stands on its foot out of flow, so a switch
+     changes which is seen and the stack's height, never what is laid out. */
   .stack {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-
-    & > .offer {
-      pointer-events: auto;
-    }
+    flex: none;
   }
-  /* The step under a card parked, on the card's own row: the one in the
-     column is the stack's last, and nothing is under a row with no card.
-     Asked of the row, not of the stack past `.away`: a class in a `:has()`
-     before a universal makes each of its changes restyle the whole row. */
-  .offer:has(> :global(*)) {
-    padding-bottom: var(--space-3);
-  }
-  /* The offer of a conversation not being written to: built and laid out,
-     out of the column at its foot, unseen and out of reach (`visibility`
-     takes it out of the tab order and the accessibility tree). */
-  .offer.away {
+  .offer {
     position: absolute;
     inset-inline: 0;
     bottom: 0;
+    pointer-events: auto;
+  }
+  /* The step under a card parked, on the card's own row; nothing under a
+     row with no card. Asked of the row, not of the stack past `.away`: a
+     class in a `:has()` before a universal makes each of its changes
+     restyle the whole row. */
+  .offer:has(> :global(*)) {
+    padding-bottom: var(--space-3);
+  }
+  /* The offer of a conversation not being written to: built and laid out
+     where it would stand, unseen and out of reach (`visibility` takes it
+     out of the tab order and the accessibility tree). */
+  .offer.away {
     visibility: hidden;
   }
   /* Each conversation's tray in the slot's one cell: the one written to
