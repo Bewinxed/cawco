@@ -290,13 +290,28 @@
    */
   let menuFor = $state<string | null>(null);
   const menuOpen = $derived(menuFor !== null);
-  const detailTab = $derived(tabs.find((tab) => tab.id === detailId));
+  /**
+   * The session the card shows. With `detailId` (the tab it hangs from)
+   * but a frame behind it while the card moves to another tab: the move
+   * (where it hangs, how) in one frame and what it shows, with its title's
+   * morph, in the next, each its own task (web.dev, "Optimize long tasks":
+   * break a long task up and yield between the parts). Together they were
+   * one task of 40ms, the re-placed card's measuring and the new session's
+   * card built and measured in it.
+   */
+  let shownId = $state<string | null>(null);
+  const detailTab = $derived(tabs.find((tab) => tab.id === shownId));
   /** An open card's move to another tab, waiting for the frame in hand to paint. */
   let moveFrame = 0;
   let moveTask: ReturnType<typeof setTimeout> | undefined;
+  /** What the moved card shows, waiting for the frame its move paints in. */
+  let showFrame = 0;
+  let showTask: ReturnType<typeof setTimeout> | undefined;
   function holdMove() {
     cancelAnimationFrame(moveFrame);
     clearTimeout(moveTask);
+    cancelAnimationFrame(showFrame);
+    clearTimeout(showTask);
   }
   function closeDetails() {
     clearTimeout(timer);
@@ -317,6 +332,7 @@
     pinned = pin;
     if (!(detailsOpen && detailId !== id)) {
       detailId = id;
+      shownId = id;
       detailAnchor = anchor;
       cardPlace = placeOf(anchor, cardWidth());
       cardFlush = cardPlace.flush;
@@ -341,6 +357,12 @@
         detailAnchor = anchor;
         cardPlace = placeOf(anchor, cardWidth());
         cardFlush = cardPlace.flush;
+        // What it shows, the frame after it moved (`shownId`).
+        showFrame = requestAnimationFrame(() => {
+          showTask = setTimeout(() => {
+            shownId = id;
+          });
+        });
       });
     });
   }
