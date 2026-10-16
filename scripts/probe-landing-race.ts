@@ -291,7 +291,7 @@ try {
   check(
     "a: report says it rebased and ran the checks again",
     (a.item.result ?? "").includes(
-      "rebased onto the newer main with the checks run again"
+      "rebased onto the newer main with the checks run again on the rebased tree"
     ),
     (a.item.result ?? "")
       .split("\n")

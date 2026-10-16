@@ -121,6 +121,7 @@ import type {
 import { leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
+  GATE_COVERS,
   land,
   landGateChecks,
   landingQueue,
@@ -128,6 +129,7 @@ import {
   pushBranch,
   quote,
   type Refusal,
+  statusCommand,
 } from "./landing";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { CommandOptions } from "./machine-pause";
@@ -1219,9 +1221,54 @@ interface CheckOutcome {
   exitCode: number;
   passed: boolean;
   result: CommandResult;
+  /**
+   * Why a check did not run, its pass carried over ({@link checkOnce}):
+   * `passed on this tree at finish_item`.
+   */
+  skipped?: string;
   /** Where a check that names another machine ran: `on Omars-MacBook-Pro at 1a2b3c4d5`. */
   where?: string;
 }
+
+/**
+ * A check command that passed on a tree, with the `expect` it passed with
+ * and the stage it ran in (`at finish_item`, `after the rebase`, `in the
+ * land gate`), for the line of a check its pass lets skip.
+ */
+interface Passed {
+  command: string;
+  expect: string | undefined;
+  stage: string;
+}
+
+/**
+ * Why `check` need not run on a tree where `passed` passed: the same
+ * command passed there (with the same `expect`, when it has one), or one
+ * that covers it did (landing.ts {@link GATE_COVERS}). Undefined when it
+ * must run.
+ */
+const priorPass = (
+  check: WorkItemCheck,
+  passed: Passed[]
+): string | undefined => {
+  const command = check.command.trim();
+  const same = passed.find(
+    (each) =>
+      each.command === command &&
+      (check.expect === undefined || each.expect === check.expect)
+  );
+  if (same) {
+    return `passed on this tree ${same.stage}`;
+  }
+  const covers = GATE_COVERS[command] ?? [];
+  const cover =
+    check.expect === undefined
+      ? passed.find((each) => covers.includes(each.command))
+      : undefined;
+  return cover
+    ? `${cover.command}, which covers it, passed on this tree ${cover.stage}`
+    : undefined;
+};
 
 /**
  * An install {@link depsScript} ran ahead of the checks: not one of the
@@ -1319,8 +1366,12 @@ const checkLine = ({
   exitCode,
   durationMs,
   result,
+  skipped,
   where,
 }: CheckOutcome): string => {
+  if (skipped) {
+    return `- ${check.name}: pass (not run again: ${skipped})`;
+  }
   const missing =
     exitCode === 0 && !passed && check.expect !== undefined
       ? `, stdout does not contain ${JSON.stringify(check.expect)}`
@@ -1331,6 +1382,48 @@ const checkLine = ({
     ? `${line}${fenced(result.stdout)}`
     : line;
 };
+
+/** A run's passed installs, as the landing line says them; empty without one. */
+const installedSaid = (run: CheckRun): string =>
+  run.installs
+    .filter((each) => each.passed)
+    .map((each) => `, installing dependencies first: ${each.said}`)
+    .join("");
+
+/**
+ * The landing line on the item's checks after the fetch: not run again when
+ * the base had not moved, else which ran again on the rebased tree.
+ */
+const recheckSaid = (
+  base: string,
+  rebased: boolean,
+  run: CheckRun | undefined
+): string => {
+  if (!(rebased && run)) {
+    return `${base} had not moved, so the checks were not run again`;
+  }
+  const ran = run.outcomes.filter((each) => !each.skipped);
+  if (ran.length === 0) {
+    return `rebased onto the newer ${base}, which left the checked tree as it was, so the checks were not run again`;
+  }
+  const which =
+    ran.length === run.outcomes.length
+      ? "the checks"
+      : ran.map((each) => each.check.name).join(" and ");
+  return `rebased onto the newer ${base} with ${which} run again on the rebased tree${installedSaid(run)}`;
+};
+
+/** The landing line on the land gate: each script, run or not and why; empty with no gate. */
+const gateSaid = (run: CheckRun | undefined): string =>
+  run && run.outcomes.length > 0
+    ? `; gate: ${run.outcomes
+        .map((each) =>
+          each.skipped
+            ? `${each.check.name} not run again (${each.skipped})`
+            : `${each.check.name} ran and passed`
+        )
+        .join(", ")}${installedSaid(run)}`
+    : "";
 
 /** A check as the delegate reads it: a failure carries its stderr too. */
 const checkResultLine = (outcome: CheckOutcome): string =>
@@ -1527,6 +1620,12 @@ export const createWorkItems = ({
    * checks again from the first.
    */
   const checkQueues = new Map<string, { words: string; since: number }>();
+  /**
+   * The check commands that passed for each live item, by the tree they
+   * passed on ({@link treeOf}): one command runs at most once on one tree
+   * ({@link checkOnce}). In memory: a hub that starts runs them again.
+   */
+  const passes = new Map<string, Map<string, Passed[]>>();
   /** One landing at a time per repository and branch (landing.ts). */
   const landings = landingQueue();
   /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
@@ -3407,10 +3506,12 @@ export const createWorkItems = ({
   const finish = (
     item: WorkItemRow,
     change: Parameters<DbShape["updateWorkItem"]>[1]
-  ): WorkItemRow =>
-    LIVE.has(item.state)
+  ): WorkItemRow => {
+    passes.delete(item.id);
+    return LIVE.has(item.state)
       ? (update(item.id, { ...change, endedAt: new Date() }) ?? item)
       : item;
+  };
 
   /**
    * Whether the session still has something coming as its turn ends at
@@ -4152,6 +4253,89 @@ export const createWorkItems = ({
   };
 
   /**
+   * The tree a check run in the workspace checks: HEAD's tree (`git
+   * rev-parse HEAD^{tree}`), with the item's outputs' contents beside it when
+   * it has outputs, while nothing else is uncommitted; landing.ts lands only
+   * such a tree. Undefined while something else is uncommitted: those checks
+   * read files no tree names, so their passes are not kept.
+   */
+  const treeOf = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<string | undefined> => {
+    const outputs = item.outputs ?? [];
+    const hashed =
+      outputs.length > 0
+        ? ` && git hash-object -- ${outputs.map(quote).join(" ")}`
+        : "";
+    const read = await runIn(workspace)(
+      `left=$(${statusCommand(outputs)}) && test -z "$left" && git rev-parse --verify 'HEAD^{tree}'${hashed}`,
+      GIT_TIMEOUT_MS
+    );
+    const tree = read.stdout.trim().split(WORD).join(" ");
+    return read.exitCode === 0 && tree ? tree : undefined;
+  };
+
+  /**
+   * {@link runChecks}, each check run at most once on one tree: a check that
+   * passed on the tree the workspace holds now, or whose command one that
+   * covers it did (landing.ts GATE_COVERS), is not run again; its outcome
+   * says where it passed. `stage` names this run for the lines of the checks
+   * it lets skip later. A pass is kept only when the workspace held the same
+   * tree before and after the run.
+   */
+  const checkOnce = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    checks: WorkItemCheck[],
+    stage: string
+  ): Promise<CheckRun> => {
+    const tree = await treeOf(workspace, item);
+    const kept = tree ? (passes.get(item.id)?.get(tree) ?? []) : [];
+    const prior = checks.map((check) => priorPass(check, kept));
+    const due = checks.filter((_, at) => prior[at] === undefined);
+    const run =
+      due.length > 0
+        ? await runChecks(workspace, item, due)
+        : { installs: [], outcomes: [] };
+    if (due.length > 0 && run.outcomes.length === 0) {
+      // The workspace's install failed: no check ran.
+      return run;
+    }
+    if (tree && due.length > 0 && (await treeOf(workspace, item)) === tree) {
+      const byTree = passes.get(item.id) ?? new Map<string, Passed[]>();
+      byTree.set(tree, [
+        ...kept,
+        ...run.outcomes
+          .filter((each) => each.passed)
+          .map((each) => ({
+            command: each.check.command.trim(),
+            expect: each.check.expect,
+            stage,
+          })),
+      ]);
+      passes.set(item.id, byTree);
+    }
+    const ran = [...run.outcomes];
+    return {
+      installs: run.installs,
+      outcomes: checks.map((check, at) => {
+        const skipped = prior[at];
+        return skipped === undefined
+          ? (ran.shift() as CheckOutcome)
+          : {
+              check,
+              skipped,
+              passed: true,
+              exitCode: 0,
+              durationMs: 0,
+              result: { exitCode: 0, stdout: "", stderr: "" },
+            };
+      }),
+    };
+  };
+
+  /**
    * The report's commits and diffstat: only what the item's own session
    * made. A range from a starting commit cannot say that — a rebase onto a
    * newer main pulls other people's commits into it, and after the push that
@@ -4213,30 +4397,31 @@ export const createWorkItems = ({
     checks: WorkItemCheck[]
   ): Promise<Landed> => {
     const { base } = workspace;
-    /** What the recheck after a rebase installed first, for the landing line. */
-    let installed = "";
-    /** The gate scripts that ran and passed, for the landing line. */
-    let gated: string[] = [];
+    /** The recheck after a rebase and the gate's run, for the landing line. */
+    const runs: { gate?: CheckRun; recheck?: CheckRun } = {};
     const outcome = await land<CheckRun>(base, {
       run: runIn(workspace),
       recheck: async () => {
-        const again = await runChecks(workspace, item, checks);
-        installed = again.installs
-          .filter((each) => each.passed)
-          .map((each) => `; installed dependencies first: ${each.said}`)
-          .join("");
-        return runFailed(again) ? again : undefined;
+        const run = await checkOnce(
+          workspace,
+          item,
+          checks,
+          "after the rebase"
+        );
+        runs.recheck = run;
+        return runFailed(run) ? run : undefined;
       },
       // The repository's lint and typecheck on the commit about to be
       // pushed (landing.ts LAND_GATE_SCRIPTS): run as checks are, so a
       // lockfile the rebase moved is installed first.
       gate: async () => {
-        const run = await runChecks(
+        const run = await checkOnce(
           workspace,
           item,
-          await landGateChecks(runIn(workspace))
+          await landGateChecks(runIn(workspace)),
+          "in the land gate"
         );
-        gated = run.outcomes.map((each) => each.check.name);
+        runs.gate = run;
         return runFailed(run) ? run : undefined;
       },
       queue: landings,
@@ -4247,7 +4432,7 @@ export const createWorkItems = ({
       case "landed":
         return {
           kind: "done",
-          line: `Landed on ${base} at ${outcome.sha.slice(0, 9)}${outcome.rebased ? `, rebased onto the newer ${base} with the checks run again${installed}` : ""}${gated.length > 0 ? `; ${gated.join(" and ")} passed on it first` : ""}.`,
+          line: `Landed on ${base} at ${outcome.sha.slice(0, 9)}; ${recheckSaid(base, outcome.rebased, runs.recheck)}${gateSaid(runs.gate)}.`,
         };
       case "nothing":
         return {
@@ -4694,7 +4879,7 @@ export const createWorkItems = ({
         return { done: false, text: gate.refusal };
       }
       const { checks } = gate;
-      const run = await runChecks(workspace, item, checks);
+      const run = await checkOnce(workspace, item, checks, "at finish_item");
       if (runFailed(run)) {
         update(item.id, settled);
         const { head, lines } = failedRun(run);

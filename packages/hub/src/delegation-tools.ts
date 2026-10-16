@@ -114,7 +114,7 @@ const finishItemDescription = (lands: LandsMode = "main"): string => {
   const outputs =
     " When the item names outputs, each must be a file at its path in your workspace: the hub copies them into the project's folder, and a missing one comes back to you like a failing check.";
   const close =
-    " Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work. When your item is an attempt at a task, the first call lists the task's to-dos still open, once, before any check runs: tick each one you finished with todo_write, say in your summary why each other one stays open, and call again.";
+    " Call finish_item as soon as the work is done: the hub runs the item's checks itself, so running them yourself first only repeats them. Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work. When your item is an attempt at a task, the first call lists the task's to-dos still open, once, before any check runs: tick each one you finished with todo_write, say in your summary why each other one stays open, and call again.";
   switch (lands) {
     case "branch":
       return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub pushes your branch to origin (nothing goes onto the base branch); the item is then done and your parent receives the results. When a check fails or work is left uncommitted, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
@@ -123,7 +123,7 @@ const finishItemDescription = (lands: LandsMode = "main"): string => {
     case "none":
       return `Finish your work item. Nothing is pushed: the hub runs the item's acceptance checks in your worktree and returns each result, and when all pass, your outputs are collected into the project's folder; the item is then done and your parent receives the results. Each output must be a file at its path in your workspace; a missing one comes back to you like a failing check, as does a failing check: fix the cause and call finish_item again.${close}`;
     default:
-      return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub rebases your commits onto the base branch (running the checks again if it moved) and pushes to it; the item is then done and your parent receives the results. When a check fails or your commits conflict with the base branch, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
+      return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub rebases your commits onto the base branch (running the checks again only when the rebase changed your tree) and pushes to it; the item is then done and your parent receives the results. When a check fails or your commits conflict with the base branch, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
   }
 };
 

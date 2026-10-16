@@ -10,17 +10,21 @@
  * go back to the delegate rather than leaving the branch without them.
  *
  * One landing at a time per repository and branch: fetch, rebase onto it
- * (a conflict is undone and goes back to the delegate), run the checks again
+ * (a conflict is undone and goes back to the delegate), check the item again
  * when the branch had moved, run the repository's land gate on the commit
  * about to be pushed ({@link LAND_GATE_SCRIPTS}), push, and, while someone
  * keeps pushing in between, the same again, three tries in all. Nothing ahead
  * of the branch counts as landed, so running this again after a hub restart
  * is safe.
  *
- * The gate runs on every landing, rebased or not: an item's own checks need
- * not lint or typecheck anything, and a clean rebase can still break either
- * (23da40303 sorted boundary.ts's imports, and ded95f4d2 formatted
- * SessionHover's, after rebases had landed them unlinted on main).
+ * The gate is asked on every landing, rebased or not: an item's own checks
+ * need not lint or typecheck anything, and a clean rebase can still break
+ * either (23da40303 sorted boundary.ts's imports, and ded95f4d2 formatted
+ * SessionHover's, after rebases had landed them unlinted on main). One
+ * command runs at most once on one tree: the caller skips a recheck or gate
+ * command that already passed, or one {@link GATE_COVERS} names did, on the
+ * exact tree about to be pushed (work-items.ts `checkOnce`), and runs every
+ * other.
  *
  * A work item that lands `branch` or `pr` goes to a branch of its own
  * instead ({@link pushBranch}): HEAD as it is, replacing only what the hub
@@ -60,12 +64,16 @@ export type LandingOutcome<F> =
 export interface LandingDeps<F> {
   /**
    * The repository's land gate on the commit about to be pushed, after any
-   * rebase and recheck: undefined when it passes.
+   * rebase and recheck, each script skipped that passed (or one covering it
+   * did) on that exact tree: undefined when it passes.
    */
   gate: () => Promise<F | undefined>;
   /** Serialises landings that share a key. */
   queue: LandingQueue;
-  /** The item's checks again, after a rebase moved HEAD: undefined when all pass. */
+  /**
+   * The item's checks on the rebased tree, after a rebase moved HEAD, each
+   * skipped that passed on that exact tree: undefined when all pass.
+   */
   recheck: () => Promise<F | undefined>;
   /**
    * The name every machine's clone of the repository shares (the item's
@@ -169,6 +177,19 @@ export const statusCommand = (skip: string[] = []): string =>
  * to main by hand.
  */
 export const LAND_GATE_SCRIPTS = ["lint:changed", "typecheck"] as const;
+
+/**
+ * The commands whose pass on a tree covers another's there, by the command
+ * covered. `bun run lint` covers `bun run lint:changed`: the root
+ * package.json runs the same css-scope and mark-line checks in both, then
+ * `fmt.ts --check` over every file where lint:changed passes `--changed`, and
+ * `ultracite check` (ultracite 7: `biome check --no-errors-on-unmatched ./`)
+ * where lint:changed runs `biome check --no-errors-on-unmatched` on the files
+ * changed since the merge-base with origin/main.
+ */
+export const GATE_COVERS: Readonly<Record<string, readonly string[]>> = {
+  "bun run lint:changed": ["bun run lint"],
+};
 
 /**
  * Prints, one per line, the {@link LAND_GATE_SCRIPTS} the checkout's root
