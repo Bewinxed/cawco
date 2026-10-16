@@ -684,7 +684,13 @@ const run = async (kit: Kit) => {
       .replaceAll("\0", " ")
       .trim();
     /** The shell's answer to SHELL-MARK in the request after its tool call. */
-    const shellSees = async (id: string, step: string, marker: string) => {
+    const shellSees = async (
+      id: string,
+      step: string,
+      marker: string,
+      /** A first turn that starts its harness's server waits for that too. */
+      ms = 120_000
+    ) => {
       const before = fleet.seen.length;
       await fleet.send(id, `SHELL-MARK ${marker}`);
       const read = await seenWhere(
@@ -693,7 +699,7 @@ const run = async (kit: Kit) => {
           one.afterTool &&
           one.body.includes("pid:["),
         `${name}: the shell's answer ${step}`,
-        120_000
+        ms
       ).catch(() => undefined);
       if (!read) {
         for (const one of fleet.seen.slice(before)) {
@@ -769,7 +775,9 @@ const run = async (kit: Kit) => {
       "opencode",
       "Person's OpenCode in a lead's folder"
     );
-    if (!(await shellSees(oc, "on OpenCode", "opencode"))) {
+    // Its first turn starts the folder's OpenCode server: on the host it has
+    // taken past 120 s with no request reaching the model (9878c1b82).
+    if (!(await shellSees(oc, "on OpenCode", "opencode", 300_000))) {
       console.log(
         (await fleet.logs("agent"))
           .split("\n")
