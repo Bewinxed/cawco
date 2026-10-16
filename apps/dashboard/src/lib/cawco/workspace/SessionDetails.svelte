@@ -34,6 +34,7 @@
     dur,
     easeOut,
   } from "../motion/curves.svelte";
+  import { standsOpen } from "../motion/hang";
   import { morph } from "../motion/morph.svelte";
   import { bypasses, permissionModesFor } from "../permission-modes";
   import ModelSection from "../spawn/ModelSection.svelte";
@@ -183,7 +184,7 @@
    * of those is not a reason to ask again.
    */
   /*
-   * Asked once the card stands open (its `grown`, PaneTabs `cardMotion`):
+   * Asked once the card stands open (its `grown`, motion/hang):
    * the reading re-wraps the stats strip, and its height tween landing
    * while the card grows resizes the card every frame, which takes the
    * growth's clip off the compositor. A card already open (moving between
@@ -196,10 +197,9 @@
   let askPending = $state(false);
   function whenOpen(ask: () => void) {
     const card = rootEl?.closest<HTMLElement>(".session-details-popover");
-    if (
-      !card ||
-      ("shown" in card.dataset && card.getAnimations().length === 0)
-    ) {
+    // As the card's motion said it stands (motion/hang `standsOpen`): its
+    // animations, asked, styled the page in the middle of a tab switch.
+    if (!card || standsOpen(card)) {
       askPending = false;
       ask();
       return () => undefined;

@@ -63,6 +63,22 @@ import { dur, ease, motionOk } from "./curves.svelte";
 const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/;
 /** The event a card fires once it stands open. */
 export const GROWN = "grown";
+
+/** The cards standing open, at rest: grown, and nothing running on them since. */
+const standing = new WeakSet<HTMLElement>();
+
+/**
+ * Whether a card stands open at rest, as its own motion last said: what
+ * waits for it to open (SessionDetails) asks this rather than the card's
+ * animations, which styled the page to answer, inside a tab switch.
+ */
+export const standsOpen = (node: HTMLElement): boolean => standing.has(node);
+
+/** The card stands open: said, and fired. */
+const grown = (card: HTMLElement): void => {
+  standing.add(card);
+  card.dispatchEvent(new Event(GROWN));
+};
 /** The event a card fires once it is shut and at rest up behind the cut. */
 export const FOLDED = "folded";
 
@@ -271,6 +287,7 @@ function growMotion(
   };
   const play = (target: number, ms: number) => {
     halt();
+    standing.delete(node);
     from = p;
     to = target;
     const next = node.animate(
@@ -290,6 +307,7 @@ function growMotion(
   const rest = () => {
     halt();
     set(0);
+    standing.delete(node);
     delete node.dataset.shown;
     options.onshown?.(false);
     node.dispatchEvent(new Event(FOLDED));
@@ -303,13 +321,13 @@ function growMotion(
     // A finger drawing it out draws it itself (`growTo`).
     if (options.held?.()) {
       halt();
-      node.dispatchEvent(new Event(GROWN));
+      grown(node);
       return;
     }
     if (!motionOk.current) {
       halt();
       set(1);
-      node.dispatchEvent(new Event(GROWN));
+      grown(node);
       return;
     }
     const growth = play(1, dur("--dur-pop"));
@@ -318,7 +336,7 @@ function growMotion(
         if (run === growth) {
           halt();
           set(1);
-          node.dispatchEvent(new Event(GROWN));
+          grown(node);
         }
       })
       .catch(() => undefined);
@@ -402,6 +420,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
   const drawn = (fallback: string) =>
     run ? getComputedStyle(node).translate : fallback;
   const play = (from: string, to: string, ms: number) => {
+    standing.delete(node);
     const next = node.animate([{ translate: from }, { translate: to }], {
       duration: ms,
       easing: ease("--ease-out"),
@@ -418,6 +437,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
   const rest = () => {
     run?.cancel();
     run = null;
+    standing.delete(node);
     delete node.dataset.shown;
     node.dispatchEvent(new Event(FOLDED));
   };
@@ -432,7 +452,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
     if (!motionOk.current || options.held?.()) {
       run?.cancel();
       run = null;
-      node.dispatchEvent(new Event(GROWN));
+      grown(node);
       return;
     }
     const growth = play(drawn(shut()), OPEN, dur("--dur-pop"));
@@ -442,7 +462,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
           // At rest the card's own rules hold it open.
           growth.cancel();
           run = null;
-          node.dispatchEvent(new Event(GROWN));
+          grown(node);
         }
       })
       .catch(() => undefined);
