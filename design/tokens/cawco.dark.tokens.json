@@ -1590,6 +1590,10 @@
     "account-week-mix": {
       "$type": "number",
       "$value": 0.63
+    },
+    "glyph-duo-status-opacity": {
+      "$type": "number",
+      "$value": 0.46
     }
   },
   "shadow": {

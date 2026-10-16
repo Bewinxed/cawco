@@ -136,9 +136,11 @@
     column-gap: 10px;
     min-width: 0;
   }
-  /* The glyph is the row's status signal, so both its tones hold 3:1 on the
-     recess in both themes: ink-strong when no hue, and the duotone's second
-     layer at the status-glyph opacity (the spinner keeps its own track). */
+  /* The glyph is the row's status signal, a mark on a disc: its disc (the
+     duotone's second layer, at the status-glyph opacity) holds 3:1 on the
+     recess, and its strokes hold 3:1 on the disc, in both themes. The two
+     need the ink at about 9:1 on the recess, which the hue glyph inks miss by
+     day, so a hue takes its status ink (the spinner keeps its own track). */
   .glyph {
     display: flex;
     align-items: center;
@@ -149,10 +151,10 @@
     opacity: var(--glyph-duo-status-opacity);
   }
   .glyph.done {
-    color: var(--status-done-glyph);
+    color: var(--status-done-ink);
   }
   .glyph.attn {
-    color: var(--status-attn-glyph);
+    color: var(--status-attn-ink);
   }
   .words {
     display: flex;

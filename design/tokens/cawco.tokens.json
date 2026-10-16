@@ -5195,8 +5195,8 @@
     },
     "glyph-duo-status-opacity": {
       "$type": "number",
-      "$value": 0.81,
-      "$description": "The duotone second layer of a status glyph in an alert row (join/JoinedRow): the lowest at which it holds 3:1 on the recess in both schemes for the ink-strong, done and attn glyph inks, the attn glyph by day being the floor. Every other Solar glyph keeps 0.5."
+      "$value": 0.57,
+      "$description": "The duotone second layer (the disc) of a status glyph in an alert row (join/JoinedRow), drawn in ink-strong, status-done-ink or status-attn-ink. It holds two conditions in both schemes: the disc 3:1 or more on the recess, and the glyph's full layer (the check, the strokes) 3:1 or more on the disc, so the glyph reads as a mark on a disc, not a solid one. The two multiply to the ink's own contrast on the recess, so the ink needs about 9:1 there and no hue glyph ink holds it by day. By day 0.57 (the attn ink's disc the floor, 3.18:1); at night 0.46 (the done ink's check the floor, 3.24:1). Every other Solar glyph keeps 0.5."
     },
     "account-week-mix": {
       "$type": "number",
