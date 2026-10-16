@@ -1168,6 +1168,19 @@ const spec: Spec = {
         ),
         agents.map((row) => `${row.machineId} ${row.status}`).join(", ")
       );
+      // The fleet's one-time upstream choice (8a732a3a7) is asked in this
+      // panel until it is answered; this fleet answers it first, as the
+      // owner's has, so the panel holds only what this spec stages.
+      const answered = await fetch(`${fleet.base}/api/fleet/choices`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ upstream: false }),
+      });
+      kit.check(
+        "the fleet's upstream choice answered",
+        answered.ok,
+        `${answered.status}`
+      );
       const base = await fleet.dashboard();
       // The update alone: its notes stand open.
       for (const view of ["desk", "phone"] as View[]) {
@@ -1179,6 +1192,9 @@ const spec: Spec = {
           return {
             notices: document.querySelectorAll(".caw-pop .notices > li").length,
             asks: document.querySelectorAll(".caw-pop .row").length,
+            rows: [...document.querySelectorAll(".caw-pop .row")].map((row) =>
+              (row.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 120)
+            ),
             open: fold?.hasAttribute("data-open") ?? false,
             height: Math.round(fold?.getBoundingClientRect().height ?? 0),
           };

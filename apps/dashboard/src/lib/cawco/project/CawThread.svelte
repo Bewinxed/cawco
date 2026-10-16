@@ -109,6 +109,22 @@
 
   // --- his lead session's card --------------------------------------------------
 
+  /**
+   * His view is read again as the panel opens and whenever a thread of his
+   * starts or ends a turn: the hub starts his lead session on the first
+   * words he answers, and his card (his harness and model) is that
+   * session's, so a view read before it began has no session to open.
+   */
+  const turns = $derived(threads.map((each) => each.status).join(","));
+  let turnsSeen: string | null = null;
+  $effect(() => {
+    const now = turns;
+    if (now !== turnsSeen) {
+      turnsSeen = now;
+      untrack(() => lead.read());
+    }
+  });
+
   const leadId = $derived(lead.view?.leadInstanceId ?? null);
   const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
   let cardOpen = $state(false);
