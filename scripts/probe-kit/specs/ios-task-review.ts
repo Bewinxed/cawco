@@ -29,7 +29,17 @@
  *  g. The older tab: "Failed after 3 min" and how it ended; back again.
  *  h. Expand: the pane at the sheet's full height, over the review on the
  *     phone, beside it on the iPad (the review 416pt at the sheet's right
- *     edge, the pane filling the rest); Collapse puts it back under the attempt.
+ *     edge, the pane filling the rest); Collapse puts it back under the attempt,
+ *     where it stood.
+ *  i. The body ends with the safe area under its `pb-6`: the last line
+ *     scrolls clear of the home indicator.
+ *  j. A data result's label stands in its 6rem column, its value `gap-4` past it.
+ *  k. Every markdown in the review (MarkdownDocumentView over MessageBody:
+ *     the report, a document handed in, the description and acceptance
+ *     criteria) stands at its height again after Expand and Collapse, which
+ *     lays it at the iPad review's 416pt and back.
+ *  l. No text in the sheet or its transcript lays out wider than its view
+ *     (ProseView's DEBUG `prose overflow`): a line that does is cut off.
  *
  * Each device writes the sheet and the sheet expanded, light and dark, to
  * the spec's folder; the same task on the built dashboard (WebKit, at the
@@ -52,11 +62,11 @@ import { writeFile } from "node:fs/promises";
 import { connect, createServer } from "node:net";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { PNG } from "pngjs";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec, settle, THEMES } from "../kit";
-import { photo } from "./web/oui-mockup/bytes";
 
 const AXE = "/opt/homebrew/bin/axe";
 /** iOS 18.5, the app's oldest target, where axe reaches the simulator from a workspace. */
@@ -84,8 +94,20 @@ const STAGES =
   "---\ntodo       todo\nreview     you\ndone       done\nmoves\n  * → *    you, session\nviews\n  board      by stage\n---\n";
 const MINUTE = 60_000;
 const HEADLINE = "Wrote the launch post and planned launch week's three posts.";
-const REPORT =
-  "The post leads with booking a berth in two taps. The week goes out **Monday, Wednesday and Friday**, each post under 280 characters.";
+/**
+ * Long enough to wrap to a different number of lines at each width the
+ * sheet passes through (an expanded iPad's 416pt review, its 672pt sheet),
+ * with inline code in it, as a real report has.
+ */
+const REPORT = [
+  "The post leads with booking a berth in two taps. The week goes out **Monday, Wednesday and Friday**, each post under 280 characters, written to `post.md` and planned in `schedule.json`.",
+  "`week.csv` keeps each post's reach from the last launch, so the Friday post can lean on what read best. The page in `page.html` is the post as it will look on the site, and `cover.png` its picture.",
+  "Nothing was posted: every post waits for your approval in the queue.",
+].join("\n\n");
+const DESCRIPTION = [
+  "The launch post for Harbour, and what goes out each day of launch week: one post a day, each under 280 characters, in the house voice.",
+  "Read `knowledge/brand.md` first; the week's posts go in `schedule.json`, one record a day with its time and its words.",
+].join("\n\n");
 const FAILED_WHY = "the post ran past 280 characters.";
 const POST =
   "---\ntitle: Harbour is live\n---\n# Harbour is live\n\nToday we open Harbour to everyone. Book a berth in two taps, pay at the quay, and sail.\n\nWe built it for the people who keep boats, not for the people who sell them.\n";
@@ -121,14 +143,37 @@ const OUTPUTS: {
   {
     name: "cover.png",
     drawn: "picture",
-    content: photo().toString("base64"),
+    content: cover().toString("base64"),
     base64: true,
   },
 ];
 
+/** A picture worth looking at: 320 × 180, a sea's gradient under a horizon. */
+function cover(): Buffer {
+  const png = new PNG({ width: 320, height: 180 });
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const at = (y * png.width + x) * 4;
+      const sea = y > 110;
+      png.data[at] = sea ? 30 : 250 - y;
+      png.data[at + 1] = sea ? 90 + (y - 110) : 200 - y / 2;
+      png.data[at + 2] = sea ? 140 + x / 8 : 120 + y;
+      png.data[at + 3] = 255;
+    }
+  }
+  return PNG.sync.write(png);
+}
+
 /** `--space-5` and `--space-4` (design/tokens/cawco.tokens.json): the body's inset and the cards' gap. */
 const SPACE_5 = 18;
 const SPACE_4 = 14;
+/** `--space-6`: the body's `pb-6`. */
+const SPACE_6 = 21;
+/** ResultData's label column, `minmax(6rem, max-content)` with short labels: 6rem. */
+const DATA_COLUMN = 96;
+/** The task's own text sections (TaskTextPart), by their ids. */
+const TEXT_PARTS = ["task-text-description", "task-text-acceptance-criteria"];
+const FOOT = /foot=([\d.-]+) safe=([\d.-]+)/;
 const LOG_HEAD = /^.*\] /;
 const OFFSET = /offset=([\d.-]+)/;
 const HANDED_IN = /^Attempt \d+ finished .* and handed this in\.$/;
@@ -354,7 +399,7 @@ async function seed(fleet: Awaited<ReturnType<Kit["fleet"]>>) {
       "---",
       `# ${TITLE}`,
       "",
-      "The launch post for Harbour, and what goes out each day of launch week.",
+      DESCRIPTION,
       "",
       "## Acceptance criteria",
       "",
@@ -452,6 +497,14 @@ async function device(
   const parts = new Map<string, Part>();
   /** Each part as it was last seen, kept after it scrolls away: a list part's frame is in the body's content points, which a scroll moves none of. */
   const seen = new Map<string, Part>();
+  /**
+   * Each part as it was last seen on screen: a cell the list lays out ahead,
+   * off screen, logs its first self-sizing pass, before its words know
+   * their width.
+   */
+  const shown = new Map<string, Part>();
+  /** Text the app laid out wider than its view (ProseView's DEBUG `prose overflow`). */
+  const overflow: string[] = [];
   try {
     sim = await macSim({ runtime: RUNTIME, device: which.type });
     const { udid } = sim;
@@ -462,7 +515,7 @@ async function device(
       [
         "bash",
         "-c",
-        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "TaskSheet" OR category == "Push")'`,
+        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "TaskSheet" OR category == "Push" OR (category == "Prose" AND eventMessage BEGINSWITH "prose overflow"))'`,
       ],
       { stdout: "pipe", stderr: "ignore" }
     );
@@ -485,6 +538,9 @@ async function device(
           }
           const line = raw.replace(LOG_HEAD, "");
           lines.push(line);
+          if (line.startsWith("prose overflow")) {
+            overflow.push(line);
+          }
           const part = PART.exec(line);
           if (part) {
             const read: Part = {
@@ -498,6 +554,9 @@ async function device(
             };
             parts.set(part[1], read);
             seen.set(part[1], read);
+            if (read.shows) {
+              shown.set(part[1], read);
+            }
           } else if (line.startsWith("gone ")) {
             parts.delete(line.slice(5));
           }
@@ -525,20 +584,26 @@ async function device(
       }
       return out;
     };
-    /** A node labelled `label` wholly inside the sheet's body or the window's top, where a tap reaches it. */
-    const onScreen = async (label: string) => {
-      const sheet = part("task-sheet");
-      const floor = sheet ? sheet.y + sheet.h : Number.POSITIVE_INFINITY;
+    /**
+     * A node labelled `label` wholly inside `region`'s frame in the window
+     * (the body, by default), where a tap reaches it: the accessibility tree
+     * keeps a node scrolled up under the header, or off the sheet's top, at
+     * its frame there.
+     */
+    const onScreen = async (label: string, region = "task-sheet-body") => {
+      const within = part(region);
+      const top = within?.y ?? 0;
+      const floor = within ? within.y + within.h : Number.POSITIVE_INFINITY;
       return (await tree()).find(
         (n) =>
           n.label === label &&
           (n.frame?.width ?? 0) > 0 &&
-          (n.frame?.y ?? -1) >= 0 &&
+          (n.frame?.y ?? -1) >= top &&
           (n.frame?.y ?? 0) + (n.frame?.height ?? 0) <= floor
       );
     };
-    const tapLabel = async (label: string) => {
-      const node = await onScreen(label);
+    const tapLabel = async (label: string, region?: string) => {
+      const node = await onScreen(label, region);
       const f = node?.frame;
       if (!f) {
         throw new Error(`${tag}: nothing labelled "${label}" to tap`);
@@ -574,7 +639,9 @@ async function device(
       if (!body || reach < 40) {
         return;
       }
-      const x = Math.round(body.x + body.w / 2);
+      // In the body's own px-5 margin, where no card stands: a swipe begun
+      // on the transcript pane scrolls the transcript, not the body.
+      const x = Math.round(body.x + SPACE_5 / 2);
       const top = Math.round(body.y + body.h * 0.25);
       const bottom = Math.round(down ? body.y + body.h * 0.8 : top + reach);
       await sh(
@@ -715,6 +782,44 @@ async function device(
       at(pane)
     );
 
+    // i. The body's foot: its last line scrolls clear of the home indicator.
+    const footing = FOOT.exec(part("task-sheet-body")?.says ?? "");
+    const foot = Number(footing?.[1] ?? -1);
+    const safe = Number(footing?.[2] ?? 0);
+    kit.check(
+      `${tag} i: the body ends with the safe area under its pb-6 (${safe.toFixed(1)} + ${SPACE_6})`,
+      foot >= safe + SPACE_6 - 0.5,
+      part("task-sheet-body")?.says ?? "no body line"
+    );
+
+    // j. A data result's fields: a label column of its own width, the value a gap-4 past it.
+    const dataLabel = was("task-data-label-channel");
+    const dataValue = was("task-data-value-channel");
+    if (expect.outputs.some((o) => o.drawn === "data")) {
+      kit.check(
+        `${tag} j: a data field's label stands in its 6rem column, the value ${SPACE_4}pt past it`,
+        near(dataLabel?.w, DATA_COLUMN) &&
+          near(dataValue?.x, (dataLabel?.x ?? 0) + DATA_COLUMN + SPACE_4),
+        `label ${at(dataLabel)} | value ${at(dataValue)}`
+      );
+    }
+    /**
+     * Every markdown the sheet draws (MarkdownDocumentView over MessageBody):
+     * the report, each document handed in, the task's own text sections,
+     * measured before the transcript is expanded.
+     */
+    const markdown = [
+      "task-report",
+      ...expect.outputs
+        .filter((o) => o.drawn === "document")
+        .map((o) => `task-output-${o.name}`),
+      ...TEXT_PARTS,
+    ];
+    for (let n = 0; n < 12 && !markdown.every((id) => shown.has(id)); n += 1) {
+      await scroll(true);
+    }
+    const textBefore = markdown.map((id) => shown.get(id)?.h);
+
     // g. The older attempt, and back.
     if (older) {
       await reveal(`Attempt ${count - 1}`);
@@ -795,7 +900,14 @@ async function device(
           );
         }
       }
-      await tapLabel("Collapse transcript");
+      // Each markdown is read afresh from here: Collapse lays every part on
+      // screen again (its line changes), and one off screen logs as it scrolls in.
+      if (theme === "light") {
+        for (const id of markdown) {
+          shown.delete(id);
+        }
+      }
+      await tapLabel("Collapse transcript", "task-transcript-expanded");
       const back = await waitFor(
         "the pane back under the attempt",
         () =>
@@ -817,8 +929,43 @@ async function device(
             near(part("task-review")?.w, part("task-sheet")?.w),
           `${at(part("task-transcript"))} (stood at ${stood?.toFixed(1)}); review ${at(part("task-review"))}; sheet ${at(part("task-sheet"))}`
         );
+        // k. Every markdown in the review, laid at the expanded iPad
+        // review's width on the way and back (MessageBody), at its height
+        // again, with no re-measure of the sheet's own: from the top down.
+        for (let n = 0; n < 12 && offset() > 40; n += 1) {
+          await scroll(false);
+        }
+        for (
+          let n = 0;
+          n < 12 && !markdown.every((id) => shown.has(id));
+          n += 1
+        ) {
+          await scroll(true);
+        }
+        const textAfter = markdown.map((id) => shown.get(id));
+        kit.check(
+          `${tag} k: every markdown (${markdown.join(", ")}) stands at its height again after Expand and Collapse`,
+          markdown.every(
+            (_, i) =>
+              textBefore[i] !== undefined &&
+              near(textAfter[i]?.h, textBefore[i])
+          ),
+          markdown
+            .map(
+              (id, i) =>
+                `${id} ${textBefore[i]?.toFixed(1) ?? "unseen"} → ${textAfter[i]?.h.toFixed(1) ?? "unseen"}`
+            )
+            .join(" | ")
+        );
       }
     }
+
+    // l. No text the sheet or its transcript drew ran past its view.
+    kit.check(
+      `${tag} l: no text in the sheet or its transcript lays out wider than its view`,
+      overflow.length === 0,
+      overflow.slice(0, 4).join(" | ") || "none"
+    );
   } finally {
     await writeFile(join(kit.out, `${tag}-log.txt`), lines.join("\n"));
     await writeFile(

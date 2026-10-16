@@ -47,6 +47,11 @@
     overflow: hidden;
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
+    /* A cell wraps between words, never inside one ("09:00" whole): a
+       table inside a data field would take that field's `anywhere`, which
+       lets the table squeeze each cell to a character. A word wider than its
+       cell still breaks rather than overflow. */
+    overflow-wrap: break-word;
   }
   .link {
     color: var(--link-ink);

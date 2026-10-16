@@ -73,6 +73,8 @@ final class AttemptTranscriptPane: UIView {
         let rule = UIView()
         rule.backgroundColor = Palette.borderHairline
         transcriptView.hub = hub
+        // The pane's own raised ground under the rows, as the web's (`.pane`, one surface).
+        transcriptView.surface = Palette.surfaceRaised
         transcriptView.onOpenSession = { [weak self] id in self?.onOpenSession(id) }
         transcriptView.onOpenRun = { [weak self] runId in self?.onOpenSession(BoardRun.prefix + runId) }
         for part in [head, rule, transcriptView] as [UIView] {

@@ -5,11 +5,11 @@ import UIKit
 
 /// A paragraph of rendered Markdown with what the browser paints that text
 /// can't: inline code spans on their own surface (the run's block padding,
-/// `.inlineCodePad`, above and below the mono run, 4pt either side,
-/// --radius-xs), and a list's disc filled over its stand-in run (ListDisc).
+/// `.inlineCodePad`, above and below the mono run, `InlineCodeRoom.side`
+/// either side, --radius-xs), and a list's disc filled over its stand-in run (ListDisc).
 nonisolated final class ProseFragment: NSTextLayoutFragment {
     override var renderingSurfaceBounds: CGRect {
-        super.renderingSurfaceBounds.insetBy(dx: -Space.space1, dy: -Size.proseCodePad)
+        super.renderingSurfaceBounds.insetBy(dx: -InlineCodeRoom.side, dy: -Size.proseCodePad)
     }
 
     /// Each line's piece of a run: its start and end along the line, and the
@@ -37,8 +37,8 @@ nonisolated final class ProseFragment: NSTextLayoutFragment {
                 let font = text.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont ?? TypeScale.typeCode.font
                 let pad = text.attribute(.inlineCodePad, at: range.location, effectiveRange: nil) as? Double ?? Size.txCodeSpanPad
                 for span in spans(of: range, in: text, at: point) {
-                    let rect = CGRect(x: span.x0 - Space.space1, y: span.baseline - font.ascender - pad,
-                                      width: span.x1 - span.x0 + Space.space1, height: font.ascender - font.descender + pad * 2)
+                    let rect = CGRect(x: span.x0 - InlineCodeRoom.side, y: span.baseline - font.ascender - pad,
+                                      width: span.x1 - span.x0 + InlineCodeRoom.side, height: font.ascender - font.descender + pad * 2)
                     context.setFillColor(surface.cgColor)
                     context.addPath(UIBezierPath(roundedRect: rect, cornerRadius: Radius.radiusXs).cgPath)
                     context.fillPath()
@@ -161,6 +161,9 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
             manager.ensureLayout(for: manager.documentRange)
             fitted = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
         }
+        #if DEBUG
+        checkLater()
+        #endif
         return CGSize(width: natural, height: fitted)
     }
 
@@ -222,6 +225,9 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
             remeasured = (version, bounds.width)
             remeasureRow()
         }
+        #if DEBUG
+        checkLater()
+        #endif
         // The frame is snapped to whole pixels and can come out a fraction
         // shorter than the text (LineWrap.Container `size`): said once a text.
         if bounds.height > 0, fitted - bounds.height > 0.01, shortFor != version {
@@ -236,6 +242,44 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
     private var remeasured: (Int, CGFloat)?
     /// The text version a short view was last logged for.
     private var shortFor = -1
+    #if DEBUG
+    /// The text, width and container width an overflow was last logged for.
+    private var overflowFor: (Int, CGFloat, CGFloat)?
+    private var checkQueued = false
+
+    /// Once the pass that laid or measured the text is over: the lines as
+    /// they will be drawn, against the view they are drawn in
+    /// (scripts/probe-kit/specs/ios-task-review.ts). A line past the view's
+    /// edge is cut off there; a container at another width than the view's
+    /// draws the text at that width.
+    private func checkLater() {
+        guard !checkQueued else { return }
+        checkQueued = true
+        DispatchQueue.main.async { [weak self] in
+            self?.checkQueued = false
+            self?.checkOverflow()
+        }
+    }
+
+    private func checkOverflow() {
+        guard window != nil, bounds.width > 0, textStorage.length > 0, let manager = textLayoutManager else { return }
+        var widest = 0.0
+        manager.enumerateTextLayoutFragments(from: manager.documentRange.location, options: [.ensuresLayout]) { fragment in
+            for line in fragment.textLineFragments {
+                widest = max(widest, fragment.layoutFragmentFrame.minX + line.typographicBounds.maxX)
+            }
+            return true
+        }
+        let used = widest + textContainerInset.left
+        let inner = bounds.width - textContainerInset.left - textContainerInset.right
+        let container = textContainer.size.width
+        // A line's trailing space can hang a hair past its box: a whole word can't.
+        guard used > bounds.width + 6 || abs(container - inner) > 0.5 else { return }
+        guard overflowFor.map({ $0 != (version, bounds.width, container) }) ?? true else { return }
+        overflowFor = (version, bounds.width, container)
+        Self.log.notice("prose overflow used=\(used, format: .fixed(precision: 1)) width=\(Double(self.bounds.width), format: .fixed(precision: 1)) container=\(Double(container), format: .fixed(precision: 1)) fit=\(self.fitWidth.map { String(format: "%.1f", $0) } ?? "none", privacy: .public) laid=\(self.laidWidth.map { String(format: "%.1f", $0) } ?? "none", privacy: .public) float=\(Double(self.floatSize.width), format: .fixed(precision: 1)) excluded=\(self.excluded.map { String(format: "%.1f", $0.minX) } ?? "none", privacy: .public) in=\(self.superview.map { String(describing: type(of: $0)) } ?? "none", privacy: .public) text=\(String(self.textStorage.string.prefix(40)), privacy: .public)")
+    }
+    #endif
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Prose")
 
     /// Chooses the constrained paragraphs' line widths for the width the text
@@ -975,9 +1019,14 @@ final class MessageBody: UIView {
         super.layoutSubviews()
         redrawForViewport()
         let width = bounds.width
+        // Its height is its height at its width: laid at a new one, it says
+        // so to the layout around it, and the row it stands in, measured at
+        // the width it last stood at, is measured again (a list's cell sizes
+        // itself before its content lays out, so it read the old height).
         if fitWidth == nil, laidWidth.map({ abs($0 - width) > 0.5 }) ?? true {
             laidWidth = width
             invalidateIntrinsicContentSize()
+            remeasureRow()
         }
         var y: CGFloat = 0
         for (view, gap) in zip(views, gaps) {

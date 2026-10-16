@@ -54,9 +54,14 @@ public final class KitField: UITextField {
 
 /// The kit's Select trigger (ui/select): the input's look, the field's
 /// surface and border at the input's 36pt (`h-9`), or 30pt when `small`
-/// (`size="sm"`), its value in label type, the unfold mark at the end; its
-/// options are a menu.
+/// (`size="sm"`), its value in body type in the strong ink (`text-body`,
+/// `--ink-strong`), the unfold mark `gap-1.5` after it, `px-3` in from each
+/// side; its options are a menu.
 public final class KitSelect: UIButton {
+    /// select-trigger.svelte `px-3` and `gap-1.5` (Tailwind's 0.25rem step).
+    private static let inset = 12.0
+    private static let gap = 6.0
+
     public init(small: Bool = false) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -64,8 +69,9 @@ public final class KitSelect: UIButton {
         // select-trigger.svelte's `IconUnfold`.
         config.image = Glyph.unfold.image.resized(to: Size.iconMd)
         config.imagePlacement = .trailing
+        config.imagePadding = Self.gap
         config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkMuted }
-        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 10)
+        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Self.inset, bottom: 0, trailing: Self.inset)
         config.background.backgroundColor = Palette.surfaceRaised
         config.background.cornerRadius = Radius.radiusMd
         config.background.strokeColor = Palette.borderControl
@@ -84,7 +90,7 @@ public final class KitSelect: UIButton {
     }
 
     public func setValue(_ text: String) {
-        configuration?.attributedTitle = AttributedString(text, attributes: TypeScale.typeLabel.withWeight(.regular).container(color: Palette.foreground))
+        configuration?.attributedTitle = AttributedString(text, attributes: TypeScale.typeBody.container(color: Palette.inkStrong))
         configuration?.titleLineBreakMode = .byTruncatingTail
         accessibilityValue = text
     }

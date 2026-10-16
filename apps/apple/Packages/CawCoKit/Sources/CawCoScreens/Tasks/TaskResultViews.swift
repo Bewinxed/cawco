@@ -248,7 +248,15 @@ final class ResultPage: UIView, WKNavigationDelegate {
         accessibilityLabel = "The page this attempt made"
         layer.borderWidth = 1
         layer.cornerRadius = Radius.radiusSm
-        backgroundColor = Palette.surfaceWell
+        // The author's page on the canvas a browser gives a page in either
+        // theme (an iframe's own white), never the app's: a page that sets
+        // no background keeps its black words readable at night too.
+        backgroundColor = .white
+        web.isOpaque = true
+        web.backgroundColor = .white
+        web.scrollView.backgroundColor = .white
+        web.underPageBackgroundColor = .white
+        web.overrideUserInterfaceStyle = .light
         web.loadHTMLString(html, baseURL: nil)
     }
 
@@ -384,16 +392,19 @@ final class ResultDataView: UIView {
         for (key, field) in shown {
             let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted, lines: 0)
             label.text = ResultRead.keyLabel(key)
+            label.accessibilityIdentifier = "task-data-label-\(key)"
             let value = any(field, depth: depth + 1)
+            value.accessibilityIdentifier = "task-data-value-\(key)"
             if field.isPlain {
+                // The label column at its width, the value taking the rest, the
+                // two on one baseline.
                 let row = UIStackView(arrangedSubviews: [label, value])
                 row.spacing = Space.space4
-                row.alignment = .top
-                let own = label.widthAnchor.constraint(equalToConstant: column)
-                own.priority = .defaultHigh
-                own.isActive = true
-                label.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor, multiplier: 0.5).isActive = true
+                row.alignment = .firstBaseline
+                label.widthAnchor.constraint(equalToConstant: column).isActive = true
+                label.setContentHuggingPriority(.required, for: .horizontal)
                 value.setContentHuggingPriority(.defaultLow, for: .horizontal)
+                value.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
                 grid.addArrangedSubview(row)
             } else {
                 // A field whose value is a list or a record takes the row's whole width under its label.

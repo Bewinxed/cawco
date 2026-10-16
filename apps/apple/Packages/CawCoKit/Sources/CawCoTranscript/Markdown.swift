@@ -14,6 +14,13 @@ extension NSAttributedString.Key {
     nonisolated static let listDisc = NSAttributedString.Key("dev.cawco.listDisc")
 }
 
+/// The room an inline code chip takes past its words, either side: half a
+/// step (MessageBody.svelte and prose.ts `padding-inline: calc(var(--space-1) / 2)`;
+/// a wider pad read as a space inside "(ev-3121)").
+nonisolated enum InlineCodeRoom {
+    static let side = Space.space1 / 2
+}
+
 /// An outside `list-style: disc` marker as WebKit draws it (RenderListMarker):
 /// a filled circle `(ascent·⅔ + 1) / 2` across, its top half the ascent above
 /// the baseline, its start the marker padding plus ⅔ of the rounded ascent
@@ -94,9 +101,6 @@ nonisolated struct ProseStyle: Sendable {
     var codeSize = TypeScale.textMeta
     var codeSurface: UIColor = Palette.muted
     var codePad = Size.proseCodePad
-    /// The prose plugin wraps inline code in literal backticks (`code::before/after`);
-    /// a reasoning step and a tool's markdown take them off.
-    var codeTicks = true
     /// app.css's wrap: `p` and `li` `pretty`, h1–h4 `balance` (LineWrap);
     /// a turn's words (MessageBody) are `stable` and wrap as written.
     var wraps = false
@@ -116,14 +120,14 @@ nonisolated struct ProseStyle: Sendable {
     static let muted = ProseStyle(ink: Palette.inkMuted, codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRecess,
                                   codePad: Size.txCodeSpanPad, name: "muted")
     /// A reasoning step (thinking-step.svelte): muted, --space-1 above each
-    /// block and nothing below, strong in the strong ink, no backticks.
+    /// block and nothing below, strong in the strong ink.
     static let step = ProseStyle(ink: Palette.inkMuted, blockGap: Space.space1, flushBottoms: true, headingGap: Space.space1,
-                                 headingSize: nil, paragraphGap: 0, itemParagraphGap: 0, strongInk: Palette.inkStrong, codeTicks: false,
+                                 headingSize: nil, paragraphGap: 0, itemParagraphGap: 0, strongInk: Palette.inkStrong,
                                  wraps: true, name: "step")
     /// ToolProse: a tool's markdown, --space-2 apart, h1 to h4 --space-4 down
-    /// and at the label size, no backticks.
+    /// and at the label size.
     static let tool = ProseStyle(blockGap: Space.space2, headingGap: Space.space4, headingGapThrough: 4,
-                                 headingSize: TypeScale.textLabel, paragraphGap: 0, itemParagraphGap: 0, codeTicks: false, wraps: true,
+                                 headingSize: TypeScale.textLabel, paragraphGap: 0, itemParagraphGap: 0, wraps: true,
                                  name: "tool")
     /// A rendered document (the project page's docs card, a memory file):
     /// prose-sm as it stands, on its 24/14 line.
@@ -626,19 +630,20 @@ nonisolated enum MarkdownRender {
                     mono[.font] = TypeScale.typeCode.font(style.codeSize, weight: TypeScale.weightBody)
                     mono[.inlineCode] = style.codeSurface
                     mono[.inlineCodePad] = style.codePad
-                    // Its 4pt inline padding, as room either side of the run. Where
+                    // Its inline padding, as room either side of the run. Where
                     // it opens the text there is no character before it to carry the
                     // room: the container gives that line its start (LineWrap.codeStarts).
                     if out.length > 0 {
                         let before = out.length - 1
                         let kern = out.attribute(.kern, at: before, effectiveRange: nil) as? Double ?? 0
-                        out.addAttribute(.kern, value: kern + Space.space1, range: NSRange(location: before, length: 1))
+                        out.addAttribute(.kern, value: kern + InlineCodeRoom.side, range: NSRange(location: before, length: 1))
                     }
+                    // No backticks around it: the web's prose turns the plugin's off
+                    // (prose.ts `[&_code]:before:content-none [&_code]:after:content-none`).
                     let start = out.length
-                    let ticks = style.codeTicks ? "`" : ""
-                    out.append(NSAttributedString(string: ticks + code.code + ticks, attributes: mono))
+                    out.append(NSAttributedString(string: code.code, attributes: mono))
                     if out.length > start {
-                        out.addAttribute(.kern, value: Space.space1, range: NSRange(location: out.length - 1, length: 1))
+                        out.addAttribute(.kern, value: InlineCodeRoom.side, range: NSRange(location: out.length - 1, length: 1))
                     }
                 case let link as Markdown.Link:
                     var linked = attributes

@@ -721,13 +721,26 @@ extension HostCell: RowHost {}
 
 extension UIView {
     /// What this view draws no longer fits the height its row was measured
-    /// at: the row (the cell it stands in) is measured again.
+    /// at: the row (the cell it stands in) is measured again. A transcript
+    /// row forgets the height it kept, and its list (RowLayout) reads it
+    /// again. Any other self-sizing cell, a list's or a table's, is asked to
+    /// size itself again as UIKit's self-sizing invalidation takes it
+    /// (`invalidateIntrinsicContentSize` on the cell), once the pass laying
+    /// it out is over: raised inside that pass, where a view learns its new
+    /// width, the list had already taken the cell's size and kept it (the
+    /// task sheet's report stood 395.5pt tall at a width it needs 578.5 for,
+    /// after its transcript collapsed on an iPad). A view in no cell is laid
+    /// out again by its own invalidation.
     func remeasureRow() {
         var view = superview
-        while let current = view, !(current is ItemCell) { view = current.superview }
-        guard let cell = view as? ItemCell else { return }
-        cell.forget()
-        cell.invalidateIntrinsicContentSize()
+        while let current = view, !(current is UICollectionViewCell || current is UITableViewCell) { view = current.superview }
+        guard let cell = view else { return }
+        if let row = cell as? ItemCell {
+            row.forget()
+            cell.invalidateIntrinsicContentSize()
+            return
+        }
+        DispatchQueue.main.async { [weak cell] in cell?.invalidateIntrinsicContentSize() }
     }
 }
 

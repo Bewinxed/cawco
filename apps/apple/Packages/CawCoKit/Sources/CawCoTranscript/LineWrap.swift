@@ -91,10 +91,10 @@ nonisolated enum LineWrap {
         text.enumerateAttribute(.inlineCode, in: NSRange(location: 0, length: text.length)) { value, range, _ in
             guard value != nil else { return }
             // Code that opens the text has no character before it to carry its
-            // 4pt of room (MarkdownRender.inline): the line's start gives it.
+            // room (MarkdownRender.inline): the line's start gives it.
             out[range.location] = range.location > 0
                 ? text.attribute(.kern, at: range.location - 1, effectiveRange: nil) as? Double ?? 0
-                : Space.space1
+                : InlineCodeRoom.side
         }
         return out
     }
@@ -119,9 +119,26 @@ nonisolated enum LineWrap {
 
         override var isSimpleRectangularTextContainer: Bool { widths.isEmpty && codeStarts.isEmpty && exclusionPaths.isEmpty }
 
+        /// The line's rect, worked out here and never asked of UIKit's own:
+        /// TextKit 2 proposes a line as wide as can be, for the container to
+        /// clip, and UIKit's container clips it to its height as well, which
+        /// here is none (`size`): it answered an empty rect, and a line with
+        /// no width is laid out unbounded, so a paragraph with a floated
+        /// clock and inline code drew as one line past the view's edge.
+        /// The line keeps its height; its width is the container's, ending
+        /// where a kept-clear rect (`exclusionPaths`, the float at the end of
+        /// the first line) crosses it.
         override func lineFragmentRect(forProposedRect proposedRect: CGRect, at characterIndex: Int,
-                                       writingDirection: NSWritingDirection, remaining remainingRect: UnsafeMutablePointer<CGRect>?) -> CGRect {
-            var rect = super.lineFragmentRect(forProposedRect: proposedRect, at: characterIndex, writingDirection: writingDirection, remaining: remainingRect)
+                                       writingDirection _: NSWritingDirection, remaining remainingRect: UnsafeMutablePointer<CGRect>?) -> CGRect {
+            remainingRect?.pointee = .zero
+            let start = max(0, proposedRect.minX)
+            var end = min(proposedRect.maxX, size.width)
+            for path in exclusionPaths {
+                let clear = path.bounds
+                guard clear.minY < proposedRect.maxY, clear.maxY > proposedRect.minY, clear.minX > start else { continue }
+                end = min(end, clear.minX)
+            }
+            var rect = CGRect(x: start, y: proposedRect.minY, width: max(0, end - start), height: proposedRect.height)
             if let width = widths[characterIndex] { rect.size.width = min(rect.width, width) }
             if let pad = codeStarts[characterIndex], pad > 0 {
                 rect.origin.x += pad

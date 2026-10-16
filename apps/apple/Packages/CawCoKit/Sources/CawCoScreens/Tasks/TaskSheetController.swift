@@ -122,8 +122,6 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private var sideBeside: [NSLayoutConstraint] = []
     private var sideOver: [NSLayoutConstraint] = []
     private var laidWide: Bool?
-    /// The body's width its rows were last measured at.
-    private var laidBodyWidth: CGFloat = 0
 
     // Rows that hold a field, load or follow a session keep their view across renders.
     private lazy var descriptionPart = TaskTextPart(heading: "Description",
@@ -345,23 +343,6 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         super.viewWillLayoutSubviews()
         // The window crossed `64rem`: the expanded transcript moves beside the review or over it.
         if expanded, wide != laidWide { layoutFrame() }
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        // The body changed width (the transcript expanded or collapsed, the
-        // sheet resized): a document's words size to the width they were
-        // last laid at (MessageBody `laidWidth`), so once the rows have laid
-        // at this one, the list measures them again. Measured before, a
-        // report kept the height it had at the sheet's passing width.
-        let width = collection.bounds.width
-        guard abs(width - laidBodyWidth) > 0.5 else { return }
-        laidBodyWidth = width
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            collection.layoutIfNeeded()
-            collection.collectionViewLayout.invalidateLayout()
-        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -1182,7 +1163,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private func pick(_ label: String, edge: ProjectTasks.Edge, others: [TaskSummary]) -> UIView? {
         guard !others.isEmpty else { return nil }
         let select = KitSelect(small: true)
-        select.configuration?.attributedTitle = AttributedString(label, attributes: TypeScale.typeLabel.withWeight(.regular).container(color: Palette.mutedForeground))
+        select.configuration?.attributedTitle = AttributedString(label, attributes: TypeScale.typeBody.container(color: Palette.mutedForeground))
         select.accessibilityLabel = label
         select.menu = UIMenu(children: others.map { other in
             UIAction(title: other.title, subtitle: other.id) { [weak self] _ in self?.link(edge, to: other.id) }
@@ -1210,12 +1191,10 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         label.isHidden = problem == nil
     }
 
-    /// time.ts `formatTimestamp` (en-US "Oct 13, 11:15 AM"), from ms epoch.
-    /// The date and the time apart: one en-US date-time style reads "Oct 13 at 11:15 AM".
+    /// time.ts `formatTimestamp` from ms epoch, as Safari renders its en-US
+    /// `toLocaleString` (month short, day, hour, minute): "Oct 13 at 11:15 AM".
     static func timestamp(_ ms: Double) -> String {
-        let at = Date(timeIntervalSince1970: ms / 1000)
-        let us = Locale(identifier: "en_US")
-        return "\(at.formatted(.dateTime.month(.abbreviated).day().locale(us))), \(at.formatted(.dateTime.hour().minute().locale(us)))"
+        Date(timeIntervalSince1970: ms / 1000).formatted(.dateTime.month(.abbreviated).day().hour().minute().locale(Locale(identifier: "en_US")))
     }
 
     static func problemLabel(_ text: String? = nil) -> KitLabel {
@@ -1471,6 +1450,7 @@ final class TaskTextPart: UIView, UITextViewDelegate {
         self.empty = empty
         self.onSave = onSave
         super.init(frame: .zero)
+        accessibilityIdentifier = "task-text-\(heading.lowercased().replacing(" ", with: "-"))"
         editButton = KitButton.make("Edit", variant: .ghost, height: .xs) { [weak self] in self?.beginEditing() }
         saveButton = KitButton.make("Save", variant: .outline, height: .sm) { [weak self] in self?.save() }
         let cancel = KitButton.make("Cancel", variant: .ghost, height: .sm) { [weak self] in self?.cancel() }
@@ -1630,7 +1610,9 @@ enum TaskSheetProbe {
         switch view {
         case let output as TaskOutputView: "state=\(output.shown) head=\(output.head)"
         case let tabs as KitSegmented: "selected=\(tabs.selectedIndex.map(String.init) ?? "none")"
-        case let list as UICollectionView: String(format: "offset=%.1f", list.contentOffset.y + list.adjustedContentInset.top)
+        case let list as UICollectionView:
+            String(format: "offset=%.1f foot=%.1f safe=%.1f", list.contentOffset.y + list.adjustedContentInset.top,
+                   list.adjustedContentInset.bottom, list.safeAreaInsets.bottom)
         case let label as UILabel: label.text
         case let button as UIButton: button.configuration?.title ?? button.currentTitle ?? button.accessibilityLabel
         default: view.accessibilityLabel

@@ -416,6 +416,25 @@ const readSheet = (page: Page) =>
       ]
         .filter((box) => box.scrollWidth > box.clientWidth + 1)
         .map((box) => `${box.scrollWidth}/${box.clientWidth}px`),
+      // Result table cells broken inside a word ("09:0 / 0"): one word, more than one line.
+      brokenWords: [
+        ...(sheet?.querySelectorAll<HTMLElement>(
+          "[data-result-kind] td, [data-result-kind] th"
+        ) ?? []),
+      ]
+        .filter((cell) => {
+          const words = cell.textContent?.trim() ?? "";
+          if (!words || [...words].some((char) => char.trim() === "")) {
+            return false;
+          }
+          const range = document.createRange();
+          range.selectNodeContents(cell);
+          const tops = new Set(
+            [...range.getClientRects()].map((rect) => Math.round(rect.top))
+          );
+          return tops.size > 1;
+        })
+        .map((cell) => cell.textContent?.trim() ?? ""),
       reviewShown: (() => {
         const review = sheet?.querySelector<HTMLElement>(".review");
         return review ? getComputedStyle(review).display !== "none" : false;
@@ -545,9 +564,15 @@ async function width(kit: Kit, base: string, at: View) {
   await page.screenshot({ path: join(kit.out, `${at}-sheet.png`) });
   const before = at === "desk" ? await pins(kit, page) : await readSheet(page);
   kit.check(
-    `d. ${at}: every result table cell holds its words`,
-    before.clipped.length === 0 && before.wideTables.length === 0,
-    [...before.clipped, ...before.wideTables].join(" | ")
+    `d. ${at}: every result table cell holds its words, none broken inside a word`,
+    before.clipped.length === 0 &&
+      before.wideTables.length === 0 &&
+      before.brokenWords.length === 0,
+    [
+      ...before.clipped,
+      ...before.wideTables,
+      ...before.brokenWords.map((word) => `broken: ${word}`),
+    ].join(" | ")
   );
 
   await page.click(`${SHEET} [data-transcript-expand]`);

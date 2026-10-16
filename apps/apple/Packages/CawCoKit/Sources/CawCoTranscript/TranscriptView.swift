@@ -21,6 +21,17 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// The hub the session is on: the fleet for delegates and runs, the
     /// pictures and memory history it serves, the asks parked on the reader.
     public weak var hub: HubConnection? { didSet { env.hub = hub; dirty = true } }
+    /// The ground the rows stand on, which is the host's (Transcript.svelte
+    /// `.tr` paints none): the session pane's recess (SessionPane.svelte
+    /// `.pane`), or the raised card of a pane that holds it elsewhere (the
+    /// task sheet's, AttemptTranscript.svelte `.pane`).
+    public var surface: UIColor = Palette.surfaceRecess {
+        didSet {
+            backgroundColor = surface
+            collection.backgroundColor = surface
+        }
+    }
+
     /// Opening another session or a run in its own view; the host routes it.
     public var onOpenSession: (String) -> Void = { _ in }
     public var onOpenRun: (String) -> Void = { _ in }
@@ -225,9 +236,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         layout.height = { [weak self] path in self?.rowHeight(path) ?? (Self.estimate, false) }
         layout.measured = { [weak self] path, height in self?.took(height, at: path) }
         Self.warm()
-        // The session pane's ground (SessionPane.svelte `.pane`): the recess, not the page.
-        backgroundColor = Palette.surfaceRecess
-        collection.backgroundColor = Palette.surfaceRecess
+        backgroundColor = surface
+        collection.backgroundColor = surface
         collection.delegate = self
         collection.keyboardDismissMode = .interactive
         collection.selfSizingInvalidation = .enabledIncludingConstraints
