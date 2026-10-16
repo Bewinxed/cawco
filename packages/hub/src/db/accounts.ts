@@ -16,7 +16,7 @@ import {
   type ModelInfo,
   type ProviderRouting,
 } from "@cawco/core";
-import { and, asc, eq, gt, gte, inArray, lte, max } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lte, max, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   accountBench,
@@ -26,6 +26,7 @@ import {
   accountRouting,
   accountSignins,
   accounts,
+  accountWindows,
   loginMoves,
   movedFromSessions,
   removedAccounts,
@@ -165,6 +166,19 @@ const toAccount = (row: AccountRow): Account => ({
 /** A window's identity in a reading: its kind and the model it is scoped to. */
 const windowKey = (w: LimitWindow): string =>
   `${w.kind}\u0000${w.scopeLabel ?? ""}`;
+
+/** A window as its row keeps it; "" is no scope. */
+const toWindow = (
+  row: Omit<typeof accountWindows.$inferSelect, "accountId">
+): LimitWindow => ({
+  kind: row.kind,
+  scopeLabel: row.scopeLabel === "" ? null : row.scopeLabel,
+  group: row.group,
+  isActive: row.isActive,
+  percent: row.percent,
+  severity: row.severity,
+  resetsAt: row.resetsAt,
+});
 
 export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
   const get = (id: string): Account | undefined => {
@@ -416,85 +430,137 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .onConflictDoUpdate({ target: accountRouting.provider, set: routing })
         .run();
     },
-    readings: () =>
-      db
+    readings: () => {
+      const windows = new Map<string, LimitWindow[]>();
+      for (const { accountId, ...row } of db
+        .select()
+        .from(accountWindows)
+        .orderBy(sql`rowid`)
+        .all()) {
+        windows.set(accountId, [
+          ...(windows.get(accountId) ?? []),
+          toWindow(row),
+        ]);
+      }
+      return db
         .select()
         .from(accountReadings)
         .all()
         .map((row) => ({
           accountId: row.accountId,
-          windows: row.windows,
+          windows: windows.get(row.accountId) ?? [],
           subscription: row.subscription,
           overage: row.overage,
           lastSeenAt: row.lastSeenAt.getTime(),
-        })),
+        }));
+    },
     putReading: (accountId, report, at = Date.now()) => {
       if (!get(accountId)) {
         return;
       }
-      const previous = db
-        .select()
-        .from(accountReadings)
-        .where(eq(accountReadings.accountId, accountId))
-        .get();
-      const before = new Map(
-        (previous?.windows ?? []).map((w) => [windowKey(w), w])
-      );
-      const reported = report.windows ?? [];
-      const windows = [
-        ...[...before.values()].filter(
-          (w) => !reported.some((one) => windowKey(one) === windowKey(w))
-        ),
-        ...reported,
-      ];
-      const values = {
-        windows,
-        subscription:
-          report.subscription === undefined
-            ? (previous?.subscription ?? null)
-            : report.subscription,
-        overage:
-          report.overage === undefined
-            ? (previous?.overage ?? null)
-            : report.overage,
-        lastSeenAt: new Date(at),
-      };
-      db.insert(accountReadings)
-        .values({ accountId, ...values })
-        .onConflictDoUpdate({ target: accountReadings.accountId, set: values })
-        .run();
-      // A window that moved — percent, severity, or a new window (`resetsAt`,
-      // so a rollover's drop starts a new series rather than reading as
-      // spend running backwards) — is a point on its series.
-      const moved = reported.filter((w) => {
-        const prior = before.get(windowKey(w));
-        return (
-          prior === undefined ||
-          prior.percent !== w.percent ||
-          prior.severity !== w.severity ||
-          prior.resetsAt !== w.resetsAt
+      db.transaction((tx) => {
+        const previous = tx
+          .select()
+          .from(accountReadings)
+          .where(eq(accountReadings.accountId, accountId))
+          .get();
+        const before = new Map(
+          tx
+            .select()
+            .from(accountWindows)
+            .where(eq(accountWindows.accountId, accountId))
+            .all()
+            .map((row) => {
+              const w = toWindow(row);
+              return [windowKey(w), w];
+            })
         );
+        // One window per kind and scope, the last reported of each.
+        const reported = [
+          ...new Map(
+            (report.windows ?? []).map((w) => [windowKey(w), w])
+          ).values(),
+        ];
+        const values = {
+          subscription:
+            report.subscription === undefined
+              ? (previous?.subscription ?? null)
+              : report.subscription,
+          overage:
+            report.overage === undefined
+              ? (previous?.overage ?? null)
+              : report.overage,
+          lastSeenAt: new Date(at),
+        };
+        tx.insert(accountReadings)
+          .values({ accountId, ...values })
+          .onConflictDoUpdate({
+            target: accountReadings.accountId,
+            set: values,
+          })
+          .run();
+        // The windows reported replace their own rows, read after the ones
+        // this report did not name; every other window stays as it was.
+        for (const w of reported) {
+          tx.delete(accountWindows)
+            .where(
+              and(
+                eq(accountWindows.accountId, accountId),
+                eq(accountWindows.kind, w.kind),
+                eq(accountWindows.scopeLabel, w.scopeLabel ?? "")
+              )
+            )
+            .run();
+        }
+        if (reported.length > 0) {
+          tx.insert(accountWindows)
+            .values(
+              reported.map((w) => ({
+                accountId,
+                kind: w.kind,
+                scopeLabel: w.scopeLabel ?? "",
+                group: w.group,
+                isActive: w.isActive,
+                percent: w.percent,
+                severity: w.severity,
+                resetsAt: w.resetsAt,
+              }))
+            )
+            .run();
+        }
+        // A window that moved — percent, severity, or a new window
+        // (`resetsAt`, so a rollover's drop starts a new series rather than
+        // reading as spend running backwards) — is a point on its series.
+        const moved = reported.filter((w) => {
+          const prior = before.get(windowKey(w));
+          return (
+            prior === undefined ||
+            prior.percent !== w.percent ||
+            prior.severity !== w.severity ||
+            prior.resetsAt !== w.resetsAt
+          );
+        });
+        if (moved.length === 0) {
+          return;
+        }
+        tx.insert(usageLimitHistory)
+          .values(
+            moved.map((w) => ({
+              accountId,
+              kind: w.kind,
+              scopeLabel: w.scopeLabel,
+              percent: Math.round(w.percent),
+              severity: w.severity,
+              resetsAt: w.resetsAt,
+              fetchedAt: new Date(at),
+            }))
+          )
+          .run();
+        const cutoff = new Date(at - LIMIT_HISTORY_RETENTION_MS);
+        tx.delete(usageLimitHistory)
+          .where(lte(usageLimitHistory.fetchedAt, cutoff))
+          .run();
       });
-      if (moved.length === 0) {
-        return;
-      }
-      db.insert(usageLimitHistory)
-        .values(
-          moved.map((w) => ({
-            accountId,
-            kind: w.kind,
-            scopeLabel: w.scopeLabel,
-            percent: Math.round(w.percent),
-            severity: w.severity,
-            resetsAt: w.resetsAt,
-            fetchedAt: new Date(at),
-          }))
-        )
-        .run();
-      const cutoff = new Date(at - LIMIT_HISTORY_RETENTION_MS);
-      db.delete(usageLimitHistory)
-        .where(lte(usageLimitHistory.fetchedAt, cutoff))
-        .run();
     },
     history: ({ accountId, kind, since, until }) =>
       db

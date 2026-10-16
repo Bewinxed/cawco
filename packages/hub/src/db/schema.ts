@@ -1958,14 +1958,37 @@ export const accountReadings = sqliteTable("account_readings", {
   accountId: text("account_id")
     .primaryKey()
     .references(() => accounts.id, { onDelete: "cascade" }),
-  windows: text("windows", { mode: "json" })
-    .$type<LimitWindow[]>()
-    .notNull()
-    .default([]),
   subscription: text("subscription"),
   overage: text("overage", { mode: "json" }).$type<AccountOverage>(),
   lastSeenAt: timestamp("last_seen_at").notNull(),
 });
+
+/**
+ * One limit window of an account's reading ({@link LimitWindow}), keyed by
+ * its kind and the model scope it limits ("" for none). A report replaces
+ * the windows it names and keeps the rest; read in the order they were last
+ * reported (rowid).
+ */
+export const accountWindows = sqliteTable(
+  "account_windows",
+  {
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accountReadings.accountId, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    /** The window's `scopeLabel`, "" for none. */
+    scopeLabel: text("scope_label").notNull().default(""),
+    group: text("group").notNull(),
+    isActive: integer("is_active", { mode: "boolean" }).notNull(),
+    percent: real("percent").notNull(),
+    severity: text("severity").notNull(),
+    /** ISO. */
+    resetsAt: text("resets_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.accountId, table.kind, table.scopeLabel] }),
+  ]
+);
 
 /**
  * Each account's model catalog, as its Claude Code answered at initialize (a
