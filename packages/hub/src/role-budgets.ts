@@ -16,6 +16,7 @@ import { createActions } from "./actions";
 import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createFleetWatch } from "./fleet-watch";
+import { createHubTools } from "./hub-tools";
 import { createIngress } from "./ingress";
 import { makeLifetime } from "./lifetime";
 import { createMemory, createTurnWatch } from "./memory";
@@ -312,6 +313,13 @@ export const measureRoles = (): RoleSize[] => {
         stop: () => undefined,
         wakeCaw: () => Promise.reject(new Error("measuring")),
       }).tools(actor),
+    // The hub's own tools, from the one list the server gives sessions.
+    hubTools: createHubTools({
+      askPerson: () => Promise.reject(new Error("measuring")),
+      designWrite: () => Promise.reject(new Error("measuring")),
+      machineIds: () => [],
+      pairing: () => false,
+    }),
   });
   try {
     return SESSION_ROLES.map((role) => {

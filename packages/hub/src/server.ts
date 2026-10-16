@@ -323,7 +323,6 @@ import type { UpstreamRules } from "@cawco/core/upstream-guard";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
-import { z } from "zod";
 import {
   type AccountProber,
   accountOfIdentity,
@@ -338,7 +337,7 @@ import {
 } from "./accounts";
 import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
-import { tool as adminTool, adminTools, isAdminWrite } from "./admin-tools";
+import { adminTools, isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createArtifactSessions } from "./artifact-session";
 import { createArtifactDocs } from "./artifacts/docs";
@@ -436,7 +435,7 @@ import type { SendDelivery, SendHold } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree } from "./delegation-tree";
 import { createDesignOffers, designOfferRoutes } from "./design-offers";
-import { createDesignSystem, DESIGN_WRITE_FILES } from "./design-system";
+import { createDesignSystem } from "./design-system";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
 import {
@@ -460,7 +459,8 @@ import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
 import { addressOf, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
-import { hubHttpUrl, selfFetch } from "./hub-self";
+import { hubHttpUrl } from "./hub-self";
+import { createHubTools } from "./hub-tools";
 import { createIngress, ingressRoutes } from "./ingress";
 import { jevAccess } from "./jev";
 import { JevFailed, jevAttach, jevType, offLine } from "./jev-placement";
@@ -550,8 +550,6 @@ import {
 import { createProjectEdits, ProjectEditRefusal } from "./project-edit";
 import {
   changeFolderFiles,
-  FOLDER_CONTENT_LIMIT,
-  FOLDER_ENCODINGS,
   YOU as FOLDER_YOU,
   FolderRefusal,
   folderFileNames,
@@ -17786,20 +17784,8 @@ export const createServer = (
     },
     workspaces: (id8) => db.workspacesNamed(id8),
   };
-  /**
-   * What sessions once did on the person's routes, as their own tools, so a
-   * hub that requires paired devices still lets them (hub-auth.ts). No
-   * session archives a workspace: a landed one retires itself, and a held
-   * one ends only by the person's Continue or Discard (work-items.ts
-   * `settle`).
-   *
-   * - `update_machines`, for `POST /api/binary-updates/check` and `POST
-   *   /api/agents/:id/update`: the check runs at once; installing asks the
-   *   person first when the hub requires paired devices (admin-asks.ts),
-   *   and runs at once while it trusts its network.
-   * - `design_write`: the project's design system, written at the root of
-   *   the caller's repository or in its project's folder (design-system.ts).
-   */
+  // The hub's own session tools (hub-tools.ts): what sessions once did on
+  // the person's routes.
   const designSystem = createDesignSystem({
     run: (machineId, cwd, cmd, timeoutMs) =>
       runOnMachine(machineId, cwd, cmd, timeoutMs, undefined, {
@@ -17810,111 +17796,12 @@ export const createServer = (
       tasks.touched(projectId);
     },
   });
-  const hubTools = (actor: InstanceRow | undefined) => {
-    const me = (): InstanceRow => {
-      if (!actor) {
-        throw new Error("Discovery cannot execute tools");
-      }
-      return actor;
-    };
-    const ok = (data: unknown) => ({
-      content: [{ type: "text" as const, text: JSON.stringify(data) }],
-      structuredContent: data,
-    });
-    const said = async (response: Response): Promise<unknown> => {
-      const text = await response.text();
-      if (!response.ok) {
-        throw new Error(text || `the hub answered ${response.status}`);
-      }
-      return JSON.parse(text) as unknown;
-    };
-    return [
-      adminTool(
-        "update_machines",
-        "Look for a new CawCo build and tell every machine (check_only), or install it on one machine or every online machine. Installing asks the person first when the hub requires paired devices.",
-        {
-          machine: z
-            .string()
-            .optional()
-            .describe("A machine id; every online machine when left out."),
-          check_only: z.boolean().optional(),
-          reason: z
-            .string()
-            .max(300)
-            .optional()
-            .describe("One sentence on why: the person reads it on the ask."),
-        },
-        async (input) => {
-          const caller = me();
-          const machines = input.machine
-            ? [input.machine]
-            : registry.machineIds();
-          // The person first, before anything runs: installing the newest
-          // build on these machines.
-          if (!input.check_only && hubAuth.mode() === "pairing") {
-            await adminAsks.ask(caller, "update_machines", {
-              ...input,
-              machines,
-            });
-          }
-          const found = (await said(
-            await selfFetch(`${hubHttpUrl()}/api/binary-updates/check`, {
-              method: "POST",
-            })
-          )) as { version: string };
-          if (input.check_only) {
-            return ok({ found });
-          }
-          const updates = await Promise.all(
-            machines.map(async (id) => {
-              try {
-                return {
-                  machine: id,
-                  report: await said(
-                    await selfFetch(
-                      `${hubHttpUrl()}/api/agents/${encodeURIComponent(id)}/update`,
-                      {
-                        method: "POST",
-                        headers: { "content-type": "application/json" },
-                        body: JSON.stringify({
-                          version: found.version,
-                          commandId: crypto.randomUUID(),
-                        }),
-                        timeout: false,
-                      }
-                    )
-                  ),
-                };
-              } catch (error) {
-                return {
-                  machine: id,
-                  error: error instanceof Error ? error.message : String(error),
-                };
-              }
-            })
-          );
-          return ok({ found, updates });
-        }
-      ),
-      adminTool(
-        "design_write",
-        "Write files of the project's design system (design/, paths inside it); bytes as base64. tokens.css is generated from tokens.json; every token needs a source in manifest.json. A file the person edited is kept, not overwritten.",
-        {
-          files: z
-            .array(
-              z.object({
-                path: z.string().min(1),
-                content: z.string().max(FOLDER_CONTENT_LIMIT),
-                encoding: z.enum(FOLDER_ENCODINGS).optional(),
-              })
-            )
-            .min(1)
-            .max(DESIGN_WRITE_FILES),
-        },
-        async ({ files }) => ok(await designSystem.write(me(), files))
-      ),
-    ];
-  };
+  const hubTools = createHubTools({
+    askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
+    designWrite: (actor, files) => designSystem.write(actor, files),
+    machineIds: () => registry.machineIds(),
+    pairing: () => hubAuth.mode() === "pairing",
+  });
   const delegationMcp = createDelegationMcp({
     lifetime,
     tasks,
