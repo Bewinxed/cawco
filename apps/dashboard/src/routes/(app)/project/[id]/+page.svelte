@@ -1737,6 +1737,9 @@
     flex-direction: column;
     block-size: 100%;
     min-block-size: 0;
+    /* A flex item's automatic minimum is its content's min-content width:
+       without this the frame grows to the board's columns past its pane. */
+    min-inline-size: 0;
   }
   .under-head {
     display: contents;
