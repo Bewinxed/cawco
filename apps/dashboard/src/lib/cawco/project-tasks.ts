@@ -43,6 +43,8 @@ export interface StageMove {
 export interface StagesView {
   moves: StageMove[];
   problems: string[];
+  /** What an empty Routines page offers to ask Caw for: the recorded template's, or the general four. */
+  routineStarters: Starter[];
   /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
   source: "file" | "template";
   stages: Stage[];
@@ -313,6 +315,10 @@ const one = (projectId: string, taskId: string) =>
 
 export const listTasks = (projectId: string): Promise<TaskList> =>
   send(`${base(projectId)}/tasks`);
+
+/** The project's archived tasks, instead of the board's. */
+export const listArchived = (projectId: string): Promise<TaskList> =>
+  send(`${base(projectId)}/tasks?archived=1`);
 
 export const readStages = (projectId: string): Promise<StagesView> =>
   send(`${base(projectId)}/stages`);

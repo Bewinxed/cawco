@@ -35,7 +35,13 @@
     oncreate,
     moving,
     refused,
+    archived = [],
+    showArchived = false,
   }: {
+    /** The project's archived tasks. */
+    archived?: TaskSummary[];
+    /** The strip's Archived is on, so they stand dimmed in their columns. */
+    showArchived?: boolean;
     stages: Stage[];
     tasks: TaskSummary[];
     /** The column that takes new tasks: the first of kind todo. */
@@ -56,9 +62,32 @@
   } = $props();
 
   const named = $derived(new Set(stages.map((stage) => stage.name)));
+  /** The archived tasks standing dimmed in their columns, after the live ones. */
+  const dimmed = $derived(showArchived ? archived : []);
+  const archivedIds = $derived(new Set(dimmed.map((task) => task.id)));
+  let scroller = $state<HTMLElement | null>(null);
+  /**
+   * Archived tasks stand in their own stages' columns, most
+   * often the last ones (done, dropped), which a board wider than its place
+   * keeps past its trailing edge. Shown, the board brings the first of them
+   * into view, so turning them on is never a change off-screen.
+   */
+  let dimmedSeen = 0;
+  $effect(() => {
+    const count = dimmed.length;
+    const node = scroller;
+    if (count > 0 && dimmedSeen === 0 && node) {
+      requestAnimationFrame(() => {
+        node
+          .querySelector("[data-archived]")
+          ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      });
+    }
+    dimmedSeen = count;
+  });
   const byStage = $derived.by(() => {
     const columns = new Map<string, TaskSummary[]>();
-    for (const task of tasks) {
+    for (const task of [...tasks, ...dimmed]) {
       const key = named.has(task.stage) ? task.stage : "";
       const column = columns.get(key);
       if (column) {
@@ -83,6 +112,7 @@
   cards: TaskSummary[]
 )}
   <TaskColumn
+    {archivedIds}
     {cards}
     closed={open !== null && name !== boardDrag.from && !open.has(name)}
     {dateOf}
@@ -103,7 +133,7 @@
   <NewTaskForm {oncreate} stage={newIn ?? ""} bind:open={adding} />
 {/snippet}
 
-<div class="board kit-edge-fade">
+<div bind:this={scroller} class="board kit-edge-fade">
   {#each stages as stage (stage.name)}
     {@render column(
       stage.name,

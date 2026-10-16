@@ -602,6 +602,16 @@ public enum Size {
     public static let cStarterH: Double = 56
     /// The column an empty state with starters takes at most: four cards across with their gaps.
     public static let cStartersW: Double = 725
+    /// A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after.
+    public static let cRowLead: Double = 28
+    /// A routines-page row's pitch: the whole row is its own 44px opener on every pointer.
+    public static let cRowH: Double = 44
+    /// The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and "23h ago", or "Tomorrow 13:30", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say.
+    public static let cRoutineTimeW: Double = 144
+    /// The widest the routines ledger runs: a few rows of name, schedule and two times read as one line each, never across a 2560px screen (Hex's and Cursor's bounded schedule tables).
+    public static let cRoutinesW: Double = 1120
+    /// The page width from which the routines page holds its three parts at once, a bento filling the page's height (Routines two thirds, Event sources over Approved actions in the last third, each scrolling in itself); narrower, they are views behind tabs, each at --c-routines-w.
+    public static let cRoutinesBentoAt: Double = 1600
     /// The delegate tray's row: a chip, and the step down to the pill.
     public static let cTrayChip: Double = 28
     /// `cTrayChip` under a coarse pointer (touch).

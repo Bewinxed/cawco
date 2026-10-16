@@ -76,6 +76,7 @@ import {
   moveProblem,
   passesReview,
   readStages,
+  routineStartersFor,
   ruledStages,
   STAGE_NAME,
   type Stage,
@@ -437,6 +438,8 @@ export interface StagesView {
   moves: StageMove[];
   /** What is wrong with stages.md, one sentence each; stages, moves and views are empty while there is any. */
   problems: string[];
+  /** What an empty Routines page offers to ask Caw for: the recorded template's, or the general four. */
+  routineStarters: readonly Starter[];
   /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
   source: "file" | "template";
   stages: Stage[];
@@ -1236,6 +1239,7 @@ const stagesView = (
 ): StagesView => ({
   source,
   starters: startersFor(recorded),
+  routineStarters: routineStartersFor(recorded),
   template: TEMPLATES.find((name) => templateText(name) === content) ?? null,
   stages: reading.ok ? reading.stages.stages : [],
   moves: reading.ok ? reading.stages.moves : [],

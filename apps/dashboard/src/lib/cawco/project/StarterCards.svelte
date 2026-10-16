@@ -27,7 +27,7 @@
   } from "#lib/icons.js";
 
   /** Each kind of work a starter names (the hub's `STARTER_GLYPHS`), as its Solar duotone glyph. */
-  const GLYPHS: Record<
+  export const GLYPHS: Record<
     StarterGlyph,
     Component<SVGAttributes<SVGSVGElement>>
   > = {

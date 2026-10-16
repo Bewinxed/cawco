@@ -100,6 +100,8 @@ export { default as IconGraphUp } from "~icons/solar/graph-up-bold-duotone";
 /** A person is asked for: the Needs-you glyph (DESIGN.md, Session status). */
 export { default as IconNeedsYou } from "~icons/solar/hand-shake-bold-duotone";
 export { default as IconHistory } from "~icons/solar/history-bold-duotone";
+/** A routine turning itself off soon unless kept. */
+export { default as IconHourglass } from "~icons/solar/hourglass-bold-duotone";
 export { default as IconHandoff } from "~icons/solar/inbox-in-bold-duotone";
 export { default as IconInfo } from "~icons/solar/info-circle-bold-duotone";
 export { default as IconKey } from "~icons/solar/key-bold-duotone";
@@ -121,6 +123,8 @@ export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";
 export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
 export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
 export { default as IconMinimize } from "~icons/solar/minimize-bold-duotone";
+/** A routine that has not run yet, or a run that ended without an outcome (cancelled, skipped, denied): the neutral status. */
+export { default as IconMinusCircle } from "~icons/solar/minus-circle-bold-duotone";
 export { default as IconMonitor } from "~icons/solar/monitor-bold-duotone";
 export { default as IconMoon } from "~icons/solar/moon-bold-duotone";
 export { default as IconMoonSleep } from "~icons/solar/moon-sleep-bold-duotone";
@@ -132,6 +136,8 @@ export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
 export { default as IconPaperclip } from "~icons/solar/paperclip-bold-duotone";
 /** Caw holds still while his lead works (the sidebar's motion switch). */
 export { default as IconPause } from "~icons/solar/pause-bold-duotone";
+/** A paused routine's state glyph. */
+export { default as IconPauseCircle } from "~icons/solar/pause-circle-bold-duotone";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
 /** The person's ink on an artifact: the composer's Ink chip, the pen of the stroke's icon. */
 export { default as IconPen } from "~icons/solar/pen-bold-duotone";

@@ -48,6 +48,7 @@
   import {
     createTask,
     firstTodoStage,
+    listArchived,
     listTasks,
     movesFrom,
     moveTask,
@@ -76,6 +77,7 @@
   import ViewCanvas from "#lib/cawco/views/ViewCanvas.svelte";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import ViewPipeline from "#lib/cawco/views/ViewPipeline.svelte";
+  import ViewRoutines from "#lib/cawco/views/ViewRoutines.svelte";
   import {
     discardView,
     keepView,
@@ -96,6 +98,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
+    IconArchive,
     IconNeedsYou,
     IconPlus,
     IconSparkles,
@@ -163,6 +166,21 @@
   );
   const newIn = $derived(firstTodoStage(stageList)?.name);
   const empty = $derived(list !== null && list.tasks.length === 0);
+
+  /** The archived tasks, and whether the strip's Archived shows them dimmed in their columns. */
+  let archived = $state<TaskSummary[]>([]);
+  let showArchived = $state(false);
+  async function readArchived() {
+    const id = projectId;
+    try {
+      const read = await listArchived(id);
+      if (id === projectId) {
+        archived = read.tasks;
+      }
+    } catch {
+      // The board stands without them.
+    }
+  }
 
   const allowedFrom = (stage: string): Set<string> =>
     stages ? movesFrom(stages, stage) : new Set();
@@ -300,6 +318,8 @@
     { value: "board", label: "Board", draft: false },
     { value: "table", label: "Table", draft: false },
     { value: "pipeline", label: "Pipeline", draft: false },
+    // Routines, the fourth tab, always there.
+    { value: "routines", label: "Routines", draft: false },
     // The task graph, while the tasks draw one (an edge between two).
     ...(taskEdges(tasks).length > 0
       ? [{ value: "canvas", label: "Canvas", draft: false }]
@@ -415,6 +435,8 @@
     }
     // biome-ignore lint/complexity/noVoid: the re-read sets its own state
     void readDated();
+    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+    void readArchived();
   }
 
   /** A task the hub just wrote, put into the list until the list is read again. */
@@ -613,6 +635,7 @@
       lead.read();
       readViews();
       readDated();
+      readArchived();
       if (list) {
         refresh();
       }
@@ -715,7 +738,11 @@
    * form — once a task is being added by hand.
    */
   const standing = $derived(
-    empty && canTalk && !adding && !current.startsWith("view:")
+    empty &&
+      canTalk &&
+      !adding &&
+      !current.startsWith("view:") &&
+      current !== "routines"
   );
 
   /**
@@ -791,6 +818,22 @@
           <span>Needs you</span>
           <span class="num">{needsYou.length}</span>
         </button>
+      {/if}
+      {#if archived.length > 0 && current === "board"}
+        <!-- The archived tasks, dimmed in their columns while on. -->
+        <Button
+          aria-pressed={showArchived}
+          class="archived-toggle pressable"
+          onclick={() => {
+            showArchived = !showArchived;
+          }}
+          size="sm"
+          variant={showArchived ? "secondary" : "ghost"}
+        >
+          <IconArchive />
+          <span>Archived</span>
+          <span class="num">{archived.length}</span>
+        </Button>
       {/if}
       {#if strippedNewTask}
         <Button
@@ -869,6 +912,14 @@
     {:else}
       <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
     {/if}
+  {:else if value === "routines" && project}
+    <!-- The routines, the strip's fourth tab. -->
+    <ViewRoutines
+      {canTalk}
+      cawProblem={lead.view?.problem ?? null}
+      project={{ id: project.id, name: project.name }}
+      starters={stages?.routineStarters ?? []}
+    />
   {:else if !list}
     <div class="state">
       <EmptyState
@@ -935,6 +986,7 @@
   {:else if value === "board"}
     <TaskBoard
       {allowedFrom}
+      {archived}
       {dateOf}
       hrefOf={(id) => hrefOf(id)}
       {kindOf}
@@ -944,6 +996,7 @@
       onmove={drop}
       onopen={openOne}
       refused={refusedMove}
+      {showArchived}
       stages={shownStages}
       tasks={shownTasks}
       bind:adding
@@ -1285,6 +1338,15 @@
   .pane[data-view="board"] .current,
   .pane[data-view="canvas"] .swap,
   .pane[data-view="canvas"] .current {
+    flex: 1 1 auto;
+  }
+  /* The routines bento fills the pane, as the board does, and its panels
+     scroll in themselves. */
+  .pane:has(:global(.routines-view[data-layout="bento"])) {
+    overflow: hidden;
+  }
+  .pane:has(:global(.routines-view[data-layout="bento"])) .swap,
+  .pane:has(:global(.routines-view[data-layout="bento"])) .current {
     flex: 1 1 auto;
   }
   .pane[data-view="canvas"] {

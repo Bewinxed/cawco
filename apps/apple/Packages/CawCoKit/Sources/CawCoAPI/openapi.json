@@ -28907,6 +28907,13 @@
               "type": "string"
             }
           },
+          "routineStarters": {
+            "description": "What an empty Routines page offers to ask Caw for: the recorded template's, or the general four.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Starter"
+            }
+          },
           "source": {
             "$ref": "#/components/schemas/StagesViewSource",
             "description": "`file`: the project's stages.md; `template`: it has none, and the code template stands in."
@@ -28938,6 +28945,7 @@
         "required": [
           "moves",
           "problems",
+          "routineStarters",
           "source",
           "stages",
           "starters",
@@ -28966,6 +28974,48 @@
           "from",
           "to",
           "who"
+        ]
+      },
+      "Starter": {
+        "description": "One starter on an empty board: a sentence the person would say to Caw,\nsent as it stands when pressed, and the glyph for its kind of work.",
+        "type": "object",
+        "properties": {
+          "glyph": {
+            "$ref": "#/components/schemas/StarterGlyph"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "glyph",
+          "text"
+        ]
+      },
+      "StarterGlyph": {
+        "type": "string",
+        "enum": [
+          "brief",
+          "bug",
+          "calendar",
+          "draft",
+          "explore",
+          "grill",
+          "ideas",
+          "mail",
+          "palette",
+          "people",
+          "refresh",
+          "reply",
+          "rocket",
+          "routine",
+          "screen",
+          "search",
+          "site",
+          "stages",
+          "tasks",
+          "triage",
+          "voice"
         ]
       },
       "Stage": {
@@ -29018,48 +29068,6 @@
           "todo",
           "waiting",
           "you"
-        ]
-      },
-      "Starter": {
-        "description": "One starter on an empty board: a sentence the person would say to Caw,\nsent as it stands when pressed, and the glyph for its kind of work.",
-        "type": "object",
-        "properties": {
-          "glyph": {
-            "$ref": "#/components/schemas/StarterGlyph"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "glyph",
-          "text"
-        ]
-      },
-      "StarterGlyph": {
-        "type": "string",
-        "enum": [
-          "brief",
-          "bug",
-          "calendar",
-          "draft",
-          "explore",
-          "grill",
-          "ideas",
-          "mail",
-          "palette",
-          "people",
-          "refresh",
-          "reply",
-          "rocket",
-          "routine",
-          "screen",
-          "search",
-          "site",
-          "stages",
-          "tasks",
-          "triage",
-          "voice"
         ]
       },
       "StageView": {

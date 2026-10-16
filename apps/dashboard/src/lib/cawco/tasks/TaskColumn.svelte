@@ -34,7 +34,10 @@
     foot,
     moving,
     refused,
+    archivedIds,
   }: {
+    /** The cards that are archived tasks, drawn dimmed. */
+    archivedIds?: Set<string>;
     label: string;
     kind: StageKind | null;
     cards: TaskSummary[];
@@ -55,10 +58,17 @@
     /** A move the hub refused: the card is back here, the reason under it. */
     refused?: (id: string) => { again: () => void; reason: string } | null;
   } = $props();
+
+  /** The column's count: its live tasks; archived ones shown with them don't count. */
+  const count = $derived(
+    archivedIds
+      ? cards.filter((task) => !archivedIds.has(task.id)).length
+      : cards.length
+  );
 </script>
 
 <section
-  aria-label="{label}, {cards.length} {cards.length === 1 ? 'task' : 'tasks'}"
+  aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
   class="column"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
@@ -71,7 +81,7 @@
         <IconNeedsYou aria-hidden="true" class="you-glyph" />
       {/if}
       <h3 class="name">{label}</h3>
-      <span class="count num"><MorphText text={String(cards.length)} /></span>
+      <span class="count num"><MorphText text={String(count)} /></span>
     </span>
     <span class="kind">{kind ? KIND_LABEL[kind] : "not in stages.md"}</span>
   </header>
@@ -80,6 +90,7 @@
       {@const fault = refused?.(task.id) ?? null}
       <li
         aria-busy={moving?.(task.id) || undefined}
+        data-archived={archivedIds?.has(task.id) || undefined}
         data-flip
         data-moving={moving?.(task.id) || undefined}
       >
@@ -109,6 +120,10 @@
      until the hub answers. */
   li[data-moving] > :global(:first-child) {
     opacity: 0.6;
+  }
+  /* An archived task stands quieter than the live ones. */
+  li[data-archived] > :global(:first-child) {
+    opacity: 0.55;
   }
   .moving {
     display: flex;
