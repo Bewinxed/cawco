@@ -111,6 +111,13 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private let stageProblemLabel = TaskSheetController.problemLabel()
     private let facts = UIStackView()
     private var closeButton: UIButton!
+    /// The screen's foot under a phone's sheet (ScreenEdges.svelte `.edge-bottom`:
+    /// a bottom sheet is the bottom edge itself): the sheet's surface over the
+    /// home indicator's band, so words scroll away under it rather than
+    /// behind the indicator. `max(12px, safe area)` tall, set 7px past the
+    /// screen's edge, so that much less of it shows.
+    private let foot = UIView()
+    private lazy var footHeight = foot.heightAnchor.constraint(equalToConstant: 0)
 
     private var collection: UICollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Part, Item>!
@@ -238,6 +245,17 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: Space.space4),
             closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space4),
         ])
+        foot.backgroundColor = Palette.surfaceRaised
+        foot.isUserInteractionEnabled = false
+        foot.accessibilityIdentifier = "task-sheet-foot"
+        foot.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(foot)
+        NSLayoutConstraint.activate([
+            foot.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            foot.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            foot.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            footHeight,
+        ])
 
         reviewFill = [
             review.topAnchor.constraint(equalTo: view.topAnchor),
@@ -337,6 +355,13 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         for part in [descriptionPart, acceptancePart] {
             part.onResize = { [weak self] in self?.collection.collectionViewLayout.invalidateLayout() }
         }
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        // Only a phone's sheet stands on the screen's foot; a wider screen's sheet is a side sheet, which has none.
+        let safe = view.safeAreaInsets.bottom
+        footHeight.constant = traitCollection.userInterfaceIdiom == .phone && safe > 0 ? max(12, safe) - 7 : 0
     }
 
     override func viewWillLayoutSubviews() {
@@ -924,6 +949,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         review.isHidden = open && !beside
         splitRule.isHidden = !beside
         view.bringSubviewToFront(closeButton)
+        view.bringSubviewToFront(foot)
         if traitCollection.userInterfaceIdiom != .phone, let window = view.window {
             preferredContentSize = open ? window.bounds.size : CGSize(width: Self.sheetWidth, height: window.bounds.height)
         }
@@ -1623,6 +1649,7 @@ enum TaskSheetProbe {
     private static func says(_ view: UIView) -> String? {
         switch view {
         case let output as TaskOutputView: "state=\(output.shown) head=\(output.head)"
+        case let page as ResultPage: page.probeWords
         case let tabs as KitSegmented: "selected=\(tabs.selectedIndex.map(String.init) ?? "none")"
         case let list as UICollectionView:
             String(format: "offset=%.1f foot=%.1f safe=%.1f", list.contentOffset.y + list.adjustedContentInset.top,

@@ -257,8 +257,23 @@ final class ResultPage: UIView, WKNavigationDelegate {
         web.scrollView.backgroundColor = .white
         web.underPageBackgroundColor = .white
         web.overrideUserInterfaceStyle = .light
+        accessibilityIdentifier = "task-page-canvas"
         web.loadHTMLString(html, baseURL: nil)
     }
+
+    #if DEBUG
+    /// The canvas as the app's theme draws it now, the theme the page is
+    /// given, and the app's own (TaskSheetProbe,
+    /// scripts/probe-kit/specs/ios-task-review.ts).
+    var probeWords: String {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        let canvas: UIColor = web.backgroundColor ?? UIColor.clear
+        canvas.resolvedColor(with: traitCollection).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        func name(_ style: UIUserInterfaceStyle) -> String { style == .dark ? "dark" : "light" }
+        return String(format: "canvas=#%02X%02X%02X page=%@ app=%@", Int(red * 255), Int(green * 255), Int(blue * 255),
+                      name(web.traitCollection.userInterfaceStyle), name(traitCollection.userInterfaceStyle))
+    }
+    #endif
 
     convenience init(svg: Data) {
         self.init(fits: true)

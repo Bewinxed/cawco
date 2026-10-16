@@ -460,7 +460,7 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
         let floated = turn.grouped ? [note, clock].compactMap(\.self).joined(separator: " ") : nil
         float.set(floated?.isEmpty == false ? floated : nil)
         body.floatSize = float.isHidden ? .zero : FloatNote.size(floated ?? "")
-        body.configure(env.replacement(block.id) ?? block.content, style: .well)
+        body.configure(env.replacement(block.id) ?? block.content, style: .body)
         let presence = (waiting || ghost) && !taken ? Effect.ghostPresence : 1
         who.alpha = presence
         words.alpha = presence

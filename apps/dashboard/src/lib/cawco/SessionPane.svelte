@@ -75,6 +75,7 @@
   import { keepDraft } from "./transcript/keep-draft.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";
   import { parkedAsks } from "./transcript/present";
+  import { speakerName } from "./transcript/speaker";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
   import {
@@ -712,15 +713,7 @@
     });
   });
 
-  const HARNESS_LABEL: Record<string, string> = {
-    claude: "Claude Code",
-    opencode: "opencode",
-    code: "opencode",
-    pi: "pi",
-  };
-  const agentName = $derived(
-    HARNESS_LABEL[session?.harness ?? ""] ?? session?.harness ?? "Agent"
-  );
+  const agentName = $derived(speakerName(session?.harness));
 
   const commands = $derived(cawco.commandsOf(viewId));
 

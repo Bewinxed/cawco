@@ -55,6 +55,7 @@ final class AttemptTranscriptPane: UIView {
             guard let self else { return }
             onOpenSession(instanceId)
         }
+        open.accessibilityIdentifier = "task-transcript-open"
         let acts = UIStackView(arrangedSubviews: [toggle, open])
         acts.spacing = Space.space2
         // `.words { flex: 1 1 12rem }` beside the acts, which wrap under them where they do not fit.
@@ -172,8 +173,17 @@ final class FlexRow: UIView {
             return
         }
         trail.translatesAutoresizingMaskIntoConstraints = false
-        trail.setContentHuggingPriority(.required, for: .horizontal)
-        trail.setContentCompressionResistancePriority(.required, for: .horizontal)
+        // The second part stands at its content's size either way, as a flex
+        // item not stretched (`align-items: start`, its `flex: none`): a
+        // button beside two lines of words kept a button's height (Try
+        // again stood 56.7pt tall), and a row of buttons packed at the end
+        // (a ghost button took the line's spare width and floated mid-row).
+        // A stack has no size of its own; its parts are what hug.
+        for part in [trail] + ((trail as? UIStackView)?.arrangedSubviews ?? []) {
+            part.setContentHuggingPriority(.required, for: .horizontal)
+            part.setContentHuggingPriority(.required, for: .vertical)
+            part.setContentCompressionResistancePriority(.required, for: .horizontal)
+        }
         addSubview(trail)
         let trailBottom = trail.bottomAnchor.constraint(equalTo: bottomAnchor)
         trailBottom.priority = .defaultLow

@@ -40,6 +40,17 @@
  *     lays it at the iPad review's 416pt and back.
  *  l. No text in the sheet or its transcript lays out wider than its view
  *     (ProseView's DEBUG `prose overflow`): a line that does is cut off.
+ *  m. No inline code chip narrower than its line is laid across two
+ *     (`prose chip split`): the web's chip is an `inline-block`.
+ *  n. On the phone, each output card (data, table, page, picture) and the
+ *     attempts' tabs come wholly on screen in light and in dark, each drawn
+ *     as what it is and captured; the page on a white canvas, set light,
+ *     while the app is dark.
+ *  o. Try again stands at the Attempts row's top at a button's height,
+ *     beside two lines of words (`align-items: start`).
+ *  p. The transcript head's Expand and Open session pack to its end.
+ *  q. A phone's sheet lays its surface over the screen's foot, `max(12,
+ *     safe area) - 7` tall (ScreenEdges.svelte `.edge-bottom`); an iPad's, none.
  *
  * Each device writes the sheet and the sheet expanded, light and dark, to
  * the spec's folder; the same task on the built dashboard (WebKit, at the
@@ -102,7 +113,7 @@ const HEADLINE = "Wrote the launch post and planned launch week's three posts.";
 const REPORT = [
   "The post leads with booking a berth in two taps. The week goes out **Monday, Wednesday and Friday**, each post under 280 characters, written to `post.md` and planned in `schedule.json`.",
   "`week.csv` keeps each post's reach from the last launch, so the Friday post can lean on what read best. The page in `page.html` is the post as it will look on the site, and `cover.png` its picture.",
-  "Nothing was posted: every post waits for your approval in the queue.",
+  "Nothing was posted: every post waits for your approval in `Queue { posts, approvals }` until you say so.",
 ].join("\n\n");
 const DESCRIPTION = [
   "The launch post for Harbour, and what goes out each day of launch week: one post a day, each under 280 characters, in the house voice.",
@@ -505,6 +516,8 @@ async function device(
   const shown = new Map<string, Part>();
   /** Text the app laid out wider than its view (ProseView's DEBUG `prose overflow`). */
   const overflow: string[] = [];
+  /** Inline code chips narrower than a line laid across two (ProseView's DEBUG `prose chip split`). */
+  const splits: string[] = [];
   try {
     sim = await macSim({ runtime: RUNTIME, device: which.type });
     const { udid } = sim;
@@ -515,7 +528,7 @@ async function device(
       [
         "bash",
         "-c",
-        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "TaskSheet" OR category == "Push" OR (category == "Prose" AND eventMessage BEGINSWITH "prose overflow"))'`,
+        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "TaskSheet" OR category == "Push" OR (category == "Prose" AND (eventMessage BEGINSWITH "prose overflow" OR eventMessage BEGINSWITH "prose chip split")))'`,
       ],
       { stdout: "pipe", stderr: "ignore" }
     );
@@ -540,6 +553,9 @@ async function device(
           lines.push(line);
           if (line.startsWith("prose overflow")) {
             overflow.push(line);
+          }
+          if (line.startsWith("prose chip split")) {
+            splits.push(line);
           }
           const part = PART.exec(line);
           if (part) {
@@ -809,6 +825,111 @@ async function device(
         `label ${at(dataLabel)} | value ${at(dataValue)}`
       );
     }
+
+    // o. Try again keeps a button's height beside the words, at the row's top (`align-items: start`).
+    const attemptsRow = was("task-attempts");
+    kit.check(
+      `${tag} o: Try again stands at the Attempts row's top, a button's height, beside its ${attemptsHint?.h.toFixed(1)}pt of words`,
+      !!again &&
+        near(again.y, attemptsRow?.y) &&
+        again.h < 45 &&
+        again.h < (attemptsRow?.h ?? 0) - 1,
+      `${at(again)} | row ${at(attemptsRow)}`
+    );
+
+    // p. The transcript's actions pack to the head's end (its `padding-inline: space-4`).
+    const openSession = was("task-transcript-open");
+    kit.check(
+      `${tag} p: Expand and Open session stand at the transcript head's end`,
+      !!openSession &&
+        near(
+          openSession.x + openSession.w,
+          (pane?.x ?? 0) + (pane?.w ?? 0) - SPACE_4
+        ),
+      `open ${at(openSession)} | pane ${at(pane)}`
+    );
+
+    // q. A phone's sheet stands on the screen's foot with its surface over
+    // the home indicator's band (ScreenEdges.svelte `.edge-bottom`); a wider
+    // screen's sheet has none.
+    const footStrip = part("task-sheet-foot");
+    const sheetFrame = part("task-sheet");
+    const strip = which.phone ? Math.max(12, safe) - 7 : 0;
+    kit.check(
+      `${tag} q: the sheet's foot strip stands ${strip.toFixed(1)}pt tall at the screen's foot`,
+      !!footStrip &&
+        near(footStrip.h, strip) &&
+        (strip === 0 ||
+          near(
+            footStrip.y + footStrip.h,
+            (sheetFrame?.y ?? 0) + (sheetFrame?.h ?? 0)
+          )),
+      `foot ${at(footStrip)} | sheet ${at(sheetFrame)} | safe ${safe}`
+    );
+
+    // n. On a phone, each output card and the attempts' tabs, wholly on
+    // screen in either theme, drawn as what it is; the page's canvas white
+    // and the page in light at night too.
+    if (which.phone) {
+      const cardIds = [
+        ...expect.outputs
+          .filter((o) => o.drawn !== "document")
+          .map((o) => ({
+            id: `task-output-${o.name}`,
+            name: o.name,
+            drawn: o.drawn,
+          })),
+        ...(count > 1
+          ? [{ id: "task-attempt-tabs", name: "tabs", drawn: "" }]
+          : []),
+      ];
+      const inView = (id: string) => {
+        const p = seen.get(id);
+        const b = part("task-sheet-body");
+        if (!(p && b && p.shows)) {
+          return false;
+        }
+        const top = b.y + p.y - offset();
+        return top >= b.y - 0.5 && top + p.h <= b.y + b.h + 0.5;
+      };
+      const bring = async (id: string) => {
+        for (let n = 0; n < 16 && !inView(id); n += 1) {
+          const p = seen.get(id);
+          const b = part("task-sheet-body");
+          const above = p && b ? b.y + p.y - offset() < b.y : false;
+          await (above ? scroll(false) : scroll(true, true));
+        }
+      };
+      for (const theme of THEMES) {
+        await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
+        await pause(1500);
+        const missing: string[] = [];
+        for (const card of cardIds) {
+          await bring(card.id);
+          await pause(800);
+          const read = seen.get(card.id);
+          if (inView(card.id)) {
+            await shot(`card-${card.name}-${theme}`);
+          }
+          const drawn =
+            card.drawn === "" ||
+            (read?.says ?? "").startsWith(`state=${card.drawn} `);
+          if (!(inView(card.id) && drawn)) {
+            missing.push(`${card.name}: ${at(read)}`);
+          }
+        }
+        const canvas = seen.get("task-page-canvas")?.says ?? "";
+        const page = expect.outputs.some((o) => o.drawn === "page");
+        kit.check(
+          `${tag} n (${theme}): each output card and the tabs come wholly on screen, drawn as what they are${page ? ", the page on a white canvas, set light" : ""}`,
+          missing.length === 0 &&
+            (!page || canvas === `canvas=#FFFFFF page=light app=${theme}`),
+          `${missing.join(" | ") || `${cardIds.length} on screen`}${page ? ` | page ${canvas || "unread"}` : ""}`
+        );
+      }
+      await sh(`xcrun simctl ui ${udid} appearance light`);
+      await pause(1500);
+    }
     /**
      * Every markdown the sheet draws (MarkdownDocumentView over MessageBody):
      * the report, each document handed in, the task's own text sections,
@@ -971,6 +1092,12 @@ async function device(
       `${tag} l: no text in the sheet or its transcript lays out wider than its view`,
       overflow.length === 0,
       overflow.slice(0, 4).join(" | ") || "none"
+    );
+    // m. An inline code chip that fits a line stands on one (the web's `inline-block`).
+    kit.check(
+      `${tag} m: no inline code chip narrower than its line is laid across two`,
+      splits.length === 0,
+      splits.slice(0, 4).join(" | ") || "none"
     );
   } finally {
     await writeFile(join(kit.out, `${tag}-log.txt`), lines.join("\n"));

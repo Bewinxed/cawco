@@ -545,6 +545,9 @@ private final class TailRowView: UIView {
             box.frame = CGRect(x: start, y: baseline - font.ascender, width: width, height: font.ascender - font.descender)
             box.cornerRadius = Radius.radiusXs
             box.backgroundColor = surface.resolvedColor(with: traitCollection).cgColor
+            // The chip's inset hairline, as MessageBody.svelte draws it.
+            box.borderWidth = 1
+            box.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
             surfaces.addSublayer(box)
         }
     }

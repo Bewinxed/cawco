@@ -75,9 +75,13 @@ public enum TextWrap: Sendable {
     /// the paragraph alone. `leading` gives, by the offset of the item it
     /// opens, the width of an inline box's opening padding that the text
     /// carries on the space before that item: it is counted with the item.
+    /// `atoms` are ranges set as one inline box each (CSS `inline-block`,
+    /// as an inline code chip is): no line breaks inside one, so a box that
+    /// fits moves to the next line whole; one wider than a line is the
+    /// layout's to break.
     public static func lines(of text: NSAttributedString, width: Double, wrap: TextWrap,
-                             leading: [Int: Double] = [:]) -> [(start: Int, width: Double)]? {
-        WrapParagraph(text, leading: leading).lines(width: width, wrap: wrap)
+                             leading: [Int: Double] = [:], atoms: [NSRange] = []) -> [(start: Int, width: Double)]? {
+        WrapParagraph(text, leading: leading, atoms: atoms).lines(width: width, wrap: wrap)
     }
 
     /// How many UTF-16 units of `line` stay before a U+2026 when the line is
@@ -174,9 +178,14 @@ struct WrapParagraph {
     /// A soft hyphen or a tab: WebKit leaves such a paragraph alone.
     private let unconstrainable: Bool
 
-    init(_ text: NSAttributedString, leading: [Int: Double] = [:]) {
+    init(_ text: NSAttributedString, leading: [Int: Double] = [:], atoms: [NSRange] = []) {
         let string = text.string as NSString
         let length = string.length
+        // Offsets inside an atomic box, past its first: no item starts there.
+        var inside = Set<Int>()
+        for atom in atoms where atom.length > 1 {
+            inside.formUnion(atom.location + 1 ..< NSMaxRange(atom))
+        }
         var items: [Item] = []
         var sums: [Double] = [0]
         var chunks: [Chunk] = []
@@ -217,6 +226,8 @@ struct WrapParagraph {
                 continue
             }
             if unit == 0x00AD || unit == 0x09 { plain = false }
+            // Inside an atomic box: the box's item goes on, spaces and all.
+            if inside.contains(offset) { continue }
             let space = unit == 0x20
             // A new item: the chunk's first, a space after a word or a word
             // after a space, or a place inside a word where a line may break.

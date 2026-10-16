@@ -97,9 +97,10 @@ nonisolated struct ProseStyle: Sendable {
     var itemParagraphGap: Double = Space.space3
     /// Strong text's ink, where a body sets one (a reasoning step's).
     var strongInk: UIColor?
-    /// Inline code: its size, its surface and the surface's block padding.
+    /// Inline code: its size and its chip's block padding. The chip is one
+    /// surface wherever it stands, the code surface edged with a hairline
+    /// (MessageBody.svelte and prose.ts `:not(pre) > code`, DESIGN.md code-bg).
     var codeSize = TypeScale.textMeta
-    var codeSurface: UIColor = Palette.muted
     var codePad = Size.proseCodePad
     /// app.css's wrap: `p` and `li` `pretty`, h1–h4 `balance` (LineWrap);
     /// a turn's words (MessageBody) are `stable` and wrap as written.
@@ -113,12 +114,9 @@ nonisolated struct ProseStyle: Sendable {
 
     /// A turn's words (MessageBody.svelte): --space-3 between blocks and
     /// --space-5 over a heading, headings at the body size, code at the label
-    /// size on the recess.
-    static let body = ProseStyle(codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRecess, codePad: Size.txCodeSpanPad, name: "body")
-    /// The reader's own words, in their well: code lifts to the raised surface.
-    static let well = ProseStyle(codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRaised, codePad: Size.txCodeSpanPad, name: "well")
-    static let muted = ProseStyle(ink: Palette.inkMuted, codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRecess,
-                                  codePad: Size.txCodeSpanPad, name: "muted")
+    /// size. The reader's own words in their well are set the same.
+    static let body = ProseStyle(codeSize: TypeScale.textLabel, codePad: Size.txCodeSpanPad, name: "body")
+    static let muted = ProseStyle(ink: Palette.inkMuted, codeSize: TypeScale.textLabel, codePad: Size.txCodeSpanPad, name: "muted")
     /// A reasoning step (thinking-step.svelte): muted, --space-1 above each
     /// block and nothing below, strong in the strong ink.
     static let step = ProseStyle(ink: Palette.inkMuted, blockGap: Space.space1, flushBottoms: true, headingGap: Space.space1,
@@ -628,7 +626,7 @@ nonisolated enum MarkdownRender {
                     // `code`: the mono face at the label size, regular, on its surface.
                     var mono = attributes
                     mono[.font] = TypeScale.typeCode.font(style.codeSize, weight: TypeScale.weightBody)
-                    mono[.inlineCode] = style.codeSurface
+                    mono[.inlineCode] = Palette.codeBg
                     mono[.inlineCodePad] = style.codePad
                     // Its inline padding, as room either side of the run. Where
                     // it opens the text there is no character before it to carry the

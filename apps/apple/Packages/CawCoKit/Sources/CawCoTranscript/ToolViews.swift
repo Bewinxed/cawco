@@ -293,7 +293,11 @@ final class ToolLineView: RailRow, Recycled, Disclosing, FrameRow {
             arg.append(Styled.string(" " + detail, label, color: Palette.inkMuted.withAlphaComponent(0.7), size: TypeScale.textLabel, leading: TypeScale.leadingRoot, mono: true))
         }
         argument.attributedText = arg
-        argument.isHidden = arg.length == 0
+        // The argument stands in the line even with nothing to say, as the
+        // web's `.arg` span does: it is the line's one grower, so the chip,
+        // the fact and the chevron stand at its end (a call with no argument
+        // had its chip beside its verb).
+        argument.isHidden = false
         chip.attributedText = d.chip.map { Styled.string($0, TypeScale.typeMeta, color: Palette.inkMuted) }
         chip.isHidden = d.chip == nil
         fact.attributedText = d.fact.map { Self.fact($0, diff: d.factDiff) }

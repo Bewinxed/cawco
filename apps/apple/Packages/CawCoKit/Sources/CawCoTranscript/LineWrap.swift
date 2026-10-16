@@ -64,7 +64,14 @@ nonisolated enum LineWrap {
             }
             // Forced breaks (a line separator) part the content into chunks the rule lays out apart.
             let content = text.attributedSubstring(from: NSRange(location: start, length: end - start))
-            guard let lines = TextWrap.lines(of: content, width: maxWidth, wrap: style.rule, leading: leading) else { continue }
+            // Each inline code run is one box on the line (MessageBody.svelte
+            // `:not(pre) > code { display: inline-block }`): a chip that fits
+            // moves to the next line whole, never split at a space inside it.
+            var chips: [NSRange] = []
+            content.enumerateAttribute(.inlineCode, in: NSRange(location: 0, length: content.length)) { value, range, _ in
+                if value != nil { chips.append(range) }
+            }
+            guard let lines = TextWrap.lines(of: content, width: maxWidth, wrap: style.rule, leading: leading, atoms: chips) else { continue }
             for (index, line) in lines.enumerated() {
                 // A word wider than the line breaks anywhere: that line is TextKit's.
                 guard line.width <= maxWidth else { continue }

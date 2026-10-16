@@ -173,7 +173,7 @@ actor TranscriptPrep {
             case .delegate, .run, .peer: fleet.append(i)
             case .compaction: compacts = true
             // The reader's own words are rendered here, so their row reads them.
-            case let .user(turn): _ = MarkdownCache.shared.blocks(turn.block.content, style: .well)
+            case let .user(turn): _ = MarkdownCache.shared.blocks(turn.block.content, style: .body)
             default: break
             }
         }

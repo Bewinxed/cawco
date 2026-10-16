@@ -42,6 +42,11 @@ nonisolated final class ProseFragment: NSTextLayoutFragment {
                     context.setFillColor(surface.cgColor)
                     context.addPath(UIBezierPath(roundedRect: rect, cornerRadius: Radius.radiusXs).cgPath)
                     context.fillPath()
+                    // Edged inside with a hairline (`box-shadow: inset 0 0 0 1px var(--border-hairline)`).
+                    context.setStrokeColor(Palette.borderHairline.cgColor)
+                    context.setLineWidth(1)
+                    context.addPath(UIBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: max(0, Radius.radiusXs - 0.5)).cgPath)
+                    context.strokePath()
                 }
             }
             text.enumerateAttribute(.listDisc, in: all) { value, range, _ in
@@ -245,6 +250,8 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
     #if DEBUG
     /// The text, width and container width an overflow was last logged for.
     private var overflowFor: (Int, CGFloat, CGFloat)?
+    /// The text and width a split chip was last logged for.
+    private var splitFor: (Int, CGFloat)?
     private var checkQueued = false
 
     /// Once the pass that laid or measured the text is over: the lines as
@@ -264,15 +271,35 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
     private func checkOverflow() {
         guard window != nil, bounds.width > 0, textStorage.length > 0, let manager = textLayoutManager else { return }
         var widest = 0.0
+        let container = textContainer.size.width
+        // An inline code chip narrower than a line laid across two (MessageBody.svelte's
+        // chip is `inline-block`: it moves to the next line whole).
+        var split: String?
         manager.enumerateTextLayoutFragments(from: manager.documentRange.location, options: [.ensuresLayout]) { fragment in
-            for line in fragment.textLineFragments {
+            let lines = fragment.textLineFragments
+            for line in lines {
                 widest = max(widest, fragment.layoutFragmentFrame.minX + line.typographicBounds.maxX)
+            }
+            if split == nil, let text = (fragment.textElement as? NSTextParagraph)?.attributedString {
+                text.enumerateAttribute(.inlineCode, in: NSRange(location: 0, length: text.length)) { value, range, stop in
+                    guard value != nil, range.length > 1 else { return }
+                    let first = lines.firstIndex { NSLocationInRange(range.location, $0.characterRange) }
+                    let last = lines.firstIndex { NSLocationInRange(NSMaxRange(range) - 1, $0.characterRange) }
+                    let width = text.attributedSubstring(from: range).size().width + 2 * InlineCodeRoom.side
+                    if let first, let last, first != last, width <= container {
+                        split = (text.string as NSString).substring(with: range)
+                        stop.pointee = true
+                    }
+                }
             }
             return true
         }
+        if let split, splitFor.map({ $0 != (version, bounds.width) }) ?? true {
+            splitFor = (version, bounds.width)
+            Self.log.notice("prose chip split chip=\(split, privacy: .public) container=\(Double(container), format: .fixed(precision: 1))")
+        }
         let used = widest + textContainerInset.left
         let inner = bounds.width - textContainerInset.left - textContainerInset.right
-        let container = textContainer.size.width
         // A line's trailing space can hang a hair past its box: a whole word can't.
         guard used > bounds.width + 6 || abs(container - inner) > 0.5 else { return }
         guard overflowFor.map({ $0 != (version, bounds.width, container) }) ?? true else { return }
