@@ -827,15 +827,12 @@ function noteInputToShown(
 }
 
 /**
- * A stream's script by self time, and the layouts script forced after its
- * frame's own layout, in the
+ * A stream's script by self time, and the layouts script forced either side
+ * of its frame's own (`forcedAround`): in the frame's callbacks, and in the
  * observers' step (a ResizeObserver's call, where virtua writes the list's
- * new height and the transcript's pin reads it), by the script that forced
- * them, with how many of their frames the frame laid out again after them.
- * None again, and each was the layout the frame owed the writes made in
- * that step, paid where it was read; the frames that laid out twice with
- * no script forcing it are counted beside them, for what that step's
- * writes cost the frame when nothing reads them.
+ * new height and the transcript's pin reads it). The frames that laid out
+ * twice with no script forcing it are counted beside them, for what that
+ * step's writes cost the frame when nothing reads them.
  */
 function noteStream(
   kit: Kit,
@@ -850,44 +847,92 @@ function noteStream(
     .map(([fn, ms]) => `${fn} ${ms.toFixed(0)}ms`)
     .join("; ");
   kit.note(`${where}: the script it ran, by self time: ${spent}`);
-  const by = new Map<string, { again: number; ms: number; n: number }>();
-  let twice = 0;
-  let twiceMs = 0;
+  const { before, after, twice } = forcedAround(own);
+  const said = (
+    tally: Map<string, Forced>,
+    then: (one: Forced) => string
+  ): string =>
+    [...tally]
+      .sort((a, b) => b[1].ms - a[1].ms)
+      .slice(0, 6)
+      .map(
+        ([who, one]) =>
+          `${who}: ${one.n} layouts, ${one.ms.toFixed(0)}ms, ${then(one)}`
+      )
+      .join("; ") || "none";
+  kit.note(
+    `${where}: layouts forced in the frame's callbacks, before its own: ${said(
+      before,
+      (one) =>
+        `the frame's own layout after them ${one.thenMs.toFixed(0)}ms in all, ${one.again} of them 0.5ms or more`
+    )} | forced after the frame's own (the observers' step): ${said(
+      after,
+      (one) => `${one.again} of their frames laid out again after them`
+    )} | frames laid out twice with no script forcing it: ${twice.n}, ${twice.ms.toFixed(0)}ms`
+  );
+}
+
+/** The layouts one script forced, and what the frame's own layout did after them. */
+interface Forced {
+  /** Frames the frame laid out again after them (or, before its own, did 0.5ms or more of it). */
+  again: number;
+  ms: number;
+  n: number;
+  /** The frame's own layout after them, ms (before its own only). */
+  thenMs: number;
+}
+
+/**
+ * Each rendering task's script-forced layouts, by the script that forced
+ * them, either side of the frame's own layout: before it (the frame's
+ * callbacks), with the frame's own layout that followed; after it (the
+ * observers' step), with whether the frame laid out again. A layout forced
+ * before the frame's own that leaves it nothing to do is the frame's layout
+ * paid early; one after it the frame never repeats is the layout the frame
+ * owed that step's writes.
+ */
+function forcedAround(own: MainTask[]) {
+  const before = new Map<string, Forced>();
+  const after = new Map<string, Forced>();
+  const twice = { ms: 0, n: 0 };
+  const count = (
+    tally: Map<string, Forced>,
+    at: string,
+    ms: number,
+    again: boolean,
+    thenMs: number
+  ) => {
+    const who = at.split(" ← ")[0] ?? at;
+    const one = tally.get(who) ?? { again: 0, ms: 0, n: 0, thenMs: 0 };
+    one.n += 1;
+    one.ms += ms;
+    one.thenMs += thenMs;
+    one.again += again ? 1 : 0;
+    tally.set(who, one);
+  };
   for (const task of own) {
     const layouts = task.passes.filter((pass) => pass.name === "Layout");
     const framed = layouts.findIndex((pass) => pass.at === "the frame");
-    if (framed < 0) {
+    const frame = layouts[framed];
+    if (!frame) {
       continue;
     }
-    const after = layouts.slice(framed + 1);
-    after.forEach((pass, i) => {
-      if (pass.at === "the frame") {
-        return;
+    for (const pass of layouts.slice(0, framed)) {
+      count(before, pass.at, pass.ms, frame.ms >= 0.5, frame.ms);
+    }
+    const rest = layouts.slice(framed + 1);
+    rest.forEach((pass, i) => {
+      if (pass.at !== "the frame") {
+        const again = rest.slice(i + 1).some((one) => one.at === "the frame");
+        count(after, pass.at, pass.ms, again, 0);
       }
-      const who = pass.at.split(" ← ")[0] ?? pass.at;
-      const one = by.get(who) ?? { again: 0, ms: 0, n: 0 };
-      one.n += 1;
-      one.ms += pass.ms;
-      if (after.slice(i + 1).some((later) => later.at === "the frame")) {
-        one.again += 1;
-      }
-      by.set(who, one);
     });
-    if (after.every((pass) => pass.at === "the frame") && after.length > 0) {
-      twice += 1;
-      twiceMs += after.reduce((sum, pass) => sum + pass.ms, 0);
+    if (rest.length > 0 && rest.every((pass) => pass.at === "the frame")) {
+      twice.n += 1;
+      twice.ms += rest.reduce((sum, pass) => sum + pass.ms, 0);
     }
   }
-  const said = [...by]
-    .sort((a, b) => b[1].ms - a[1].ms)
-    .slice(0, 6)
-    .map(
-      ([who, { again, ms, n }]) =>
-        `${who}: ${n} layouts, ${ms.toFixed(0)}ms, ${again} of their frames laid out again after them`
-    );
-  kit.note(
-    `${where}: layouts forced after the frame's own (the observers' step): ${said.join("; ") || "none"}; frames laid out twice with no script forcing it: ${twice}, ${twiceMs.toFixed(0)}ms`
-  );
+  return { before, after, twice };
 }
 
 /** The slow `setAttribute` calls of the switches `press` makes, one tab at a time. */

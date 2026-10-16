@@ -923,7 +923,10 @@ export async function traceMain(
       ? {
           rendering: renderingIn(from, to),
           passes: passesIn(from, to),
-          invalidated: askedIn(restyleAsks, from, to),
+          // As many as the boxes laid out again: a switch's frame restyles
+          // a thousand elements for a dozen reasons, the eight most counted
+          // a few spans on the rail.
+          invalidated: askedIn(restyleAsks, from, to, 24),
           // Every box laid out again, each of its own: one box can be a
           // whole column's layout, and the most counted are a few spans.
           relaidOut: askedIn(relayoutAsks, from, to, 24),
