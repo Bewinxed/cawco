@@ -362,12 +362,13 @@
   data-leaf={leaf.id}
   onfocusincapture={() => workspace.focus(leaf.id)}
   onpointerdowncapture={() => workspace.focus(leaf.id)}
-  class:rail-shown={railShown}
 >
   <!-- The focus mark is graphite, never the accent: the one loud colour in
        this product means a session is asking for something, and "you are
-       typing here" must not compete with it. -->
-  <span aria-hidden="true" class="rail"></span>
+       typing here" must not compete with it. Said on the mark itself: said
+       on the group, every focus change invalidated the group's whole
+       subtree, both panes and their composer. -->
+  <span aria-hidden="true" class="rail" class:shown={railShown}></span>
 
   {#if !hosted}
     <RegionBoundary region="tabs">
@@ -537,7 +538,7 @@
     z-index: 2;
     pointer-events: none;
   }
-  .rail-shown .rail {
+  .rail.shown {
     opacity: 0.5;
   }
   @media (prefers-reduced-motion: no-preference) {

@@ -3629,12 +3629,16 @@
     flex-direction: column;
     gap: var(--space-3);
 
-    &:has(> .offer:not(.away) > :global(*)) {
-      padding-bottom: var(--space-3);
-    }
     & > .offer {
       pointer-events: auto;
     }
+  }
+  /* The step under a card parked, on the card's own row: the one in the
+     column is the stack's last, and nothing is under a row with no card.
+     Asked of the row, not of the stack past `.away`: a class in a `:has()`
+     before a universal makes each of its changes restyle the whole row. */
+  .offer:has(> :global(*)) {
+    padding-bottom: var(--space-3);
   }
   /* The offer of a conversation not being written to: built and laid out,
      out of the column at its foot, unseen and out of reach (`visibility`
