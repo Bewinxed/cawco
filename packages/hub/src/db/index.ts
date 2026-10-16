@@ -108,14 +108,19 @@ import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
 import {
   accountSignins,
+  actions,
   agents,
+  artifacts,
   capabilityUsageDaily,
   cawTurns,
   claudeContextWindows,
   completedTurns,
+  connectionProjects,
+  connectorPolls,
   continuations,
   credentials,
   delegateEvents,
+  eventRoutes,
   fleetAgents,
   fleetDeniedTools,
   fleetHookHistory,
@@ -129,7 +134,10 @@ import {
   fleetSkillHistory,
   fleetWatchNotices,
   fleetWatchSettings,
+  githubPollCursors,
+  githubPollers,
   type HubFolder,
+  inboundEvents,
   instanceAliases,
   instances,
   jevSettings,
@@ -159,6 +167,7 @@ import {
   pushDevices,
   queuedTaskStarts,
   queuedWorkItems,
+  relays,
   routines,
   ruleState,
   rules,
@@ -757,10 +766,13 @@ export interface DbShape {
   /**
    * Folds a duplicate project into the one it duplicates (project-merge.ts),
    * in one transaction: its checkout and workspace places join `keepId`'s
-   * (the same folder once), its sessions, work items, threads, Caw turns,
-   * fleet rows, offers and queued starts become `keepId`'s, task ids renamed
-   * through `taskIds`; then its row goes. `keepId`'s settings, primary place
-   * and repositories stand. Answers what moved.
+   * (the same folder once), and every row that names it becomes `keepId`'s
+   * (sessions, work items, threads, Caw's turns and calls, the rules scoped
+   * to it, routines with their routes and polls, events, actions, relays,
+   * moves, artifacts, notices, fleet rows, offers, granted connections,
+   * queued starts), task ids renamed through `taskIds`; then its row goes.
+   * `keepId`'s settings, allowed accounts, primary place, repositories and
+   * GitHub poller stand. Answers what moved.
    */
   readonly foldProject: (
     dupId: string,
@@ -2244,7 +2256,12 @@ const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
   reply: row.reply,
   timing: row.timing,
   repeat: row.repeat,
-  scope: row.scope,
+  scope: {
+    ...(row.scopeMachineId ? { machineId: row.scopeMachineId } : {}),
+    ...(row.scopeProjectId ? { projectId: row.scopeProjectId } : {}),
+    ...(row.scopeHarness ? { harness: row.scopeHarness } : {}),
+    ...(row.scopeModel ? { model: row.scopeModel } : {}),
+  },
   createdAt: row.createdAt.getTime(),
 });
 
@@ -7075,10 +7092,23 @@ const make = async (path: string): Promise<DbShape> => {
       }),
     deleteProject: (id) => {
       db.transaction((tx) => {
-        // Its places, tasks, threads and Caw turns go with it (cascade); the
-        // sessions started from it outlive it and stop being its (set null).
+        // Its places, tasks, threads, Caw turns and the rules scoped to it go
+        // with it (cascade); the sessions started from it outlive it and stop
+        // being its (set null).
         tx.delete(queuedTaskStarts)
           .where(eq(queuedTaskStarts.projectId, id))
+          .run();
+        // Where those rules stood with each session, which no key ties to them.
+        tx.delete(ruleState)
+          .where(
+            inArray(
+              ruleState.ruleId,
+              tx
+                .select({ id: rules.id })
+                .from(rules)
+                .where(eq(rules.scopeProjectId, id))
+            )
+          )
           .run();
         // A memory document scoped to it alone goes with it: losing its last
         // project must not widen it to every session.
@@ -7189,6 +7219,85 @@ const make = async (path: string): Promise<DbShape> => {
           .set({ projectId: keepId })
           .where(eq(cawTurns.projectId, dupId))
           .run();
+        // A rule scoped to it fires in the kept project from now on.
+        tx.update(rules)
+          .set({ scopeProjectId: keepId })
+          .where(eq(rules.scopeProjectId, dupId))
+          .run();
+        // An action names its task by the duplicate's number.
+        for (const action of tx
+          .select({ id: actions.id, taskId: actions.taskId })
+          .from(actions)
+          .where(and(eq(actions.projectId, dupId), isNotNull(actions.taskId)))
+          .all()) {
+          tx.update(actions)
+            .set({ taskId: renamed(action.taskId) })
+            .where(eq(actions.id, action.id))
+            .run();
+        }
+        // Its routines with their routes and polls, the events it took in,
+        // its actions, relays and moves, Caw's turns and calls, its
+        // artifacts and notices: the kept project's from now on, where the
+        // duplicate's row going would have taken them or left them naming it.
+        for (const table of [
+          routines,
+          eventRoutes,
+          connectorPolls,
+          inboundEvents,
+          actions,
+          relays,
+          moves,
+          leadTurns,
+          leadCalls,
+          artifacts,
+          fleetWatchNotices,
+        ]) {
+          tx.update(table)
+            .set({ projectId: keepId })
+            .where(eq(table.projectId, dupId))
+            .run();
+        }
+        tx.update(instances)
+          .set({ delegateTypeProject: keepId })
+          .where(eq(instances.delegateTypeProject, dupId))
+          .run();
+        // The connections it was granted, each once.
+        for (const grant of tx
+          .select()
+          .from(connectionProjects)
+          .where(eq(connectionProjects.projectId, dupId))
+          .all()) {
+          tx.insert(connectionProjects)
+            .values({ ...grant, projectId: keepId })
+            .onConflictDoNothing()
+            .run();
+        }
+        tx.delete(connectionProjects)
+          .where(eq(connectionProjects.projectId, dupId))
+          .run();
+        // Its GitHub poller, with its cursors, where the kept project polls
+        // none: both poll the one repository they share.
+        const poller = tx
+          .select()
+          .from(githubPollers)
+          .where(eq(githubPollers.projectId, dupId))
+          .get();
+        if (
+          poller &&
+          !tx
+            .select({ projectId: githubPollers.projectId })
+            .from(githubPollers)
+            .where(eq(githubPollers.projectId, keepId))
+            .get()
+        ) {
+          tx.insert(githubPollers)
+            .values({ ...poller, projectId: keepId })
+            .run();
+          tx.update(githubPollCursors)
+            .set({ projectId: keepId })
+            .where(eq(githubPollCursors.projectId, dupId))
+            .run();
+        }
         for (const table of [
           fleetHooks,
           fleetHookHistory,
@@ -8503,7 +8612,10 @@ const make = async (path: string): Promise<DbShape> => {
         reply: rule.reply,
         timing: rule.timing,
         repeat: rule.repeat,
-        scope: rule.scope,
+        scopeMachineId: rule.scope.machineId || null,
+        scopeProjectId: rule.scope.projectId || null,
+        scopeHarness: rule.scope.harness || null,
+        scopeModel: rule.scope.model || null,
         createdAt: new Date(rule.createdAt),
         updatedAt: new Date(),
       };
@@ -8524,7 +8636,10 @@ const make = async (path: string): Promise<DbShape> => {
             reply: values.reply,
             timing: values.timing,
             repeat: values.repeat,
-            scope: values.scope,
+            scopeMachineId: values.scopeMachineId,
+            scopeProjectId: values.scopeProjectId,
+            scopeHarness: values.scopeHarness,
+            scopeModel: values.scopeModel,
             updatedAt: values.updatedAt,
           },
         })

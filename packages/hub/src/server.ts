@@ -21268,6 +21268,9 @@ export const createServer = (
         if (first) {
           return status(400, first);
         }
+        if (draft.scope.projectId && !db.project(draft.scope.projectId)) {
+          return status(400, `There is no project ${draft.scope.projectId}.`);
+        }
         // The hub mints the id: the client never invents identity, it asks for it.
         const rule: Rule = {
           ...draft,
@@ -21290,6 +21293,9 @@ export const createServer = (
         const existing = db.getRule(params.id);
         if (!existing) {
           return status(404, `there is no rule ${params.id} to edit`);
+        }
+        if (draft.scope.projectId && !db.project(draft.scope.projectId)) {
+          return status(400, `There is no project ${draft.scope.projectId}.`);
         }
         const rule: Rule = {
           ...draft,

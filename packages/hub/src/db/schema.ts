@@ -2236,11 +2236,20 @@ export const rules = sqliteTable("rules", {
    * fires once per session and goes quiet.
    */
   repeat: integer("repeat", { mode: "boolean" }).notNull().default(true),
-  /** Optional narrowing — machine, project, harness, model. Empty means everywhere. */
-  scope: text("scope", { mode: "json" })
-    .$type<RuleScope>()
-    .notNull()
-    .default({}),
+  /** Optional narrowing ({@link RuleScope}), each null for everywhere: the machine it fires on. */
+  scopeMachineId: text("scope_machine_id"),
+  /**
+   * The project it fires in. The rule goes with its project, never widened
+   * to every project, and follows it into the project a merge folds it into.
+   */
+  scopeProjectId: text("scope_project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
+  /** The harness it fires on. */
+  scopeHarness:
+    text("scope_harness").$type<NonNullable<RuleScope["harness"]>>(),
+  /** A model name it fires on, matched as a substring in any case. */
+  scopeModel: text("scope_model"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
