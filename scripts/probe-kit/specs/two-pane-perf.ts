@@ -661,6 +661,55 @@ async function measure(
       }
       return `${tops.length} rows into ${pane.dataset.pane?.slice(0, 8)} (${state}) at ${Math.min(...tops)}-${Math.max(...tops)}px`;
     };
+    // Every scroll and every row taken out of a transcript, by pane, with
+    // when: what a switch sets going after its own frame (a list scrolled
+    // to its tail, a range re-cut), past the 100ms the boxes are read for.
+    const later: { at: number; line: string }[] = [];
+    const paneOf = (node: Node | null): string => {
+      const pane =
+        node instanceof Element
+          ? node.closest<HTMLElement>("[data-pane]")
+          : null;
+      if (!pane) {
+        return "outside a pane";
+      }
+      let state = "drawn";
+      if (pane.classList.contains("pane-hidden")) {
+        state = "put away";
+      } else if (pane.classList.contains("pane-settling")) {
+        state = "settling";
+      }
+      return `${(pane.getAttribute("data-pane") ?? "").slice(0, 8)} (${state})`;
+    };
+    document.addEventListener(
+      "scroll",
+      (event) => {
+        const box = event.target;
+        if (box instanceof HTMLElement) {
+          later.push({
+            at: performance.now(),
+            line: `scrolled ${paneOf(box)} ${box.className.split(" ")[0]} to ${Math.round(box.scrollTop)}px`,
+          });
+        }
+      },
+      { capture: true, passive: true }
+    );
+    new MutationObserver((records) => {
+      const at = performance.now();
+      for (const { removedNodes, target } of records) {
+        const gone = [...removedNodes].filter(
+          (node) => node instanceof HTMLElement && node.style.top
+        ).length;
+        if (
+          gone > 0 &&
+          target instanceof Element &&
+          target.closest(".listing")
+        ) {
+          later.push({ at, line: `${gone} rows out of ${paneOf(target)}` });
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+    (window as unknown as { __later: typeof later }).__later = later;
     new MutationObserver((records) => {
       const at = performance.now();
       for (const { addedNodes, target, attributeName, oldValue } of records) {
@@ -685,6 +734,7 @@ async function measure(
   for (const how of SWITCHES) {
     const way = ways[how];
     const changed = new Map<string, number>();
+    const after = new Map<string, number>();
     await page.waitForTimeout(REST_MS);
     await phase(how, async () => {
       for (const [n, id] of order.entries()) {
@@ -768,8 +818,36 @@ async function measure(
         for (const what of said) {
           changed.set(what, (changed.get(what) ?? 0) + 1);
         }
+        const happened = await page.evaluate(
+          ([since, within]) => {
+            const later = (
+              window as unknown as { __later: { at: number; line: string }[] }
+            ).__later;
+            const ours = later
+              .filter(({ at }) => at >= since && at < since + within)
+              .map(
+                ({ at, line }) =>
+                  `${line} at ${Math.round((at - since) / 10) * 10}ms`
+              );
+            later.length = 0;
+            return ours;
+          },
+          [madeAt, SETTLE_MS] as const
+        );
+        for (const what of happened) {
+          after.set(what, (after.get(what) ?? 0) + 1);
+        }
       }
     });
+    kit.note(
+      `${mode} pane(s), ${how}: what followed each switch within ${SETTLE_MS}ms, scrolls and rows taken out: ${
+        [...after]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 30)
+          .map(([what, times]) => `${what} ${times}x`)
+          .join("; ") || "nothing"
+      }`
+    );
     kit.note(
       `${mode} pane(s), ${how}: what its switches changed, within ${CLICK_MS}ms of each, on boxes of ${ROOT_ELEMENTS} elements or more: ${
         [...changed]
