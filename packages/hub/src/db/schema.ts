@@ -1579,25 +1579,43 @@ export const queuedWorkItemGlobs = sqliteTable(
  * are the harnesses' copies; this is the hub's own record, so a reader that was
  * not watching does not have to reconstruct the exchange out of transcript text.
  */
-export const delegateEvents = sqliteTable("delegate_events", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  /** The delegate the traffic is about — never the parent, on any of the kinds. */
-  instanceId: text("instance_id").notNull(),
-  parentInstanceId: text("parent_instance_id").notNull(),
-  kind: text("kind").$type<DelegateEventKind>().notNull(),
-  /** The permission request an ask and its answer share. Null on a report. */
-  requestId: text("request_id"),
-  toolName: text("tool_name"),
-  requestKind: text("request_kind").$type<"question" | "tool">(),
-  payload: text("payload", { mode: "json" })
-    .$type<DelegateEventPayload>()
-    .notNull(),
-  /** An ask's own state; null on an answer and a report, which settle nothing. */
-  status: text("status").$type<DelegateAskStatus>(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const delegateEvents = sqliteTable(
+  "delegate_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** The delegate the traffic is about — never the parent, on any of the kinds. */
+    instanceId: text("instance_id").notNull(),
+    parentInstanceId: text("parent_instance_id").notNull(),
+    kind: text("kind").$type<DelegateEventKind>().notNull(),
+    /** The permission request an ask and its answer share. Null on a report. */
+    requestId: text("request_id"),
+    toolName: text("tool_name"),
+    requestKind: text("request_kind").$type<"question" | "tool">(),
+    /**
+     * What the kind carries, read whole: an ask's input, an answer, a
+     * report's body; a report's turn identity is its own columns.
+     */
+    payload: text("payload", { mode: "json" })
+      .$type<DelegateEventPayload>()
+      .notNull(),
+    /** A report's harness result id: the turn it reports (`completed_turns`). */
+    resultId: text("result_id"),
+    /** A report's turn's completion time, ISO, when its harness said it. */
+    completedAt: text("completed_at"),
+    /** An ask's own state; null on an answer and a report, which settle nothing. */
+    status: text("status").$type<DelegateAskStatus>(),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    index("delegate_events_report").on(
+      table.instanceId,
+      table.kind,
+      table.resultId
+    ),
+  ]
+);
 
 /**
  * One record per message sent to a session (`SendRecord`, @cawco/core): what

@@ -2335,10 +2335,21 @@ export class Db extends Context.Service<Db, DbShape>()("Db") {}
  * A delegate_events row as everything reads it: its date as JSON writes one,
  * and its payload paired with its kind, which the two columns cannot say.
  */
-const delegateEventOf = (
-  row: typeof delegateEvents.$inferSelect
-): DelegateEvent =>
-  ({ ...row, createdAt: row.createdAt.toISOString() }) as DelegateEvent;
+/** A stored delegate event as the wire carries it: a report's turn identity in its payload. */
+const delegateEventOf = ({
+  resultId,
+  completedAt,
+  ...row
+}: typeof delegateEvents.$inferSelect): DelegateEvent =>
+  ({
+    ...row,
+    payload: {
+      ...row.payload,
+      ...(resultId === null ? {} : { resultId }),
+      ...(completedAt === null ? {} : { completedAt }),
+    },
+    createdAt: row.createdAt.toISOString(),
+  }) as DelegateEvent;
 
 /** A stored rule row back into the shape the fleet and the dashboard share. */
 const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
@@ -8551,14 +8562,35 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(sentMessages.uuid, uuid))
         .run();
     },
-    recordDelegateEvent: (event) =>
-      delegateEventOf(
-        db.insert(delegateEvents).values(event).returning().get()
-      ),
+    // A report's turn identity is its columns, which the turn queries join on.
+    recordDelegateEvent: ({ payload, ...event }) => {
+      const { resultId, completedAt, ...rest } = payload as {
+        completedAt?: string;
+        resultId?: string;
+      };
+      return delegateEventOf(
+        db
+          .insert(delegateEvents)
+          .values({
+            ...event,
+            payload: rest as DelegateEventPayload,
+            resultId: resultId ?? null,
+            completedAt: completedAt ?? null,
+          })
+          .returning()
+          .get()
+      );
+    },
     claimCompletedTurn: (instanceId, resultId, completedAt, recovered) => {
       const receivedAt = recovered ? undefined : new Date().toISOString();
+      // Each report's identity, its body left unread.
       const reports = db
-        .select()
+        .select({
+          requestId: delegateEvents.requestId,
+          resultId: delegateEvents.resultId,
+          completedAt: delegateEvents.completedAt,
+          createdAt: delegateEvents.createdAt,
+        })
         .from(delegateEvents)
         .where(
           and(
@@ -8568,13 +8600,12 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .all();
       const exact = reports.some(
-        ({ requestId, createdAt, payload }) =>
-          requestId === resultId ||
-          ("resultId" in payload && payload.resultId === resultId) ||
+        (report) =>
+          report.requestId === resultId ||
+          report.resultId === resultId ||
           (completedAt !== undefined &&
-            (("completedAt" in payload &&
-              payload.completedAt === completedAt) ||
-              createdAt.toISOString() === completedAt))
+            (report.completedAt === completedAt ||
+              report.createdAt.toISOString() === completedAt))
       );
       // An old report without a harness identity cannot prove a fresh completion.
       // Adopt that recovered identity silently, as directed; never guess by time proximity.
@@ -8582,7 +8613,7 @@ const make = async (path: string): Promise<DbShape> => {
         recovered &&
         reports.length > 0 &&
         reports.every(
-          ({ payload }) => !("resultId" in payload || "completedAt" in payload)
+          (report) => report.resultId === null && report.completedAt === null
         );
       const inserted = db
         .insert(completedTurns)
@@ -8615,7 +8646,7 @@ const make = async (path: string): Promise<DbShape> => {
           and(
             eq(delegateEvents.instanceId, completedTurns.instanceId),
             eq(delegateEvents.kind, "report"),
-            sql`json_extract(${delegateEvents.payload}, '$.resultId') = ${completedTurns.resultId}`
+            eq(delegateEvents.resultId, completedTurns.resultId)
           )
         )
         .where(eq(completedTurns.instanceId, instanceId))
