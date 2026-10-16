@@ -1,15 +1,13 @@
 <script lang="ts">
   /**
-   * FINDER BENCH (dev only): the finder's components on the real hub, as
-   * the finder spec (scripts/probe-kit/specs/web/finder.ts) drives them.
+   * FINDER BENCH (dev only): the finder's components on the real hub.
    * Find itself stands in the shell, the glass's Jump card (FinderCard); the
    * @ field stands here until the composer takes it. On a desk, Find hangs
    * as the glass's card under a 44px bar, right-aligned, `c-find-w` wide, the
    * page live under it; on a phone it is a sheet with the field at its foot.
    * A composer at the page's foot holds the @ field.
    *
-   * `window.__finder` is what the probe (scripts/probe-kit/specs/web/finder.ts)
-   * reads: what was opened, what was sent, and the state.
+   * `window.__finder` holds what was opened, what was sent, and the state.
    */
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
