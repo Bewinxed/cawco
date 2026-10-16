@@ -65,8 +65,10 @@
  *    second promote is a newer commit changing state.json.
  * 16. A canvas, once its screen drew its picture, promotes canvas.excalidraw,
  *    outline.md and picture.png.
- * 17. Outside a project the tool answers the refusal sentence and no project
- *    folder holds anything of it.
+ * 17. Outside a project the session is never listed the tool (hub
+ *    delegation-mcp.ts `PROJECT_ONLY`, 2edf20006): neither the hub's listing
+ *    nor any request the model got names it, artifact_create is listed, and
+ *    no project folder holds anything.
  */
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -84,9 +86,6 @@ const UPDATE = "mcp__cawco__artifact_update";
 const PROMOTE = "mcp__cawco__artifact_promote";
 /** The commit in artifact_promote's answer. */
 const ANSWERED_COMMIT = /"commit":"([0-9a-f]{40})"/;
-/** The refusal outside a project (artifacts/service.ts `NO_PROJECT`). */
-const NO_PROJECT =
-  "This session belongs to no project, so there is nowhere to promote to.";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 /** Anything the hub would tell the session of the person's responses, or the person's picks as words. */
 const TOLD =
@@ -555,7 +554,7 @@ const run = async (kit: Kit) => {
   );
 
   await fieldChecks({ kit, fleet, session, page, base, call, said });
-  await promoteChecks({ kit, fleet, base, call, callIn, heroId: id });
+  await promoteChecks({ kit, fleet, base, callIn, session });
 };
 
 /** A git command in `folder`; its output. */
@@ -573,16 +572,15 @@ const promoteChecks = async ({
   kit,
   fleet,
   base,
-  call,
   callIn,
-  heroId,
+  session,
 }: {
   base: string;
-  call: (tool: string, input: object) => Promise<string>;
   callIn: (on: string) => (tool: string, input: object) => Promise<string>;
   fleet: KitFleet;
-  heroId: string;
   kit: Kit;
+  /** Checks 1–14's session, in no project. */
+  session: string;
 }) => {
   const projects = join(dirname(fleet.env.CAWCO_DB_PATH ?? ""), "projects");
   /** Every project folder's `artifacts/` entries, by project. */
@@ -597,13 +595,21 @@ const promoteChecks = async ({
         )
       : [];
 
-  // 17. Outside a project: the refusal, and nothing written.
-  const refused = await call(PROMOTE, { id: heroId });
+  // 17. Outside a project the session is never listed the tool, so nothing is
+  // written. Every request so far is this session's: the project's is spawned below.
+  const listing = await fleet.api<{ tools: { name: string }[] }>(
+    `/api/delegation/tools?instanceId=${session}`
+  );
+  const listed = listing.tools.map((tool) => tool.name);
+  const offered = fleet.seen.filter((one) => one.toolNames.includes(PROMOTE));
   const strays = promotedAnywhere();
   kit.check(
-    "17: outside a project artifact_promote answers the refusal sentence and writes nothing",
-    refused.includes(NO_PROJECT) && strays.length === 0,
-    `${refused.slice(0, 300)}; promoted folders: ${strays.join(", ") || "none"}`
+    "17: outside a project artifact_promote is in neither the hub's listing nor any model request, artifact_create is, and nothing is promoted",
+    !listed.includes("artifact_promote") &&
+      listed.includes("artifact_create") &&
+      offered.length === 0 &&
+      strays.length === 0,
+    `listed promote ${listed.includes("artifact_promote")}, create ${listed.includes("artifact_create")}; requests offering promote: ${offered.length}; promoted folders: ${strays.join(", ") || "none"}`
   );
 
   // 15. A project session's page, with one pick and one pin.
