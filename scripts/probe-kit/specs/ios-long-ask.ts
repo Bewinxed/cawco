@@ -331,6 +331,12 @@ async function run(kit: Kit): Promise<void> {
   if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
     return;
   }
+  const liveAsk = process.env.PROBE_LIVE_ASK?.split("|");
+  if (liveAsk && liveAsk.length >= 4) {
+    const [hub, machineId, cwd, projectId] = liveAsk;
+    await askLive(kit, app, { hub, machineId, cwd, projectId });
+    return;
+  }
   // `PROBE_LIVE=<hub>|<session>`: the app opened on a real session of a
   // running hub, read and never answered; its main thread sampled at the
   // transcript's foot and after scrolling back through it.
@@ -809,6 +815,395 @@ async function run(kit: Kit): Promise<void> {
   } finally {
     stream?.kill();
     await sim?.release();
+  }
+}
+
+/** A running hub, the machine and folder a probe session runs in there, and its project. */
+interface LiveHub {
+  cwd: string;
+  hub: string;
+  machineId: string;
+  projectId: string;
+}
+
+const HTTP_SCHEME = /^http/;
+
+/** What the Deny step came to, in words. */
+const denyWords = (denied: boolean, cleared: boolean): string => {
+  if (!denied) {
+    return "no Deny to tap";
+  }
+  return cleared
+    ? "denied; the hub's pending list cleared"
+    : "tapped; still pending";
+};
+
+/** One message to a running hub's dashboard socket (trusted mode: no pairing). */
+const dashboardSend = async (hub: string, message: object): Promise<void> => {
+  const ws = new WebSocket(`${hub.replace(HTTP_SCHEME, "ws")}/ws/dashboard`);
+  await new Promise<void>((open, fail) => {
+    ws.onopen = () => open();
+    ws.onerror = () =>
+      fail(new Error(`the dashboard socket at ${hub} refused`));
+  });
+  ws.send(JSON.stringify(message));
+  await pause(500);
+  ws.close();
+};
+
+/** What the probe session is told: the one call, word for word, to be denied. */
+const PROBE_PROMPT = [
+  "This is a UI probe of the CawCo app's permission card. Make exactly one tool call: the Bash tool, with",
+  `description "${INPUT.description}", timeout ${INPUT.timeout}, and command set to exactly the text between the two marker lines below.`,
+  "Do not change the command, do not run anything else, and do not explain. The call will be denied.",
+  "<<<COMMAND",
+  INPUT.command,
+  "COMMAND>>>",
+].join("\n");
+
+/**
+ * `PROBE_LIVE_ASK=<hub>|<machine>|<cwd>|<project>`: the owner's case on his
+ * own hub, with the app as TestFlight builds it (`PROBE_IOS_APP` names the
+ * Release simulator build). A probe session of this spec's own, in default
+ * mode in that project, asks for the long call; the app is measured with
+ * that ask raised on iOS 27.0 (the owner's phone and OS: at rest from
+ * launch, as nothing taps there from a workspace) and on iOS 18.5, reached
+ * through Needs you, the drawer and the ask's notification, then its whole
+ * command opened and its Deny tapped. Only the probe's own ask is touched,
+ * found by its ids; the probe is stopped and archived at the end.
+ */
+async function askLive(kit: Kit, app: string, live: LiveHub): Promise<void> {
+  const instanceId = crypto.randomUUID();
+  const title = "Probe: long ask (ios-long-ask)";
+  const listed = async (): Promise<
+    (InstanceRow & { status?: string }) | undefined
+  > => {
+    const rows = (await (await fetch(`${live.hub}/api/instances`)).json()) as
+      | (InstanceRow & { status?: string })[]
+      | { instances?: (InstanceRow & { status?: string })[] };
+    const all = Array.isArray(rows) ? rows : (rows.instances ?? []);
+    return all.find((row) => (row.instanceId ?? row.id) === instanceId);
+  };
+  await dashboardSend(live.hub, {
+    verb: "spawn",
+    machineId: live.machineId,
+    instanceId,
+    requestId: crypto.randomUUID(),
+    payload: {
+      instanceId,
+      cwd: live.cwd,
+      harness: "claude",
+      title,
+      permissionMode: "default",
+      projectId: live.projectId,
+    },
+  });
+  try {
+    const running = await until(
+      "the probe running",
+      listed,
+      (row) => row?.status === "running",
+      180_000
+    ).catch(() => undefined);
+    if (
+      !kit.check(
+        "live: the probe session runs on the hub, in default mode, in its project",
+        !!running,
+        `${instanceId} ${running?.status ?? "not listed"}`
+      )
+    ) {
+      return;
+    }
+    const uuid = crypto.randomUUID();
+    await dashboardSend(live.hub, {
+      type: "command",
+      commandId: crypto.randomUUID(),
+      kind: "send",
+      machineId: live.machineId,
+      sessionId: instanceId,
+      payload: {
+        instanceId,
+        message: {
+          type: "user",
+          uuid,
+          message: { role: "user", content: PROBE_PROMPT },
+          parent_tool_use_id: null,
+          origin: { kind: "human" },
+        },
+      },
+    });
+    const ours = async () => {
+      const all = (await (await fetch(`${live.hub}/api/pending`)).json()) as {
+        instanceId?: string;
+        requestId?: string;
+      }[];
+      return all.find(
+        (entry) =>
+          entry.instanceId === instanceId &&
+          JSON.stringify(entry).includes("lost-scan")
+      );
+    };
+    const ask = await until(
+      "the probe's long ask",
+      ours,
+      Boolean,
+      240_000
+    ).catch(() => undefined);
+    if (
+      !kit.check(
+        "live: the probe asks for the long call, waiting on its card",
+        !!ask,
+        ask?.requestId ?? "no ask from the probe"
+      )
+    ) {
+      return;
+    }
+    for (const which of ["27", "18"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one simulator after the other
+      await onSimulator(kit, app, live, which, ours);
+    }
+  } finally {
+    // The probe stopped (its ask goes with it, if still standing) and archived.
+    await dashboardSend(live.hub, {
+      verb: "stop",
+      machineId: live.machineId,
+      instanceId,
+      requestId: crypto.randomUUID(),
+    }).catch(() => undefined);
+    await until(
+      "the probe stopped",
+      listed,
+      (row) => row?.status !== "running" && row?.status !== "starting",
+      60_000
+    ).catch(() => undefined);
+    const archived = await fetch(`${live.hub}/api/seen`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: [instanceId], kind: "archive" }),
+    });
+    kit.check(
+      "live: the probe is stopped and archived",
+      archived.ok,
+      `${archived.status} ${(await archived.text()).slice(0, 160)}`
+    );
+  }
+}
+
+/** The Release app on one simulator against the live hub, the probe's ask raised; on iOS 18.5 reached each way, opened and denied. */
+async function onSimulator(
+  kit: Kit,
+  app: string,
+  live: LiveHub,
+  which: "27" | "18",
+  ours: () => Promise<{ instanceId?: string; requestId?: string } | undefined>
+): Promise<void> {
+  const tag = which === "27" ? "iOS 27" : "iOS 18.5";
+  const sim = await macSim(
+    which === "27"
+      ? {
+          runtime: "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+          device: "iPhone 17 Pro Max",
+        }
+      : {
+          runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+          device: "iPhone 16 Pro",
+        }
+  );
+  const { udid } = sim;
+  try {
+    await sh(`xcrun simctl bootstatus ${udid} -b >/dev/null`);
+    await sh(`xcrun simctl install ${udid} "${app}"`);
+    const pid = async (): Promise<string | undefined> => {
+      const listed = await sh(
+        `xcrun simctl spawn ${udid} launchctl list | grep 'UIKitApplication:dev.cawco.app' || true`
+      );
+      const [id] = listed.trim().split(SPACES);
+      return id && id !== "-" ? id : undefined;
+    };
+    const launch = async () => {
+      await sh(
+        `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -cawco-hub-url ${live.hub} >/dev/null`
+      );
+      return await until("the app's pid", pid, Boolean, 30_000).catch(
+        () => undefined
+      );
+    };
+    const rest = async (process: string, name: string) => {
+      const file = join(kit.out, `release-${which}-${name}.sample.txt`);
+      await sh(
+        `sample ${process} ${REST_S} -file "${file}" >/dev/null 2>&1 || true`
+      );
+      try {
+        return mainThread(readFileSync(file, "utf8"));
+      } catch {
+        return { share: Number.NaN, frames: "no sample written" };
+      }
+    };
+    const labels = async (): Promise<
+      {
+        label: string;
+        frame?: { x: number; y: number; width: number; height: number };
+      }[]
+    > => {
+      const out: {
+        label: string;
+        frame?: { x: number; y: number; width: number; height: number };
+      }[] = [];
+      const walk = (node: Record<string, unknown>) => {
+        const text = node.AXLabel ?? node.label;
+        if (typeof text === "string" && text) {
+          out.push({
+            label: text,
+            frame: node.frame as (typeof out)[number]["frame"],
+          });
+        }
+        for (const kid of (node.children as
+          Record<string, unknown>[] | undefined) ?? []) {
+          walk(kid);
+        }
+      };
+      const roots = JSON.parse(
+        await sh(`${AXE} describe-ui --udid ${udid}`)
+      ) as Record<string, unknown>[];
+      for (const root of roots) {
+        walk(root);
+      }
+      return out;
+    };
+    let screens = 0;
+    const tap = async (test: (label: string) => boolean): Promise<boolean> => {
+      const all = await labels();
+      const frame = all.find(
+        (node) => test(node.label) && (node.frame?.width ?? 0) > 0
+      )?.frame;
+      if (!frame) {
+        screens += 1;
+        writeFileSync(
+          join(kit.out, `release-${which}-screen-${screens}.txt`),
+          all.map((node) => node.label).join("\n")
+        );
+        return false;
+      }
+      await sh(
+        `${AXE} tap -x ${Math.round(frame.x + frame.width / 2)} -y ${Math.round(frame.y + frame.height / 2)} --udid ${udid}`
+      );
+      return true;
+    };
+    const report = (
+      name: string,
+      reached: boolean,
+      at: { share: number; frames: string }
+    ) =>
+      kit.check(
+        `live ${tag} (Release): ${name}, the main thread busy under ${REST_SHARE * 100}%`,
+        reached && at.share < REST_SHARE,
+        `${reached ? "" : "not reached; "}main thread busy ${(at.share * 100).toFixed(1)}%${at.frames ? `: ${at.frames}` : ""}`
+      );
+    let id = await launch();
+    await pause(20_000);
+    if (!id) {
+      kit.check(`live ${tag} (Release): the app launches`, false, "no pid");
+      return;
+    }
+    report(
+      "from launch, with the probe's ask raised on the hub",
+      true,
+      await rest(id, "launch")
+    );
+    if (which === "27") {
+      return;
+    }
+    // A first launch asks to send notifications: allowed, as the owner did.
+    await tap((label) => label === "Allow");
+    await pause(2000);
+    // Needs you, the list that draws the ask's command on a line; then the probe's own row.
+    const needs = await tap((label) => label.startsWith("Needs you"));
+    await pause(3000);
+    report("Needs you lists the asks", needs, await rest(id, "needs-you"));
+    const row =
+      needs && (await tap((label) => label.includes(INPUT.description)));
+    await pause(3000);
+    report(
+      "the probe's card from Needs you",
+      row,
+      await rest(id, "card-from-needs-you")
+    );
+    // The drawer: the project, the probe's row under it.
+    id = (await launch()) ?? id;
+    await pause(8000);
+    let drawer = await tap((label) => label === "Open navigation");
+    if (drawer) {
+      await pause(2000);
+      drawer = await tap((label) => label.includes("Probe: long ask"));
+    }
+    await pause(3000);
+    report(
+      "the probe's card from the drawer's session row",
+      drawer,
+      await rest(id, "card-from-drawer")
+    );
+    // The ask's notification, the app in the background: its banner tapped.
+    const ask = await ours();
+    await sh(`xcrun simctl launch ${udid} com.apple.Preferences >/dev/null`);
+    await pause(2000);
+    const payload = join(kit.out, "release-push.json");
+    writeFileSync(
+      payload,
+      JSON.stringify({
+        aps: {
+          alert: { title: "Probe: long ask", body: INPUT.description },
+          sound: "default",
+        },
+        cawco: {
+          kind: "ask",
+          instanceId: ask?.instanceId,
+          requestId: ask?.requestId,
+        },
+      })
+    );
+    await sh(`xcrun simctl push ${udid} dev.cawco.app "${payload}" >/dev/null`);
+    await pause(2500);
+    const banner = await tap(
+      (label) =>
+        label.includes(INPUT.description) || label.includes("Probe: long ask")
+    );
+    await pause(5000);
+    id = (await pid()) ?? id;
+    report(
+      "the probe's card from its notification",
+      banner,
+      await rest(id, "card-from-notification")
+    );
+    // The whole command opened, then Deny.
+    const opened = await tap((label) => label === "Show the whole command");
+    await pause(2000);
+    report(
+      "the probe's whole command opened",
+      opened,
+      await rest(id, "card-opened")
+    );
+    const denied = await tap((label) => label === "Deny");
+    const cleared =
+      denied &&
+      !!(await until(
+        "the probe's ask answered",
+        async () => ((await ours()) ? undefined : true),
+        Boolean,
+        30_000
+      ).catch(() => undefined));
+    kit.check(
+      `live ${tag} (Release): Deny, tapped, answers the probe's ask`,
+      cleared,
+      denyWords(denied, cleared)
+    );
+    const after = await pid();
+    kit.check(
+      `live ${tag} (Release): the app stays one process`,
+      !!after,
+      `pid ${after ?? "none"}`
+    );
+  } finally {
+    await sim.release();
   }
 }
 
