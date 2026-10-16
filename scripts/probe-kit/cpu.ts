@@ -225,7 +225,10 @@ async function webProcess(page: Page): Promise<number> {
   const most = Math.max(0, ...rise);
   const at = rise.indexOf(most);
   const others = rise.filter((_, i) => i !== at);
-  if (most < IDENTIFY_MS / 3 || others.some((one) => one > most / 4)) {
+  // The task runs to a wall-clock end, so a loaded machine gives its thread
+  // a share of it (81ms of 300 with every core twice over): what names the
+  // process is that it ran far more of it than any other, not how much.
+  if (most < IDENTIFY_MS / 10 || others.some((one) => one > most / 4)) {
     throw new Error(
       `no one process ran the page's ${IDENTIFY_MS}ms task: ${candidates
         .map((pid, i) => `${pid} ${(rise[i] as number).toFixed(0)}ms`)
