@@ -33,6 +33,8 @@ import type { Page } from "playwright-core";
 export const SCROLLER = '[aria-label="Session transcript"]';
 /** A trace's node name's class attribute, cut to its first class. */
 const CLASS_ATTRIBUTE = / class='([^' ]*)[^']*'/;
+/** A style invalidation that restyles a container's whole subtree. */
+const SUBTREE = /subtree/i;
 
 export interface Watched {
   anchor: string | null;
@@ -664,7 +666,7 @@ export async function traceMain(
   const restyleAsks = [
     ...trackedAs("StyleRecalcInvalidationTracking"),
     ...trackedAs("StyleInvalidatorInvalidationTracking").filter((one) =>
-      /subtree/i.test(one.args?.data?.reason ?? "")
+      SUBTREE.test(one.args?.data?.reason ?? "")
     ),
   ];
   const relayoutAsks = trackedAs("LayoutInvalidationTracking");
@@ -684,7 +686,7 @@ export async function traceMain(
       }
     }
     // A whole subtree asked for once outweighs an element asked for often.
-    const whole = (key: string) => (/subtree/i.test(key) ? 1 : 0);
+    const whole = (key: string) => (SUBTREE.test(key) ? 1 : 0);
     return [...counted]
       .sort((a, b) => whole(b[0]) - whole(a[0]) || b[1] - a[1])
       .slice(0, 8);
