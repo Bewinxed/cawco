@@ -45,11 +45,7 @@
  * stage: it is every task whose stage is of kind `you`, worked out on read.
  */
 
-import {
-  STAGE_KINDS as KINDS,
-  type StageKind,
-  type StarterGlyph,
-} from "@cawco/core";
+import { STAGE_KINDS as KINDS, type StageKind } from "@cawco/core";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind), core's: a view binds to them too. */
 export type { StageKind } from "@cawco/core";
@@ -706,55 +702,6 @@ views
   canvas     by stage`,
     },
   };
-
-// --- routine starters ----------------------------------------------------------------
-
-/**
- * A routine an empty Routines page offers to ask Caw for: the sentence, and
- * the glyph for its kind of work. A project's own starters are written for
- * it (project-starters.ts), not listed here.
- */
-export interface Starter {
-  glyph: StarterGlyph;
-  text: string;
-}
-
-/** A code project's routines to ask Caw for, each with its schedule or event in its words. */
-const CODE_ROUTINE_STARTERS: readonly Starter[] = [
-  {
-    glyph: "triage",
-    text: "Every weekday at 09:00, triage new issues into Ready",
-  },
-  { glyph: "bug", text: "When a pull request merges, run the smoke tests" },
-  {
-    glyph: "refresh",
-    text: "Every Monday, bump dependencies and open one pull request",
-  },
-  {
-    glyph: "brief",
-    text: "Every evening, write the day's merges into the changelog",
-  },
-];
-
-/** Every other project's routines to ask Caw for. */
-const GENERAL_ROUTINE_STARTERS: readonly Starter[] = [
-  { glyph: "routine", text: "Suggest routines that fit this project" },
-  {
-    glyph: "brief",
-    text: "Every morning at 08:30, sum up yesterday's sessions",
-  },
-  {
-    glyph: "calendar",
-    text: "Every Friday at 16:00, write up the week's work",
-  },
-  { glyph: "search", text: "Every Monday, list what changed in the folder" },
-];
-
-/** What an empty Routines page offers to ask Caw for, for a project made from `template`. */
-export const routineStartersFor = (
-  template: StagesTemplate | null | undefined
-): readonly Starter[] =>
-  template === "code" ? CODE_ROUTINE_STARTERS : GENERAL_ROUTINE_STARTERS;
 
 /** A template as the stages.md it writes. */
 export const templateText = (name: StagesTemplate): string => {

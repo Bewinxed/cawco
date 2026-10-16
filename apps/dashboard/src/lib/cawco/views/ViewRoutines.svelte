@@ -33,9 +33,9 @@
    * On a narrow ledger Last and Next fold into the schedule's line.
    *
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
-   * starters for the project's kind of work over the session Composer to
-   * Caw (words alone), whose words open a thread with him. A starter puts
-   * its words in the composer, unsent.
+   * starters written for the project from what it repeats or waits on over
+   * the session Composer to Caw (words alone), whose words open a thread
+   * with him. A starter puts its words in the composer, unsent.
    *
    * The page is the hub's (routines-api): read on arrival and on every
    * reconnect, again when the project's threads move (a run notes its slot
@@ -43,7 +43,10 @@
    * tab comes back, after each of its own row actions, and every few
    * seconds while a run goes.
    */
-  import type { Starter } from "#lib/cawco/project-tasks.js";
+  import {
+    type ProjectStarter,
+    tellStarterOutcome,
+  } from "#lib/cawco/project-tasks.js";
   import ActionsTable, {
     waitsOnYou,
   } from "#lib/cawco/routines/ActionsTable.svelte";
@@ -98,8 +101,11 @@
   }: {
     /** The project: its id and its name. */
     project: { id: string; name: string };
-    /** What the empty page offers to ask Caw for (the hub's, for the project's template). */
-    starters: Starter[];
+    /**
+     * What the empty page offers to ask Caw for: what the project repeats
+     * or waits on, written for it (hub project-starters.ts), in its order.
+     */
+    starters: ProjectStarter[];
     /** Caw can start: the empty page's composer and New routine reach him. */
     canTalk: boolean;
     /** Why Caw can't start, said on the empty page instead. */
@@ -522,6 +528,12 @@
     askAgain = false;
     try {
       const said = await startThread(project.id, text, id);
+      // A starter pressed into the field went, as it stood or changed:
+      // Jev's steering (hub project-starters.ts), told without a wait.
+      const pressed = askDraft.takePressed(text);
+      if (pressed) {
+        tellStarterOutcome(project.id, pressed).catch(() => undefined);
+      }
       await goto(threadHref(said.thread.id));
     } catch (error) {
       askDraft.restore(text);
@@ -533,8 +545,7 @@
   }
   /** A starter: its words in the composer, the caret after them; nothing is sent. */
   function pick(text: string) {
-    askDraft.text = text;
-    askDraft.focusWanted = true;
+    askDraft.press(text, "routines");
   }
   /** New routine: the composer over the ledger. */
   let asking = $state(false);

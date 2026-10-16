@@ -28,6 +28,7 @@ import {
   type CawView,
   type ProjectCap,
   questionsOf,
+  type StarterPlace,
 } from "@cawco/core";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
@@ -130,22 +131,12 @@ export class CawLead {
 
   /**
    * A starter's words into his panel's composer and the panel open, the
-   * caret after them: nothing is sent (The Empty Starts Work Rule).
+   * caret after them: nothing is sent (The Empty Starts Work Rule). The
+   * send after it tells the hub whether its words went as they stood
+   * (project-starters.ts outcomes), under the place it stood in.
    */
-  ask(text: string): void {
-    this.draft.text = text;
-    this.draft.pressed = null;
-    this.draft.focusWanted = true;
-    this.open = true;
-  }
-
-  /**
-   * One of the project's starters into his panel's composer, as {@link ask}
-   * does; the send after it tells the hub whether its words went as they
-   * stood (project-starters.ts outcomes).
-   */
-  askStarter(text: string): void {
-    this.draft.press(text);
+  ask(text: string, place: StarterPlace): void {
+    this.draft.press(text, place);
     this.open = true;
   }
 

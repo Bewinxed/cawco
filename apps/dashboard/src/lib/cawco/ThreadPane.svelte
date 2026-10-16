@@ -568,7 +568,7 @@
   /** The project's starters its stages carried, read for the hero. */
   let startersRead = $state<ProjectStarter[] | undefined>(undefined);
   /** The project's starters, live: a new set the hub writes replaces the read one. */
-  const starters = $derived(cawco.startersOf(projectId, startersRead));
+  const starters = $derived(cawco.startersOf(projectId, "board", startersRead));
   $effect(() => {
     const pid = projectId;
     if (!(hero && pid && cawco.status === "connected")) {
@@ -590,7 +590,7 @@
   );
   /** A starter's sentence into the composer, the caret after it; nothing is sent. */
   function pick(text: string) {
-    draft.press(text);
+    draft.press(text, "board");
   }
   /**
    * The hero's Caw departs as it goes, and his seat on the composer lands
@@ -616,9 +616,7 @@
       // Jev's steering, and nothing here waits on it.
       const pressed = draft.takePressed(text);
       if (pressed) {
-        tellStarterOutcome(projectId, pressed.text, pressed.outcome).catch(
-          () => undefined
-        );
+        tellStarterOutcome(projectId, pressed).catch(() => undefined);
       }
       if (!threadId) {
         if (docked) {

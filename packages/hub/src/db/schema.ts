@@ -51,6 +51,7 @@ import type {
   SkillFile,
   StarterGlyph,
   StarterOutcome,
+  StarterPlace,
   StarterSourceKind,
   StoppedCommands,
   StrategyChoice,
@@ -3102,34 +3103,46 @@ export const designOffers = sqliteTable("design_offers", {
 });
 
 /**
- * A project's starters as they were last written (project-starters.ts): one
- * row per project, kept even when the set is empty, so an unchanged project
- * (`input_hash`) and a set's age (`generated_at`) are known without one.
+ * A project's starters for one place (core `StarterPlace`: the board, the
+ * Routines page, the Decisions tab) as they were last written
+ * (project-starters.ts): one row per project and place, kept even when the
+ * set is empty, so an unchanged project (`input_hash`) and a set's age
+ * (`generated_at`) are known without one.
  */
-export const projectStarterSets = sqliteTable("project_starter_sets", {
-  projectId: text("project_id")
-    .primaryKey()
-    .references(() => projects.id, { onDelete: "cascade" }),
-  generatedAt: timestamp("generated_at").notNull(),
-  /** The hash of the inputs Jev was asked over. */
-  inputHash: text("input_hash").notNull(),
-  /** What asked for it: `project created`, `task moved`, `turn ended`, `commit landed`, `attempt failed`, `routine failed`, `stale`. */
-  trigger: text("trigger").notNull(),
-});
-
-/** One starter of a project's set, at its place in the set's order. */
-export const projectStarters = sqliteTable(
-  "project_starters",
+export const projectStarterSets = sqliteTable(
+  "project_starter_sets",
   {
     projectId: text("project_id")
       .notNull()
-      .references(() => projectStarterSets.projectId, { onDelete: "cascade" }),
+      .references(() => projects.id, { onDelete: "cascade" }),
+    place: text("place").$type<StarterPlace>().notNull(),
+    generatedAt: timestamp("generated_at").notNull(),
+    /** The hash of the inputs Jev was asked over. */
+    inputHash: text("input_hash").notNull(),
+    /** What asked for it: `project created`, `task moved`, `turn ended`, `commit landed`, `attempt failed`, `routine failed`, `routine made`, `event received`, `stale`. */
+    trigger: text("trigger").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.place] })]
+);
+
+/** One starter of a project's set for a place, at its position in the set's order. */
+export const projectStarters = sqliteTable(
+  "project_starters",
+  {
+    projectId: text("project_id").notNull(),
+    place: text("place").$type<StarterPlace>().notNull(),
     position: integer("position").notNull(),
     text: text("text").notNull(),
     glyph: text("glyph").$type<StarterGlyph>().notNull(),
     reason: text("reason").notNull(),
   },
-  (table) => [primaryKey({ columns: [table.projectId, table.position] })]
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.place, table.position] }),
+    foreignKey({
+      columns: [table.projectId, table.place],
+      foreignColumns: [projectStarterSets.projectId, projectStarterSets.place],
+    }).onDelete("cascade"),
+  ]
 );
 
 /** What one starter comes from, in its order. */
@@ -3137,16 +3150,23 @@ export const projectStarterSources = sqliteTable(
   "project_starter_sources",
   {
     projectId: text("project_id").notNull(),
+    place: text("place").$type<StarterPlace>().notNull(),
     position: integer("position").notNull(),
     seq: integer("seq").notNull(),
     kind: text("kind").$type<StarterSourceKind>().notNull(),
     ref: text("ref").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.projectId, table.position, table.seq] }),
+    primaryKey({
+      columns: [table.projectId, table.place, table.position, table.seq],
+    }),
     foreignKey({
-      columns: [table.projectId, table.position],
-      foreignColumns: [projectStarters.projectId, projectStarters.position],
+      columns: [table.projectId, table.place, table.position],
+      foreignColumns: [
+        projectStarters.projectId,
+        projectStarters.place,
+        projectStarters.position,
+      ],
     }).onDelete("cascade"),
   ]
 );
@@ -3163,6 +3183,8 @@ export const starterOutcomes = sqliteTable(
     projectId: text("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    /** The place the starter stood in. */
+    place: text("place").$type<StarterPlace>().notNull(),
     text: text("text").notNull(),
     outcome: text("outcome").$type<StarterOutcome>().notNull(),
     at: timestamp("at").notNull(),

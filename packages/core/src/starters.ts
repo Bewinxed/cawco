@@ -35,6 +35,15 @@ export const STARTER_GLYPHS = [
 ] as const;
 export type StarterGlyph = (typeof STARTER_GLYPHS)[number];
 
+/**
+ * Where a project's starters stand, each place its own set: the empty board
+ * and Caw's panel hero (`board`), the empty Routines page (`routines`:
+ * routines to ask Caw for), the empty Decisions tab (`decisions`: choices
+ * to lay out as a decision page).
+ */
+export const STARTER_PLACES = ["board", "routines", "decisions"] as const;
+export type StarterPlace = (typeof STARTER_PLACES)[number];
+
 /** What in a project a starter comes from. */
 export const STARTER_SOURCE_KINDS = [
   "task",
@@ -42,10 +51,15 @@ export const STARTER_SOURCE_KINDS = [
   "path",
   "commit",
   "routine",
+  "event",
 ] as const;
 export type StarterSourceKind = (typeof STARTER_SOURCE_KINDS)[number];
 
-/** One thing a starter comes from: a task id, a thread id, a folder path, a commit sha, a routine id. */
+/**
+ * One thing a starter comes from: a task id, a thread id, a folder path, a
+ * commit sha, a routine id, or an event source and kind (`github:acme/site
+ * issue.opened`).
+ */
 export interface StarterSource {
   kind: StarterSourceKind;
   ref: string;
@@ -69,12 +83,14 @@ export interface ProjectStarter {
 export type StarterOutcome = "picked" | "edited" | "ignored";
 
 /**
- * Hub-originated: a project's starters were written again; the whole set,
- * in its order (empty when none is offered, Jev off included).
+ * Hub-originated: a project's starters for one place were written again;
+ * the whole set, in its order (empty when none is offered, Jev off
+ * included).
  */
 export interface StartersChangedFrame {
   instanceId?: undefined;
   kind: "starters.changed";
+  place: StarterPlace;
   projectId: string;
   starters: ProjectStarter[];
 }

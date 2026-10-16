@@ -1,10 +1,14 @@
 /**
- * A project's starters: what its empty board (StarterCards) and Caw's panel
- * hero (CawStarters) offer to say to him, written for that project from
- * what it holds now. No list of starters exists; each is one of the asks
- * that fit a thing in the project (a task, a thread, a failed routine, a
- * landed commit, the project itself), chosen by Jev (jev-placement.ts
- * `jevStarters`), with the reason it is offered and what it comes from.
+ * A project's starters, in three places (core `StarterPlace`): what its
+ * empty board (StarterCards) and Caw's panel hero (CawStarters) offer to say
+ * to him, what its empty Routines page offers as routines, and what its
+ * empty Decisions tab offers to lay out as a decision page. Each is written
+ * for that project from what it holds now. No list of starters exists; each
+ * is one of the asks that fit a thing in the project (starter-asks.ts: a
+ * task, a thread, a failure, a landed commit, a task kind filed often, an
+ * event source no routine takes, a draft view, the project itself), chosen
+ * by Jev (jev-placement.ts `jevStarters`, every place in one call), with the
+ * reason it is offered and what it comes from.
  *
  * The pattern is pi-prompt-suggester's (https://github.com/guwidoe/pi-prompt-suggester,
  * vision.md): the project's curated words (AGENTS.md, knowledge/) are the
@@ -20,7 +24,8 @@
  * - asked by a project being made, a task filed or moved, a turn ending in
  *   one of its threads (Caw's answer landing), a commit landing on its
  *   repository (an attempt landing on its base branch), an attempt or a
- *   routine failing;
+ *   routine failing, a session making one of its routines, an event from
+ *   outside landing for it;
  * - after {@link QUIET_MS} with no other ask for the project, so a burst
  *   of moves asks once;
  * - at most once per {@link GAP_MS} per project: a later ask waits its turn;
@@ -41,6 +46,8 @@ import {
   type CommandResult,
   type ProjectStarter,
   readEnv,
+  STARTER_PLACES,
+  type StarterPlace,
   type StartersChangedFrame,
 } from "@cawco/core";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -48,14 +55,7 @@ import { Elysia, t } from "elysia";
 import type { DbShape, WorkItemRow } from "./db";
 import { designShaped } from "./design-offers";
 import { jevAccess } from "./jev";
-import {
-  boundStarterInputs,
-  JevFailed,
-  jevStarters,
-  type StarterInputs,
-  type StarterTask,
-  startersOff,
-} from "./jev-placement";
+import { JevFailed, jevStarters, startersOff } from "./jev-placement";
 import { AGENTS_FILE, fileOr, KNOWLEDGE_DIR } from "./memory";
 import {
   FolderRefusal,
@@ -63,6 +63,13 @@ import {
   projectRoot,
   refused,
 } from "./project-folder";
+import {
+  boundStarterInputs,
+  STARTER_OFTEN,
+  STARTER_RECENT_DAYS,
+  type StarterInputs,
+  type StarterTask,
+} from "./starter-asks";
 import type { TaskEvent, TaskSummary, Tasks } from "./tasks";
 
 const MINUTE_MS = 60_000;
@@ -93,6 +100,8 @@ export const STALE_MS = DAY_MS;
 const READ_MS = 10_000;
 /** `origin/main` as the branch it names. */
 const ORIGIN = /^origin\//;
+/** The newest events read for "an event source with no routine". Our own call: a fortnight's polls of a busy repository. */
+const UNROUTED_READ = 200;
 
 /** What asks for a project's starters, as its set and its log line name it. */
 export type StartersTrigger =
@@ -102,7 +111,13 @@ export type StartersTrigger =
   | "commit landed"
   | "attempt failed"
   | "routine failed"
+  | "routine made"
+  | "event received"
   | "stale";
+
+/** Where a project's views Caw drafted wait (views.ts `DRAFTS`). */
+const DRAFTS_DIR = "views/drafts";
+const OUI = /\.oui$/;
 
 export interface ProjectStartersDeps {
   /** Every open dashboard hears a project's new set. */
@@ -185,9 +200,14 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     };
   };
 
-  const knowledgeNames = async (projectId: string): Promise<string[]> => {
+  /** The files under a folder of the project's, by path; none when it has no such folder. */
+  const filesIn = async (
+    projectId: string,
+    dir: string,
+    recursive: boolean
+  ): Promise<string[]> => {
     try {
-      const listing = await listFolder(projectId, KNOWLEDGE_DIR, true);
+      const listing = await listFolder(projectId, dir, recursive);
       return listing.entries
         .filter((entry) => entry.kind === "file")
         .map((entry) => entry.path);
@@ -199,16 +219,87 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     }
   };
 
+  /**
+   * Task kinds filed often: each task made in the last
+   * {@link STARTER_RECENT_DAYS} counted under its type, else its first
+   * label; the kinds filed {@link STARTER_OFTEN} times or more, most first,
+   * each with its newest tasks.
+   */
+  const kindsFiledOften = (
+    all: TaskSummary[],
+    now: number
+  ): StarterInputs["recentKinds"] => {
+    const since = now - STARTER_RECENT_DAYS * DAY_MS;
+    const byKind = new Map<string, TaskSummary[]>();
+    for (const task of all) {
+      const kind = task.type ?? task.labels[0];
+      if (kind && task.createdAt >= since) {
+        byKind.set(kind, [...(byKind.get(kind) ?? []), task]);
+      }
+    }
+    return [...byKind]
+      .filter(([, filed]) => filed.length >= STARTER_OFTEN)
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([name, filed]) => ({
+        name,
+        count: filed.length,
+        tasks: filed
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .map((task) => task.id),
+      }));
+  };
+
+  /**
+   * Event sources whose events in the last {@link STARTER_RECENT_DAYS}
+   * reached no routine (stored only, or handed to the lead), by source and
+   * kind, most first.
+   */
+  const unroutedEvents = (
+    projectId: string,
+    now: number
+  ): StarterInputs["unrouted"] => {
+    const since = now - STARTER_RECENT_DAYS * DAY_MS;
+    const routineIds = new Set(
+      db.routines.list(projectId).map((routine) => routine.id)
+    );
+    const counts = new Map<
+      string,
+      { kind: string; source: string; n: number }
+    >();
+    for (const event of db.ingress.events(projectId, UNROUTED_READ)) {
+      if (
+        event.receivedAt.getTime() < since ||
+        (event.routedTo !== null && routineIds.has(event.routedTo))
+      ) {
+        continue;
+      }
+      const key = `${event.source} ${event.kind}`;
+      const held = counts.get(key) ?? {
+        source: event.source,
+        kind: event.kind,
+        n: 0,
+      };
+      held.n += 1;
+      counts.set(key, held);
+    }
+    return [...counts.values()]
+      .sort((a, b) => b.n - a.n)
+      .map(({ source, kind, n }) => ({ source, kind, count: n }));
+  };
+
   /** What the project holds now, bounded. */
   const gather = async (projectId: string): Promise<StarterInputs> => {
     const project = db.project(projectId);
     const template = project?.template ?? null;
-    const [{ tasks: all }, agents, knowledge, repo] = await Promise.all([
-      tasks.list(projectId),
-      fileOr(projectId, AGENTS_FILE),
-      knowledgeNames(projectId),
-      repository(projectId),
-    ]);
+    const [{ tasks: all }, agents, knowledge, drafts, repo] = await Promise.all(
+      [
+        tasks.list(projectId),
+        fileOr(projectId, AGENTS_FILE),
+        filesIn(projectId, KNOWLEDGE_DIR, true),
+        filesIn(projectId, DRAFTS_DIR, false),
+        repository(projectId),
+      ]
+    );
     const now = Date.now();
     const open = all
       .filter((task) => task.kind !== null && OPEN_KINDS.has(task.kind))
@@ -271,15 +362,33 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       failures: [...routineFailures, ...attemptFailures]
         .sort((a, b) => b.at - a.at)
         .map(({ at: _at, ...failure }) => failure),
+      recentKinds: kindsFiledOften(all, now),
+      unrouted: unroutedEvents(projectId, now),
+      drafts: drafts.filter((path) => OUI.test(path)),
+      routines: db.routines
+        .list(projectId)
+        .map((routine) => ({ id: routine.id, name: routine.name })),
       shown: db.starters.outcomes(projectId, 10).map((each) => ({
+        place: each.place,
         text: each.text,
         outcome: each.outcome,
       })),
     });
   };
 
-  const publish = (projectId: string, starters: ProjectStarter[]) =>
-    deps.broadcast({ kind: "starters.changed", projectId, starters });
+  const publish = (
+    projectId: string,
+    place: StarterPlace,
+    starters: ProjectStarter[]
+  ) => deps.broadcast({ kind: "starters.changed", projectId, place, starters });
+
+  /** The project's sets as they stand, each place's, when every place has one. */
+  const storedSets = (projectId: string) => {
+    const sets = STARTER_PLACES.map((place) =>
+      db.starters.set(projectId, place)
+    );
+    return sets.every((set) => set !== undefined) ? sets : undefined;
+  };
 
   /** Writes the project's set now: Jev asked over what it holds, unless that is what the stored set was asked over. */
   const write = async (
@@ -293,16 +402,18 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     const access = jevAccess(db);
     if (!access) {
       startersOff(projectId);
-      publish(projectId, []);
+      for (const place of STARTER_PLACES) {
+        publish(projectId, place, []);
+      }
       return;
     }
     const inputs = await gather(projectId);
     const inputHash = hashOf(inputs);
-    const stored = db.starters.set(projectId);
+    const stored = storedSets(projectId);
     checked.set(projectId, Date.now());
-    if (stored?.inputHash === inputHash) {
+    if (stored?.every((set) => set?.inputHash === inputHash)) {
       console.log(
-        `[starters] project=${projectId} trigger=${trigger}: unchanged since ${stored.generatedAt.toISOString()}, Jev not asked`
+        `[starters] project=${projectId} trigger=${trigger}: unchanged since ${stored[0]?.generatedAt.toISOString()}, Jev not asked`
       );
       return;
     }
@@ -312,20 +423,23 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       written = await jevStarters(access, projectId, inputs);
     } catch (error) {
       if (error instanceof JevFailed) {
-        // askRow logged Jev's words; the stored set stands.
+        // askRow logged Jev's words; the stored sets stand.
         return;
       }
       throw error;
     }
+    // Every place's set from this one ask, in one write.
     db.starters.replace(projectId, {
       inputHash,
       trigger,
       starters: written.starters,
     });
     console.log(
-      `[starters] project=${projectId} trigger=${trigger}: wrote ${written.starters.length}${written.dropped > 0 ? `, dropped ${written.dropped} not grounded in the inputs` : ""}`
+      `[starters] project=${projectId} trigger=${trigger}: wrote ${STARTER_PLACES.map((place) => `${place} ${written.starters[place].length}`).join(", ")}${written.dropped > 0 ? `; dropped ${written.dropped} not grounded in the inputs` : ""}`
     );
-    publish(projectId, written.starters);
+    for (const place of STARTER_PLACES) {
+      publish(projectId, place, written.starters[place]);
+    }
   };
 
   /** Asks for the project's set: after the quiet, and no sooner than the gap since its last ask. */
@@ -339,7 +453,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     const now = Date.now();
     const last =
       asked.get(projectId) ??
-      db.starters.set(projectId)?.generatedAt.getTime() ??
+      db.starters.set(projectId, "board")?.generatedAt.getTime() ??
       0;
     const at = Math.max(now + QUIET_MS, last + GAP_MS);
     // Not on the hub's lifetime: a timer per project, dropped at the next
@@ -399,15 +513,28 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       }
     },
 
+    /** A session made one of the project's routines. */
+    routineMade(projectId: string | null): void {
+      if (projectId) {
+        touched(projectId, "routine made");
+      }
+    },
+
+    /** An event from outside landed for the project (ingress.ts `ingest`). */
+    eventLanded(projectId: string): void {
+      touched(projectId, "event received");
+    },
+
     /**
-     * The project's set for a read: none while Jev is off; otherwise the
-     * stored one, asked again when it is stale or there is none yet.
+     * The project's set for a place, for a read: none while Jev is off;
+     * otherwise the stored one, every place asked again when it is stale or
+     * there is none yet.
      */
-    read(projectId: string): ProjectStarter[] {
+    read(projectId: string, place: StarterPlace): ProjectStarter[] {
       if (!jevAccess(db)) {
         return [];
       }
-      const stored = db.starters.set(projectId);
+      const stored = db.starters.set(projectId, place);
       const seen = Math.max(
         stored?.generatedAt.getTime() ?? 0,
         checked.get(projectId) ?? 0
@@ -422,20 +549,21 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       return stored?.starters ?? [];
     },
 
-    /** What the person did with a starter of the project's set: sent as it stood, or changed. */
+    /** What the person did with a starter of a place's set: sent as it stood, or changed. */
     record(
       projectId: string,
+      place: StarterPlace,
       text: string,
       outcome: "picked" | "edited"
     ): { ok: true } {
-      const stored = db.starters.set(projectId);
+      const stored = db.starters.set(projectId, place);
       if (!stored?.starters.some((starter) => starter.text === text)) {
         throw new FolderRefusal(
           404,
-          "That starter is not one this project offers now."
+          "That starter is not one this project offers there now."
         );
       }
-      db.starters.record(projectId, text, outcome);
+      db.starters.record(projectId, place, text, outcome);
       return { ok: true };
     },
   };
@@ -450,13 +578,14 @@ export const starterRoutes = (starters: ProjectStarters) =>
     {
       params: t.Object({ id: t.String() }),
       body: t.Object({
+        place: t.Union(STARTER_PLACES.map((place) => t.Literal(place))),
         text: t.String({ minLength: 1, maxLength: 200 }),
         outcome: t.Union([t.Literal("picked"), t.Literal("edited")]),
       }),
     },
     ({ params, body }) => {
       try {
-        return starters.record(params.id, body.text, body.outcome);
+        return starters.record(params.id, body.place, body.text, body.outcome);
       } catch (error) {
         return refused(error);
       }

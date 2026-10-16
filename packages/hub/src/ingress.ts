@@ -393,6 +393,8 @@ export interface IngressDeps {
   >;
   /** Moves a task on when the pull request its attempt opened merges (dispatch.ts). */
   readonly dispatcher: Pick<Dispatcher, "pullRequestMerged">;
+  /** An event landed for a project, stored once: its starters are asked again (project-starters.ts). */
+  readonly eventLanded: (projectId: string) => void;
   /** Jev's route while Jev is on (jev.ts `jevAccess`). */
   readonly jevAccess: () => JevAccess | undefined;
   readonly lifetime: HubLifetimeShape;
@@ -460,6 +462,7 @@ export const createIngress = ({
   connections,
   db,
   dispatcher,
+  eventLanded,
   jevAccess,
   lifetime,
   routines,
@@ -611,6 +614,7 @@ export const createIngress = ({
       return undefined;
     }
     console.log(`[ingress] ${row.source} ${row.deliveryKey} landed via ${via}`);
+    eventLanded(projectId);
     detach(
       route(row, event).catch((error: unknown) =>
         console.warn(

@@ -38,7 +38,8 @@
  * instruction renders markdown (its list a <ul>) clamped until More; the
  * runs table's columns start on one edge in every row, in tabular figures.
  * Desk 1440: one clock per row; New routine and an empty project's starters
- * are the session Composer with no attach control.
+ * (Jev's, from three bugs it filed: a stand-in on `CAWCO_TYPESAFE_URL`) are
+ * the session Composer with no attach control.
  * Phone 390: Last and Next fold into the schedule's line.
  * T5 at desk 1440 and phone 390: the folded rail stands inside the
  * viewport after the columns, none of the three in them; pressed, it opens
@@ -52,6 +53,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { type Fleet, MACHINE, type Seen, until } from "../../../scratch-fleet";
+import { jevMock, jevOn } from "../../jev-mock";
 import { COMPOSER_FIELD, type Kit, open, type Spec, settle } from "../../kit";
 
 const ROUTINES = 4;
@@ -1221,11 +1223,14 @@ async function proposeFromRun(
 const spec: Spec = {
   name: "routines-view",
   async run(kit) {
+    const jev = jevMock();
     const fleet = await kit.fleet((_: Seen) => ({
       everyMs: 20,
       words: ["Ready."],
     }));
     fleet.env.CAWCO_GITHUB_API = fakeGitHub();
+    fleet.env.CAWCO_TYPESAFE_URL = jev.url;
+    fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
     fleet.launch("sessiond");
     await fleet.sessiondUp();
     fleet.launch("hub");
@@ -1313,9 +1318,31 @@ const spec: Spec = {
     await busyBlocks(kit, base, busy.id);
     await detail(kit, base, project.id);
     await oneClock(kit, base, project.id);
+    // The empty page's starters are Jev's, from what the project repeats
+    // (hub project-starters.ts): Jev on only from here, so the routes above
+    // run as they always have, and three bugs filed to repeat.
+    await jevOn(fleet.base);
+    for (const what of ["login", "export", "upload"]) {
+      await fleet.api(`/api/projects/${empty.id}/tasks`, {
+        title: `Fix the ${what} crash`,
+        labels: ["bug"],
+      });
+    }
+    await until(
+      "Field notes' routine starters",
+      async () =>
+        (
+          await fleet.api<{ routineStarters: unknown[] }>(
+            `/api/projects/${empty.id}/stages`
+          )
+        ).routineStarters,
+      (starters) => starters.length > 0,
+      60_000
+    );
     await asks(kit, base, project.id, empty.id);
     await phone(kit, base, project.id);
     await archive(kit, base, project.id);
+    jev.stop();
   },
 };
 export default spec;

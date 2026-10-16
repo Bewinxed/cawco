@@ -5597,9 +5597,51 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/StarterPlace`.
+    public enum StarterPlace: OpenEnum {
+        case board
+        case decisions
+        case routines
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "board": self = .board
+            case "decisions": self = .decisions
+            case "routines": self = .routines
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .board: "board"
+            case .decisions: "decisions"
+            case .routines: "routines"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.board, .decisions, .routines]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/StarterSourceKind`.
     public enum StarterSourceKind: OpenEnum {
         case commit
+        case event
         case path
         case routine
         case task
@@ -5610,6 +5652,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "commit": self = .commit
+            case "event": self = .event
             case "path": self = .path
             case "routine": self = .routine
             case "task": self = .task
@@ -5621,6 +5664,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .commit: "commit"
+            case .event: "event"
             case .path: "path"
             case .routine: "routine"
             case .task: "task"
@@ -5633,7 +5677,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.commit, .path, .routine, .task, .thread]
+        public static let allCases: [Self] = [.commit, .event, .path, .routine, .task, .thread]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

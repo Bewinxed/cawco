@@ -24,6 +24,17 @@
  *    `edited`.
  * f. Every input the stand-in received is within its stated bound, on a
  *    project with more of everything than the bounds let through.
+ * g. The empty Routines page's starters come from what the project repeats
+ *    or waits on (a task kind filed often, an event source no routine
+ *    takes), every source in the inputs; the page shows them in the hub's
+ *    order; an answer about a kind no input holds never reaches them.
+ * h. The empty Decisions tab's starters come from the project's open
+ *    choices (a task waiting on your pick, a draft view), every source in
+ *    the inputs; the tab shows them in the hub's order; an answer about a
+ *    task no input holds never reaches them.
+ * i. One change asks Jev once for every place: one call, and the three
+ *    places' sets written over the same inputs at the same moment.
+ * j. Jev off: no routine or decision starters, served or on the page.
  *
  *   bun scripts/probe-kit/run.ts starters
  */
@@ -58,16 +69,25 @@ const BOUNDS = {
   subject: 120,
   failures: 5,
   failure: 200,
+  recentKinds: 5,
+  unrouted: 5,
+  drafts: 5,
+  routines: 10,
   shown: 10,
 };
 
-/** A task the inputs never hold: the stand-in answers about it anyway. */
-const GHOST = "task:tsk-999";
+/** Answers about things the inputs never hold, one per place: the stand-in gives them anyway. */
+const GHOSTS: Record<string, StarterPick> = {
+  "board/task:tsk-999": { choice: "start", p: 0.99 },
+  "routines/kind:ghost": { choice: "triage", p: 0.99 },
+  "decisions/pick:tsk-999": { choice: "page", p: 0.99 },
+};
 
 /**
  * The stand-in's starters answers: each question's first ask, at a
- * probability by what it is about, so the hub's order is Jev's; a thread's
- * under the confidence gate; and one answer about a task no input holds.
+ * probability by what it is about (`<place>/<kind>:<ref>`), so the hub's
+ * order is Jev's; a thread's under the confidence gate in every place; and
+ * the {@link GHOSTS}.
  */
 const PICKED: Record<string, number> = {
   task: 0.92,
@@ -76,7 +96,15 @@ const PICKED: Record<string, number> = {
   routine: 0.8,
   commit: 0.7,
   thread: 0.4,
+  kind: 0.9,
+  check: 0.85,
+  event: 0.8,
+  pick: 0.9,
+  view: 0.85,
 };
+/** `routines/event:github:acme/site issue.opened` → `event`. */
+const kindOf = (id: string) =>
+  id.slice(id.indexOf("/") + 1).split(":")[0] as string;
 const picks = (call: JevCall): Record<string, StarterPick> => ({
   ...Object.fromEntries(
     Object.entries(call.questions).map(([id, asked]) => [
@@ -86,11 +114,11 @@ const picks = (call: JevCall): Record<string, StarterPick> => ({
           Object.keys((asked.criteria ?? {}) as Record<string, unknown>).find(
             (option) => option !== "none"
           ) ?? "none",
-        p: PICKED[id.split(":")[0] as string] ?? 0.9,
+        p: PICKED[kindOf(id)] ?? 0.9,
       },
     ])
   ),
-  [GHOST]: { choice: "start", p: 0.99 },
+  ...GHOSTS,
 });
 
 interface Served {
@@ -163,10 +191,14 @@ const same = (a: string[], b: string[]) =>
 const overBounds = (call: JevCall): string[] => {
   const state = call.state as {
     agents_md: string;
+    drafts: string[];
     failures: { name: string; reason: string }[];
     knowledge: string[];
+    recent_kinds: Record<string, { tasks: string[] }>;
     repository: { commits: { subject: string }[] };
+    routines: string[];
     shown: { text: string }[];
+    unrouted: { kind: string; source: string }[];
     tasks: Record<string, { last_attempt_failed?: string; title: string }>;
     threads: Record<string, { last_line: string; title: string }>;
   };
@@ -205,6 +237,17 @@ const overBounds = (call: JevCall): string[] => {
   for (const failure of state.failures) {
     most("a failure's reason", failure.reason.length, BOUNDS.failure);
   }
+  most(
+    "recent kinds",
+    Object.keys(state.recent_kinds).length,
+    BOUNDS.recentKinds
+  );
+  most("unrouted sources", state.unrouted.length, BOUNDS.unrouted);
+  most("drafts", state.drafts.length, BOUNDS.drafts);
+  for (const path of state.drafts) {
+    most("a draft path", path.length, BOUNDS.path);
+  }
+  most("routines", state.routines.length, BOUNDS.routines);
   most("shown", state.shown.length, BOUNDS.shown);
   return over;
 };
@@ -257,9 +300,24 @@ const run = async (kit: Kit) => {
       template,
     });
   };
-  const served = async (id: string) =>
-    (await fleet.api<{ starters: Served[] }>(`/api/projects/${id}/stages`))
-      .starters;
+  /** Every place's starters, as the project's stages carry them. */
+  const servedAll = (id: string) =>
+    fleet.api<{
+      decisionStarters: Served[];
+      routineStarters: Served[];
+      starters: Served[];
+    }>(`/api/projects/${id}/stages`);
+  const served = async (id: string) => (await servedAll(id)).starters;
+  /** The chips an empty tab of the project page shows (`?view=`), in order. */
+  const tabChips = async (id: string, view: string, selector: string) => {
+    await open(desk, `${base}/project/${id}?view=${view}`, ".kit-empty-title");
+    await settle(desk);
+    return desk
+      .locator(selector)
+      .evaluateAll((all) => all.map((chip) => chip.textContent?.trim() ?? ""));
+  };
+  const ROUTINE_CHIPS = ".routine-starters .kit-chip";
+  const DECISION_CHIPS = ".caw-empty .caw-starters .kit-chip";
   /** The project's starters once the hub has written a set with some in it. */
   const written = (id: string) =>
     until(
@@ -292,6 +350,25 @@ const run = async (kit: Kit) => {
       quietCards === 0 &&
       jev.starterCalls().length === 0,
     `line ${said.includes(offLine)}; served ${(await served(quiet.id)).length}; cards ${quietCards}; Jev starters calls ${jev.starterCalls().length}`
+  );
+
+  // ── j. Jev off: no routine or decision starters either ─────────────────
+  const quietAll = await servedAll(quiet.id);
+  const quietRoutineChips = await tabChips(quiet.id, "routines", ROUTINE_CHIPS);
+  await desk.screenshot({ path: join(kit.out, "quiet-routines.png") });
+  const quietDecisionChips = await tabChips(
+    quiet.id,
+    "decisions",
+    DECISION_CHIPS
+  );
+  await desk.screenshot({ path: join(kit.out, "quiet-decisions.png") });
+  kit.check(
+    "j: Jev off, no routine or decision starters: none served, none on the Routines page or the Decisions tab",
+    quietAll.routineStarters.length === 0 &&
+      quietAll.decisionStarters.length === 0 &&
+      quietRoutineChips.length === 0 &&
+      quietDecisionChips.length === 0,
+    `served routines ${quietAll.routineStarters.length}, decisions ${quietAll.decisionStarters.length}; chips routines ${quietRoutineChips.length}, decisions ${quietDecisionChips.length}`
   );
 
   await jevOn(fleet.base);
@@ -355,7 +432,7 @@ const run = async (kit: Kit) => {
       ) &&
       !page.includes("tsk-999") &&
       new RegExp(
-        `\\[starters\\] project=${harbour.id} trigger=[^:]+: wrote ${harbourSet.length}, dropped 1 not grounded in the inputs`
+        `\\[starters\\] project=${harbour.id} trigger=[^:]+: wrote board ${harbourSet.length}, routines \\d+, decisions \\d+; dropped ${Object.keys(GHOSTS).length} not grounded in the inputs`
       ).test(log),
     `${harbourCalls.length} call(s); served sources ${harbourSet.flatMap((s) => s.sources.map((x) => x.ref)).join(", ")}; “tsk-999” on the page ${page.includes("tsk-999")}`
   );
@@ -535,6 +612,151 @@ const run = async (kit: Kit) => {
       rows.some((row) => row.text === firstText && row.outcome === "picked") &&
       rows.some((row) => row.text === editWith && row.outcome === "edited"),
     `picked ${pickedAnswer?.status()}, edited ${editedAnswer?.status()}; rows ${rows.map((row) => `${row.outcome} “${row.text}”`).join(" | ")}`
+  );
+
+  // ── g. the Routines page: what the project repeats or waits on ─────────
+  const ledger = await project("ledger", "code", false);
+  const SOURCE = "github:acme/site";
+  // Two issues the project's poll brought in, routed nowhere (stored as
+  // ingress.ts stores one with no route and the lead off).
+  for (const n of [1, 2]) {
+    fleet.write(
+      "INSERT INTO inbound_events (id, source, delivery_key, kind, project_id, payload, received_at, via, routed_to, route_id, handled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)",
+      crypto.randomUUID(),
+      SOURCE,
+      `issue:${n}:opened`,
+      "issue.opened",
+      ledger.id,
+      "{}",
+      Date.now(),
+      "poll"
+    );
+  }
+  const bugs: string[] = [];
+  for (const what of ["login", "export", "upload"]) {
+    const filed = await fleet.api<{ id: string }>(
+      `/api/projects/${ledger.id}/tasks`,
+      { title: `Fix the ${what} crash`, labels: ["bug"] }
+    );
+    bugs.push(filed.id);
+  }
+  const routineSet = await until(
+    "ledger's routine starters",
+    async () => (await servedAll(ledger.id)).routineStarters,
+    (set) => set.length > 0,
+    60_000
+  ).catch(() => [] as Served[]);
+  const routineRefs = new Set([
+    ...bugs.map((id) => `task:${id}`),
+    `event:${SOURCE} issue.opened`,
+  ]);
+  const routineTexts = routineSet.map((starter) => starter.text);
+  const routineChips = await tabChips(ledger.id, "routines", ROUTINE_CHIPS);
+  await desk.screenshot({ path: join(kit.out, "ledger-routines.png") });
+  const described = (set: Served[]) =>
+    set
+      .map(
+        (s) =>
+          `“${s.text}” — ${s.reason} [${s.sources.map((x) => `${x.kind}:${x.ref}`).join(", ")}]`
+      )
+      .join(" | ");
+  kit.check(
+    "g: the Routines page's starters come from a task kind filed often and an event source no routine takes, every source in the inputs, none about a kind no input holds",
+    routineSet.length > 0 &&
+      routineSet.every((starter) =>
+        starter.sources.every((source) =>
+          routineRefs.has(`${source.kind}:${source.ref}`)
+        )
+      ) &&
+      routineTexts.includes(
+        "Every Monday, triage the week's new “bug” tasks"
+      ) &&
+      routineTexts.includes(
+        "When an issue opens on acme/site, triage it into a task"
+      ) &&
+      !routineTexts.some((text) => text.includes("ghost")),
+    described(routineSet)
+  );
+  kit.check(
+    "g: the empty Routines page shows them in the hub's order",
+    same(routineChips, routineTexts),
+    `chips ${routineChips.join(" | ")}`
+  );
+
+  // ── h. the Decisions tab: the project's open choices ───────────────────
+  const drafted = await fetch(
+    `${fleet.base}/api/projects/${ledger.id}/folder/file`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: "views/drafts/pricing.oui",
+        content: 'root = Stack([TextContent("Pricing")])\n',
+      }),
+    }
+  );
+  const [waiting] = bugs as [string];
+  const callsBefore = jev.starterCalls("ledger").length;
+  await fleet.api(`/api/projects/${ledger.id}/tasks/${waiting}/stage`, {
+    stage: "review",
+  });
+  await until(
+    "ledger's set after the move",
+    async () => jev.starterCalls("ledger").length,
+    (n) => n > callsBefore,
+    30_000
+  ).catch(() => 0);
+  // Long enough for a second ask the quiet and the gap would allow.
+  await Bun.sleep(QUIET_MS + GAP_MS + 2000);
+  const callsAfter = jev.starterCalls("ledger").length;
+  const decisionSet = (await servedAll(ledger.id)).decisionStarters;
+  const decisionRefs = new Set([
+    `task:${waiting}`,
+    "path:views/drafts/pricing.oui",
+  ]);
+  const decisionTexts = decisionSet.map((starter) => starter.text);
+  const decisionChips = await tabChips(ledger.id, "decisions", DECISION_CHIPS);
+  await desk.screenshot({ path: join(kit.out, "ledger-decisions.png") });
+  kit.check(
+    "h: the Decisions tab's starters come from a task waiting on your pick and a draft view, every source in the inputs, none about a task no input holds",
+    drafted.ok &&
+      decisionSet.length > 0 &&
+      decisionSet.every((starter) =>
+        starter.sources.every((source) =>
+          decisionRefs.has(`${source.kind}:${source.ref}`)
+        )
+      ) &&
+      decisionTexts.includes(
+        "Write a decision page for “Fix the login crash”"
+      ) &&
+      decisionTexts.includes("Help me decide on the “pricing” draft view") &&
+      !decisionSet.some((starter) =>
+        starter.sources.some((source) => source.ref === "tsk-999")
+      ),
+    `draft written ${drafted.status}; ${described(decisionSet)}`
+  );
+  kit.check(
+    "h: the empty Decisions tab shows them in the hub's order",
+    same(decisionChips, decisionTexts),
+    `chips ${decisionChips.join(" | ")}`
+  );
+
+  // ── i. one change, one ask, every place written from it ────────────────
+  const sets = fleet.query<{
+    generated_at: number;
+    input_hash: string;
+    place: string;
+  }>(
+    "SELECT place, generated_at, input_hash FROM project_starter_sets WHERE project_id = ? ORDER BY place",
+    ledger.id
+  );
+  kit.check(
+    "i: one change asks Jev once for every place: one call, and the board's, the routines' and the decisions' sets written over the same inputs in one write (one generated_at)",
+    callsAfter === callsBefore + 1 &&
+      sets.length === 3 &&
+      new Set(sets.map((set) => set.input_hash)).size === 1 &&
+      new Set(sets.map((set) => set.generated_at)).size === 1,
+    `calls ${callsBefore} → ${callsAfter}; sets ${sets.map((set) => `${set.place} ${set.input_hash.slice(0, 8)} @${set.generated_at}`).join(", ")}`
   );
 
   // ── f. every input within its bound ─────────────────────────────────────

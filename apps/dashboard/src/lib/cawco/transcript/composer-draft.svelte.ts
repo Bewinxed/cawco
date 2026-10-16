@@ -9,6 +9,7 @@
  * per conversation for as long as the conversation is open, and keeps it
  * across a reload through `draft-store.ts`.
  */
+import type { StarterPlace } from "@cawco/core";
 import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import type { SendExtras } from "../client.svelte";
@@ -147,14 +148,15 @@ export class ComposerDraft {
   notice = $state("");
   /**
    * The starter last pressed into this draft, its words as the press put
-   * them: the send after it says whether they went as they stood.
+   * them and the place it stood: the send after it says whether they went
+   * as they stood.
    */
-  pressed = $state<string | null>(null);
+  pressed = $state<{ place: StarterPlace; text: string } | null>(null);
 
   /** A starter's words into the field, the caret after them: nothing is sent. */
-  press(words: string): void {
+  press(words: string, place: StarterPlace): void {
     this.text = words;
-    this.pressed = words;
+    this.pressed = { text: words, place };
     this.focusWanted = true;
   }
 
@@ -162,17 +164,19 @@ export class ComposerDraft {
    * At a send: the starter pressed into this draft and what became of it,
    * `picked` when `sent` is its words as they stood, else `edited`; once.
    */
-  takePressed(
-    sent: string
-  ): { outcome: "picked" | "edited"; text: string } | null {
+  takePressed(sent: string): {
+    outcome: "picked" | "edited";
+    place: StarterPlace;
+    text: string;
+  } | null {
     const { pressed } = this;
     this.pressed = null;
     if (pressed === null) {
       return null;
     }
     return {
-      text: pressed,
-      outcome: sent.trim() === pressed.trim() ? "picked" : "edited",
+      ...pressed,
+      outcome: sent.trim() === pressed.text.trim() ? "picked" : "edited",
     };
   }
 

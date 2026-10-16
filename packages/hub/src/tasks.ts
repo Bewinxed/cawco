@@ -36,13 +36,15 @@
  * Changes to one project's tasks are taken one at a time: two to-dos ticked
  * at once both land.
  */
-import type {
-  AttemptResult,
-  EndedBy,
-  InstanceRow,
-  LandsMode,
-  ProjectStarter,
-  ResultArtifact,
+import {
+  type AttemptResult,
+  type EndedBy,
+  type InstanceRow,
+  type LandsMode,
+  type ProjectStarter,
+  type ResultArtifact,
+  STARTER_PLACES,
+  type StarterPlace,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
@@ -86,7 +88,6 @@ import {
   moveProblem,
   passesReview,
   readStages,
-  routineStartersFor,
   ruledStages,
   STAGE_NAME,
   type Stage,
@@ -96,7 +97,6 @@ import {
   type StagesReading,
   type StagesTemplate,
   type StageView,
-  type Starter,
   stageNamed,
   startProblem,
   TEMPLATES,
@@ -392,8 +392,11 @@ export interface TaskStore {
   /** Records the template a project's stages came from: its starter skills follow it. */
   readonly setTemplate: (id: string, template: StagesTemplate) => void;
   readonly setTracker: (id: string, tracker: Tracker) => void;
-  /** The project's starters as they were last written for it (project-starters.ts); none while Jev is off. */
-  readonly starters: (projectId: string) => ProjectStarter[];
+  /** The project's starters for a place as they were last written for it (project-starters.ts); none while Jev is off. */
+  readonly starters: (
+    projectId: string,
+    place: StarterPlace
+  ) => ProjectStarter[];
   /** Why the hub last could not start an attempt at a task, while that stands (dispatch.ts). */
   readonly startProblem?: (
     projectId: string,
@@ -472,11 +475,21 @@ export interface TaskList {
 
 /** A project's stages as the dashboard reads them. */
 export interface StagesView {
+  /**
+   * What an empty Decisions tab offers to ask Caw for: the project's open
+   * choices to lay out as a decision page (project-starters.ts), in that
+   * order; none while Jev is off.
+   */
+  decisionStarters: ProjectStarter[];
   moves: StageMove[];
   /** What is wrong with stages.md, one sentence each; stages, moves and views are empty while there is any. */
   problems: string[];
-  /** What an empty Routines page offers to ask Caw for: the recorded template's, or the general four. */
-  routineStarters: readonly Starter[];
+  /**
+   * What an empty Routines page offers to ask Caw for: what the project
+   * repeats or waits on, as routines (project-starters.ts), in that order;
+   * none while Jev is off.
+   */
+  routineStarters: ProjectStarter[];
   /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
   source: "file" | "template";
   stages: Stage[];
@@ -1313,13 +1326,13 @@ const stagesView = (
   source: "file" | "template",
   content: string,
   reading: StagesReading,
-  /** The template the project was made from or last had applied (`projects.template`). */
-  recorded: StagesTemplate | null,
-  starters: ProjectStarter[]
+  /** The project's starters, each place's (project-starters.ts). */
+  starters: Record<StarterPlace, ProjectStarter[]>
 ): StagesView => ({
   source,
-  starters,
-  routineStarters: routineStartersFor(recorded),
+  starters: starters.board,
+  routineStarters: starters.routines,
+  decisionStarters: starters.decisions,
   template: TEMPLATES.find((name) => templateText(name) === content) ?? null,
   stages: reading.ok ? reading.stages.stages : [],
   moves: reading.ok ? reading.stages.moves : [],
@@ -1432,6 +1445,11 @@ export const createTasks = (store: TaskStore) => {
   };
   /** One change to a project's tasks at a time, around the folder's own commits. */
   const inTurn = turnTaker();
+  /** The project's starters, each place's, as the stages view carries them. */
+  const startersOf = (projectId: string) =>
+    Object.fromEntries(
+      STARTER_PLACES.map((place) => [place, store.starters(projectId, place)])
+    ) as Record<StarterPlace, ProjectStarter[]>;
   /** Who hears about changes (dispatch.ts); told after the change has landed. */
   const listeners = new Set<(event: TaskEvent) => void>();
   const emit = (event: TaskEvent): void => {
@@ -3376,13 +3394,7 @@ export const createTasks = (store: TaskStore) => {
     async stages(projectId: string): Promise<StagesView> {
       known(projectId);
       const { source, content, reading } = await stagesOf(projectId);
-      return stagesView(
-        source,
-        content,
-        reading,
-        store.project(projectId)?.template ?? null,
-        store.starters(projectId)
-      );
+      return stagesView(source, content, reading, startersOf(projectId));
     },
 
     /** Writes stages.md, once it reads; a file that does not is refused with every problem. */
@@ -3406,8 +3418,7 @@ export const createTasks = (store: TaskStore) => {
           "file",
           content,
           ruled(projectId, reading),
-          store.project(projectId)?.template ?? null,
-          store.starters(projectId)
+          startersOf(projectId)
         );
       }).then((written) => told({ kind: "changed", projectId }, written));
     },
@@ -3443,8 +3454,7 @@ export const createTasks = (store: TaskStore) => {
             template === DEFAULT_TEMPLATE ? "template" : "file",
             content,
             ruled(projectId, { ok: true, stages }),
-            template,
-            store.starters(projectId)
+            startersOf(projectId)
           ),
           stranded: rows
             .filter((row) => !stageNamed(stages, row.stage))

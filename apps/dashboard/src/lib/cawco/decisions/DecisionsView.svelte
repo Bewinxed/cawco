@@ -22,7 +22,7 @@
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
-  import type { StageKind, Starter } from "#lib/cawco/project-tasks.js";
+  import type { ProjectStarter, StageKind } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -51,6 +51,7 @@
     taskHref,
     onopentask,
     sitDown,
+    starters,
     go,
   }: {
     projectId: string;
@@ -78,6 +79,11 @@
     onopentask: (id: string) => void;
     /** Caw standing here departs into the head's seat as he leaves. */
     sitDown: (node: HTMLElement) => TransitionConfig;
+    /**
+     * What the empty tab offers to ask him: the project's open choices,
+     * written for it (hub project-starters.ts), in the hub's order.
+     */
+    starters: ProjectStarter[];
     /** Where the pane goes: a page (at a card), the list or the graph, kept in the URL. */
     go: (to: {
       card?: string | null;
@@ -85,12 +91,6 @@
       page?: string | null;
     }) => void;
   } = $props();
-
-  /** What the empty tab offers to ask him. */
-  const DECISION_STARTER: Starter = {
-    glyph: "brief",
-    text: "Write a decision page for this project",
-  };
 
   const list = $derived(decisions.list);
   const pages = $derived(list?.pages ?? []);
@@ -265,8 +265,8 @@
                      press outside the panel (CawFloat, data-caw-asks). -->
                 <div class="contents" data-caw-asks>
                   <CawStarters
-                    onpick={(text) => lead.ask(text)}
-                    starters={[DECISION_STARTER]}
+                    onpick={(text) => lead.ask(text, "decisions")}
+                    {starters}
                   />
                 </div>
               {/snippet}

@@ -188,7 +188,16 @@
   );
   let stagesProblem = $derived(refusal(data.stages));
   /** The project's starters, live: a new set the hub writes replaces the one its stages carried. */
-  const starters = $derived(cawco.startersOf(projectId, stages?.starters));
+  const starters = $derived(
+    cawco.startersOf(projectId, "board", stages?.starters)
+  );
+  /** The empty Routines page's starters and the empty Decisions tab's, live as the board's. */
+  const routineStarters = $derived(
+    cawco.startersOf(projectId, "routines", stages?.routineStarters)
+  );
+  const decisionStarters = $derived(
+    cawco.startersOf(projectId, "decisions", stages?.decisionStarters)
+  );
   /** The task open beside the view, or as its own page on a phone: the URL's `?task=`. */
   const openTask = $derived(
     (page.shallow?.url ?? page.url).searchParams.get("task")
@@ -1622,7 +1631,7 @@
       {canTalk}
       cawProblem={lead.view?.problem ?? null}
       project={{ id: project.id, name: project.name }}
-      starters={stages?.routineStarters ?? []}
+      starters={routineStarters}
       viewItems={viewItemsOf("routines")}
     />
   {:else if value === "decisions"}
@@ -1640,6 +1649,7 @@
       {projectId}
       projectName={project?.name ?? ""}
       {sitDown}
+      starters={decisionStarters}
       taskHref={(id) => hrefOf(id)}
       {taskOf}
     />
@@ -1682,7 +1692,7 @@
             {#if starters.length > 0}
               <div class="contents" data-caw-asks>
                 <StarterCards
-                  onpick={(text) => lead.askStarter(text)}
+                  onpick={(text) => lead.ask(text, "board")}
                   {starters}
                 />
               </div>

@@ -69,6 +69,7 @@ import type {
   SessionTooling,
   SlashCommand,
   SpawnPayload,
+  StarterPlace,
   StopPayload,
   StreamHeartbeat,
   SupportedCommands,
@@ -928,9 +929,9 @@ const state = $state({
    */
   blocksChanged: {} as Record<string, number>,
   /**
-   * Each project's starters as the hub last wrote them while this page was
-   * connected (`starters.changed` frames), by project id: newer than the
-   * set its stages read carried.
+   * Each project's starters for each place as the hub last wrote them while
+   * this page was connected (`starters.changed` frames), by
+   * `<place>:<project id>`: newer than the set its stages read carried.
    */
   starters: {} as Record<string, ProjectStarter[]>,
   sessions: {} as Record<string, SessionState>,
@@ -3091,7 +3092,7 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "starters.changed") {
-    state.starters[frame.projectId] = frame.starters;
+    state.starters[`${frame.place}:${frame.projectId}`] = frame.starters;
     return;
   }
 
@@ -7954,13 +7955,14 @@ export const cawco = {
   blocksChangedOf: (projectId: string): number =>
     state.blocksChanged[projectId] ?? 0,
   /**
-   * The project's starters: the set the hub last sent while this page was
-   * connected, else `read`, the set its stages read carried.
+   * The project's starters for a place: the set the hub last sent while
+   * this page was connected, else `read`, the set its stages read carried.
    */
   startersOf: (
     projectId: string,
+    where: StarterPlace,
     read: ProjectStarter[] | undefined
-  ): ProjectStarter[] => state.starters[projectId] ?? read ?? [],
+  ): ProjectStarter[] => state.starters[`${where}:${projectId}`] ?? read ?? [],
   threadMessagesOf: (threadId: string): ThreadMessage[] | null =>
     state.threadMessages[threadId] ?? null,
   session: (instanceId: string): SessionState | null =>

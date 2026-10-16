@@ -46,12 +46,15 @@ import type { CarrySessionRequest } from "./harness";
  *    its meta, each component's props) in place of `stories` (live
  *    components, slice 2). Nothing but an agent reads them; a page built for
  *    7 reloads into the inspector that reads the sheet from its page.
+ * 9: a starter's outcome (`POST /api/projects/:id/starters/outcome`) names
+ *    the place it stood in (`place`: board, routines or decisions), each
+ *    place its own set; a page built for 8 sends none, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 8;
+export const WIRE_PROTOCOL = 9;
 
 /**
  * What a session's stream carries: the changes each frame made to its

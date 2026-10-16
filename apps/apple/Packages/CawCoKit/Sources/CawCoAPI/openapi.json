@@ -7331,6 +7331,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "place": {
+                    "type": "string",
+                    "enum": [
+                      "board",
+                      "routines",
+                      "decisions"
+                    ]
+                  },
                   "text": {
                     "minLength": 1,
                     "maxLength": 200,
@@ -7345,6 +7353,7 @@
                   }
                 },
                 "required": [
+                  "place",
                   "text",
                   "outcome"
                 ]
@@ -31669,6 +31678,13 @@
         "description": "A project's stages as the dashboard reads them.",
         "type": "object",
         "properties": {
+          "decisionStarters": {
+            "description": "What an empty Decisions tab offers to ask Caw for: the project's open\nchoices to lay out as a decision page (project-starters.ts), in that\norder; none while Jev is off.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectStarter"
+            }
+          },
           "moves": {
             "type": "array",
             "items": {
@@ -31683,10 +31699,10 @@
             }
           },
           "routineStarters": {
-            "description": "What an empty Routines page offers to ask Caw for: the recorded template's, or the general four.",
+            "description": "What an empty Routines page offers to ask Caw for: what the project\nrepeats or waits on, as routines (project-starters.ts), in that order;\nnone while Jev is off.",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Starter"
+              "$ref": "#/components/schemas/ProjectStarter"
             }
           },
           "source": {
@@ -31718,6 +31734,7 @@
           }
         },
         "required": [
+          "decisionStarters",
           "moves",
           "problems",
           "routineStarters",
@@ -31727,43 +31744,32 @@
           "views"
         ]
       },
-      "StageMove": {
-        "type": "object",
-        "properties": {
-          "from": {
-            "description": "A stage, or `*` for any.",
-            "type": "string"
-          },
-          "to": {
-            "description": "A stage, or `*` for any.",
-            "type": "string"
-          },
-          "who": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StageHooksBy"
-            }
-          }
-        },
-        "required": [
-          "from",
-          "to",
-          "who"
-        ]
-      },
-      "Starter": {
-        "description": "A routine an empty Routines page offers to ask Caw for: the sentence, and\nthe glyph for its kind of work. A project's own starters are written for\nit (project-starters.ts), not listed here.",
+      "ProjectStarter": {
+        "description": "One starter: a sentence the person would say to Caw, put in the composer\nwhen pressed (nothing is sent), the glyph for its kind of work, why it is\noffered, and what it comes from.",
         "type": "object",
         "properties": {
           "glyph": {
             "$ref": "#/components/schemas/StarterGlyph"
           },
+          "reason": {
+            "description": "Why it is offered, naming what in the project it comes from; at most 120 characters.",
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StarterSource"
+            }
+          },
           "text": {
+            "description": "At most 90 characters.",
             "type": "string"
           }
         },
         "required": [
           "glyph",
+          "reason",
+          "sources",
           "text"
         ]
       },
@@ -31792,6 +31798,57 @@
           "tasks",
           "triage",
           "voice"
+        ]
+      },
+      "StarterSource": {
+        "description": "One thing a starter comes from: a task id, a thread id, a folder path, a\ncommit sha, a routine id, or an event source and kind (`github:acme/site\nissue.opened`).",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/StarterSourceKind"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ref"
+        ]
+      },
+      "StarterSourceKind": {
+        "type": "string",
+        "enum": [
+          "commit",
+          "event",
+          "path",
+          "routine",
+          "task",
+          "thread"
+        ]
+      },
+      "StageMove": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "description": "A stage, or `*` for any.",
+            "type": "string"
+          },
+          "to": {
+            "description": "A stage, or `*` for any.",
+            "type": "string"
+          },
+          "who": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageHooksBy"
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "who"
         ]
       },
       "Stage": {
@@ -31844,61 +31901,6 @@
           "todo",
           "waiting",
           "you"
-        ]
-      },
-      "ProjectStarter": {
-        "description": "One starter: a sentence the person would say to Caw, put in the composer\nwhen pressed (nothing is sent), the glyph for its kind of work, why it is\noffered, and what it comes from.",
-        "type": "object",
-        "properties": {
-          "glyph": {
-            "$ref": "#/components/schemas/StarterGlyph"
-          },
-          "reason": {
-            "description": "Why it is offered, naming what in the project it comes from; at most 120 characters.",
-            "type": "string"
-          },
-          "sources": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StarterSource"
-            }
-          },
-          "text": {
-            "description": "At most 90 characters.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "glyph",
-          "reason",
-          "sources",
-          "text"
-        ]
-      },
-      "StarterSource": {
-        "description": "One thing a starter comes from: a task id, a thread id, a folder path, a commit sha, a routine id.",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "$ref": "#/components/schemas/StarterSourceKind"
-          },
-          "ref": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "ref"
-        ]
-      },
-      "StarterSourceKind": {
-        "type": "string",
-        "enum": [
-          "commit",
-          "path",
-          "routine",
-          "task",
-          "thread"
         ]
       },
       "StageView": {
@@ -37166,13 +37168,13 @@
           "pages": {
             "type": "object",
             "properties": {
-              "routines": {
+              "board": {
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/BlockPlace"
                 }
               },
-              "board": {
+              "routines": {
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/BlockPlace"
@@ -49944,7 +49946,7 @@
         ]
       },
       "StartersChangedFrame": {
-        "description": "Hub-originated: a project's starters were written again; the whole set,\nin its order (empty when none is offered, Jev off included).",
+        "description": "Hub-originated: a project's starters for one place were written again;\nthe whole set, in its order (empty when none is offered, Jev off\nincluded).",
         "type": "object",
         "properties": {
           "kind": {
@@ -49952,6 +49954,9 @@
             "enum": [
               "starters.changed"
             ]
+          },
+          "place": {
+            "$ref": "#/components/schemas/StarterPlace"
           },
           "projectId": {
             "type": "string"
@@ -49965,8 +49970,17 @@
         },
         "required": [
           "kind",
+          "place",
           "projectId",
           "starters"
+        ]
+      },
+      "StarterPlace": {
+        "type": "string",
+        "enum": [
+          "board",
+          "decisions",
+          "routines"
         ]
       },
       "ProjectsChangedFrame": {

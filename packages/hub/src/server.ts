@@ -17018,7 +17018,7 @@ export const createServer = (
     put: db.putTaskIndex,
     drop: db.dropTaskIndex,
     setTracker: db.setProjectTracker,
-    starters: (projectId) => projectStarters.read(projectId),
+    starters: (projectId, place) => projectStarters.read(projectId, place),
     // The template's starter skills go to the project's places, and the old one's leave.
     setTemplate: (id, template) => {
       db.setProjectTemplate(id, template);
@@ -17861,7 +17861,10 @@ export const createServer = (
           projectStarters.routineFailed(said.projectId);
         }
       },
-      routineMade: (said) => push.routineMade(said),
+      routineMade: (said) => {
+        push.routineMade(said);
+        projectStarters.routineMade(said.projectId);
+      },
     },
     types: (projectId) => projectTypes.typesFor(projectId),
     jevAccess: () => jevAccess(db),
@@ -17922,6 +17925,9 @@ export const createServer = (
     connections,
     db,
     dispatcher,
+    // An event from outside changes what the project's routines could take
+    // (project-starters.ts).
+    eventLanded: (projectId) => projectStarters.eventLanded(projectId),
     jevAccess: () => jevAccess(db),
     lifetime,
     routines,

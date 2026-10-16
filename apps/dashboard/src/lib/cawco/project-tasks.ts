@@ -14,6 +14,7 @@ import {
   outputArtifacts,
   type ProjectStarter,
   type StarterGlyph,
+  type StarterPlace,
 } from "@cawco/core";
 import { HUB_UNREACHABLE, HubUnreachable, unreachedAnswer } from "./hub-read";
 
@@ -47,10 +48,12 @@ export interface StageMove {
 }
 
 export interface StagesView {
+  /** What an empty Decisions tab offers to ask Caw for: the project's open choices (hub project-starters.ts); none while Jev is off. */
+  decisionStarters: ProjectStarter[];
   moves: StageMove[];
   problems: string[];
-  /** What an empty Routines page offers to ask Caw for: the recorded template's, or the general four. */
-  routineStarters: Starter[];
+  /** What an empty Routines page offers to ask Caw for: what the project repeats or waits on (hub project-starters.ts); none while Jev is off. */
+  routineStarters: ProjectStarter[];
   /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
   source: "file" | "template";
   stages: Stage[];
@@ -65,7 +68,7 @@ export interface StagesView {
 }
 
 /** The kind of work a starter names (core starters.ts `STARTER_GLYPHS`); CawStarters draws its glyph. */
-export type { ProjectStarter, StarterGlyph } from "@cawco/core";
+export type { ProjectStarter, StarterGlyph, StarterPlace } from "@cawco/core";
 
 /**
  * A sentence to Caw a press puts in the composer, and its glyph: what
@@ -465,10 +468,9 @@ export const readStages = (projectId: string): Promise<StagesView> =>
 /** What you did with a starter you pressed, as the composer sent: its words as they stood, or changed. */
 export const tellStarterOutcome = (
   projectId: string,
-  text: string,
-  outcome: "picked" | "edited"
+  pressed: { outcome: "picked" | "edited"; place: StarterPlace; text: string }
 ): Promise<{ ok: true }> =>
-  send(`${base(projectId)}/starters/outcome`, json("POST", { text, outcome }));
+  send(`${base(projectId)}/starters/outcome`, json("POST", pressed));
 
 export const readTask = (
   projectId: string,

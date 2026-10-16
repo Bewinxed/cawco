@@ -269,6 +269,7 @@ export const measureRoles = (): RoleSize[] => {
         connections: {} as never,
         db: {} as never,
         dispatcher: {} as never,
+        eventLanded: () => undefined,
         jevAccess: () => undefined,
         lifetime,
         routines: {} as never,
