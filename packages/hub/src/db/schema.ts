@@ -1464,12 +1464,6 @@ export const workItems = sqliteTable(
      * line, written when it lands.
      */
     digest: text("digest"),
-    /**
-     * Globs of the repository's files this item owns: the hub never runs two
-     * live items whose globs overlap in one repository (work-items.ts
-     * `globsOverlap`). Null: it claims nothing.
-     */
-    owns: text("owns", { mode: "json" }).$type<string[]>(),
     /** What it may spend before the hub stops it; null: no limit. */
     budget: text("budget", { mode: "json" }).$type<WorkBudget>(),
     /** Turns its session has ended since it started. */
@@ -1506,6 +1500,34 @@ export const queuedWorkItems = sqliteTable("queued_work_items", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * Globs of the repository's files a work item owns, one row each: the hub
+ * never runs two live items whose globs overlap in one repository
+ * (work-items.ts `globsOverlap`). None: it claims nothing.
+ */
+export const workItemGlobs = sqliteTable(
+  "work_item_globs",
+  {
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    glob: text("glob").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.glob] })]
+);
+
+/** The globs a queued delegate's request owns (`owns`), one row each: what holds it back. */
+export const queuedWorkItemGlobs = sqliteTable(
+  "queued_work_item_globs",
+  {
+    queuedId: text("queued_id")
+      .notNull()
+      .references(() => queuedWorkItems.id, { onDelete: "cascade" }),
+    glob: text("glob").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.queuedId, table.glob] })]
+);
 
 /**
  * What a delegate and its parent said to each other through the hub: every ask

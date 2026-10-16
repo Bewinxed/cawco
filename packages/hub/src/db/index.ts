@@ -173,6 +173,7 @@ import {
   projectThreads,
   pushDevices,
   queuedTaskStarts,
+  queuedWorkItemGlobs,
   queuedWorkItems,
   relays,
   routines,
@@ -200,6 +201,7 @@ import {
   workflowRuns,
   workflowSteps,
   workflows,
+  workItemGlobs,
   workItems,
   workspaceCreates,
   workspaces,
@@ -688,7 +690,10 @@ export interface DbShape {
       >;
   }) => { thread: ThreadRow; message: ThreadMessageRow };
   /** Files a work item as the hub accepted it. */
-  readonly createWorkItem: (item: typeof workItems.$inferInsert) => WorkItemRow;
+  /** Files a work item as the hub accepted it, the globs it owns with it in one transaction. */
+  readonly createWorkItem: (
+    item: typeof workItems.$inferInsert & { owns?: string[] | null }
+  ) => WorkItemRow;
   /** Files a workspace whose checkout its machine has just made. */
   readonly createWorkspace: (
     workspace: typeof workspaces.$inferInsert
@@ -1071,6 +1076,11 @@ export interface DbShape {
     cwd: MachinePath;
     id: string;
     machineId: string;
+  }[];
+  /** The live work items (starting or running) that own files, each with its globs: one join on `work_item_globs`. */
+  readonly liveOwningWorkItems: () => {
+    globs: string[];
+    item: WorkItemRow;
   }[];
   /** Every work item still `starting`/`running`, fleet-wide. */
   readonly liveWorkItems: () => WorkItemRow[];
@@ -2254,6 +2264,8 @@ export interface DbShape {
   readonly workItem: (id: string) => WorkItemRow | undefined;
   /** The newest work item whose landing opened or found the pull request at `url`. */
   readonly workItemByPrUrl: (url: string) => WorkItemRow | undefined;
+  /** The globs a work item owns; none when it claims nothing. */
+  readonly workItemGlobs: (itemId: string) => string[];
   /** A workspace's items, newest first. */
   readonly workItemsIn: (workspaceId: string) => WorkItemRow[];
   /** Every work item any of these sessions delegated, newest first (delegation-tree.ts). */
@@ -7972,10 +7984,45 @@ const make = async (path: string): Promise<DbShape> => {
             .where(sql`${workspaces.id} LIKE ${`${idOrPrefix}%`}`)
             .all();
     },
-    createWorkItem: (item) =>
-      db.insert(workItems).values(item).returning().get(),
+    createWorkItem: ({ owns, ...item }) =>
+      db.transaction((tx) => {
+        const row = tx.insert(workItems).values(item).returning().get();
+        const owned = [...new Set(owns ?? [])];
+        if (owned.length > 0) {
+          tx.insert(workItemGlobs)
+            .values(owned.map((glob) => ({ itemId: row.id, glob })))
+            .run();
+        }
+        return row;
+      }),
     workItem: (id) =>
       db.select().from(workItems).where(eq(workItems.id, id)).get(),
+    workItemGlobs: (itemId) =>
+      db
+        .select({ glob: workItemGlobs.glob })
+        .from(workItemGlobs)
+        .where(eq(workItemGlobs.itemId, itemId))
+        .orderBy(sql`rowid`)
+        .all()
+        .map(({ glob }) => glob),
+    liveOwningWorkItems: () => {
+      const owning = new Map<string, { globs: string[]; item: WorkItemRow }>();
+      for (const { item, glob } of db
+        .select({ item: workItems, glob: workItemGlobs.glob })
+        .from(workItemGlobs)
+        .innerJoin(workItems, eq(workItems.id, workItemGlobs.itemId))
+        .where(inArray(workItems.state, ["starting", "running"]))
+        .orderBy(asc(workItems.createdAt), sql`${workItemGlobs}.rowid`)
+        .all()) {
+        const known = owning.get(item.id);
+        if (known) {
+          known.globs.push(glob);
+        } else {
+          owning.set(item.id, { item, globs: [glob] });
+        }
+      }
+      return [...owning.values()];
+    },
     waitingWorkItems: () =>
       db
         .select()
@@ -8059,14 +8106,44 @@ const make = async (path: string): Promise<DbShape> => {
         .from(usageBuckets)
         .where(eq(usageBuckets.sessionId, sessionId))
         .get()?.usd ?? 0,
-    queuedWorkItems: () =>
-      db
+    // A queued request's `owns` is its globs' rows, put back as it reads.
+    queuedWorkItems: () => {
+      const globs = new Map<string, string[]>();
+      for (const { queuedId, glob } of db
+        .select()
+        .from(queuedWorkItemGlobs)
+        .orderBy(sql`rowid`)
+        .all()) {
+        globs.set(queuedId, [...(globs.get(queuedId) ?? []), glob]);
+      }
+      return db
         .select()
         .from(queuedWorkItems)
         .orderBy(asc(queuedWorkItems.queuedAt), asc(queuedWorkItems.id))
-        .all(),
-    queueWorkItem: (row) =>
-      db.insert(queuedWorkItems).values(row).returning().get(),
+        .all()
+        .map((row) => {
+          const owned = globs.get(row.id);
+          return owned
+            ? { ...row, request: { ...(row.request as object), owns: owned } }
+            : row;
+        });
+    },
+    queueWorkItem: ({ request, ...row }) =>
+      db.transaction((tx) => {
+        const { owns, ...rest } = request as { owns?: string[] };
+        const queued = tx
+          .insert(queuedWorkItems)
+          .values({ ...row, request: rest })
+          .returning()
+          .get();
+        const owned = [...new Set(owns ?? [])];
+        if (owned.length > 0) {
+          tx.insert(queuedWorkItemGlobs)
+            .values(owned.map((glob) => ({ queuedId: queued.id, glob })))
+            .run();
+        }
+        return { ...queued, request };
+      }),
     dropQueuedWorkItem: (id) => {
       db.delete(queuedWorkItems).where(eq(queuedWorkItems.id, id)).run();
     },

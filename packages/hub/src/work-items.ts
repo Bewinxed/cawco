@@ -2032,9 +2032,8 @@ export const createWorkItems = ({
     repo: RepoRef,
     owns: string[]
   ): { item: { id: string; title: string }; globs: string } | undefined => {
-    for (const item of db.liveWorkItems()) {
-      const theirs = item.owns ?? [];
-      const where = theirs.length > 0 ? repoOfItem(item) : undefined;
+    for (const { item, globs: theirs } of db.liveOwningWorkItems()) {
+      const where = repoOfItem(item);
       const globs =
         where && sameRepo(repo, where) && globsOverlap(owns, theirs);
       if (globs) {
@@ -3809,12 +3808,13 @@ export const createWorkItems = ({
       : "";
 
   /** What the caller's start text adds for a group, owned files and a budget. */
-  const extrasLine = (item: WorkItemRow): string =>
-    [
+  const extrasLine = (item: WorkItemRow): string => {
+    const owns = db.workItemGlobs(item.id);
+    return [
       item.group
         ? ` It is in group “${item.group}”: its report waits until every item of the group has ended (a failure reports at once).`
         : "",
-      item.owns?.length ? ` It owns ${item.owns.join(", ")}.` : "",
+      owns.length > 0 ? ` It owns ${owns.join(", ")}.` : "",
       item.budget
         ? ` Its budget: ${[
             item.budget.usd === undefined ? "" : `$${item.budget.usd}`,
@@ -3829,6 +3829,7 @@ export const createWorkItems = ({
             .join(", ")}.`
         : "",
     ].join("");
+  };
 
   /**
    * A new session in `workspace`, running a new item from the request's
