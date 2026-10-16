@@ -42,6 +42,13 @@ import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MODEL, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
+/** A session as the hub lists it (`/api/instances`). */
+interface InstanceRow {
+  id?: string;
+  instanceId?: string;
+  title?: string;
+}
+
 /** A block of a hub transcript (`/api/instances/:id/transcript`). */
 interface Block {
   content?: string;
@@ -604,6 +611,16 @@ async function run(kit: Kit): Promise<void> {
     // where a tap reaches the simulator.
     const requestId = stood?.split(" ")[2] ?? "";
     const route = JSON.stringify({ kind: "ask", instanceId: asker, requestId });
+    /** The session's title as the hub has it now (a resumed session's may be its history's). */
+    const sessionTitle = async (): Promise<string> => {
+      const rows = (await (await fetch(`${base}/api/instances`)).json()) as
+        InstanceRow[] | { instances?: InstanceRow[] };
+      const all = Array.isArray(rows) ? rows : (rows.instances ?? []);
+      return (
+        all.find((row) => (row.instanceId ?? row.id) === asker)?.title ??
+        "Long ask"
+      );
+    };
     const ways: {
       name: string;
       args: string;
@@ -613,26 +630,38 @@ async function run(kit: Kit): Promise<void> {
       ...(taps
         ? [
             {
-              name: "the session list",
+              // Home's "Needs you", the list that draws the ask's command
+              // on one line, sampled while it stands; then its row.
+              name: "Needs you",
               args: "",
               reach: async () => {
                 await pause(6000);
-                // The row by the session's title as the hub has it now (a resumed session's may be its history's).
-                const rows = (await (
-                  await fetch(`${base}/api/instances`)
-                ).json()) as
-                  | { id?: string; instanceId?: string; title?: string }[]
-                  | {
-                      instances?: {
-                        id?: string;
-                        instanceId?: string;
-                        title?: string;
-                      }[];
-                    };
-                const all = Array.isArray(rows) ? rows : (rows.instances ?? []);
-                const title =
-                  all.find((row) => (row.instanceId ?? row.id) === asker)
-                    ?.title ?? "Long ask";
+                if (!(await tap((label) => label.startsWith("Needs you")))) {
+                  return false;
+                }
+                await pause(3000);
+                const list = launched
+                  ? await rest(launched, "needs-you-list")
+                  : { share: Number.NaN, frames: "" };
+                kit.check(
+                  `Needs you lists the long ask with the app at rest, its main thread busy under ${REST_SHARE * 100}%`,
+                  list.share < REST_SHARE,
+                  `main thread busy ${(list.share * 100).toFixed(1)}%${list.frames ? `: ${list.frames}` : ""}`
+                );
+                return await tap((label) => label.includes(INPUT.description));
+              },
+            },
+            {
+              // The navigation's sessions, the session's row by its title as the hub has it now.
+              name: "the navigation's session list",
+              args: "",
+              reach: async () => {
+                await pause(6000);
+                if (!(await tap("Open navigation"))) {
+                  return false;
+                }
+                await pause(2000);
+                const title = await sessionTitle();
                 return await tap((label) => label.includes(title));
               },
             },
@@ -663,6 +692,16 @@ async function run(kit: Kit): Promise<void> {
     // The chevron: tapped where axe reaches the simulator, else pressed by the app itself (`-open-ask-command`).
     let opened: boolean;
     if (taps) {
+      // Back on the session's own card, whichever way in came last.
+      const from = heard.length;
+      launched = (await relaunch(`-open-session ${asker}`)) ?? launched;
+      await until(
+        "the card",
+        () => said(from, "probe card "),
+        Boolean,
+        STAND_MS
+      ).catch(() => undefined);
+      await pause(2000);
       opened = await tap("Show the whole command");
     } else {
       const from = heard.length;
