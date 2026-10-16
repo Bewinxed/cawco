@@ -149,7 +149,7 @@
   });
 
   /**
-   * Show a width. Runs on every frame of a drag, so it does no more than that.
+   * Show a width. Called on every frame of a drag, so it does no more than that.
    *
    * `--sidebar-width` resolves through `--rail-w` (see the shell's inline
    * style), so the value the inline script established is replaced rather than
@@ -161,7 +161,7 @@
   }
 
   /**
-   * Remember the width the reader settled on. Runs once, when they let go.
+   * Remember the width the reader settled on. Called once, when they let go.
    *
    * Separated from showing it because these writes are not cheap where it
    * matters: localStorage is synchronous, in WebKit a round trip to another

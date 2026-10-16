@@ -764,14 +764,14 @@ function advanceStage(
  */
 export interface StreamEffects {
   /**
-   * Runs once, when the record settles — ack, refusal, or timeout sweep.
+   * Called once, when the record settles — ack, refusal, or timeout sweep.
    *
    * The stage is the one it settled AT, which for a `send` is `accepted`
    * (see {@link SettleStage}); hooks that roll an optimistic value back test
    * for `'failed'` and are unaffected by that widening.
    */
   settled?: (stage: SettleStage | "failed", reason?: string) => void;
-  /** Runs once, when the envelope is dispatched (before any ack). */
+  /** Called once, when the envelope is dispatched (before any ack). */
   submitted?: () => void;
 }
 

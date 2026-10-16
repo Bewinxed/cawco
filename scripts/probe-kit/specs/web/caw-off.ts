@@ -31,9 +31,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
-import { checkCawSeatPop, openCawSettings } from "./web/caw-seat-pop";
+import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
+import { type Kit, open, type Spec, settle } from "../../kit";
+import { checkCawSeatPop, openCawSettings } from "./caw-seat-pop";
 
 const CAW = "You are Caw";
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
