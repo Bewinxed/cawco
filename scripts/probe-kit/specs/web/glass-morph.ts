@@ -40,7 +40,12 @@ const ROUTE = "/motion/echo";
 const CARD = ".kit-pop.kit-hang.glass-card";
 const PCTS = [0, 25, 50, 75, 100];
 /** Where a press lands on the page, clear of the bar and the card. */
-const OUTSIDE = { desk: { x: 700, y: 600 }, phone: { x: 195, y: 620 } };
+/**
+ * A press outside every card. On a phone, under the foot of Jump's sheet,
+ * which stands the screen's whole height but the bar and 24px at the foot
+ * (FinderCard): 620 was on the finder itself.
+ */
+const OUTSIDE = { desk: { x: 700, y: 600 }, phone: { x: 195, y: 836 } };
 /** The focus each card's contents take as they come in. */
 const FOCUS: Record<Face, string> = {
   caw: "a.cover, button, .empty",
@@ -464,7 +469,19 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
 
   // Every way it shuts, each from a card standing open.
   const opener: Face = touch ? "jump" : "caw";
-  const outsidePress = () => page.mouse.click(outside.x, outside.y);
+  const outsidePress = async () => {
+    const onCard = await page.evaluate(
+      ({ x, y, sel }) =>
+        document.elementFromPoint(x, y)?.closest(sel)?.className ?? null,
+      { ...outside, sel: CARD }
+    );
+    if (onCard !== null) {
+      throw new Error(
+        `the press outside (${outside.x}, ${outside.y}) lands on the card (${onCard})`
+      );
+    }
+    await page.mouse.click(outside.x, outside.y);
+  };
   const closes: [string, () => Promise<void>][] = [
     [
       "a press outside",

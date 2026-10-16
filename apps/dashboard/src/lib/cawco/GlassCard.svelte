@@ -63,7 +63,7 @@
   import { liveFeed } from "./home/caw-feed.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { dur, ease } from "./motion/curves.svelte";
-  import { FOLDED, GROWN } from "./motion/hang";
+  import { FOLDED, GROWN, standsOpen } from "./motion/hang";
   import { cawQuiet } from "./NeedsCaw.svelte";
 
   const phoneQuery = new MediaQuery(DRAWER_QUERY);
@@ -417,10 +417,14 @@
     inert={asked === null || rehearsing}
     morphs={{
       width: true,
-      // At once from the keyboard, and while it is not drawn out of the
-      // glass (a face changed behind the cut).
+      // It tweens only standing open (a face swapped in place) or folding
+      // back: at once from the keyboard, behind the cut, and while it comes
+      // down out of the glass, which is translate alone (motion/hang); what
+      // arrives mid-slide (Jump's first answer) lands at once, and the
+      // slide, a percentage of the card's own box, follows it.
       still: () =>
-        barGlass.instant || !(barGlass.joined || rehearsalJoined || folding),
+        barGlass.instant ||
+        !(folding || (content !== null && standsOpen(content))),
     }}
     onCloseAutoFocus={(event) => {
       event.preventDefault();
