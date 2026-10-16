@@ -241,10 +241,16 @@ const spec: Spec = {
     const respond = (request: Seen): Reply => {
       const now = step;
       // The hub's quiet-turn word to a delegate is answered with its wait,
-      // even while a compaction's summary is being written: three quiet
-      // turns in a row fail its item (work-items.ts `QUIET_TURNS`), and the
-      // mock answers in milliseconds.
-      if (request.tools && request.last.includes(STILL_OPEN)) {
+      // once a compaction's summary has been given: three quiet turns in a
+      // row fail its item (work-items.ts `QUIET_TURNS`), and the mock
+      // answers in milliseconds. Before that, the summarizing request comes
+      // first: OpenCode's carries the kept history, whose last word can be
+      // the hub's.
+      if (
+        request.tools &&
+        request.last.startsWith(STILL_OPEN) &&
+        !(now?.summary && !now.done)
+      ) {
         return delegateTurn(
           request,
           now?.delegate && !now.summary ? now : undefined
