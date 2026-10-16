@@ -23,8 +23,10 @@
  *    neither edge;
  *  - the model panel is as tall as its column, and the harness rail's top
  *    is that column's top (search and list);
- *  - the owner's path: the body wheeled down and a lower model picked, then
- *    each chip (effort, permission, account, location) brought into the
+ *  - wheeled to its foot, a body that scrolls fades only its top;
+ *  - the owner's path: a model the fleet's catalog gives an effort scale
+ *    picked (found by that capability, from the feeds the dialog reads; the
+ *    effort chip draws only for such a model), then each chip (effort, permission, account, location) brought into the
  *    body's view, pressed and held (long enough for a press transition to
  *    land), then let go so its menu opens: while held and once open, every
  *    box of the model section, its panel, the rail, the search, the list, the
@@ -38,6 +40,7 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one viewport, one step at a time.
 import type { Page } from "playwright-core";
+import { EFFORT_LEVELS } from "../../../../../packages/core/src/harness";
 import type { Box } from "../../../geom";
 import { type Kit, open, settle } from "../../../kit";
 
@@ -307,11 +310,8 @@ function whole(kit: Kit, name: string, rest: Read) {
   );
 }
 
-/**
- * The owner's path: the body wheeled down to the list, a lower model picked
- * (its fifth row, or its last), as the hand does it.
- */
-async function pickLower(kit: Kit, page: Page, name: string) {
+/** The body wheeled down as the hand does it: at its foot it fades only its top. */
+async function wheelDown(kit: Kit, page: Page, name: string) {
   const bb = await (await page.$(`${CARD} .body`))?.boundingBox();
   if (!bb) {
     kit.check(`${name}: the body is drawn`, false);
@@ -320,26 +320,151 @@ async function pickLower(kit: Kit, page: Page, name: string) {
   await page.mouse.move(bb.x + bb.width / 2, bb.y + 20);
   await page.mouse.wheel(0, 1000);
   await settle(page, 300);
-  const target = await page.evaluate((card) => {
-    const rows = [
-      ...document.querySelectorAll<HTMLElement>(
-        `${card} [role='listbox'] .option [role='option']:not([disabled])`
+  const at = await read(page);
+  if (scrolls(at.body)) {
+    const end =
+      at.body.scrollTop >= at.body.scrollHeight - at.body.clientHeight - 1;
+    kit.check(
+      `${name}: wheeled to its foot, the body fades only its top (--fade-start > 0, --fade-end 0px)`,
+      end &&
+        Number.parseFloat(at.body.fadeStart) > 0 &&
+        at.body.fadeEnd === "0px",
+      `scroll ${at.body.scrollTop}/${at.body.scrollHeight - at.body.clientHeight}, --fade-start ${at.body.fadeStart}, --fade-end ${at.body.fadeEnd}`
+    );
+  }
+}
+
+/**
+ * The Claude models New session gives an effort picker, read from the feeds
+ * the dialog reads (`/api/agents` for each machine's harness report,
+ * `/api/accounts` for each signed-in account's catalog). The dialog draws the
+ * `-effort` chip only when ToolChips' `effortPicker` holds,
+ * `!(readonly || effortOff) && tools.efforts.length > 0`, and NewSessionDialog
+ * fills `efforts` with the EFFORT_LEVELS stops where
+ * `report?.capabilities.effort === true && (selected?.effort.includes(stop.value) ?? false)`,
+ * `selected.effort` being every `supportedEffortLevels` of the model's rows
+ * (model-entries.ts). So a model qualifies when every machine's Claude report
+ * says `capabilities.effort`, and its rows carry a level: on a machine's
+ * report, or in every signed-in Claude account's catalog (the dialog offers
+ * the catalog of whichever account placement picks).
+ */
+function effortModels(
+  page: Page
+): Promise<{ capable: boolean; detail: string; ids: string[] }> {
+  return page.evaluate(async (levels) => {
+    interface Row {
+      resolvedModel?: string;
+      supportedEffortLevels?: string[];
+      value: string;
+    }
+    interface Report {
+      capabilities?: { effort?: boolean };
+      harness: string;
+      models?: Row[];
+    }
+    const get = async <T>(path: string): Promise<T> =>
+      (await fetch(path)).json() as Promise<T>;
+    const [agents, view] = await Promise.all([
+      get<{ harnesses?: Report[] }[]>("/api/agents"),
+      get<{
+        accounts: { id: string; provider: string }[];
+        catalogs: { accountId: string; models?: Row[] }[];
+        signins: { accountId: string; state: string }[];
+      }>("/api/accounts"),
+    ]);
+    const takes = (rows: Row[] = []) =>
+      new Set(
+        rows
+          .filter((row) =>
+            (row.supportedEffortLevels ?? []).some((level) =>
+              levels.includes(level)
+            )
+          )
+          .map((row) => row.resolvedModel ?? row.value)
+      );
+    const reports = agents.flatMap((agent) =>
+      (agent.harnesses ?? []).filter((one) => one.harness === "claude")
+    );
+    const capable =
+      reports.length > 0 &&
+      reports.every((one) => one.capabilities?.effort === true);
+    const onMachine = takes(reports.flatMap((one) => one.models ?? []));
+    const claude = new Set(
+      view.accounts
+        .filter((one) => one.provider === "anthropic")
+        .map((one) => one.id)
+    );
+    const signed = [
+      ...new Set(
+        view.signins
+          .filter(
+            (one) => one.state === "signed-in" && claude.has(one.accountId)
+          )
+          .map((one) => one.accountId)
       ),
     ];
-    const row = rows[Math.min(4, rows.length - 1)];
-    const r = row?.getBoundingClientRect();
-    return r
-      ? {
-          model: row.dataset.model ?? "",
-          x: r.left + r.width / 3,
-          y: r.top + r.height / 2,
-        }
-      : null;
-  }, CARD);
+    const perAccount = signed.map((id) =>
+      takes(view.catalogs.find((one) => one.accountId === id)?.models)
+    );
+    const inEvery = perAccount.length
+      ? [...perAccount[0]].filter((id) =>
+          perAccount.every((set) => set.has(id))
+        )
+      : [];
+    const ids = [...new Set([...onMachine, ...inEvery])];
+    return {
+      capable,
+      ids,
+      detail: `claude reports effort: ${reports.map((one) => String(one.capabilities?.effort)).join(",") || "none"}; with levels on a machine: ${[...onMachine].join(",") || "none"}; in all ${signed.length} signed-in accounts' catalogs: ${inEvery.join(",") || "none"}`,
+    };
+  }, EFFORT_LEVELS as string[]);
+}
+
+/**
+ * The owner's path: a model with an effort scale picked by a press on its
+ * row (the lowest such row other than the chosen one, else the chosen one),
+ * so the chosen row draws all its chips.
+ */
+async function pickEffortModel(kit: Kit, page: Page, name: string) {
+  const effort = await effortModels(page);
+  kit.check(
+    `${name}: the fleet's catalog offers a Claude model that takes effort`,
+    effort.capable && effort.ids.length > 0,
+    effort.detail
+  );
+  const target = await page.evaluate(
+    ({ card, ids }) => {
+      const rows = [
+        ...document.querySelectorAll<HTMLElement>(
+          `${card} [role='listbox'] .option [role='option']:not([disabled])`
+        ),
+      ].filter((one) => ids.includes(one.dataset.model ?? ""));
+      const row =
+        rows
+          .filter((one) => one.getAttribute("aria-selected") !== "true")
+          .at(-1) ?? rows.at(-1);
+      if (!row) {
+        return null;
+      }
+      row.scrollIntoView({ block: "nearest" });
+      const r = row.getBoundingClientRect();
+      return {
+        model: row.dataset.model ?? "",
+        x: r.left + r.width / 3,
+        y: r.top + r.height / 2,
+      };
+    },
+    { card: CARD, ids: effort.ids }
+  );
   if (!target) {
-    kit.check(`${name}: a lower model to pick`, false);
+    kit.check(
+      `${name}: the list draws a model that takes effort`,
+      false,
+      effort.ids.join(",") || "none"
+    );
     return;
   }
+  await settle(page, 300);
   await page.mouse.click(target.x, target.y);
   const picked = await page
     .waitForSelector(
@@ -349,22 +474,10 @@ async function pickLower(kit: Kit, page: Page, name: string) {
     .then(() => true)
     .catch(() => false);
   kit.check(
-    `${name}: wheeled down, a press on ${target.model} picks it`,
+    `${name}: a press on ${target.model}, a model that takes effort, picks it`,
     picked
   );
   await settle(page, 600);
-  const at = await read(page);
-  if (scrolls(at.body)) {
-    const end =
-      at.body.scrollTop >= at.body.scrollHeight - at.body.clientHeight - 1;
-    kit.check(
-      `${name}: scrolled to its foot, the body fades only its top (--fade-start > 0, --fade-end 0px)`,
-      end &&
-        Number.parseFloat(at.body.fadeStart) > 0 &&
-        at.body.fadeEnd === "0px",
-      `scroll ${at.body.scrollTop}/${at.body.scrollHeight - at.body.clientHeight}, --fade-start ${at.body.fadeStart}, --fade-end ${at.body.fadeEnd}`
-    );
-  }
 }
 
 /** A chip pressed and held, then let go: nothing else in the dialog moves. */
@@ -477,7 +590,8 @@ async function size(kit: Kit, page: Page, base: string, at: Size) {
     return;
   }
   whole(kit, name, await read(page));
-  await pickLower(kit, page, name);
+  await wheelDown(kit, page, name);
+  await pickEffortModel(kit, page, name);
   for (const chip of CHIPS) {
     await chipStill(kit, page, name, chip);
   }
