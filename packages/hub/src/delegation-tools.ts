@@ -128,15 +128,11 @@ const finishItemDescription = (lands: LandsMode = "main"): string => {
 };
 
 const HANDOFF_DESCRIPTION =
-  "Send a message to another session on the fleet — to guide one of your delegates while " +
-  "its work item runs, or to brief a session that already owns the work. An idle target wakes " +
-  "and works on it immediately; a busy target reads it at its next step, a command it is " +
-  "running moved to the background and kept going. Write the message as a brief " +
-  "for another engineer who cannot see your conversation: what you found, where (file " +
-  "and line), and what you are asking them to do. For new standalone work, use delegate instead. " +
-  "To follow up on your own delegate after it reports (done, failed or cancelled), hand off to it: " +
-  "the message reopens its work item in the same session, on its cached transcript. " +
-  "Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold target other than your own parent is refused once with the cost considerations, and a repeat of the call is delivered.";
+  "Send a message to another session on the fleet: guide one of your delegates while its work item runs, or brief a session that already owns the work. " +
+  "An idle target starts on it at once; a busy one reads it at its next step, a command it is running moved to the background and kept going. " +
+  "For new standalone work, delegate instead. " +
+  "A message to your own delegate after it reports (done, failed or cancelled) reopens its work item in the same session, on its cached transcript; prefer a fresh delegate unless that session is warm and holds context the task needs. " +
+  "A cold target other than your own parent is refused once with the cost considerations; a repeat of the call is delivered.";
 
 /** `handoff`'s target and message, every session's. */
 const handoffShape = () => ({
@@ -148,7 +144,7 @@ const handoffShape = () => ({
   message: z
     .string()
     .describe(
-      "The brief. Include the finding, the paths involved, and the ask."
+      "The brief, for an engineer who cannot see your conversation: what you found, where (file and line), and the ask."
     ),
 });
 
@@ -390,7 +386,7 @@ export function handoffTools(deps: HandoffDeps) {
           .trim()
           .min(1)
           .describe(
-            "Describe intended use, subject, framing/layout, style, lighting/materials, and exclusions. Quote exact text and specify its placement/typography. For complex briefs use Scene/Subject/Details/Constraints. For edits say 'Change only X; preserve Y' and name identity, geometry, lighting, and labels to retain. Number reference roles. Iterate one change at a time with the previous output as input. Set size/quality separately."
+            "Intended use, subject, framing, style, lighting, materials and exclusions; exact text quoted, with its placement and typography. A complex brief as Scene/Subject/Details/Constraints. An edit: 'Change only X; preserve Y', naming the identity, geometry, lighting and labels to keep. One change per iteration, the previous output as its input."
           ),
         output_path: z
           .string()
@@ -403,7 +399,7 @@ export function handoffTools(deps: HandoffDeps) {
           .max(5)
           .optional()
           .describe(
-            "Ordered local PNG/JPEG/WebP/GIF paths. Assign each a role in the prompt, e.g. 'Image 1: person to preserve; Image 2: clothing to apply.' For follow-up edits, attach the previous output and restate preservation constraints. Limit: 5 images, 50 MiB per image, 100 MiB combined."
+            "Ordered local PNG/JPEG/WebP/GIF paths, each given its role in the prompt ('Image 1: person to preserve; Image 2: clothing to apply'); for a follow-up edit, the previous output, with what to preserve restated. 50 MiB each, 100 MiB in all."
           ),
         size: z
           .string()
@@ -415,7 +411,7 @@ export function handoffTools(deps: HandoffDeps) {
           .enum(["auto", "low", "medium", "high"])
           .optional()
           .describe(
-            "Requested quality; defaults to auto. Use low for drafts; consider high for dense text, diagrams, or fine detail. Increase only when the result falls short; higher is not always better. This subscription tool exposes auto/low/medium/high, not xhigh/max."
+            "Defaults to auto. low for drafts; high for dense text, diagrams or fine detail, raised only when a result falls short: higher is not always better."
           ),
       },
       async (request) => {
@@ -434,11 +430,9 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "list_delegate_types",
-      "Read the live delegate catalog: each type's task description, harness, model, effort, skills, denied tools, and permission to delegate further. " +
-        "In a project, its own types (source 'project') come first and replace fleet types of the same name. " +
-        "Use this to inspect current routing before choosing a delegate type or answering questions about model mappings. " +
-        "This is a read-only tool, not an MCP resource; it does not spawn sessions. Returned settings are configuration, not confirmation of a served model. " +
-        "Named delegate dispatch reads this same live catalog.",
+      "The live delegate catalog, the one a named delegate's dispatch reads: each type's task description, harness, model, effort, skills, denied tools and whether it may delegate. " +
+        "In a project its own types (source 'project') come first and replace fleet types of the same name. " +
+        "Read it before choosing a type or answering what a type runs; it spawns nothing, and a setting is configuration, not proof of the model served.",
       {},
       async () => {
         const catalog = await actions.listDelegateTypes();
@@ -450,12 +444,10 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "list_sessions",
-      "List the other sessions running on the fleet, with the directory and machine each is working in, " +
-        "then the machines online now by the names `machine` takes on delegate and start_session. " +
-        "The listing shows where each session works, not what it is currently doing, how busy it " +
-        "is, or how likely it is to pick up a handoff — and recency is not an ownership signal. " +
-        "Use it to find a session that already owns the work, or to name a delegate. For configured delegate types and model mappings, use list_delegate_types. " +
-        "A finished delegate still takes a handoff from its parent or the user: the message continues its own session.",
+      "The other sessions on the fleet, each with the directory and machine it works in, then the machines online now by the names `machine` takes on delegate and start_session. " +
+        "It shows where each session works, not what it is doing, how busy it is or whether it will take a handoff, and recency is not ownership. " +
+        "Use it to find a session that already owns the work, or to name a delegate; delegate types are list_delegate_types'. " +
+        "A finished delegate still takes a handoff from its parent or the user, in its own session.",
       {},
       async () => ({
         content: [{ type: "text" as const, text: actions.listSessions() }],
@@ -1012,12 +1004,8 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "send_to_user",
-      "Display a message directly to the user (delivered to their Telegram). Use this for " +
-        "progress updates, partial results, or content the user must see exactly as written " +
-        "before the task finishes. Attach image or video files by absolute path (png, jpg, gif, " +
-        "webp, avif, bmp, mp4, mov, webm; up to 50 MB each, Telegram's limit) — they are read off " +
-        "this machine when sent; you do not need to read them yourself. The call fails, naming " +
-        "each one, when anything did not reach the user.",
+      "Show the user a message on their Telegram: progress, partial results, or content they must see exactly as written before the task finishes. " +
+        "The call fails, naming each one, when anything did not reach the user.",
       {
         message: z
           .string()
@@ -1026,7 +1014,7 @@ export function handoffTools(deps: HandoffDeps) {
           .array(z.string())
           .optional()
           .describe(
-            "Absolute paths of image or video files on this machine to send with the message."
+            "Absolute paths of image or video files on this machine (png, jpg, gif, webp, avif, bmp, mp4, mov, webm; up to 50 MB each, Telegram's limit), read off it as the message is sent: you need not read them yourself."
           ),
       },
       async ({ message, attachments }) => ({

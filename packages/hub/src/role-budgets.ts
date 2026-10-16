@@ -111,6 +111,13 @@ import type { Tasks } from "./tasks";
  * description cut to two sentences (the worker's measure is a session with
  * no work item, which is not listed it) (delegate 6,931 measured). Raised
  * deliberately.
+ * 2026-10-16: the hub's own tools counted (hub-tools.ts, the list sessions
+ * are given): `update_machines` (164 tokens) and `design_write` (187) put
+ * the worker 242 over and the delegate 178 over. They fit the same budgets:
+ * generate_image's, handoff's, list_sessions', list_delegate_types' and
+ * send_to_user's words were cut to what the schema and each parameter's own
+ * description do not already say (worker 24,557, delegate 6,842, lead
+ * 15,744 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 24_590,
