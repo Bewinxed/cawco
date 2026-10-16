@@ -160,6 +160,9 @@ const SOLAR_ICONS = [
   "eye-bold-duotone", // IconEye
   "eye-closed-bold-duotone", // IconEyeClosed
   "chart-2-bold-duotone", // IconUsage
+  // The task sheet's result kinds (tasks/ResultView.svelte).
+  "layers-bold-duotone", // IconLayers: data
+  "clipboard-list-bold-duotone", // IconFileTable: table
 ];
 
 /**

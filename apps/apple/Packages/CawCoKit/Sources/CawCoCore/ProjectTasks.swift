@@ -12,6 +12,8 @@ public typealias TaskView = Components.Schemas.TaskView
 public typealias TaskSummary = Components.Schemas.TaskSummary
 public typealias TaskTodo = Components.Schemas.TaskTodo
 public typealias TaskAttempt = Components.Schemas.TaskAttempt
+/// What a task's newest finished attempt handed back: its session's report (the hub's `TaskResult`).
+public typealias TaskResult = Components.Schemas.TaskResult
 public typealias StagesView = Components.Schemas.StagesView
 public typealias TaskList = Components.Schemas.TaskList
 public typealias TaskStage = Components.Schemas.Stage
@@ -55,12 +57,15 @@ public struct TaskRefusal: Error, LocalizedError {
 /// One project's task operations through the generated client.
 public struct ProjectTasks: Sendable {
     let client: Client
+    /// The hub's address, for the one route read raw (`readOutput`).
+    let address: URL?
     public let projectId: String
 
     @MainActor
     public init(hub: HubConnection, projectId: String) throws {
         guard let client = hub.client else { throw TaskRefusal(message: "No hub is connected.") }
         self.client = client
+        address = hub.address
         self.projectId = projectId
     }
 
@@ -170,11 +175,36 @@ public struct ProjectTasks: Sendable {
         throw await TaskRefusal.reading(output)
     }
 
-    /// A fresh attempt at a task whose last one failed; it reports to the project's lead.
+    /// A fresh attempt at a task whose last one failed or was stopped, in that
+    /// attempt's workspace (`retryTask`); it reports to the project's lead.
     public func retry(_ taskId: String) async throws {
         let output = try await client.postApiProjectsByIdTasksByTaskIdRetry(path: .init(id: projectId, taskId: taskId), body: .json(.init()))
         if case .ok = output { return }
         throw await TaskRefusal.reading(output)
+    }
+
+    /// A fresh attempt at a task whose last one finished (`startAttempt`); it reports to the project's lead.
+    public func startAttempt(_ taskId: String) async throws {
+        let output = try await client.postApiProjectsByIdTasksByTaskIdAttempts(path: .init(id: projectId, taskId: taskId), body: .json(.init()))
+        if case .ok = output { return }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// One output an attempt handed in, whole, by the name the task file gives
+    /// it (`readOutput`): a picture's bytes, anything else's text, with the
+    /// type the hub served it as. Read raw rather than through the generated
+    /// client: the hub answers in the output's own type (`image/png`,
+    /// `text/plain`), which the contract's one `application/octet-stream`
+    /// would refuse. A refusal is the hub's sentence.
+    public func readOutput(_ taskId: String, name: String) async throws -> (data: Data, type: String) {
+        guard let address else { throw TaskRefusal(message: "No hub is connected.") }
+        var url = address.appending(path: "api/projects").appending(path: projectId).appending(path: "tasks")
+            .appending(path: taskId).appending(path: "outputs/file")
+        url.append(queryItems: [URLQueryItem(name: "name", value: name)])
+        let (data, response) = try await URLSession.shared.data(from: url)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw TaskRefusal(message: Wire.words(data) ?? Wire.reason(data, status: status)) }
+        return (data, (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? "")
     }
 }
 
@@ -188,14 +218,30 @@ public enum TaskWords {
         return first.uppercased() + words.dropFirst()
     }
 
-    /// An attempt's state as a status word (WORDS.md: working / done / failed).
-    public static func attempt(_ state: Components.Schemas.WorkItemState) -> String {
-        switch state {
-        case .starting, .running: "Working"
-        case .done: "Done"
-        case .failed: "Failed"
-        case .cancelled: "Stopped"
-        case .unrecognized: "Unknown"
+    /// A span of time in plain words (`spanWords`): `40 s`, `12 min`, `2 h 5 min`.
+    public static func span(_ ms: Double) -> String {
+        let seconds = Int(max(0, (ms / 1000).rounded()))
+        if seconds < 60 { return "\(seconds) s" }
+        let minutes = Int((Double(seconds) / 60).rounded())
+        if minutes < 60 { return "\(minutes) min" }
+        let rest = minutes % 60
+        return rest > 0 ? "\(minutes / 60) h \(rest) min" : "\(minutes / 60) h"
+    }
+
+    /// The status tint an attempt's state takes (`AttemptTone`).
+    public enum AttemptTone: Sendable { case live, done, fail, idle }
+
+    /// An attempt's state in plain words with how long it took or has taken
+    /// so far (`attemptSentence`): "Finished in 1 min", "Failed after 3 min",
+    /// "Stopped after 40 s", "Working for 2 min". `now` in ms epoch.
+    public static func attempt(_ attempt: TaskAttempt, now: Double) -> (tone: AttemptTone, text: String) {
+        let took = span((attempt.endedAt ?? now) - attempt.startedAt)
+        switch attempt.state {
+        case .starting: return (.live, "Starting")
+        case .running: return (.live, "Working for \(took)")
+        case .done: return (.done, "Finished in \(took)")
+        case .failed: return (.fail, "Failed after \(took)")
+        case .cancelled, .unrecognized: return (.idle, "Stopped after \(took)")
         }
     }
 

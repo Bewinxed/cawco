@@ -153,6 +153,9 @@ public enum Glyph: String, CaseIterable, Sendable {
     case eye = "eye-bold-duotone"
     case eyeClosed = "eye-closed-bold-duotone"
     case usage = "chart-2-bold-duotone"
+    // The task sheet's result kinds (tasks/ResultView.svelte).
+    case dataLayers = "layers-bold-duotone" // IconLayers
+    case fileTable = "clipboard-list-bold-duotone" // IconFileTable
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)

@@ -3,27 +3,47 @@ import CawCoDesign
 import CawCoTranscript
 import UIKit
 
-/// A task, whole, in a sheet (tasks/TaskSheet.svelte): its title, stage,
-/// flags, description, acceptance criteria, to-dos, edges and attempts.
+/// A task, whole, in a sheet, read to review it (tasks/TaskSheet.svelte):
+/// what its attempts handed in (its result, each output drawn as the thing
+/// it is), its attempts and their transcripts, then its description,
+/// acceptance criteria, to-dos and edges. Every part says what it is: the
+/// header's facts are named, its labels are labels (badges, which take no
+/// press) and its actions are buttons with a verb.
+///
 /// Every change is the hub's to make, so each waits for the hub's answer and
 /// shows the task as the hub wrote it back; a refusal is said beside what it
 /// refused, in the hub's own words. The header stays; under it the parts are
-/// one list.
+/// one list, a section each.
+///
+/// An attempt's transcript opens under it; expanded, it takes a pane of its
+/// own at the sheet's full height, beside the task on a wide window and over
+/// it on a narrow one, and the sheet widens to hold both.
 final class TaskSheetController: UIViewController, UICollectionViewDelegate {
+    nonisolated enum Part: Hashable, Sendable {
+        case state, result, attempts, description, acceptance, todos, edges
+    }
+
     nonisolated enum Item: Hashable, Sendable {
         case readProblem, skeleton, warnings
+        case resultHead, report
+        /// An output by the name the task file gives it.
+        case output(String)
+        case attemptsHead, attemptTabs, attemptLine, transcript, startProblem
         case description, acceptance
         case todosHead, todosProblem, todosEmpty
         case todo(String)
         /// The add field: `""` at the foot, a to-do's ref under that to-do.
         case todoAdd(String)
         case edges
-        case attemptsHead, startProblem, retry
-        case attempt(String)
-        case path
     }
 
-    /// Presents the sheet: medium and large detents on an iPhone, a form sheet on an iPad and the Mac.
+    /// The sheet's width at rest (`sm:max-w-2xl`).
+    static let sheetWidth = 672.0
+    /// The window width from which an expanded transcript stands beside the review (`width >= 64rem`).
+    static let splitWidth = 1024.0
+
+    /// Presents the sheet: medium and large detents on an iPhone, a form sheet
+    /// the web sheet's width on an iPad and the Mac.
     static func present(projectId: String, taskId: String, attempt: String?, hub: HubConnection,
                         from presenter: UIViewController, openSession: @escaping (String) -> Void) {
         let sheet = TaskSheetController(projectId: projectId, taskId: taskId, attempt: attempt, hub: hub, openSession: openSession)
@@ -31,13 +51,14 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             sheet.modalPresentationStyle = .pageSheet
             if let controller = sheet.sheetPresentationController {
                 controller.detents = [.medium(), .large()]
-                // An attempt is read at the foot of the list: the sheet opens tall enough to show it.
+                // An attempt is read under the result: the sheet opens tall enough to show it.
                 controller.selectedDetentIdentifier = attempt == nil ? .medium : .large
                 controller.prefersGrabberVisible = true
                 controller.prefersScrollingExpandsWhenScrolledToEdge = true
             }
         } else {
             sheet.modalPresentationStyle = .formSheet
+            sheet.preferredContentSize = CGSize(width: sheetWidth, height: presenter.view.window?.bounds.height ?? presenter.view.bounds.height)
         }
         // The dialog tray's corner (`--radius-modal`), not the system sheet's.
         sheet.sheetPresentationController?.preferredCornerRadius = Radius.radiusModal
@@ -57,33 +78,50 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private var titleProblem: String?
     private var stageProblem: String?
     private var edgeProblem: String?
-    private var retryProblem: String?
     private var todoProblem: String?
+    private var tryProblem: String?
     private var moving = false
-    private var retrying = false
+    private var trying = false
     /// Ticks shown before the hub has written them, by ref.
     private var ticking: [String: Bool] = [:]
     private var editingTodo: String?
     private var addingUnder: String?
+    /// The attempt shown, by work item; nil: the newest.
+    private var chosenAttempt: String?
+    /// The shown attempt's transcript is in its own pane at the sheet's height.
+    private var expanded = false
+    /// Each row's space above it, as the parts and their gaps lay it out.
+    private var tops: [Item: Double] = [:]
 
-    // The header: the id and the stage, the title, what refused, the flags.
+    // The header: the task's number and dates, the title, what refused, its facts.
+    private let review = UIView()
     private let head = UIStackView()
-    private let idLabel = KitLabel(TaskSheetController.mono, ink: Palette.inkSubtle)
+    private let numberLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    /// "Created <date> · Updated <relative>", beside the number (`.dates`).
+    private let datesLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    private lazy var meta = WrapLayout([numberLabel, datesLabel], gap: Space.space2, centred: true)
     private let stagePicker = KitSelect(small: true)
     private let stageSkeleton = SkeletonView(height: Size.cBtnHSm)
-    /// "Created <date> · Updated <relative>", its own line under the id and stage (`.dates`).
-    private let datesLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let titleButton = UIControl()
     private let titleLabel = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
     private let titleField = KitField()
     private let titleProblemLabel = TaskSheetController.problemLabel()
     private let stageProblemLabel = TaskSheetController.problemLabel()
-    private let flagsHolder = UIView()
+    private let facts = UIStackView()
+    private var closeButton: UIButton!
 
     private var collection: UICollectionView!
-    private var dataSource: UICollectionViewDiffableDataSource<Int, Item>!
+    private var dataSource: UICollectionViewDiffableDataSource<Part, Item>!
 
-    // Rows that hold a field keep it across renders, so the keyboard stays.
+    // The frame: the review alone, or the expanded transcript's pane beside it or over it.
+    private let splitRule = UIView()
+    private var reviewFill: [NSLayoutConstraint] = []
+    private var reviewSplit: [NSLayoutConstraint] = []
+    private var sideBeside: [NSLayoutConstraint] = []
+    private var sideOver: [NSLayoutConstraint] = []
+    private var laidWide: Bool?
+
+    // Rows that hold a field, load or follow a session keep their view across renders.
     private lazy var descriptionPart = TaskTextPart(heading: "Description",
         empty: "Say what this task is for, so a session picking it up starts from it.") { [weak self] text in
         guard let self else { return }
@@ -97,6 +135,14 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private let todoField = TaskSheetController.compactField("")
     private let footField = TaskSheetController.compactField("Add a to-do")
     private let underField = TaskSheetController.compactField("A step of it")
+    private var reportCard: (key: String, view: UIView)?
+    /// Each output's view, by the attempt that handed it in and its name.
+    private var outputViews: [String: TaskOutputView] = [:]
+    private var attemptTabs: (ids: [String], view: KitSegmented)?
+    private var inlinePane: AttemptTranscriptPane?
+    private var sidePane: AttemptTranscriptPane?
+    /// Ticks while an attempt is live, so its sentence counts on ("Working for 2 min").
+    private var clock: Timer?
 
     static let mono = TypeScale.typeCode.with(points: TypeScale.typeMeta.points)
 
@@ -104,6 +150,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         self.projectId = projectId
         self.taskId = taskId
         scrollTo = attempt
+        chosenAttempt = attempt
         self.hub = hub
         self.openSession = openSession
         super.init(nibName: nil, bundle: nil)
@@ -116,48 +163,95 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
 
     private func api() throws -> ProjectTasks { try ProjectTasks(hub: hub, projectId: projectId) }
 
+    private var now: Double { Date().timeIntervalSince1970 * 1000 }
+
     // MARK: Building
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRaised
+        view.accessibilityIdentifier = "task-sheet"
+        review.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(review)
         buildHead()
 
         var list = UICollectionLayoutListConfiguration(appearance: .plain)
         list.showsSeparators = false
         list.backgroundColor = .clear
-        collection = UICollectionView(frame: .zero, collectionViewLayout: UICollectionViewCompositionalLayout.list(using: list))
+        let config = list
+        let layout = UICollectionViewCompositionalLayout { _, environment in
+            NSCollectionLayoutSection.list(using: config, layoutEnvironment: environment)
+        }
+        collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collection.translatesAutoresizingMaskIntoConstraints = false
         collection.backgroundColor = .clear
         collection.delegate = self
         collection.keyboardDismissMode = .interactive
-        // A row whose field or text grows takes its new height at once.
+        collection.accessibilityIdentifier = "task-sheet-body"
+        // A row whose field, text or loaded output grows takes its new height at once.
         collection.selfSizingInvalidation = .enabledIncludingConstraints
         // `pb-6` under the last part.
         collection.contentInset.bottom = Space.space6
-        view.addSubview(collection)
+        review.addSubview(collection)
 
         let rule = UIView()
         rule.backgroundColor = Palette.borderHairline
         rule.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(rule)
+        review.addSubview(rule)
+        // The review's own edge when the transcript stands beside it (`border-inline-start`).
+        splitRule.backgroundColor = Palette.borderHairline
+        splitRule.translatesAutoresizingMaskIntoConstraints = false
+        splitRule.isHidden = true
+        review.addSubview(splitRule)
         NSLayoutConstraint.activate([
-            head.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: Space.space5),
-            head.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Space.space5),
-            head.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space5),
+            head.topAnchor.constraint(equalTo: review.safeAreaLayoutGuide.topAnchor, constant: Space.space5),
+            head.leadingAnchor.constraint(equalTo: review.leadingAnchor, constant: Space.space5),
+            head.trailingAnchor.constraint(equalTo: review.trailingAnchor, constant: -Space.space5),
             rule.topAnchor.constraint(equalTo: head.bottomAnchor, constant: Space.space3),
-            rule.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            rule.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            rule.leadingAnchor.constraint(equalTo: review.leadingAnchor),
+            rule.trailingAnchor.constraint(equalTo: review.trailingAnchor),
             rule.heightAnchor.constraint(equalToConstant: 1),
             collection.topAnchor.constraint(equalTo: rule.bottomAnchor),
-            collection.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            collection.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            collection.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            collection.leadingAnchor.constraint(equalTo: review.leadingAnchor),
+            collection.trailingAnchor.constraint(equalTo: review.trailingAnchor),
+            collection.bottomAnchor.constraint(equalTo: review.bottomAnchor),
+            splitRule.topAnchor.constraint(equalTo: review.topAnchor),
+            splitRule.bottomAnchor.constraint(equalTo: review.bottomAnchor),
+            splitRule.leadingAnchor.constraint(equalTo: review.leadingAnchor),
+            splitRule.widthAnchor.constraint(equalToConstant: 1),
         ])
+
+        // The sheet's close (`absolute top-4 right-4`, ghost `icon-sm`): over whichever pane is in front.
+        closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.dismiss(animated: true) }
+        closeButton.accessibilityLabel = "Close"
+        view.addSubview(closeButton)
+        NSLayoutConstraint.activate([
+            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: Space.space4),
+            closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space4),
+        ])
+
+        reviewFill = [
+            review.topAnchor.constraint(equalTo: view.topAnchor),
+            review.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            review.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            review.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ]
+        // The review takes 40% of the sheet, between 26rem and 42rem (`clamp(26rem, 40%, 42rem)`).
+        let share = review.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.4)
+        share.priority = .defaultHigh
+        reviewSplit = [
+            review.topAnchor.constraint(equalTo: view.topAnchor),
+            review.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            review.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            share,
+            review.widthAnchor.constraint(greaterThanOrEqualToConstant: 416),
+            review.widthAnchor.constraint(lessThanOrEqualToConstant: Self.sheetWidth),
+        ]
+        NSLayoutConstraint.activate(reviewFill)
 
         let cell = UICollectionView.CellRegistration<HostCell, Item> { [weak self] cell, _, item in
             guard let self else { return }
-            cell.host(rowView(for: item), top: top(for: item))
+            cell.host(rowView(for: item), top: tops[item] ?? Space.space2)
         }
         dataSource = UICollectionViewDiffableDataSource(collectionView: collection) { collection, indexPath, item in
             collection.dequeueConfiguredReusableCell(using: cell, for: indexPath, item: item)
@@ -171,20 +265,21 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         head.axis = .vertical
         head.spacing = Space.space2
         head.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(head)
+        review.addSubview(head)
 
-        idLabel.text = taskId
-        stageSkeleton.widthAnchor.constraint(equalToConstant: 96).isActive = true
-        stagePicker.accessibilityLabel = "Stage"
-        stagePicker.isHidden = true
-        let close = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.dismiss(animated: true) }
-        close.accessibilityLabel = "Close"
-        let meta = UIStackView(arrangedSubviews: [idLabel, stageSkeleton, stagePicker, UIView(), close])
-        meta.spacing = Space.space2
-        meta.alignment = .center
-        head.addArrangedSubview(meta)
-        datesLabel.isHidden = true
-        head.addArrangedSubview(datesLabel)
+        // `.meta`: the number and the dates, wrapping, clear of the close (`padding-inline-end: space-8`).
+        numberLabel.tabular = true
+        numberLabel.accessibilityIdentifier = "task-number"
+        let metaRow = UIView()
+        meta.translatesAutoresizingMaskIntoConstraints = false
+        metaRow.addSubview(meta)
+        NSLayoutConstraint.activate([
+            meta.topAnchor.constraint(equalTo: metaRow.topAnchor),
+            meta.bottomAnchor.constraint(equalTo: metaRow.bottomAnchor),
+            meta.leadingAnchor.constraint(equalTo: metaRow.leadingAnchor),
+            meta.trailingAnchor.constraint(equalTo: metaRow.trailingAnchor, constant: -Space.space8),
+        ])
+        head.addArrangedSubview(metaRow)
 
         // The title edits in place (`title-button`): a tap opens the field.
         titleLabel.wrap = .balance
@@ -203,7 +298,13 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         titleField.font = TypeScale.typeTitle.font
         titleField.accessibilityLabel = "Title"
         titleField.isHidden = true
-        for part in [titleButton, titleField, titleProblemLabel, stageProblemLabel, flagsHolder] as [UIView] {
+
+        stageSkeleton.widthAnchor.constraint(equalToConstant: 96).isActive = true
+        stagePicker.accessibilityLabel = "Stage"
+        facts.axis = .vertical
+        facts.spacing = Space.space2
+        facts.accessibilityIdentifier = "task-facts"
+        for part in [titleButton, titleField, titleProblemLabel, facts, stageProblemLabel] as [UIView] {
             head.addArrangedSubview(part)
         }
     }
@@ -227,6 +328,26 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         for part in [descriptionPart, acceptancePart] {
             part.onResize = { [weak self] in self?.collection.collectionViewLayout.invalidateLayout() }
         }
+    }
+
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        // The window crossed `64rem`: the expanded transcript moves beside the review or over it.
+        if expanded, wide != laidWide { layoutFrame() }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        tick()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        guard isBeingDismissed || presentingViewController == nil else { return }
+        clock?.invalidate()
+        clock = nil
+        inlinePane?.close()
+        sidePane?.close()
     }
 
     // MARK: Reading
@@ -257,49 +378,120 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
 
     private func render() {
         renderHead()
-        var items: [Item] = []
+        var parts: [(Part, [Item])] = []
         if readProblem != nil {
-            items = [.readProblem]
+            parts = [(.state, [.readProblem])]
         } else if let task {
-            if !task.problems.isEmpty { items.append(.warnings) }
+            if !task.problems.isEmpty { parts.append((.state, [.warnings])) }
+            if task.result != nil || !task.outputs.isEmpty {
+                var items: [Item] = [.resultHead]
+                if task.result != nil { items.append(.report) }
+                if handedIn(task) { items += task.outputs.map(Item.output) }
+                parts.append((.result, items))
+            }
+            if !task.attempts.isEmpty {
+                parts.append((.attempts, [.attemptsHead] + (task.attempts.count > 1 ? [.attemptTabs] : []) + [.attemptLine, .transcript]))
+            } else if task.startProblem != nil {
+                parts.append((.attempts, [.startProblem]))
+            }
             descriptionPart.text = task.description
             acceptancePart.text = task.acceptance
-            items += [.description, .acceptance, .todosHead]
-            if todoProblem != nil { items.append(.todosProblem) }
-            if task.todos.isEmpty { items.append(.todosEmpty) }
+            parts.append((.description, [.description]))
+            parts.append((.acceptance, [.acceptance]))
+            var todos: [Item] = [.todosHead]
+            if todoProblem != nil { todos.append(.todosProblem) }
+            if task.todos.isEmpty { todos.append(.todosEmpty) }
             for todo in task.todos {
-                items.append(.todo(todo.path))
-                if addingUnder == todo.ref { items.append(.todoAdd(todo.ref)) }
+                todos.append(.todo(todo.path))
+                if addingUnder == todo.ref { todos.append(.todoAdd(todo.ref)) }
             }
-            items.append(.todoAdd(""))
-            items.append(.edges)
-            if !task.attempts.isEmpty || task.startProblem != nil {
-                items.append(.attemptsHead)
-                if task.startProblem != nil { items.append(.startProblem) }
-                if (task.lastAttemptFailed || task.lastAttemptStopped) && !task.liveAttempt { items.append(.retry) }
-                items += task.attempts.map { .attempt($0.workItemId) }
-            }
-            items.append(.path)
+            todos.append(.todoAdd(""))
+            parts.append((.todos, todos))
+            parts.append((.edges, [.edges]))
         } else {
-            items = [.skeleton]
+            parts = [(.state, [.skeleton])]
         }
-        var snapshot = NSDiffableDataSourceSnapshot<Int, Item>()
-        snapshot.appendSections([0])
-        snapshot.appendItems(items)
+
+        // Each part starts `gap-5` under the one before (`pt-4` before the first); within a part, its own gaps.
+        tops = [:]
+        for (index, (part, items)) in parts.enumerated() {
+            for (at, item) in items.enumerated() {
+                tops[item] = at == 0 ? (index == 0 ? Space.space4 : Space.space5) : gap(before: item, at: at, in: part)
+            }
+        }
+
+        syncSide()
+        var snapshot = NSDiffableDataSourceSnapshot<Part, Item>()
+        for (part, items) in parts {
+            snapshot.appendSections([part])
+            snapshot.appendItems(items, toSection: part)
+        }
         // Rows that stay are drawn again from the task as it now is.
-        snapshot.reconfigureItems(items.filter { dataSource.indexPath(for: $0) != nil })
+        snapshot.reconfigureItems(snapshot.itemIdentifiers.filter { dataSource.indexPath(for: $0) != nil })
         dataSource.apply(snapshot, animatingDifferences: collection.window != nil && !UIAccessibility.isReduceMotionEnabled) { [weak self] in
             self?.scrollToAttempt()
         }
+        tick()
+    }
+
+    /// The space over a part's row past its first.
+    private func gap(before item: Item, at: Int, in part: Part) -> Double {
+        switch part {
+        // The results stand `gap-2` under the part's head, `gap-4` apart.
+        case .result: at == 1 ? Space.space2 : Space.space4
+        // The attempts part's rows are `gap-3` apart; the transcript is `gap-2` under its attempt.
+        case .attempts: item == .transcript ? Space.space2 : Space.space3
+        case .todos:
+            switch item {
+            case .todo: 0
+            case let .todoAdd(under): under.isEmpty && task?.todos.isEmpty == false ? Space.space2 : 0
+            default: Space.space2
+            }
+        default: Space.space2
+        }
+    }
+
+    /// An attempt has finished, so its outputs are in the project's folder.
+    private func handedIn(_ task: TaskView) -> Bool {
+        task.attempts.contains { $0.state == .done }
+    }
+
+    /// The attempt shown and what it is called ("Attempt 2": the oldest is the first).
+    private func shownAttempt(_ task: TaskView) -> (attempt: TaskAttempt, index: Int, name: String)? {
+        let index = max(0, task.attempts.firstIndex { $0.workItemId == chosenAttempt } ?? 0)
+        guard task.attempts.indices.contains(index) else { return nil }
+        return (task.attempts[index], index, "Attempt \(task.attempts.count - index)")
     }
 
     /// An `attempt` push lands on its attempt once the task is read.
     private func scrollToAttempt() {
-        guard let id = scrollTo, task != nil else { return }
+        guard scrollTo != nil, task != nil else { return }
         scrollTo = nil
-        guard let path = dataSource.indexPath(for: .attempt(id)) else { return }
+        guard let path = dataSource.indexPath(for: .attemptLine) else { return }
         collection.layoutIfNeeded()
-        collection.scrollToItem(at: path, at: .centeredVertically, animated: false)
+        collection.scrollToItem(at: path, at: .top, animated: false)
+    }
+
+    /// Draws the rows given again, as they stand now.
+    private func reconfigure(_ items: [Item]) {
+        var snapshot = dataSource.snapshot()
+        let present = items.filter { snapshot.indexOfItem($0) != nil }
+        guard !present.isEmpty else { return }
+        snapshot.reconfigureItems(present)
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
+    /// A live attempt's sentence counts on once a second while the sheet is up (`tickingClock`).
+    private func tick() {
+        let live = task?.liveAttempt == true && view.window != nil
+        if live, clock == nil {
+            clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reconfigure([.attemptLine]) }
+            }
+        } else if !live {
+            clock?.invalidate()
+            clock = nil
+        }
     }
 
     private func renderHead() {
@@ -309,56 +501,67 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         titleButton.accessibilityLabel = shown?.title
         show(titleProblem, in: titleProblemLabel)
         show(stageProblem, in: stageProblemLabel)
-        // The shape of a stage still coming; once the read has answered, with
-        // the task or with why it could not be read, no shape is left waiting.
-        stageSkeleton.isHidden = shown != nil || readProblem != nil
-        stagePicker.isHidden = shown == nil
+        numberLabel.text = shown.map { "Task \(Int($0.number))" } ?? ""
+        datesLabel.text = ""
+        if let shown {
+            let updated = RailAge.ago(shown.updatedAt, now: now)
+            datesLabel.text = "Created \(Self.timestamp(shown.createdAt)) · Updated \(updated)"
+        }
+        meta.invalidateIntrinsicContentSize()
+        meta.setNeedsLayout()
+
+        // The task's facts, each under its name: the stage is a picker (a
+        // control), the rest are labels (badges, which take no press).
+        facts.arrangedSubviews.forEach { $0.removeFromSuperview() }
         if let shown {
             stagePicker.setValue(TaskWords.stage(shown.stage))
             stagePicker.isEnabled = !moving
             stagePicker.menu = stageMenu(shown)
         }
-        datesLabel.isHidden = shown == nil
-        if let shown {
-            // time.ts `formatTimestamp` (en-US "Oct 13, 11:15 AM") and `formatDistanceToNow`.
-            // The date and the time apart: one en-US date-time style reads "Oct 13 at 11:15 AM".
-            let at = Date(timeIntervalSince1970: shown.createdAt / 1000)
-            let us = Locale(identifier: "en_US")
-            let created = "\(at.formatted(.dateTime.month(.abbreviated).day().locale(us))), \(at.formatted(.dateTime.hour().minute().locale(us)))"
-            let updated = RailAge.ago(shown.updatedAt, now: Date().timeIntervalSince1970 * 1000)
-            datesLabel.text = "Created \(created) · Updated \(updated)"
+        // The shape of a stage still coming; once the read has answered, with
+        // the task or with why it could not be read, no shape is left waiting.
+        if shown != nil {
+            facts.addArrangedSubview(factRow("Stage", Self.leading(stagePicker)))
+        } else if readProblem == nil {
+            facts.addArrangedSubview(factRow("Stage", Self.leading(stageSkeleton)))
         }
+        guard let shown else { return }
+        var status: [UIView] = []
+        if shown.needsYou { status.append(KitBadge("Needs you", variant: .attn, glyph: .attention)) }
+        if shown.liveAttempt {
+            status.append(KitBadge("An attempt is working", variant: .live, glyph: .working))
+        } else if shown.lastAttemptFailed {
+            status.append(KitBadge("Last attempt failed", variant: .fail, glyph: .failed))
+        } else if shown.lastAttemptStopped {
+            status.append(KitBadge("Last attempt stopped", variant: .secondary, glyph: .stop))
+        } else if shown.queuedStart {
+            status.append(KitBadge("Waiting for a free slot", variant: .secondary, glyph: .clock))
+        }
+        if !status.isEmpty { facts.addArrangedSubview(factRow("Status", WrapLayout(status, gap: Space.space1))) }
+        if !shown.blockedBy.isEmpty {
+            let badges = shown.blockedBy.map { id in
+                let badge = KitBadge(id, variant: .secondary, glyph: .lock)
+                badge.accessibilityHint = summaries.first { $0.id == id }?.title
+                return badge as UIView
+            }
+            facts.addArrangedSubview(factRow("Waits on", WrapLayout(badges, gap: Space.space1)))
+        }
+        if !shown.labels.isEmpty {
+            facts.addArrangedSubview(factRow("Labels", WrapLayout(shown.labels.map { KitBadge($0, variant: .secondary) }, gap: Space.space1)))
+        }
+    }
 
-        flagsHolder.subviews.forEach { $0.removeFromSuperview() }
-        var badges: [UIView] = []
-        if let shown {
-            if shown.needsYou { badges.append(KitBadge("Needs you", variant: .attn, glyph: .attention)) }
-            if shown.liveAttempt {
-                badges.append(KitBadge("Working", variant: .live, glyph: .working))
-            } else if shown.lastAttemptFailed {
-                badges.append(KitBadge("Last attempt failed", variant: .fail, glyph: .failed))
-            } else if shown.lastAttemptStopped {
-                badges.append(KitBadge("Stopped", variant: .secondary))
-            } else if shown.queuedStart {
-                badges.append(KitBadge("Queued", variant: .secondary))
-            }
-            if !shown.blockedBy.isEmpty {
-                badges.append(KitBadge("Waits on \(shown.blockedBy.joined(separator: ", "))", variant: .secondary, glyph: .lock))
-            }
-            badges += shown.labels.map { KitBadge($0, variant: .secondary) }
-        }
-        flagsHolder.isHidden = badges.isEmpty
-        if !badges.isEmpty {
-            let wrap = WrapLayout(badges, gap: Space.space1)
-            wrap.translatesAutoresizingMaskIntoConstraints = false
-            flagsHolder.addSubview(wrap)
-            NSLayoutConstraint.activate([
-                wrap.topAnchor.constraint(equalTo: flagsHolder.topAnchor),
-                wrap.bottomAnchor.constraint(equalTo: flagsHolder.bottomAnchor),
-                wrap.leadingAnchor.constraint(equalTo: flagsHolder.leadingAnchor),
-                wrap.trailingAnchor.constraint(equalTo: flagsHolder.trailingAnchor),
-            ])
-        }
+    /// One fact: its name in label type over the `4.5rem` column, its value beside it, centred on each other.
+    private func factRow(_ name: String, _ value: UIView) -> UIView {
+        let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+        label.text = name
+        label.widthAnchor.constraint(equalToConstant: 72).isActive = true
+        label.setContentHuggingPriority(.required, for: .horizontal)
+        let row = UIStackView(arrangedSubviews: [label, value])
+        row.spacing = Space.space2
+        row.alignment = .center
+        row.accessibilityIdentifier = "task-fact-\(name.lowercased().replacing(" ", with: "-"))"
+        return row
     }
 
     /// The moves the project's stages allow you from where the task is; the
@@ -376,18 +579,6 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         return UIMenu(children: actions)
     }
 
-    private func top(for item: Item) -> Double {
-        switch item {
-        case .readProblem, .skeleton, .warnings: Space.space4
-        // Each part starts `gap-5` under the one before (`pt-4` before the first).
-        case .description: task?.problems.isEmpty == false ? Space.space5 : Space.space4
-        case .acceptance, .todosHead, .edges, .attemptsHead, .path: Space.space5
-        case .todo: 0
-        case let .todoAdd(under): under.isEmpty && task?.todos.isEmpty == false ? Space.space2 : 0
-        default: Space.space2
-        }
-    }
-
     private func rowView(for item: Item) -> UIView {
         guard let task else {
             if item == .readProblem { return readProblemView() }
@@ -397,6 +588,14 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         case .readProblem: return readProblemView()
         case .skeleton: return skeletonView()
         case .warnings: return KitAlert(task.problems.joined(separator: " "), tone: .warning)
+        case .resultHead: return resultHead(task)
+        case .report: return reportView(task)
+        case let .output(name): return outputView(name, task: task)
+        case .attemptsHead: return attemptsHead(task)
+        case .attemptTabs: return tabsView(task)
+        case .attemptLine: return attemptLine(task)
+        case .transcript: return transcriptRow(task)
+        case .startProblem: return Self.problemLabel(task.startProblem)
         case .description: return descriptionPart
         case .acceptance: return acceptancePart
         case .todosHead:
@@ -412,17 +611,6 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             return todoRow(todo)
         case let .todoAdd(under): return addRow(under: under, depth: under.isEmpty ? 0 : (task.todos.first { $0.ref == under }.map { Int($0.depth) + 1 } ?? 1))
         case .edges: return edgesView(task)
-        case .attemptsHead: return Self.sectionHead("Attempts", count: task.attempts.isEmpty ? nil : "\(task.attempts.count)")
-        case .startProblem: return Self.problemLabel(task.startProblem)
-        case .retry: return retryView()
-        case let .attempt(id):
-            guard let index = task.attempts.firstIndex(where: { $0.workItemId == id }) else { return UIView() }
-            return attemptRow(task.attempts[index], number: task.attempts.count - index)
-        case .path:
-            let path = KitLabel(Self.mono, ink: Palette.inkSubtle, lines: 0)
-            path.text = task.path
-            path.accessibilityHint = "The task's file in the project folder"
-            return path
         }
     }
 
@@ -456,6 +644,265 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         stack.isAccessibilityElement = true
         stack.accessibilityLabel = "Loading"
         return stack
+    }
+
+    // MARK: Result (TaskSheet.svelte `data-task-result`)
+
+    /// "Result" and what it is: which attempt reported it and when, or what will be there.
+    private func resultHead(_ task: TaskView) -> UIView {
+        let hint = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+        if let result = task.result {
+            let who = task.attempts.firstIndex { $0.workItemId == result.workItemId }.map { "Attempt \(task.attempts.count - $0)" } ?? "The attempt"
+            hint.text = "\(who) finished \(RailAge.ago(result.at, now: now)) and handed this in."
+        } else {
+            hint.text = handedIn(task) ? "What the finished attempt handed in." : "What an attempt hands in shows here once one finishes."
+        }
+        let stack = UIStackView(arrangedSubviews: [Self.sectionHead("Result", count: nil), hint])
+        stack.axis = .vertical
+        stack.accessibilityIdentifier = "task-result"
+        return stack
+    }
+
+    /// The attempt's own report, leading: its headline, then its summary as markdown.
+    private func reportView(_ task: TaskView) -> UIView {
+        guard let result = task.result else { return UIView() }
+        let key = "\(result.workItemId)\u{0}\(result.headline ?? "")\u{0}\(result.report)"
+        if let reportCard, reportCard.key == key { return reportCard.view }
+        let card = ResultCard(glyph: .report, kind: "Report")
+        card.accessibilityIdentifier = "task-report"
+        var content: [UIView] = []
+        if let headline = result.headline {
+            // `.lead`: body type at the strong weight, read first.
+            let lead = KitLabel(TypeScale.typeBody.withWeight(TypeScale.weightStrong), ink: Palette.inkStrong, lines: 0)
+            lead.wrap = .pretty
+            lead.text = headline
+            content.append(lead)
+        }
+        let body = MarkdownDocumentView(message: true)
+        body.setSource(result.report)
+        content.append(body)
+        card.setContent(content)
+        reportCard = (key, card)
+        return card
+    }
+
+    private func outputView(_ name: String, task: TaskView) -> UIView {
+        let key = "\(task.result?.workItemId ?? "")\u{0}\(name)"
+        if let kept = outputViews[key] { return kept }
+        let projectId = projectId
+        let taskId = taskId
+        let hub = hub
+        let view = TaskOutputView(name: name) {
+            try await ProjectTasks(hub: hub, projectId: projectId).readOutput(taskId, name: name)
+        }
+        outputViews[key] = view
+        return view
+    }
+
+    // MARK: Attempts (tasks/TaskAttempts.svelte)
+
+    /// "Attempts", what an attempt is and how many there were, and Try again whenever none runs.
+    private func attemptsHead(_ task: TaskView) -> UIView {
+        let count = task.attempts.count
+        let hint = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+        hint.text = "Each attempt is one session's try at this task. " + (count == 1 ? "It has had 1." : "It has had \(count).")
+        let words = UIStackView(arrangedSubviews: [Self.sectionHead("Attempts", count: nil), hint])
+        words.axis = .vertical
+        var again: UIView?
+        if !task.liveAttempt {
+            let button = KitButton.make(trying ? "Starting…" : "Try again", glyph: .refresh, variant: .outline, height: .sm) { [weak self] in
+                self?.tryAgain()
+            }
+            button.isEnabled = !trying
+            button.accessibilityIdentifier = "task-try-again"
+            again = button
+        }
+        // `.words { flex: 1 1 14rem }`; the button wraps under them where both do not fit.
+        let line = FlexRow(lead: words, trail: again, basis: 224, gap: Space.space4, rowGap: Space.space2)
+        let stack = UIStackView(arrangedSubviews: [line])
+        stack.axis = .vertical
+        stack.spacing = Space.space3
+        stack.accessibilityIdentifier = "task-attempts"
+        for problem in [tryProblem, task.startProblem] {
+            if let problem { stack.addArrangedSubview(Self.problemLabel(problem)) }
+        }
+        return stack
+    }
+
+    /// Tabs past one attempt, newest first, at their own width (`Tabs.List`, `self-start`).
+    private func tabsView(_ task: TaskView) -> UIView {
+        let ids = task.attempts.map(\.workItemId)
+        let index = shownAttempt(task)?.index ?? 0
+        if let attemptTabs, attemptTabs.ids == ids {
+            attemptTabs.view.select(index)
+            return Self.leading(attemptTabs.view)
+        }
+        let tabs = KitSegmented(ids.indices.map { "Attempt \(ids.count - $0)" }, selected: index)
+        tabs.accessibilityLabel = "Attempts"
+        tabs.accessibilityIdentifier = "task-attempt-tabs"
+        tabs.addAction(UIAction { [weak self, weak tabs] _ in
+            guard let self, let chosen = tabs?.selectedIndex, let task = self.task, task.attempts.indices.contains(chosen) else { return }
+            chosenAttempt = task.attempts[chosen].workItemId
+            render()
+        }, for: .valueChanged)
+        attemptTabs = (ids, tabs)
+        return Self.leading(tabs)
+    }
+
+    /// The shown attempt: its name (alone, with no tabs), its state in plain
+    /// words with how long it took, when it started, how it ended, and what
+    /// it said it did where the Result does not already say it.
+    private func attemptLine(_ task: TaskView) -> UIView {
+        guard let (attempt, _, name) = shownAttempt(task) else { return UIView() }
+        var items: [UIView] = []
+        if task.attempts.count == 1 {
+            let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+            label.text = name
+            items.append(label)
+        }
+        let said = TaskWords.attempt(attempt, now: now)
+        let (variant, glyph): (KitBadge.Variant, Glyph) = switch said.tone {
+        case .live: (.live, .working)
+        case .done: (.done, .passed)
+        case .fail: (.fail, .failed)
+        case .idle: (.secondary, .stop)
+        }
+        let badge = KitBadge(said.text, variant: variant, glyph: glyph)
+        badge.accessibilityIdentifier = "task-attempt-status"
+        items.append(badge)
+        let started = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+        started.text = "Started \(Self.timestamp(attempt.startedAt))"
+        items.append(started)
+        let stack = UIStackView(arrangedSubviews: [WrapLayout(items, gap: Space.space3, rowGap: Space.space2, centred: true)])
+        stack.axis = .vertical
+        stack.spacing = Space.space2
+        stack.accessibilityIdentifier = "task-attempt"
+        // How it ended when it did not land; what it said it did, where the Result's report is another attempt's.
+        var ended: [String] = []
+        if let how = attempt.endedHow { ended.append(how) }
+        if let headline = attempt.headline, task.result?.workItemId != attempt.workItemId { ended.append(headline) }
+        for words in ended {
+            let line = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
+            line.lineBreakMode = .byCharWrapping
+            line.text = words
+            stack.addArrangedSubview(line)
+        }
+        return stack
+    }
+
+    /// The shown attempt's transcript in its pane, or where it went.
+    private func transcriptRow(_ task: TaskView) -> UIView {
+        guard let (attempt, _, name) = shownAttempt(task) else { return UIView() }
+        if expanded {
+            let hint = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+            hint.text = "\(name)'s transcript is open in its own pane."
+            return hint
+        }
+        if inlinePane?.instanceId != attempt.instanceId {
+            inlinePane?.close()
+            inlinePane = pane(attempt, name: name, expanded: false)
+        }
+        inlinePane?.attempt = name
+        return inlinePane ?? UIView()
+    }
+
+    private func pane(_ attempt: TaskAttempt, name: String, expanded: Bool) -> AttemptTranscriptPane {
+        let pane = AttemptTranscriptPane(hub: hub, instanceId: attempt.instanceId, attempt: name, expanded: expanded)
+        pane.onToggle = { [weak self] in self?.setExpanded(!expanded) }
+        pane.onOpenSession = { [weak self] id in
+            guard let self else { return }
+            let open = openSession
+            dismiss(animated: true) { open(id) }
+        }
+        return pane
+    }
+
+    /// Try again: a retry in the last attempt's workspace when it failed or
+    /// was stopped (`retryTask`), a fresh attempt when it finished
+    /// (`startAttempt`); the hub's refusal under the button in its own words.
+    private func tryAgain() {
+        guard let task, !trying else { return }
+        let retry = task.lastAttemptFailed || task.lastAttemptStopped
+        trying = true
+        tryProblem = nil
+        render()
+        Task {
+            do {
+                let api = try api()
+                if retry { try await api.retry(taskId) } else { try await api.startAttempt(taskId) }
+                let fresh = try await api.read(taskId)
+                chosenAttempt = nil
+                self.task = fresh
+            } catch { tryProblem = error.localizedDescription }
+            trying = false
+            render()
+        }
+    }
+
+    // MARK: The frame: the transcript expanded
+
+    private var wide: Bool { (view.window?.bounds.width ?? view.bounds.width) >= Self.splitWidth }
+
+    private func setExpanded(_ open: Bool) {
+        expanded = open
+        render()
+        layoutFrame()
+    }
+
+    /// The expanded pane follows the shown attempt; collapsed, or with no attempt, it goes.
+    private func syncSide() {
+        let shown = task.flatMap(shownAttempt)
+        guard expanded, let shown else {
+            if expanded { expanded = false }
+            guard let sidePane else { return }
+            sidePane.close()
+            sidePane.removeFromSuperview()
+            self.sidePane = nil
+            layoutFrame()
+            return
+        }
+        if let sidePane, sidePane.instanceId == shown.attempt.instanceId {
+            sidePane.attempt = shown.name
+            return
+        }
+        sidePane?.close()
+        sidePane?.removeFromSuperview()
+        let side = pane(shown.attempt, name: shown.name, expanded: true)
+        view.addSubview(side)
+        sideBeside = [
+            side.topAnchor.constraint(equalTo: view.topAnchor),
+            side.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            side.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            side.trailingAnchor.constraint(equalTo: review.leadingAnchor),
+        ]
+        sideOver = [
+            side.topAnchor.constraint(equalTo: view.topAnchor),
+            side.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            side.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            side.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ]
+        sidePane = side
+        // Another attempt chosen while expanded: its pane takes the place the last one stood in.
+        layoutFrame()
+    }
+
+    /// The review alone; or, expanded, the transcript's pane and the review
+    /// side by side, the review where it stood at the sheet's right edge; a
+    /// narrow window holds the pane alone. The sheet takes the window's width
+    /// to hold both, and goes back to its own when the pane closes.
+    private func layoutFrame() {
+        let open = expanded && sidePane != nil
+        let beside = open && wide
+        laidWide = open ? wide : nil
+        NSLayoutConstraint.deactivate(reviewFill + reviewSplit + sideBeside + sideOver)
+        NSLayoutConstraint.activate(beside ? reviewSplit + sideBeside : open ? reviewFill + sideOver : reviewFill)
+        review.isHidden = open && !beside
+        splitRule.isHidden = !beside
+        view.bringSubviewToFront(closeButton)
+        if traitCollection.userInterfaceIdiom != .phone, let window = view.window {
+            preferredContentSize = open ? window.bounds.size : CGSize(width: Self.sheetWidth, height: window.bounds.height)
+        }
+        UIView.performWithoutAnimation { view.layoutIfNeeded() }
     }
 
     // MARK: Title and stage
@@ -710,82 +1157,6 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         }
     }
 
-    // MARK: Attempts
-
-    private func retryView() -> UIView {
-        let button = KitButton.make("Retry", variant: .outline, height: .sm) { [weak self] in self?.retry() }
-        button.isEnabled = !retrying
-        let stack = UIStackView(arrangedSubviews: [Self.leading(button)])
-        stack.axis = .vertical
-        stack.spacing = Space.space1
-        if let retryProblem { stack.addArrangedSubview(Self.problemLabel(retryProblem)) }
-        return stack
-    }
-
-    /// A fresh attempt at a task whose last one failed; it reports to the project's lead.
-    private func retry() {
-        retrying = true
-        retryProblem = nil
-        render()
-        Task {
-            do {
-                let api = try api()
-                try await api.retry(taskId)
-                took(try await api.read(taskId))
-            } catch { retryProblem = error.localizedDescription }
-            retrying = false
-            render()
-        }
-    }
-
-    /// "Attempt N", its status word in its tint, and when it ended (or started); a tap opens its session.
-    private func attemptRow(_ attempt: TaskAttempt, number: Int) -> UIView {
-        let row = TaskPressRow(lines: 1)
-        row.label.text = "Attempt \(number)"
-        row.label.role = TypeScale.typeLabel
-        let word = TaskWords.attempt(attempt.state)
-        let variant: KitBadge.Variant = switch word {
-        case "Working": .live
-        case "Done": .done
-        case "Failed": .fail
-        default: .secondary
-        }
-        let at = (attempt.endedAt ?? attempt.startedAt) / 1000
-        let when = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-        when.text = Date(timeIntervalSince1970: at).formatted(date: .numeric, time: .shortened)
-        row.trail([KitBadge(word, variant: variant), UIView(), when])
-        row.backgroundColor = Palette.surfaceRecess
-        row.layer.cornerRadius = Radius.radiusSm
-        row.layer.cornerCurve = .continuous
-        row.inset(NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space3, bottom: Space.space2, trailing: Space.space3))
-        row.accessibilityLabel = "Attempt \(number), \(word), \(when.text ?? "")"
-        let instanceId = attempt.instanceId
-        row.addAction(UIAction { [weak self] _ in
-            guard let self else { return }
-            let open = openSession
-            dismiss(animated: true) { open(instanceId) }
-        }, for: .primaryActionTriggered)
-        // How it ended when it did not land ("Attempt failed: …", "Stopped by Caw"), on its own line under the row.
-        guard let how = attempt.endedHow else { return row }
-        row.accessibilityLabel = "Attempt \(number), \(how), \(when.text ?? "")"
-        let line = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
-        line.text = how
-        line.isAccessibilityElement = false
-        let indented = UIView()
-        indented.addSubview(line)
-        line.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            line.topAnchor.constraint(equalTo: indented.topAnchor),
-            line.bottomAnchor.constraint(equalTo: indented.bottomAnchor),
-            line.leadingAnchor.constraint(equalTo: indented.leadingAnchor, constant: Space.space3),
-            line.trailingAnchor.constraint(equalTo: indented.trailingAnchor, constant: -Space.space3),
-        ])
-        let stack = UIStackView(arrangedSubviews: [row, indented])
-        stack.axis = .vertical
-        stack.spacing = Space.space1
-        return stack
-    }
-
     // MARK: Small parts
 
     func collectionView(_: UICollectionView, shouldHighlightItemAt _: IndexPath) -> Bool { false }
@@ -793,6 +1164,14 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private func show(_ problem: String?, in label: KitLabel) {
         label.text = problem
         label.isHidden = problem == nil
+    }
+
+    /// time.ts `formatTimestamp` (en-US "Oct 13, 11:15 AM"), from ms epoch.
+    /// The date and the time apart: one en-US date-time style reads "Oct 13 at 11:15 AM".
+    static func timestamp(_ ms: Double) -> String {
+        let at = Date(timeIntervalSince1970: ms / 1000)
+        let us = Locale(identifier: "en_US")
+        return "\(at.formatted(.dateTime.month(.abbreviated).day().locale(us))), \(at.formatted(.dateTime.hour().minute().locale(us)))"
     }
 
     static func problemLabel(_ text: String? = nil) -> KitLabel {
@@ -855,7 +1234,8 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
 }
 
 /// One row's view in a list cell, `px-5` in; the view may be one the sheet
-/// keeps (a field), which moves in without leaving the window it is in.
+/// keeps (a field, an output, a transcript), which moves in without leaving
+/// the window it is in.
 final class HostCell: UICollectionViewCell {
     private weak var hosted: UIView?
     private var topConstraint: NSLayoutConstraint?
@@ -982,11 +1362,6 @@ final class TaskPressRow: UIControl {
         super.endTracking(touch, with: event)
         guard touch != nil, isTouchInside else { return }
         sendActions(for: .primaryActionTriggered)
-    }
-
-    func trail(_ views: [UIView]) {
-        views.forEach { stack.addArrangedSubview($0) }
-        label.setContentHuggingPriority(.required, for: .horizontal)
     }
 
     func inset(_ insets: NSDirectionalEdgeInsets) {

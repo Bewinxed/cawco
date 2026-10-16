@@ -1085,15 +1085,21 @@ public struct AskRun {
     }
 }
 
-/// Chips that wrap: each as wide as its content, `gap` apart either way.
+/// Chips that wrap: each as wide as its content, `gap` apart either way, or
+/// `gap` across and `rowGap` between lines (`gap: <row> <column>`);
+/// `centred`, each centred in its line's height (`align-items: center`).
 public final class WrapLayout: UIView {
     private let items: [UIView]
     private let gap: Double
+    private let rowGap: Double
+    private let centred: Bool
     private var laidWidth = 0.0
 
-    public init(_ items: [UIView], gap: Double = Space.space2) {
+    public init(_ items: [UIView], gap: Double = Space.space2, rowGap: Double? = nil, centred: Bool = false) {
         self.items = items
         self.gap = gap
+        self.rowGap = rowGap ?? gap
+        self.centred = centred
         super.init(frame: .zero)
         for item in items {
             item.translatesAutoresizingMaskIntoConstraints = true
@@ -1122,19 +1128,30 @@ public final class WrapLayout: UIView {
     private func arrange(width: Double, apply: Bool) -> Double {
         guard width > 0 else { return 30 }
         var x = 0.0, y = 0.0, line = 0.0
+        /// The line being laid: each item and its frame, set once the line's height is known.
+        var laying: [(UIView, CGRect)] = []
+        func close() {
+            guard apply else { return }
+            for (item, frame) in laying {
+                item.frame = frame.offsetBy(dx: 0, dy: centred ? (line - frame.height) / 2 : 0)
+            }
+            laying = []
+        }
         for item in items {
             let fit = item.systemLayoutSizeFitting(CGSize(width: width, height: UIView.layoutFittingCompressedSize.height), withHorizontalFittingPriority: .fittingSizeLevel, verticalFittingPriority: .fittingSizeLevel)
             let w = min(width, fit.width)
             let h = item.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
             if x > 0, x + w > width {
+                close()
                 x = 0
-                y += line + gap
+                y += line + rowGap
                 line = 0
             }
-            if apply { item.frame = CGRect(x: x, y: y, width: w, height: h) }
+            laying.append((item, CGRect(x: x, y: y, width: w, height: h)))
             x += w + gap
             line = max(line, h)
         }
+        close()
         return y + line
     }
 }
