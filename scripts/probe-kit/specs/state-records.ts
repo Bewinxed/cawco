@@ -4,7 +4,9 @@
  * and sessiond; Claude Code against the mock model), boundaries included:
  * run it where a workspace boundary can start (not inside another one).
  *
- * Two delegates cut workspaces A and B; a third session, Quiet, is stopped;
+ * Two delegates cut workspaces A and B, each held by the parent's preview
+ * so its ended item does not retire it (hub work-items.ts `settle`); a
+ * third session, Quiet, is stopped;
  * a notice is acknowledged, so the hub keeps its notices record. Then
  * everything stops as a crash stops it (sessiond and its sessions killed,
  * the agent and the hub killed), and A's `create.json` and `accounts.json`,
@@ -19,8 +21,7 @@
  * (c) Other sessions still spawn: a plain session, and a new delegate in a
  *     new workspace C (both read every workspace's records on the way).
  * (d) B's records and clone are as they were, and its row says nothing.
- * (e) Archiving A (its session stopped first, so its item is not live; or
- *     its own retirement, its item over and nothing of its own in it)
+ * (e) Archiving A (its session stopped first, so its item is not live)
  *     removes its state dir and clone, its damaged records never read, and
  *     its row stops saying it.
  * (f) The hub started with its notices record damaged: the board says so
@@ -92,7 +93,7 @@ const board = (base: string): Promise<Board> =>
 
 const delegate = async (
   fleet: KitFleet,
-  parent: string,
+  parent: { id: string; projectId: string },
   cwd: string,
   tag: string
 ): Promise<{ instanceId: string; workspaceId: string }> => {
@@ -101,13 +102,29 @@ const delegate = async (
     workItemId: string;
     workspaceId: string;
   }>("/api/work-items", {
-    parentInstanceId: parent,
+    parentInstanceId: parent.id,
     title: `Hold workspace ${tag}`,
     prompt: `PROBE-${tag}: say ok.`,
     harness: "claude",
     cwd,
     checks: [{ name: "Nothing to check", command: "true" }],
   });
+  // Its item fails on its third quiet turn, in seconds; the parent's preview
+  // of its server holds the workspace (hub work-items.ts `settle`), so it
+  // stands with its records for the crash and the archive below.
+  const now = Date.now();
+  fleet.write(
+    "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', ?, ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+    crypto.randomUUID(),
+    parent.id,
+    parent.projectId,
+    `records-${tag}`,
+    MACHINE,
+    JSON.stringify({ port: 5199, workspace: started.workspaceId }),
+    now,
+    now,
+    now
+  );
   await until(
     `delegate ${tag} running`,
     () => fleet.instance(started.instanceId),
@@ -233,8 +250,9 @@ const spec: Spec = {
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
-    const a = await delegate(fleet, parent, src, "A");
-    const b = await delegate(fleet, parent, src, "B");
+    const held = { id: parent, projectId: project.id };
+    const a = await delegate(fleet, held, src, "A");
+    const b = await delegate(fleet, held, src, "B");
     const quiet = await fleet.spawn("claude", "Quiet", src);
     await fleet.stopSession(quiet);
     await until(
@@ -353,9 +371,12 @@ const spec: Spec = {
     const parent2 = await fleet.spawn("claude", "Parent after", src, {
       projectId: project.id,
     });
-    const c = await delegate(fleet, parent2, src, "C").catch((error: unknown) =>
-      String(error)
-    );
+    const c = await delegate(
+      fleet,
+      { id: parent2, projectId: project.id },
+      src,
+      "C"
+    ).catch((error: unknown) => String(error));
     check(
       "(c) a new delegate cuts workspace C and runs",
       typeof c === "object" && existsSync(pathOf(c.workspaceId)),
@@ -454,17 +475,8 @@ const spec: Spec = {
     // (e)
     await fleet.stopSession(a.instanceId);
     const aPath = pathOf(a.workspaceId);
-    // Asked again until its stop has cancelled the item (a live item refuses
-    // it). Its item over and nothing of its own in it, A may retire on its
-    // own first (hub work-items.ts `settle`): its row says so.
+    // Asked again until its stop has cancelled the item (a live item refuses it).
     const archiveA = async (): Promise<{ state: string }> => {
-      const [row] = fleet.query<{ state: string }>(
-        "SELECT state FROM workspaces WHERE id = ?",
-        a.workspaceId
-      );
-      if (row?.state === "archived") {
-        return { state: "archived" };
-      }
       try {
         return await fleet.api<{ state: string }>(
           `/api/workspaces/${a.workspaceId}/archive`,

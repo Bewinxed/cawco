@@ -321,6 +321,44 @@ interface Scene {
   workspaceOf: (id: string) => Workspace;
 }
 
+/** Each launch's time from its ask to its session's first model request, for the run's note. */
+const launchTimes: string[] = [];
+
+/**
+ * Seconds from `asked` to the first model request whose words hold `mark`:
+ * how long a launch took to reach its model, its grant included.
+ */
+const launchSeconds = (fleet: Fleet, asked: number, mark: string): string => {
+  const first = fleet.seen.find(
+    (one) => one.at >= asked && one.all.includes(mark)
+  );
+  return first ? `${((first.at - asked) / 1000).toFixed(1)} s` : "never";
+};
+
+/**
+ * The hub's and agent's lines naming a session, said in the run's output
+ * when its item failed where it should not have: the evidence goes with the
+ * scratch fleet's sandbox otherwise (a launch whose grant went unanswered,
+ * 2026-10-16).
+ */
+const sayLogs = async (
+  kit: Kit,
+  fleet: Fleet,
+  label: string,
+  instanceId: string
+): Promise<void> => {
+  for (const role of ["hub", "agent"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: two logs
+    const lines = (await fleet.logs(role))
+      .split("\n")
+      .filter((line) => line.includes(instanceId))
+      .slice(-60);
+    kit.note(
+      `${label} failed: the ${role}'s lines naming ${instanceId}:\n${lines.join("\n") || "(none)"}`
+    );
+  }
+};
+
 /** Whether a boundary or judge of the workspace runs on the keeper. */
 const runsOnKeeper = async (fleet: Fleet, id: string): Promise<string[]> =>
   (await fleet.heldProcs())
@@ -471,6 +509,7 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     `${m.item.state} ${m.item.error ?? ""}; ${retired.state}; clone ${existsSync(wm.path) ? "stands" : "gone"}`
   );
   const message = `${RECUT}: go on in your workspace and say where you are.`;
+  const asked = Date.now();
   let handed = await callAsParent("handoff", {
     target: m.instanceId,
     message,
@@ -503,6 +542,10 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
         m.workItemId
       )[0]
   );
+  launchTimes.push(`M again ${launchSeconds(fleet, asked, RECUT)}`);
+  if (ended?.state !== "done") {
+    await sayLogs(kit, fleet, "M again", m.instanceId);
+  }
   const items = fleet.query<{ id: string; instance_id: string }>(
     "SELECT id, instance_id FROM work_items WHERE workspace_id = ?",
     wm.id
@@ -879,6 +922,13 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
 const spec: Spec = {
   name: "workspace-retire",
   run: async (kit: Kit) => {
+    // Each run starts from nothing, however many run in one process.
+    for (const tag of Object.keys(steps)) {
+      delete steps[tag];
+    }
+    recutSeen.pwd = undefined;
+    recutSeen.file = undefined;
+    launchTimes.length = 0;
     const fleet = await kit.fleet(respond);
     const home = fleet.env.HOME as string;
 
@@ -932,6 +982,7 @@ const spec: Spec = {
           SETTLE_MS
         ).catch(() => workspaceOf(id)),
       delegate: async (tag, onStart) => {
+        const asked = Date.now();
         const started = await fleet.api<{
           instanceId: string;
           workItemId: string;
@@ -958,6 +1009,12 @@ const spec: Spec = {
             ["done", "failed", "cancelled"].includes(row.state),
           300_000
         );
+        launchTimes.push(
+          `${tag} ${launchSeconds(fleet, asked, `PROBE-RETIRE-${tag}:`)}`
+        );
+        if (item.state !== (tag === "K" ? "failed" : "done")) {
+          await sayLogs(kit, fleet, tag, started.instanceId);
+        }
         return { ...started, item };
       },
       showPreview: (workspace, name) => {
@@ -1022,6 +1079,9 @@ const spec: Spec = {
     await unstartablePhase(kit, scene);
     await huskPhase(kit, scene);
     await diskPhase(kit);
+    kit.note(
+      `launch timings, ask to the session's first model request: ${launchTimes.join(", ")}`
+    );
   },
 };
 

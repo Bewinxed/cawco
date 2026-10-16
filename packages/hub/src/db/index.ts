@@ -2413,6 +2413,17 @@ export const hashHookMaterial = (hook: {
 const make = async (path: string): Promise<DbShape> => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
+  // busy_timeout: another process's connection to this file (the CLI's
+  // `cawco pairing off`, a probe's writes, the sqlite3 shell) holds the write
+  // lock for a statement's length. With none, the hub's write failed at once
+  // with "database is locked" (measured in WAL, the mode the workflow
+  // engine's connection sets on this file: 0 ms against a writer in another
+  // process; 330 ms and done with this), and a launch's grant that failed so
+  // left its machine waiting out its 90 s with no answer (workspace-retire,
+  // G, 2026-10-16). 5 s, as the workflow engine's own connection waits
+  // (@effect/sql-sqlite-bun's default) and the transcript index does
+  // (jsonl-parser fts5.ts).
+  db.$client.run("PRAGMA busy_timeout = 5000");
   const {
     endRetryAt: _endRetryAt,
     endAttempts: _endAttempts,

@@ -70,7 +70,6 @@ type HubTool = ReturnType<typeof adminTool>;
 
 /** The hub's own session tools, by name: what sessions once did on the person's routes. */
 export const HUB_TOOLS: ReadonlySet<string> = new Set([
-  "archive_workspace",
   "update_machines",
   "design_write",
 ]);

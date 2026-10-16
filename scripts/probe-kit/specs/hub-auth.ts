@@ -38,9 +38,9 @@
  *      and at the hub, and changes nothing;
  * (p6) `POST /api/session-identities/install` without a machine's proof is
  *      refused (anonymous, the person, a session);
- * (p7) `archive_workspace` archives the caller's own delegate's workspace
- *      (held by the caller's preview, so its landed work has not retired it
- *      first), and refuses another session's;
+ * (p7) a delegate works with pairing on: its tools reach the hub through
+ *      its machine, its item lands, and its workspace retires on its own
+ *      (hub work-items.ts `settle`);
  * (p8) turning it off returns to trusted.
  *
  *   bun scripts/probe-kit/run.ts hub-auth
@@ -270,17 +270,9 @@ const spec: Spec = {
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
-    const other = await fleet.spawn("claude", "Other", src, {
-      projectId: project.id,
-    });
     const parentKey = await until(
       "the parent's credential",
       () => credentialOf(fleet, parent),
-      (value) => value.length === 43
-    );
-    const otherKey = await until(
-      "the other session's credential",
-      () => credentialOf(fleet, other),
       (value) => value.length === 43
     );
     const bearer = { authorization: `Bearer ${parentKey}` };
@@ -327,7 +319,7 @@ const spec: Spec = {
       json({}, bearer)
     );
     check(
-      "(t2) trusted: a session's curl to POST /api/workspaces/:id/archive is refused (403): its path is archive_workspace",
+      "(t2) trusted: a session's curl to POST /api/workspaces/:id/archive is refused (403): no session archives a workspace",
       archivedByCurl.status === 403,
       `${archivedByCurl.status} ${archivedByCurl.text.slice(0, 200)}`
     );
@@ -829,7 +821,7 @@ const spec: Spec = {
       `${byNobody.status}, ${byOwner.status}, ${bySession.status}`
     );
 
-    // (p7) archive_workspace: its own delegate's workspace, not another's.
+    // (p7) A delegate with pairing on: it lands, and its workspace retires.
     const delegated = await fleet.api<{
       workItemId: string;
       workspaceId: string;
@@ -842,20 +834,6 @@ const spec: Spec = {
       cwd: src,
       checks: [{ name: "Probe check", command: "true" }],
     });
-    // The parent's preview of its server holds the workspace once its work
-    // lands (hub work-items.ts `settle`), so it is still there to archive.
-    const now = Date.now();
-    fleet.write(
-      "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', 'auth-preview', ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
-      crypto.randomUUID(),
-      parent,
-      project.id,
-      MACHINE,
-      JSON.stringify({ port: 5199, workspace: delegated.workspaceId }),
-      now,
-      now,
-      now
-    );
     const item = await until(
       "work item A ended",
       () =>
@@ -873,37 +851,21 @@ const spec: Spec = {
       item.state === "done",
       `${item.state} ${item.error ?? ""}`
     );
-    const notTheirs = await callTool(
-      fleet,
-      other,
-      otherKey,
-      "archive_workspace",
-      { workspace: delegated.workspaceId }
-    );
     const stateOf = () =>
       fleet.query<{ state: string }>(
         "SELECT state FROM workspaces WHERE id = ?",
         delegated.workspaceId
       )[0]?.state;
+    const retired = await until(
+      "A's workspace retired",
+      stateOf,
+      (state) => state === "archived",
+      120_000
+    ).catch(stateOf);
     check(
-      "(p7) archive_workspace is refused for another session's delegate's workspace; it stays active",
-      notTheirs.said.includes("is not one of your delegates'") &&
-        stateOf() === "active",
-      `${notTheirs.status} ${notTheirs.said.slice(0, 300)}; ${stateOf()}`
-    );
-    const theirs = await callTool(
-      fleet,
-      parent,
-      parentKey,
-      "archive_workspace",
-      {
-        workspace: delegated.workspaceId,
-      }
-    );
-    check(
-      "(p7) archive_workspace archives the caller's own delegate's workspace",
-      stateOf() === "archived",
-      `${theirs.status} ${theirs.said.slice(0, 300)}; ${stateOf()}`
+      "(p7) its work landed, the delegate's workspace retires on its own, no session archiving it",
+      retired === "archived",
+      `${retired}`
     );
 
     // (p8) Off is trusted again.

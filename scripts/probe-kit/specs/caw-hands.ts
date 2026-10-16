@@ -819,9 +819,37 @@ const cloneCase = async (
       lands: "none",
     })
   );
+  const asked = Date.now();
   await fleet.api(`/api/projects/${coded.id}/threads`, {
     body: "PROBE-K: hand this to a delegate.",
   });
+  // Its delegate only says ok, so its item fails on its third quiet turn and
+  // its workspace would retire in seconds (hub work-items.ts `settle`): a
+  // preview artifact of it holds it while its clone is read.
+  const cut = await until(
+    "k: the delegate's workspace filed",
+    () =>
+      fleet.query<{ id: string; created_by_instance_id: string }>(
+        "SELECT id, created_by_instance_id FROM workspaces WHERE created_at >= ? ORDER BY created_at DESC LIMIT 1",
+        asked
+      )[0],
+    Boolean,
+    240_000
+  ).catch(() => undefined);
+  if (cut) {
+    const now = Date.now();
+    fleet.write(
+      "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', 'clone-preview', ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+      crypto.randomUUID(),
+      cut.created_by_instance_id,
+      coded.id,
+      MACHINE,
+      JSON.stringify({ port: 5199, workspace: cut.id }),
+      now,
+      now,
+      now
+    );
+  }
   const clone = await until(
     "k: the delegate's workspace with its stand-ins",
     () => standInsOf(fleet),

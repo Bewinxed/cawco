@@ -319,9 +319,9 @@ setting, "Require paired devices" (Configure › Devices):
   pinned), `cawco pairing off` on the hub's own machine, as the hub's user, writes the
   setting into its database, which the hub reads on every request.
 
-What a session once did on the person's routes is its own tool now: `archive_workspace`
-for its own delegates' workspaces, and `update_machines`, which asks the person first in
-pairing mode. Sessiond's unix socket still authorizes by filesystem permission alone —
+What a session once did on the person's routes is its own tool now: `update_machines`,
+which asks the person first in pairing mode. No session archives a workspace: a landed
+one retires itself, and a held one ends only by the person's Continue or Discard. Sessiond's unix socket still authorizes by filesystem permission alone —
 `0600` inside a `0700` directory, design §9 (`packages/sessiond/src/server.ts:151-166`).
 
 What is left in both modes: on the hub's machine, an unboundaried session runs as the

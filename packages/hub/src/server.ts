@@ -17786,10 +17786,11 @@ export const createServer = (
   };
   /**
    * What sessions once did on the person's routes, as their own tools, so a
-   * hub that requires paired devices still lets them (hub-auth.ts):
+   * hub that requires paired devices still lets them (hub-auth.ts). No
+   * session archives a workspace: a landed one retires itself, and a held
+   * one ends only by the person's Continue or Discard (work-items.ts
+   * `settle`).
    *
-   * - `archive_workspace`, for `POST /api/workspaces/:id/archive`: a
-   *   workspace one of the caller's own delegates works in, and no other.
    * - `update_machines`, for `POST /api/binary-updates/check` and `POST
    *   /api/agents/:id/update`: the check runs at once; installing asks the
    *   person first when the hub requires paired devices (admin-asks.ts),
@@ -17826,38 +17827,6 @@ export const createServer = (
       return JSON.parse(text) as unknown;
     };
     return [
-      adminTool(
-        "archive_workspace",
-        "Archive a workspace one of your own delegates worked in, once its work has landed (its id or the short id in its delegate's name). Refused while its clone holds work that is nowhere else, and for a workspace none of your delegates worked in.",
-        { workspace: z.string().trim().min(1) },
-        async ({ workspace }) => {
-          const caller = me();
-          const named = db.workspacesNamed(workspace);
-          if (named.length !== 1) {
-            throw new Error(
-              named.length === 0
-                ? `No workspace ${workspace} on this hub.`
-                : `${workspace} names ${named.length} workspaces; give more of its id.`
-            );
-          }
-          const [found] = named as [WorkspaceRow];
-          if (
-            !db
-              .workItemsIn(found.id)
-              .some((item) => item.parentInstanceId === caller.id)
-          ) {
-            throw new Error(
-              `Workspace ${found.id} is not one of your delegates': you archive only the workspaces of work items you delegated.`
-            );
-          }
-          const { workspace: archived, carry } = await workItems.archive(
-            found.id,
-            { discard: false }
-          );
-          workspaceArchived(archived);
-          return ok({ ...archived, carry });
-        }
-      ),
       adminTool(
         "update_machines",
         "Look for a new CawCo build and tell every machine (check_only), or install it on one machine or every online machine. Installing asks the person first when the hub requires paired devices.",
@@ -24747,12 +24716,22 @@ export const createServer = (
               break;
             }
             // A launch starting on its machine: what it runs on, minted now.
+            // A grant that throws is answered with why: the frame's own
+            // failure is no answer to the ask, whose machine would wait out
+            // its 90 s and fail the start saying only that nothing came.
             case "launch": {
-              const grant = grantLaunch(
-                message.machineId,
-                message.instanceId,
-                message.payload as LaunchAsk | undefined
-              );
+              let grant: LaunchGrant;
+              try {
+                grant = grantLaunch(
+                  message.machineId,
+                  message.instanceId,
+                  message.payload as LaunchAsk | undefined
+                );
+              } catch (error) {
+                grant = {
+                  refusal: `The hub could not grant this launch: ${error instanceof Error ? error.message : String(error)}`,
+                };
+              }
               if ("refusal" in grant) {
                 console.warn(
                   `[hub] launch of ${message.instanceId} refused at its start: ${grant.refusal}`

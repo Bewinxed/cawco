@@ -396,6 +396,23 @@ const run = async (kit: Kit) => {
     lands: "none",
     outputs: ["post.md"],
   });
+  // Its clone is read once it ends (b): a preview artifact of it holds the
+  // workspace, which would otherwise retire once its session sleeps (hub
+  // work-items.ts `settle`).
+  if (first.workspaceId) {
+    const now = Date.now();
+    probe.fleet.write(
+      "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', 'place-preview', ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+      crypto.randomUUID(),
+      from,
+      project.id,
+      MACHINE,
+      JSON.stringify({ port: 5199, workspace: first.workspaceId }),
+      now,
+      now,
+      now
+    );
+  }
   kit.check(
     "a: task_start in a folder project starts an attempt",
     Boolean(first.workItemId && first.workspaceId),

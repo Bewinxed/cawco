@@ -68,6 +68,9 @@ export const makeDelegateTypes = (
   path: string = DB_PATH
 ): DelegateTypesShape => {
   const sqlite = new Database(path);
+  // As the hub's own connection waits (db/index.ts `make`): another
+  // process's write lock is waited out, not failed on.
+  sqlite.run("PRAGMA busy_timeout = 5000");
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS delegate_types (
       name TEXT PRIMARY KEY,
