@@ -33,6 +33,7 @@ import {
   type FindMachineCoverage,
   type FindMoment,
   type FindResult,
+  type HarnessFailed,
   type HarnessUnanswered,
   type MomentAuthor,
   machineLabel,
@@ -142,12 +143,15 @@ export interface FindDeps {
   db: DbShape;
   /**
    * A machine's catalog of the sessions it keeps (`listSessions`), with the
-   * harnesses that did not list in time, or why it gave none.
+   * harnesses that did not list in time or whose listing threw, or why it
+   * gave none.
    */
-  listStored: (
-    machineId: string
-  ) => Promise<
-    | { sessions: NeutralSessionInfo[]; unanswered: HarnessUnanswered[] }
+  listStored: (machineId: string) => Promise<
+    | {
+        failed: HarnessFailed[];
+        sessions: NeutralSessionInfo[];
+        unanswered: HarnessUnanswered[];
+      }
     | { error: string }
   >;
   /** The sessions waiting on the person: a permission or a question parked for them. */
@@ -414,12 +418,14 @@ export const createFind = (deps: FindDeps) => {
   const stagesReading = new Set<string>();
   /**
    * Each machine's catalog of the sessions it keeps, as last read, and when;
-   * with the harnesses that did not list in time on that read.
+   * with the harnesses that did not list in time, or whose listing threw, on
+   * that read.
    */
   const storedCatalogs = new Map<
     string,
     {
       at: number;
+      failed: HarnessFailed[];
       sessions: NeutralSessionInfo[];
       unanswered: HarnessUnanswered[];
     }
@@ -427,8 +433,9 @@ export const createFind = (deps: FindDeps) => {
   const storedReading = new Set<string>();
   /**
    * A machine's catalog as last read; read again in the background once
-   * stale. A harness that did not list in time keeps the sessions it listed
-   * last, and is said by name ("claude on obelisk didn't answer within 10 s"):
+   * stale. A harness that did not list in time, or whose listing threw,
+   * keeps the sessions it listed last, and is said by name ("claude on
+   * obelisk didn't answer within 10 s", "… couldn't list its sessions: …"):
    * never read as having none.
    */
   const catalogOf = (machine: AgentRow, now: number) => {
@@ -444,17 +451,28 @@ export const createFind = (deps: FindDeps) => {
             if ("error" in answer) {
               throw new Error(answer.error);
             }
-            const silent = new Set(answer.unanswered.map((one) => one.harness));
+            const silent = new Set(
+              [...answer.unanswered, ...answer.failed].map((one) => one.harness)
+            );
             const kept = (known?.sessions ?? []).filter((info) =>
               silent.has(info.harness)
             );
+            const keptOf = (harness: string) =>
+              kept.filter((info) => info.harness === harness).length;
+            const name = machineLabel(machine.hostname);
             for (const { harness, after } of answer.unanswered) {
               console.info(
-                `[find] ${harness} on ${machineLabel(machine.hostname)} didn't answer within ${after / 1000} s; its stored sessions are kept as last read (${kept.filter((info) => info.harness === harness).length})`
+                `[find] ${harness} on ${name} didn't answer within ${after / 1000} s; its stored sessions are kept as last read (${keptOf(harness)})`
+              );
+            }
+            for (const { harness, error } of answer.failed) {
+              console.info(
+                `[find] ${harness} on ${name} couldn't list its sessions: ${error}; its stored sessions are kept as last read (${keptOf(harness)})`
               );
             }
             storedCatalogs.set(machineId, {
               at: Date.now(),
+              failed: answer.failed,
               sessions: [...answer.sessions, ...kept],
               unanswered: answer.unanswered,
             });

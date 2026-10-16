@@ -34,6 +34,7 @@ import type {
   FramePayload,
   FsPayload,
   HarnessCapabilities,
+  HarnessFailed,
   HarnessKind,
   HarnessUnanswered,
   InstanceRow,
@@ -728,8 +729,8 @@ export interface SessionState {
  * paid for, with nothing ever mutating a row in place.
  */
 let catalog = $state.raw<Record<string, NeutralSessionInfo[]>>({});
-/** Per machine, a sentence for each harness its last listing said did not list in time ({@link harnessDidntAnswer}). */
-let catalogUnanswered = $state.raw<Record<string, string[]>>({});
+/** Per machine, a sentence for each harness its last listing left out: not in time ({@link harnessDidntAnswer}) or failed ({@link harnessCouldntList}). */
+let catalogLeftOut = $state.raw<Record<string, string[]>>({});
 /** The machines whose stored sessions have been asked for and answered, or failed. */
 const catalogsTried = $state<Record<string, true>>({});
 
@@ -1057,8 +1058,8 @@ const state = $state({
 
 interface Waiter {
   reject: (error: Error) => void;
-  /** The answer's `result`, and the harnesses a `listSessions` answer says did not list in time. */
-  resolve: (result: unknown, unanswered?: HarnessUnanswered[]) => void;
+  /** The answer's `result`, and the harnesses a `listSessions` answer left out ({@link LeftOut}). */
+  resolve: (result: unknown, leftOut?: LeftOut) => void;
 }
 
 /** Control calls awaiting their `control_result`, keyed by the SDK `requestId`. */
@@ -3161,7 +3162,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "control_result") {
     const answered = settle(frame.requestId, (waiter) =>
       frame.ok
-        ? waiter.resolve(frame.result, frame.unanswered)
+        ? waiter.resolve(frame.result, {
+            unanswered: frame.unanswered ?? [],
+            failed: frame.failed ?? [],
+          })
         : waiter.reject(
             new Error(
               frame.error ?? "The machine could not carry out that request."
@@ -6394,17 +6398,15 @@ function ask<T>(
   requestId: string,
   timeoutMs: number,
   dispatch: () => void,
-  readAnswer: (result: unknown, unanswered?: HarnessUnanswered[]) => T = (
-    result
-  ) => result as T
+  readAnswer: (result: unknown, leftOut?: LeftOut) => T = (result) =>
+    result as T
 ): Promise<Bounded<T>> {
   return readWithin(
     timeoutMs,
     (signal) =>
       new Promise<T>((resolve, reject) => {
         inflight.set(requestId, {
-          resolve: (result, unanswered) =>
-            resolve(readAnswer(result, unanswered)),
+          resolve: (result, leftOut) => resolve(readAnswer(result, leftOut)),
           reject,
         });
         signal.addEventListener("abort", () => inflight.delete(requestId), {
@@ -6471,9 +6473,28 @@ export function harnessDidntAnswer(
 }
 
 /**
+ * What the person reads when one harness on `machineId` couldn't list its
+ * stored sessions (its listing threw), in {@link harnessDidntAnswer}'s voice.
+ */
+export function harnessCouldntList(
+  machineId: string,
+  { harness, error }: HarnessFailed
+): string {
+  return `${harness} on ${machineName(machineId)} couldn't list its stored sessions (${error}), so they are the ones it listed last.`;
+}
+
+/** A `listSessions` answer's harnesses it left out: not answered in time, or their listing threw. */
+interface LeftOut {
+  failed: HarnessFailed[];
+  unanswered: HarnessUnanswered[];
+}
+
+/**
  * The machine's stored sessions, newest first. A harness that did not list
- * in time keeps the sessions it listed last, and is kept on
- * {@link catalogUnanswered} in {@link harnessDidntAnswer}'s words.
+ * in time, or whose listing threw, keeps the sessions it listed last; it is
+ * kept on {@link catalogLeftOut} in {@link harnessDidntAnswer}'s and
+ * {@link harnessCouldntList}'s words, and said in one toast per machine,
+ * changed in place by each load and dismissed once none is left out.
  */
 export async function loadCatalog(machineId: string): Promise<void> {
   try {
@@ -6488,9 +6509,10 @@ export async function loadCatalog(machineId: string): Promise<void> {
       requestId,
       CONTROL_TIMEOUT_MS,
       () => send({ verb: "control", machineId, requestId, payload }),
-      (result, unanswered = []) => ({
+      (result, leftOut) => ({
         sessions: result as NeutralSessionInfo[],
-        unanswered,
+        unanswered: leftOut?.unanswered ?? [],
+        failed: leftOut?.failed ?? [],
       })
     );
     switch (listed.kind) {
@@ -6501,21 +6523,28 @@ export async function loadCatalog(machineId: string): Promise<void> {
         );
         break;
       case "answered": {
-        const { sessions, unanswered } = listed.value;
-        const silent = new Set(unanswered.map((one) => one.harness));
+        const { sessions, unanswered, failed } = listed.value;
+        const silent = new Set(
+          [...unanswered, ...failed].map((one) => one.harness)
+        );
         const kept = (catalog[machineId] ?? []).filter((info) =>
           silent.has(info.harness)
         );
-        for (const one of unanswered) {
-          console.warn(`[cawco] ${harnessDidntAnswer(machineId, one)}`);
+        const said = [
+          ...unanswered.map((one) => harnessDidntAnswer(machineId, one)),
+          ...failed.map((one) => harnessCouldntList(machineId, one)),
+        ];
+        for (const sentence of said) {
+          console.warn(`[cawco] ${sentence}`);
         }
         catalog = { ...catalog, [machineId]: [...sessions, ...kept] };
-        catalogUnanswered = {
-          ...catalogUnanswered,
-          [machineId]: unanswered.map((one) =>
-            harnessDidntAnswer(machineId, one)
-          ),
-        };
+        catalogLeftOut = { ...catalogLeftOut, [machineId]: said };
+        const toastId = `catalog-unread-${machineId}`;
+        if (said.length > 0) {
+          toast.warning(said.join(" "), { id: toastId });
+        } else {
+          toast.dismiss(toastId);
+        }
         break;
       }
       default: {
@@ -8204,9 +8233,9 @@ export const cawco = {
   /** Stored sessions on one machine, minus the spin-offs hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),
-  /** The harnesses on `machineId` whose last listing did not answer in time, each as a sentence; no view shows these yet. */
-  catalogUnansweredOf: (machineId: string): string[] =>
-    catalogUnanswered[machineId] ?? [],
+  /** The harnesses on `machineId` its last listing left out (not in time, or failed), each as a sentence; said in a toast, no view shows them. */
+  catalogLeftOutOf: (machineId: string): string[] =>
+    catalogLeftOut[machineId] ?? [],
   /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */
   hasStored: (machineId: string): boolean =>
     (catalog[machineId] ?? []).some(listedInHistory),

@@ -50560,6 +50560,13 @@
           "error": {
             "type": "string"
           },
+          "failed": {
+            "description": "`listSessions` only, and only when some harness's listing threw: those harnesses, whose sessions `result` leaves out.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HarnessFailed"
+            }
+          },
           "instanceId": {
             "type": "string"
           },
@@ -50589,6 +50596,22 @@
           "kind",
           "ok",
           "requestId"
+        ]
+      },
+      "HarnessFailed": {
+        "description": "A harness whose `listSessions` refused (threw): left out of the listing with its error, not read as having none.",
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          }
+        },
+        "required": [
+          "error",
+          "harness"
         ]
       },
       "HarnessUnanswered": {

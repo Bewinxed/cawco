@@ -68,6 +68,7 @@ import {
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
+  type HarnessFailed,
   type HarnessUnanswered,
   holdingWords,
   INSTALL_SESSION_CREDENTIAL,
@@ -4533,7 +4534,7 @@ export class SessionSupervisor {
     }
     try {
       if (method === CONTROL_LIST_SESSIONS) {
-        const { sessions, unanswered } = await this.#listSessions(args);
+        const { sessions, unanswered, failed } = await this.#listSessions(args);
         this.sink({
           kind: "control_result",
           instanceId,
@@ -4541,6 +4542,7 @@ export class SessionSupervisor {
           ok: true,
           result: sessions,
           ...(unanswered.length > 0 ? { unanswered } : {}),
+          ...(failed.length > 0 ? { failed } : {}),
         });
         return;
       }
@@ -4575,13 +4577,17 @@ export class SessionSupervisor {
    * 30s for its server's first line) is left out of this answer, as one that
    * fails is, rather than holding every other harness's sessions past the
    * reader's own wait (the dashboard's 15s), which lost the whole catalog.
+   * Each one left out is said beside the answer (`unanswered`, `failed`),
+   * never read as having none.
    */
   async #listSessions(args: unknown[]): Promise<{
     sessions: NeutralSessionInfo[];
     unanswered: HarnessUnanswered[];
+    failed: HarnessFailed[];
   }> {
     const options = (args[0] ?? {}) as { limit?: number; dir?: string };
     const unanswered: HarnessUnanswered[] = [];
+    const failed: HarnessFailed[] = [];
     const listed = await Promise.all(
       harnesses().map(async (adapter) => {
         let read: Bounded<NeutralSessionInfo[]>;
@@ -4591,6 +4597,7 @@ export class SessionSupervisor {
           );
         } catch (error) {
           warn(`listSessions on ${adapter.kind} failed: ${error}`);
+          failed.push({ harness: adapter.kind, error: errorText(error) });
           return [];
         }
         switch (read.kind) {
@@ -4618,6 +4625,7 @@ export class SessionSupervisor {
     return {
       sessions: options.limit ? all.slice(0, options.limit) : all,
       unanswered,
+      failed,
     };
   }
 

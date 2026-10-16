@@ -14552,12 +14552,18 @@ export const createServer = (
       default:
         throw unreachable(answer);
     }
-    // A harness that did not list in time (`unanswered`) keeps what was named
-    // for it: its rows are named only from a listing that has them, and
-    // nothing here drops or renames a row the listing left out.
+    // A harness that did not list in time (`unanswered`) or whose listing
+    // threw (`failed`) keeps what was named for it: its rows are named only
+    // from a listing that has them, and nothing here drops or renames a row
+    // the listing left out.
     for (const { harness, after } of answer.value.unanswered ?? []) {
       console.info(
         `[catalog] ${harness} on ${machineName(machineId)} didn't list its sessions within ${after / 1000} s; its unnamed rows wait for the next listing`
+      );
+    }
+    for (const { harness, error } of answer.value.failed ?? []) {
+      console.info(
+        `[catalog] ${harness} on ${machineName(machineId)} couldn't list its sessions: ${error}; its unnamed rows wait for the next listing`
       );
     }
 
@@ -18292,6 +18298,7 @@ export const createServer = (
             ? {
                 sessions: answer.value.result as NeutralSessionInfo[],
                 unanswered: answer.value.unanswered ?? [],
+                failed: answer.value.failed ?? [],
               }
             : { error: searchMiss(answer) };
         default:

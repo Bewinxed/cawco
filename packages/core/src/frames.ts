@@ -417,8 +417,16 @@ export interface HarnessUnanswered {
   harness: HarnessKind;
 }
 
+/** A harness whose `listSessions` refused (threw): left out of the listing with its error, not read as having none. */
+export interface HarnessFailed {
+  error: string;
+  harness: HarnessKind;
+}
+
 export interface ControlResultFrame {
   error?: string;
+  /** `listSessions` only, and only when some harness's listing threw: those harnesses, whose sessions `result` leaves out. */
+  failed?: HarnessFailed[];
   instanceId?: string;
   /** No `instanceId` when the call it answers was machine-scoped. */
   kind: "control_result";
