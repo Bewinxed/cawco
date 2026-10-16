@@ -1,6 +1,4 @@
 @import "tailwindcss" source(".");
-@import "tw-animate-css";
-@import "shadcn-svelte/tailwind.css";
 @import "@fontsource-variable/figtree";
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource/fredoka/600.css";
@@ -8,6 +6,11 @@
 /* Every token the app reads, generated from design/tokens/cawco.tokens.json
    (`bun run tokens`). This sheet defines none of its own. */
 @import "./lib/tokens/tokens.css";
+/* The Tailwind theme over them (`bun run tokens`): a utility exists only
+   where a token does. */
+@import "./lib/tokens/theme.css";
+/* The house's variants and one per attribute state (`bun run variants`). */
+@import "./lib/tokens/variants.css";
 @plugin "@tailwindcss/typography";
 /* The plugin's rules, minus the four that restyled a whole reply per block. */
 @config "../typography.config.ts";
@@ -29,8 +32,6 @@
   inherits: false;
   initial-value: 0px;
 }
-
-@custom-variant dark (&:where(.dark, .dark *));
 
 /* A tab's hang's open and close clock (motion/hang `GROW`): a number the
    run carries between 0 and 1, which nothing draws; each frame's shape is
@@ -165,106 +166,6 @@
   initial-value: 0;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-action-solid: var(--action-solid);
-  --color-on-action: var(--on-action);
-  --color-link: var(--link-ink);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-focus-ring: var(--focus-ring);
-
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-info: var(--info);
-  --color-error: var(--error);
-
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-selected-bg: var(--selected-bg);
-  --color-selected-ink: var(--selected-ink);
-  --color-selected-icon: var(--selected-icon);
-
-  /* Figtree across the product, JetBrains Mono for code/paths/IDs, Fredoka
-     for brand display (the token file holds the stacks). */
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-  --font-display: var(--font-display);
-
-  /* Only the ladder steps the product uses; Tailwind's own (black-based)
-     shadow scale is cleared so nothing falls back to it. */
-  --shadow-*: initial;
-  --shadow-xs: var(--shadow-xs);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
-  --shadow-xl: var(--shadow-xl);
-
-  --color-tool-run: var(--tool-run);
-  --color-tool-mcp: var(--tool-mcp);
-  --color-tool-search: var(--tool-search);
-  --color-tool-ask: var(--tool-ask);
-  --color-tool-web: var(--tool-web);
-  --color-tool-read: var(--tool-read);
-  --color-tool-agent: var(--tool-agent);
-  --color-tool-edit: var(--tool-edit);
-  --color-tool-write: var(--tool-write);
-  --color-tool-skill: var(--tool-skill);
-  --color-tool-plan: var(--tool-plan);
-}
-
-@theme inline {
-  /* Radius roles: xs marks and tiles, sm controls inside a surface, md
-     controls and buttons, lg cards and menus, modal the dialog tray. */
-  --radius-xs: var(--radius-xs);
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-modal: var(--radius-modal);
-  --radius-well: var(--radius-well);
-  --radius-hair: var(--radius-hair);
-  --radius-panel: var(--radius-panel);
-
-  /* Type roles. Each generates a `text-<role>` utility with its leading. */
-  --text-meta: var(--text-meta);
-  --text-meta--line-height: var(--leading-meta);
-  --text-meta--font-weight: var(--weight-body);
-  --text-label: var(--text-label);
-  --text-label--line-height: var(--leading-label);
-  --text-label--font-weight: var(--weight-strong);
-  --text-body: var(--text-body);
-  --text-body--line-height: var(--leading-body);
-  --text-body--font-weight: var(--weight-body);
-  --text-title: var(--text-title);
-  --text-title--line-height: var(--leading-ui);
-  --text-title--letter-spacing: var(--track-title);
-  --text-title--font-weight: var(--weight-strong);
-  --text-kpi: var(--text-kpi);
-  --text-kpi--line-height: var(--leading-kpi);
-  --text-kpi--font-weight: var(--weight-strong);
-
-  /* Curves. Generates `ease-out`, `ease-in-out`, `ease-drawer`. */
-  --ease-out: var(--ease-out);
-  --ease-in-out: var(--ease-in-out);
-  --ease-drawer: var(--ease-drawer);
-
-  /* Tailwind's own timing, on the product's: `transition-colors` and its
-     siblings run --dur-control on --ease-out, and the stock loops turn on
-     --dur-loop (a rotation is linear; a pulse breathes in-out). */
-  --default-transition-duration: var(--dur-control);
-  --default-transition-timing-function: var(--ease-out);
-  --animate-spin: spin var(--dur-loop) linear infinite;
-  --animate-pulse: pulse var(--dur-loop) var(--ease-in-out) infinite;
-  --animate-ping: ping var(--dur-loop) var(--ease-out) infinite;
-}
-
 @layer base {
   /* The theme class is the one switch: it picks the palette through
      light-dark() and the platform's own controls, scrollbars and form
@@ -339,7 +240,7 @@
   }
 
   html {
-    @apply antialiased font-sans;
+    @apply antialiased font-body;
     -webkit-tap-highlight-color: transparent;
   }
   /* The screen's bottom inset (the home indicator's room), which a keyboard
@@ -357,7 +258,7 @@
 
   /* The body's background is the screen's bottom edge (cawco/ScreenEdges). */
   body {
-    @apply text-foreground;
+    @apply text-ink-strong;
     font: var(--type-body);
   }
 
@@ -2290,9 +2191,11 @@
 }
 
 /* A changing figure: digits of one width, so a count or a price that
-   ticks does not move what stands beside it. Important, because a type role
-   is a `font` shorthand, which resets font-variant-numeric, and a
-   component's own (unlayered) rule would otherwise win over any utility. */
+   ticks does not move what stands beside it. Important, because a
+   component's own (unlayered) rule that sets a role by the `font` shorthand
+   resets font-variant-numeric and would otherwise win over any utility. A
+   role's utility (`type-<role>`) sets longhands and leaves it alone: once
+   no component rule sets the shorthand, this needs no `!important`. */
 @utility num {
   font-variant-numeric: tabular-nums !important;
 }
@@ -2307,11 +2210,6 @@
   font-size-adjust: cap-height var(--mono-figure-cap);
   font-variant-ligatures: none;
   font-variant-numeric: tabular-nums;
-}
-
-/* A scroller that scrolls without drawing a bar. */
-@utility no-scrollbar {
-  scrollbar-width: none;
 }
 
 /* ---- Motion is opt-in: every travelling transition and keyframe animation

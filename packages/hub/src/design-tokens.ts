@@ -395,6 +395,463 @@ export function tokensCss(view: TokenView, options: TokensCssOptions): string {
   ].join("\n");
 }
 
+// MARK: - The Tailwind theme over the tokens
+
+/**
+ * What a Tailwind theme carries beyond the tokens themselves: the literals
+ * Tailwind reads at build time, the keys a platform default needs, and the
+ * names a product has retired.
+ */
+export interface TailwindThemeOptions {
+  /** Media-query widths by name (`desk:`, `max-desk:`). Literals: a media query cannot read `var()`. Written as containers too. */
+  breakpoints: Readonly<Record<string, string>>;
+  /** Container-query widths by name (`@max-leaf/leaf:`), one per width a container query uses. Literals, as breakpoints. */
+  containers: Readonly<Record<string, string>>;
+  /** Keys no token makes, in CSS over the tokens: Tailwind's `--default-*` and `--animate-*`. */
+  defaults: Readonly<Record<string, string>>;
+  /** Shadow tokens drawn as a filter's `drop-shadow()`, not a box's: `--drop-shadow-*` keys. */
+  dropShadows: ReadonlySet<string>;
+  /** The comment the file opens with, whole. */
+  header: string;
+  /** Which tokens the theme carries; every one when left out. */
+  include?: (token: TransformedToken) => boolean;
+  /** The keyframes the defaults name, by name, as their CSS body. */
+  keyframes: Readonly<Record<string, string>>;
+  /** Font weights no token carries, by key: a face that ships only that weight. */
+  literalWeights: Readonly<Record<string, string>>;
+  /**
+   * The type roles markup names as `text-<role>`: the role's size, with its
+   * leading, weight and tracking as fallbacks under `--tw-leading`,
+   * `--tw-font-weight` and `--tw-tracking`, so a `leading-*`, `font-*` or
+   * `tracking-*` beside it wins whatever the order (Tailwind's own type
+   * scale utilities, written from the role's token).
+   */
+  markupRoles: readonly string[];
+  /** Tokens markup no longer names: no key and no utility is made for them. */
+  retired: ReadonlySet<string>;
+  /** Declarations a type role's utility adds after the role's own. */
+  roleExtras: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /** Tailwind's numeric spacing step (`p-2`): the one key no token gives. */
+  spacing: string;
+  /** Which `size` tokens are also spacing keys (`h-c-btn-h`, `size-icon-md`), by name. */
+  spacingSizes: RegExp;
+  /** Font-weight tokens by the key each makes (`weight-strong` → `medium`). */
+  weights: Readonly<Record<string, string>>;
+}
+
+/** One key of the theme and the token it reads. */
+export interface ThemeKey {
+  key: string;
+  token: ViewToken;
+}
+
+/** The theme a token view makes, with what it holds, for a reader that lists it. */
+export interface TailwindTheme {
+  css: string;
+  /** Every key a token makes, by namespace (`spacing`, `radius`, `color` …). */
+  keys: Map<string, ThemeKey[]>;
+  /** Literal keys, by namespace, with their values. */
+  literals: Map<string, [string, string][]>;
+  /** Tokens whose value switches under a media context, and every token that reads one. */
+  switched: Set<string>;
+  /** Every utility the file declares. */
+  utilities: string[];
+}
+
+/** A `@utility` rule: its name and its body's lines. */
+type ThemeUtility = [string, string[]];
+
+const strip = (leaf: string, prefix: string): string =>
+  leaf.startsWith(prefix) ? leaf.slice(prefix.length) : leaf;
+const RADIUS_SUFFIX = /-r$/;
+
+/** Tokens whose value a media context switches, and every token whose CSS reads one of them. */
+function switchedTokens(
+  tokens: ViewToken[],
+  contexts: TokenContext[]
+): Set<string> {
+  const media = contexts
+    .filter((c) => "media" in c.condition)
+    .map((c) => c.name);
+  const switched = new Set(
+    tokens
+      .filter((t) => media.some((name) => t.variants[name] !== undefined))
+      .map((t) => t.name)
+  );
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const token of tokens) {
+      if (switched.has(token.name)) {
+        continue;
+      }
+      const reads = [...token.css.matchAll(REFS)].map(
+        ([, ref]) => ref.split(".").at(-1) ?? ref
+      );
+      if (reads.some((name) => switched.has(name))) {
+        switched.add(token.name);
+        grew = true;
+      }
+    }
+  }
+  return switched;
+}
+
+/** A radius token's key: `radius-md` → `md`, `row-mark-r` → `row-mark`; its whole name where that would repeat another's. */
+function radiusKeys(tokens: ViewToken[]): Map<string, string> {
+  const short = (name: string) =>
+    strip(name, "radius-").replace(RADIUS_SUFFIX, "");
+  const taken = new Map<string, number>();
+  for (const t of tokens) {
+    taken.set(short(t.name), (taken.get(short(t.name)) ?? 0) + 1);
+  }
+  return new Map(
+    tokens.map((t) => {
+      const key = short(t.name);
+      const own = t.name.startsWith("radius-") || (taken.get(key) ?? 0) === 1;
+      return [t.name, own ? key : t.name];
+    })
+  );
+}
+
+/** A type role's longhands, from its DTCG composite: never the `font` shorthand, which resets font-variant. */
+function roleLonghands(token: ViewToken, names: Set<string>): string[] {
+  const value = (token.original.original as Json).$value as Json;
+  const css = (type: string, v: unknown) =>
+    cssValue(toCss(type, v) ?? "", names, token.name);
+  const lines = [
+    `font-family: ${css("fontFamily", value.fontFamily)};`,
+    `font-size: ${css("dimension", value.fontSize)};`,
+    `font-weight: ${css("fontWeight", value.fontWeight)};`,
+    `line-height: ${css("number", value.lineHeight)};`,
+  ];
+  const tracking = value.letterSpacing;
+  const zero =
+    tracking &&
+    typeof tracking === "object" &&
+    (tracking as { value: number }).value === 0;
+  if (tracking !== undefined && !zero) {
+    lines.push(`letter-spacing: ${css("dimension", tracking)};`);
+  }
+  return lines;
+}
+
+/**
+ * A type role as markup names it (`text-meta`): its size, and its leading,
+ * weight and tracking as fallbacks a utility beside it overrides. Each
+ * value is read from the token of the role's own name (`leading-meta`), or
+ * from the one token of its group with the role's value (`leading-ui` for
+ * the title's 1.25), so the utility follows the tokens.
+ */
+function markupRoleLonghands(
+  role: ViewToken,
+  tokens: ViewToken[],
+  names: Set<string>
+): string[] {
+  const value = (role.original.original as Json).$value as Json;
+  const short = strip(role.name, "type-");
+  const named = (prefix: string, type: string, v: unknown): string => {
+    if (typeof v === "string") {
+      return cssValue(v, names, role.name);
+    }
+    const same = tokens.filter(
+      (t) =>
+        t.name.startsWith(prefix) &&
+        t.type === type &&
+        sameValue((t.original.original as Json).$value, v)
+    );
+    const own = same.find((t) => t.name === `${prefix}${short}`);
+    const pick = own ?? (same.length === 1 ? same[0] : undefined);
+    if (!pick) {
+      throw new Error(
+        `${role.path}: its ${prefix}* value ${JSON.stringify(v)} is ${same.length === 0 ? "no" : "more than one"} token's; name one ${prefix}${short}`
+      );
+    }
+    return `var(--${pick.name})`;
+  };
+  const lines = [
+    `font-size: ${cssValue(toCss("dimension", value.fontSize) ?? "", names, role.name)};`,
+    `line-height: var(--tw-leading, ${named("leading-", "number", value.lineHeight)});`,
+  ];
+  const tracking = value.letterSpacing;
+  const zero =
+    tracking &&
+    typeof tracking === "object" &&
+    (tracking as { value: number }).value === 0;
+  if (tracking !== undefined && !zero) {
+    lines.push(
+      `letter-spacing: var(--tw-tracking, ${named("track-", "dimension", tracking)});`
+    );
+  }
+  lines.push(
+    `font-weight: var(--tw-font-weight, ${named("weight-", "fontWeight", value.fontWeight)});`
+  );
+  return lines;
+}
+
+/** A token's theme key, by its group and type: the namespace and the name after it. */
+type KeyRule = (
+  leaf: string,
+  options: TailwindThemeOptions,
+  radii: Map<string, string>
+) => [string, string] | undefined;
+
+const KEY_RULES: Record<string, KeyRule> = {
+  "color/color": (leaf) => ["color", leaf],
+  "shadow/shadow": (leaf, options) => [
+    options.dropShadows.has(leaf) ? "drop-shadow" : "shadow",
+    strip(leaf, "shadow-"),
+  ],
+  "font/fontFamily": (leaf) => ["font", strip(leaf, "font-")],
+  "type/fontWeight": (leaf, options) => {
+    const key = options.weights[leaf];
+    if (!key) {
+      throw new Error(
+        `${leaf}: a font weight with no key; name it in the theme's weights`
+      );
+    }
+    return ["font-weight", key];
+  },
+  "type/dimension": (leaf) =>
+    leaf.startsWith("track-") ? ["tracking", strip(leaf, "track-")] : undefined,
+  "type/number": (leaf) =>
+    leaf.startsWith("leading-")
+      ? ["leading", strip(leaf, "leading-")]
+      : undefined,
+  "space/dimension": (leaf) => ["spacing", leaf],
+  "radius/dimension": (leaf, _options, radii) => [
+    "radius",
+    radii.get(leaf) ?? leaf,
+  ],
+  "size/dimension": (leaf, options) =>
+    options.spacingSizes.test(leaf) ? ["spacing", leaf] : undefined,
+  "motion/cubicBezier": (leaf) => {
+    const key = strip(leaf, "ease-");
+    if (key === "in") {
+      throw new Error(`${leaf}: no ease-in (DESIGN.md, the No Ease-In Rule)`);
+    }
+    return ["ease", key];
+  },
+  "motion/duration": (leaf) => ["duration", strip(leaf, "dur-")],
+};
+
+const groupOf = (token: ViewToken): string => token.path.split(".")[0] ?? "";
+const kindOf = (token: ViewToken): string => `${groupOf(token)}/${token.type}`;
+
+/** Every key the tokens make, by namespace, in token order. */
+function themeKeys(
+  tokens: ViewToken[],
+  options: TailwindThemeOptions
+): Map<string, ThemeKey[]> {
+  const radii = radiusKeys(tokens.filter((t) => groupOf(t) === "radius"));
+  const keys = new Map<string, ThemeKey[]>();
+  for (const token of tokens) {
+    const entry = KEY_RULES[kindOf(token)]?.(token.name, options, radii);
+    if (entry) {
+      const [ns, key] = entry;
+      keys.set(ns, [...(keys.get(ns) ?? []), { key, token }]);
+    }
+  }
+  return keys;
+}
+
+const DURATION_UTILITIES: ThemeUtility[] = [
+  ["dur-*", ["transition-duration: --value(--duration-*);"]],
+  ["anim-dur-*", ["animation-duration: --value(--duration-*);"]],
+];
+
+/** Every utility the tokens make: the composites, each type role's three forms, and the theme's own few. */
+function themeUtilities(
+  tokens: ViewToken[],
+  options: TailwindThemeOptions,
+  names: Set<string>
+): ThemeUtility[] {
+  const of = (kind: string) => tokens.filter((t) => kindOf(t) === kind);
+  const roles = of("type/typography");
+  const markup = options.markupRoles.map((role) => {
+    const token = roles.find((t) => t.name === `type-${role}`);
+    if (!token) {
+      throw new Error(`markup role ${role}: no type-${role} token`);
+    }
+    return token;
+  });
+  const extras = (t: ViewToken) =>
+    Object.entries(options.roleExtras[t.name] ?? {}).map(
+      ([property, value]) => `${property}: ${value};`
+    );
+  return [
+    ...of("color/gradient").map((t): ThemeUtility => [
+      `bg-${t.name}`,
+      [`background-image: var(--${t.name});`],
+    ]),
+    ...roles.map((t): ThemeUtility => [
+      `type-${strip(t.name, "type-")}`,
+      [...roleLonghands(t, names), ...extras(t)],
+    ]),
+    ...of("type/dimension")
+      .filter((t) => t.name.startsWith("text-"))
+      .map((t): ThemeUtility => [
+        `text-size-${strip(t.name, "text-")}`,
+        [`font-size: var(--${t.name});`],
+      ]),
+    ...markup.map((t): ThemeUtility => [
+      `text-${strip(t.name, "type-")}`,
+      markupRoleLonghands(t, tokens, names),
+    ]),
+    ...of("motion/transition").map((t): ThemeUtility => [
+      t.name,
+      [`transition: var(--${t.name});`],
+    ]),
+    ["liga-none", ["font-variant-ligatures: none;"]],
+    [
+      "no-scrollbar",
+      [
+        "scrollbar-width: none;",
+        "&::-webkit-scrollbar {",
+        "  display: none;",
+        "}",
+      ],
+    ],
+    ...(of("motion/duration").length > 0 ? DURATION_UTILITIES : []),
+  ];
+}
+
+/**
+ * The inline block: a key per token, then the literal weights, the defaults
+ * and the keyframes they name. A key named as a token must read that token:
+ * Tailwind writes the key into :root as well, before tokens.css, whose own
+ * declaration must stay the one that holds.
+ */
+function inlineLines(
+  keys: Map<string, ThemeKey[]>,
+  switched: Set<string>,
+  names: Set<string>,
+  options: TailwindThemeOptions
+): string[] {
+  const inline: string[] = [];
+  for (const [ns, list] of keys) {
+    inline.push("");
+    for (const { key, token } of list) {
+      const name = `${ns}-${key}`;
+      if (names.has(name) && name !== token.name) {
+        throw new Error(
+          `--${name} would read --${token.name}, but a token is named --${name}`
+        );
+      }
+      if (switched.has(token.name)) {
+        inline.push(
+          "  /* Switches with its context: no literal maps to it. */"
+        );
+      }
+      inline.push(`  --${name}: var(--${token.name});`);
+    }
+  }
+  const literalWeights = Object.entries(options.literalWeights);
+  if (literalWeights.length > 0) {
+    inline.push("");
+    for (const [key, value] of literalWeights) {
+      inline.push(`  --font-weight-${key}: ${value};`);
+    }
+  }
+  inline.push("");
+  for (const [key, value] of Object.entries(options.defaults)) {
+    inline.push(`  --${key}: ${value};`);
+  }
+  for (const [name, body] of Object.entries(options.keyframes)) {
+    inline.push(
+      `  @keyframes ${name} {`,
+      ...body.split("\n").map((l) => `    ${l}`),
+      "  }"
+    );
+  }
+  return inline.slice(1);
+}
+
+/** The literals Tailwind reads at build time, by namespace: the numeric step, the breakpoints, the container widths. */
+function themeLiterals(
+  options: TailwindThemeOptions
+): Map<string, [string, string][]> {
+  return new Map([
+    ["spacing", [["spacing", options.spacing]]],
+    ["breakpoint", Object.entries(options.breakpoints)],
+    [
+      "container",
+      [
+        ...Object.entries(options.breakpoints),
+        ...Object.entries(options.containers),
+      ],
+    ],
+  ]);
+}
+
+/** The plain block: every namespace reset, then the literals. */
+function plainLines(literals: Map<string, [string, string][]>): string[] {
+  const plain = ["  --*: initial;"];
+  for (const [ns, list] of literals) {
+    plain.push("");
+    for (const [key, value] of list) {
+      plain.push(
+        ns === "spacing"
+          ? `  --${key}: ${value};`
+          : `  --${ns}-${key}: ${value};`
+      );
+    }
+  }
+  return plain;
+}
+
+/**
+ * The Tailwind v4 theme a token view makes: every Tailwind namespace reset
+ * (`--*: initial`), then one `@theme inline` key per token that has a
+ * utility (`--color-surface-raised: var(--surface-raised)`), so a utility
+ * compiles to the token's own custom property and its contexts (dark, a
+ * coarse pointer) switch it where tokens.css does. What a media or
+ * container query reads is a literal in a plain `@theme`. Composite tokens
+ * become `@utility` rules: a type role as longhands, a gradient as a
+ * background image, a transition as itself. A key that shares a token's
+ * name reads that token (Tailwind writes the key into `:root` too, and the
+ * token's own declaration, later in the theme layer, must stay the one
+ * that holds).
+ */
+export function tailwindThemeCss(
+  view: TokenView,
+  options: TailwindThemeOptions
+): TailwindTheme {
+  const tokens = view.tokens.filter(
+    (token) =>
+      (options.include ? options.include(token.original) : true) &&
+      !options.retired.has(token.name)
+  );
+  const names = new Set(view.tokens.map((t) => t.name));
+  const keys = themeKeys(tokens, options);
+  const utilities = themeUtilities(tokens, options, names);
+  const switched = switchedTokens(tokens, view.contexts);
+  const literals = themeLiterals(options);
+  const css = [
+    options.header,
+    "@theme {",
+    ...plainLines(literals),
+    "}",
+    "",
+    "@theme inline {",
+    ...inlineLines(keys, switched, names, options),
+    "}",
+    ...utilities.flatMap(([name, body]) => [
+      "",
+      `@utility ${name} {`,
+      ...body.map((line) => `  ${line}`),
+      "}",
+    ]),
+    "",
+  ].join("\n");
+  return {
+    css,
+    keys,
+    literals,
+    switched,
+    utilities: utilities.map(([name]) => name),
+  };
+}
+
 /** A system built: its files settled and checked against the DTCG schemas, its view, its stylesheet. */
 export interface BuiltTokens {
   /** The files settle changed, by path, with their new JSON. */
