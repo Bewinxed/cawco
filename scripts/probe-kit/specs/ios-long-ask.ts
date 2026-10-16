@@ -39,7 +39,13 @@ import type { Subprocess } from "bun";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
-import { MODEL, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 /** A session as the hub lists it (`/api/instances`). */
@@ -209,6 +215,8 @@ const INPUT = {
   timeout: 300_000,
 };
 const MARKER = "PROBE-LONG-ASK";
+/** The asking session's project, the owner's orchestrator's. */
+const PROJECT = "cockpit";
 /** From launch to the card standing: a free main thread takes a few seconds. */
 const STAND_MS = 15_000;
 /** When the card has not stood this long after launch, the main thread is sampled while it is awaited. */
@@ -343,6 +351,14 @@ async function run(kit: Kit): Promise<void> {
     await fleet.agentUp();
     await fleet.accountSignedIn();
     ({ base } = fleet);
+    // In a project, as the owner's was ("Orchestrate cockpit fleet work ·
+    // cockpit"): a phone lists a session under its project.
+    const project = await fleet.api<{ id: string }>("/api/projects", {
+      name: PROJECT,
+      machineId: MACHINE,
+      cwd: fleet.repo,
+      caw: false,
+    });
     // `PROBE_HISTORY=<hub>|<instance>`: the session resumes that real
     // session's whole history (the owner's orchestrator chat, thousands of
     // turns), read from its hub and written as its Claude Code file here.
@@ -364,11 +380,13 @@ async function run(kit: Kit): Promise<void> {
       );
       asker = await fleet.spawn("claude", "Long ask", fleet.repo, {
         permissionMode: "default",
+        projectId: project.id,
         resume: { sessionKey },
       });
     } else {
       asker = await fleet.spawn("claude", "Long ask", fleet.repo, {
         permissionMode: "default",
+        projectId: project.id,
       });
       for (let turn = 0; turn < HISTORY_TURNS; turn += 1) {
         // biome-ignore lint/performance/noAwaitInLoops: the turns are sent in order
@@ -454,6 +472,8 @@ async function run(kit: Kit): Promise<void> {
         return { share: Number.NaN, frames: "no sample written" };
       }
     };
+    /** Screens where a tap found nothing, each one's labels kept in its own file. */
+    let untapped = 0;
     /** A node of the accessibility tree by its label (or a test of it), tapped at its middle. */
     const tap = async (
       label: string | ((said: string) => boolean)
@@ -496,7 +516,11 @@ async function run(kit: Kit): Promise<void> {
         for (const root of roots) {
           list(root);
         }
-        writeFileSync(join(kit.out, "untapped-labels.txt"), labels.join("\n"));
+        untapped += 1;
+        writeFileSync(
+          join(kit.out, `untapped-${untapped}.txt`),
+          labels.join("\n")
+        );
         return false;
       }
       await sh(
@@ -652,7 +676,8 @@ async function run(kit: Kit): Promise<void> {
               },
             },
             {
-              // The navigation's sessions, the session's row by its title as the hub has it now.
+              // The navigation's projects, the session's row in its project
+              // by its title as the hub has it now.
               name: "the navigation's session list",
               args: "",
               reach: async () => {
@@ -661,21 +686,11 @@ async function run(kit: Kit): Promise<void> {
                   return false;
                 }
                 await pause(2000);
-                const title = await sessionTitle();
-                if (await tap((label) => label.includes(title))) {
-                  return true;
-                }
-                // Its sessions stand under their machine, which opens first.
-                const machines = (await (
-                  await fetch(`${base}/api/agents`)
-                ).json()) as { hostname?: string }[];
-                const hosts = machines
-                  .map((machine) => machine.hostname)
-                  .filter((host): host is string => !!host);
-                if (!(await tap((label) => hosts.includes(label)))) {
+                if (!(await tap((label) => label.startsWith(PROJECT)))) {
                   return false;
                 }
-                await pause(2000);
+                await pause(3000);
+                const title = await sessionTitle();
                 return await tap((label) => label.includes(title));
               },
             },
