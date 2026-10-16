@@ -163,7 +163,7 @@ import type { Tasks } from "./tasks";
  * the session writing the brief, and the model-keyed SessionStart hook's
  * text was summarized away at each compaction. About 150 tokens for the
  * worker alone, the memory group's words and the rule scope's cut to a
- * clause each. Within the same budgets.
+ * clause each (worker 24,278 → 24,426 measured). Within the same budgets.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 25_000,

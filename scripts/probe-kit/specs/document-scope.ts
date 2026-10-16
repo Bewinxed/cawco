@@ -36,6 +36,7 @@
  *
  *   bun scripts/probe-kit/run.ts document-scope
  */
+import { readWithin } from "../../../packages/core/src/bounded";
 import {
   HARNESSES,
   type Harness,
@@ -355,14 +356,29 @@ const spec: Spec = {
       ).catch(() => undefined);
       return first;
     };
-    /** The compactions a session's transcript shows: its `compact_boundary` blocks. */
+    /**
+     * The compactions a session's transcript shows: its `compact_boundary`
+     * blocks. It is polled, so a read the hub did not answer shows none yet
+     * and the poll asks again.
+     */
     const compactions = async (session: string): Promise<number> => {
-      const response = await fetch(
-        `${fleet.base}/api/instances/${session}/transcript?limit=1000`,
-        { signal: AbortSignal.timeout(30_000) }
-      ).catch(() => undefined);
-      const text = response?.ok ? await response.text() : "";
-      return text.split('"system.compact_boundary"').length - 1;
+      const read = await readWithin(30_000, async (signal) => {
+        const response = await fetch(
+          `${fleet.base}/api/instances/${session}/transcript?limit=1000`,
+          { signal }
+        ).catch(() => undefined);
+        return response?.ok ? await response.text() : "";
+      });
+      switch (read.kind) {
+        case "answered":
+          return read.value.split('"system.compact_boundary"').length - 1;
+        case "unanswered":
+          return 0;
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     };
     /**
      * A `/compact`, answered with a summary of the mock's, waited for until
@@ -656,17 +672,34 @@ const briefing = async (
 /** The fleet's memory through the hub's own routes (admin_memory_write's). */
 const keepDocuments = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const hub = async (method: string, path: string, body?: unknown) => {
-    const response = await fetch(`${fleet.base}${path}`, {
-      method,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30_000),
+    const read = await readWithin(30_000, async (signal) => {
+      const response = await fetch(`${fleet.base}${path}`, {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+      });
+      return {
+        ok: response.ok,
+        status: response.status,
+        text: await response.text(),
+      };
     });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`${method} ${path}: ${response.status} ${text}`);
+    switch (read.kind) {
+      case "unanswered":
+        throw new Error(`${method} ${path}: no answer within ${read.after} ms`);
+      case "answered":
+        if (!read.value.ok) {
+          throw new Error(
+            `${method} ${path}: ${read.value.status} ${read.value.text}`
+          );
+        }
+        return JSON.parse(read.value.text) as unknown;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    return JSON.parse(text) as unknown;
   };
   await hub("PUT", "/api/fleet/memory", {
     content: `# Fleet\n\n${MARK.user}\n`,
