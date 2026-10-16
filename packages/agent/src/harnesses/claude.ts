@@ -102,6 +102,7 @@ import {
   settledQuestionResult,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
+import type { RestartHold } from "@cawco/core/binary-updates";
 import { LineSplitter } from "@cawco/core/lines";
 import {
   accountConfigDir,
@@ -2752,24 +2753,31 @@ class ClaudeSession implements HarnessSession {
       : "its scheduled wake-ups are not known until its next turn ends";
   }
 
-  heldForLater(): string | undefined {
+  heldForLater(): RestartHold[] {
     // A background task's completion is what wakes the session for it, and
     // no resume brings the task back ("Background Bash and monitor tasks are
     // never restored on resume", code.claude.com/docs/en/scheduled-tasks).
     // Its completion starts the turn whose end the move then takes.
     if (this.#background.size > 0) {
-      return `${this.#background.size} background task(s) it started are still running`;
+      return [{ reason: "command", ids: [...this.#background.keys()] }];
     }
-    const unknown = this.#wakeupsUnknown();
-    if (unknown) {
-      return unknown;
+    if (this.#wakeupsUnknown()) {
+      return [
+        { reason: "wake-ups-unknown", ids: [this.sessionId ?? "session"] },
+      ];
     }
     // A move resumes the conversation at once on another account, which
     // brings back the recurring wake-ups and not every one-shot
     // ({@link Wakeups}).
-    return (this.#crons?.once ?? 0) > 0
-      ? `it has scheduled itself ${this.#crons?.once} one-time wake-up(s)`
-      : undefined;
+    const once = this.#crons?.once ?? 0;
+    return once > 0
+      ? [
+          {
+            reason: "wake-up",
+            ids: Array.from({ length: once }, (_, at) => `wake-up ${at + 1}`),
+          },
+        ]
+      : [];
   }
 
   /**

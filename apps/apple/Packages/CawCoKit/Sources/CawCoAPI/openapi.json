@@ -37940,6 +37940,8 @@
           "opencode-send",
           "starting",
           "tool-call",
+          "wake-up",
+          "wake-ups-unknown",
           "workspace",
           "write"
         ]
@@ -39718,7 +39720,7 @@
                     "type": "string"
                   },
                   "waits": {
-                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up): the move goes when that ends, or after\n{@link MOVE_LATER_WAIT_MS} at the latest, ending it.",
+                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up): the move goes when that ends, or after\n{@link RESTART_WAIT_CAP_MS} at the latest, ending it.",
                     "const": true,
                     "type": "boolean"
                   }
@@ -46897,7 +46899,7 @@
                     "type": "string"
                   },
                   "waits": {
-                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up): the move goes when that ends, or after\n{@link MOVE_LATER_WAIT_MS} at the latest, ending it.",
+                    "description": "Only work its process holds for later kept it (a background task, a\none-time wake-up): the move goes when that ends, or after\n{@link RESTART_WAIT_CAP_MS} at the latest, ending it.",
                     "const": true,
                     "type": "boolean"
                   }

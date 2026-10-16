@@ -7,7 +7,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
   holdPhrases,
-  UPDATE_WAIT_CAP_MS,
+  RESTART_WAIT_CAP_MS,
 } from "@cawco/core/binary-updates";
 
 /** The part of a machine row these functions read. */
@@ -648,7 +648,7 @@ function heldBack({ input, machines }: Ctx): Notice | null {
     failed: false,
     lines: [],
     notes: releaseNotes(state.notes),
-    closing: `Each machine installs it once its work in flight ends, within ${UPDATE_WAIT_CAP_MS / 60_000} minutes. Turns keep running through it. ${held.length} ${held.length === 1 ? "is" : "are"} waiting now.`,
+    closing: `Each machine installs it once its work in flight ends, within ${RESTART_WAIT_CAP_MS / 60_000} minutes. Turns keep running through it. ${held.length} ${held.length === 1 ? "is" : "are"} waiting now.`,
     configure: true,
     caw: { status: "ready", moves: false },
     machineIds: held.map((m) => m.machineId),

@@ -4394,6 +4394,8 @@ public enum OpenEnums {
         case opencodeSend
         case starting
         case toolCall
+        case wakeUp
+        case wakeUpsUnknown
         case workspace
         case write
         /// A value this app does not know: a newer hub's.
@@ -4409,6 +4411,8 @@ public enum OpenEnums {
             case "opencode-send": self = .opencodeSend
             case "starting": self = .starting
             case "tool-call": self = .toolCall
+            case "wake-up": self = .wakeUp
+            case "wake-ups-unknown": self = .wakeUpsUnknown
             case "workspace": self = .workspace
             case "write": self = .write
             default: self = .unrecognized(rawValue)
@@ -4425,6 +4429,8 @@ public enum OpenEnums {
             case .opencodeSend: "opencode-send"
             case .starting: "starting"
             case .toolCall: "tool-call"
+            case .wakeUp: "wake-up"
+            case .wakeUpsUnknown: "wake-ups-unknown"
             case .workspace: "workspace"
             case .write: "write"
             case let .unrecognized(rawValue): rawValue
@@ -4435,7 +4441,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.command, .custody, .hubToolCall, .image, .opencode, .opencodeSend, .starting, .toolCall, .workspace, .write]
+        public static let allCases: [Self] = [.command, .custody, .hubToolCall, .image, .opencode, .opencodeSend, .starting, .toolCall, .wakeUp, .wakeUpsUnknown, .workspace, .write]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

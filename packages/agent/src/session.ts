@@ -97,6 +97,7 @@ import {
   AGENT_RESTARTING,
   mergeHolds,
   type RestartHold,
+  waitingWords,
 } from "@cawco/core/binary-updates";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import {
@@ -353,8 +354,10 @@ const heldBy = (
   if (held) {
     return { why: held };
   }
-  const later = forMove ? session.heldForLater?.() : undefined;
-  return later ? { why: later, later: true } : undefined;
+  const later = forMove ? (session.heldForLater?.() ?? []) : [];
+  return later.length > 0
+    ? { why: waitingWords(later), later: true }
+    : undefined;
 };
 
 /** A carry's outcome as its end line says it. */

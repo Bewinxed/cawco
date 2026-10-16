@@ -15,6 +15,7 @@
  * Browser-safe: types and pure functions only.
  */
 
+import { RESTART_WAIT_CAP_MS } from "./binary-updates";
 import type { LimitWindow } from "./usage/types";
 import { accountsWords } from "./words/accounts";
 
@@ -1056,21 +1057,10 @@ export type AccountMove =
       /**
        * Only work its process holds for later kept it (a background task, a
        * one-time wake-up): the move goes when that ends, or after
-       * {@link MOVE_LATER_WAIT_MS} at the latest, ending it.
+       * {@link RESTART_WAIT_CAP_MS} at the latest, ending it.
        */
       waits?: true;
     };
-
-/**
- * How long a move waits for the work a session's process holds for later (a
- * background task it started, a one-time wake-up: neither comes back when
- * Claude Code resumes it on another account) before it ends that work with
- * the process and tells the session, on the new account, what ended. Two
- * minutes: long enough for a build or a short wait to finish and move whole,
- * short enough that a session at its account's limit, which can take no
- * turn there, is not stranded behind a watcher that never ends.
- */
-export const MOVE_LATER_WAIT_MS = 2 * 60_000;
 
 /**
  * Who ended a session's process ({@link AccountMove} `ended`): a person (the
@@ -1295,7 +1285,7 @@ const unmovedNext = (
   }
   const from = move.from.name;
   if (move.waits) {
-    return `It moves${move.to ? ` to ${move.to.name}` : ""} when that work ends, or in ${MOVE_LATER_WAIT_MS / 60_000} minutes at the latest: then the move ends it, and the session is told there what ended`;
+    return `It moves${move.to ? ` to ${move.to.name}` : ""} when that work ends, or in ${RESTART_WAIT_CAP_MS / 60_000} minutes at the latest: then the move ends it, and the session is told there what ended`;
   }
   return move.signedOut
     ? `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} once ${from} is signed in again in Configure → Accounts`

@@ -1528,7 +1528,7 @@ export interface CarrySessionRequest {
   accountId: string | null;
   /**
    * The move has waited its bound for the work this session holds for later
-   * (hub `MOVE_LATER_WAIT_MS`): its process ends with that work, and the
+   * (core `RESTART_WAIT_CAP_MS`): its process ends with that work, and the
    * outcome says what ended ({@link MoveEnded}), for the session to hear
    * once it runs on the new account. Only with `stop`.
    */

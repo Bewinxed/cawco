@@ -33,6 +33,7 @@ import type {
   SpawnPayload,
   TextAttachment,
 } from "@cawco/core";
+import type { RestartHold } from "@cawco/core/binary-updates";
 
 /**
  * What a turn carries to its harness beside its words: the texts it folds in
@@ -200,13 +201,14 @@ export interface HarnessSession {
   readonly harness: HarnessKind;
   /**
    * For a move's stop: the work this process holds for later that a resume
-   * on another account would not bring back (a background task it started,
-   * a one-time wake-up), in words. The move waits for it up to its bound,
-   * then ends it with the process ({@link endedForMove}). Nothing when it
-   * holds none.
+   * on another account would not bring back (a background task it started:
+   * a `command`; a one-time wake-up), as the work a restart would cut is
+   * counted for an update (core `RestartHold`). The move waits for it up to
+   * the restart bound (core `RESTART_WAIT_CAP_MS`), then ends it with the
+   * process ({@link endedForMove}). Empty when it holds none.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  heldForLater?(): string | undefined;
+  heldForLater?(): RestartHold[];
   /**
    * What stopping this session's processes now would lose, in words, beyond
    * what the supervisor sees for itself (a running turn, a parked ask): work

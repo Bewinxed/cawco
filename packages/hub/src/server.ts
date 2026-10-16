@@ -225,7 +225,6 @@ import {
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
-  MOVE_LATER_WAIT_MS,
   MOVED_HERE,
   mcpRunsOn,
   memoryDocProblem,
@@ -301,6 +300,8 @@ import {
   type BinaryUpdatePhase,
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
+  RESTART_WAIT_CAP_MS,
+  waitedOut,
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
@@ -7617,7 +7618,7 @@ export const createServer = (
         }
         continue;
       }
-      lifetime.cancel(laterWaits.get(row.id));
+      lifetime.cancel(laterWaits.get(row.id)?.timer);
       laterWaits.delete(row.id);
       if (outcome?.state === "carried" && outcome.ended) {
         endedByMove.set(row.id, outcome.ended);
@@ -7631,29 +7632,37 @@ export const createServer = (
   /**
    * The moves held only by work a session's process holds for later (a
    * background task, a one-time wake-up: {@link Kept.later}), by instance id:
-   * each tried again {@link MOVE_LATER_WAIT_MS} after it was first held,
-   * then with `endLater` ({@link endLaterNow}), which ends that work with the
-   * process. A completion before then starts the turn whose end the move
-   * takes, as it always has.
+   * since when each was first held, and its timer. Once it has waited out the
+   * restart bound (core `waitedOut`, the rule auto-update waits by) it is
+   * tried again with `endLater` ({@link endLaterNow}), which ends that work
+   * with the process. A completion before then starts the turn whose end the
+   * move takes, as it always has.
    */
-  const laterWaits = new Map<string, HubTimer>();
+  const laterWaits = new Map<string, { since: number; timer: HubTimer }>();
   /** The rows whose next carry ends what their process holds for later: their wait is over. */
   const endLaterNow = new Set<string>();
   /** What a move ended with a session's process, told to it once it runs on the new account ({@link tellEndedByMove}). */
   const endedByMove = new Map<string, MoveEnded>();
 
   /** The move of `instanceId` is held by work its process holds for later: tried again, ending it, once its wait is over. */
-  const waitForLater = (instanceId: string): void => {
+  const waitForLater = (instanceId: string, since = Date.now()): void => {
     if (laterWaits.has(instanceId)) {
       return;
     }
-    laterWaits.set(
-      instanceId,
-      lifetime.after(MOVE_LATER_WAIT_MS, () => {
-        laterWaits.delete(instanceId);
-        detach(retryLaterMove(instanceId), "move past its wait");
-      })
-    );
+    laterWaits.set(instanceId, {
+      since,
+      timer: lifetime.after(
+        Math.max(0, since + RESTART_WAIT_CAP_MS - Date.now()),
+        () => {
+          laterWaits.delete(instanceId);
+          if (waitedOut(since)) {
+            detach(retryLaterMove(instanceId), "move past its wait");
+          } else {
+            waitForLater(instanceId, since);
+          }
+        }
+      ),
+    });
   };
 
   /**
@@ -7671,14 +7680,14 @@ export const createServer = (
       return;
     }
     console.info(
-      `[accounts] ${sessionName(row)}'s move waited ${MOVE_LATER_WAIT_MS / 60_000} minutes for the work its process holds for later; it is carried now, that work ending with the process, and the session is told what ended once it runs on the new account.`
+      `[accounts] ${sessionName(row)}'s move waited ${RESTART_WAIT_CAP_MS / 60_000} minutes for the work its process holds for later; it is carried now, that work ending with the process, and the session is told what ended once it runs on the new account.`
     );
     endLaterNow.add(instanceId);
     try {
       await (held
         ? atLimit.lookNow(
             instanceId,
-            `its move waited ${MOVE_LATER_WAIT_MS / 60_000} minutes for the work its process holds for later`
+            `its move waited ${RESTART_WAIT_CAP_MS / 60_000} minutes for the work its process holds for later`
           )
         : takeUpOwedMove(instanceId));
     } finally {
@@ -7724,7 +7733,7 @@ export const createServer = (
    */
   const keptNextWords = (why: Kept, toName: string): string => {
     if (why.later) {
-      return `It moves when that work ends, or in ${MOVE_LATER_WAIT_MS / 60_000} minutes at the latest, ending it; the session is told on ${toName} what ended.`;
+      return `It moves when that work ends, or in ${RESTART_WAIT_CAP_MS / 60_000} minutes at the latest, ending it; the session is told on ${toName} what ended.`;
     }
     return why.running
       ? "It moves when its next turn ends."
@@ -12030,7 +12039,7 @@ export const createServer = (
    * Continuations whose session's process still runs, already said so
    * ({@link leaveConversation}), with when that was first said: one held
    * only by work its process holds for later goes past
-   * {@link MOVE_LATER_WAIT_MS}, ending it.
+   * {@link RESTART_WAIT_CAP_MS}, ending it.
    */
   const leavingSaid = new Map<string, number>();
 
@@ -12045,7 +12054,7 @@ export const createServer = (
     }
     leavingSaid.set(job.id, Date.now());
     const after = why.later
-      ? `, and after ${MOVE_LATER_WAIT_MS / 60_000} minutes ends that work with its process`
+      ? `, and after ${RESTART_WAIT_CAP_MS / 60_000} minutes ends that work with its process`
       : "";
     console.info(
       `[continuation] ${sessionName(row)} can't go on from its summary yet: ${why.why}. The hub asks again every ${IN_PLACE_IDLE_LOOK_MS / 1000} s until it can${after}.`
@@ -12064,7 +12073,7 @@ export const createServer = (
     row: StoredRow
   ): Promise<Kept | undefined> => {
     const since = leavingSaid.get(job.id);
-    if (since !== undefined && Date.now() - since >= MOVE_LATER_WAIT_MS) {
+    if (since !== undefined && waitedOut(since)) {
       endLaterNow.add(row.id);
     }
     try {

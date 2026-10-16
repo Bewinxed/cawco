@@ -40,13 +40,13 @@ import {
 import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
-  holdPhrases,
   mergeHolds,
   type RestartHold,
   type RestartReadiness,
   type RetiringKeeper,
   UPDATE_DRAIN_MS,
-  UPDATE_WAIT_CAP_MS,
+  waitedOut,
+  waitingWords,
 } from "@cawco/core/binary-updates";
 import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
 import { timerMs } from "@cawco/core/clock";
@@ -393,7 +393,7 @@ export class BinaryUpdater {
     await this.tick();
     const to = this.#state.availableVersion;
     const waiting = this.#state.waitingOn?.length
-      ? `waiting for work in flight to end: ${holdPhrases(this.#state.waitingOn).join(", ")}`
+      ? waitingWords(this.#state.waitingOn)
       : `update is ${this.#state.phase}`;
     return {
       from,
@@ -1200,7 +1200,7 @@ export class BinaryUpdater {
    * keeps new session starts. The work already in flight then gets
    * {@link UPDATE_DRAIN_MS} to end. Nothing left: replace. Something left: a
    * person's Install now, or an auto-update that has waited
-   * {@link UPDATE_WAIT_CAP_MS}, replaces anyway and the state records what it cut;
+   * {@link RESTART_WAIT_CAP_MS}, replaces anyway and the state records what it cut;
    * otherwise the fence comes down and a later tick looks again. Work that
    * outlasted a drain gets no new fence until it has ended
    * ({@link #outlasted}): a long call is waited out, not fenced every minute.
@@ -1209,7 +1209,7 @@ export class BinaryUpdater {
     const before = this.#state.phase;
     const capped = (): boolean =>
       this.#state.waitingSince !== undefined &&
-      Date.now() - this.#state.waitingSince >= UPDATE_WAIT_CAP_MS;
+      waitedOut(this.#state.waitingSince);
     if (await this.#cancelled(before)) {
       return undefined;
     }

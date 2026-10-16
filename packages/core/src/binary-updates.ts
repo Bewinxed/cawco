@@ -90,7 +90,9 @@ export type RestartHoldReason =
   | "hub-tool-call"
   | "write"
   | "opencode"
-  | "opencode-send";
+  | "opencode-send"
+  | "wake-up"
+  | "wake-ups-unknown";
 
 /** One kind of work a restart would cut now, and what each piece is (a session, a call). */
 export interface RestartHold {
@@ -136,13 +138,27 @@ export const RESUMABLE_CAWCO_TOOLS: ReadonlySet<string> = new Set([
 export const UPDATE_DRAIN_MS = 45_000;
 
 /**
- * How long auto-update waits on work in flight before it installs anyway and
- * records what it cut. Ours: past the long work a restart would cut (an image
- * generation is given 10 minutes, a delegate's workspace and a continuation's
- * summary take minutes, a check 10 minutes by default), and short enough that
- * a fix still reaches a machine that is never without work in flight.
+ * How long a restart waits on the work in flight it would cut before it cuts
+ * it: auto-update's restart of the machine's services, and an account move's
+ * restart of a session's Claude Code process, whose background commands and
+ * one-time wake-ups no resume brings back (hub server.ts `waitForLater`).
+ * Ours: past the long work a restart would cut (an image generation is given
+ * 10 minutes, a delegate's workspace and a continuation's summary take
+ * minutes, a check 10 minutes by default, a build or a probe chain run in
+ * the background as long), and short enough that a fix still reaches a
+ * machine, and a session at its limit another account, when the work never
+ * ends.
  */
-export const UPDATE_WAIT_CAP_MS = 30 * 60_000;
+export const RESTART_WAIT_CAP_MS = 30 * 60_000;
+
+/**
+ * Whether a restart that has waited since `since` on work it would cut now
+ * cuts it: never before {@link RESTART_WAIT_CAP_MS}. The one rule an
+ * auto-update (agent binary-update.ts `#drain`) and an account move (hub
+ * server.ts `waitForLater`, `endConversationProcess`) wait by.
+ */
+export const waitedOut = (since: number, now = Date.now()): boolean =>
+  now - since >= RESTART_WAIT_CAP_MS;
 
 /** What a request refused by a raised fence answers: it was not started. */
 export const AGENT_RESTARTING =
@@ -176,6 +192,9 @@ const HOLD_WORDS: Record<RestartHoldReason, (n: number) => string> = {
       "session with messages not yet handed to OpenCode",
       "sessions with messages not yet handed to OpenCode"
     ),
+  "wake-up": (n) =>
+    counted(n, "one-time wake-up scheduled", "one-time wake-ups scheduled"),
+  "wake-ups-unknown": () => "wake-ups not known until its next turn ends",
 };
 
 /** Each hold in words, in order: `2 tool calls`, `1 image generation`. A kind a newer build names is still counted. */
@@ -186,6 +205,13 @@ export const holdPhrases = (holds: readonly RestartHold[]): string[] =>
       ((n: number) => counted(n, "piece of work", "pieces of work"))
     )(ids.length)
   );
+
+/**
+ * What a restart that waits says it waits for, an update's and an account
+ * move's alike: `waiting for work in flight to end: 1 command running`.
+ */
+export const waitingWords = (holds: readonly RestartHold[]): string =>
+  `waiting for work in flight to end: ${holdPhrases(holds).join(", ")}`;
 
 /** Every hold of `lists`, one entry per reason, each id once. */
 export function mergeHolds(
