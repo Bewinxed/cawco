@@ -1485,6 +1485,13 @@
       "when": 1792157438502,
       "tag": "0211_move_machine_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 212,
+      "version": "6",
+      "when": 1792157465784,
+      "tag": "0212_artifact_source_columns",
+      "breakpoints": true
     }
   ]
 }

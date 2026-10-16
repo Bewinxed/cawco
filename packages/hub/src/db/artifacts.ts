@@ -1,3 +1,4 @@
+import type { PreviewSource } from "@cawco/core";
 import { and, asc, count, desc, eq, gt, gte, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
@@ -7,7 +8,61 @@ import {
   shownPreviews,
 } from "./schema";
 
-export type ArtifactRow = typeof artifacts.$inferSelect;
+type StoredArtifact = typeof artifacts.$inferSelect;
+type SourceColumn =
+  | "sourcePage"
+  | "sourceDir"
+  | "sourcePort"
+  | "sourcePath"
+  | "sourceWorkspace"
+  | "sourceStageDir"
+  | "sourceStageFile";
+
+/** An artifact as everything reads it: what it shows as one {@link PreviewSource}. */
+export type ArtifactRow = Omit<StoredArtifact, SourceColumn> & {
+  source: PreviewSource;
+};
+
+/** A source as its columns keep it: one of page, dir or port set, the rest of its kind's beside it. */
+export const sourceColumnsOf = (
+  source: PreviewSource
+): Pick<StoredArtifact, SourceColumn> => ({
+  sourcePage: "page" in source ? source.page : null,
+  sourceDir: "dir" in source ? source.dir : null,
+  sourcePort: "port" in source ? source.port : null,
+  sourcePath: "page" in source ? null : (source.path ?? null),
+  sourceWorkspace: "port" in source ? (source.workspace ?? null) : null,
+  sourceStageDir: "port" in source ? (source.stage?.dir ?? null) : null,
+  sourceStageFile: "port" in source ? (source.stage?.file ?? null) : null,
+});
+
+/** A stored artifact with its source whole again. */
+export const artifactOf = ({
+  sourcePage,
+  sourceDir,
+  sourcePort,
+  sourcePath,
+  sourceWorkspace,
+  sourceStageDir,
+  sourceStageFile,
+  ...row
+}: StoredArtifact): ArtifactRow => {
+  const path = sourcePath === null ? {} : { path: sourcePath };
+  const port = (): PreviewSource => ({
+    port: sourcePort ?? 0,
+    ...path,
+    ...(sourceStageDir !== null && sourceStageFile !== null
+      ? { stage: { dir: sourceStageDir, file: sourceStageFile } }
+      : {}),
+    ...(sourceWorkspace === null ? {} : { workspace: sourceWorkspace }),
+  });
+  const folder = (): PreviewSource =>
+    sourceDir === null ? port() : { dir: sourceDir, ...path };
+  return {
+    ...row,
+    source: sourcePage === null ? folder() : { page: sourcePage },
+  };
+};
 
 /** One key's last change on an artifact: the seq it changed at, and who changed it. */
 export interface ArtifactChange {
@@ -144,8 +199,8 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
         )
       )
       .all(),
-  byName: (instanceId, kind, name) =>
-    db
+  byName: (instanceId, kind, name) => {
+    const row = db
       .select()
       .from(artifacts)
       .where(
@@ -155,7 +210,9 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
           eq(artifacts.name, name)
         )
       )
-      .get(),
+      .get();
+    return row && artifactOf(row);
+  },
   compact: (id, snapshot) => {
     db.transaction((tx) => {
       const row = tx.select().from(artifacts).where(eq(artifacts.id, id)).get();
@@ -170,12 +227,22 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
         .run();
     });
   },
-  create: (row) => db.insert(artifacts).values(row).returning().get(),
+  create: ({ source, ...row }) =>
+    artifactOf(
+      db
+        .insert(artifacts)
+        .values({ ...row, ...sourceColumnsOf(source) })
+        .returning()
+        .get()
+    ),
   dropLegacy: () => {
     db.run(sql`DROP TABLE IF EXISTS legacy_canvas_choices`);
     db.run(sql`DROP TABLE IF EXISTS legacy_canvases`);
   },
-  get: (id) => db.select().from(artifacts).where(eq(artifacts.id, id)).get(),
+  get: (id) => {
+    const row = db.select().from(artifacts).where(eq(artifacts.id, id)).get();
+    return row && artifactOf(row);
+  },
   legacy: () => {
     const there = db.get(
       sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'legacy_canvases'`
@@ -202,32 +269,35 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .from(artifacts)
       .where(eq(artifacts.instanceId, instanceId))
       .orderBy(desc(artifacts.createdAt))
-      .all(),
+      .all()
+      .map(artifactOf),
   ofProject: (projectId) =>
     db
       .select()
       .from(artifacts)
       .where(eq(artifacts.projectId, projectId))
       .orderBy(desc(artifacts.createdAt))
-      .all(),
+      .all()
+      .map(artifactOf),
   previewing: ({ id, machineId, path }) =>
     db
       .select()
       .from(artifacts)
       .where(
         or(
-          sql`json_extract(${artifacts.source}, '$.workspace') = ${id}`,
+          eq(artifacts.sourceWorkspace, id),
           and(
             eq(artifacts.machineId, machineId),
             or(
-              sql`json_extract(${artifacts.source}, '$.dir') = ${path}`,
-              sql`substr(json_extract(${artifacts.source}, '$.dir'), 1, ${path.length + 1}) = ${`${path}/`}`
+              eq(artifacts.sourceDir, path),
+              sql`substr(${artifacts.sourceDir}, 1, ${path.length + 1}) = ${`${path}/`}`
             )
           )
         )
       )
       .orderBy(desc(artifacts.createdAt))
-      .all(),
+      .all()
+      .map(artifactOf),
   remove: (id) => {
     db.delete(artifacts).where(eq(artifacts.id, id)).run();
   },
@@ -245,21 +315,32 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .select({ instanceId: shownPreviews.instanceId, artifact: artifacts })
       .from(shownPreviews)
       .innerJoin(artifacts, eq(artifacts.id, shownPreviews.artifactId))
-      .all(),
+      .all()
+      .map(({ instanceId, artifact }) => ({
+        instanceId,
+        artifact: artifactOf(artifact),
+      })),
   touchedSince: (at) =>
-    db.select().from(artifacts).where(gte(artifacts.updatedAt, at)).all(),
+    db
+      .select()
+      .from(artifacts)
+      .where(gte(artifacts.updatedAt, at))
+      .all()
+      .map(artifactOf),
   unshow: (instanceId) => {
     db.delete(shownPreviews)
       .where(eq(shownPreviews.instanceId, instanceId))
       .run();
   },
-  update: (id, patch) =>
-    db
+  update: (id, { source, ...patch }) => {
+    const row = db
       .update(artifacts)
-      .set(patch)
+      .set({ ...patch, ...(source ? sourceColumnsOf(source) : {}) })
       .where(eq(artifacts.id, id))
       .returning()
-      .get(),
+      .get();
+    return row && artifactOf(row);
+  },
   updates: (id) =>
     db
       .select({ update: artifactUpdates.update })

@@ -3116,10 +3116,22 @@ export const artifacts = sqliteTable(
     name: text("name").notNull(),
     /** The machine a preview's dev server or folder is on; null for a page, which the hub serves. */
     machineId: text("machine_id"),
-    /** What the panel shows: a page by name (served from `artifacts/<id>/`), a dev server or a folder. */
-    source: text("source", { mode: "json" })
-      .$type<import("@cawco/core").PreviewSource>()
-      .notNull(),
+    /**
+     * What the panel shows (core `PreviewSource`), exactly one of: a page by
+     * name (served from `artifacts/<id>/`), a folder, or a dev server's port.
+     */
+    sourcePage: text("source_page"),
+    sourceDir: text("source_dir"),
+    sourcePort: integer("source_port"),
+    /** The path a folder or port preview opens at. */
+    sourcePath: text("source_path"),
+    /** The workspace whose dev server a port preview is: it runs in that workspace's own network. */
+    sourceWorkspace: text("source_workspace").references(() => workspaces.id, {
+      onDelete: "set null",
+    }),
+    /** A sheet's: the stage's Vite root and its story file, from the clone's root. */
+    sourceStageDir: text("source_stage_dir"),
+    sourceStageFile: text("source_stage_file"),
     /** Moved by each new HTML; mirrored in the doc's `meta.revision`. */
     revision: integer("revision").notNull().default(1),
     /** Moved by every update the doc takes, from anyone: `artifact_read`'s `since` cursor. */
