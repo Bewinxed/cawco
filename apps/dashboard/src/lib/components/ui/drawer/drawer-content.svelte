@@ -13,6 +13,7 @@
     style,
     portalProps,
     hosted = false,
+    modal = true,
     children,
     ...restProps
   }: DrawerPrimitive.ContentProps & {
@@ -22,7 +23,33 @@
      * composer): the host places it, and the kit leaves its place alone.
      */
     hosted?: boolean;
+    /** As its root's `modal`: false, the page under it stays live, to a screen reader too. */
+    modal?: boolean;
   } = $props();
+
+  /**
+   * A sheet whose root is `modal={false}` is not modal to a screen reader
+   * either: its content says `aria-modal="false"`, held there through every
+   * redraw. vaul-svelte (1.0.0-next.7) does not forward `modal` to bits-ui's
+   * Dialog.Root, and bits-ui (2.19.5) writes `aria-modal="true"` on every
+   * dialog's content: the gap React vaul closed in emilkowalski/vaul#580,
+   * unreleased per #647. Delete this once vaul-svelte forwards `modal`.
+   */
+  $effect(() => {
+    const node = ref;
+    if (modal || !node) {
+      return;
+    }
+    const hold = () => {
+      if (node.getAttribute("aria-modal") !== "false") {
+        node.setAttribute("aria-modal", "false");
+      }
+    };
+    hold();
+    const watch = new MutationObserver(hold);
+    watch.observe(node, { attributeFilter: ["aria-modal"] });
+    return () => watch.disconnect();
+  });
 
   /**
    * The visible area as the sheet's --visible-top and --visible-height,

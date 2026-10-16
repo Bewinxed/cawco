@@ -379,20 +379,14 @@ const insertThread = (db: Database, projectId: string): string => {
   return threadId;
 };
 
-/** A routine of the project whose runs are noted in `threadId`: where it opens. */
+/** A routine of the project whose runs are noted in `threadId`; it opens in its project's Routines tab. */
 const ROUTINE = "Weekly lantern audit";
+const ROUTINE_ID = "routine-lantern-audit";
 const insertRoutine = (db: Database, projectId: string, threadId: string) => {
   const now = Date.now();
   db.query(
     "INSERT INTO routines (id, project_id, name, cron, time_zone, target, prompt, lands, enabled, created_by, keep, next_slot, thread_id, created_at) VALUES (?, ?, ?, '0 6 * * *', 'UTC', 'delegate', 'Audit the lanterns.', 'none', 1, 'owner', 0, ?, ?, ?)"
-  ).run(
-    crypto.randomUUID(),
-    projectId,
-    ROUTINE,
-    now + DAY,
-    threadId,
-    now - DAY
-  );
+  ).run(ROUTINE_ID, projectId, ROUTINE, now + DAY, threadId, now - DAY);
 };
 
 /**
@@ -925,7 +919,7 @@ const frameOf = async (page: Page, title: string, ready: string) => {
  * shell from there.
  */
 const checkScreens = async (
-  { kit, fleet, sender, live, find, threadId }: Probe,
+  { kit, fleet, sender, live, find }: Probe,
   call: (name: string, input: object) => Promise<string>
 ) => {
   const base = await fleet.dashboard();
@@ -1131,7 +1125,7 @@ const checkScreens = async (
       afterSplit.groups === before.groups + 1,
     JSON.stringify({ keys, before, afterK, afterSplit })
   );
-  // A routine opens into the thread its runs are noted in.
+  // A routine opens in its project's Routines tab, its row open.
   await page.click("[data-share='jump']");
   await page.waitForSelector(JUMP_FIELD);
   await page.fill(JUMP_FIELD, "routine lantern");
@@ -1142,15 +1136,27 @@ const checkScreens = async (
     20_000
   ).catch(() => page.evaluate(JUMP_NAMES));
   await page.press(JUMP_FIELD, "Enter");
+  const routineAt = (href: string) => {
+    const url = new URL(href);
+    return {
+      path: url.pathname,
+      view: url.searchParams.get("view"),
+      routine: url.searchParams.get("routine"),
+    };
+  };
+  const inRoutines = (at: ReturnType<typeof routineAt>) =>
+    at.path.startsWith("/project/") &&
+    at.view === "routines" &&
+    at.routine === ROUTINE_ID;
   const landed = await until(
-    "the routine's thread",
-    () => new URL(page.url()).pathname,
-    (path) => path === `/session/thread:${threadId}`,
+    "the routine in its Routines tab",
+    () => routineAt(page.url()),
+    inRoutines,
     20_000
-  ).catch(() => new URL(page.url()).pathname);
+  ).catch(() => routineAt(page.url()));
   kit.check(
-    "h. ↵ on a routine in the finder opens the thread its runs are noted in",
-    listed[0] === ROUTINE && landed === `/session/thread:${threadId}`,
+    "h. ↵ on a routine in the finder opens it in its project's Routines tab",
+    listed[0] === ROUTINE && inRoutines(landed),
     JSON.stringify({ listed: listed.slice(0, 3), landed })
   );
 };

@@ -323,6 +323,7 @@
     <Drawer.Content
       class="preview-sheet"
       hosted
+      modal={false}
       onCloseAutoFocus={(event) => event.preventDefault()}
       onEscapeKeydown={(event) => {
         if (lightbox.current) {

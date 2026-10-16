@@ -120,6 +120,11 @@ const fileOpenOf = (page: Page) =>
       blockers: blockers.map(
         (el) => el.getAttribute("data-slot") ?? el.className
       ),
+      // What a screen reader is told of the sheet the file stands on.
+      sheetModal:
+        file
+          ?.closest("[data-slot='drawer-content']")
+          ?.getAttribute("aria-modal") ?? null,
       file: fileBox
         ? {
             left: fileBox.left,
@@ -207,6 +212,15 @@ async function thread(
     before.reaches && !before.inert,
     JSON.stringify(before.point)
   );
+  if (view === "phone") {
+    kit.check(
+      `${leg}: the sheet the file stands on is not aria-modal="true" while the page under it takes presses`,
+      before.sheetModal !== null &&
+        before.sheetModal !== "true" &&
+        before.reaches,
+      JSON.stringify({ ariaModal: before.sheetModal, reaches: before.reaches })
+    );
+  }
   await page.mouse.move(before.point.x, before.point.y);
   await page.mouse.wheel(0, -400);
   await settle(page, 300);
