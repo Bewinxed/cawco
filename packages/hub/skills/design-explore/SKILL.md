@@ -9,6 +9,14 @@ A design preview is a **sheet**: a CSF 3 story file beside the real component (`
 
 The method for both modes is Jakub Krehel's `variant` and `state-machine` skills (github.com/jakubkrehel/skills), MIT, Copyright (c) 2026 Jakub Krehel.
 
+## Where the sheet runs
+
+Look at the repository before step 1:
+
+- **No code yet** (no `package.json`, no app): the project starts as code now, and the sheet's component is its first real file. Take the stack the person or the brief named; when none is named, ask once with `AskUserQuestion` (SvelteKit, Vite with React or Vue, Astro, Nuxt), then scaffold it with that framework's own creator in the repository root: `npx sv create`, `npm create vite@latest`, `npm create astro@latest`, `npx nuxi@latest init`, `npx create-next-app@latest`. Install and commit the scaffold on its own. Done when the project's dev command starts and the scaffold is committed.
+- **A Vite, Astro or Nuxt project:** a sheet, as below. In Astro the sheet mounts the project's framework components (Svelte, Vue, React, Solid, Preact), never an `.astro` file.
+- **Any other toolchain** (Next.js for now, Angular CLI, plain webpack, a custom server), **or an Astro component (`.astro`)**: the stage refuses the sheet by name. Show the variants or states as a `page` artifact instead: run the project's build, then write one HTML page that links the built CSS it emits and lays out one section per story, with the markup the component renders; pins on it carry no `file:line`.
+
 ## The gate
 
 A sheet exists for one of two things:
@@ -58,8 +66,6 @@ Feed each state through the component's props, as its story's `args`, with fixtu
 5. **Hand over the decision.** Give a table with each variant's axis position, when it is right, and what it costs, with no favourite marked; asked directly, answer from how often the piece is seen and the product's personality. Then end your turn.
 6. **Read what comes back.** The person's pick (the story they chose) and the args they edited come from `artifact_read`; their pins, each with its `source`, come from `comment_read`, and each is a change you make in the component or the story at that line. Asked for another round, keep the sheet and add stories around the direction they leaned toward. Done when every pin is answered in its thread.
 7. **Build the pick.** In a task flow (brief → explore → review → picked → build), file the build with `task_create` once the task is picked: `after` this task, `acceptance` listing every state of the picked variant. Otherwise build it where it belongs, following the project's conventions, with the args the person tuned. Then delete the variant stories and variant components that lost, so only the shipped component's own states stay in its sheet.
-
-A project whose toolchain the stage cannot run (Angular CLI, plain webpack, a custom server) shows the component as a `page` artifact that loads the project's built CSS, one section per story, with no `file:line` on its pins.
 
 ## Before you finish
 

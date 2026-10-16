@@ -72,6 +72,17 @@ export const STAGE_IDLE_MS = 30 * 60_000;
 /** Starts a failed stage gets before it stays in `error`. The spec's number. */
 export const STAGE_RESTARTS = 3;
 
+/**
+ * The dev toolchains a stage runs (spec §2): the project's own Vite, or
+ * Astro's or Nuxt's, each started by its programmatic API with the stage's
+ * plugins added.
+ */
+export type StageToolchain = "vite" | "astro" | "nuxt";
+
+/** The words for a project or component no stage shows: the owner's decision, an HTML page on the project's CSS (spec §10). */
+export const AS_PAGE =
+  "Show its components as an HTML page artifact (artifact_create kind page) that loads the project's built CSS.";
+
 /** A CSF story file: `Who.stories.ts`, `Card.stories.tsx`, `Page.stories.js`. */
 export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/;
 

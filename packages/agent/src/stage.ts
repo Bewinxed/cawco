@@ -1,12 +1,13 @@
 /**
  * Each workspace's stage (live components, core `stage.ts`), supervised by
- * the daemon with no agent in the loop: the project's own Vite (the host,
- * `stage-host/host.ts`) run inside the workspace's boundary through the
- * executor every command of the workspace runs through, so it sees and
- * writes what the workspace's commands do and listens on the boundary's
- * loopback, which the preview bridge reaches (`preview-bridge.ts`).
+ * the daemon with no agent in the loop: the project's own Vite, Astro or
+ * Nuxt (the host, `stage-host/host.ts`) run inside the workspace's boundary
+ * through the executor every command of the workspace runs through, so it
+ * sees and writes what the workspace's commands do and listens on the
+ * boundary's loopback, which the preview bridge reaches (`preview-bridge.ts`).
  *
- * One stage per Vite root of a workspace's clone, found from the sheet's
+ * One stage per toolchain root of a workspace's clone (the dir of its
+ * `vite.config`, `astro.config` or `nuxt.config`), found from the sheet's
  * story file up. Its rules, the spec's:
  *
  * - starts on the first {@link ensureStage} (an `artifact_create` of a
@@ -41,6 +42,7 @@ import type { PreviewSource, WorkspaceRef } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
+  AS_PAGE,
   COMPONENTS_PATH,
   type Found,
   HEALTH_PATH,
@@ -60,6 +62,7 @@ import {
   type StageOpened,
   type StageState,
   type StageStatus,
+  type StageToolchain,
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { ensureBoundary, shellQuote } from "./boundary";
@@ -70,7 +73,7 @@ import { workspaceRefs } from "./workspace-records";
 
 type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
 
-/** Where the host is written, in the Vite root: git-excluded, never the project's. */
+/** Where the host is written, in the toolchain root: git-excluded, never the project's. */
 const HOST_DIR = ".cawco/stage";
 const HOST_FILE = `${HOST_DIR}/host.mjs`;
 
@@ -118,16 +121,28 @@ const KILL_GRACE_MS = 5000;
 /** How much of a host's stderr is kept to say why it ended. Ours. */
 const STDERR_KEPT = 2000;
 
-const VITE_CONFIGS = ["ts", "mts", "js", "mjs", "cts", "cjs"].map(
-  (ext) => `vite.config.${ext}`
-);
-
-/** Toolchains a sheet does not run on yet, by the file that names them. Astro, Nuxt and Next come in a later slice. */
-const LATER: [RegExp, string][] = [
-  [/^astro\.config\.[cm]?[jt]s$/, "Astro"],
-  [/^nuxt\.config\.[cm]?[jt]s$/, "Nuxt"],
-  [/^next\.config\.[cm]?[jt]s$/, "Next.js"],
+/** The toolchains a stage runs, by the config file that makes a dir their root; in this order where one dir has several (Astro and Nuxt run Vite inside). */
+const TOOLCHAINS: [RegExp, StageToolchain][] = [
+  [/^astro\.config\.[cm]?[jt]s$/, "astro"],
+  [/^nuxt\.config\.[cm]?[jt]s$/, "nuxt"],
+  [/^vite\.config\.[cm]?[jt]s$/, "vite"],
 ];
+const TOOLCHAIN_NAME: Record<StageToolchain, string> = {
+  vite: "Vite",
+  astro: "Astro",
+  nuxt: "Nuxt",
+};
+/**
+ * The Astro major the stage starts: Astro's `dev()` is its "Programmatic
+ * Astro API (experimental)", whose "API signature may change"
+ * (docs.astro.build/en/reference/programmatic-reference/). Read again and
+ * moved on with each Astro major.
+ */
+const ASTRO_MAJOR = 7;
+/** The first Nuxt whose Vite has the Environment API the stage runs on (Nuxt 4 ships Vite 7 on). */
+const NUXT_MAJOR = 4;
+/** Toolchains a sheet does not run on yet, by the file that names them. Next.js waits on the owner: its dev compiler compiles only routes. */
+const LATER: [RegExp, string][] = [[/^next\.config\.[cm]?[jt]s$/, "Next.js"]];
 /** Toolchains that take no plugin, by the file that names them (spec §2). */
 const NO_PLUGIN: [RegExp, string][] = [
   [/^angular\.json$/, "Angular CLI"],
@@ -137,23 +152,20 @@ const NO_PLUGIN: [RegExp, string][] = [
 /** What `artifact_create` and the agent are told when a sheet cannot run, and why. */
 export class StageRefusal extends Error {}
 
-/** The words for a project whose toolchain shows no sheet: the owner's decision, an HTML page on the project's CSS. */
-const AS_PAGE =
-  "Show its components as an HTML page artifact (artifact_create kind page) that loads the project's built CSS.";
-
-/** What a stage runs: the stage host on a sheet's Vite root, or the command a workspace preview names. */
+/** What a stage runs: the stage host on a sheet's toolchain root, or the command a workspace preview names. */
 type Runs =
   | {
       readonly framework: Framework;
       readonly kind: "sheet";
       readonly kit: boolean;
       readonly runtime: string;
+      readonly toolchain: StageToolchain;
     }
   | { readonly command: string; readonly kind: "serve" };
 
 interface Stage {
   child?: ChildProcess;
-  /** Where it runs from the clone's root: a sheet's Vite root, a server's `cwd`. */
+  /** Where it runs from the clone's root: a sheet's toolchain root, a server's `cwd`. */
   readonly dir: string;
   errors: StageError[];
   /** Its health look's timer, while it runs. */
@@ -196,7 +208,7 @@ const stateOf = (stage: Stage): StageState => ({
   ...(stage.message ? { message: stage.message } : {}),
 });
 
-/** The stage in words: a sheet's by its Vite root, a preview's server by its command and port. */
+/** The stage in words: a sheet's by its toolchain root, a preview's server by its command and port. */
 const stageWords = (stage: Stage): string =>
   stage.runs.kind === "sheet"
     ? `The stage for ${stage.dir}`
@@ -274,10 +286,48 @@ const storyPath = (workspace: WorkspaceRef, file: string): string => {
   return abs;
 };
 
+/** The toolchain whose root `dir` is, by its config file; null when it is none's. */
+const toolchainAt = (dir: string): StageToolchain | null =>
+  namedIn(dir, TOOLCHAINS) as StageToolchain | null;
+
+/** A package's `version` as the project installed it, from `root` up (a workspace's packages hoist); null when it isn't. */
+const installed = (name: string, root: string, top: string): string | null => {
+  const pkg = upFrom(root, top)
+    .map((at) => readJson(join(at, "node_modules", name, "package.json")))
+    .find(Boolean);
+  return pkg ? String(pkg.version) : null;
+};
+
+/** Why the toolchain at `dir` can't start a stage as installed; null when it can. */
+function notInstalled(
+  toolchain: StageToolchain,
+  root: string,
+  top: string,
+  dir: string
+): string | null {
+  const name = TOOLCHAIN_NAME[toolchain];
+  const version = installed(toolchain, root, top);
+  if (!version) {
+    return `${name} isn't installed in ${dir}: run the project's install there, then call again.`;
+  }
+  const major = Number(version.split(".")[0]);
+  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on.
+  if (toolchain === "vite" && !(major >= 6)) {
+    return `Live components need Vite 6 or later, whose Environment API the stage runs on; ${dir} runs Vite ${version}.`;
+  }
+  if (toolchain === "astro" && major !== ASTRO_MAJOR) {
+    return `The stage starts Astro through its experimental programmatic API, read for Astro ${ASTRO_MAJOR}; ${dir} runs Astro ${version}, whose API this CawCo hasn't read.`;
+  }
+  if (toolchain === "nuxt" && !(major >= NUXT_MAJOR)) {
+    return `Live components need Nuxt ${NUXT_MAJOR} or later, whose Vite has the Environment API the stage runs on; ${dir} runs Nuxt ${version}.`;
+  }
+  return null;
+}
+
 /**
- * The stage a story file runs on: the nearest Vite root above it, its
- * framework, runtime and port. A toolchain a sheet does not run on is
- * refused by name.
+ * The stage a story file runs on: the nearest toolchain root above it (a
+ * Vite, Astro or Nuxt config's dir), its framework, runtime and port. A
+ * toolchain a sheet does not run on is refused by name.
  */
 function stageFor(
   workspace: WorkspaceRef,
@@ -293,27 +343,30 @@ function stageFor(
   | "stopping"
   | "viewers"
 > {
-  const dirs = upFrom(dirname(story), workspace.path);
-  const root = dirs.find((at) =>
-    VITE_CONFIGS.some((name) => existsSync(join(at, name)))
-  );
-  if (!root) {
-    for (const dir of dirs) {
-      const later = namedIn(dir, LATER);
-      if (later) {
-        throw new StageRefusal(
-          `Live components run on Vite projects for now, and this project uses ${later}, which comes later. ${AS_PAGE}`
-        );
-      }
-      const none = namedIn(dir, NO_PLUGIN);
-      if (none) {
-        throw new StageRefusal(
-          `Live components need a Vite dev toolchain; this project uses ${none}. ${AS_PAGE}`
-        );
-      }
+  let root: string | undefined;
+  let toolchain: StageToolchain | null = null;
+  for (const at of upFrom(dirname(story), workspace.path)) {
+    toolchain = toolchainAt(at);
+    if (toolchain) {
+      root = at;
+      break;
     }
+    const later = namedIn(at, LATER);
+    if (later) {
+      throw new StageRefusal(
+        `Live components run on Vite, Astro and Nuxt projects for now, and this project uses ${later}, which comes later. ${AS_PAGE}`
+      );
+    }
+    const none = namedIn(at, NO_PLUGIN);
+    if (none) {
+      throw new StageRefusal(
+        `Live components need a Vite, Astro or Nuxt dev toolchain; this project uses ${none}. ${AS_PAGE}`
+      );
+    }
+  }
+  if (!(root && toolchain)) {
     throw new StageRefusal(
-      `No vite.config is above ${relative(workspace.path, story)}, so it has no dev toolchain a sheet runs on. ${AS_PAGE}`
+      `No vite.config, astro.config or nuxt.config is above ${relative(workspace.path, story)}, so it has no dev toolchain a sheet runs on. ${AS_PAGE}`
     );
   }
   const dir = relative(workspace.path, root) || ".";
@@ -337,20 +390,9 @@ function stageFor(
       `${dir}'s package.json names none of Svelte, Vue, React, Solid or Preact, the frameworks a sheet mounts. ${AS_PAGE}`
     );
   }
-  const vite = upFrom(root, workspace.path)
-    .map((at) => readJson(join(at, "node_modules", "vite", "package.json")))
-    .find(Boolean);
-  if (!vite) {
-    throw new StageRefusal(
-      `Vite isn't installed in ${dir}: run the project's install there, then call again.`
-    );
-  }
-  const major = Number(String(vite.version).split(".")[0]);
-  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on.
-  if (!(major >= 6)) {
-    throw new StageRefusal(
-      `Live components need Vite 6 or later, whose Environment API the stage runs on; ${dir} runs Vite ${vite.version}.`
-    );
+  const missing = notInstalled(toolchain, root, workspace.path, dir);
+  if (missing) {
+    throw new StageRefusal(missing);
   }
   const bun = upFrom(root, workspace.path).some(
     (at) =>
@@ -384,12 +426,13 @@ function stageFor(
       framework: framework === "solid-js" ? "solid" : framework,
       kit,
       runtime,
+      toolchain,
     },
     port: PORT_BASE + (hash % PORT_SPAN),
   };
 }
 
-/** A sheet's stage's key: its workspace and Vite root. */
+/** A sheet's stage's key: its workspace and toolchain root. */
 const sheetKey = (workspace: string, dir: string) => `${workspace}:${dir}`;
 /** A preview server's key: its workspace and port, one server per port. */
 const serveKey = (workspace: string, port: number) => `${workspace}@${port}`;
@@ -521,7 +564,7 @@ async function answerOf<T>(
   }
 }
 
-/** Writes the host into the Vite root when it is not there as this build has it, git-excluded. */
+/** Writes the host into the toolchain root when it is not there as this build has it, git-excluded. */
 async function writeHost(stage: Stage): Promise<void> {
   const text = await stageHost();
   const file = join(stage.root, HOST_FILE);
@@ -702,6 +745,7 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
           CAWCO_STAGE_PORT: String(stage.port),
           CAWCO_STAGE_FRAMEWORK: stage.runs.framework,
           CAWCO_STAGE_KIT: stage.runs.kit ? "1" : "0",
+          CAWCO_STAGE_TOOLCHAIN: stage.runs.toolchain,
         },
       ]
     : [serveScript(stage.runs.command), { PORT: String(stage.port) }];
@@ -876,7 +920,7 @@ async function start(stage: Stage): Promise<void> {
     case "answered":
       return;
     case "unanswered": {
-      const why = `${stage.runs.kind === "sheet" ? "vite" : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
+      const why = `${stage.runs.kind === "sheet" ? TOOLCHAIN_NAME[stage.runs.toolchain] : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
       crashed(stage, why);
       throw new Error(why);
     }
@@ -887,7 +931,7 @@ async function start(stage: Stage): Promise<void> {
   }
 }
 
-/** The stage at `found`'s Vite root, kept from before or made now; started or woken by `by`, and waited on. */
+/** The stage at `found`'s toolchain root, kept from before or made now; started or woken by `by`, and waited on. */
 async function stageAtRoot(
   found: ReturnType<typeof stageFor>,
   by: string
@@ -962,9 +1006,10 @@ export async function writeSheet(
 }
 
 /**
- * The components of the Vite root `dir` is in (`dir` from the clone's
+ * The components of the toolchain root `dir` is in (`dir` from the clone's
  * root; omitted, the clone's own root): spec §6's discovery, read by its
- * stage. A dir under no Vite root is refused with the roots the clone has.
+ * stage. A dir under no toolchain root is refused with the roots the clone
+ * has.
  */
 export async function stageComponents(
   workspace: WorkspaceRef,
@@ -974,23 +1019,18 @@ export async function stageComponents(
   if (relative(workspace.path, abs).startsWith("..")) {
     throw new StageRefusal(`${dir} is outside this workspace's clone.`);
   }
-  const roots = upFrom(abs, workspace.path).filter((at) =>
-    VITE_CONFIGS.some((name) => existsSync(join(at, name)))
-  );
-  if (roots.length === 0) {
-    const found = viteRootsUnder(workspace.path);
+  const root = upFrom(abs, workspace.path).find(toolchainAt);
+  if (!root) {
+    const found = rootsUnder(workspace.path);
     throw new StageRefusal(
       found.length > 0
-        ? `${dir} is under no Vite root; this clone's are ${found.join(", ")}: name one as dir.`
-        : `This clone has no vite.config, so it has no components a sheet shows. ${AS_PAGE}`
+        ? `${dir} is under no Vite, Astro or Nuxt root; this clone's are ${found.join(", ")}: name one as dir.`
+        : `This clone has no vite.config, astro.config or nuxt.config, so it has no components a sheet shows. ${AS_PAGE}`
     );
   }
-  // The stage is found from a file of the root: its own config stands in for a story.
-  const config = VITE_CONFIGS.map((name) =>
-    join(roots[0] as string, name)
-  ).find(existsSync) as string;
+  // The stage is found from a file of the root: a file in it stands in for a story.
   const stage = await stageAtRoot(
-    stageFor(workspace, config, true),
+    stageFor(workspace, join(root, "package.json"), true),
     "a components list"
   );
   const { components } = await answerOf<{ components: Found[] }>(
@@ -1009,11 +1049,11 @@ export async function stageComponents(
   };
 }
 
-/** The clone's Vite roots, from its root, a few folders down: what a refusal names. Ours: a monorepo's apps stand near the top. */
-function viteRootsUnder(top: string, depth = 3): string[] {
+/** The clone's toolchain roots, from its root, a few folders down: what a refusal names. Ours: a monorepo's apps stand near the top. */
+function rootsUnder(top: string, depth = 3): string[] {
   const found: string[] = [];
   const walk = (dir: string, left: number) => {
-    if (VITE_CONFIGS.some((name) => existsSync(join(dir, name)))) {
+    if (toolchainAt(dir)) {
       found.push(relative(top, dir) || ".");
     }
     if (left === 0) {
@@ -1123,7 +1163,7 @@ export async function ensureServed(
   return stateOf(stage);
 }
 
-/** The stage a preview source names, by its key: a sheet's Vite root, or the server on its port; none for any other source. */
+/** The stage a preview source names, by its key: a sheet's toolchain root, or the server on its port; none for any other source. */
 const keyOf = (source: PreviewSource): string | null => {
   if (!("port" in source && source.workspace)) {
     return null;

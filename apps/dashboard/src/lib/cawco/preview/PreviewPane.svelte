@@ -594,7 +594,7 @@
       case "starting":
         return served
           ? "Starting the server…"
-          : `Starting vite in ${staged.dir}…`;
+          : `Starting the dev server in ${staged.dir}…`;
       case "waking":
       case "asleep":
         return "Waking…";

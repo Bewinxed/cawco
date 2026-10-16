@@ -1,25 +1,29 @@
 /**
  * A workspace's stage (live components, core `stage.ts`): the project's own
- * Vite, started by its JavaScript API from the project's own config file,
- * with one CawCo plugin added ({@link cawcoStage}) and nothing written into
- * the project. The daemon (agent `stage.ts`) writes this file, bundled, to
- * `<Vite root>/.cawco/stage/host.mjs` and runs it there inside the
+ * dev toolchain started by its own programmatic API from the project's own
+ * config (spec §2): Vite's `createServer`, Astro's `dev()`, Nuxt Kit's
+ * `loadNuxt` and `buildNuxt`; each with CawCo's plugins added to the Vite
+ * inside it ({@link cawcoStage}, {@link stamp}) and nothing written into the
+ * project. The daemon (agent `stage.ts`) writes this file, bundled, to
+ * `<toolchain root>/.cawco/stage/host.mjs` and runs it there inside the
  * workspace's boundary under the runtime the project's lockfile implies, so
- * the project's Vite version never meets CawCo's process (the spike: the
+ * the project's toolchain never meets CawCo's process (the spike: the
  * compiled binary can't load a project's Vite, `Cannot find module
  * 'rolldown/parseAst'`).
  *
  * Its environment: `CAWCO_STAGE=1`, which a config reads to know it runs on
  * a stage (as Storybook's `STORYBOOK`); `CAWCO_STAGE_PORT`, the port it
  * listens on, on the boundary's loopback; `CAWCO_STAGE_FRAMEWORK`, whose
- * mount function each story's frame uses; `CAWCO_STAGE_KIT=1` for SvelteKit.
+ * mount function each story's frame uses; `CAWCO_STAGE_KIT=1` for SvelteKit;
+ * `CAWCO_STAGE_TOOLCHAIN`, which toolchain it starts.
  *
  * It speaks to the daemon in JSON lines on stdout, each `{"cawco": <word>}`:
  * `ready` with its port once it serves, `errors` with every compile error
  * standing whenever that changes, `beat` every {@link BEAT_MS}, and `fatal`
  * with why it could not start. Vite's own words go to stderr (`logLevel:
  * "warn"`). Once nothing reads its stdout (the daemon is gone), a beat's
- * write fails and the stage ends.
+ * write fails and the stage ends. Astro's and Nuxt's own words go to stderr
+ * too (their `logLevel` at `warn`).
  *
  * Next to it, never through a preview (the hub answers `/__cawco/` itself
  * on every preview origin), the daemon reads a sheet ({@link STORIES_PATH}:
@@ -32,12 +36,14 @@ import {
   readdirSync,
   readFileSync,
   statSync,
+  watch,
   writeFileSync,
 } from "node:fs";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  AS_PAGE,
   COMPONENTS_PATH,
   type ComponentDoc,
   type Found,
@@ -50,6 +56,7 @@ import {
   STORIES_PATH,
   STORY_FILE,
   type StageError,
+  type StageToolchain,
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { transformCode } from "@code-inspector/core";
@@ -106,11 +113,48 @@ interface DevServer {
     html: string,
     originalUrl?: string
   ) => Promise<string>;
+  /** Vite's file watcher (chokidar): a `change` on it is what Vite's HMR runs on. */
+  watcher: { emit: (event: "change", file: string) => boolean };
 }
 
 /** The project's own Vite, as the stage uses it. */
 interface Vite {
   createServer: (config: object) => Promise<DevServer>;
+  version: string;
+}
+
+/** The project's own Astro, as the stage uses it: its programmatic `dev()` (docs.astro.build/en/reference/programmatic-reference/). */
+interface Astro {
+  dev: (config: object) => Promise<{
+    address: { port: number };
+    stop: () => Promise<void>;
+  }>;
+}
+
+/** What the stage uses of a Nuxt instance: its options, its dev server (nitro's), its end. */
+interface Nuxt {
+  close: () => Promise<void>;
+  options: { css: string[]; srcDir: string };
+  server?: {
+    listen: (
+      port: number,
+      options: object
+    ) => Promise<{ address: { port: number } | null; server: Server }>;
+  };
+}
+
+/** The project's own Nuxt Kit (`nuxt/kit`), as the stage uses it (nuxt.com/docs/api/kit/programmatic). */
+interface NuxtKit {
+  addVitePlugin: (plugins: object[], options: { server: boolean }) => void;
+  buildNuxt: (nuxt: Nuxt) => Promise<void>;
+  defineNuxtModule: (module: object) => unknown;
+  loadNuxt: (options: object) => Promise<Nuxt>;
+}
+
+/** A toolchain once it serves: its port, what it is, and how it ends. */
+interface Started {
+  close: () => Promise<void>;
+  port: number;
   version: string;
 }
 
@@ -121,6 +165,9 @@ const root = process.cwd();
 const port = Number(process.env.CAWCO_STAGE_PORT);
 const framework = process.env.CAWCO_STAGE_FRAMEWORK as Framework;
 const kit = process.env.CAWCO_STAGE_KIT === "1";
+const toolchain = process.env.CAWCO_STAGE_TOOLCHAIN as StageToolchain;
+/** Nuxt's global CSS (`css` in its config) and source dir, once it has loaded. */
+let nuxtOptions: Nuxt["options"] | undefined;
 
 const say = (word: string, rest: object = {}) => {
   process.stdout.write(`${JSON.stringify({ cawco: word, ...rest })}\n`);
@@ -128,24 +175,62 @@ const say = (word: string, rest: object = {}) => {
 // Nobody reads the stage's words any more: its daemon is gone, and so is it.
 process.stdout.on("error", () => process.exit(0));
 
+/** An export map entry's file for an ES import: a string, or its `import` (then `default`) condition's. */
+const importOf = (entry: unknown): string | undefined => {
+  if (typeof entry === "string" || entry === undefined || entry === null) {
+    return (entry ?? undefined) as string | undefined;
+  }
+  const conditions = entry as Record<string, unknown>;
+  return importOf(conditions.import ?? conditions.default);
+};
+
+/** A package's file for an ES import of its `subpath`, by its manifest's export map, else its `module` or `main` for its root. */
+function entryOf(
+  manifest: { exports?: unknown; main?: string; module?: string },
+  subpath: string
+): string | undefined {
+  const { exports } = manifest;
+  // `"exports": "./x.js"` or a conditions object: sugar for `".": …`.
+  const sugar =
+    typeof exports === "string" ||
+    (exports &&
+      !Object.keys(exports).some((key: string) => key.startsWith(".")));
+  if (subpath !== ".") {
+    return sugar
+      ? undefined
+      : importOf((exports as Record<string, unknown> | undefined)?.[subpath]);
+  }
+  return (
+    importOf(
+      sugar ? exports : (exports as Record<string, unknown> | undefined)?.["."]
+    ) ??
+    manifest.module ??
+    manifest.main
+  );
+}
+
 /**
- * The project's own copy of `name`, found from the Vite root up (a
- * workspace's packages hoist); Node takes `import.meta.resolve`'s parent
- * only behind a flag, so the walk is the stage's own.
+ * The project's own copy of `name` (its `subpath` export: `nuxt/kit` is
+ * `nuxt`'s `./kit`), found from the toolchain root up (a workspace's
+ * packages hoist); Node takes `import.meta.resolve`'s parent only behind a
+ * flag, so the walk is the stage's own.
  */
-function projectPackage(name: string): string {
+function projectPackage(
+  name: string,
+  subpath = "."
+): { href: string; version: string } {
   for (let dir = root; ; dir = dirname(dir)) {
     const pkg = join(dir, "node_modules", name, "package.json");
     if (existsSync(pkg)) {
       const json = JSON.parse(readFileSync(pkg, "utf8"));
-      const dot = json.exports?.["."] ?? json.exports;
-      const entry =
-        (typeof dot === "string"
-          ? dot
-          : (dot?.import?.default ?? dot?.import ?? dot?.default)) ??
-        json.module ??
-        json.main;
-      return pathToFileURL(join(dirname(pkg), entry)).href;
+      const entry = entryOf(json, subpath);
+      if (!entry) {
+        throw new Error(`${name} exports no ${subpath} under ${dir}`);
+      }
+      return {
+        href: pathToFileURL(join(dirname(pkg), entry)).href,
+        version: String(json.version),
+      };
     }
     if (dirname(dir) === dir) {
       throw new Error(`${name} is not installed under ${root}`);
@@ -192,6 +277,13 @@ async function sheetRead(file: string, text?: string): Promise<SheetRead> {
   const owns = await Promise.all(
     read.stories.map((story) => fileOf(story.component))
   );
+  // An Astro component renders on the server only: no mount adapter puts one in a frame.
+  const astro = [metaFile, ...owns].find((one) => one && ASTRO_FILE.test(one));
+  if (astro) {
+    throw new StoryRefusal(
+      `${relative(root, astro)} is an Astro component, which renders only on the server, so no sheet mounts it; a sheet mounts the project's Svelte, Vue, React, Solid or Preact components. ${AS_PAGE}`
+    );
+  }
   const stories = read.stories.map((story, at) => {
     const own = owns[at];
     return { ...story, component: own ? relative(root, own) : null };
@@ -221,6 +313,8 @@ async function sheetRead(file: string, text?: string): Promise<SheetRead> {
   };
 }
 
+const ASTRO_FILE = /\.astro$/;
+
 /** The app's page: SvelteKit's `src/app.html`, a Vite app's `index.html`. */
 const shellFile = () => resolve(root, kit ? "src/app.html" : "index.html");
 
@@ -228,34 +322,52 @@ const ENTRY_SCRIPT =
   /<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']([^"']+)["'][^>]*>\s*<\/script>/i;
 
 /**
- * The app's root module, whose style imports are the app's global CSS:
+ * The app's root modules, whose style imports are the app's global CSS:
  * SvelteKit's root layout (app.html loads no CSS: `import "../app.css"` is
- * the layout's), a Vite app's `index.html` entry script.
+ * the layout's), a Vite app's `index.html` entry script, an Astro project's
+ * layouts (`src/layouts/`, where Astro's docs import global styles in the
+ * frontmatter). Nuxt names its global CSS in its config instead.
  */
-function rootModule(): string | null {
+function rootModules(): string[] {
   if (kit) {
-    return resolve(root, "src/routes/+layout.svelte");
+    return [resolve(root, "src/routes/+layout.svelte")];
+  }
+  if (toolchain === "astro") {
+    const layouts = resolve(root, "src/layouts");
+    return existsSync(layouts)
+      ? readdirSync(layouts)
+          .filter((one) => ASTRO_FILE.test(one))
+          .map((one) => join(layouts, one))
+      : [];
   }
   const shell = shellFile();
   const entry = existsSync(shell)
     ? readFileSync(shell, "utf8").match(ENTRY_SCRIPT)?.[1]
     : undefined;
-  return entry ? resolve(root, entry.replace(LEADING_SLASH, "")) : null;
+  return entry ? [resolve(root, entry.replace(LEADING_SLASH, ""))] : [];
 }
 const LEADING_SLASH = /^\//;
 
 const STYLE_IMPORT =
   /^\s*import\s+["']([^"']+\.(?:css|scss|sass|less|styl|stylus|pcss|postcss))["'];?/gm;
 
-/** The root module's side-effect style imports, never the module itself: its JS (a theme, an onMount) is the app's, not a sheet's. */
+/**
+ * The app's global CSS: Nuxt's `css`, else the root modules' side-effect
+ * style imports, never the modules themselves: their JS (a theme, an
+ * onMount) is the app's, not a sheet's.
+ */
 function globalStyles(): string[] {
-  const file = rootModule();
-  if (!(file && existsSync(file))) {
-    return [];
+  if (nuxtOptions) {
+    return nuxtOptions.css;
   }
-  return [...readFileSync(file, "utf8").matchAll(STYLE_IMPORT)].map((m) =>
-    m[1].startsWith(".") ? resolve(dirname(file), m[1]) : m[1]
-  );
+  const styles = rootModules()
+    .filter((file) => existsSync(file))
+    .flatMap((file) =>
+      [...readFileSync(file, "utf8").matchAll(STYLE_IMPORT)].map((m) =>
+        m[1].startsWith(".") ? resolve(dirname(file), m[1]) : m[1]
+      )
+    );
+  return [...new Set(styles)];
 }
 
 /**
@@ -466,10 +578,11 @@ const SHEET_STYLE = `<style>
  * app's own entry with them; then the sheet's module, a virtual `.js`
  * (an inline module's id would carry the story's path, and a `.svelte` in it
  * is claimed by vite-plugin-svelte). The project's own HTML transforms run
- * over it, as on any of its pages.
+ * over it, as on any of its pages; Vite's own puts the dev server's base
+ * before the entry (Nuxt's is `/_nuxt/`), so it is written without it.
  */
-function sheetPage(base: string, file: string): string {
-  const entry = `${base}/@id/__x00__${VIRTUAL}${encodeURIComponent(file)}.js`;
+function sheetPage(file: string): string {
+  const entry = `/@id/__x00__${VIRTUAL}${encodeURIComponent(file)}.js`;
   const main = `<main id="cawco-sheet" class="cawco-sheet" data-cawco-choice="${file.replaceAll('"', "&quot;")}"></main>`;
   let html = existsSync(shellFile())
     ? readFileSync(shellFile(), "utf8")
@@ -507,13 +620,12 @@ async function serveSheet(
   req: IncomingMessage,
   res: ServerResponse,
   next: (error?: unknown) => void,
-  base: string,
   file: string
 ): Promise<void> {
   try {
     const html = await dev.transformIndexHtml(
       req.url ?? SHEET_PATH,
-      sheetPage(base, file),
+      sheetPage(file),
       (req as IncomingMessage & { originalUrl?: string }).originalUrl
     );
     res.setHeader("content-type", "text/html");
@@ -722,7 +834,10 @@ const EXTENSION = /\.[^.]+$/;
  * builds left out; each with the story files whose meta mounts it.
  */
 async function discovered(): Promise<Found[]> {
-  const top = existsSync(join(root, "src")) ? join(root, "src") : root;
+  // Nuxt's source dir is its own (`app/` from Nuxt 4), and its `app/` holds components, not routes.
+  const top =
+    nuxtOptions?.srcDir ??
+    (existsSync(join(root, "src")) ? join(root, "src") : root);
   const all = componentFiles(top);
   // Each story file's meta component, resolved as Vite resolves the import: no props read.
   const shown = await Promise.all(
@@ -840,7 +955,7 @@ async function serveStage(
     return;
   }
   if (path === SHEET_PATH) {
-    await serveSheet(dev, req, res, next, base, file);
+    await serveSheet(dev, req, res, next, file);
     return;
   }
   await sheetRead(file).then(
@@ -861,6 +976,45 @@ function storyFile(named: string | null): string | null {
   const abs = resolve(root, named);
   const inside = relative(root, abs);
   return inside.startsWith("..") || !existsSync(abs) ? null : inside;
+}
+
+/** The folders whose story files the stage watches itself, and each story file's pending change. */
+const watchedDirs = new Set<string>();
+const storyChanges = new Map<string, ReturnType<typeof setTimeout>>();
+/** A write's events (truncate, then content) as one change. Ours. */
+const STORY_SETTLE_MS = 30;
+
+/**
+ * Nuxt keeps story files out of its Vite's watcher (its default `ignore`
+ * holds `**\/*.stories.{js,cts,mts,ts,jsx,tsx}`, so its component scan
+ * passes them by too), and a story's edit or a Save would never redraw its
+ * sheet. The stage watches each sheet's story folder itself and hands every
+ * change of a story file in it to Vite's watcher as its own `change`, the
+ * event Vite's HMR runs on. The folder, not the file: an editor's atomic
+ * save replaces the file's inode.
+ */
+function watchStory(file: string): void {
+  const dir = dirname(file);
+  if (watchedDirs.has(dir)) {
+    return;
+  }
+  watchedDirs.add(dir);
+  watch(dir, (_event, name) => {
+    if (!(name && STORY_FILE.test(name))) {
+      return;
+    }
+    const changed = join(dir, name);
+    clearTimeout(storyChanges.get(changed));
+    storyChanges.set(
+      changed,
+      setTimeout(() => {
+        storyChanges.delete(changed);
+        if (existsSync(changed)) {
+          server?.watcher.emit("change", changed);
+        }
+      }, STORY_SETTLE_MS)
+    );
+  }).unref();
 }
 
 /**
@@ -909,9 +1063,13 @@ function cawcoStage() {
       if (!id.startsWith(`\0${VIRTUAL}`)) {
         return null;
       }
-      return sheetModule(
-        decodeURIComponent(id.slice(VIRTUAL.length + 1, -".js".length))
+      const file = decodeURIComponent(
+        id.slice(VIRTUAL.length + 1, -".js".length)
       );
+      if (toolchain === "nuxt") {
+        watchStory(resolve(root, file));
+      }
+      return sheetModule(file);
     },
     // A story file's edit runs its sheet's module again from a fresh load: its stories' places may have moved.
     // A component's edit reads its props again, and every sheet's page hears them (`cawco:props`).
@@ -1040,8 +1198,32 @@ const CONFIGS = ["ts", "mts", "js", "mjs", "cts", "cjs"].map(
   (ext) => `vite.config.${ext}`
 );
 
-try {
-  const vite = (await import(projectPackage("vite"))) as Vite;
+/** The stage's plugins for the Vite inside any toolchain: a Svelte element carries its place already. */
+const plugins = () => [
+  cawcoStage(),
+  ...(framework === "svelte" ? [] : [stamp()]),
+];
+
+/**
+ * The boundary's loopback alone: the daemon's bridge reaches it there, and
+ * on a machine whose boundaries share the host's network (macOS) it is open
+ * to nobody else.
+ */
+const HOST = "127.0.0.1";
+
+/** A toolchain that took another port than the stage's: the daemon would never reach it. */
+const onPort = (got: number | undefined, name: string): number => {
+  if (got !== port) {
+    throw new Error(
+      `${name} listened on port ${got} instead of ${port}, which something else holds.`
+    );
+  }
+  return got;
+};
+
+/** The project's Vite, from its own config file (vite.dev/guide/api-javascript `createServer`). */
+async function startVite(): Promise<Started> {
+  const vite = (await import(projectPackage("vite").href)) as Vite;
   const configFile = CONFIGS.map((name) => resolve(root, name)).find(
     existsSync
   );
@@ -1050,22 +1232,129 @@ try {
     configFile: configFile ?? false,
     clearScreen: false,
     logLevel: "warn",
-    plugins: [cawcoStage(), ...(framework === "svelte" ? [] : [stamp()])],
-    // The boundary's loopback alone: the daemon's bridge reaches it there,
-    // and on a machine whose boundaries share the host's network (macOS) it
-    // is open to nobody else.
-    server: {
-      host: "127.0.0.1",
-      port,
-      strictPort: true,
-      hmr: { overlay: false },
-    },
+    plugins: plugins(),
+    server: { host: HOST, port, strictPort: true, hmr: { overlay: false } },
   });
   await started.listen();
   const address = started.httpServer?.address();
+  return {
+    port: onPort(
+      typeof address === "object" && address ? address.port : undefined,
+      "Vite"
+    ),
+    version: `vite ${vite.version}`,
+    close: () => started.close(),
+  };
+}
+
+/**
+ * The project's Astro, from its own config, by Astro's `dev()`: "Programmatic
+ * Astro API (experimental) … their API signature may change"
+ * (docs.astro.build/en/reference/programmatic-reference/). Read for Astro 7
+ * (agent stage.ts `ASTRO_MAJOR` refuses any other major); read again with
+ * each Astro major. Its inline config is merged over the project's, its
+ * `vite` by Vite's own `mergeConfig`.
+ */
+async function startAstro(): Promise<Started> {
+  // A stage reports nothing anywhere: no telemetry from a boundary.
+  process.env.ASTRO_TELEMETRY_DISABLED = "1";
+  const { href, version } = projectPackage("astro");
+  const astro = (await import(href)) as Astro;
+  const started = await astro.dev({
+    root,
+    logLevel: "warn",
+    server: { host: HOST, port },
+    vite: {
+      clearScreen: false,
+      plugins: plugins(),
+      server: { strictPort: true, hmr: { overlay: false } },
+    },
+  });
+  return {
+    port: onPort(started.address.port, "Astro"),
+    version: `astro ${version}`,
+    close: () => started.stop(),
+  };
+}
+
+/**
+ * The project's Nuxt, from its own config, by Nuxt Kit's `loadNuxt` with
+ * CawCo's module in `overrides` ("Configuration applied above every layer,
+ * including the root project's own nuxt.config", nuxt.com/docs/api/kit/
+ * programmatic), then `buildNuxt`. The module adds the stage's plugins to
+ * the client's Vite (`addVitePlugin`, `server: false`: a plugin Kit scopes
+ * to several environments has its `configureServer` ignored by Vite). Nitro's
+ * dev server listens on the stage's port, as `nuxi dev`'s does; Vite's HMR
+ * socket rides the same server (`server.hmr.server`, as `nuxi dev` sets it),
+ * so a preview of the port carries it.
+ */
+async function startNuxt(): Promise<Started> {
+  const { href, version } = projectPackage("nuxt", "./kit");
+  const nuxtKit = (await import(href)) as NuxtKit;
+  let http: Server | undefined;
+  const cawcoNuxtModule = nuxtKit.defineNuxtModule({
+    meta: { name: "cawco:stage" },
+    setup() {
+      nuxtKit.addVitePlugin(
+        [
+          ...plugins(),
+          {
+            name: "cawco:stage-hmr",
+            // Before Nuxt's own config hook, which picks a port of its own
+            // (24678 on) for the socket unless it finds a server set.
+            enforce: "pre",
+            config: () => ({
+              server: { hmr: { server: http, overlay: false } },
+            }),
+          },
+        ],
+        { server: false }
+      );
+    },
+  });
+  const nuxt = await nuxtKit.loadNuxt({
+    cwd: root,
+    dev: true,
+    overrides: {
+      modules: [cawcoNuxtModule],
+      // A stage reports nothing anywhere: no telemetry from a boundary.
+      telemetry: false,
+    },
+  });
+  nuxtOptions = nuxt.options;
+  if (!nuxt.server) {
+    throw new Error(
+      "Nuxt loaded with no dev server (nuxt.server), so it has nothing to serve a sheet with."
+    );
+  }
+  const listener = await nuxt.server.listen(port, {
+    hostname: HOST,
+    showURL: false,
+  });
+  http = listener.server;
+  // Nitro's own: it hands every socket to its server's worker, Vite's HMR
+  // socket too. A sheet uses no server socket; Vite's own listener is the one.
+  http.removeAllListeners("upgrade");
+  onPort(listener.address?.port, "Nuxt");
+  await nuxtKit.buildNuxt(nuxt);
+  return {
+    port,
+    version: `nuxt ${version}`,
+    close: () => nuxt.close(),
+  };
+}
+
+const STARTS: Record<StageToolchain, () => Promise<Started>> = {
+  vite: startVite,
+  astro: startAstro,
+  nuxt: startNuxt,
+};
+
+try {
+  const started = await STARTS[toolchain]();
   say("ready", {
-    port: typeof address === "object" && address ? address.port : port,
-    vite: vite.version,
+    port: started.port,
+    toolchain: started.version,
     runtime:
       typeof Bun === "undefined"
         ? `node ${process.version}`
