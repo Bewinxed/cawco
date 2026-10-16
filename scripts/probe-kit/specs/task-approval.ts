@@ -543,22 +543,16 @@ const run = async (kit: Kit) => {
     await Bun.sleep(QUIET_MS);
     const offTask = await read(approvals, offId);
     const offSends = approvalSends(offId, offTitle);
-    const [offProject] = fleet.query<{ lead_instance_id: string | null }>(
-      "SELECT lead_instance_id FROM projects WHERE id = ?",
-      approvals
-    );
+    // The project may hold a Caw session for your own work (an attempt's
+    // report): what counts is that nobody was sent this approval.
+    const offLog = await approvalLog(approvals, offId);
     kit.check(
       "f: Caw off and the filer gone: approving wakes nobody, and the task stays in approved",
       offTask.stage === "approved" &&
         offSends.length === 0 &&
-        !offProject?.lead_instance_id &&
+        offLog.includes("Caw is off: nobody is woken") &&
         !cawHeard.some((words) => words.includes(approvalOf(offId, offTitle))),
-      JSON.stringify({
-        stage: offTask.stage,
-        sends: offSends,
-        lead: offProject?.lead_instance_id ?? null,
-        hub: await approvalLog(approvals, offId),
-      })
+      JSON.stringify({ stage: offTask.stage, sends: offSends, hub: offLog })
     );
 
     // ── g. Caw on, the filer gone: Caw is woken, as an event ───────────────
