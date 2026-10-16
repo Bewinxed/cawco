@@ -26,9 +26,9 @@
  *    orchestrator's harness. The `high` delegate loads the leaf's, the
  *    type's (and the model's) documents and never the guide; the `low` one
  *    the leaf's alone.
- * 3. After a `/compact`, the orchestrator's and the `high` delegate's next
- *    requests still carry every document for them, their history replaced
- *    by the summary; and the orchestrator's next `high` delegate call is
+ * 3. After a `/compact` (its boundary in the session's transcript), the
+ *    orchestrator's and the `high` delegate's next requests still carry
+ *    every document for them; and the orchestrator's next `high` delegate call is
  *    held with the guide again.
  *
  * Its delegates cut workspaces, so it runs as a `host` check (README, "A
@@ -244,46 +244,64 @@ const spec: Spec = {
       ).catch(() => undefined);
       return first;
     };
+    /** The compactions a session's transcript shows: its `compact_boundary` blocks. */
+    const compactions = async (session: string): Promise<number> => {
+      const response = await fetch(
+        `${fleet.base}/api/instances/${session}/transcript?limit=1000`,
+        { signal: AbortSignal.timeout(30_000) }
+      ).catch(() => undefined);
+      const text = response?.ok ? await response.text() : "";
+      return text.split('"system.compact_boundary"').length - 1;
+    };
     /**
-     * A `/compact`, answered with a summary of its own, and its end: the
-     * summary's words. Two long turns go first: pi compacts only what lies
-     * before its kept tail ("Nothing to compact (session too small)",
-     * pi-coding-agent 1.0.1 agent-session.js, `keepRecentTokens: 20000`).
+     * A `/compact`, answered with a summary of the mock's, waited for until
+     * the session's transcript shows its boundary: whether it compacted. A
+     * harness sends the boundary as its compaction ends, and pi refuses a
+     * prompt before that ("Cannot submit a prompt while compaction is in
+     * progress", pi-coding-agent 1.0.1 agent-session.js). On pi two long
+     * turns go first: it compacts only what lies before its kept tail
+     * ("Nothing to compact (session too small)", `keepRecentTokens: 20000`).
+     * The others get none, so nothing of theirs compacts on its own first.
      */
     const compact = async (
       session: string,
       delegate: boolean
-    ): Promise<string> => {
-      for (const part of ["A", "B"]) {
-        const token = `DOCSCOPE-FILLER-${part}-${crypto.randomUUID().slice(0, 8)}`;
-        // biome-ignore lint/performance/noAwaitInLoops: one turn after the other
-        await turn(
-          session,
-          `${token} ${FILLER}`,
-          { kind: "say", delegate },
-          token
-        );
+    ): Promise<boolean> => {
+      if (harnessNow === "pi") {
+        for (const part of ["A", "B"]) {
+          const token = `DOCSCOPE-FILLER-${part}-${crypto.randomUUID().slice(0, 8)}`;
+          // biome-ignore lint/performance/noAwaitInLoops: one turn after the other
+          await turn(
+            session,
+            `${token} ${FILLER}`,
+            { kind: "say", delegate },
+            token
+          );
+        }
       }
-      const summary = `DOCSCOPE-SUMMARY-${crypto.randomUUID().slice(0, 8)}`;
-      const next: Step = { kind: "say", delegate, summary };
-      step = next;
-      const from = fleet.seen.length;
+      const before = await compactions(session);
+      step = {
+        kind: "say",
+        delegate,
+        summary: `DOCSCOPE-SUMMARY-${crypto.randomUUID().slice(0, 8)}`,
+      };
       await fleet.send(session, "/compact");
-      await until(
-        "the compaction's summary request",
-        () => fleet.seen.length > from && next.done === true,
-        Boolean,
+      const compacted = await until(
+        "the compaction's boundary in the transcript",
+        () => compactions(session),
+        (count) => count > before,
         180_000
-      ).catch(() => undefined);
+      )
+        .then(() => true)
+        .catch(() => false);
       await until(
-        "the compaction ended",
+        "the compaction's turn ended",
         () => !fleet.instance(session)?.turn_open_at,
         Boolean,
-        180_000
+        60_000
       ).catch(() => undefined);
-      await Bun.sleep(1500);
       step = undefined;
-      return summary;
+      return compacted;
     };
     /**
      * The request carries exactly `wanted` of the scoped documents; `kept`
@@ -362,16 +380,16 @@ const spec: Spec = {
       await turn(orchestrator, `DOCSCOPE-BEFORE-${harness}-${RUN}`, {
         kind: "say",
       });
-      const summary = await compact(orchestrator, false);
+      const compacted = await compact(orchestrator, false);
+      kit.check(
+        `3: ${harness}, orchestrator: it compacted (its transcript shows the boundary)`,
+        compacted,
+        compacted ? "compacted" : "no compact_boundary within 180s"
+      );
       const after = await turn(
         orchestrator,
         `DOCSCOPE-AFTER-${harness}-${RUN}`,
         { kind: "say" }
-      );
-      kit.check(
-        `3: ${harness}, orchestrator: it compacted (its next request carries the compaction's summary)`,
-        after?.body.includes(summary) === true,
-        after ? `history ${after.all.length} chars` : "no request"
       );
       exactly(
         `3: ${harness}, orchestrator after a compaction`,
@@ -400,16 +418,16 @@ const spec: Spec = {
           kind: "say",
           delegate: true,
         });
-        const leafSummary = await compact(high, true);
+        const leafCompacted = await compact(high, true);
+        kit.check(
+          `3: ${harness}, high delegate: it compacted (its transcript shows the boundary)`,
+          leafCompacted,
+          leafCompacted ? "compacted" : "no compact_boundary within 180s"
+        );
         const leafAfter = await turn(
           high,
           `DOCSCOPE-LEAF-AFTER-${harness}-${RUN}`,
           { kind: "say", delegate: true }
-        );
-        kit.check(
-          `3: ${harness}, high delegate: it compacted (its next request carries the compaction's summary)`,
-          leafAfter?.body.includes(leafSummary) === true,
-          leafAfter ? `history ${leafAfter.all.length} chars` : "no request"
         );
         exactly(
           `3: ${harness}, high delegate after a compaction`,
