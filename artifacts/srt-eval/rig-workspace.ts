@@ -9,7 +9,7 @@
  * `create` prints the checkout as JSON (its clone path, its boundary's pid).
  *
  * The rig has no hub, so before `create` it hands the agent the upstream
- * rules a hub would (`takeUpstreamRules`, as the daemon does with each
+ * rules a hub would (through boundary.ts, as the daemon does with each
  * register ack): the fleet's, guarded, whose own repositories are the source
  * repo's remotes. The workspace then gets its `ro/upstream.json` as a real
  * one does, and its gh shim judges calls instead of refusing every one.
