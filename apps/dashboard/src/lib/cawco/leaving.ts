@@ -7,7 +7,8 @@
  * fails every fetch still in flight with "Load failed", which the page's
  * readers would report as their own error. Neither is a failure: nobody is
  * left to read the answer. So once the page is leaving, a new fetch never
- * starts and an in-flight one that fails never settles.
+ * starts, and an in-flight one that fails, or whose body read fails, never
+ * settles.
  *
  * `beforeunload` closes the gate; `pagehide` does too, since Safari on iOS
  * never fires `beforeunload` (MDN, Window: beforeunload event, "Safari on iOS
@@ -43,8 +44,23 @@ export function holdReadsWhileLeaving(): void {
     if (leaving) {
       return held;
     }
-    return native(input, init).catch((error: unknown) =>
-      leaving ? held : Promise.reject(error)
-    );
+    const heardWhileHere = <T>(promise: Promise<T>): Promise<T> =>
+      promise.catch((error: unknown) =>
+        leaving ? held : Promise.reject(error)
+      );
+    return heardWhileHere(native(input, init)).then((response) => {
+      // A body larger than its first packet streams after the headers, and
+      // the teardown fails its read ("Load failed") as it fails the fetch.
+      for (const read of BODY_READS) {
+        const original = response[read].bind(response);
+        Object.defineProperty(response, read, {
+          value: () => heardWhileHere(original()),
+        });
+      }
+      return response;
+    });
   };
 }
+
+/** The ways the page reads a response's body: each one's failure while leaving is held too. */
+const BODY_READS = ["arrayBuffer", "blob", "json", "text"] as const;
