@@ -18,6 +18,9 @@
  *  - a thread, already open at its latest, sent to its second message by an
  *    in-app link: marked and centred; to an id it does not hold: said, with
  *    "thread";
+ *  - each landing is heard once through the transcript's polite live region
+ *    ("Opened at that line.", or the missing moment's words), and not again
+ *    on a live reply or a scroll;
  *  - no page or console error.
  */
 
@@ -28,6 +31,55 @@ import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { open, type Spec, settle } from "../../kit";
 
 const SCROLLER = '[aria-label="Session transcript"]';
+const LANDED = "Opened at that line.";
+const GONE_SESSION = "That moment isn't in this session any more.";
+const GONE_THREAD = "That moment isn't in this thread any more.";
+
+declare global {
+  interface Window {
+    /** Every text a transcript's polite live region took, in order. */
+    probeSpoken: string[];
+  }
+}
+
+/**
+ * Installed before the page's scripts: records each new text of a
+ * transcript's polite region (the `p[aria-live="polite"]` beside its
+ * scroller), so a line said twice is counted twice.
+ */
+function hearSpoken(): void {
+  window.probeSpoken = [];
+  const last = new WeakMap<Element, string>();
+  const hear = () => {
+    for (const region of document.querySelectorAll(
+      'p[aria-live="polite"][role="status"]'
+    )) {
+      if (
+        !region.parentElement?.querySelector(
+          ':scope > [aria-label="Session transcript"]'
+        )
+      ) {
+        continue;
+      }
+      const text = region.textContent?.trim() ?? "";
+      if (text && text !== last.get(region)) {
+        window.probeSpoken.push(text);
+      }
+      last.set(region, text);
+    }
+  };
+  new MutationObserver(hear).observe(document, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+  });
+}
+
+/** How many times the transcript's polite region said `line`. */
+const saidTimes = async (page: Page, line: string) =>
+  (await page.evaluate(() => window.probeSpoken)).filter(
+    (text) => text === line
+  ).length;
 const MARKED = `${SCROLLER} [data-row][data-marked="on"]`;
 const GONE = `${SCROLLER} [data-open-at="gone"]`;
 const TURNS = 12;
@@ -249,7 +301,7 @@ const spec: Spec = {
     const errors: string[] = [];
 
     // ── A session opened at a record pages back.
-    const page = await kit.page("desk");
+    const page = await kit.page("desk", { init: [hearSpoken] });
     errorsOf(page, errors);
     const older: string[] = [];
     page.on("request", (request) => {
@@ -324,6 +376,12 @@ const spec: Spec = {
       "the reader's wheel lets the mark go",
       (await page.evaluate(markedBox)) === null
     );
+    const landedSaid = await saidTimes(page, LANDED);
+    kit.check(
+      `the landing is heard once, "${LANDED}", and not again on the live reply or the wheel`,
+      landedSaid === 1,
+      `${landedSaid} times; heard: ${(await page.evaluate(() => window.probeSpoken)).join(" | ")}`
+    );
 
     // ── A session opened at an id it does not hold.
     const missing = `not-a-record-${crypto.randomUUID()}`;
@@ -342,8 +400,16 @@ const spec: Spec = {
     );
     kit.check(
       "and says the moment isn't there",
-      gone?.note === "That moment isn't in this session any more.",
+      gone?.note === GONE_SESSION,
       gone?.note
+    );
+    await page.mouse.wheel(0, -200);
+    await page.waitForTimeout(800);
+    const goneSaid = await saidTimes(page, GONE_SESSION);
+    kit.check(
+      "the missing moment is heard once, in the dock's words, and not again on a scroll",
+      goneSaid === 1,
+      `${goneSaid} times; heard: ${(await page.evaluate(() => window.probeSpoken)).join(" | ")}`
     );
 
     // ── A thread, open at its latest, sent to a message by an in-app link.
@@ -380,7 +446,7 @@ const spec: Spec = {
       noteIds.push(said.message.id);
     }
     const threadHref = `/session/thread:${threadId}`;
-    const threadPage = await kit.page("desk");
+    const threadPage = await kit.page("desk", { init: [hearSpoken] });
     errorsOf(threadPage, errors);
     await open(threadPage, `${base}${threadHref}`, `${SCROLLER} [data-row]`);
     await until(
@@ -407,6 +473,12 @@ const spec: Spec = {
       centredIn(inThread) && inThread.tint === inThread.selection,
       describe(inThread)
     );
+    const threadLanded = await saidTimes(threadPage, LANDED);
+    kit.check(
+      `a thread's landing is heard once, "${LANDED}"`,
+      threadLanded === 1,
+      `${threadLanded} times`
+    );
     await follow(threadPage, `${threadHref}?at=${missing}`);
     await threadPage.waitForSelector(GONE, { timeout: 60_000 });
     await settle(threadPage, 300);
@@ -416,10 +488,16 @@ const spec: Spec = {
       !!threadGone &&
         threadGone.fromEnd <= 1 &&
         !threadGone.marked &&
-        threadGone.note === "That moment isn't in this thread any more.",
+        threadGone.note === GONE_THREAD,
       threadGone
         ? `${threadGone.fromEnd.toFixed(1)}px from the end, "${threadGone.note}"`
         : "no scroller"
+    );
+    const threadGoneSaid = await saidTimes(threadPage, GONE_THREAD);
+    kit.check(
+      "a thread's missing moment is heard once, in the dock's words",
+      threadGoneSaid === 1 && (await saidTimes(threadPage, LANDED)) === 1,
+      `${threadGoneSaid} times; heard: ${(await threadPage.evaluate(() => window.probeSpoken)).join(" | ")}`
     );
 
     kit.check(

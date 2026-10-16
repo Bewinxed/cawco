@@ -1814,6 +1814,12 @@
   let marked = $state<{ key: string; state: "on" | "off" } | null>(null);
   /** The record asked for is not here (`gone`), or the pages before could not be read (`unread`). */
   let unfound = $state<"gone" | "unread" | null>(null);
+  /** What the dock says, and the live region says once, of a record not reached. */
+  const unfoundWords = $derived(
+    unfound === "unread"
+      ? "That moment couldn't be reached: the turns before these couldn't be read."
+      : `That moment isn't in this ${isThreadTab(session.instanceId) ? "thread" : "session"} any more.`
+  );
   /** The most frames a seek re-centres for while rows around it measure: our own call. */
   const SEEK_FRAMES = 30;
 
@@ -1848,13 +1854,20 @@
     if (openAt.get(session.instanceId) === docId) {
       openAt.delete(session.instanceId);
     }
+    // Said once, here, where the seek ends: a landing is a state change and
+    // a record not held is a refusal (PRODUCT.md, screen readers), and
+    // nothing after it (a scroll, a live row) says it again.
     const index = rowHolding(renderedRows, docId);
     if (index < 0) {
       marked = null;
       unfound = paged()?.olderFault ? "unread" : "gone";
+      announcement = unfoundWords;
       return;
     }
     marked = { key: renderedRows[index].key, state: "on" };
+    // The finder's own words for the key that brought the reader here
+    // ("↵ open at that line", docs/tom/find-and-mention-chosen.md).
+    announcement = "Opened at that line.";
     if (scroller) {
       const distance =
         scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
@@ -3377,24 +3390,17 @@
         onretry={() => readTranscript(session.instanceId, "retry")}
       />
     {/if}
-    <!-- The record this was opened at is not here: said where the reader
-         landed instead, until they move on. -->
+    <!-- The record this was opened at is not here: shown where the reader
+         landed instead, until they move on. Heard once through the polite
+         region above (`arrived`), so this line is no live region itself. -->
     {#if unfound}
       <p
         class="unfound"
         data-open-at={unfound}
-        role="status"
         in:rise={"--dur-panel"}
         out:rise={"--dur-exit"}
       >
-        {#if unfound === "gone"}
-          That moment isn't in this {isThreadTab(session.instanceId)
-            ? "thread"
-            : "session"} any more.
-        {:else}
-          That moment couldn't be reached: the turns before these couldn't be
-          read.
-        {/if}
+        {unfoundWords}
       </p>
     {/if}
     {#if catching || showLatest}
