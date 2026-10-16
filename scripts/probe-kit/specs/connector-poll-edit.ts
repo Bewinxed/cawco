@@ -126,19 +126,26 @@ async function run(kit: Kit): Promise<void> {
         id_path: string;
         polled_at: number | null;
         reason: string | null;
-        seen: string | null;
+        seen_at: number | null;
       }>(
-        "SELECT seen, id_path, polled_at, reason FROM connector_polls WHERE id = ?",
+        "SELECT seen_at, id_path, polled_at, reason FROM connector_polls WHERE id = ?",
         pollId
       )[0];
     const events = () =>
       fleet.query<{ delivery_key: string }>(
         "SELECT delivery_key FROM inbound_events WHERE source = 'conn:feed:list_items'"
       );
-    const seenCount = () => {
-      const seen = row()?.seen;
-      return seen ? Object.keys(JSON.parse(seen) as object).length : null;
-    };
+    /** The item ids the poll's last call kept; null until it has looked. */
+    const seenIds = () =>
+      (row()?.seen_at ?? null) === null
+        ? null
+        : fleet
+            .query<{ item_id: string }>(
+              "SELECT item_id FROM connector_poll_items WHERE poll_id = ? ORDER BY item_id",
+              pollId
+            )
+            .map((one) => one.item_id);
+    const seenCount = () => seenIds()?.length ?? null;
 
     // (a) the first call only looks. The pollers' clock calls it at once
     // (never polled); "poll now" joins that call or makes it.
@@ -177,8 +184,9 @@ async function run(kit: Kit): Promise<void> {
       "b: the call's answer is dropped: the poll keeps the edit, nothing seen",
       answered.status === 200 &&
         after?.id_path === "uid" &&
-        after.seen === null,
-      `poll answered ${answered.status}; id_path ${after?.id_path}; seen ${after?.seen}`
+        after.seen_at === null &&
+        seenIds() === null,
+      `poll answered ${answered.status}; id_path ${after?.id_path}; seen ${JSON.stringify(seenIds())}`
     );
 
     // (c) the next call is a first look on the new keying
@@ -187,12 +195,10 @@ async function run(kit: Kit): Promise<void> {
       "c: the next call ingests no duplicates: 0 inbound events, 3 seen by uid",
       events().length === 0 &&
         seenCount() === 3 &&
-        Object.keys(JSON.parse(row()?.seen ?? "{}") as object).every((key) =>
-          key.startsWith("u")
-        ),
+        (seenIds() ?? []).every((key) => key.startsWith("u")),
       `events ${events().length} (${events()
         .map((one) => one.delivery_key)
-        .join(", ")}); seen ${row()?.seen}`
+        .join(", ")}); seen ${JSON.stringify(seenIds())}`
     );
 
     // (d) a real change still lands, once
