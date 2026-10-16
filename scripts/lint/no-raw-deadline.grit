@@ -1,0 +1,28 @@
+language js
+
+// Law A: a read with a deadline has three outcomes: answered yes, answered
+// no, or no answer in time, and nothing reads "no answer in time" as "no".
+// packages/core/src/bounded.ts (Bounded<T>, readWithin, Gone) is the one
+// place a deadline meets a read; every other read with a deadline goes
+// through readWithin and its callers switch on `kind`.
+or {
+  `AbortSignal.timeout($_)` as $hit where {
+    $filename <: not includes "packages/core/src/bounded.ts",
+    register_diagnostic(span=$hit, message="A read with a deadline goes through @cawco/core/bounded (readWithin), which says when it was not answered. No AbortSignal.timeout outside bounded.ts.")
+  },
+  or { `setTimeout($cb, $_)`, `$_.after($_, $cb)` } as $hit where {
+    $filename <: not includes "packages/core/src/bounded.ts",
+    $cb <: contains or { `reject($_)`, `resolve($_)`, `settle($_)`, `$_.reject($_)`, `$_.resolve($_)`, `$_.settle($_)` },
+    register_diagnostic(span=$hit, message="A timer that settles a read decides its answer when none came. Use readWithin from @cawco/core/bounded.")
+  },
+  `Promise.race($arms)` as $hit where {
+    $filename <: not includes "packages/core/src/bounded.ts",
+    $arms <: contains or { `setTimeout($_)`, `setTimeout($_, $_)`, `Bun.sleep($_)`, `sleep($_)`, `$_.after($_, $_)` },
+    register_diagnostic(span=$hit, message="Racing a read against a timer reads no answer as an answer. Use readWithin from @cawco/core/bounded.")
+  },
+  or { `Bun.spawn($_, $opts)`, `Bun.spawnSync($_, $opts)`, `spawn($_, $opts)` } as $hit where {
+    $filename <: not includes "packages/core/src/bounded.ts",
+    $opts <: contains `timeout: $t` where { $t <: not `false` },
+    register_diagnostic(span=$hit, message="A spawn read with a deadline goes through readWithin from @cawco/core/bounded (hand its signal to the spawn).")
+  }
+}

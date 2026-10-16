@@ -1,12 +1,18 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["ultracite/biome/core", "ultracite/biome/svelte"],
+  // Law A: a read with a deadline goes through packages/core/src/bounded.ts.
+  "plugins": ["./scripts/lint/no-raw-deadline.grit"],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.
   // drizzle/meta is drizzle-kit generate output, and CawCoAPI/openapi.json is
   // `bun run openapi`'s (packages/hub).
   // .design-foundations holds design artifacts; .mcp.json is local MCP config.
   "files": {
+    // Biome skips a file past maxSize (1 MiB by default) as "ignored", so a
+    // check passes without reading it: packages/hub/src/server.ts passed
+    // 1 MiB on 2026-10-16 and went unlinted. Every file it lints is read.
+    "maxSize": 2097152,
     "includes": [
       "!mocks",
       "!.design-foundations",
