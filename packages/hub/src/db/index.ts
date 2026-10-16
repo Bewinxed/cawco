@@ -182,6 +182,7 @@ import {
   supervisorConfig,
   type Tracker,
   threadMessages,
+  threadMessageTasks,
   tools,
   upstreamSettings,
   usageBuckets,
@@ -307,7 +308,10 @@ export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
 /** One of Caw's shell or edit calls (lead-gate.ts). */
 export type LeadCallRow = typeof leadCalls.$inferSelect;
 export type ThreadRow = typeof projectThreads.$inferSelect;
-export type ThreadMessageRow = typeof threadMessages.$inferSelect;
+/** A thread's message, with the tasks it is about (`thread_message_tasks`); null for none. */
+export type ThreadMessageRow = typeof threadMessages.$inferSelect & {
+  tasks: string[] | null;
+};
 /** A thread as its project's list shows it: with its newest message. */
 export type ThreadListRow = ThreadRow & { last: string };
 export type ContinuationRow = typeof continuations.$inferSelect;
@@ -2500,6 +2504,31 @@ const make = async (path: string): Promise<DbShape> => {
   /** A workflow's columns but its program: what the list carries. */
   const { program: _program, ...workflowListColumns } =
     getTableColumns(workflows);
+  /** Each message with the tasks it names, in the order it named them. */
+  const withTasks = (
+    rows: (typeof threadMessages.$inferSelect)[]
+  ): ThreadMessageRow[] => {
+    const named = new Map<string, string[]>();
+    if (rows.length > 0) {
+      for (const { messageId, taskId } of db
+        .select({
+          messageId: threadMessageTasks.messageId,
+          taskId: threadMessageTasks.taskId,
+        })
+        .from(threadMessageTasks)
+        .where(
+          inArray(
+            threadMessageTasks.messageId,
+            rows.map((row) => row.id)
+          )
+        )
+        .orderBy(sql`rowid`)
+        .all()) {
+        named.set(messageId, [...(named.get(messageId) ?? []), taskId]);
+      }
+    }
+    return rows.map((row) => ({ ...row, tasks: named.get(row.id) ?? null }));
+  };
   /** The fleet's tool denials, in the order they were added. */
   const deniedToolNames = (): string[] =>
     db
@@ -6737,15 +6766,19 @@ const make = async (path: string): Promise<DbShape> => {
     threadOfTask: (projectId, taskId) =>
       db
         .select({ thread: projectThreads })
-        .from(threadMessages)
+        .from(threadMessageTasks)
+        .innerJoin(
+          threadMessages,
+          eq(threadMessages.id, threadMessageTasks.messageId)
+        )
         .innerJoin(
           projectThreads,
           eq(projectThreads.id, threadMessages.threadId)
         )
         .where(
           and(
-            eq(projectThreads.projectId, projectId),
-            sql`exists (select 1 from json_each(${threadMessages.tasks}) where value = ${taskId})`
+            eq(threadMessageTasks.projectId, projectId),
+            eq(threadMessageTasks.taskId, taskId)
           )
         )
         .orderBy(desc(threadMessages.createdAt), desc(threadMessages.id))
@@ -6754,14 +6787,18 @@ const make = async (path: string): Promise<DbShape> => {
     thread: (id) =>
       db.select().from(projectThreads).where(eq(projectThreads.id, id)).get(),
     threadMessages: (threadId) =>
-      db
-        .select()
-        .from(threadMessages)
-        .where(eq(threadMessages.threadId, threadId))
-        .orderBy(asc(threadMessages.createdAt), asc(threadMessages.id))
-        .all(),
+      withTasks(
+        db
+          .select()
+          .from(threadMessages)
+          .where(eq(threadMessages.threadId, threadId))
+          .orderBy(asc(threadMessages.createdAt), asc(threadMessages.id))
+          .all()
+      ),
     threadMessage: (id) =>
-      db.select().from(threadMessages).where(eq(threadMessages.id, id)).get(),
+      withTasks(
+        db.select().from(threadMessages).where(eq(threadMessages.id, id)).all()
+      )[0],
     createThread: ({ id, projectId, title, setup, first }) =>
       db.transaction((tx) => {
         const at = new Date();
@@ -6787,12 +6824,23 @@ const make = async (path: string): Promise<DbShape> => {
           })
           .returning()
           .get();
-        return { thread, message };
+        return { thread, message: { ...message, tasks: null } };
       }),
-    addThreadMessage: ({ threadId, id, createdAt, ...said }) =>
+    addThreadMessage: ({ threadId, id, createdAt, tasks, ...said }) =>
       db.transaction((tx) => {
         const at = createdAt ?? new Date();
-        const message = tx
+        const before = tx
+          .select({
+            updatedAt: projectThreads.updatedAt,
+            projectId: projectThreads.projectId,
+          })
+          .from(projectThreads)
+          .where(eq(projectThreads.id, threadId))
+          .get();
+        if (!before) {
+          throw new Error(`thread ${threadId} is not on this hub`);
+        }
+        const row = tx
           .insert(threadMessages)
           .values({
             ...said,
@@ -6802,14 +6850,19 @@ const make = async (path: string): Promise<DbShape> => {
           })
           .returning()
           .get();
-        const before = tx
-          .select({ updatedAt: projectThreads.updatedAt })
-          .from(projectThreads)
-          .where(eq(projectThreads.id, threadId))
-          .get();
-        if (!before) {
-          throw new Error(`thread ${threadId} is not on this hub`);
+        const named = [...new Set(tasks ?? [])];
+        if (named.length > 0) {
+          tx.insert(threadMessageTasks)
+            .values(
+              named.map((taskId) => ({
+                messageId: row.id,
+                projectId: before.projectId,
+                taskId,
+              }))
+            )
+            .run();
         }
+        const message = { ...row, tasks: named.length > 0 ? named : null };
         const thread = tx
           .update(projectThreads)
           .set({
@@ -7215,6 +7268,26 @@ const make = async (path: string): Promise<DbShape> => {
           .set({ projectId: keepId })
           .where(eq(projectThreads.projectId, dupId))
           .run();
+        // Its messages' tasks, by the numbers they have in the kept project.
+        const named = tx
+          .select()
+          .from(threadMessageTasks)
+          .where(eq(threadMessageTasks.projectId, dupId))
+          .orderBy(sql`rowid`)
+          .all();
+        tx.delete(threadMessageTasks)
+          .where(eq(threadMessageTasks.projectId, dupId))
+          .run();
+        for (const link of named) {
+          tx.insert(threadMessageTasks)
+            .values({
+              ...link,
+              projectId: keepId,
+              taskId: renamed(link.taskId) ?? link.taskId,
+            })
+            .onConflictDoNothing()
+            .run();
+        }
         tx.update(cawTurns)
           .set({ projectId: keepId })
           .where(eq(cawTurns.projectId, dupId))

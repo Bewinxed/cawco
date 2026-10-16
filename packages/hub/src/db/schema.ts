@@ -3094,8 +3094,6 @@ export const threadMessages = sqliteTable(
     noteTitle: text("note_title"),
     /** What an event is, as typed data (`ThreadEvent`); null on notes stored before it was kept. */
     event: text("event", { mode: "json" }).$type<ThreadEvent>(),
-    /** The tasks Caw's message is about (`tsk-12`). */
-    tasks: text("tasks", { mode: "json" }).$type<string[]>(),
     /** The project folder's files Caw's message says he wrote (`stages.md`). */
     files: text("files", { mode: "json" }).$type<string[]>(),
     /** Your answer's question and answer, from the lead's AskUserQuestion. */
@@ -3110,6 +3108,29 @@ export const threadMessages = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("thread_messages_thread").on(table.threadId)]
+);
+
+/**
+ * The tasks Caw's message is about (`tsk-12`), one row each, in the order he
+ * named them (rowid); the thread a task's work reports to is the newest
+ * message naming it (db `threadOfTask`).
+ */
+export const threadMessageTasks = sqliteTable(
+  "thread_message_tasks",
+  {
+    messageId: text("message_id")
+      .notNull()
+      .references(() => threadMessages.id, { onDelete: "cascade" }),
+    /** The message's thread's project, which a task id is unique within. */
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    taskId: text("task_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.messageId, table.taskId] }),
+    index("thread_message_tasks_task").on(table.projectId, table.taskId),
+  ]
 );
 
 /** Who a routine's run goes to: a fresh delegate of its type, or the project's lead. */
