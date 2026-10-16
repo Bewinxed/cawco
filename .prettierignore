@@ -19,6 +19,8 @@ site/wrangler.jsonc
 site/scripts/deploy.mjs
 # Backlot's review page, copied as it stands there (scripts/probe-review/README.md).
 scripts/probe-review/index.html
+# Pages copied byte for byte from the owner's sessions: a spec reads them as he saw them.
+scripts/probe-kit/fixtures/
 
 # Languages Biome never formatted here.
 *.md

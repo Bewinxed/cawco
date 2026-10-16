@@ -26,6 +26,8 @@
       "!assets/mascot/loops/*/body-*.svg",
       // the same drawings for the transition clips, by trace_clip.py.
       "!assets/mascot/clips/*/body-*.svg",
+      // pages copied byte for byte from the owner's sessions: a spec reads them as he saw them.
+      "!scripts/probe-kit/fixtures",
     ],
   },
   // Biome lints; `bun fmt` formats (scripts/fmt.ts, .prettierrc). Each
