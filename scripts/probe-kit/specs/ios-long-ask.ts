@@ -1188,6 +1188,10 @@ async function onSimulator(
     let drawer = await tap((label) => label === "Open navigation");
     if (drawer) {
       await pause(2000);
+      // Its project open again, if the notifications step folded it.
+      if (await tap((label) => label === "Show cockpit's sessions")) {
+        await pause(1500);
+      }
       // The live probe's own row, which says it needs you: not an earlier probe's
       // stopped row, nor any other session that needs you.
       drawer = await tap(
