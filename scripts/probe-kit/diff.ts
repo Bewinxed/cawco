@@ -4,7 +4,8 @@
  * visual comparison "uses the pixelmatch library": `threshold`, default 0.2,
  * and a count of pixels allowed to differ). Nothing here asks anyone to look:
  * a failed diff writes the region that changed, cropped, beside the capture
- * for a reviewer, and names its path.
+ * for a reviewer, and names its path, and hands the change to the run for
+ * the owner's review page (`--review`, review.ts).
  *
  * `--approve <spec>` writes the spec's captures as its baselines, and
  * `--approve <spec>:<name>,…` the captures named alone (`kit.approves`): the
@@ -64,6 +65,7 @@ export async function diff(
   const want = PNG.sync.read(await readFile(baseline));
   const got = PNG.sync.read(shot);
   if (want.width !== got.width || want.height !== got.height) {
+    kit.changed({ entry: name, baseline, capture, box: null });
     kit.check(
       `${name} matches its baseline`,
       false,
@@ -85,8 +87,13 @@ export async function diff(
     kit.check(`${name} matches its baseline`, true, `${differing} px differ`);
     return;
   }
+  const box = changedBox(out, 8);
+  const cut = new PNG({ width: box.width, height: box.height });
+  PNG.bitblt(out, cut, box.x, box.y, box.width, box.height, 0, 0);
   const crop = join(kit.out, `${name}.diff.png`);
-  await writeFile(crop, PNG.sync.write(cropToChange(out)));
+  await writeFile(crop, PNG.sync.write(cut));
+  // The owner's review page (`--review`) cuts both pictures wider than this.
+  kit.changed({ entry: name, baseline, capture, box: changedBox(out, 48) });
   kit.check(
     `${name} matches its baseline`,
     false,
@@ -94,8 +101,14 @@ export async function diff(
   );
 }
 
-/** The diff image cut to the box round its changed (red) pixels, 8px of room. */
-function cropToChange(img: PNG): PNG {
+/**
+ * The box round a pixelmatch diff image's changed (red) pixels with `room`
+ * px round it, inside the image; the whole image when none changed.
+ */
+function changedBox(
+  img: PNG,
+  room: number
+): { height: number; width: number; x: number; y: number } {
   let [x0, y0, x1, y1] = [img.width, img.height, -1, -1];
   for (let y = 0; y < img.height; y += 1) {
     for (let x = 0; x < img.width; x += 1) {
@@ -113,13 +126,11 @@ function cropToChange(img: PNG): PNG {
     }
   }
   if (x1 < 0) {
-    return img;
+    return { x: 0, y: 0, width: img.width, height: img.height };
   }
-  x0 = Math.max(0, x0 - 8);
-  y0 = Math.max(0, y0 - 8);
-  x1 = Math.min(img.width - 1, x1 + 8);
-  y1 = Math.min(img.height - 1, y1 + 8);
-  const crop = new PNG({ width: x1 - x0 + 1, height: y1 - y0 + 1 });
-  PNG.bitblt(img, crop, x0, y0, crop.width, crop.height, 0, 0);
-  return crop;
+  x0 = Math.max(0, x0 - room);
+  y0 = Math.max(0, y0 - room);
+  x1 = Math.min(img.width - 1, x1 + room);
+  y1 = Math.min(img.height - 1, y1 + room);
+  return { x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
 }

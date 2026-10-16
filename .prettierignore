@@ -17,6 +17,8 @@ site/art/
 site/src/assets/
 site/wrangler.jsonc
 site/scripts/deploy.mjs
+# Backlot's review page, copied as it stands there (scripts/probe-review/README.md).
+scripts/probe-review/index.html
 
 # Languages Biome never formatted here.
 *.md

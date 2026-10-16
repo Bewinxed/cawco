@@ -87,6 +87,19 @@ export const entrySlug = (entry: string): string =>
 const BASELINES_ROOT =
   process.env.PROBE_BASELINES ?? join(import.meta.dir, "baselines");
 
+/** A capture that differs from its approved baseline, for the owner's review page. */
+export interface Changed {
+  /** The approved baseline's png. */
+  baseline: string;
+  /** The region that changed, device px; null when the sizes differ. */
+  box: { height: number; width: number; x: number; y: number } | null;
+  /** This run's capture's png. */
+  capture: string;
+  /** The capture's name, as `--approve <spec>:<entry>` names it. */
+  entry: string;
+  spec: string;
+}
+
 export interface Kit {
   /**
    * Whether `--approve` names this spec: this run writes baselines, the
@@ -113,6 +126,8 @@ export interface Kit {
    * rendering included): its address. It stops when the spec ends.
    */
   builtFor: (hub: string) => Promise<string>;
+  /** A capture that differs from its approved baseline: kept for `--review`. */
+  changed: (change: Omit<Changed, "spec">) => void;
   /** One assertion: a PASS or FAIL line. Returns `ok`. */
   check: (assertion: string, ok: boolean, detail?: string) => boolean;
   /**
@@ -284,6 +299,8 @@ const NO_HUB = "http://127.0.0.1:9";
 export class Run {
   failures = 0;
   notes = 0;
+  /** Every capture this run that differs from its baseline, in run order. */
+  readonly changed: Changed[] = [];
   private devServer: Served | null = null;
   private builtServer: Served | null = null;
   private built: Promise<void> | null = null;
@@ -358,6 +375,9 @@ export class Run {
       },
       baselines: join(BASELINES_ROOT, "web", spec.name),
       out,
+      changed: (change) => {
+        this.changed.push({ ...change, spec: spec.name });
+      },
       check: (assertion, ok, detail) => {
         console.log(
           `${ok ? "PASS" : "FAIL"} ${spec.name}: ${assertion}${detail ? ` (${detail})` : ""}`

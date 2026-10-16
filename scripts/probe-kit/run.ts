@@ -2,7 +2,7 @@
 /**
  * The probe kit: every web UI proof, read from the engine, not the picture.
  *
- *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]]
+ *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]
  *   bun scripts/probe-kit/run.ts <spec>
  *
  * The second form runs one spec of its own in `specs/<spec>.ts`, beside the
@@ -23,6 +23,11 @@
  * left as it is to the byte. Only after the owner has approved what they
  * show. `PROBE_BASELINES=<dir>` reads and writes the baselines under `<dir>`
  * instead: a scratch copy, to prove an approve on.
+ *
+ * `--review <dir>` writes the owner's review page (review.ts,
+ * `scripts/probe-review/`) when a capture differs from its baseline: one
+ * decision per surface, the approved look or the new one, and prints the
+ * `--approve` command each "New look" pick runs.
  *
  * What each level proves is the fleet's rule 7: state and geometry first
  * (geom.ts), motion by seeking the clock (anim.ts), regressions by pixel
@@ -55,7 +60,7 @@ const [kind, ...rest] = args;
 const own = kind ? join(import.meta.dir, "specs", `${kind}.ts`) : undefined;
 if (kind !== "web" && !(own && existsSync(own))) {
   console.error(
-    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]]\n       bun scripts/probe-kit/run.ts <spec>  (a spec in specs/)"
+    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]\n       bun scripts/probe-kit/run.ts <spec>  (a spec in specs/)"
   );
   process.exit(2);
 }
@@ -79,11 +84,20 @@ if (entries?.length === 0) {
   process.exit(2);
 }
 const approval: Approval | null = approve === null ? null : (entries ?? "all");
+const reviewAt = rest.indexOf("--review");
+const review = reviewAt === -1 ? null : (rest[reviewAt + 1] ?? null);
+if (reviewAt !== -1 && (review === null || review.startsWith("--"))) {
+  console.error("--review <dir>: name the folder the review page goes in");
+  process.exit(2);
+}
 const named =
   kind === "web"
     ? rest.filter(
         (one, i) =>
-          one !== "--approve" && (approveAt === -1 || i !== approveAt + 1)
+          one !== "--approve" &&
+          (approveAt === -1 || i !== approveAt + 1) &&
+          one !== "--review" &&
+          (reviewAt === -1 || i !== reviewAt + 1)
       )
     : [kind];
 const dir =
@@ -121,6 +135,14 @@ try {
   }
 } finally {
   await run.close();
+}
+if (review !== null) {
+  if (run.changed.length === 0) {
+    console.log(`REVIEW: no baseline differs; nothing written to ${review}`);
+  } else {
+    const { writeReview } = await import("./review");
+    await writeReview(review, run.changed);
+  }
 }
 const seconds = ((performance.now() - started) / 1000).toFixed(0);
 const notes = run.notes > 0 ? `, ${run.notes} note(s)` : "";

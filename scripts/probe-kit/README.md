@@ -6,8 +6,8 @@ the clock (`anim.ts`), regressions by pixel diff against an approved baseline
 (`diff.ts`), ink (`ink.ts`) only for what drawing alone decides.
 
 ```sh
-bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]]   # specs/web/
-bun scripts/probe-kit/run.ts <spec>                                       # specs/<spec>.ts
+bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]   # specs/web/
+bun scripts/probe-kit/run.ts <spec>                                                        # specs/<spec>.ts
 ```
 
 Each assertion prints `PASS <spec>: …` or `FAIL <spec>: …`; the run ends with
@@ -25,6 +25,15 @@ its name as a slug (`--approve project-bar:phone-390` for "phone 390"). An
 entry the spec doesn't write fails the run. `PROBE_BASELINES=<dir>` reads and
 writes the baselines under `<dir>/web/<spec>/` instead of `baselines/`: a
 scratch copy, to prove an approve on.
+
+## Showing the owner what changed
+
+`--review <dir>` (say `.probe-review/<spec>`) writes the owner's review page
+when a capture differs from its baseline: one phone page, one decision per
+surface, "Approved look" or "New look" on the same cropped pictures
+(`review.ts`, `scripts/probe-review/README.md`). The run prints the
+`--approve` command each "New look" pick runs; the manifest carries it too.
+Open the folder with `artifact_create(kind: "preview", dir)`.
 
 ## A spec that delegates is a `host` check
 
