@@ -19,6 +19,7 @@ import {
   type AccountReport,
   type AuthState,
   identityOf,
+  type MachineHarnessReport,
   type ModelInfo,
 } from "@cawco/core";
 import {
@@ -73,58 +74,123 @@ const envFor = (account: string): Record<string, string | undefined> => ({
   ...accountEnv(account),
 });
 
-/** What `claude auth status --json` says, run in `env`: signed in, how, and as whom. */
+/** How long one `claude auth status` may take to answer. */
+const AUTH_STATUS_TIMEOUT_MS = 20_000;
+
+/**
+ * Claude Code gave no answer to `claude auth status` for a config dir: it
+ * ran out of time, printed nothing it could mean, or is not installed. No
+ * answer says nothing about the dir's sign-in, so nothing reads it as
+ * signed out.
+ */
+export class AuthStatusUnanswered extends Error {
+  readonly dir: string;
+  readonly ms: number;
+  constructor(dir: string, ms: number, why: string) {
+    super(
+      `Claude Code did not answer \`claude auth status\` for ${dir}: ${why} after ${ms} ms. Its sign-in was not read.`
+    );
+    this.name = "AuthStatusUnanswered";
+    this.dir = dir;
+    this.ms = ms;
+  }
+}
+
+/** `claude auth status --json`'s output read as an answer, or undefined when it is none (no JSON, no `loggedIn`). */
+const statusIn = (
+  output: string
+):
+  | {
+      loggedIn: boolean;
+      authMethod?: unknown;
+      email?: unknown;
+      orgName?: unknown;
+    }
+  | undefined => {
+  let parsed: { loggedIn?: unknown } | null;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    return undefined;
+  }
+  return typeof parsed?.loggedIn === "boolean"
+    ? (parsed as { loggedIn: boolean })
+    : undefined;
+};
+
+/**
+ * What `claude auth status --json` says, run in `env` (its config dir is
+ * `dir`): signed in, how, and as whom. Throws {@link AuthStatusUnanswered}
+ * when Claude Code gives no answer.
+ */
 export const authStatusIn = async (
-  env: Record<string, string | undefined>
+  env: Record<string, string | undefined>,
+  dir: string
 ): Promise<{
   loggedIn: boolean;
   authMethod?: string;
   identity?: AccountIdentity;
 }> => {
+  const started = Date.now();
   const executable = resolveClaudeExecutable();
   if (!executable) {
-    return { loggedIn: false };
+    throw new AuthStatusUnanswered(dir, 0, "Claude Code is not installed");
   }
   const child = Bun.spawn([executable, "auth", "status", "--json"], {
     env,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",
-    timeout: 20_000,
+    timeout: AUTH_STATUS_TIMEOUT_MS,
   });
   const [output] = await Promise.all([
     new Response(child.stdout).text(),
     child.exited,
   ]);
-  try {
-    const status = JSON.parse(output) as {
-      loggedIn?: unknown;
-      authMethod?: unknown;
-      email?: unknown;
-      orgName?: unknown;
-    };
-    // `email` and `orgName` are the login's `emailAddress` and
-    // `organizationName`, which its initialize response reports as `email`
-    // and `organization`: one identity, whichever of the two read it.
-    const identity =
-      status.loggedIn === true && typeof status.email === "string"
-        ? identityOf({
-            email: status.email,
-            ...(typeof status.orgName === "string"
-              ? { organization: status.orgName }
-              : {}),
-          })
-        : undefined;
-    return {
-      loggedIn: status.loggedIn === true,
-      ...(typeof status.authMethod === "string"
-        ? { authMethod: status.authMethod }
-        : {}),
-      ...(identity ? { identity } : {}),
-    };
-  } catch {
-    return { loggedIn: false };
+  const ms = Date.now() - started;
+  // Ran out of time by the clock, however the process took its end (a CLI
+  // that traps the signal exits with a code of its own).
+  if (ms >= AUTH_STATUS_TIMEOUT_MS) {
+    throw new AuthStatusUnanswered(
+      dir,
+      ms,
+      `no answer within ${AUTH_STATUS_TIMEOUT_MS / 1000} s`
+    );
   }
+  if (child.signalCode !== null) {
+    throw new AuthStatusUnanswered(
+      dir,
+      ms,
+      `it was ended by ${child.signalCode}`
+    );
+  }
+  const status = statusIn(output);
+  if (!status) {
+    throw new AuthStatusUnanswered(
+      dir,
+      ms,
+      `it printed no JSON with a loggedIn (exit ${child.exitCode})`
+    );
+  }
+  // `email` and `orgName` are the login's `emailAddress` and
+  // `organizationName`, which its initialize response reports as `email`
+  // and `organization`: one identity, whichever of the two read it.
+  const identity =
+    status.loggedIn && typeof status.email === "string"
+      ? identityOf({
+          email: status.email,
+          ...(typeof status.orgName === "string"
+            ? { organization: status.orgName }
+            : {}),
+        })
+      : undefined;
+  return {
+    loggedIn: status.loggedIn,
+    ...(typeof status.authMethod === "string"
+      ? { authMethod: status.authMethod }
+      : {}),
+    ...(identity ? { identity } : {}),
+  };
 };
 
 /** A dir signed in through `claude auth login --console` reports a method other than claude.ai. */
@@ -159,28 +225,65 @@ export const changingSignins = <T>(change: Promise<T>): Promise<T> => {
 };
 
 /**
+ * What one read of the machine's account dirs found: each dir Claude Code
+ * answered for, and the dirs it gave no answer for ({@link
+ * AuthStatusUnanswered}), which are neither signed in nor out: the hub keeps
+ * what it last had for each.
+ */
+export interface AccountsRead {
+  accounts: AccountReport[];
+  unread: string[];
+}
+
+/** The account dirs whose last read went unanswered, so each is said once until it answers again. */
+const unanswered = new Set<string>();
+
+/** One account dir read, or the account id when Claude Code gave no answer for it (said once). */
+const readAccount = async (
+  account: string
+): Promise<AccountReport | string> => {
+  try {
+    const status = await authStatusIn(
+      envFor(account),
+      accountConfigDir(account)
+    );
+    unanswered.delete(account);
+    const kind = kindOf(status.authMethod);
+    return {
+      account,
+      loggedIn: status.loggedIn,
+      ...(kind ? { kind } : {}),
+      ...(status.identity ? { identity: status.identity } : {}),
+    };
+  } catch (error) {
+    if (!(error instanceof AuthStatusUnanswered)) {
+      throw error;
+    }
+    if (!unanswered.has(account)) {
+      unanswered.add(account);
+      console.warn(`[accounts] ${error.message}`);
+    }
+    return account;
+  }
+};
+
+/**
  * Every account dir on this machine and whether it is signed in, read when
  * no sign-in is changing here and again when one changed while it was read.
  */
-export const accountReports = async (): Promise<AccountReport[]> => {
+export const accountReports = async (): Promise<AccountsRead> => {
   for (;;) {
     // biome-ignore lint/performance/noAwaitInLoops: each read waits out the changes begun before it
     await Promise.allSettled([...signinChanges]);
     const seen = signinChanged;
-    const reports = await Promise.all(
-      accountIds().map(async (account) => {
-        const status = await authStatusIn(envFor(account));
-        const kind = kindOf(status.authMethod);
-        return {
-          account,
-          loggedIn: status.loggedIn,
-          ...(kind ? { kind } : {}),
-          ...(status.identity ? { identity: status.identity } : {}),
-        };
-      })
-    );
+    const read = await Promise.all(accountIds().map(readAccount));
     if (seen === signinChanged) {
-      return reports;
+      return {
+        accounts: read.filter(
+          (one): one is AccountReport => typeof one !== "string"
+        ),
+        unread: read.filter((one): one is string => typeof one === "string"),
+      };
     }
   }
 };
@@ -237,22 +340,47 @@ const keychainHolds = async (account: string): Promise<boolean> => {
  * when none is, the keychain holds one's login, and the login keychain is
  * locked for this process (login-keychain.ts, read with no secret and no
  * UI); else unauthenticated. The machine's own `~/.claude` has no say.
+ * Undefined when none answered signed in and some dir gave no answer: its
+ * dirs have not said, and the hub keeps the machine's last word.
  */
-export const claudeAuth = async (
-  reports: readonly AccountReport[]
-): Promise<AuthState> => {
-  if (reports.some((report) => report.loggedIn)) {
+export const claudeAuth = async ({
+  accounts,
+  unread,
+}: AccountsRead): Promise<AuthState | undefined> => {
+  if (accounts.some((report) => report.loggedIn)) {
     return "authenticated";
+  }
+  if (unread.length > 0) {
+    return undefined;
   }
   if (platform() === "darwin") {
     const held = await Promise.all(
-      reports.map((report) => keychainHolds(report.account))
+      accounts.map((report) => keychainHolds(report.account))
     );
     if (held.some(Boolean) && keychainLocked(loginKeychainPath())) {
       return "unreadable-credentials";
     }
   }
   return "unauthenticated";
+};
+
+/**
+ * The sign-in part of Claude's harness report, from one read of the account
+ * dirs: the dirs that answered, the ones that did not (`unreadAccounts`, which
+ * the hub leaves as they were), and the machine's word on Claude when its
+ * dirs settle it. The one place the report's sign-ins are made.
+ */
+export const claudeSignins = async (
+  read: AccountsRead
+): Promise<
+  Pick<MachineHarnessReport, "accounts" | "auth" | "unreadAccounts">
+> => {
+  const auth = await claudeAuth(read);
+  return {
+    accounts: read.accounts,
+    ...(read.unread.length > 0 ? { unreadAccounts: read.unread } : {}),
+    ...(auth ? { auth } : {}),
+  };
 };
 
 /**

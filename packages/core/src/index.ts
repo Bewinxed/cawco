@@ -1,5 +1,5 @@
 import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
-import type { HarnessReport } from "./harness";
+import type { MachineHarnessReport } from "./harness";
 import type { ToolStatus } from "./tools";
 
 // Accounts: several sign-ins per provider, and which one a session runs on.
@@ -538,7 +538,7 @@ export interface HeartbeatPayload {
    * changed (pi's default provider, a Claude Code dir's login); absent from
    * every other beat.
    */
-  harnesses?: HarnessReport[];
+  harnesses?: MachineHarnessReport[];
   /**
    * A fingerprint of the machine's own pi and OpenCode credential stores
    * (never their contents). Rides the beat `harnesses` rides, and again

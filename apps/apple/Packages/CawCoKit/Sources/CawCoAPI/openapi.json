@@ -39232,6 +39232,13 @@
               "$ref": "#/components/schemas/SignInFault"
             }
           },
+          "unreadAccounts": {
+            "description": "Claude only: the account dirs (`~/.cawco/accounts/<id>/claude`) Claude\nCode gave no answer for on this read: its `auth status` ran out of time\nor printed nothing it could mean. Neither signed in nor out: the hub\nkeeps what it last had for each, and does not read them as gone.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "version": {
             "description": "The CLI/SDK version, when it can be read.",
             "type": "string"

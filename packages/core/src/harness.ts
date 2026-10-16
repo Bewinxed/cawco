@@ -1354,9 +1354,29 @@ export interface HarnessReport {
    * machine's row, with the fix ({@link opencodeSignInFaultWords}).
    */
   signInFaults?: SignInFault[];
+  /**
+   * Claude only: the account dirs (`~/.cawco/accounts/<id>/claude`) Claude
+   * Code gave no answer for on this read: its `auth status` ran out of time
+   * or printed nothing it could mean. Neither signed in nor out: the hub
+   * keeps what it last had for each, and does not read them as gone.
+   */
+  unreadAccounts?: string[];
   /** The CLI/SDK version, when it can be read. */
   version?: string;
 }
+
+/**
+ * A harness's report as its machine's agent sends it ({@link
+ * HeartbeatPayload.harnesses}). Claude's leaves `auth` out when no account
+ * dir answered signed in and some gave no answer ({@link
+ * HarnessReport.unreadAccounts}): those dirs have not said, so the machine
+ * has no new word. The hub keeps its last one: it files the report with the
+ * `auth` of the last it kept of that harness, and keeps none while it has
+ * none (the harness then reads as not reported).
+ */
+export type MachineHarnessReport = Omit<HarnessReport, "auth"> & {
+  auth?: AuthState;
+};
 
 /** The default for a harness adapter that reports nothing; adapters override. */
 export const CAPABILITIES_NONE: HarnessCapabilities = {

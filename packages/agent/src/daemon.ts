@@ -9,12 +9,12 @@ import type {
   BuildInfo,
   Envelope,
   HarnessKind,
-  HarnessReport,
   HeartbeatAckPayload,
   HeartbeatPayload,
   LaunchAsk,
   LaunchGrant,
   LentAccess,
+  MachineHarnessReport,
   MachineProviderLists,
   RegisterAckPayload,
   SessionCustody,
@@ -92,7 +92,7 @@ import { announcingParts, clientLine } from "@cawco/core/wire";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
-import { accountReports, claudeAuth, claudeAuthNote } from "./accounts";
+import { accountReports, claudeAuthNote, claudeSignins } from "./accounts";
 import { unlockKeychain } from "./auth";
 import {
   BinaryUpdater,
@@ -449,13 +449,14 @@ let claudeAuthNoted = false;
 
 /**
  * The machine's word on Claude, said once per process, from the first Claude
- * report it reads: nothing while an account is signed in, else the sentence
- * pointing at Configure → Accounts. It used to be read before the agent
- * started, which made the start wait on `claude auth status` for every
- * account.
+ * report that settles it: nothing while an account is signed in, else the
+ * sentence pointing at Configure → Accounts. A report whose dirs gave no
+ * answer settles nothing (`auth` absent), and the next one is read for it.
+ * It used to be read before the agent started, which made the start wait on
+ * `claude auth status` for every account.
  */
-const noteClaudeAuth = (auth: AuthState): void => {
-  if (claudeAuthNoted) {
+const noteClaudeAuth = (auth: AuthState | undefined): void => {
+  if (claudeAuthNoted || auth === undefined) {
     return;
   }
   claudeAuthNoted = true;
@@ -466,7 +467,9 @@ const noteClaudeAuth = (auth: AuthState): void => {
 };
 
 /** A harness's report, read on its own ({@link readPart}). */
-const readHarness = (adapter: Harness): Promise<HarnessReport | undefined> =>
+const readHarness = (
+  adapter: Harness
+): Promise<MachineHarnessReport | undefined> =>
   readPart(`the ${adapter.kind} harness's report`, () => adapter.detect());
 
 /** The provider-account controls, each telling the machine's harnesses when the accounts moved. */
@@ -1397,7 +1400,7 @@ const attach = (
     // registry, and so reading offline, for most of the 2.7–3.2s the journal
     // showed between `Connection ended` and `registered with` on every hub
     // restart.
-    let reportedHarnesses: HarnessReport[] = [];
+    let reportedHarnesses: MachineHarnessReport[] = [];
     /** Whether this connection's harnesses have been read once ({@link supervisor.reannounce}). */
     let announced = false;
     let lastPiCheck = Date.now();
@@ -1406,7 +1409,10 @@ const attach = (
     /** The fingerprint of pi's and OpenCode's own stores this connection last sent. */
     let reportedHomeStores = homeStoresStamp();
     /** `report` in place of the one of its harness this connection last read, or beside the others. */
-    const keepReport = (report: HarnessReport): void => {
+    const keepReport = (report: MachineHarnessReport): void => {
+      if (report.harness === "claude") {
+        noteClaudeAuth(report.auth);
+      }
       reportedHarnesses = [
         ...reportedHarnesses.filter((one) => one.harness !== report.harness),
         report,
@@ -1513,9 +1519,6 @@ const attach = (
             if (report) {
               keepReport(report);
               beat({ harnesses: [report] });
-              if (report.harness === "claude") {
-                noteClaudeAuth(report.auth);
-              }
             }
           }),
           (async () => {
@@ -1630,7 +1633,9 @@ const attach = (
      * report read again when the announce could not read it, so its sign-ins
      * still reach the hub. Nothing when there is nothing new to send.
      */
-    const rereadClaude = async (): Promise<HarnessReport | undefined> => {
+    const rereadClaude = async (): Promise<
+      MachineHarnessReport | undefined
+    > => {
       const old = reportedHarnesses.find(
         (report) => report.harness === "claude"
       );
@@ -1638,17 +1643,21 @@ const attach = (
         const claude = harness("claude");
         return claude ? await readHarness(claude) : undefined;
       }
-      const accounts = await readPart(
+      const read = await readPart(
         "the claude harness's sign-ins",
         accountReports
       );
-      if (!accounts) {
+      if (!read) {
         return;
       }
-      const auth = await claudeAuth(accounts);
-      return Bun.deepEquals(accounts, old.accounts ?? []) && auth === old.auth
-        ? undefined
-        : { ...old, accounts, auth };
+      const {
+        accounts: _accounts,
+        auth: _auth,
+        unreadAccounts: _unread,
+        ...rest
+      } = old;
+      const next = { ...rest, ...(await claudeSignins(read)) };
+      return Bun.deepEquals(next, old) ? undefined : next;
     };
 
     /**
@@ -1732,7 +1741,7 @@ const attach = (
     const authed = [pi, harness("opencode")].filter(
       (adapter): adapter is Harness => adapter !== undefined
     );
-    const changedAuth = (): HarnessReport[] | undefined => {
+    const changedAuth = (): MachineHarnessReport[] | undefined => {
       const moved = authed.filter((adapter) => {
         const old = reportedHarnesses.find(
           (report) => report.harness === adapter.kind

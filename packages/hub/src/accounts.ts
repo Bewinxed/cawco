@@ -175,15 +175,17 @@ const squaredState = (
  * each store is signed in as decides its sign-in, every time, except one
  * settled since the report came in (`receivedAt`): a sign-in finished, or an
  * earlier pass of this same report, while it waited behind a probe; or one
- * the hub signed out on a refused credential ({@link squaredState}). True
- * when anything changed; `failed` when a Claude catalog probe it needed
- * could not be read, which the caller retries.
+ * the hub signed out on a refused credential ({@link squaredState}). A
+ * store the report names `unread` (Claude Code gave no answer for it) is
+ * left exactly as it was: no answer moves no sign-in. True when anything
+ * changed; `failed` when a Claude catalog probe it needed could not be read,
+ * which the caller retries.
  */
 export const reconcileAccounts = async (
   db: DbShape,
   machineId: string,
   scope: "claude" | "providers",
-  reports: AccountReport[],
+  { reports, unread }: { reports: AccountReport[]; unread: string[] },
   receivedAt: number,
   probe: AccountProber
 ): Promise<Squared> => {
@@ -234,11 +236,13 @@ export const reconcileAccounts = async (
     }
   }
 
-  // An account store the machine no longer has is an account it is not signed in to.
+  // An account store the machine no longer has is an account it is not
+  // signed in to. One it has and could not read is not gone.
   for (const signin of mine) {
     const gone =
       signin.state !== "signed-out" &&
       !settledSince(signin.accountId) &&
+      !unread.includes(signin.accountId) &&
       !reports.some((report) => report.account === signin.accountId);
     if (gone) {
       changed = store.putSignin({ ...signin, state: "signed-out" }) || changed;

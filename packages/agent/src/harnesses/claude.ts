@@ -49,7 +49,7 @@ import type {
   EndedTask,
   FleetMcpChange,
   HarnessCapabilities,
-  HarnessReport,
+  MachineHarnessReport,
   ModelInfo,
   MoveEnded,
   NeutralMessage,
@@ -125,7 +125,7 @@ import {
   accountEnv,
   accountReports,
   changingSignins,
-  claudeAuth,
+  claudeSignins,
   linkProjectMemory,
   probeAccount,
   projectMemoryRoot,
@@ -3656,24 +3656,24 @@ export class ClaudeHarness implements Harness {
    * model catalog: that is each account's, which its sessions' initialize
    * responses report and the hub keeps.
    */
-  async detect(): Promise<HarnessReport> {
+  async detect(): Promise<MachineHarnessReport> {
     const executable = resolveClaudeExecutable();
     const installed = executable !== undefined;
     // Side by side: each is bounded on its own (`auth status` 20 s, `--version` 5 s).
-    const [accounts, version] = await Promise.all([
+    const [read, version] = await Promise.all([
       accountReports(),
       executable ? toolVersion(executable) : undefined,
     ]);
-    const auth = await claudeAuth(accounts);
-    this.auth = auth;
+    const signins = await claudeSignins(read);
+    // Dirs that gave no answer leave the machine's word as it was.
+    this.auth = signins.auth ?? this.auth;
     return {
       harness: "claude",
       installed,
       ...(version ? { version } : {}),
-      auth,
+      ...signins,
       ...(installed ? {} : { authReason: CLAUDE_NOT_INSTALLED }),
       capabilities: CLAUDE_CAPABILITIES,
-      accounts,
     };
   }
 

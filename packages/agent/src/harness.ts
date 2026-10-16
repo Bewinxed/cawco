@@ -21,6 +21,7 @@ import type {
   HarnessCapabilities,
   HarnessKind,
   HarnessReport,
+  MachineHarnessReport,
   MoveEnded,
   NeutralMessage,
   NeutralSessionInfo,
@@ -293,7 +294,7 @@ export interface Harness {
   deleteSession(sessionKey: string, dir?: string): Promise<void>;
   /** What this machine can do with the harness — install, version, auth. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  detect(): Promise<HarnessReport>;
+  detect(): Promise<MachineHarnessReport>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   dispose?(): Promise<void>;
   /** Confirm a server session's turn and resources ended without adopting it. */

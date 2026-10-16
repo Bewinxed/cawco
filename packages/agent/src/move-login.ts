@@ -68,9 +68,13 @@ const log = (line: string): void => {
   console.log(`[move-login] ${line}`);
 };
 
-/** Who the machine's own `~/.claude` is signed in as, by its `claude auth status`. */
+/**
+ * Who the machine's own `~/.claude` is signed in as, by its `claude auth
+ * status`. Throws when Claude Code gives no answer (accounts.ts
+ * `AuthStatusUnanswered`): no answer is not "not signed in".
+ */
 export const readHomeLogin = async (): Promise<HomeLogin> => {
-  const status = await authStatusIn(bareEnv());
+  const status = await authStatusIn(bareEnv(), claudeHome());
   const kind = kindOf(status.authMethod);
   return {
     loggedIn: status.loggedIn,
@@ -247,11 +251,18 @@ const putOauthAccount = async (
   );
 };
 
-/** Who the account's dir answers as now, by its own `claude auth status`. */
+/**
+ * Who the account's dir answers as now, by its own `claude auth status`;
+ * throws when Claude Code gives no answer, so a move never writes over a dir
+ * whose sign-in it could not read.
+ */
 const accountAnswersAs = async (
   account: string
 ): Promise<AccountIdentity | undefined> => {
-  const status = await authStatusIn({ ...bareEnv(), ...accountEnv(account) });
+  const status = await authStatusIn(
+    { ...bareEnv(), ...accountEnv(account) },
+    accountConfigDir(account)
+  );
   return status.loggedIn ? status.identity : undefined;
 };
 

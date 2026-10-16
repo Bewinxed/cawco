@@ -42,6 +42,7 @@ import type {
   InstanceRow,
   LaunchAsk,
   LaunchGrant,
+  MachineHarnessReport,
   MachineHookScript,
   MachineMemorySet,
   MarketplaceLink,
@@ -1585,7 +1586,9 @@ export const resolveCanDelegate = (parent: InstanceRow | undefined): boolean =>
   !!parent && parent.canDelegate !== false;
 
 /** The report beat's word on what each harness adapter on the machine can do. */
-const peekHarnesses = (payload: unknown): HarnessReport[] | undefined => {
+const peekHarnesses = (
+  payload: unknown
+): MachineHarnessReport[] | undefined => {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
@@ -1594,10 +1597,10 @@ const peekHarnesses = (payload: unknown): HarnessReport[] | undefined => {
     return undefined;
   }
   return value.filter(
-    (report): report is HarnessReport =>
+    (report): report is MachineHarnessReport =>
       typeof report === "object" &&
       report !== null &&
-      typeof (report as HarnessReport).harness === "string"
+      typeof (report as MachineHarnessReport).harness === "string"
   );
 };
 
@@ -3724,8 +3727,11 @@ export const createServer = (
     string,
     {
       attempt: number;
-      /** Undefined until the machine's connection has named its stores. */
-      reports: AccountReport[] | undefined;
+      /**
+       * Undefined until the machine's connection has named its stores: those
+       * read, and those Claude Code gave no answer for (`unread`).
+       */
+      reports: { reports: AccountReport[]; unread: string[] } | undefined;
       /** When `reports` came in: a sign-in settled since is not theirs to undo. */
       receivedAt: number;
       running: Promise<void>;
@@ -3744,7 +3750,7 @@ export const createServer = (
   const syncAccounts = (
     machineId: string,
     harness: "claude" | "providers",
-    reports?: AccountReport[]
+    reports?: { reports: AccountReport[]; unread: string[] }
   ): void => {
     const key = `${machineId}\u0000${harness}`;
     const sync = accountSyncs.get(key) ?? {
@@ -24739,7 +24745,17 @@ export const createServer = (
               // or tools runs here, off the part it reads.
               const reported = peekHarnesses(message.payload);
               if (reported) {
-                db.mergeAgentHarnesses(message.machineId, reported);
+                // A report with no word (Claude's, its dirs unanswered) is
+                // filed with the last word kept of that harness; with none
+                // kept, it is not filed, and the harness reads as not
+                // reported yet.
+                const filed = reported.flatMap((report): HarnessReport[] => {
+                  const auth =
+                    report.auth ??
+                    harnessReportOf(message.machineId, report.harness)?.auth;
+                  return auth ? [{ ...report, auth }] : [];
+                });
+                db.mergeAgentHarnesses(message.machineId, filed);
                 capabilityReports.delete(message.machineId);
                 const claudeReport = reported.find(
                   (report) => report.harness === "claude"
@@ -24747,18 +24763,25 @@ export const createServer = (
                 // The machine's word on Claude moves with its Claude report,
                 // not only at its register: a keychain unlocked from the
                 // dashboard clears the machine's row (its Unlock offer) now.
+                // A report whose dirs did not answer carries no word, and the
+                // row keeps the last one.
+                const claudeWord = claudeReport?.auth;
                 if (
-                  claudeReport &&
-                  AUTH_STATES.includes(claudeReport.auth) &&
-                  db.setAgentAuth(message.machineId, claudeReport.auth)
+                  claudeWord &&
+                  AUTH_STATES.includes(claudeWord) &&
+                  db.setAgentAuth(message.machineId, claudeWord)
                 ) {
                   publishInstances(message.machineId);
                 }
                 // Where each Claude account is signed in on this machine, as
-                // its Claude Code config dirs say.
+                // its Claude Code config dirs say; the dirs it gave no answer
+                // for stay as they were.
                 const claudeAccounts = claudeReport?.accounts;
                 if (claudeAccounts) {
-                  syncAccounts(message.machineId, "claude", claudeAccounts);
+                  syncAccounts(message.machineId, "claude", {
+                    reports: claudeAccounts,
+                    unread: claudeReport?.unreadAccounts ?? [],
+                  });
                 }
                 sendFleetSync(message.machineId, ws);
               }
@@ -24792,7 +24815,10 @@ export const createServer = (
               const { providerAccounts, providers } =
                 message.payload as HeartbeatPayload;
               if (providerAccounts) {
-                syncAccounts(message.machineId, "providers", providerAccounts);
+                syncAccounts(message.machineId, "providers", {
+                  reports: providerAccounts,
+                  unread: [],
+                });
               }
               if (providers) {
                 machineProviders.set(message.machineId, {

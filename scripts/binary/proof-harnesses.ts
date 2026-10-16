@@ -15,7 +15,10 @@
  * list, no account changes to take).
  */
 
-import { accountReports, claudeAuth } from "../../packages/agent/src/accounts";
+import {
+  accountReports,
+  claudeSignins,
+} from "../../packages/agent/src/accounts";
 import type { Harness } from "../../packages/agent/src/harness";
 import { KeeperPool } from "../../packages/agent/src/keepers";
 import { parseProcId, procIdFor } from "../../packages/agent/src/proc-id";
@@ -32,7 +35,7 @@ import {
 import {
   CAWCO_ENV,
   type HarnessKind,
-  type HarnessReport,
+  type MachineHarnessReport,
 } from "../../packages/core/src/index";
 import { sessionEnvironment } from "../../packages/core/src/session-env";
 
@@ -166,7 +169,7 @@ function session(
  * an account dir holding a credential and `oauthAccount`, as `claude auth
  * login` would leave it. The other harnesses report no sign-in.
  */
-const detected = async (kind: HarnessKind): Promise<HarnessReport> => {
+const detected = async (kind: HarnessKind): Promise<MachineHarnessReport> => {
   if (kind !== "claude") {
     return {
       harness: kind,
@@ -175,13 +178,11 @@ const detected = async (kind: HarnessKind): Promise<HarnessReport> => {
       capabilities: CAPABILITIES_NONE,
     };
   }
-  const accounts = await accountReports();
   return {
     harness: kind,
     installed: false,
-    auth: await claudeAuth(accounts),
+    ...(await claudeSignins(await accountReports())),
     capabilities: CAPABILITIES_NONE,
-    accounts,
   };
 };
 
