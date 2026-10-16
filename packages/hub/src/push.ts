@@ -65,6 +65,7 @@ import {
   PROJECT_SETTINGS_TOOL,
   questionsOf,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { Elysia, t } from "elysia";
@@ -629,40 +630,58 @@ type PushBody =
   | { collapseId: string; payload: Record<string, unknown> }
   | { pushType: "background"; payload: Record<string, unknown> };
 
+/** "Cawrier did not answer within N s". */
+const cawrierSilent = (after: number): string =>
+  `Cawrier did not answer within ${Math.round(after / 1000)} s`;
+
 /**
  * One POST to Cawrier for this device, its body made here (a visible alert
  * is sealed per device); never throws. `reason` is Cawrier's sentence, or
- * APNs' reason it passed on.
+ * APNs' reason it passed on; status 0 is no HTTP answer, its reason saying
+ * when that was no answer in time.
  */
 const post = async (
   device: PushDeviceRow,
   body: () => Promise<PushBody>
 ): Promise<{ status: number; reason: string | null }> => {
   try {
-    const response = await fetch(`${CAWRIER}/v1/push`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${device.secret}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        pairingId: device.pairingId,
-        expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
-        ...(await body()),
-      }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    const sent = JSON.stringify({
+      pairingId: device.pairingId,
+      expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
+      ...(await body()),
     });
-    if (response.ok) {
-      return { status: response.status, reason: null };
+    const asked = await readWithin(REQUEST_TIMEOUT_MS, async (signal) => {
+      const response = await fetch(`${CAWRIER}/v1/push`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${device.secret}`,
+          "content-type": "application/json",
+        },
+        body: sent,
+        signal,
+      });
+      if (response.ok) {
+        return { status: response.status, reason: null };
+      }
+      const answer = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        reason?: string;
+      };
+      return {
+        status: response.status,
+        reason: answer.reason ?? answer.error ?? null,
+      };
+    });
+    switch (asked.kind) {
+      case "answered":
+        return asked.value;
+      case "unanswered":
+        return { status: 0, reason: cawrierSilent(asked.after) };
+      default: {
+        const unhandled: never = asked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    const answer = (await response.json().catch(() => ({}))) as {
-      error?: string;
-      reason?: string;
-    };
-    return {
-      status: response.status,
-      reason: answer.reason ?? answer.error ?? null,
-    };
   } catch {
     return { status: 0, reason: null };
   }
@@ -684,20 +703,35 @@ const removeDevice = async (
   }
   let refusal: string | undefined;
   try {
-    const response = await fetch(`${CAWRIER}/v1/unenroll`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${device.secret}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ pairingId }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (response.status !== 204) {
+    const asked = await readWithin(REQUEST_TIMEOUT_MS, async (signal) => {
+      const response = await fetch(`${CAWRIER}/v1/unenroll`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${device.secret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ pairingId }),
+        signal,
+      });
+      if (response.status === 204) {
+        return;
+      }
       const answer = (await response.json().catch(() => ({}))) as {
         error?: string;
       };
-      refusal = `Cawrier answered ${response.status} ${answer.error ?? ""}`;
+      return `Cawrier answered ${response.status} ${answer.error ?? ""}`;
+    });
+    switch (asked.kind) {
+      case "answered":
+        refusal = asked.value;
+        break;
+      case "unanswered":
+        refusal = cawrierSilent(asked.after);
+        break;
+      default: {
+        const unhandled: never = asked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
   } catch (error) {
     refusal = `Cawrier not reached: ${error instanceof Error ? error.message : String(error)}`;

@@ -10,6 +10,8 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  * {@link HubLifetimeShape.sleep}, but for two that are not the hub's own
  * schedule, each named where it stands (json-response's yield inside one
  * response body; jev's backoff inside one request, bounded by its deadline).
+ * A read with a deadline waits on `readWithin` (@cawco/core/bounded) instead,
+ * handed {@link HubLifetimeShape.signal} when the hub holds the wait.
  * What holds a resource gives its release to {@link HubLifetimeShape.onClose}.
  *
  * {@link HubLifetimeShape.close} stops every timer, so none can fire into
@@ -40,6 +42,12 @@ export interface HubLifetimeShape {
   /** A release for {@link close}: run after every timer has stopped, newest first. */
   readonly onClose: (release: () => void) => void;
   /**
+   * Aborts when {@link close} runs, with the timers. A wait the hub holds on
+   * `readWithin` (@cawco/core/bounded) passes it as its `signal`, so a read
+   * still unanswered at close is let go and nothing it would decide runs.
+   */
+  readonly signal: AbortSignal;
+  /**
    * Resolves after `ms`; never when the lifetime closes first, so whatever
    * awaits it goes no further.
    */
@@ -49,6 +57,7 @@ export interface HubLifetimeShape {
 export const makeLifetime = (): HubLifetimeShape => {
   const timers = new Set<HubTimer>();
   const releases: (() => void)[] = [];
+  const closing = new AbortController();
   let closed = false;
   /** Holds a timer just made; one made after close is stopped at once. */
   const hold = (timer: HubTimer): HubTimer => {
@@ -84,6 +93,7 @@ export const makeLifetime = (): HubLifetimeShape => {
       releases.push(release);
     },
     closed: () => closed,
+    signal: closing.signal,
     close: () => {
       if (closed) {
         return;
@@ -93,6 +103,7 @@ export const makeLifetime = (): HubLifetimeShape => {
         clearTimeout(timer);
       }
       timers.clear();
+      closing.abort(new DOMException("the hub closed", "AbortError"));
       for (const release of releases.toReversed()) {
         try {
           release();

@@ -3,6 +3,7 @@ import {
   type FleetConfig,
   type FleetMcpServer,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import {
   discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
@@ -35,40 +36,80 @@ const REPROBE_MAX_MS = 15 * 60_000;
 type OAuthRow = NonNullable<ReturnType<DbShape["getMcpOauth"]>>;
 type McpServerRow = NonNullable<ReturnType<DbShape["getMcpServer"]>>;
 
-/** No answer from the server: the network, DNS, a timeout, an abort, or a 5xx. */
+/**
+ * No answer from the server: the network, DNS, none within the deadline, or
+ * a 5xx. Thrown, not returned: {@link reach} is the MCP SDK's `fetchFn`, whose
+ * callers take a Response or an error.
+ */
 class Unreachable extends Error {}
 
-/** A body cut off by the deadline is as unanswered as a connection that never opened. */
-const unreachable = (error: unknown): boolean =>
-  error instanceof Unreachable ||
-  (error instanceof DOMException &&
-    (error.name === "TimeoutError" || error.name === "AbortError"));
+const unreachable = (error: unknown): boolean => error instanceof Unreachable;
+
+/** Statuses whose Response carries no body (Fetch: "null body status"). */
+const NULL_BODY = new Set([101, 103, 204, 205, 304]);
 
 /**
  * A fetch whose failure to get the server's own answer is told apart from what
  * that answer said. A 5xx is no answer either: it is what an edge or a proxy in
  * front of the server says while the server cannot be reached, and taking it
- * for "direct" would delete a signed-in server's OAuth row.
+ * for "direct" would delete a signed-in server's OAuth row. `take` reads what
+ * is wanted of the response inside the same deadline, so a body cut off by
+ * it is as unanswered as a connection that never opened.
  */
-const reach = async (
+const reachWithin = async (
+  input: string | URL,
+  init: RequestInit | undefined,
+  take: (response: Response) => Promise<Response>
+): Promise<Response> => {
+  const reached = await readWithin(DISCOVERY_TIMEOUT_MS, async (signal) => {
+    let response: Response;
+    try {
+      response = await fetch(input, { ...init, signal });
+    } catch (error) {
+      throw new Unreachable("No response.", { cause: error });
+    }
+    if (response.status >= 500) {
+      await response.body?.cancel();
+      throw new Unreachable(`HTTP ${response.status}.`);
+    }
+    return await take(response);
+  });
+  switch (reached.kind) {
+    case "answered":
+      return reached.value;
+    case "unanswered":
+      throw new Unreachable(
+        `No answer within ${Math.round(reached.after / 1000)} s.`
+      );
+    default: {
+      const unhandled: never = reached;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
+/** {@link reachWithin} with the whole body read: the SDK's discovery and token fetches. */
+const reach = (input: string | URL, init?: RequestInit): Promise<Response> =>
+  reachWithin(input, init, async (response) => {
+    const body = NULL_BODY.has(response.status)
+      ? null
+      : await response.arrayBuffer();
+    return new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  });
+
+/** {@link reachWithin} for the status and headers only: the body (perhaps a stream that stays open) is let go. */
+const reachHead = (
   input: string | URL,
   init?: RequestInit
-): Promise<Response> => {
-  let response: Response;
-  try {
-    response = await fetch(input, {
-      ...init,
-      signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
-    });
-  } catch (error) {
-    throw new Unreachable("No response.", { cause: error });
-  }
-  if (response.status >= 500) {
+): Promise<Response> =>
+  reachWithin(input, init, async (response) => {
     await response.body?.cancel();
-    throw new Unreachable(`HTTP ${response.status}.`);
-  }
-  return response;
-};
+    return response;
+  });
 
 /**
  * The hub's sign-in is missing: 503, never 401. The proxy is the upstream's
@@ -238,7 +279,7 @@ export class FleetMcp {
         : undefined;
     };
     try {
-      const response = await reach(config.url, {
+      const response = await reachHead(config.url, {
         method: "POST",
         headers: {
           ...config.headers,
@@ -259,7 +300,6 @@ export class FleetMcp {
         redirect: "manual",
       });
       const { resourceMetadataUrl } = extractWWWAuthenticateParams(response);
-      await response.body?.cancel();
       if (!fresh()) {
         return;
       }

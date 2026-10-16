@@ -34,6 +34,7 @@ import {
   relaunchOf,
   withInputsLine,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
@@ -56,8 +57,8 @@ const fetch = selfFetch;
  * and skills) — a daemon fetches this directly from the hub it already knows
  * the address of, right before it builds the `delegate` tool's description,
  * and the caller freezes what comes back for the session's whole life.
- * Failures are logged and passed to the caller for its startup instructions.
- * A valid empty catalog remains distinct from a failed fetch.
+ * Failures, and a hub that did not answer in time, are logged and thrown in
+ * their own words: a valid empty catalog remains distinct from both.
  * Descriptions take a startup snapshot. Catalog reads and named dispatch fetch
  * again so saved routing changes apply to sessions already running.
  *
@@ -66,32 +67,45 @@ const fetch = selfFetch;
  * the same name (project-delegate-types.ts).
  */
 export async function fetchDelegateTypes(
-  onError?: (message: string) => void,
   projectId?: string
 ): Promise<DelegateType[]> {
+  const path = projectId
+    ? `/api/projects/${encodeURIComponent(projectId)}/delegate-types`
+    : "/api/delegate-types";
+  let read: Bounded<DelegateType[]>;
   try {
-    const path = projectId
-      ? `/api/projects/${encodeURIComponent(projectId)}/delegate-types`
-      : "/api/delegate-types";
-    const res = await fetch(`${hubHttpUrl()}${path}`, {
-      signal: AbortSignal.timeout(5000),
+    read = await readWithin(DELEGATE_TYPES_MS, async (signal) => {
+      const res = await fetch(`${hubHttpUrl()}${path}`, { signal });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const body = (await res.json()) as { types?: DelegateType[] } | null;
+      if (
+        !Array.isArray(body?.types) ||
+        body.types.some((type) => !type || delegateTypeProblem(type))
+      ) {
+        throw new Error("Invalid delegate catalog response");
+      }
+      return body.types;
     });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const body = (await res.json()) as { types?: DelegateType[] } | null;
-    if (
-      !Array.isArray(body?.types) ||
-      body.types.some((type) => !type || delegateTypeProblem(type))
-    ) {
-      throw new Error("Invalid delegate catalog response");
-    }
-    return body.types;
   } catch (error) {
     const message = `Could not load delegate types: ${error instanceof Error ? error.message : String(error)}`;
     console.warn(`[cawco] ${message}`);
-    onError?.(message);
-    return [];
+    throw new Error(message, { cause: error });
+  }
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered": {
+      // Not answered is never an empty catalog.
+      const message = `Could not load delegate types: the hub did not answer within ${Math.round(read.after / 1000)} s`;
+      console.warn(`[cawco] ${message}`);
+      throw new Error(message);
+    }
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
@@ -1133,6 +1147,10 @@ const coldRefusals = new Map<string, string>();
 
 /** The cold check waits for Jev's answer when the hub asks it: its 20 s, and the hub's own read. */
 const FOLLOWUP_STATE_MS = 30_000;
+/** A cold refusal's context-size read: short, as it cannot hold the refusal on an offline machine. */
+const CONTEXT_SIZE_MS = 3000;
+/** The delegate catalog, read from the hub. */
+const DELEGATE_TYPES_MS = 5000;
 
 /**
  * Whether a session's prompt cache is warm now (mid-turn, unmeasured, or
@@ -1191,17 +1209,17 @@ async function checkCold(
   caller: string,
   message: string
 ): Promise<void> {
-  const response = await fetch(`${hubHttpUrl()}/api/followup-state`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ instanceId, workspace, message }),
-    signal: AbortSignal.timeout(FOLLOWUP_STATE_MS),
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  const { row, midTurn, hasTurns, lastTurnAt, activityBound, jev } =
-    (await response.json()) as {
+  const read = await readWithin(FOLLOWUP_STATE_MS, async (signal) => {
+    const response = await fetch(`${hubHttpUrl()}/api/followup-state`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ instanceId, workspace, message }),
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return (await response.json()) as {
       row: KeepAliveRow | null;
       midTurn: boolean;
       hasTurns: boolean;
@@ -1210,6 +1228,21 @@ async function checkCold(
       /** Jev's answer, when Jev is on and the hub found the session cold. */
       jev?: { attach: boolean; noul: number } | { error: string };
     };
+  });
+  switch (read.kind) {
+    case "answered":
+      break;
+    case "unanswered":
+      // Its state is unknown: never read as cold or warm.
+      throw new Error(
+        `The hub did not answer within ${Math.round(read.after / 1000)} s whether that session's cache is warm, so nothing was sent. Retry.`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  const { row, midTurn, hasTurns, lastTurnAt, activityBound, jev } = read.value;
   if (!row) {
     return;
   }
@@ -1235,13 +1268,28 @@ async function checkCold(
   coldRefusals.set(key, turn);
   if (row.contextTokens === null) {
     try {
-      const measured = await fetch(
-        `${hubHttpUrl()}/api/instances/${encodeURIComponent(row.id)}/context-size`,
-        { method: "POST", signal: AbortSignal.timeout(3000) }
-      );
-      if (measured.ok) {
-        const reading = (await measured.json()) as { tokens?: number | null };
-        row.contextTokens = reading.tokens ?? null;
+      const measured = await readWithin(CONTEXT_SIZE_MS, async (signal) => {
+        const response = await fetch(
+          `${hubHttpUrl()}/api/instances/${encodeURIComponent(row.id)}/context-size`,
+          { method: "POST", signal }
+        );
+        return response.ok
+          ? ((await response.json()) as { tokens?: number | null })
+          : undefined;
+      });
+      switch (measured.kind) {
+        case "answered":
+          if (measured.value) {
+            row.contextTokens = measured.value.tokens ?? null;
+          }
+          break;
+        case "unanswered":
+          // The size stays unknown; the refusal says so as it always has.
+          break;
+        default: {
+          const unhandled: never = measured;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
     } catch {
       // A context read cannot keep a cold-session refusal waiting on an offline machine.
@@ -1561,19 +1609,36 @@ export const handoffActions = ({
     return response.json();
   },
   async generateImage(request) {
-    const response = await fetch(
-      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/generate-image`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(request),
-        signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS + 60_000),
+    const read = await readWithin(
+      IMAGE_GENERATION_TIMEOUT_MS + 60_000,
+      async (signal) => {
+        const response = await fetch(
+          `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/generate-image`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(request),
+            signal,
+          }
+        );
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        return (await response.json()) as GeneratedImage;
       }
     );
-    if (!response.ok) {
-      throw new Error(await response.text());
+    switch (read.kind) {
+      case "answered":
+        return read.value;
+      case "unanswered":
+        throw new Error(
+          `The hub did not answer within ${Math.round(read.after / 1000)} s with the image.`
+        );
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    return (await response.json()) as GeneratedImage;
   },
   async artifactCall(method, path, body) {
     const response = await fetch(
@@ -1594,9 +1659,7 @@ export const handoffActions = ({
     return response.json();
   },
   async listDelegateTypes() {
-    const types = await fetchDelegateTypes((message) => {
-      throw new Error(message);
-    }, projectId);
+    const types = await fetchDelegateTypes(projectId);
     return { types };
   },
   listSessions(): string {
@@ -1755,9 +1818,7 @@ export const handoffActions = ({
     // Nothing is left to the machine's defaults: the type (or `medium`) says
     // what runs, and the caller's own mode is how it answers permissions.
     // The caller's project's catalog: its own types shadow the fleet's.
-    const types = await fetchDelegateTypes((message) => {
-      throw new Error(message);
-    }, projectId);
+    const types = await fetchDelegateTypes(projectId);
     const { rows } = fleetInstances(fleet);
     const { type, harness, model } = resolveSpawnType(types, {
       type: typeName,

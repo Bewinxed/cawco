@@ -32,8 +32,9 @@ import {
   type SessionPulse,
   topsIn,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { checkoutOf, type DbShape } from "./db";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { HubLifetimeShape } from "./lifetime";
 
 type Row = ReturnType<DbShape["sessionOwnership"]>[number];
 
@@ -53,13 +54,13 @@ export interface RunningSession {
   title: string | null;
 }
 
-/** Why a stop was not confirmed in time. */
-const NO_ANSWER =
-  "Stop got no answer in time. The machine may be offline. Check the machine, then retry.";
+/** Why a stop was not confirmed in time, from how long it waited. */
+const noAnswer = (after: number): string =>
+  `The machine did not confirm the stop within ${Math.round(after / 1000)} s. It may be offline. Check the machine, then retry.`;
 
 export const createProjectStops = (ports: {
   db: DbShape;
-  /** Runs each stop's deadline until the hub closes. */
+  /** Lets go of each stop's wait when the hub closes. */
   lifetime: HubLifetimeShape;
   /** The session's live pulse, if its daemon has sent one. */
   pulse: (id: string) => SessionPulse | undefined;
@@ -77,9 +78,10 @@ export const createProjectStops = (ports: {
   const asked = new Map<
     string,
     {
+      /** Ends the wait for its machine's answer, while one is waited for. */
+      answer: (() => void) | undefined;
       machineId: string;
       projectId: string;
-      timer: HubTimer | undefined;
       /** Reported deferred: owed to its machine's next register. */
       deferred?: boolean;
     }
@@ -181,10 +183,12 @@ export const createProjectStops = (ports: {
   const settle = (id: string, frame: Omit<ProjectStopFrame, "kind">) => {
     ports.publish({ kind: "project.stop", ...frame });
     const entry = asked.get(id);
-    if (entry && frame.outcome !== "failed") {
-      ports.lifetime.cancel(entry.timer);
-      entry.timer = undefined;
-      entry.deferred = frame.outcome === "deferred";
+    if (entry) {
+      entry.answer?.();
+      entry.answer = undefined;
+      if (frame.outcome !== "failed") {
+        entry.deferred = frame.outcome === "deferred";
+      }
     }
     if (frame.outcome === "stopped") {
       asked.delete(id);
@@ -194,7 +198,6 @@ export const createProjectStops = (ports: {
   const fail = (id: string, error: string) => {
     const entry = asked.get(id);
     if (entry) {
-      ports.lifetime.cancel(entry.timer);
       settle(id, {
         projectId: entry.projectId,
         instanceId: id,
@@ -211,8 +214,8 @@ export const createProjectStops = (ports: {
    */
   const defer = (projectId: string, row: Row): void => {
     const { id } = row;
-    ports.lifetime.cancel(asked.get(id)?.timer);
-    asked.set(id, { machineId: row.machineId, projectId, timer: undefined });
+    asked.get(id)?.answer?.();
+    asked.set(id, { machineId: row.machineId, projectId, answer: undefined });
     if (!row.endIntent) {
       ports.owe(id);
     }
@@ -222,12 +225,44 @@ export const createProjectStops = (ports: {
   /** Asks one running session's stop, and reports what is already known. */
   const stopOne = (projectId: string, row: Row): void => {
     const { id } = row;
-    ports.lifetime.cancel(asked.get(id)?.timer);
-    asked.set(id, {
+    asked.get(id)?.answer?.();
+    const entry = {
       machineId: row.machineId,
       projectId,
-      timer: ports.lifetime.after(ports.timeoutMs, () => fail(id, NO_ANSWER)),
-    });
+      answer: undefined as (() => void) | undefined,
+    };
+    asked.set(id, entry);
+    // Its machine's answer: confirmed, refused, or deferred as it goes away.
+    readWithin(
+      ports.timeoutMs,
+      (signal) =>
+        new Promise<void>((resolve, reject) => {
+          entry.answer = resolve;
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        }),
+      { signal: ports.lifetime.signal }
+    ).then(
+      (outcome) => {
+        switch (outcome.kind) {
+          case "answered":
+            return;
+          case "unanswered":
+            if (asked.get(id) === entry) {
+              fail(id, noAnswer(outcome.after));
+            }
+            return;
+          default: {
+            const unhandled: never = outcome;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
+      },
+      () => {
+        // The hub closed: nothing it would report runs.
+      }
+    );
     try {
       ports.stop(id);
     } catch (error) {

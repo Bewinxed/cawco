@@ -682,16 +682,43 @@ export const createIngress = ({
       .sort((a, b) => a.at - b.at)
       .map((event) => ingest(event, "poll", projectId))
       .filter(Boolean).length;
-    // The cursors this poll moved, each over its own; another repository's
-    // are dropped as `repo` changes.
+    keepGitHubPoll(projectId, repo, now, poller.reason, polled, landed);
+  };
+
+  /**
+   * The cursors a poll moved, each over its own; another repository's are
+   * dropped as `repo` changes. A request GitHub did not answer in time
+   * leaves the poller's reason and wait as they were, and says so here.
+   */
+  const keepGitHubPoll = (
+    projectId: string,
+    repo: string,
+    now: number,
+    before: string | null,
+    polled: Awaited<ReturnType<typeof pollRepo>>,
+    landed: number
+  ): void => {
+    if (polled.unanswered !== null) {
+      console.log(
+        `[ingress] polled ${repo}: GitHub did not answer within ${Math.round(polled.unanswered / 1000)} s; the poller's state stands`
+      );
+    }
     store.updateGitHubPoller(projectId, {
       repo,
       cursors: polled.cursors,
-      reason: polled.problem,
-      resumeAt: polled.resumeAt === null ? null : new Date(polled.resumeAt),
+      ...(polled.unanswered === null
+        ? {
+            reason: polled.problem,
+            resumeAt:
+              polled.resumeAt === null ? null : new Date(polled.resumeAt),
+          }
+        : {}),
       polledAt: new Date(now),
     });
-    if (landed > 0 || polled.problem !== poller.reason) {
+    if (
+      landed > 0 ||
+      (polled.unanswered === null && polled.problem !== before)
+    ) {
       console.log(
         `[ingress] polled ${repo}: ${landed} new${polled.problem ? `; ${polled.problem}` : ""}`
       );

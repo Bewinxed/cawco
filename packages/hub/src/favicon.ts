@@ -22,6 +22,7 @@ import { readFile } from "node:fs/promises";
 import { get as httpsGet } from "node:https";
 import type { LookupFunction } from "node:net";
 import { dirname, join } from "node:path";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { writeStateFile } from "@cawco/core/state-file";
 import { faviconReachable } from "@cawco/core/tool-presentation";
 import { Elysia, t } from "elysia";
@@ -192,18 +193,26 @@ type Answer =
   | { kind: "body"; bytes: Buffer; type: string }
   | { kind: "redirect"; location: string };
 
-/** One GET through {@link publicLookup}; the body is read up to `cap` bytes. */
+/** One GET through {@link publicLookup} within {@link TIMEOUT_MS}; the body is read up to `cap` bytes. */
 const getOnce = (
   url: URL,
   cap: number,
   accept: string
+): Promise<Bounded<Answer | undefined>> =>
+  readWithin(TIMEOUT_MS, (signal) => fetchOnce(url, cap, accept, signal));
+
+const fetchOnce = (
+  url: URL,
+  cap: number,
+  accept: string,
+  signal: AbortSignal
 ): Promise<Answer | undefined> =>
   new Promise((resolve) => {
     const request = httpsGet(
       url,
       {
         lookup: publicLookup,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal,
         headers: { accept, "user-agent": "CawCo hub (site icon)" },
       },
       (response) => {
@@ -248,26 +257,43 @@ const getOnce = (
 
 /**
  * One GET, following at most `hops` redirects, each held to
- * {@link fetchable}. Undefined for anything but a 200 within `cap`.
+ * {@link fetchable}. Answered undefined for anything but a 200 within `cap`;
+ * unanswered when a hop did not answer in time.
  */
 const fetchCapped = async (
   url: URL,
   cap: number,
   accept: string,
   hops = MAX_HOPS
-): Promise<{ bytes: Buffer; type: string; url: URL } | undefined> => {
+): Promise<Bounded<{ bytes: Buffer; type: string; url: URL } | undefined>> => {
   if (!fetchable(url)) {
-    return undefined;
+    return { kind: "answered", value: undefined };
   }
-  const answer = await getOnce(url, cap, accept);
+  const asked = await getOnce(url, cap, accept);
+  switch (asked.kind) {
+    case "answered":
+      break;
+    case "unanswered":
+      return asked;
+    default: {
+      const unhandled: never = asked;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  const answer = asked.value;
   if (answer?.kind === "body") {
-    return { bytes: answer.bytes, type: answer.type, url };
+    return {
+      kind: "answered",
+      value: { bytes: answer.bytes, type: answer.type, url },
+    };
   }
   if (answer?.kind !== "redirect" || hops === 0) {
-    return undefined;
+    return { kind: "answered", value: undefined };
   }
   const next = URL.parse(answer.location, url);
-  return next ? await fetchCapped(next, cap, accept, hops - 1) : undefined;
+  return next
+    ? await fetchCapped(next, cap, accept, hops - 1)
+    : { kind: "answered", value: undefined };
 };
 
 /** The raster type `bytes` begin with; never SVG or anything a browser could run. */
@@ -330,10 +356,30 @@ interface Icon {
   type: string;
 }
 
-/** Reads the site's icon: its declared links in order, then `/favicon.ico`. */
-const fetchIcon = async (host: string): Promise<Icon | undefined> => {
+/**
+ * Reads the site's icon: its declared links in order, then `/favicon.ico`.
+ * Answered undefined only when every read answered and none was an icon;
+ * unanswered when no icon was found and a read did not answer in time, as
+ * the site's icon is then not known.
+ */
+const fetchIcon = async (host: string): Promise<Bounded<Icon | undefined>> => {
   const home = new URL(`https://${host}/`);
-  const page = await fetchCapped(home, PAGE_CAP, "text/html");
+  /** The first read that went unanswered, if one did. */
+  let silent: Bounded<never> | undefined;
+  const pageRead = await fetchCapped(home, PAGE_CAP, "text/html");
+  let page: { bytes: Buffer; type: string; url: URL } | undefined;
+  switch (pageRead.kind) {
+    case "answered":
+      page = pageRead.value;
+      break;
+    case "unanswered":
+      silent = pageRead;
+      break;
+    default: {
+      const unhandled: never = pageRead;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   const candidates = page?.type.includes("html")
     ? iconLinks(new TextDecoder().decode(page.bytes), page.url)
     : [];
@@ -345,13 +391,26 @@ const fetchIcon = async (host: string): Promise<Icon | undefined> => {
     }
     tried.add(candidate.href);
     // biome-ignore lint/performance/noAwaitInLoops: the first icon that answers is the one
-    const icon = await fetchCapped(candidate, ICON_CAP, "image/*");
-    const type = icon ? sniff(icon.bytes) : undefined;
-    if (icon && type) {
-      return { bytes: icon.bytes, type };
+    const iconRead = await fetchCapped(candidate, ICON_CAP, "image/*");
+    switch (iconRead.kind) {
+      case "answered": {
+        const icon = iconRead.value;
+        const type = icon ? sniff(icon.bytes) : undefined;
+        if (icon && type) {
+          return { kind: "answered", value: { bytes: icon.bytes, type } };
+        }
+        break;
+      }
+      case "unanswered":
+        silent ??= iconRead;
+        break;
+      default: {
+        const unhandled: never = iconRead;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
   }
-  return undefined;
+  return silent ?? { kind: "answered", value: undefined };
 };
 
 interface Meta {
@@ -364,13 +423,16 @@ const paths = (host: string) => {
   return { meta: join(DIR, `${key}.json`), image: join(DIR, `${key}.img`) };
 };
 
-/** The cached answer for `host` while it is fresh. */
-const cached = async (host: string): Promise<Icon | null | undefined> => {
+/** The cached answer for `host`: while it is fresh, or any age when `stale`. */
+const cached = async (
+  host: string,
+  stale = false
+): Promise<Icon | null | undefined> => {
   const { meta, image } = paths(host);
   try {
     const stored = JSON.parse(await readFile(meta, "utf8")) as Meta;
     const kept = stored.type ? ICON_KEPT_MS : MISS_KEPT_MS;
-    if (Date.now() - stored.at > kept) {
+    if (!stale && Date.now() - stored.at > kept) {
       return undefined;
     }
     return stored.type
@@ -391,25 +453,45 @@ const remember = async (host: string, icon: Icon | undefined) => {
 };
 
 /** Reads in flight, by host: a board of chips for one site is one fetch. */
-const inFlight = new Map<string, Promise<Icon | null>>();
+const inFlight = new Map<string, Promise<Bounded<Icon | null>>>();
 
-const iconFor = (host: string): Promise<Icon | null> => {
+/**
+ * The site's icon, or null when it has none. A site that did not answer in
+ * time is kept as it was: nothing is written, and the read is unanswered.
+ */
+const iconFor = (host: string): Promise<Bounded<Icon | null>> => {
   const running = inFlight.get(host);
   if (running !== undefined) {
     return running;
   }
-  const read = (async () => {
+  const read = (async (): Promise<Bounded<Icon | null>> => {
     const hit = await cached(host);
     if (hit !== undefined) {
-      return hit;
+      return { kind: "answered", value: hit };
     }
-    const icon = await fetchIcon(host).catch(() => undefined);
+    const fetched = await fetchIcon(host).catch(
+      (): Bounded<Icon | undefined> => ({ kind: "answered", value: undefined })
+    );
+    switch (fetched.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        console.warn(
+          `[favicon] ${host}: did not answer within ${Math.round(fetched.after / 1000)} s; nothing kept`
+        );
+        return fetched;
+      default: {
+        const unhandled: never = fetched;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const icon = fetched.value;
     await remember(host, icon).catch((error: unknown) =>
       console.warn(
         `[favicon] ${host}: not kept — ${error instanceof Error ? error.message : String(error)}`
       )
     );
-    return icon ?? null;
+    return { kind: "answered", value: icon ?? null };
   })().finally(() => inFlight.delete(host));
   inFlight.set(host, read);
   return read;
@@ -424,7 +506,27 @@ export const faviconRoutes = () =>
       if (!publicName(host)) {
         return status(400, "That host is not a public site name.");
       }
-      const icon = await iconFor(host);
+      const read = await iconFor(host);
+      let icon: Icon | null | undefined;
+      switch (read.kind) {
+        case "answered":
+          icon = read.value;
+          break;
+        case "unanswered":
+          // The last icon kept for it stands, however old.
+          icon = await cached(host, true);
+          if (icon === undefined) {
+            return status(
+              504,
+              `That site did not answer within ${Math.round(read.after / 1000)} s.`
+            );
+          }
+          break;
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
       if (!icon) {
         return status(404, "That site has no icon this hub could read.");
       }

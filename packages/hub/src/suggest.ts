@@ -1,7 +1,7 @@
 import type { JevResult } from "@cawco/core/workflow-program";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
-import { askJev, type JevAccess } from "./jev";
+import { askJev, type JevAccess, jevUnanswered } from "./jev";
 import { usageScores } from "./usage-count";
 
 /** Suggestions answer while the reader types, so they are asked briefly. */
@@ -147,9 +147,23 @@ export async function suggest(
   );
   let result: JevResult<typeof questions>;
   try {
-    result = await askJev(access, { prompt: text }, questions, {
+    const asking = await askJev(access, { prompt: text }, questions, {
       timeoutMs: SUGGEST_TIMEOUT_MS,
     });
+    switch (asking.kind) {
+      case "answered":
+        result = asking.value;
+        break;
+      case "unanswered": {
+        const words = jevUnanswered(asking.after);
+        console.warn(`[suggest] route=${access.route}: ${words}`);
+        return { error: words };
+      }
+      default: {
+        const unhandled: never = asking;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } catch (error) {
     const words = error instanceof Error ? error.message : String(error);
     console.warn(`[suggest] route=${access.route} failed: ${words}`);

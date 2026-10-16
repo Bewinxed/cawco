@@ -6,7 +6,9 @@ import type {
   SendPayload,
 } from "@cawco/core";
 import { RULE_FIRE_CEILING, ruleMarker, ruleMatches } from "@cawco/core";
+import type { Bounded } from "@cawco/core/bounded";
 import type { DbShape } from "./db";
+import { jevUnanswered } from "./jev";
 import type { MeaningJudge } from "./meaning";
 
 /**
@@ -372,22 +374,36 @@ export class RuleEngine {
   /**
    * Fires each of `rules` Jev answered yes to, through the same {@link #fire}
    * a phrase match takes, once the answer arrives. Resolves true when any of
-   * them sent its reply; never rejects.
+   * them sent its reply; never rejects. Jev not answering in time judges
+   * none of them: nothing fires, and the log says they went unjudged.
    */
   #fireMeaning(
     instanceId: string,
     rules: Rule[],
-    answer: Promise<Set<string>>
+    answer: Promise<Bounded<Set<string>>>
   ): Promise<boolean> {
     return answer
-      .then((yes) => {
-        let replied = false;
-        for (const rule of rules) {
-          if (yes.has(rule.id) && this.#fire(rule, instanceId)) {
-            replied = true;
+      .then((judged) => {
+        switch (judged.kind) {
+          case "answered": {
+            let replied = false;
+            for (const rule of rules) {
+              if (judged.value.has(rule.id) && this.#fire(rule, instanceId)) {
+                replied = true;
+              }
+            }
+            return replied;
+          }
+          case "unanswered":
+            console.warn(
+              `[rules] ${instanceId}: meaning rules ${rules.map((rule) => rule.id).join(", ")} not judged: ${jevUnanswered(judged.after)}`
+            );
+            return false;
+          default: {
+            const unhandled: never = judged;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
           }
         }
-        return replied;
       })
       .catch((error) => {
         console.error(

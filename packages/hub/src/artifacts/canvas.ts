@@ -12,6 +12,8 @@
  * no screen joined it is refused with {@link NO_SCREEN}: there is no other
  * path.
  */
+
+import { readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
   type CanvasEntry,
@@ -116,24 +118,36 @@ export const convertOnScreen = async (
   });
   const request = requests.get(id) as YMap<unknown>;
   let observer: (() => void) | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await new Promise<CanvasRequestResult | null>((resolve) => {
-      const answered = () => {
-        const value = request.get("result") as CanvasRequestResult | undefined;
-        if (value) {
-          resolve(value);
-        }
-      };
-      observer = answered;
-      request.observe(answered);
-      timer = setTimeout(() => resolve(null), CANVAS_LIMITS.convertMs);
-    });
-    if (!result) {
-      throw new ArtifactRefusal(
-        504,
-        `The canvas wasn't changed: no screen drew it within ${CANVAS_LIMITS.convertMs / 1000} s. Open it on a dashboard (artifact_show), then try again.`
-      );
+    const drawn = await readWithin(
+      CANVAS_LIMITS.convertMs,
+      () =>
+        new Promise<CanvasRequestResult>((resolve) => {
+          const answered = () => {
+            const value = request.get("result") as
+              CanvasRequestResult | undefined;
+            if (value) {
+              resolve(value);
+            }
+          };
+          observer = answered;
+          request.observe(answered);
+        })
+    );
+    let result: CanvasRequestResult;
+    switch (drawn.kind) {
+      case "answered":
+        result = drawn.value;
+        break;
+      case "unanswered":
+        throw new ArtifactRefusal(
+          504,
+          `The canvas wasn't changed: no screen drew it within ${Math.round(drawn.after / 1000)} s. Open it on a dashboard (artifact_show), then try again.`
+        );
+      default: {
+        const unhandled: never = drawn;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
     if ("error" in result) {
       throw new ArtifactRefusal(
@@ -143,7 +157,6 @@ export const convertOnScreen = async (
     }
     return result.ids;
   } finally {
-    clearTimeout(timer);
     if (observer) {
       request.unobserve(observer);
     }

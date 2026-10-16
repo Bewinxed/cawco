@@ -15,6 +15,7 @@ import {
   MEMORY_ROLES,
   type MemoryScope,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { z } from "zod";
 import { landedFetch } from "./fleet-fetches";
@@ -50,25 +51,41 @@ const api = async (
   body?: unknown
 ): Promise<unknown> => {
   const url = `${hubHttpUrl()}${path}`;
-  // The hub calling its own route, as itself (hub-self.ts).
-  const response = await selfFetch(url, {
-    method,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+  const asked = await readWithin(TIMEOUT_MS, async (signal) => {
+    // The hub calling its own route, as itself (hub-self.ts).
+    const response = await selfFetch(url, {
+      method,
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+      signal,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(
+        `${method} ${path} → ${response.status}: ${text.slice(0, 500)}`
+      );
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    return (await (contentType.includes("json")
+      ? response.json()
+      : response.text())) as unknown;
   });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      `${method} ${path} → ${response.status}: ${text.slice(0, 500)}`
-    );
+  switch (asked.kind) {
+    case "answered":
+      return asked.value;
+    case "unanswered":
+      throw new Error(
+        `${method} ${path}: the hub did not answer within ${Math.round(asked.after / 1000)} s`
+      );
+    default: {
+      const unhandled: never = asked;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  const contentType = response.headers.get("content-type") ?? "";
-  return contentType.includes("json") ? response.json() : response.text();
 };
 
 /** The fields a call gave: none undefined, no empty list. */

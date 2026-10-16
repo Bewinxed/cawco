@@ -28,6 +28,7 @@
  * - **The token** goes in one header to the API's own origin: a next-page
  *   link elsewhere is not followed, and a redirect is refused.
  */
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { z } from "zod";
 import type { GitHubCursor, GitHubResource } from "./db/schema";
 import type { InboundEvent } from "./ingress";
@@ -355,10 +356,17 @@ export interface RepoPoll {
   cursors: Partial<Record<GitHubResource, GitHubCursor>>;
   /** The events in the window, in no particular order; the store keeps each once. */
   events: InboundEvent[];
-  /** Why the poll stopped short, in words; null when every resource answered. */
+  /** Why the poll stopped short, in words; null when every resource answered or one did not answer in time. */
   problem: string | null;
   /** GitHub's rate limit holds the next poll back until then, ms. */
   resumeAt: number | null;
+  /**
+   * A request GitHub did not answer within {@link REQUEST_MS} stopped the
+   * poll there: how long it waited, ms; null when every request was
+   * answered. Not answered is not a problem GitHub stated: the poller's
+   * state stands.
+   */
+  unanswered: number | null;
 }
 
 /** The path and query a resource is listed at, from its cursor. */
@@ -503,21 +511,53 @@ export const pollRepo = async (input: {
     "User-Agent": "CawCo-hub",
     "X-GitHub-Api-Version": "2022-11-28",
   };
-  const get = (url: string, etag: string | null) =>
-    fetch(url, {
-      headers: etag ? { ...headers, "If-None-Match": etag } : headers,
-      redirect: "error",
-      signal: AbortSignal.timeout(REQUEST_MS),
+  /** One request within {@link REQUEST_MS}, its body read inside the same time. */
+  const get = (url: string, etag: string | null): Promise<Bounded<Response>> =>
+    readWithin(REQUEST_MS, async (signal) => {
+      const response = await fetch(url, {
+        headers: etag ? { ...headers, "If-None-Match": etag } : headers,
+        redirect: "error",
+        signal,
+      });
+      return new Response(
+        [204, 205, 304].includes(response.status)
+          ? null
+          : await response.arrayBuffer(),
+        {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        }
+      );
     });
   const out: RepoPoll = {
     cursors: {},
     events: [],
     problem: null,
     resumeAt: null,
+    unanswered: null,
   };
 
-  /** One resource: its pages read, its events kept, its cursor moved. */
-  const pollResource = async (resource: GitHubResource): Promise<void> => {
+  /** The page `response` links to next, read; answered none past the window's edge or off GitHub's origin. */
+  const nextPage = async (
+    response: Response,
+    past: boolean
+  ): Promise<Bounded<Response | undefined>> => {
+    const next: string | undefined = NEXT_LINK.exec(
+      response.headers.get("link") ?? ""
+    )?.[1];
+    return !past && next && new URL(next).origin === origin
+      ? await get(next, null)
+      : { kind: "answered", value: undefined };
+  };
+
+  /**
+   * One resource: its pages read, its events kept, its cursor moved; a
+   * request not answered in time ends it there, its cursor where it was.
+   */
+  const pollResource = async (
+    resource: GitHubResource
+  ): Promise<Bounded<null>> => {
     const cursor: GitHubCursor = input.cursors[resource] ?? {
       etag: null,
       notModified: 0,
@@ -526,14 +566,25 @@ export const pollRepo = async (input: {
     };
     const edge = cursor.since - OVERLAP_MS;
     const path = pathOf(input.repo, resource, cursor.since);
-    const first = await get(`${origin}${path}`, cursor.etag);
+    const asked = await get(`${origin}${path}`, cursor.etag);
+    switch (asked.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        return asked;
+      default: {
+        const unhandled: never = asked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const first = asked.value;
     if (first.status === 304) {
       out.cursors[resource] = {
         ...cursor,
         polls: cursor.polls + 1,
         notModified: cursor.notModified + 1,
       };
-      return;
+      return { kind: "answered", value: null };
     }
     let newest = cursor.since;
     let response: Response | undefined = first;
@@ -546,13 +597,18 @@ export const pollRepo = async (input: {
       out.events.push(...read.events);
       newest = Math.max(newest, read.newest);
       out.resumeAt = waitOf(response, input.now) ?? out.resumeAt;
-      const next: string | undefined = NEXT_LINK.exec(
-        response.headers.get("link") ?? ""
-      )?.[1];
-      response =
-        !read.past && next && new URL(next).origin === origin
-          ? await get(next, null)
-          : undefined;
+      const paged = await nextPage(response, read.past);
+      switch (paged.kind) {
+        case "answered":
+          response = paged.value;
+          break;
+        case "unanswered":
+          return paged;
+        default: {
+          const unhandled: never = paged;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     }
     out.cursors[resource] = {
       etag: first.headers.get("etag"),
@@ -560,12 +616,25 @@ export const pollRepo = async (input: {
       polls: cursor.polls + 1,
       since: newest,
     };
+    return { kind: "answered", value: null };
   };
 
   for (const resource of GITHUB_RESOURCES) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one resource at a time, inside one rate limit
-      await pollResource(resource);
+      const polled = await pollResource(resource);
+      switch (polled.kind) {
+        case "answered":
+          continue;
+        case "unanswered":
+          out.unanswered = polled.after;
+          break;
+        default: {
+          const unhandled: never = polled;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+      break;
     } catch (error) {
       out.problem =
         error instanceof Stop

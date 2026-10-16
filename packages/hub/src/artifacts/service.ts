@@ -34,6 +34,7 @@ import {
   type PreviewSource,
   type ShownFailure,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
   canvasOutline,
@@ -1253,25 +1254,30 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const waiting = new Map<string, (ack: ShownAck) => void>();
   const shownKey = (id: string, revision: string) => `${id}:${revision}`;
 
-  /** The first view's word on `revision` of artifact `id`; null when none came in time. */
-  const shownBy = (id: string, revision: string): Promise<ShownAck | null> => {
+  /** The first view's word on `revision` of artifact `id`, within {@link SHOWN_WAIT_MS}. */
+  const shownBy = (
+    id: string,
+    revision: string
+  ): Promise<Bounded<ShownAck>> => {
     const key = shownKey(id, revision);
     const early = heard.get(key);
     if (early) {
       heard.delete(key);
-      return Promise.resolve(early);
+      return Promise.resolve({ kind: "answered", value: early });
     }
-    return new Promise((done) => {
-      const timer = setTimeout(() => {
-        waiting.delete(key);
-        done(null);
-      }, SHOWN_WAIT_MS);
-      waiting.set(key, (ack) => {
-        clearTimeout(timer);
-        waiting.delete(key);
-        done(ack);
-      });
-    });
+    return readWithin(
+      SHOWN_WAIT_MS,
+      (signal) =>
+        new Promise<ShownAck>((done) => {
+          waiting.set(key, (ack) => {
+            waiting.delete(key);
+            done(ack);
+          });
+          signal.addEventListener("abort", () => waiting.delete(key), {
+            once: true,
+          });
+        })
+    );
   };
 
   /** Why a view could not load the artifact, in WORDS.md's error formula: what failed, and why. */
@@ -1319,9 +1325,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (!published.ok) {
       return { opened: false, why: published.error, started: false };
     }
-    const ack = await shownBy(row.id, published.revision);
-    if (!ack) {
-      return { opened: false, why: NO_VIEW, started: true };
+    const shown = await shownBy(row.id, published.revision);
+    let ack: ShownAck;
+    switch (shown.kind) {
+      case "answered":
+        ack = shown.value;
+        break;
+      case "unanswered":
+        // Not known yet, not failed: it is in the panel and opens when a dashboard does.
+        return { opened: false, why: NO_VIEW, started: true };
+      default: {
+        const unhandled: never = shown;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
     if (!ack.ok) {
       return {

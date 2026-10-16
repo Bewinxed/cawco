@@ -60,12 +60,13 @@ import {
   TRIAGE_DECISIONS,
   type TriageDecision,
 } from "@cawco/core";
+import { Gone, readWithin } from "@cawco/core/bounded";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import { CAW_HARNESSES, type CawEvent } from "./caw";
 import type { DbShape } from "./db";
-import { askJev, type JevAccess, jevAccess } from "./jev";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
+import type { HubLifetimeShape } from "./lifetime";
 import { MEANING_THRESHOLD } from "./meaning";
 
 /** Triage runs at once, fleet-wide; the rest wait their turn. */
@@ -196,11 +197,14 @@ interface Watch {
 
 interface Triage {
   decided?: TriageDecision;
+  /** Its turn ended: the run answered, decided or not. */
+  ended: () => void;
   episode: string;
+  /** Its session is gone (forgotten, or never started): it will not answer. */
+  gone: () => void;
   id: string;
   lead: Lead;
   lines: string[];
-  timer: HubTimer;
   watched: string;
 }
 
@@ -487,8 +491,24 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       },
       { timeoutMs: JEV_TIMEOUT_MS }
     )
-      .then((result) => {
+      .then((asking) => {
         episode.jevInFlight = false;
+        switch (asking.kind) {
+          case "answered":
+            break;
+          case "unanswered": {
+            const words = jevUnanswered(asking.after);
+            log(row, row.id, words);
+            // Not answered is not a no: it says so, and starts no triage (§2).
+            deps.line(row.id, `${signals} · ${words}, so no triage ran`);
+            return;
+          }
+          default: {
+            const unhandled: never = asking;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
+        const result = asking.value;
         const { noul } = result.answers.stuck;
         const yes = noul >= MEANING_THRESHOLD;
         log(
@@ -584,14 +604,52 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       episode: queued.episode,
       lead,
       lines: lines(watch),
-      timer: deps.lifetime.after(TRIAGE_DEADLINE_MS, () => {
-        if (running.get(id) === triage) {
-          log(row, row.id, "triage ran out of time");
-          finish(triage, "it ran out of time");
-        }
-      }),
+      ended: () => undefined,
+      gone: () => undefined,
     };
     running.set(id, triage);
+    // The run's answer is the end of its turn, within the deadline.
+    readWithin(
+      TRIAGE_DEADLINE_MS,
+      (signal) =>
+        new Promise<void>((resolve, reject) => {
+          triage.ended = resolve;
+          triage.gone = () => reject(new Gone(`triage ${id}`));
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        }),
+      { signal: deps.lifetime.signal }
+    ).then(
+      (outcome) => {
+        if (running.get(id) !== triage) {
+          return;
+        }
+        switch (outcome.kind) {
+          case "answered":
+            finish(triage, "its turn ended first");
+            return;
+          case "unanswered":
+            if (outcome.reason === "dead") {
+              release(triage);
+              return;
+            }
+            log(row, row.id, "triage ran out of time");
+            finish(
+              triage,
+              `it did not end its turn within ${Math.round(outcome.after / 60_000)} min`
+            );
+            return;
+          default: {
+            const unhandled: never = outcome;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
+      },
+      () => {
+        // The hub closed: nothing it would decide runs.
+      }
+    );
     const { harness, model } = harnessFor(row);
     const brief = briefOf(row, triage, seen);
     log(row, row.id, `triage started (${id}) on ${harness}`);
@@ -630,7 +688,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
           row.id,
           `${triage.lines.join(" · ")} · triage couldn't start\n${words}`
         );
-        release(triage);
+        triage.gone();
       });
   };
 
@@ -654,7 +712,6 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
   };
 
   const release = (triage: Triage) => {
-    deps.lifetime.cancel(triage.timer);
     running.delete(triage.id);
     drain();
   };
@@ -864,7 +921,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
   const endTurn = (id: string, result: NeutralMessage & { type: "result" }) => {
     const triage = running.get(id);
     if (triage) {
-      finish(triage, "its turn ended first");
+      triage.ended();
       return;
     }
     const watch = on ? watchOf(id) : undefined;
@@ -962,10 +1019,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     forget(id: string): void {
       watches.delete(id);
       ignored.delete(id);
-      const triage = running.get(id);
-      if (triage) {
-        release(triage);
-      }
+      running.get(id)?.gone();
     },
 
     /** The open notices, for a dashboard's first frame. */

@@ -35,6 +35,7 @@ import {
   type InstanceRow,
   parseConnectionTool,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import {
   auth,
@@ -76,8 +77,15 @@ export const CONNECTION_CALLBACK_PATH = "/api/connections/oauth/callback";
 const SIGN_IN_MS = 10 * 60_000;
 /** A connect and a listing. Our choice. */
 const CONNECT_MS = 30_000;
-/** One tool call, its progress resetting the clock. Our choice. */
+/** One tool call, from when it is sent. Our choice. */
 const CALL_MS = 5 * 60_000;
+/**
+ * The MCP SDK times every request out itself (60 s when not given,
+ * `DEFAULT_REQUEST_TIMEOUT_MSEC`), with an McpError that reads as the
+ * server's answer. Each request here is given readWithin's signal and this,
+ * the longest timer a JavaScript clock holds, so readWithin alone decides.
+ */
+const SDK_CLOCK_OFF = 2 ** 31 - 1;
 
 const HEADER_NAME = /^[A-Za-z0-9-]+$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -297,7 +305,7 @@ const NO_SECRET = "the hub holds no key for it";
 export const createConnections = (deps: ConnectionsDeps) => {
   const { db } = deps;
   /** Each connection's live client, by row id; a connect shared by concurrent calls. */
-  const clients = new Map<string, Promise<Client>>();
+  const clients = new Map<string, Promise<Bounded<Client>>>();
   /** Each connection's tools as it last listed them, by row id. */
   const listed = new Map<string, Tool[]>();
 
@@ -392,7 +400,21 @@ export const createConnections = (deps: ConnectionsDeps) => {
     clients.delete(id);
     if (client !== undefined) {
       detach(
-        client.then((one) => one.close()).catch(() => undefined),
+        client
+          .then((connected) => {
+            switch (connected.kind) {
+              case "answered":
+                return connected.value.close();
+              case "unanswered":
+                // It never connected: the SDK closed it when it was let go.
+                return;
+              default: {
+                const unhandled: never = connected;
+                throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+              }
+            }
+          })
+          .catch(() => undefined),
         "connection client close"
       );
     }
@@ -524,7 +546,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       : new StreamableHTTPClientTransport(url, options);
   };
 
-  const connect = async (r: ConnectionRow): Promise<Client> => {
+  const connect = async (r: ConnectionRow): Promise<Bounded<Client>> => {
     // An access token past its time is refreshed before it is sent.
     // A refresh that would need the person has marked the row; nothing is sent.
     if (
@@ -553,12 +575,19 @@ export const createConnections = (deps: ConnectionsDeps) => {
         },
       }
     );
-    await client.connect(transportOf(r), { timeout: CONNECT_MS });
-    return client;
+    const transport = transportOf(r);
+    return readWithin(CONNECT_MS, async (signal) => {
+      // The SDK's own clock (60 s unless given) never decides: readWithin does.
+      await client.connect(transport, { signal, timeout: SDK_CLOCK_OFF });
+      return client;
+    });
   };
 
-  /** A connection's client, connected once and shared; forgotten when its transport closes. */
-  const clientOf = (r: ConnectionRow): Promise<Client> => {
+  /**
+   * A connection's client, connected once and shared; forgotten when its
+   * transport closes, or when it did not connect in time.
+   */
+  const clientOf = (r: ConnectionRow): Promise<Bounded<Client>> => {
     const live = clients.get(r.id);
     if (live !== undefined) {
       return live;
@@ -570,10 +599,21 @@ export const createConnections = (deps: ConnectionsDeps) => {
         clients.delete(r.id);
       }
     };
-    connecting.then((client) => {
-      // A stdio process that exits, or a stream the server ends: the next
-      // call connects again instead of finding a dead client.
-      client.onclose = release;
+    connecting.then((connected) => {
+      switch (connected.kind) {
+        case "answered":
+          // A stdio process that exits, or a stream the server ends: the next
+          // call connects again instead of finding a dead client.
+          connected.value.onclose = release;
+          return;
+        case "unanswered":
+          release();
+          return;
+        default: {
+          const unhandled: never = connected;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     }, release);
     return connecting;
   };
@@ -592,29 +632,55 @@ export const createConnections = (deps: ConnectionsDeps) => {
    * signed in; a refusal of its key or sign-in marks it needs-sign-in; any
    * other failure to reach it marks it in error, the reason with its secrets
    * cut out. An error the server answered a request with (a tool's bad
-   * arguments) is the caller's, and leaves the connection as it is.
+   * arguments) is the caller's, and leaves the connection as it is. No answer
+   * within `ms` (or no connection within its own time) is unanswered and
+   * leaves the connection's state as it was.
    */
   const using = async <T>(
     r: ConnectionRow,
-    use: (client: Client) => Promise<T>
-  ): Promise<T> => {
+    ms: number,
+    use: (client: Client, signal: AbortSignal) => Promise<T>
+  ): Promise<Bounded<T>> => {
     if (r.state === "needs-sign-in") {
       problem(`${r.name} is not signed in: ${r.reason ?? NO_SECRET}.`);
     }
+    const once = async (): Promise<Bounded<T>> => {
+      const connected = await clientOf(r);
+      switch (connected.kind) {
+        case "answered":
+          break;
+        case "unanswered":
+          return connected;
+        default: {
+          const unhandled: never = connected;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+      const answer = await readWithin(ms, (signal) =>
+        use(connected.value, signal)
+      );
+      switch (answer.kind) {
+        case "answered":
+          setState(r, "signed-in", null);
+          return answer;
+        case "unanswered":
+          return answer;
+        default: {
+          const unhandled: never = answer;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    };
     const reused = clients.has(r.id);
     try {
-      const answer = await use(await clientOf(r));
-      setState(r, "signed-in", null);
-      return answer;
+      return await once();
     } catch (error) {
       // A kept client whose server session ended (404 on its session id):
       // the server ran nothing, so the use goes once more on a new session.
       if (reused && sessionGone(error)) {
         drop(r.id);
         try {
-          const answer = await use(await clientOf(r));
-          setState(r, "signed-in", null);
-          return answer;
+          return await once();
         } catch (again) {
           throw failure(r, again);
         }
@@ -622,6 +688,12 @@ export const createConnections = (deps: ConnectionsDeps) => {
       throw failure(r, error);
     }
   };
+
+  /** "<name> did not answer within N s": a use of a connection that was not answered. */
+  const unanswered = (r: ConnectionRow, after: number): ConnectionProblem =>
+    new ConnectionProblem(
+      `${r.name} did not answer within ${Math.round(after / 1000)} s.`
+    );
 
   /**
    * What a failed use of a row's client becomes, the row's state moved with
@@ -652,13 +724,17 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return new ConnectionProblem(`${r.name} could not be reached: ${said}`);
   };
 
-  const listAll = async (client: Client): Promise<Tool[]> => {
+  const listAll = async (
+    client: Client,
+    signal: AbortSignal
+  ): Promise<Tool[]> => {
     const tools: Tool[] = [];
     let cursor: string | undefined;
     do {
       // biome-ignore lint/performance/noAwaitInLoops: each page names the next
       const page = await client.listTools(cursor ? { cursor } : {}, {
-        timeout: CONNECT_MS,
+        signal,
+        timeout: SDK_CLOCK_OFF,
       });
       tools.push(...page.tools);
       cursor = page.nextCursor;
@@ -666,12 +742,28 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return tools;
   };
 
-  /** The tools a connection's server lists now, kept for sessions' lists. */
+  /**
+   * The tools a connection's server lists now, kept for sessions' lists. A
+   * listing not answered in time throws so, and keeps the last list: it is
+   * never "no tools".
+   */
   const listConnectionTools = async (name: string): Promise<Tool[]> => {
     const r = row(name);
-    const tools = await using(r, listAll);
-    keepListing(r.id, tools);
-    return tools;
+    const listing = await using(r, CONNECT_MS, listAll);
+    switch (listing.kind) {
+      case "answered":
+        keepListing(r.id, listing.value);
+        return listing.value;
+      case "unanswered":
+        console.warn(
+          `[connections] ${r.name}: its tools were not listed, the last list stands: ${unanswered(r, listing.after).message}`
+        );
+        throw unanswered(r, listing.after);
+      default: {
+        const unhandled: never = listing;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   };
 
   /**
@@ -686,12 +778,24 @@ export const createConnections = (deps: ConnectionsDeps) => {
     args: Record<string, unknown>
   ): Promise<CallToolResult> => {
     const r = row(name);
-    const result = (await using(r, (client) =>
+    const called = await using(r, CALL_MS, (client, signal) =>
       client.callTool({ name: tool, arguments: args }, undefined, {
-        timeout: CALL_MS,
-        resetTimeoutOnProgress: true,
+        signal,
+        timeout: SDK_CLOCK_OFF,
       })
-    )) as CallToolResult;
+    );
+    let result: CallToolResult;
+    switch (called.kind) {
+      case "answered":
+        result = called.value as CallToolResult;
+        break;
+      case "unanswered":
+        throw unanswered(r, called.after);
+      default: {
+        const unhandled: never = called;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     const text = JSON.stringify(result);
     const clean = scrub(r, text);
     return clean === text ? result : (JSON.parse(clean) as CallToolResult);
@@ -705,8 +809,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
    * - `answered`: the server answered the call (its result may say it failed);
    * - `refused`: it never ran: the hub could not connect or sign in, or the
    *   server answered the request with an error;
-   * - `unknown`: the request went and no answer came back (a timeout, a
-   *   dropped stream, a server error status): it may or may not have run.
+   * - `unknown`: the request went and no answer came back (none within
+   *   its time, a dropped stream, a server error status): it may or may not
+   *   have run.
    */
   const callOnce = async (
     name: string,
@@ -724,17 +829,33 @@ export const createConnections = (deps: ConnectionsDeps) => {
     /** The last error the call itself raised; none: it never left the hub. */
     let raw: unknown;
     try {
-      const result = (await using(r, (client) =>
+      const called = await using(r, CALL_MS, (client, signal) =>
         client
           .callTool({ name: tool, arguments: args, _meta: meta }, undefined, {
-            timeout: CALL_MS,
-            resetTimeoutOnProgress: true,
+            signal,
+            timeout: SDK_CLOCK_OFF,
           })
           .catch((error: unknown) => {
             raw = error;
             throw error;
           })
-      )) as CallToolResult;
+      );
+      let result: CallToolResult;
+      switch (called.kind) {
+        case "answered":
+          result = called.value as CallToolResult;
+          break;
+        case "unanswered":
+          // It went, or its connection was being made: it may have run.
+          return {
+            kind: "unknown",
+            error: unanswered(r, called.after).message,
+          };
+        default: {
+          const unhandled: never = called;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
       const text = JSON.stringify(result);
       const clean = scrub(r, text);
       return {

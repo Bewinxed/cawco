@@ -39,6 +39,7 @@ import {
 } from "node:fs/promises";
 import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
 import { hubProjectsDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -157,7 +158,7 @@ export interface FolderHistory {
 }
 
 export type FolderRefusalStatus =
-  400 | 403 | 404 | 409 | 413 | 415 | 422 | 500 | 503;
+  400 | 403 | 404 | 409 | 413 | 415 | 422 | 500 | 503 | 504;
 
 /** A folder request the hub turns down, with the status and the words the caller reads. */
 export class FolderRefusal extends Error {
@@ -305,39 +306,55 @@ const run = async (root: string, args: string[]): Promise<GitRun> => {
       "git is not installed on the hub's machine, so project folders cannot keep their history. Install git there, then try again."
     );
   }
-  const child = Bun.spawn(
-    [
-      "git",
-      ...SAFE_GIT_FLAGS,
-      `--git-dir=${join(root, ".git")}`,
-      `--work-tree=${root}`,
-      "-c",
-      `user.name=${HUB_NAME}`,
-      "-c",
-      `user.email=${NO_REPLY}`,
-      "-c",
-      "init.defaultBranch=main",
-      "-c",
-      "commit.gpgsign=false",
-      "-c",
-      "core.quotePath=false",
-      ...args,
-    ],
-    {
-      cwd: root,
-      env: gitEnv(),
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: GIT_TIMEOUT_MS,
+  const ran = await readWithin(GIT_TIMEOUT_MS, async (signal) => {
+    const child = Bun.spawn(
+      [
+        "git",
+        ...SAFE_GIT_FLAGS,
+        `--git-dir=${join(root, ".git")}`,
+        `--work-tree=${root}`,
+        "-c",
+        `user.name=${HUB_NAME}`,
+        "-c",
+        `user.email=${NO_REPLY}`,
+        "-c",
+        "init.defaultBranch=main",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "core.quotePath=false",
+        ...args,
+      ],
+      {
+        cwd: root,
+        env: gitEnv(),
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+      }
+    );
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    return { code, stdout, stderr };
+  });
+  switch (ran.kind) {
+    case "answered":
+      return ran.value;
+    case "unanswered":
+      // Not a git answer: never read as a failed or empty one.
+      throw new FolderRefusal(
+        504,
+        `git ${args[0]} did not finish within ${Math.round(ran.after / 1000)} s in the project folder.`
+      );
+    default: {
+      const unhandled: never = ran;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
-  );
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  return { code, stdout, stderr };
+  }
 };
 
 /** {@link run}, refusing with the first line of git's own words when it fails. */
