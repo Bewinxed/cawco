@@ -5852,7 +5852,7 @@
         }
       }
     },
-    "/api/instances/{id}/artifacts/{artifact}/stage": {
+    "/api/instances/{id}/artifacts/{artifact}/view": {
       "get": {
         "parameters": [
           {
@@ -5872,14 +5872,14 @@
             }
           }
         ],
-        "operationId": "getApiInstancesByIdArtifactsByArtifactStage",
+        "operationId": "getApiInstancesByIdArtifactsByArtifactView",
         "responses": {
           "200": {
-            "description": "getApiInstancesByIdArtifactsByArtifactStage 200",
+            "description": "getApiInstancesByIdArtifactsByArtifactView 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiInstancesByIdArtifactsByArtifactStage200"
+                  "$ref": "#/components/schemas/getApiInstancesByIdArtifactsByArtifactView200"
                 }
               }
             }
@@ -24610,13 +24610,26 @@
           "heard"
         ]
       },
-      "getApiInstancesByIdArtifactsByArtifactStage200": {
+      "getApiInstancesByIdArtifactsByArtifactView200": {
         "type": "object",
         "properties": {
+          "choices": {
+            "type": "object"
+          },
+          "sentAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "stage": {
             "$ref": "#/components/schemas/StageState"
           }
-        }
+        },
+        "required": [
+          "choices",
+          "sentAt"
+        ]
       },
       "postApiInstancesByIdArtifactsByArtifactSent200": {
         "type": "object",

@@ -136,30 +136,36 @@ public typealias StageState = Components.Schemas.StageState
 public typealias StageError = Components.Schemas.StageError
 
 public extension HubConnection {
-    /// A sheet's stage as its doc keeps it (`meta.stage`), as the dashboard's
-    /// pane reads it from the doc: the hub's read of the doc alone, which
-    /// neither wakes the stage nor waits on it; nil before it was ever told.
-    func sheetStage(_ artifact: String, in instanceId: String) async throws -> StageState? {
-        let output = try await api.instances.sheetStage(.init(path: .init(id: instanceId, artifact: artifact)))
+    /// The artifact's doc as a person's view reads it (artifact-doc.ts
+    /// `viewOf`): its picks, their last send, a sheet's stage. The hub reads
+    /// the doc alone: no read of the session's (its cursor stays) and no
+    /// wake of a sheet's stage.
+    private func artifactView(_ artifact: String, in instanceId: String) async throws
+        -> Components.Schemas.GetApiInstancesByIdArtifactsByArtifactView200 {
+        let output = try await api.instances.artifactView(.init(path: .init(id: instanceId, artifact: artifact)))
         guard case let .ok(found) = output else { throw await TaskRefusal.reading(output) }
-        return try found.body.json.stage
+        return try found.body.json
+    }
+
+    /// A sheet's stage as its doc keeps it (`meta.stage`), as the dashboard's
+    /// pane reads it; nil before it was ever told.
+    func sheetStage(_ artifact: String, in instanceId: String) async throws -> StageState? {
+        try await artifactView(artifact, in: instanceId).stage
     }
 
     /// Every pin on one artifact, open and resolved, and the picks the session
-    /// has not heard (`comment_read`'s route with `filter=all`, and the
-    /// artifact's read for its state and `sentAt`), read together.
+    /// has not heard (`comment_read`'s route with `filter=all`, and the doc's
+    /// view for its picks and `sentAt`), read together.
     func comments(on artifact: String, in instanceId: String) async throws -> ArtifactComments {
         let api = try api
         async let read = api.instances.comments(.init(path: .init(id: instanceId), query: .init(artifact: artifact, filter: .all)))
-        async let state = api.instances.readArtifact(.init(path: .init(id: instanceId, artifact: artifact)))
-        let (comments, artifactRead) = try await (read, state)
+        async let view = artifactView(artifact, in: instanceId)
+        let (comments, held) = try await (read, view)
         guard case let .ok(found) = comments else { throw await TaskRefusal.reading(comments) }
-        guard case let .ok(doc) = artifactRead else { throw await TaskRefusal.reading(artifactRead) }
         // Each pin as the doc keeps it; the ink's box beside it is the agent's.
         let pins = try found.body.json.artifacts.first { $0.id == artifact }?.pins.map(\.value1) ?? []
-        let held = try doc.body.json
         // artifact-doc.ts `unsentPicks`: every pick when nothing was sent yet, else those made since.
-        let picks = held.state.value.values.count { entry in
+        let picks = held.choices.value.values.count { entry in
             guard let at = (entry as? [String: (any Sendable)?])?["at"] as? String else { return false }
             return held.sentAt.map { at > $0 } ?? true
         }

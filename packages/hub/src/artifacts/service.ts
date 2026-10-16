@@ -2588,22 +2588,30 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       deps.stageComponents(sessionOf(instanceId), dir),
 
     /**
-     * A sheet's stage as its doc keeps it (`meta.stage`), for a person's
-     * view: the app's panel, which holds no doc of its own. Never asks the
-     * daemon, so a read neither wakes the stage nor waits on it.
+     * The artifact's doc as a person's view reads it (the dashboard pane's
+     * `viewOf`, artifact-doc.ts): its picks, when they were last sent, and a
+     * sheet's stage (`meta.stage`). For the app's panel, which holds no doc
+     * of its own. It is no read of the session's: its read cursor stays,
+     * and a sheet's stage is neither woken nor waited on.
      */
-    stageOf: (instanceId: string, id: string): { stage: StageState | null } => {
+    viewOf: (
+      instanceId: string,
+      id: string
+    ): {
+      choices: Record<string, ChoiceEntry>;
+      sentAt: string | null;
+      stage: StageState | null;
+    } => {
       const row = readable(sessionOf(instanceId), id);
-      if (row.kind !== "sheet") {
-        throw new ArtifactRefusal(
-          409,
-          `${row.name} is a ${row.kind}: only a sheet has a stage.`
-        );
-      }
+      const doc = docs.doc(row.id);
+      const meta = doc.getMap("meta");
       return {
+        choices: stateOf(doc),
+        sentAt: (meta.get("sentAt") as string | undefined) ?? null,
         stage:
-          (docs.doc(row.id).getMap("meta").get("stage") as
-            StageState | undefined) ?? null,
+          row.kind === "sheet"
+            ? ((meta.get("stage") as StageState | undefined) ?? null)
+            : null,
       };
     },
 
