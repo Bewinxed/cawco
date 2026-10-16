@@ -280,7 +280,7 @@ enum PushTaps {
         case "session": return .session(parts[1])
         case "task":
             let ids = parts[1].split(separator: "/", maxSplits: 1).map(String.init)
-            return ids.count == 2 ? .task(projectId: ids[0], taskId: ids[1], attempt: nil) : nil
+            return ids.count == 2 ? .task(projectId: ids[0], taskId: ids[1]) : nil
         default: return nil
         }
     }

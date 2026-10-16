@@ -66,7 +66,7 @@ public final class RootViewController: ObservedViewController {
         guard let at = arguments.firstIndex(of: "-open-task"), arguments.indices.contains(at + 1) else { return nil }
         let parts = arguments[at + 1].split(separator: "/", maxSplits: 1).map(String.init)
         guard parts.count == 2 else { return nil }
-        return .task(projectId: parts[0], taskId: parts[1], attempt: nil)
+        return .task(projectId: parts[0], taskId: parts[1])
     }
     #endif
 

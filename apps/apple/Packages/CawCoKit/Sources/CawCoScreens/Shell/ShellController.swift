@@ -94,7 +94,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     var context: ShellContext {
         ShellContext(hub: hub, home: home, openSession: { [weak self] id in self?.openSession(id) }, go: { [weak self] place in self?.go(place) },
-                     openTask: { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId, attempt: nil) },
+                     openTask: { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId) },
                      openConfigure: { [weak self] slug in self?.openConfigure(slug) },
                      forgetProject: { [weak self] project, source in self?.forgetProject(project, from: source) },
                      startSession: { [weak self] machineId, cwd, projectId in self?.startSession(machineId: machineId, cwd: cwd, projectId: projectId) },
@@ -135,7 +135,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         panes.onEditWorkflow = { [weak self] id in self?.go(.workflow(id: id, program: true)) }
         panes.continueHandler = { [weak self] id in self?.newSession.continueSession(id) }
         // A Caw thread's task cards, its way to the board, its machines line and its first message's new tab.
-        panes.onOpenTask = { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId, attempt: nil) }
+        panes.onOpenTask = { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId) }
         panes.onOpenProject = { [weak self] projectId in self?.go(.project(projectId)) }
         panes.onCheckMachines = { [weak self] source in self?.openMachines(from: source) }
         panes.onRetarget = { [weak self] from, to in self?.workspace.retarget(from, to: to) }
@@ -348,7 +348,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             }
             openSession(id)
         case let .project(id): go(.project(id))
-        case let .task(projectId, taskId, attempt): openTask(projectId: projectId, taskId: taskId, attempt: attempt)
+        case let .task(projectId, taskId): openTask(projectId: projectId, taskId: taskId)
         case .board: go(.fleet)
         // Needs you is Caw's panel: it hangs from the glass in front, as his press opens it.
         case .needs:
@@ -1581,11 +1581,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     /// A task's sheet over its project's page (a `task` or `attempt` push):
     /// the page first, then the sheet over whatever is in front.
-    func openTask(projectId: String, taskId: String, attempt: String?) {
+    func openTask(projectId: String, taskId: String) {
         go(.project(projectId))
         // What was presented (another task's sheet, a dialog) gives way to this one.
         if presentedViewController != nil { dismiss(animated: false) }
-        TaskSheetController.present(projectId: projectId, taskId: taskId, attempt: attempt, hub: hub,
+        TaskSheetController.present(projectId: projectId, taskId: taskId, hub: hub, home: home,
                                     from: self) { [weak self] id in self?.openSession(id) }
     }
 

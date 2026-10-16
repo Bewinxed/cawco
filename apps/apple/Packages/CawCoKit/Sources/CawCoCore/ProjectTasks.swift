@@ -15,6 +15,25 @@ public typealias TaskAttempt = Components.Schemas.TaskAttempt
 /// What a task's newest finished attempt handed back: its session's report (the hub's `TaskResult`).
 public typealias TaskResult = Components.Schemas.TaskResult
 public typealias StagesView = Components.Schemas.StagesView
+/// What an attempt handed in through `task_result`: its words, what to check, its artifacts.
+public typealias AttemptResult = Components.Schemas.AttemptResult
+public typealias ResultArtifact = Components.Schemas.ResultArtifact
+public typealias TaskComment = Components.Schemas.TaskComment
+public typealias TaskHistoryEvent = Components.Schemas.TaskHistoryEvent
+
+/// One of a task's own fields (`extra`): a scalar or a list.
+public enum TaskField: Sendable, Equatable {
+    case one(String)
+    case list([String])
+
+    /// As TaskFields.svelte says it: a list's items with commas between.
+    public var said: String {
+        switch self {
+        case let .one(text): text
+        case let .list(items): items.joined(separator: ", ")
+        }
+    }
+}
 public typealias TaskList = Components.Schemas.TaskList
 public typealias TaskStage = Components.Schemas.Stage
 public typealias StagesTemplateView = Components.Schemas.StagesTemplateView
@@ -117,9 +136,40 @@ public struct ProjectTasks: Sendable {
         throw await TaskRefusal.reading(output)
     }
 
-    public func update(_ taskId: String, title: String? = nil, description: String? = nil, acceptance: String? = nil) async throws -> TaskView {
+    public func update(_ taskId: String, title: String? = nil, description: String? = nil, acceptance: String? = nil,
+                       labels: [String]? = nil, fields: [String: TaskField]? = nil) async throws -> TaskView {
+        // A field set to "" is taken out (TaskFields.svelte).
+        let container = try fields.map { change in
+            try OpenAPIObjectContainer(unvalidatedValue: change.mapValues { field -> (any Sendable)? in
+                switch field {
+                case let .one(text): text
+                case let .list(items): items
+                }
+            })
+        }
         let output = try await client.patchApiProjectsByIdTasksByTaskId(path: .init(id: projectId, taskId: taskId),
-            body: .json(.init(title: title, description: description, acceptance: acceptance)))
+            body: .json(.init(title: title, description: description, acceptance: acceptance, labels: labels, fields: container)))
+        if case let .ok(ok) = output { return try ok.body.json }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// Your comment on the task (`addComment`): it goes where the hub sends it.
+    public func comment(_ taskId: String, text: String) async throws -> TaskView {
+        let output = try await client.postApiProjectsByIdTasksByTaskIdComments(path: .init(id: projectId, taskId: taskId), body: .json(.init(text: text)))
+        if case let .ok(ok) = output { return try ok.body.json }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// Its file's commits, oldest first (`readHistory`).
+    public func history(_ taskId: String) async throws -> [TaskHistoryEvent] {
+        let output = try await client.getApiProjectsByIdTasksByTaskIdHistory(path: .init(id: projectId, taskId: taskId))
+        if case let .ok(ok) = output { return try ok.body.json.events }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// A decision page as its record has it (`readDecision`).
+    public func decision(_ name: String) async throws -> Components.Schemas.DecisionPageRead {
+        let output = try await client.getApiProjectsByIdDecisionsByName(path: .init(id: projectId, name: name))
         if case let .ok(ok) = output { return try ok.body.json }
         throw await TaskRefusal.reading(output)
     }
@@ -130,12 +180,32 @@ public struct ProjectTasks: Sendable {
         throw await TaskRefusal.reading(output)
     }
 
-    /// The two edges the sheet sets: what a task waits on, and its parent.
-    public enum Edge: Sendable { case after, parent }
+    /// The edges a task sets on another (TaskRelations.svelte `EDGES`).
+    public enum Edge: Sendable, CaseIterable {
+        case after, parent, related, foundIn, duplicateOf
+
+        /// What its row is called.
+        public var name: String {
+            switch self {
+            case .after: "After"
+            case .parent: "Parent"
+            case .related: "Related"
+            case .foundIn: "Found in"
+            case .duplicateOf: "Duplicate of"
+            }
+        }
+    }
 
     public func link(_ taskId: String, edge: Edge, to: String, remove: Bool = false) async throws -> TaskView {
+        let wire: Operations.PostApiProjectsByIdTasksByTaskIdLinks.Input.Body.JsonPayload.EdgePayload = switch edge {
+        case .after: .after
+        case .parent: .parent
+        case .related: .related
+        case .foundIn: .foundIn
+        case .duplicateOf: .duplicateOf
+        }
         let output = try await client.postApiProjectsByIdTasksByTaskIdLinks(path: .init(id: projectId, taskId: taskId),
-            body: .json(.init(edge: edge == .after ? .after : .parent, to: to, remove: remove)))
+            body: .json(.init(edge: wire, to: to, remove: remove)))
         if case let .ok(ok) = output { return try ok.body.json }
         throw await TaskRefusal.reading(output)
     }
@@ -274,6 +344,121 @@ public enum TaskWords {
                     (move.from == "*" || move.from == from) && (move.to == "*" || move.to == to.name) && move.who.contains(.you)
                 }
         }.map(\.name))
+    }
+}
+
+// MARK: A task's review (project-tasks.ts `reviewOf`, TaskReview.svelte)
+
+/// One thing an attempt handed in (`ResultArtifact`): a file of the
+/// project's folder or a post, a link, or an artifact it presented.
+public enum Handed: Sendable, Equatable {
+    case file(path: String, post: Bool, name: String?, primary: Bool)
+    case link(url: String, name: String?, primary: Bool)
+    case artifact(id: String, name: String?, primary: Bool)
+
+    public init?(_ wire: ResultArtifact) {
+        if let file = wire.value1 {
+            self = .file(path: file.value2.path, post: file.value2.kind == .post, name: file.value1.name, primary: file.value1.primary == true)
+        } else if let link = wire.value2 {
+            self = .link(url: link.value2.url, name: link.value1.name, primary: link.value1.primary == true)
+        } else if let artifact = wire.value3 {
+            self = .artifact(id: artifact.value2.artifactId, name: artifact.value1.name, primary: artifact.value1.primary == true)
+        } else {
+            return nil
+        }
+    }
+
+    /// A task's `outputs` as an attempt that never handed in names them (`outputArtifacts`).
+    public init(output path: String) {
+        self = .file(path: path, post: path.hasSuffix(".post.json"), name: nil, primary: false)
+    }
+
+    public var primary: Bool {
+        switch self {
+        case let .file(_, _, _, primary), let .link(_, _, primary), let .artifact(_, _, primary): primary
+        }
+    }
+
+    /// What its chip says (`artifactName`): its name, else the file's, the link's host or the artifact's id.
+    public var name: String {
+        switch self {
+        case let .file(path, _, name, _): name ?? path.split(separator: "/").last.map(String.init) ?? path
+        case let .link(url, name, _): name ?? URL(string: url)?.host() ?? url
+        case let .artifact(id, name, _): name ?? id
+        }
+    }
+}
+
+/// The review a task draws: the session it is from, what it handed in, and
+/// its words whole as markdown (`reviewOf`).
+public struct TaskReviewRead: Sendable {
+    public let attempt: TaskAttempt?
+    public let summary: String
+    public let check: [String]
+    public let handed: [Handed]
+    public let whole: String
+}
+
+public extension TaskWords {
+    /// A session's state on a task as a status word (`attemptWord`).
+    static func attemptWord(_ state: Components.Schemas.WorkItemState) -> String {
+        switch state {
+        case .starting, .running: "Working"
+        case .done: "Done"
+        case .failed: "Failed"
+        case .cancelled, .unrecognized: "Stopped"
+        }
+    }
+
+    /// `reviewOf`: the newest attempt's `task_result`, else its finish_item
+    /// report with the task's outputs; nil when there is neither.
+    static func review(of task: TaskView) -> TaskReviewRead? {
+        let report = task.result
+        let newest = task.attempts.first { $0.result != nil || $0.workItemId == report?.workItemId }
+        if let newest, let result = newest.result {
+            return TaskReviewRead(attempt: newest, summary: result.summary, check: result.check,
+                                  handed: result.artifacts.compactMap(Handed.init), whole: result.summary)
+        }
+        if report == nil, task.outputs.isEmpty { return nil }
+        let whole = report.map { [$0.headline, $0.report].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n") } ?? ""
+        return TaskReviewRead(attempt: newest ?? task.attempts.first, summary: report.map { $0.headline ?? $0.report } ?? "",
+                              check: [], handed: task.outputs.map(Handed.init(output:)), whole: whole)
+    }
+
+    /// Where a task waiting on you goes once you approve it (`approveTarget`):
+    /// the first stage after its own that the moves allow you, short of a dropped one.
+    static func approveTarget(_ stages: StagesView, from: String) -> TaskStage? {
+        let allowed = moves(stages, from: from)
+        let at = stages.stages.firstIndex { $0.name == from } ?? -1
+        return stages.stages.dropFirst(at + 1).first { $0.kind != .dropped && allowed.contains($0.name) }
+    }
+
+    /// Where a task you send back goes (`sendBackTarget`): the nearest stage
+    /// before its own of kind active, else the nearest to-do one, that the moves allow you.
+    static func sendBackTarget(_ stages: StagesView, from: String) -> TaskStage? {
+        let allowed = moves(stages, from: from)
+        let at = max(stages.stages.firstIndex { $0.name == from } ?? 0, 0)
+        let before = stages.stages.prefix(at).reversed().filter { allowed.contains($0.name) }
+        return before.first { $0.kind == .active } ?? before.first { $0.kind == .todo }
+    }
+
+    /// The decision a task was made from (`decided: <page>#<card>`, decisions.ts `decidedOf`).
+    static func decided(_ task: TaskView) -> (page: String, card: String)? {
+        guard let value = task.extra.value["decided"] as? String,
+              let found = value.trimmingCharacters(in: .whitespaces).wholeMatch(of: /([a-z0-9][a-z0-9-]{0,62})#(.+)/)
+        else { return nil }
+        return (String(found.output.1), String(found.output.2))
+    }
+
+    /// Its own fields (`extra`), `decided` aside: it is said under the title.
+    static func fields(_ task: TaskView) -> [(key: String, value: TaskField)] {
+        task.extra.value.compactMap { key, value -> (String, TaskField)? in
+            guard key != "decided" else { return nil }
+            if let text = value as? String { return (key, .one(text)) }
+            if let items = value as? [(any Sendable)?] { return (key, .list(items.compactMap { $0 as? String })) }
+            if let items = value as? [String] { return (key, .list(items)) }
+            return value.map { (key, .one("\($0)")) }
+        }.sorted { $0.0 < $1.0 }
     }
 }
 

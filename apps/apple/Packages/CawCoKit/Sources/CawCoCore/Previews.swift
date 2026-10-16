@@ -108,6 +108,16 @@ public extension HubConnection {
         }
     }
 
+    /// An artifact by id with the session that made it, and whether its panel
+    /// shows it now (artifact-api.ts `findArtifact`): what a task's review stage opens on.
+    func findArtifact(_ id: String) async throws -> (instanceId: String, shown: Bool) {
+        guard let client else { throw TaskRefusal(message: "No hub is connected.") }
+        let output = try await client.getApiArtifactsByArtifact(path: .init(artifact: id))
+        guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
+        let found = try ok.body.json.value2
+        return (found.instanceId, found.shown)
+    }
+
     /// An error as the formula's middle sentence: a refusal's words, a lost connection's.
     private static func sentence(_ error: any Error) -> String {
         if let refusal = error as? TaskRefusal { return refusal.message }

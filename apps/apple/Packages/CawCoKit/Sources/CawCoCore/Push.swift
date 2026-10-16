@@ -19,8 +19,8 @@ public enum PushRoute: Sendable, Equatable {
     case session(String)
     /// A project's page.
     case project(String)
-    /// A task's sheet over its project's page; `attempt` scrolls it to that attempt.
-    case task(projectId: String, taskId: String, attempt: String?)
+    /// A task's sheet over its project's page, open on its review.
+    case task(projectId: String, taskId: String)
     /// The board.
     case board
     /// Needs you, in Caw's panel: a burst of several things that need you (push.ts `needs`).
@@ -106,7 +106,7 @@ public struct PushNote: Sendable {
         case "task", "attempt":
             guard let projectId = fields["projectId"], !projectId.isEmpty else { return .board }
             guard let taskId = fields["taskId"], !taskId.isEmpty else { return .project(projectId) }
-            return .task(projectId: projectId, taskId: taskId, attempt: kind == "attempt" ? fields["workItemId"] : nil)
+            return .task(projectId: projectId, taskId: taskId)
         // Several at once: the list of what waits, each opened from there.
         case "needs":
             return .needs

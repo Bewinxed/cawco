@@ -57,6 +57,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     let grabArea = GrabArea()
     private let grabber = UIView()
     private var headTop: NSLayoutConstraint!
+    /// The well under the head, or, inset, at the view's top.
+    private var wellTop: NSLayoutConstraint!
+    private var wellTopInset: NSLayoutConstraint!
     private let well = UIView()
     private let cover = UIView()
     /// The cover's loading line, hidden once the cover has faded so its sweep stops.
@@ -285,6 +288,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         wellTrailing = well.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space2)
         wellBottom = well.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -Space.space2)
         wellEdgeHeight = wellEdge.heightAnchor.constraint(equalToConstant: 1)
+        wellTop = well.topAnchor.constraint(equalTo: head.bottomAnchor)
+        wellTopInset = well.topAnchor.constraint(equalTo: view.topAnchor)
         NSLayoutConstraint.activate([
             wellEdge.topAnchor.constraint(equalTo: well.topAnchor),
             wellEdge.leadingAnchor.constraint(equalTo: well.leadingAnchor),
@@ -302,7 +307,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             headLeading,
             headTrailing,
             head.heightAnchor.constraint(equalToConstant: 44),
-            well.topAnchor.constraint(equalTo: head.bottomAnchor),
+            wellTop,
             wellLeading,
             wellTrailing,
             wellBottom,
@@ -397,6 +402,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         if drawer { expanded = false }
         placeHead()
         placeCardConstraints()
+    }
+
+    /// Drawn inside another surface (a task's review stage, PreviewPane.svelte
+    /// `inset`): the page in its well and what stands over it, with no head
+    /// of its own; the surface around it names it and holds its controls.
+    func standsInset() {
+        loadViewIfNeeded()
+        dragArea.isHidden = true
+        grabArea.isHidden = true
+        view.backgroundColor = .clear
+        wellTop.isActive = false
+        wellTopInset.isActive = true
+        wellLeading.constant = 0
+        wellTrailing.constant = 0
+        wellBottom.isActive = false
+        well.bottomAnchor.constraint(equalTo: view.bottomAnchor).isActive = true
     }
 
     /// Expanded over the whole session area (SideSurface.svelte `.expanded`):
