@@ -405,7 +405,13 @@ async function said(response: Response): Promise<string> {
   return body || `The hub answered ${response.status}. Try again.`;
 }
 
-/** The hub's sentence, thrown as it is: it already says what to do. */
+/**
+ * A hub read or change, the page's one way to ask the hub: its answer when it
+ * is ok and says it is JSON; otherwise the hub's sentence, thrown as it is (it
+ * already says what to do), and a hub away or restarting throws its one
+ * wording. A body is parsed only when it says it is JSON: a proxy's or a
+ * restarting hub's text answer is never read as data.
+ */
 export async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, init);
   if (unreachedAnswer(response)) {
@@ -413,6 +419,11 @@ export async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
   }
   if (!response.ok) {
     throw new Error(await said(response));
+  }
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new Error(
+      `The hub answered ${response.status} without JSON: ${(await response.text()).trim().slice(0, 200)}`
+    );
   }
   return (await response.json()) as T;
 }

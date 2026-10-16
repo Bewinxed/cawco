@@ -29,7 +29,12 @@
  *    and says "Not caught up: <machine> is offline. The rest comes in once
  *    it's back." on one line on the desk, at most two at 390 with the name
  *    whole, the card's well saying the same over its rows; both lines go once
- *    the agent is back and the reads land.
+ *    the agent is back and the reads land;
+ *  - the page never throws: no `pageerror` on either page through the
+ *    restarts, nor on a page loaded with the hub away (every read it makes
+ *    answering the dashboard's own 502 text, its proxy's `HUB_UNREACHABLE`),
+ *    held 40s: a read parses a body only when it is ok JSON
+ *    (project-tasks.ts `send`).
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the scenario runs in order, one step after the last.
 import type { Page } from "playwright-core";
@@ -52,6 +57,12 @@ const CAWCO_LOG = /^\[cawco\] (read|toast:) /;
 /** A session of its own, drawn as a delegate's card is (rows.ts `isDelegateMsg`, `start`). */
 const START_TOOL = "mcp__cawco__start_session";
 const HUB_SOCKET = /\/ws\//;
+/** The dashboard's answer for a hub it never reached (api/[...path] proxy; hub-read.ts `HUB_UNREACHABLE_HEADER`, `HUB_UNREACHABLE`). */
+const UNREACHED_HEADER = "x-cawco-hub-unreachable";
+const UNREACHED =
+  "The dashboard couldn't reach the hub: the request got no answer. Check that the hub's machine is up and this device is online, then try again.";
+/** How long a page loaded with the hub away is watched for a throw. */
+const AWAY_HOLD_MS = 40_000;
 
 interface Strip {
   lines: number;
@@ -267,9 +278,14 @@ const spec: Spec = {
     } = { failUntil: 0, holding: false, reads: [] };
     const logs: string[] = [];
     const wellLogs: string[] = [];
+    /** What either page threw, uncaught, through every restart. */
+    const thrown: string[] = [];
     /** A page whose socket to the hub is held off while `holding`. */
     const opened = async (id: string, heard: string[]) => {
       const page = await kit.page("desk");
+      page.on("pageerror", (error) => {
+        thrown.push(`${id.slice(0, 8)}: ${error.message}`);
+      });
       page.on("console", (message) => {
         if (CAWCO_LOG.test(message.text())) {
           heard.push(message.text());
@@ -652,6 +668,39 @@ const spec: Spec = {
         "offline: no older page is read again",
         olderSince(from) === 0,
         `${olderSince(from)} older page read(s)`
+      );
+    }
+
+    kit.check(
+      "no page throws through the restarts",
+      thrown.length === 0,
+      thrown.slice(0, 3).join(" | ") || "nothing thrown"
+    );
+
+    // A page loaded with the hub away: every read it makes answers the
+    // dashboard's own 502, in text, as its proxy does when the hub is down.
+    {
+      const away = await kit.page("desk");
+      const awayThrown: string[] = [];
+      away.on("pageerror", (error) => {
+        awayThrown.push(error.message);
+      });
+      await away.route("**/api/**", (route) =>
+        route.fulfill({
+          status: 502,
+          contentType: "text/plain; charset=utf-8",
+          headers: { [UNREACHED_HEADER]: "1" },
+          body: UNREACHED,
+        })
+      );
+      await away.goto(`${base}/session/${sessionId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await away.waitForTimeout(AWAY_HOLD_MS);
+      kit.check(
+        `hub away: a page loaded with every read answering 502 text throws nothing in ${AWAY_HOLD_MS / 1000}s`,
+        awayThrown.length === 0,
+        awayThrown.slice(0, 3).join(" | ") || "nothing thrown"
       );
     }
   },

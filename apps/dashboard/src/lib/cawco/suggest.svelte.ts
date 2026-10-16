@@ -3,6 +3,7 @@
  * one hub setting that switches them on. Suggestions are text the operator
  * chooses to add to a prompt; the harness's tool set is never touched.
  */
+import { send } from "./project-tasks";
 
 /**
  * One thing Jev can be asked about: a skill, a tool or an MCP server the
@@ -48,12 +49,16 @@ export function loadSuggestSetting(): void {
     return;
   }
   loaded = true;
-  // biome-ignore lint/complexity/noVoid: fire-and-forget; the result lands in shared state
-  void fetch("/api/jev")
-    .then((response) => response.json() as Promise<JevState>)
-    .then((state) => {
+  // A hub away or restarting answers no setting: suggestions stay off, and
+  // the read says why as every failed read does.
+  send<JevState>("/api/jev").then(
+    (state) => {
       suggestions.enabled = state.route !== null && state.suggestWhileTyping;
-    });
+    },
+    (error: unknown) => {
+      console.error("[cawco] /api/jev failed:", error);
+    }
+  );
 }
 
 /** Turns suggestions on or off for every composer. */
@@ -74,18 +79,14 @@ export async function askSuggestions(
   body: { text: string; candidates: SuggestCandidate[] },
   signal: AbortSignal
 ): Promise<{ id: string; noul: number }[]> {
-  const response = await fetch("/api/suggest", {
+  const { suggestions: ranked } = await send<{
+    suggestions: { id: string; noul: number }[];
+  }>("/api/suggest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal,
   });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  const { suggestions: ranked } = (await response.json()) as {
-    suggestions: { id: string; noul: number }[];
-  };
   return ranked;
 }
 
