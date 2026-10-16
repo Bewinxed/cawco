@@ -688,15 +688,26 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
 
     #if DEBUG
     private var probed = ""
+    private var probedMessages: [String] = []
 
-    /// A simulator pass reads the thread here: its messages in order, Caw's
-    /// state, and the asks standing on its composer.
+    /// A simulator pass reads the thread here, each fact on a line of its own
+    /// so none grows with the thread (unified logging clips a message near
+    /// 1 KB, and a long thread's one line lost its asks that way): Caw's
+    /// state, the count of messages and the asks standing on the composer as
+    /// `probe thread <id> …`; then, when the messages change, each in order
+    /// as `probe thread-message <id> <n>/<count> <author>:<first 40>`.
     private func probe() {
         guard let threadId else { return }
         let notes = hub.threads.messages[threadId] ?? []
-        let said = "probe thread \(threadId) status \(thread?.status.rawValue ?? "?") messages \(notes.count) ["
-            + notes.map { "\($0.author):\($0.body.prefix(40).replacingOccurrences(of: "\n", with: " "))" }.joined(separator: " | ")
-            + "] asks [\(cards.keys.sorted().joined(separator: ","))] place \(cards.values.first?.probePlace ?? "none") composer \(writable ? "on" : "off")"
+        let said = "probe thread \(threadId) status \(thread?.status.rawValue ?? "?") messages \(notes.count)"
+            + " asks [\(cards.keys.sorted().joined(separator: ","))] place \(cards.values.first?.probePlace ?? "none") composer \(writable ? "on" : "off")"
+        let listed = notes.map { "\($0.author):\($0.body.prefix(40).replacingOccurrences(of: "\n", with: " "))" }
+        if listed != probedMessages {
+            probedMessages = listed
+            for (at, words) in listed.enumerated() {
+                Self.log.notice("probe thread-message \(threadId, privacy: .public) \(at + 1)/\(listed.count) \(words, privacy: .public)")
+            }
+        }
         guard said != probed else { return }
         probed = said
         Self.log.notice("\(said, privacy: .public)")

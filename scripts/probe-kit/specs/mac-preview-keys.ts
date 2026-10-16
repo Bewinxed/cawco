@@ -23,7 +23,21 @@
  *   bun scripts/probe-kit/run.ts mac-preview-keys
  *
  * Needs the Mac probe build of this tree (scripts/lib/apple-app.ts
- * `macProbeApp`), and Peekaboo's accessibility and screen-recording grants.
+ * `macProbeApp`) and the notarized Peekaboo CLI (`brew install
+ * openclaw/tap/peekaboo`; Homebrew core's `peekaboo` is a source build
+ * without release signing, which "Local in-process commands still work"
+ * with but not "normal Bridge and daemon use", peekaboo.sh/install.html).
+ * Its `see`, `click` and `press` run as separate processes, and a snapshot
+ * belongs to the host that took it ("A stopped producer, no owner, or
+ * multiple claimants is a pre-dispatch refusal", peekaboo.sh/commands/
+ * click.html), so the run holds one host for all of them: Peekaboo's own
+ * build-scoped daemon, on the socket the CLI derives (a custom socket path
+ * "remain[s] limited to protocol 1.28", which an exact-window capture
+ * refuses, peekaboo.sh/commands/bridge.html), every call pinned to it
+ * (`PEEKABOO_BRIDGE_SOCKET`: strict, never the local runtime), started by
+ * the run when it is not up and stopped after. That daemon must hold
+ * Accessibility, Event Synthesizing and Screen Recording; the run says
+ * which it lacks before any input.
  */
 import { macProbeApp } from "../../lib/apple-app";
 import { until } from "../../scratch-fleet";
@@ -59,15 +73,107 @@ function report() {
 report();
 </script></body></html>`;
 
-/** Runs Peekaboo with `args`; its stdout, or throws with what it said. */
-async function peekaboo(args: string[]): Promise<string> {
-  const run = await Bun.$`${PEEKABOO} ${args}`.quiet().nothrow();
+/**
+ * Runs Peekaboo with `args`, on the host at `socket` when one is given
+ * (`PEEKABOO_BRIDGE_SOCKET`, strict); its stdout, or throws with what it
+ * said: its JSON's `error` (and the last of its debug lines) when it wrote
+ * JSON, else its own words.
+ */
+async function peekaboo(args: string[], socket?: string): Promise<string> {
+  const env = socket
+    ? { ...process.env, PEEKABOO_BRIDGE_SOCKET: socket }
+    : process.env;
+  const run = await Bun.$`${PEEKABOO} ${args}`.env(env).quiet().nothrow();
   if (run.exitCode !== 0) {
+    const said = (run.stdout.toString() || run.stderr.toString()).trim();
+    let why = said.slice(-600);
+    try {
+      const json = JSON.parse(said) as {
+        debug_logs?: string[];
+        error?: unknown;
+      };
+      why = JSON.stringify({
+        error: json.error,
+        last: json.debug_logs?.slice(-4),
+      });
+    } catch {
+      // Not JSON: its own words, their end, where the reason is.
+    }
     throw new Error(
-      `peekaboo ${args.join(" ")} exited ${run.exitCode}: ${(run.stderr.toString() || run.stdout.toString()).trim().slice(0, 400)}`
+      `peekaboo ${args.join(" ")} exited ${run.exitCode}: ${why}`
     );
   }
   return run.stdout.toString();
+}
+
+/** The CLI's build-scoped daemon socket, `daemon-<build>.sock`, as `bridge status` lists it among its candidates. */
+const BUILD_DAEMON = /\/daemon-[0-9a-f]+\.sock$/;
+
+/** The grants the run's input needs of its host, as `daemon status --json` names them in `data.permissions`. */
+const GRANTS = {
+  accessibility: "Accessibility",
+  postEvent: "Event Synthesizing",
+  screenRecording: "Screen Recording",
+} as const;
+
+/** The Peekaboo host the run holds: its socket, and whether the run started it. */
+interface PeekabooHost {
+  socket: string;
+  started: boolean;
+}
+
+/** `daemon status --json` on `socket`: whether it runs, its pid, and its grants. */
+async function daemonOn(socket: string) {
+  const status = JSON.parse(
+    await peekaboo(["daemon", "status", "--bridge-socket", socket, "--json"])
+  ) as {
+    data?: {
+      permissions?: Partial<Record<keyof typeof GRANTS, boolean>>;
+      pid?: number;
+      running?: boolean;
+    };
+  };
+  return status.data ?? {};
+}
+
+/**
+ * The run's one host: the CLI's own build-scoped daemon, up and granted, or
+ * why not. A source build of the CLI, no such socket among the candidates,
+ * or a missing grant is the run's failure, said before any input.
+ */
+async function peekabooHost(): Promise<PeekabooHost | string> {
+  const bridge = JSON.parse(await peekaboo(["bridge", "status", "--json"])) as {
+    data?: {
+      candidates?: { socketPath?: string }[];
+      client?: { teamIdentifier?: string };
+    };
+  };
+  if (!bridge.data?.client?.teamIdentifier) {
+    return `${PEEKABOO} is not release-signed (Homebrew core's source build): it keeps no daemon a later command can reach. Install the notarized CLI: brew install openclaw/tap/peekaboo (peekaboo.sh/install.html)`;
+  }
+  const socket = bridge.data.candidates
+    ?.map((one) => one.socketPath ?? "")
+    .find((path) => BUILD_DAEMON.test(path));
+  if (!socket) {
+    return `bridge status names no build-scoped daemon socket: ${JSON.stringify(bridge.data.candidates)}`;
+  }
+  const before = await daemonOn(socket);
+  if (!before.running) {
+    await peekaboo(["daemon", "start", "--bridge-socket", socket, "--json"]);
+  }
+  const now = await daemonOn(socket);
+  const lacks = (Object.keys(GRANTS) as (keyof typeof GRANTS)[])
+    .filter((grant) => now.permissions?.[grant] !== true)
+    .map((grant) => GRANTS[grant]);
+  if (!now.running || lacks.length > 0) {
+    if (!before.running) {
+      await peekaboo(["daemon", "stop", "--bridge-socket", socket, "--json"]);
+    }
+    return now.running
+      ? `Peekaboo's daemon (pid ${now.pid}, ${socket}) lacks ${lacks.join(", ")}: grant them to it in System Settings > Privacy & Security (peekaboo.sh/permissions.html)`
+      : `Peekaboo's daemon did not start on ${socket}`;
+  }
+  return { socket, started: !before.running };
 }
 
 /** One of `see --json`'s `data.ui_elements`: its opaque id and the AX words it is found by (peekaboo.sh/commands/see.html). */
@@ -137,17 +243,13 @@ async function windowOf(pid: number): Promise<string> {
  * so a background click lands on it and a background press has its
  * exact-window receipt (peekaboo.sh/commands/press.html).
  */
-async function look(pid: number, field?: string) {
+async function look(socket: string, pid: number, field?: string) {
   const window = await windowOf(pid);
   const seen = JSON.parse(
-    await peekaboo([
-      "see",
-      "--window-id",
-      window,
-      "--pid",
-      String(pid),
-      "--json",
-    ])
+    await peekaboo(
+      ["see", "--window-id", window, "--pid", String(pid), "--json"],
+      socket
+    )
   ) as { data?: { snapshot_id?: string | null; ui_elements?: SeenElement[] } };
   const element = field
     ? seen.data?.ui_elements?.find((one) =>
@@ -172,6 +274,38 @@ const run = async (kit: Kit) => {
   ) {
     return;
   }
+  // Peekaboo's one host for the run, said before anything starts.
+  const host = await peekabooHost();
+  if (
+    !kit.check(
+      "Peekaboo holds one granted host for the run: its build-scoped daemon",
+      typeof host !== "string",
+      typeof host === "string"
+        ? host
+        : `${host.socket}${host.started ? " (started by the run)" : ""}`
+    ) ||
+    typeof host === "string"
+  ) {
+    return;
+  }
+  try {
+    await keys(kit, binary, host.socket);
+  } finally {
+    // The daemon the run started goes with it; one already up stays as it was.
+    if (host.started) {
+      await peekaboo([
+        "daemon",
+        "stop",
+        "--bridge-socket",
+        host.socket,
+        "--json",
+      ]).catch((error) => console.log(`  peekaboo daemon stop: ${error}`));
+    }
+  }
+};
+
+/** The fleet, the Mac app and the three checks, every input through the run's Peekaboo host at `socket`. */
+const keys = async (kit: Kit, binary: string, socket: string) => {
   const fleet = await kit.fleet(() => ({ everyMs: 10, words: ["ok"] }));
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -233,40 +367,39 @@ const run = async (kit: Kit) => {
     }
     /** A background click on `field`, then its report with that focus. */
     const focus = async (field: string) => {
-      const at = await look(app.pid, field);
+      const at = await look(socket, app.pid, field);
       if (!(at.element && at.snapshot)) {
         throw new Error(
           `no ${field} in Peekaboo's snapshot (${JSON.stringify(at)})`
         );
       }
-      await peekaboo([
-        "click",
-        "--on",
-        at.element,
-        "--snapshot",
-        at.snapshot,
-        "--pid",
-        String(app.pid),
-      ]);
+      await peekaboo(
+        [
+          "click",
+          "--on",
+          at.element,
+          "--snapshot",
+          at.snapshot,
+          "--pid",
+          String(app.pid),
+        ],
+        socket
+      );
       return report(0, (m) => m[3] === field, 15_000);
     };
     /** ⌘K to the app's window, in the background, on a fresh exact-window snapshot. */
     const commandK = async () => {
-      const at = await look(app.pid);
+      const at = await look(socket, app.pid);
       if (!at.snapshot) {
         throw new Error(
           `no snapshot of window ${at.window} from Peekaboo (${JSON.stringify(at)})`
         );
       }
       // An exact-window selector and its fresh snapshot: the receipt a background press needs.
-      await peekaboo([
-        "press",
-        "cmd+k",
-        "--window-id",
-        at.window,
-        "--snapshot",
-        at.snapshot,
-      ]);
+      await peekaboo(
+        ["press", "cmd+k", "--window-id", at.window, "--snapshot", at.snapshot],
+        socket
+      );
       await Bun.sleep(1500);
     };
 
@@ -326,14 +459,10 @@ const run = async (kit: Kit) => {
     // 3. The menu bar stays live to the pointer while the page holds the keyboard.
     await focus("probe-leave");
     mark = app.lines.length;
-    await peekaboo([
-      "menu",
-      "click",
-      "--pid",
-      String(app.pid),
-      "--path",
-      JUMP_ITEM,
-    ]);
+    await peekaboo(
+      ["menu", "click", "--pid", String(app.pid), "--path", JUMP_ITEM],
+      socket
+    );
     await Bun.sleep(1500);
     kit.check(
       `3: with the page holding the keyboard, a click on ${JUMP_ITEM} opens Jump: the menu bar's item stays live`,
