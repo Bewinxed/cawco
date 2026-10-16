@@ -2,8 +2,8 @@
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { atMost } from "./at-most";
 import { binaryAssets } from "./binary-assets";
-import { bounded } from "./bounded";
 import { writeStateFile } from "./state-file";
 
 declare const __CAWCO_VERSION__: string | undefined;
@@ -95,7 +95,7 @@ export async function publishRuntime(): Promise<void> {
   )) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  const limit = bounded(PUBLISH_CONCURRENCY);
+  const limit = atMost(PUBLISH_CONCURRENCY);
   await Promise.all(
     missing.map(([name, source]) =>
       limit(async () =>

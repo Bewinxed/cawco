@@ -83,8 +83,8 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
+import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
-import { bounded } from "@cawco/core/bounded";
 import { isGitDir } from "@cawco/core/git-dir";
 import {
   currentEndpoint,
@@ -1299,7 +1299,7 @@ export const rearmHooks = (): Promise<void> => {
     };
   })();
   let armed = 0;
-  const limit = bounded(REARM_CONCURRENCY);
+  const limit = atMost(REARM_CONCURRENCY);
   const armNow = async (id: string): Promise<void> => {
     if (await limit(() => rearmOne(id))) {
       armed += 1;
