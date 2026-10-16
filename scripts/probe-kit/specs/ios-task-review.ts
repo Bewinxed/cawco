@@ -733,17 +733,24 @@ async function device(
         foot >= safe + SPACE_6 - 0.5,
         part("task-details")?.says ?? "no details line"
       );
-      // q. The phone's foot strip.
+      // q. The phone's foot strip. The details end over the keyboard's guide,
+      // the safe area's top with no keyboard: the sheet's safe area is what
+      // stands under them.
       const footStrip = part("task-sheet-foot");
       const sheet = part("task-sheet");
-      const strip = which.phone ? Math.max(12, safe) - 7 : 0;
+      const details = part("task-details");
+      const sheetSafe =
+        (sheet?.y ?? 0) +
+        (sheet?.h ?? 0) -
+        ((details?.y ?? 0) + (details?.h ?? 0));
+      const strip = which.phone ? Math.max(12, sheetSafe) - 7 : 0;
       kit.check(
-        `${tag} q: the sheet's foot strip stands ${strip.toFixed(1)}pt tall at the screen's foot`,
+        `${tag} q: the sheet's foot strip stands ${strip.toFixed(1)}pt tall at the screen's foot (its safe area ${sheetSafe.toFixed(1)})`,
         !!footStrip &&
           near(footStrip.h, strip) &&
           (strip === 0 ||
             near(footStrip.y + footStrip.h, (sheet?.y ?? 0) + (sheet?.h ?? 0))),
-        `foot ${at(footStrip)} | sheet ${at(sheet)} | safe ${safe}`
+        `foot ${at(footStrip)} | sheet ${at(sheet)} | details ${at(details)}`
       );
       // g. A comment, typed and sent, in the stream.
       if (writes) {

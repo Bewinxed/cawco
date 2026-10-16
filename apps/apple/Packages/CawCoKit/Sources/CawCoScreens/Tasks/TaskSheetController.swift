@@ -47,7 +47,11 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
                 controller.detents = [.medium(), .large()]
                 controller.selectedDetentIdentifier = .large
                 controller.prefersGrabberVisible = true
-                controller.prefersScrollingExpandsWhenScrolledToEdge = true
+                // Two scrollers take turns here (the review's stage, the
+                // details): the sheet tracks only the one it met first and took
+                // the other's drags for its own, so a drag scrolls whichever
+                // stands, and the grabber moves the sheet.
+                controller.prefersScrollingExpandsWhenScrolledToEdge = false
             }
         } else {
             sheet.modalPresentationStyle = .formSheet
