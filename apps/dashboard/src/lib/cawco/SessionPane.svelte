@@ -50,6 +50,7 @@
   } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
   import { instanceTitle, projectOfRow } from "./home/home-state.svelte";
+  import { deadlineIn } from "./hub-read";
   import { delegateHandle } from "./links";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
@@ -435,9 +436,13 @@
    */
   const served = $derived(tail && !tail.ok && !readAnswered ? tail : null);
   const servedMissing = $derived(served?.status === 404);
+  /** The tail's reconnecting window as a deadline on this clock, made once per tail it came with. */
+  const servedUntil = $derived(
+    tail && !tail.ok ? deadlineIn(tail.reconnectingMs) : null
+  );
   const servedFault = $derived(
     served && !servedMissing
-      ? readFaultOf(served, served.machineId, served.reconnectingUntil)
+      ? readFaultOf(served, served.machineId, servedUntil)
       : null
   );
 

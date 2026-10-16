@@ -25,6 +25,8 @@ final class PaneState: UIView {
     private var titleText = ""
     private var action: UIButton?
     private var shown: State?
+    /// Whether the fault shown was drawn while its machine was reconnecting.
+    private var shownReconnecting = false
     var onRetry: () -> Void = {}
     var onReturn: () -> Void = {}
 
@@ -66,8 +68,12 @@ final class PaneState: UIView {
     }
 
     func show(_ state: State) {
-        guard state != shown else { return }
+        // The same fault says something else once its machine's deadline
+        // passes (`ReadFault.reconnecting`): that is a new state to draw.
+        let reconnecting = if case let .fault(fault) = state { fault.reconnecting } else { false }
+        guard state != shown || reconnecting != shownReconnecting else { return }
         shown = state
+        shownReconnecting = reconnecting
         action?.removeFromSuperview()
         let titleText: String
         let lineText: NSAttributedString

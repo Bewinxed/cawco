@@ -770,6 +770,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // the pane keeps "Loading transcript…" over a machine reconnecting or offline.
         _ = (transcript.loadingOlder, transcript.olderFault, transcript.cursor, transcript.behind, transcript.catchingUp,
              transcript.loading, transcript.fault, transcript.missing)
+        // And the clock a reconnecting machine's deadline is read on
+        // (`Deadlines`): the pane, the dock and the strip turn to offline
+        // as it passes, with nothing read again.
+        _ = (transcript.fault?.reconnecting, transcript.behind?.reconnecting, transcript.olderFault?.reconnecting)
         let tail = transcript.tail
         let next = tail?.streaming ?? ""
         // The hub ends a reply's stream in the same breath as it appends the
@@ -1128,7 +1132,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
         // Why the page before the first row could not be read (Transcript.svelte `.older`).
         let fault = transcript.olderFault.map { fault in
-            Item(id: Self.olderId, top: 0, kind: .retry("\(fault.reason == .offline ? "This machine is offline" : "The turns before these couldn't be read"): \(fault.message)"),
+            Item(id: Self.olderId, top: 0, kind: .retry("\(fault.reason != .offline ? "The turns before these couldn't be read" : fault.reconnecting ? "This machine is reconnecting" : "This machine is offline"): \(fault.message)"),
                  print: "failed\(fault.message)")
         }
         older = olderNow

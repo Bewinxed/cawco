@@ -55,13 +55,13 @@ export const load: PageServerLoad = async ({
   }
   if (!response.ok) {
     // A 503 naming a machine is the hub saying that machine is not connected.
-    const { away, reconnectingUntil } = machineAway(response);
+    const { away, reconnectingMs } = machineAway(response);
     return {
       tail: {
         ok: false,
         viewId,
         machineId: away,
-        reconnectingUntil,
+        reconnectingMs,
         ...(await hubFailure(response)),
       },
     };

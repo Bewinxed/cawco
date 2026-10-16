@@ -126,6 +126,7 @@ import { deletePreview } from "./artifact-api";
 import { currentClientId } from "./client-id";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
+  deadlineIn,
   failureReason,
   type HubFailure,
   hubFailure,
@@ -6375,8 +6376,12 @@ export type ServerTail =
       /** The machine a 503 named as not connected, else null. */
       machineId: string | null;
       ok: false;
-      /** Until when that machine is on its way back, epoch ms (`machineAway`); else null. */
-      reconnectingUntil: number | null;
+      /**
+       * How long more that machine is on its way back, ms, as the hub said
+       * it (`machineAway`); else null. Relative: the pane makes it a
+       * deadline on the browser's clock once, as it takes the tail.
+       */
+      reconnectingMs: number | null;
       status: number;
       viewId: string;
     };
@@ -6447,11 +6452,11 @@ function thrownReason(error: unknown): string {
 /** Why a page read ended with nothing, said the way the pane says it. */
 async function pageFault(response: Response): Promise<TranscriptOutcome> {
   const failure = await hubFailure(response);
-  const { away, reconnectingUntil } = machineAway(response);
+  const { away, reconnectingMs } = machineAway(response);
   return {
     ok: false,
     status: response.status,
-    ...readFaultOf(failure, away, reconnectingUntil),
+    ...readFaultOf(failure, away, deadlineIn(reconnectingMs)),
   };
 }
 
@@ -6947,8 +6952,12 @@ async function olderPage(
         if (response.ok) {
           return (await response.json()) as TranscriptPage;
         }
-        const { away, reconnectingUntil } = machineAway(response);
-        return readFaultOf(await hubFailure(response), away, reconnectingUntil);
+        const { away, reconnectingMs } = machineAway(response);
+        return readFaultOf(
+          await hubFailure(response),
+          away,
+          deadlineIn(reconnectingMs)
+        );
       },
       cancel
     );

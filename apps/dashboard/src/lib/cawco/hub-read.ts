@@ -16,14 +16,15 @@ export type HubRead<T> = { ok: true; value: T } | ({ ok: false } & HubFailure);
 /**
  * The machine a transcript read's 503 names as not connected, and, when the
  * hub says it is on its way back (`X-Cawco-Machine-State: reconnecting`:
- * heard from moments ago), until when (epoch ms): the hub's `Retry-After`,
- * the time left before it stops reading the machine so, from now. Relative
- * on the wire and made absolute here, so no two clocks are compared. Null
+ * heard from moments ago), for how long more (ms): the hub's `Retry-After`,
+ * the time left before it stops reading the machine so. Relative, as the
+ * wire says it: whoever holds the answer makes it a deadline on its own
+ * clock ({@link deadlineIn}), so no two clocks are ever compared. Null
  * otherwise. Any other answer names no machine.
  */
 export function machineAway(response: Response): {
   away: string | null;
-  reconnectingUntil: number | null;
+  reconnectingMs: number | null;
 } {
   const away =
     response.status === 503 ? response.headers.get("x-cawco-machine") : null;
@@ -33,11 +34,16 @@ export function machineAway(response: Response): {
   const seconds = Number(response.headers.get("retry-after"));
   return {
     away,
-    reconnectingUntil:
+    reconnectingMs:
       reconnecting && Number.isFinite(seconds) && seconds > 0
-        ? Date.now() + seconds * 1000
+        ? seconds * 1000
         : null,
   };
+}
+
+/** `ms` from now on this clock (epoch ms), or null with none: a relative wait made a deadline where it is held. */
+export function deadlineIn(ms: number | null): number | null {
+  return ms === null ? null : Date.now() + ms;
 }
 
 /**

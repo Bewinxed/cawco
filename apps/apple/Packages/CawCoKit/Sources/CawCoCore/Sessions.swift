@@ -122,10 +122,12 @@ public struct ReadFault: Sendable, Equatable {
     public let reconnectingUntil: ContinuousClock.Instant?
     /// What it says while the deadline is ahead.
     private let reconnectingSaid: String?
-    /// The hub's deadline for the machine still ahead (client.svelte.ts `reconnectingNow`).
-    public var reconnecting: Bool { reconnectingUntil.map { ContinuousClock.now < $0 } ?? false }
-    /// What the fault says now (client.svelte.ts `faultMessage`).
-    public var message: String { reconnecting ? reconnectingSaid ?? stated : stated }
+    /// The hub's deadline for the machine still ahead, on the one clock
+    /// (`Deadlines`, client.svelte.ts `reconnectingNow`): a view that reads
+    /// it while observing turns to offline as the deadline passes, read or not.
+    @MainActor public var reconnecting: Bool { reconnectingUntil.map { Deadlines.shared.ahead($0) } ?? false }
+    /// What the fault says now (client.svelte.ts `faultMessage`), on the same clock.
+    @MainActor public var message: String { reconnecting ? reconnectingSaid ?? stated : stated }
 
     init(reason: Reason, machineId: String?, message: String,
          reconnecting: (until: ContinuousClock.Instant, message: String)? = nil) {
