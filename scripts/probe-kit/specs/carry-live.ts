@@ -686,6 +686,14 @@ const run = async (kit: Kit) => {
     };
     const s = await start("Person in a lead's folder");
     await shellSees(s.id, "as it starts", "first");
+    // The shell's answer is read mid-turn; the move "at rest" waits for the
+    // turn's end, which a slower machine reaches later.
+    await until(
+      `${name}: its turn ended`,
+      () => fleet.instance(s.id)?.turn_open_at ?? null,
+      (open) => open === null,
+      120_000
+    ).catch(() => undefined);
     const asked = await move(s.id, s.to);
     kit.check(
       `${name}: a person's move at rest goes at once`,
@@ -744,10 +752,18 @@ const run = async (kit: Kit) => {
   // in order: the move stays in A's organization.
   const orgLimitCase = async () => {
     const name = "at its limit, two free";
-    // A is free again: case 3 left the limit it read off A's refusal, which
-    // would place the session elsewhere and move it onto A by hand.
-    fleet.write("DELETE FROM account_bench WHERE account_id = ?", ACCOUNT);
-    fleet.write("DELETE FROM account_readings WHERE account_id = ?", ACCOUNT);
+    // The session first, on A, before C exists: placed with C first in order
+    // it lands on C and is moved onto A by hand (host run at 48cc01b91), and
+    // its turn there never reached A's limit.
+    const s = await start("Organization move", ACCOUNT);
+    // Running at rest on A before its limit: the move it makes then is the
+    // at-limit controller's alone.
+    const atRest = await until(
+      `${name}: running at rest on A`,
+      () => fleet.instance(s.id),
+      (row) => row?.status === "running" && row.turn_open_at === null,
+      180_000
+    ).catch(() => fleet.instance(s.id));
     await furnishAccount(fleet.home, C, "Other Organization");
     fleet.write(
       "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Probe C', 'red', 1, 0, ?)",
@@ -770,15 +786,12 @@ const run = async (kit: Kit) => {
       180_000
     ).catch(() => undefined);
     kit.check(`${name}: C, in another organization, is signed in`, !!cIn);
-    const s = await start("Organization move", ACCOUNT);
-    // Running at rest on A before its limit: the move it makes then is the
-    // at-limit controller's alone.
-    const atRest = await until(
-      `${name}: running at rest on A`,
-      () => fleet.instance(s.id),
-      (row) => row?.status === "running" && row.turn_open_at === null,
-      180_000
-    ).catch(() => fleet.instance(s.id));
+    const before = accountOf(s.id);
+    kit.check(
+      `${name}: with C signed in, the session is still on A at rest`,
+      before === ACCOUNT,
+      `account ${before}`
+    );
     limited.set(ACCOUNT, Date.now() + 4 * 60 * 60_000);
     await fleet.send(s.id, "ORG-MARK go on");
     // A held move is looked at again within 5 minutes (at-limit `unmoved`).
@@ -803,6 +816,12 @@ const run = async (kit: Kit) => {
     ).catch(() => undefined);
     kit.check(`${name}: it carries on on B's token`, !!onB);
     if (landed !== B || !onB) {
+      console.log(
+        `ORG-MARK requests ran on: ${fleet.seen
+          .filter((one) => one.all.includes("ORG-MARK"))
+          .map((one) => accountOfAuth(one.auth) ?? "an unknown token")
+          .join(", ")}`
+      );
       console.log((await linesAbout(s.id)).join("\n"));
     }
     limited.delete(ACCOUNT);
