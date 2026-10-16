@@ -284,6 +284,91 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/AskAnswerBehavior`.
+    public enum AskAnswerBehavior: OpenEnum {
+        case allow
+        case deny
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "allow": self = .allow
+            case "deny": self = .deny
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .allow: "allow"
+            case .deny: "deny"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.allow, .deny]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/AskAnswerVia`.
+    public enum AskAnswerVia: OpenEnum {
+        case app
+        case harness
+        case page
+        case session
+        case telegram
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "app": self = .app
+            case "harness": self = .harness
+            case "page": self = .page
+            case "session": self = .session
+            case "telegram": self = .telegram
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .app: "app"
+            case .harness: "harness"
+            case .page: "page"
+            case .session: "session"
+            case .telegram: "telegram"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.app, .harness, .page, .session, .telegram]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/AuthState`.
     public enum AuthState: OpenEnum {
         case authenticated

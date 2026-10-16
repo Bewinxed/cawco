@@ -1,9 +1,9 @@
 /**
  * The rows only this tab draws: a message it is sending, before the hub has
- * it, a failure it saw, and an ask it saw withdrawn. Everything else in a
- * transcript is the hub's.
+ * it, a failure it saw, and an ask it saw withdrawn or answered elsewhere.
+ * Everything else in a transcript is the hub's.
  */
-import type { SendPayload } from "@cawco/core";
+import type { AskAnswer, SendPayload } from "@cawco/core";
 import { newId } from "../id";
 import type { Message } from "../types";
 
@@ -72,6 +72,42 @@ export function withdrawnNote(
     instanceId,
     type: "ui.system_note",
     content: why ? `${line}: it couldn't be shown (${why})` : line,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * The same line for an ask answered somewhere other than this tab while it
+ * held the card (JOURNEY.md Flow 2: "the answer row resolves to the answer
+ * that won, naming where it came from"): "Already answered — Denied from the
+ * app." `harness` names the session's harness, for an ask it took itself.
+ */
+export function answeredNote(
+  instanceId: string,
+  question: boolean,
+  answer: AskAnswer,
+  harness: string
+): Message {
+  let word: string | null = null;
+  if (answer.behavior === "allow") {
+    word = question ? "Answered" : "Approved";
+  } else if (answer.behavior === "deny") {
+    word = question ? "Dismissed" : "Denied";
+  }
+  const where = {
+    page: answer.name ? `from ${answer.name}` : "from another tab",
+    app: answer.name ? `from ${answer.name}` : "from the app",
+    telegram: "from Telegram",
+    session: answer.name ? `by ${answer.name}` : "by another session",
+    harness: `in ${harness}`,
+  }[answer.via];
+  return {
+    id: newId(),
+    instanceId,
+    type: "ui.system_note",
+    content: word
+      ? `Already answered — ${word} ${where}`
+      : `Already answered ${where}`,
     timestamp: new Date().toISOString(),
   };
 }

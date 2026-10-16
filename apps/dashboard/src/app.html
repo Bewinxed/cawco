@@ -2,10 +2,28 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta
-      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
-      name="viewport"
-    />
+    <!--
+      The viewport, made before the body is parsed. A virtual keyboard
+      resizes the layout, not just the visual viewport
+      (`interactive-widget=resizes-content`: Chrome for Android since 108,
+      Firefox for Android since 133, per MDN's meta viewport page). WebKit
+      knows no such key and logs an error for it on every load, so only the
+      engines that read it are told it: Chromium and Gecko, by their own
+      version tokens (Chrome on iOS and Firefox on iOS are WebKit and carry
+      CriOS/ and FxiOS/ instead). Made here as Chromium's own Android keyboard
+      tests make theirs, a viewport meta appended to the head by a script
+      before the body (chromium chrome/test/data/android/view_transition.html).
+    -->
+    <script>
+      "use strict";
+      const VIEWPORT_KEY_READERS = /\b(Chrome|Firefox)\/\d/;
+      const viewportMeta = document.createElement("meta");
+      viewportMeta.name = "viewport";
+      viewportMeta.content = VIEWPORT_KEY_READERS.test(navigator.userAgent)
+        ? "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+        : "width=device-width, initial-scale=1, viewport-fit=cover";
+      document.head.appendChild(viewportMeta);
+    </script>
     <title>CawCo — mission control for Claude Code</title>
     <!--
       The tab's icon, in every page's HTML (a route with SSR off has no

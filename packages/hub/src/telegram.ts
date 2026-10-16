@@ -710,7 +710,9 @@ export const createTelegramBridge = ({
     const request = envelope.payload as PermissionRequest;
     settledHere.add(requestId);
     try {
-      await answerPermission(pending, request.instanceId, requestId, result);
+      await answerPermission(pending, request.instanceId, requestId, result, {
+        via: "telegram",
+      });
       return true;
     } catch (error) {
       settledHere.delete(requestId);

@@ -49374,6 +49374,10 @@
       "PermissionSettledFrame": {
         "type": "object",
         "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/AskAnswer",
+            "description": "What won, and where, when the ask was answered (`outcome: answered`) and the hub knows."
+          },
           "instanceId": {
             "type": "string"
           },
@@ -49406,6 +49410,27 @@
           "instanceId",
           "kind",
           "requestId"
+        ]
+      },
+      "AskAnswer": {
+        "description": "An answered ask's answer as the hub took it, and where it came from, so a\nscreen that held the ask and did not answer it says what won and where\n(JOURNEY.md Flow 2: \"the answer row resolves to the answer that won,\nnaming where it came from\").",
+        "type": "object",
+        "properties": {
+          "behavior": {
+            "$ref": "#/components/schemas/AskAnswerBehavior",
+            "description": "Approve or deny; absent when the harness settled the ask itself and did not say."
+          },
+          "name": {
+            "description": "The paired device that answered (a page or the app), or the session that\ndid (a delegate's parent, its project's lead), by name; absent when the\nhub knows no name (a page or app it trusts by its network).",
+            "type": "string"
+          },
+          "via": {
+            "$ref": "#/components/schemas/AskAnswerVia",
+            "description": "Where it was answered: a dashboard page; the app (a client that is no\npage: the iOS and Mac app); Telegram; another session; or the harness\nitself, in its own interface."
+          }
+        },
+        "required": [
+          "via"
         ]
       },
       "UsageFrame": {
@@ -50852,6 +50877,23 @@
         "enum": [
           "person",
           "session"
+        ]
+      },
+      "AskAnswerBehavior": {
+        "type": "string",
+        "enum": [
+          "allow",
+          "deny"
+        ]
+      },
+      "AskAnswerVia": {
+        "type": "string",
+        "enum": [
+          "app",
+          "harness",
+          "page",
+          "session",
+          "telegram"
         ]
       },
       "BinaryUpdateLandingOutcome": {

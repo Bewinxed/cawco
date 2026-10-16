@@ -1249,6 +1249,30 @@ public final class HubConnection {
         }
     }
 
+    /// An ask over with no answer from this device leaves its quiet line where
+    /// it was asked (client.svelte.ts `permission_settled`): withdrawn, or
+    /// answered somewhere else, saying what won and where. One the hub could
+    /// not show anyone was never parked here, and its reason is the only word
+    /// of it. Read before `needs.settle` takes the ask and its answer away.
+    private func askEnded(_ settled: Components.Schemas.PermissionSettledFrame) {
+        let ask = needs.parked[settled.instanceId]?.first { $0.requestId == settled.requestId }
+        let line: String
+        switch settled.outcome {
+        case .cancelled? where ask != nil || settled.reason != nil:
+            let question = ask?.isQuestion ?? (settled.toolName == Naming.askUserQuestion)
+            line = AskEnd.withdrawn(question: question, reason: settled.reason)
+        case .answered?:
+            guard let ask, let answer = settled.answer, needs.answerSent(for: ask).map({ $0.stage == .failed }) ?? true else { return }
+            line = AskEnd.answered(ask, answer, harness: AskEnd.harnessName(fleet.byId[settled.instanceId]?.harness))
+        default:
+            return
+        }
+        if let ask, ask.threadId != nil {
+            threads.ended(ask, line: line)
+        }
+        sessions.noteAskEnd(settled.instanceId, line)
+    }
+
     private func apply(_ frame: Frame) {
         switch frame {
         case let .instances(board, hubBuild):
@@ -1278,11 +1302,7 @@ public final class HubConnection {
         case let .permissionRequest(ask, routedTo, machineId):
             needs.park(ask, routedTo: routedTo, machineId: machineId)
         case let .permissionSettled(settled):
-            // Withdrawn, not answered: a thread's ask leaves its quiet line there.
-            if settled.outcome == .cancelled,
-               let ask = needs.parked[settled.instanceId]?.first(where: { $0.requestId == settled.requestId }), ask.threadId != nil {
-                threads.withdraw(ask, reason: settled.reason)
-            }
+            askEnded(settled)
             needs.settle(settled.instanceId, settled.requestId)
         case let .runQuestion(runId, raisedAt):
             // Represented once, by its waiting run; only the moment it was parked is kept.
