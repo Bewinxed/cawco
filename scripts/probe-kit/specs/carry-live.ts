@@ -752,6 +752,11 @@ const run = async (kit: Kit) => {
   // in order: the move stays in A's organization.
   const orgLimitCase = async () => {
     const name = "at its limit, two free";
+    // Case 3 leaves A at its limit in the mock, which refuses everything A's
+    // token sends, its login's check among them: A never reads signed in
+    // again (host run at e50d8e1f8). Its limit ends here, as case 4's does.
+    limited.delete(ACCOUNT);
+    limited.delete(B);
     // A and B signed in again first: case 3 restarted the agent, which
     // reports its logins at its next read (within a minute), and until then
     // the hub places nothing on A and refuses a move onto it ("Probe isn't
