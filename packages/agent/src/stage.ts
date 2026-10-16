@@ -298,6 +298,14 @@ function stageFor(
       `${bun ? "bun" : "node"} isn't on this machine's PATH, and ${dir}'s lockfile asks for it, so its stage can't start.`
     );
   }
+  const kit = "@sveltejs/kit" in deps;
+  // SvelteKit narrows Vite's served files to `src/` and its own folders: a
+  // story file anywhere else would load as a 403 (the spike's LibProbe).
+  if (kit && relative(join(root, "src"), story).startsWith("..")) {
+    throw new StageRefusal(
+      `SvelteKit serves only ${dir}/src, so a sheet sits beside its component there; ${relative(workspace.path, story)} is outside it.`
+    );
+  }
   const key = `${workspace.id}:${dir}`;
   const hash = createHash("sha256").update(key).digest().readUInt32BE(0);
   return {
@@ -306,7 +314,7 @@ function stageFor(
     root,
     dir,
     framework: framework === "solid-js" ? "solid" : framework,
-    kit: "@sveltejs/kit" in deps,
+    kit,
     runtime,
     port: PORT_BASE + (hash % PORT_SPAN),
   };

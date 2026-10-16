@@ -39125,8 +39125,8 @@
         "type": "object",
         "properties": {
           "artifactKind": {
-            "$ref": "#/components/schemas/FindArtifactArtifactKind",
-            "description": "Which kind of artifact: a preview, an HTML page, a canvas."
+            "$ref": "#/components/schemas/ArtifactKind",
+            "description": "Which kind of artifact: a preview, an HTML page, a canvas, a sheet."
           },
           "conversation": {
             "description": "The session that made it.",
@@ -39365,7 +39365,7 @@
         "type": "object",
         "properties": {
           "artifactKind": {
-            "$ref": "#/components/schemas/FindArtifactArtifactKind",
+            "$ref": "#/components/schemas/ArtifactKind",
             "description": "For an artifact or decision: which kind of artifact."
           },
           "conversation": {
@@ -47237,14 +47237,6 @@
           "plugin",
           "project",
           "user"
-        ]
-      },
-      "FindArtifactArtifactKind": {
-        "type": "string",
-        "enum": [
-          "canvas",
-          "page",
-          "preview"
         ]
       },
       "FindConversationOutcome": {

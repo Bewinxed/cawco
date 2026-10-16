@@ -46,7 +46,6 @@ typeOverrides:
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
     EffortLevel: OpenEnums.EffortLevel
     Exclude: OpenEnums.Exclude
-    FindArtifactArtifactKind: OpenEnums.FindArtifactArtifactKind
     FindConversationOutcome: OpenEnums.FindConversationOutcome
     FindConversationRole: OpenEnums.FindConversationRole
     FindField: OpenEnums.FindField
