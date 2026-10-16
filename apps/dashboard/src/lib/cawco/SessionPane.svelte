@@ -68,10 +68,7 @@
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
   import { inLists, threadIdOf, threadTabId } from "./thread-tabs";
-  import Composer, {
-    type ComposerAsk,
-    type Mention,
-  } from "./transcript/Composer.svelte";
+  import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";

@@ -51,7 +51,14 @@
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { previewRoute } from "../../../packages/core/src/frames";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import {
+  COMPOSER,
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+  settle,
+} from "../kit";
 import { emulateMotion } from "../motion";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -218,7 +225,7 @@ const setUp = async (kit: Kit): Promise<OnCanvas> => {
     }
   });
   page.on("pageerror", (error) => said.push(`pageerror: ${error.message}`));
-  await open(page, `${base}/session/${session}`, "textarea");
+  await open(page, `${base}/session/${session}`, COMPOSER);
   return { call, fleet, kit, logged, offOrigin, page, said, session };
 };
 
@@ -490,11 +497,7 @@ const imageChecks = async (on: OnCanvas) => {
   other.on("pageerror", (error) =>
     on.said.push(`pageerror (second screen): ${error.message}`)
   );
-  await open(
-    other,
-    `${await fleet.dashboard()}/session/${session}`,
-    "textarea"
-  );
+  await open(other, `${await fleet.dashboard()}/session/${session}`, COMPOSER);
   await fleet.api(`/api/instances/${session}/artifacts/${id}/show`, {});
   const otherFrame = await frameOf(other, id);
   // This screen's frame as it stands after the show: the canvas is an
@@ -902,7 +905,7 @@ const pressChecks = async (on: OnCanvas, id: string, hubId: string) => {
     );
 
   // 11. The dashboard has the focus; the frame does not.
-  await on.page.locator("textarea").first().focus();
+  await on.page.locator(COMPOSER).first().focus();
   const frameFocused = await frame.evaluate(() => document.hasFocus());
   const at = await screenOf(on, frame, hubId);
   if (!at) {

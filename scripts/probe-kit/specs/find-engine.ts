@@ -42,7 +42,7 @@ import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import type { TranscriptDoc } from "../../../packages/jsonl-parser/src";
 import { TranscriptIndex } from "../../../packages/jsonl-parser/src/fts5";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { COMPOSER, type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const OTHER = "scratch-other";
 const HANDOFF = "mcp__cawco__handoff";
@@ -865,7 +865,7 @@ const checkWaiting = async (
 };
 
 /** The composer's field, the finder's field in the glass's card, its rows' titles in drawn order, the composer's `@` rows. */
-const FIELD = "form.cin textarea";
+const FIELD = COMPOSER;
 const JUMP_FIELD = ".glass-face[data-face='jump'] input";
 const JUMP_NAMES = () =>
   [
@@ -873,12 +873,13 @@ const JUMP_NAMES = () =>
       ".glass-face[data-face='jump'] .slot:not([inert] *) .title"
     ),
   ].map((title) => title.textContent?.trim() ?? "");
-const AT_ROWS = () =>
-  [
-    ...document.querySelectorAll(
-      "#composer-menu [data-slot='command-item'][data-value]"
-    ),
-  ].map((row) => row.getAttribute("data-value") ?? "");
+/** The @ menu's rows (MentionMenu, standing in the composer's pill), each as its result's `kind:id`. */
+const AT_ROWS = () => {
+  const list = document.querySelector("form.cin [role='listbox']");
+  return [...(list?.querySelectorAll<HTMLElement>("[data-find-row]") ?? [])]
+    .map((row) => row.id.slice(`${list?.id}-`.length))
+    .filter(Boolean);
+};
 
 /** Whether the finder stands open in the glass's card with its field focused, and how many groups the workspace has. */
 const SHELL_STATE = () => {
@@ -911,8 +912,8 @@ const frameOf = async (page: Page, title: string, ready: string) => {
 /**
  * h: the dashboard names things as the hub ranks them: Jump's first row for
  * words in any order is the hub's first, and the composer's `@` offers the
- * hub's handles in its order, never this conversation's own; choosing one
- * writes the handle a mention reaches. And the shell's shortcuts hold with
+ * hub's names in its order, never this conversation's own; choosing one
+ * makes a chip sent as `@<title> <handle>`. And the shell's shortcuts hold with
  * the keyboard inside an artifact's page (core `SHELL_SHORTCUTS`): a page
  * that leaves ⌘K alone gives Jump, a canvas keeps it (Excalidraw's link
  * editor claims it), and a combo the canvas leaves alone (⌘\) reaches the
@@ -1045,30 +1046,36 @@ const checkScreens = async (
   const mention = await find(
     "q=boundary&transcripts=0&kinds=thread,conversation,machine"
   );
-  const handles = mention.results
-    .filter(
-      (result) =>
-        result.handle !== null &&
-        !(result.kind === "conversation" && result.instanceId === sender)
-    )
-    .map((result) => `@${result.handle}`);
+  const named = mention.results.filter(
+    (result) =>
+      result.handle !== null &&
+      !(result.kind === "conversation" && result.instanceId === sender)
+  );
+  const rowKeys = named.map((result) => `${result.kind}:${result.id}`);
   await page.focus(FIELD);
   await page.keyboard.type("@boundary");
   const offered = await until(
     "the composer's @ rows",
     () => page.evaluate(AT_ROWS),
-    (rows) => rows.length > 0 && rows[0] === handles[0],
+    (rows) => rows.length > 0 && rows[0] === rowKeys[0],
     20_000
   ).catch(() => page.evaluate(AT_ROWS));
   await page.keyboard.press("Enter");
-  const written = await page.inputValue(FIELD);
+  const written = await page.evaluate(
+    (sel) =>
+      document.querySelector<HTMLElement>(`${sel} .mention-chip`)?.dataset
+        .mention ?? null,
+    FIELD
+  );
   kit.check(
-    "h. the composer's @ offers the hub's handles in its order, and writes the one chosen",
+    "h. the composer's @ offers the hub's names in its order, never this conversation, and the one chosen is a chip that sends `@<title> <handle>`",
     offered.length > 0 &&
-      offered.every((row, i) => row === handles[i]) &&
-      !offered.some((row) => row.endsWith(sender.slice(0, 8))) &&
-      written === `${handles[0]} `,
-    JSON.stringify([handles.slice(0, 3), offered.slice(0, 3), written])
+      offered.every((row, i) => row === rowKeys[i]) &&
+      !offered.includes(`conversation:${sender}`) &&
+      // `@<title> · <what tells it apart>` when another candidate shares it.
+      !!written?.startsWith(`@${named[0]?.title.trim()}`) &&
+      written.endsWith(` <${named[0]?.handle}>`),
+    JSON.stringify([rowKeys.slice(0, 3), offered.slice(0, 3), written])
   );
   // A canvas in the panel, with the keyboard on its drawing.
   await call(CREATE, {

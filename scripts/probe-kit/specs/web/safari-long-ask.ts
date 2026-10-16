@@ -30,6 +30,7 @@
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { answering, settled } from "../../answering";
 import {
+  COMPOSER,
   type Kit,
   type KitFleet,
   open,
@@ -144,7 +145,7 @@ async function leg(
   page.on("pageerror", (error) => {
     pageErrors.push(error.message);
   });
-  await open(page, `${base}/session/${id}`, "textarea", 90_000);
+  await open(page, `${base}/session/${id}`, COMPOSER, 90_000);
 
   const words = await answering(page, async () => {
     await fleet.send(id, "hello");

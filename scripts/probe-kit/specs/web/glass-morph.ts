@@ -26,6 +26,9 @@
  * close caught mid-open, a close caught mid-switch): once shut, none of its
  * shadow (its border-image, outset under its box) lies below the cut,
  * nothing runs on it, and the glass draws no join and Caw's arcs are back.
+ * From the dashboard's own fields (the recall bench's Composer): ⌘K opens
+ * Jump from a focused composer, a field that handles ⌘K keeps it, and on
+ * Apple's systems ⌃K in the composer stays the field's.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each switch and close is read in order, case by case.
 // biome-ignore-all lint/performance/noAwaitInLoops: one switch, one reading, one close at a time.
@@ -443,30 +446,6 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
     await emulateMotion(page, null);
   }
 
-  // Any other text field keeps ⌘K: typed there, it opens nothing.
-  await page.evaluate(() => {
-    const field = document.createElement("input");
-    field.className = "probe-field";
-    document.body.append(field);
-    field.focus();
-  });
-  await page.keyboard.press("Control+k");
-  await rest();
-  const otherField = await page.evaluate((sel) => {
-    const field = document.querySelector<HTMLInputElement>(".probe-field");
-    const kept = document.activeElement === field;
-    field?.remove();
-    return {
-      kept,
-      open: document.querySelector(sel)?.getAttribute("data-state") === "open",
-    };
-  }, CARD);
-  kit.check(
-    `${where}: ⌘K in any other text field opens nothing and keeps the field's focus`,
-    otherField.kept && !otherField.open,
-    JSON.stringify(otherField)
-  );
-
   // Every way it shuts, each from a card standing open.
   const opener: Face = touch ? "jump" : "caw";
   const outsidePress = async () => {
@@ -565,6 +544,103 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
   await page.close();
 }
 
+/** The recall bench: the shell over a real Composer, no hub. */
+const COMPOSER_ROUTE = "/motion/recall";
+const COMPOSER_FIELD = 'form.cin [role="combobox"]';
+
+/** Jump stands open, and where the focus is. */
+const jumpNow = (page: Page) =>
+  page.evaluate((sel) => {
+    const card = document.querySelector(sel);
+    const at = document.activeElement;
+    const places: [string, string][] = [
+      ["jump", ".glass-face[data-face='jump'] *"],
+      ["composer", 'form.cin [role="combobox"]'],
+      ["probe-field", ".probe-field"],
+    ];
+    return {
+      jump:
+        card?.getAttribute("data-state") === "open" &&
+        card.querySelector('.glass-face[data-face="jump"]:not([inert])') !==
+          null,
+      focus:
+        places.find(([, where]) => at?.matches(where))?.[0] ??
+        at?.tagName ??
+        "nothing",
+    };
+  }, CARD);
+
+/**
+ * The shell's chords from the dashboard's own fields (decided 2026-10-16,
+ * WCAG 2.1.4 Character Key Shortcuts and Slack's ⌘K from its composer): a
+ * ⌘ chord reaches the shell from any field unless the field handled it;
+ * on Apple's systems ⌃ in a field stays the field's. One run each.
+ */
+async function fieldChords(kit: Kit) {
+  const page = await kit.page("desk");
+  await open(page, `${await kit.bench()}${COMPOSER_ROUTE}`, COMPOSER_FIELD);
+  await settle(page, 300);
+  await page.click(COMPOSER_FIELD);
+  await page.keyboard.press("Control+k");
+  await settle(page, 350);
+  const fromComposer = await jumpNow(page);
+  kit.check(
+    "⌘K (Ctrl off Apple) from a focused composer opens Jump, its field taking the focus",
+    fromComposer.jump && fromComposer.focus === "jump",
+    JSON.stringify(fromComposer)
+  );
+  await page.keyboard.press("Escape");
+  await settle(page, 350);
+
+  // A field that handles ⌘K itself keeps it.
+  await page.evaluate(() => {
+    const field = document.createElement("input");
+    field.className = "probe-field";
+    field.addEventListener("keydown", (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+        event.preventDefault();
+      }
+    });
+    document.body.append(field);
+    field.focus();
+  });
+  await page.keyboard.press("Control+k");
+  await settle(page, 350);
+  const handled = await jumpNow(page);
+  kit.check(
+    "a field that handles ⌘K (prevents its default) keeps it: Jump stays shut, the focus stays in the field",
+    !handled.jump && handled.focus === "probe-field",
+    JSON.stringify(handled)
+  );
+  await page.close();
+
+  // On Apple's systems ⌃K in a field is the text system's: the field's.
+  const apple = await kit.page("desk", {
+    init: [
+      () => {
+        Object.defineProperty(Navigator.prototype, "platform", {
+          get: () => "MacIntel",
+        });
+      },
+    ],
+  });
+  await open(apple, `${await kit.bench()}${COMPOSER_ROUTE}`, COMPOSER_FIELD);
+  await settle(apple, 300);
+  await apple.click(COMPOSER_FIELD);
+  await apple.keyboard.press("Control+k");
+  await settle(apple, 350);
+  const ctrl = await jumpNow(apple);
+  await apple.keyboard.press("Meta+k");
+  await settle(apple, 350);
+  const cmd = await jumpNow(apple);
+  kit.check(
+    "on Apple's systems ⌃K in the composer stays the field's (Jump shut, focus kept), and ⌘K there opens Jump",
+    !ctrl.jump && ctrl.focus === "composer" && cmd.jump && cmd.focus === "jump",
+    JSON.stringify({ ctrl, cmd })
+  );
+  await apple.close();
+}
+
 const spec: Spec = {
   name: "glass-morph",
   run: async (kit) => {
@@ -573,6 +649,7 @@ const spec: Spec = {
         await readAt(kit, view, theme);
       }
     }
+    await fieldChords(kit);
   },
 };
 export default spec;

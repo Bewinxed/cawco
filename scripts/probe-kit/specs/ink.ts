@@ -26,8 +26,8 @@
  *    opened at the viewport's edge stays inside it.
  * 4e. The pen's eraser removes the whole strokes it crosses (CDP's mouse has
  *    no eraser button, so these are the page's own PointerEvents, button 5).
- * 5. Send carries pins.md with two sections and one PNG the page's size at
- *    the overlay's scale, and every pin and group has `sentAt`.
+ * 5. With no Send, the ink and its pins reach the session by themselves
+ *    (the hub's delivery once quiet), and every pin and group has `sentAt`.
  * 6. On a canvas a pen stroke is Excalidraw's freedraw (the overlay's layer
  *    draws nothing), the icon stands at its end, and Annotate pins the
  *    element under it by id.
@@ -35,7 +35,14 @@
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import {
+  COMPOSER,
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+  settle,
+} from "../kit";
 import { emulateMotion } from "../motion";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -44,7 +51,8 @@ const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const FRAME = 'iframe[title="Preview"]';
 const CANVAS_FRAME = ".canvas-stage.docked iframe";
-const SECTION = /^## \d+\. /gm;
+/** A mark's section in what the session hears. */
+const SECTION = /^## /m;
 /** A pen stroke in a canvas's outline. */
 const INK_LINE = /^ink /m;
 
@@ -337,7 +345,7 @@ const setUp = async (kit: Kit): Promise<On> => {
       said.push(`error: ${message.text()}`);
     }
   });
-  await open(desk, `${base}/session/${session}`, "textarea");
+  await open(desk, `${base}/session/${session}`, COMPOSER);
   const cdp = await desk.context().newCDPSession(desk);
   return { call, cdp, fleet, kit, page: desk, said, session };
 };
@@ -364,7 +372,7 @@ const run = async (kit: Kit) => {
   await edgeChecks(on, frame);
   await eraserChecks(on, frame);
   frame = await placeChecks(on, frame, id);
-  await sendChecks(on, frame);
+  await deliveredChecks(on, frame);
   await canvasChecks(on);
   await reducedChecks(on);
   kit.check(
@@ -893,82 +901,31 @@ const placeChecks = async (
   return frame;
 };
 
-/** 5. Send carries pins.md with two sections and one PNG at the overlay's scale; everything is stamped sentAt. */
-const sendChecks = async (on: On, frame: Frame) => {
-  const chip = await until(
-    "the Ink chip",
-    () => on.page.locator(".ink-chip").count(),
-    (count) => count === 1,
-    10_000
-  ).catch(() => 0);
-  const size = await frame.evaluate(() => {
-    const root = document.documentElement;
-    const w = root.getBoundingClientRect().width;
-    const h = root.getBoundingClientRect().height;
-    const scale = Math.min(
-      2,
-      devicePixelRatio,
-      16_384 / w,
-      16_384 / h,
-      Math.sqrt(16_000_000 / (w * h))
-    );
-    return { w: Math.round(w * scale), h: Math.round(h * scale) };
-  });
-  const rows = await on.page.locator(".turn.you").count();
-  const before = heard.length;
-  await on.page.focus("textarea");
-  await on.page.keyboard.type("The ink");
-  await on.page.keyboard.press("Enter");
-  const row = on.page.locator(".turn.you").nth(rows);
-  await row.locator(".chips").waitFor({ timeout: 30_000 });
-  await settle(on.page, 300);
-  const carried = await row.evaluate(async (node) => {
-    const img = node.querySelector<HTMLImageElement>(".chips img");
-    if (img && !img.complete) {
-      await new Promise((done) =>
-        img.addEventListener("load", done, { once: true })
-      );
-    }
-    return {
-      names: [...node.querySelectorAll(".chips .doc .name")].map(
-        (n) => n.textContent
-      ),
-      images: node.querySelectorAll(".chips img").length,
-      natural: img ? [img.naturalWidth, img.naturalHeight] : null,
-    };
-  });
-  const message = await until(
-    "the message at the model",
-    () => heard.slice(before).find((text) => text.includes("## 1.")),
-    Boolean,
-    60_000
-  ).catch(() => "");
-  const sections = message?.match(SECTION)?.length ?? 0;
+/**
+ * 5. The ink and its pins reach the session by themselves, nothing sent
+ * from the composer (the hub's delivery once the marks are quiet,
+ * artifacts/service.ts `deliverMarks`): the session hears the paragraph's
+ * and the second paragraph's pins, and the hub stamps every pin and group.
+ */
+const deliveredChecks = async (on: On, frame: Frame) => {
   const stamped = await until(
-    "sentAt on the doc",
+    "sentAt on the doc, from the hub's delivery",
     () => docOf(frame),
     (doc) =>
       Object.values(doc.pins).every((pin) => !!pin.sentAt) &&
       Object.values(doc.ink).every((group) => !!group.sentAt),
-    10_000
+    60_000
   ).catch(() => docOf(frame));
+  const told = heard.filter((text) => SECTION.test(text));
   on.kit.check(
-    "5: the composer shows the Ink chip; Send carries pins.md with two sections and one PNG the page's size at the overlay's scale",
-    chip === 1 &&
-      carried.names.includes("pins.md") &&
-      carried.images === 1 &&
-      sections === 2 &&
-      !!carried.natural &&
-      Math.abs(carried.natural[0] - size.w) <= 2 &&
-      Math.abs(carried.natural[1] - size.h) <= 2,
-    `chip ${chip}; ${JSON.stringify(carried)}; expected ${size.w}×${size.h}; sections ${sections}`
-  );
-  on.kit.check(
-    "5: every pin and group is stamped sentAt, and the chip goes",
-    Object.values(stamped.pins).every((pin) => !!pin.sentAt) &&
-      Object.values(stamped.ink).every((group) => !!group.sentAt) &&
-      (await on.page.locator(".ink-chip").count()) === 0,
-    `pins ${Object.values(stamped.pins)
+    "5: with no Send, the ink and its pins reach the session (it hears #para's and #second's pins) and every pin and group is stamped sentAt",
+    told.some((text) => text.includes("#para")) &&
+      told.some((text) => text.includes("#second")) &&
+      Object.values(stamped.pins).every((pin) => !!pin.sentAt) &&
+      Object.values(stamped.ink).every((group) => !!group.sentAt),
+    `heard ${told.length} delivery message(s); pins ${Object.values(
+      stamped.pins
+    )
       .map((pin) => !!pin.sentAt)
       .join()}; groups ${Object.values(stamped.ink)
       .map((group) => !!group.sentAt)

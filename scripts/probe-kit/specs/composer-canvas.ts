@@ -78,6 +78,7 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import { type Box, box } from "../geom";
 import {
+  COMPOSER,
   type Kit,
   type KitFleet,
   open,
@@ -88,7 +89,7 @@ import {
 import { emulateMotion } from "../motion";
 
 const PILL = "form.cin";
-const FIELD = "form.cin textarea";
+const FIELD = COMPOSER;
 const STAGE = ".canvas-stage:not([hidden])";
 const FRAME = ".canvas-stage iframe";
 const SLOT = ".composer > .canvas-slot";
@@ -1023,7 +1024,7 @@ const openCheck = async (
   );
   await page.focus(FIELD);
   await page.keyboard.type("Over the canvas");
-  const typed = await page.inputValue(FIELD);
+  const typed = (await page.textContent(FIELD)) ?? "";
   kit.check(
     "1: with the canvas standing, the field still takes keys",
     typed.includes("Over the canvas"),
@@ -1434,7 +1435,7 @@ const removeCheck = async (
     `/api/instances/${session}/artifacts`
   );
   kit.check(
-    "13: Remove folds the drawn canvas as Done does (its runs on --dur-grow-exit), leaves no canvas or Ink chip in the message, and the session still lists the artifact",
+    "13: Remove folds the drawn canvas as Done does (its runs on --dur-grow-exit), leaves no canvas in the message, and the session still lists the artifact",
     runs.length > 0 &&
       runs.every((one) => one.duration === exit) &&
       !after.stage &&
@@ -1750,8 +1751,7 @@ const heldExportCheck = async (on: On) => {
         "form.cin button.stop"
       );
       return {
-        field: (document.querySelector(field) as HTMLTextAreaElement | null)
-          ?.value,
+        field: document.querySelector(field)?.textContent,
         canvas: !!document.querySelector(stage),
         label: button?.getAttribute("aria-label"),
         busy: button?.getAttribute("aria-busy") ?? null,

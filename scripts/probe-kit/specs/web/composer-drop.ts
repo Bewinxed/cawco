@@ -8,8 +8,8 @@
  *
  * Read before the page's scripts: every drag's types as it hovers, whether
  * the page refused the hover, every drop's types and data, every `input` on
- * a textarea with its `inputType`, and a stack for any textarea value that
- * comes to hold a layout's `"focusedLeaf"`.
+ * a text field with its `inputType`, and the words of any composer field
+ * that comes to hold a layout's `"focusedLeaf"`.
  *
  * - tab: Bravo's tab carried down across the composer and on to the pane's
  *   right edge splits the pane, Bravo alone in the new group, and no field
@@ -29,12 +29,12 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CDPSession, Page } from "playwright-core";
 import { MACHINE, type Seen } from "../../../scratch-fleet";
-import { type Kit, open, type Spec } from "../../kit";
+import { COMPOSER, type Kit, open, type Spec } from "../../kit";
 
 const TITLES = ["Alpha", "Bravo", "Charlie"];
 const STRIPS = "[data-strip]";
 const tabSel = (id: string) => `${STRIPS} .tab:has([data-session-tab="${id}"])`;
-const FIELD = 'form.cin textarea:not([aria-hidden="true"])';
+const FIELD = COMPOSER;
 const fieldOf = (leaf: string) => `[data-leaf="${leaf}"] ${FIELD}`;
 /** The private type (apps/dashboard/src/lib/cawco/internal-drag.ts). */
 const INTERNAL = "application/x-cawco-drag";
@@ -64,13 +64,14 @@ function watch() {
     inputs: [],
     layoutInField: [],
   };
+  /** A text field: the composer's editable box (or a textarea elsewhere). */
+  const typed = (target: EventTarget | null) =>
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable);
   window.addEventListener(
     "dragover",
     (e) => {
-      const into =
-        e.target instanceof HTMLTextAreaElement
-          ? w.__trace.hovers
-          : w.__trace.elsewhere;
+      const into = typed(e.target) ? w.__trace.hovers : w.__trace.elsewhere;
       // What the page decided is read once the dispatch is over (a task
       // later: a microtask runs between one listener and the next); its
       // types now, while the data store can still be read.
@@ -102,27 +103,25 @@ function watch() {
   window.addEventListener(
     "input",
     (e) => {
-      if (e.target instanceof HTMLTextAreaElement && e instanceof InputEvent) {
+      if (typed(e.target) && e instanceof InputEvent) {
         w.__trace.inputs.push({ inputType: e.inputType, data: e.data });
       }
     },
     true
   );
-  const desc = Object.getOwnPropertyDescriptor(
-    HTMLTextAreaElement.prototype,
-    "value"
-  );
-  Object.defineProperty(HTMLTextAreaElement.prototype, "value", {
-    ...desc,
-    set(v: string) {
-      if (String(v).includes('"focusedLeaf"')) {
-        w.__trace.layoutInField.push(
-          new Error("value").stack?.slice(0, 1200) ?? ""
-        );
+  // A layout's JSON coming to stand in a composer's field, however it got there.
+  new MutationObserver((records) => {
+    for (const record of records) {
+      const field = (
+        record.target instanceof Element
+          ? record.target
+          : record.target.parentElement
+      )?.closest<HTMLElement>('[contenteditable="true"]');
+      if (field?.textContent?.includes('"focusedLeaf"')) {
+        w.__trace.layoutInField.push(field.textContent.slice(0, 1200));
       }
-      desc?.set?.call(this, v);
-    },
-  });
+    }
+  }).observe(document, { childList: true, characterData: true, subtree: true });
 }
 
 const trace = (page: Page) =>
@@ -143,7 +142,7 @@ const fields = (page: Page) =>
     (sel) =>
       [...document.querySelectorAll<HTMLElement>("[data-leaf]")].map((g) => ({
         leaf: g.dataset.leaf ?? "",
-        value: g.querySelector<HTMLTextAreaElement>(sel)?.value ?? null,
+        value: g.querySelector<HTMLElement>(sel)?.textContent ?? null,
       })),
     FIELD
   );

@@ -401,7 +401,7 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
   // ── a. web: the thread's own composer ───────────────────────────────
   const base = await fleet.dashboard();
   const page: Page = await kit.page("desk");
-  const FIELD = 'textarea[aria-label="Message the project"]';
+  const FIELD = '[role="combobox"][aria-label="Message the project"]';
   await open(page, `${base}/session/thread:${threadId}`, FIELD, 90_000);
   const stopShown = page
     .locator('button[aria-label="Stop the agent"]')

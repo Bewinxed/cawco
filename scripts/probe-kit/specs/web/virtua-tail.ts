@@ -20,7 +20,7 @@
 
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { SCROLLER, tell, watch, watched, wholeWheels } from "../../frames";
-import { open, type Spec } from "../../kit";
+import { COMPOSER, open, type Spec } from "../../kit";
 
 const ROWS = 820;
 const TURNS = 4;
@@ -321,7 +321,7 @@ const spec: Spec = {
     for (let turn = 1; turn <= TURNS; turn += 1) {
       // biome-ignore lint/performance/noAwaitInLoops: one turn at a time, each at the tail the last left
       const spoken = (await rowsOf(sessionId)).rows;
-      const field = page.locator("textarea:visible").first();
+      const field = page.locator(`${COMPOSER}:visible`).first();
       await field.fill(`tail-turn-${turn}: one more turn.`);
       await field.press("Enter");
       await until(

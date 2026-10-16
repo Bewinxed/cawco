@@ -324,7 +324,7 @@ const run = async (kit: Kit) => {
       await open(
         page,
         `${base}/session/thread:${threadId}`,
-        'textarea[aria-label="Message the project"]',
+        '[role="combobox"][aria-label="Message the project"]',
         90_000
       );
       return await read(page);

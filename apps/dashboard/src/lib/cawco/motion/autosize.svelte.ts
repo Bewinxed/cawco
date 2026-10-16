@@ -39,11 +39,12 @@ function nextFrame(node: HTMLElement, fit: () => void) {
 }
 
 /**
- * A textarea that grows with what is in it, the same way on every engine:
- * its height is measured from the text (scrollHeight) and set in pixels, so
- * a CSS height transition carries each new line in instead of the field
- * jumping. `min-height` and `max-height` in CSS still bound it; past the
- * ceiling it scrolls. Attach with the value it shows:
+ * A text field that grows with what is in it, the same way on every engine:
+ * a textarea, or an editable box (the composer's MentionField). Its height
+ * is measured from the text (scrollHeight) and set in pixels, so a CSS
+ * height transition carries each new line in instead of the field jumping.
+ * `min-height` and `max-height` in CSS still bound it; past the ceiling it
+ * scrolls. Attach with the value it shows:
  * `{@attach autosize(() => value)}`.
  *
  * A field handed a different text wholesale (a group's one composer, lent
@@ -70,20 +71,35 @@ export function autosize(
     measured?: (natural: number) => void;
   } = {}
 ) {
-  return (node: HTMLTextAreaElement) => {
+  return (node: HTMLElement) => {
+    const area = node instanceof HTMLTextAreaElement ? node : null;
     // Measured on a hidden twin, never on the field: collapsing the field to
     // measure it would cancel the height transition it is running.
-    const twin = node.cloneNode() as HTMLTextAreaElement;
-    twin.removeAttribute("id");
-    twin.removeAttribute("name");
-    // The field is sized from its value alone. A placeholder is one line by
-    // design, but a textarea counts a wrapped placeholder in scrollHeight,
-    // so an empty field measured with one would grow a line after load.
-    twin.removeAttribute("placeholder");
-    // One row, so an empty field measures one line: without `rows` a
-    // textarea stands two rows tall, and scrollHeight never reads less than
-    // the box it scrolls in.
-    twin.rows = 1;
+    const twin = node.cloneNode() as HTMLElement;
+    for (const name of [
+      "id",
+      "name",
+      // The field is sized from its value alone. A placeholder is one line
+      // by design, but a textarea counts a wrapped placeholder in
+      // scrollHeight, so an empty field measured with one would grow a line
+      // after load.
+      "placeholder",
+      "data-placeholder",
+      // Not a field: nothing finds it as one, nor types in it.
+      "contenteditable",
+      "role",
+      "aria-label",
+      "aria-controls",
+      "aria-activedescendant",
+    ]) {
+      twin.removeAttribute(name);
+    }
+    if (twin instanceof HTMLTextAreaElement) {
+      // One row, so an empty field measures one line: without `rows` a
+      // textarea stands two rows tall, and scrollHeight never reads less
+      // than the box it scrolls in.
+      twin.rows = 1;
+    }
     twin.setAttribute("aria-hidden", "true");
     twin.tabIndex = -1;
     twin.style.cssText =
@@ -94,7 +110,17 @@ export function autosize(
     const fit = () => {
       width = node.offsetWidth;
       twin.style.width = `${width}px`;
-      twin.value = node.value;
+      if (area) {
+        (twin as HTMLTextAreaElement).value = area.value;
+      } else {
+        // An empty box measures one line, as an empty textarea of one row.
+        const copy = node.cloneNode(true);
+        twin.replaceChildren(
+          ...(copy.hasChildNodes()
+            ? copy.childNodes
+            : [document.createTextNode(" ")])
+        );
+      }
       const border = node.offsetHeight - node.clientHeight;
       natural = twin.scrollHeight + border;
       measured?.(natural);

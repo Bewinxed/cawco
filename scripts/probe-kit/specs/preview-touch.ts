@@ -25,7 +25,7 @@
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -268,7 +268,7 @@ const probe = async (kit: Kit) => {
   const page = await kit.page("phone", { scale: 3 });
   const said: string[] = [];
   page.on("pageerror", (error) => said.push(`pageerror: ${error.message}`));
-  await open(page, `${base}/session/${session}`, "textarea");
+  await open(page, `${base}/session/${session}`, COMPOSER);
   const cdp = await page.context().newCDPSession(page);
   const on: On = { kit, page };
 
@@ -362,7 +362,7 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
   const page = await kit.page("phone", { scale: 3, engine: "webkit" });
   const said: string[] = [];
   page.on("pageerror", (error) => said.push(`pageerror: ${error.message}`));
-  await open(page, url, "textarea");
+  await open(page, url, COMPOSER);
   await pageFrame(page);
   await settle(page, 400);
   const on: On = { kit, page };

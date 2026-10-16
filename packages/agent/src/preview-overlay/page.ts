@@ -181,13 +181,11 @@ function pinUnder(x: number, y: number): string | null {
 const ink = startInk({
   anchorOf,
   chrome,
-  capture: pageCapture,
   describe,
   elementAt,
   freehand,
   locate,
   pins: () => pins,
-  post,
   waiting,
 });
 
@@ -1125,11 +1123,6 @@ function scaleFor(el: Element): number {
   );
 }
 
-/** The whole page as a picture, its ink on it, at `scale` (the page's own, when none). */
-function pageCapture(scale?: number) {
-  return capture(document.documentElement, scale);
-}
-
 async function capture(
   el: Element,
   scale = scaleFor(el)
@@ -1557,10 +1550,6 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:track-pin": (message) => pins.track(idOf(message)),
     "cawco:capture": async () =>
       post("cawco:capture", await capture(document.documentElement)),
-    // The composer's Send: the pins as text and the page with its ink as a picture.
-    "cawco:ink-export": async () =>
-      post("cawco:ink-exported", await ink.exported()),
-    "cawco:ink-sent": () => ink.sent(),
   };
 
 window.addEventListener("message", async (event) => {

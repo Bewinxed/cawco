@@ -77,8 +77,13 @@
   }
 </script>
 
+<!-- Focus never leaves the field: the menu swallows the mousedown that would
+     blur it, so a picked row lands its chip where the words were typed. -->
+<!-- biome-ignore lint/a11y/noStaticElementInteractions: the mousedown handler only keeps the focus in the field; the rows are its controls -->
 <div
   class={["menu", { phone }]}
+  onmousedown={(event) => event.preventDefault()}
+  role="presentation"
   transition:grow
   {@attach morph({ rows: true })}
   {@attach phone

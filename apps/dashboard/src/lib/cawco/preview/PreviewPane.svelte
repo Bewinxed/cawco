@@ -67,7 +67,6 @@
     joinArtifact,
     sendArtifact,
   } from "./artifact-doc";
-  import { heardInk } from "./ink.svelte";
   import PinCard from "./PinCard.svelte";
   import PinList from "./PinList.svelte";
   import PlacePick from "./PlacePick.svelte";
@@ -1149,18 +1148,6 @@
       case "cawco:resolved":
         if (failure && failure.again === null) {
           failure = null;
-        }
-        break;
-      case "cawco:ink":
-        // The person's unsent ink, which the composer's Send carries.
-        if (artifact && iframe?.contentWindow) {
-          heardInk(
-            instanceId,
-            artifact.id,
-            iframe.contentWindow,
-            paneOrigin,
-            message
-          );
         }
         break;
       default:

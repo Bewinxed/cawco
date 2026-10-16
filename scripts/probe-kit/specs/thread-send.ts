@@ -24,7 +24,7 @@ import {
   HUB_UNREACHABLE_HEADER,
 } from "../../../apps/dashboard/src/lib/cawco/hub-read";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec } from "../kit";
+import { COMPOSER, type Kit, open, type Spec } from "../kit";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
@@ -193,10 +193,10 @@ const run = async (kit: Kit) => {
   // (c) The composer, a send the hub never hears.
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
-  await open(page, `${base}/session/thread:${threadId}`, "textarea");
+  await open(page, `${base}/session/thread:${threadId}`, COMPOSER);
   const route = `**/api/projects/${project.id}/threads/${threadId}/messages`;
   await page.route(route, (request) => request.abort("failed"));
-  const field = page.locator("textarea").first();
+  const field = page.locator(COMPOSER).first();
   await field.fill("KEEP-THESE-WORDS");
   await field.press("Enter");
   const line = page.locator(".send-error");
@@ -214,8 +214,8 @@ const run = async (kit: Kit) => {
   kit.check("(c) Send again stands on the line", (await again.count()) === 1);
   kit.check(
     "(c) the words are back in the field",
-    (await field.inputValue()) === "KEEP-THESE-WORDS",
-    await field.inputValue()
+    (await field.textContent()) === "KEEP-THESE-WORDS",
+    (await field.textContent()) ?? ""
   );
   await page.unroute(route);
   await again.click();

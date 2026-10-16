@@ -54,7 +54,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { type Fleet, MACHINE, type Seen, until } from "../../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { COMPOSER_FIELD, type Kit, open, type Spec, settle } from "../../kit";
 
 const ROUTINES = 4;
 const BUSY = 40;
@@ -584,17 +584,16 @@ async function asks(
   const page = await kit.page("desk");
   page.setDefaultTimeout(60_000);
   const composer = () =>
-    page.evaluate(() => {
-      const field =
-        document.querySelector<HTMLTextAreaElement>(".ask-caw textarea");
+    page.evaluate((sel) => {
+      const field = document.querySelector<HTMLElement>(`.ask-caw ${sel}`);
       return {
         field: field !== null,
         focused: field !== null && document.activeElement === field,
-        value: field?.value ?? null,
+        value: field?.textContent ?? null,
         attach: document.querySelectorAll(".ask-caw .att-btn").length,
         path: location.pathname,
       };
-    });
+    }, COMPOSER_FIELD);
   await open(
     page,
     `${base}/project/${projectId}?view=routines`,
@@ -602,7 +601,7 @@ async function asks(
   );
   await settle(page);
   await page.getByRole("button", { name: "New routine" }).click();
-  await page.waitForSelector(".ask-caw textarea");
+  await page.waitForSelector(`.ask-caw ${COMPOSER_FIELD}`);
   await settle(page);
   const opened = await composer();
   kit.check(

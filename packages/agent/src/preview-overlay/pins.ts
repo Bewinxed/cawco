@@ -31,7 +31,6 @@ import {
   type PageAnchor,
   type Pin,
   type PinnedElement,
-  pinSection,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import type { Map as YMap } from "yjs";
@@ -95,8 +94,6 @@ export interface Pins {
   /** The pin the host focused (J, K, its row), outlined and scrolled into view; or none. */
   focus: (id: string | null, scroll: boolean) => void;
   layer: SVGSVGElement;
-  /** Unsent pins as the send's sections (core `pinSection`), for the composer's Ink chip. */
-  markdown: () => string;
   /** The page with the person's ink on it, as a send carries it. */
   pagePicture: () => Promise<string | null>;
   /** A pin's picture, as a delivery carries it: its element, or its ink with the page under it. */
@@ -373,24 +370,6 @@ export function startPins(deps: PinsDeps): Pins {
     };
   };
 
-  const md = () => {
-    const doc = artifact.doc();
-    const groups = {
-      ...(doc.getMap("moved").toJSON() as Record<string, InkGroup>),
-      ...(doc.getMap("ink").toJSON() as Record<string, InkGroup>),
-    };
-    return [...pinsMap().values()]
-      .filter((pin) => !pin.sentAt)
-      .sort((a, b) => a.number - b.number)
-      .map((pin) =>
-        pinSection(pin, {
-          url: location.href,
-          ...(pin.ink && groups[pin.ink] ? { ink: groups[pin.ink].page } : {}),
-        })
-      )
-      .join("\n\n");
-  };
-
   /** The page cropped to `box` (the page's px), ink and all. */
   const crop = async (box: Box): Promise<string | null> => {
     const scale = fitScale(box.w, box.h, Math.min(2, devicePixelRatio));
@@ -424,7 +403,6 @@ export function startPins(deps: PinsDeps): Pins {
   return {
     layer,
     draw,
-    markdown: md,
     commentAt: (el, x, y) => {
       const pin: Pin = {
         id: newId(),

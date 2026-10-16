@@ -28,7 +28,7 @@ import type { Page, WebSocketRoute } from "playwright-core";
 import { MACHINE } from "../../../scratch-fleet";
 import { open, type Spec, settle, type View } from "../../kit";
 
-const FIELD = 'textarea[aria-controls="composer-menu"]';
+const FIELD = '[role="combobox"][aria-controls="composer-menu"]';
 const TWIN = "probe-twin";
 const OWN = "probe-own";
 const OWN_WORDS = "The one Claude Code runs";
@@ -346,7 +346,7 @@ const spec: Spec = {
               ?.textContent?.replace(/\s+/g, " ")
               .trim() ?? "",
           field: document.querySelectorAll(
-            'textarea[aria-controls="composer-menu"]'
+            '[role="combobox"][aria-controls="composer-menu"]'
           ).length,
           transcript: Boolean(
             document.querySelector(`[data-pane="${one}"] [role="log"]`)

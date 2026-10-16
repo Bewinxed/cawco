@@ -37,7 +37,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
+import {
+  COMPOSER_FIELD,
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+  settle,
+} from "../../kit";
 import { FONT, photo } from "./oui-mockup/bytes";
 
 const HERE = join(import.meta.dir, "oui-mockup");
@@ -47,7 +54,7 @@ const TASK_CARD_CALL = /\bTaskCard\(/g;
 /** What each of CawCo's own components draws inside it: the dashboard's real component. */
 const INSIDE: Record<string, string> = {
   SessionRow: "[data-rail-row]",
-  Composer: "textarea",
+  Composer: COMPOSER_FIELD,
   TaskCard: "[data-task]",
   BoardColumn: "section.column",
   MachineRow: ".tile",

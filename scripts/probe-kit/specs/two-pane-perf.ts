@@ -46,7 +46,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
-import { type Kit, open, type Spec } from "../kit";
+import { COMPOSER, type Kit, open, type Spec } from "../kit";
 
 /** Calls in each long session. */
 const LONG = 2000;
@@ -544,7 +544,7 @@ async function measure(
   };
   await phase("stream", () => page.waitForTimeout(20_000));
   await phase("type", async () => {
-    await page.locator('[data-leaf="pleft"] textarea').first().click();
+    await page.locator(`[data-leaf="pleft"] ${COMPOSER}`).first().click();
     await page.keyboard.type(
       "The quick brown fox jumps over the lazy dog while both panes stream on",
       { delay: 70 }

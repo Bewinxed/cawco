@@ -16,7 +16,6 @@
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
   import { theme } from "#lib/theme.svelte.js";
-  import { heardInk } from "../preview/ink.svelte";
   import { previewShortcut, SHORTCUT_MESSAGE } from "../preview/wire";
   import { watchInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
@@ -57,18 +56,6 @@
         break;
       case "cawco:drawn":
         stage.heardDrawn(event.data.count);
-        break;
-      case "cawco:ink":
-        // The person's unsent ink on the canvas, which the composer's Send carries.
-        if (stage.frame?.contentWindow && stage.origin) {
-          heardInk(
-            stage.instanceId,
-            stage.id,
-            stage.frame.contentWindow,
-            stage.origin,
-            event.data
-          );
-        }
         break;
       case "cawco:dock":
         actions?.dock?.();

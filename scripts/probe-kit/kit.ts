@@ -53,6 +53,16 @@ export type Theme = (typeof THEMES)[number];
 /** Device pixels per css px, everywhere. */
 export const SCALE = 2;
 
+/**
+ * A composer's message field (Composer.svelte's MentionField): an editable
+ * box, not a textarea. Its words read as its `textContent` (a chip as its
+ * label); its draft is the composer's own string. Its autosize twin is no
+ * combobox, so this finds the field alone.
+ */
+export const COMPOSER_FIELD = '[role="combobox"][contenteditable="true"]';
+/** A composer's field in its pill. */
+export const COMPOSER = `form.cin ${COMPOSER_FIELD}`;
+
 export interface PageOptions {
   /** WebKit for a spec that reads Safari's engine; Chromium otherwise. */
   engine?: "chromium" | "webkit";

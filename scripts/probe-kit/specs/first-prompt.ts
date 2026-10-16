@@ -21,7 +21,7 @@
  */
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
-import type { Spec } from "../kit";
+import { COMPOSER, type Spec } from "../kit";
 
 const MARK = {
   first: "PROBE-FP-FIRST say one",
@@ -284,7 +284,7 @@ const spec: Spec = {
 
     // 2. A composer send into the idle session.
     await phase("idle");
-    const field = page.locator("textarea").first();
+    const field = page.locator(COMPOSER).first();
     await field.click();
     await field.fill(MARK.second);
     await phase("second");

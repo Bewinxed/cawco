@@ -29,7 +29,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
-import { type Kit, open, type Spec, settle, type View } from "../../kit";
+import {
+  COMPOSER_FIELD,
+  type Kit,
+  open,
+  type Spec,
+  settle,
+  type View,
+} from "../../kit";
 import { openCawSettings } from "./caw-seat-pop";
 
 const DOCK = "[data-caw-dock]";
@@ -87,10 +94,10 @@ const moneyIn = (page: Page, within: string) =>
 
 /**
  * The dock's pickers and popups: anything that drops down, or a setting.
- * The composer's message field is a `<textarea role="combobox">` (its `/`
- * and `@` suggestions, the ARIA combobox pattern for a text field): words
- * are typed into it, nothing is picked from it, so a text field's combobox
- * is not a picker. Every popup trigger is named by what it is: the threads
+ * The composer's message field is an editable `role="combobox"` box (its
+ * `/` and `@` suggestions, the ARIA combobox pattern for a text field):
+ * words are typed into it, nothing is picked from it, so a text field's
+ * combobox is not a picker. Every popup trigger is named by what it is: the threads
  * menu, or the composer's Attach (`+`: Attach a file, Draw), the composer
  * every thread draws.
  */
@@ -104,12 +111,14 @@ const pickersIn = (page: Page) =>
     const combos = all(
       '[role="combobox"], [role="listbox"], [data-slot="select-trigger"]'
     );
+    const typed = (el: Element) =>
+      el instanceof HTMLTextAreaElement ||
+      (el as HTMLElement).isContentEditable;
     return {
       selects: all("select").length,
-      textFields: combos.filter((el) => el instanceof HTMLTextAreaElement)
-        .length,
+      textFields: combos.filter(typed).length,
       pickers: combos
-        .filter((el) => !(el instanceof HTMLTextAreaElement))
+        .filter((el) => !typed(el))
         .map((el) => `${el.tagName} ${el.className}`),
       switches: all('[role="switch"], input[type="checkbox"]').length,
       popups: all("[aria-haspopup]").map((el) => ({
@@ -244,7 +253,7 @@ const OWN_HERO = [
 /** Measured at a size: the dock, the hero, its cards and the composer. */
 const measure = (page: Page) =>
   page.evaluate(
-    ({ dock, hero }) => {
+    ({ dock, hero, field }) => {
       const box = (sel: string) => {
         const el = document.querySelector(sel);
         if (!el) {
@@ -269,7 +278,7 @@ const measure = (page: Page) =>
         hero: box(`${hero} .kit-empty`),
         caw: box(`${dock} .caw-80`),
         title: box(`${hero} .kit-empty-title`),
-        composer: box(`${dock} .composer-dock textarea`),
+        composer: box(`${dock} .composer-dock ${field}`),
         cardsInside: card
           ? cards.every((r) => {
               const c = card.getBoundingClientRect();
@@ -286,7 +295,7 @@ const measure = (page: Page) =>
         ).length,
       };
     },
-    { dock: DOCK, hero: HERO }
+    { dock: DOCK, hero: HERO, field: COMPOSER_FIELD }
   );
 
 /** The hero's assertions, at `name`. */
@@ -467,8 +476,8 @@ async function checkout(fleet: Fleet, name: string): Promise<string> {
   return src;
 }
 
-/** The composer's field (its measuring twin is aria-hidden). */
-const FIELD = 'textarea[aria-label="Message the project"]:not([aria-hidden])';
+/** The composer's field (its measuring twin is no combobox). */
+const FIELD = `${COMPOSER_FIELD}[aria-label="Message the project"]`;
 
 /** What the page's sockets received that carries a `thread.message` frame, as sent. */
 function threadFrames(page: Page): string[] {

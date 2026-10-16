@@ -10,6 +10,9 @@
  *   replaces a newer one;
  * - "No sessions for …" is drawn only once every source has answered;
  * - @ inserts a chip whose sent text is `@<title> · <apart> <handle>`;
+ * - in a session's own composer: @ opens the @ menu, ↵ makes a chip, Send
+ *   delivers its serialised form, and a draft kept across a reload draws
+ *   its chip again;
  * - desk 1055×567 and phone 390×844 hold the wireframe's heights;
  * - the three felt moments, scrubbed: the list narrowing under a keystroke
  *   (a row that stays slides), the peek unfolding (what follows makes room),
@@ -25,7 +28,7 @@ import type { Page } from "playwright-core";
 import { until } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
 import type { Kit, Spec } from "../../kit";
-import { open, settle } from "../../kit";
+import { COMPOSER, open, settle } from "../../kit";
 import { emulateMotion } from "../../motion";
 
 const DESK = { width: 1055, height: 567 };
@@ -417,6 +420,120 @@ async function mentions(kit: Kit, page: Page) {
   );
 }
 
+/** A chip in the composer's field: what it sends, its words, its facts. */
+const composerChips = (page: Page) =>
+  page.evaluate(
+    (sel) =>
+      [...document.querySelectorAll<HTMLElement>(`${sel} .mention-chip`)].map(
+        (chip) => ({
+          mention: chip.dataset.mention ?? "",
+          tip: chip.dataset.tip ?? "",
+          handle: chip.dataset.handle ?? "",
+          words: chip.textContent?.trim() ?? "",
+        })
+      ),
+    COMPOSER
+  );
+
+/** The hub's handle for the first named result `q` finds. */
+const handleFor = (page: Page, q: string) =>
+  page.evaluate(async (asked) => {
+    const r = await fetch(
+      `/api/find?q=${encodeURIComponent(asked)}&transcripts=0&kinds=conversation,thread,machine`
+    );
+    const body = (await r.json()) as { results: { handle: string | null }[] };
+    return body.results.find((x) => x.handle)?.handle ?? null;
+  }, q);
+
+/**
+ * The session composer's @ (Composer's MentionField, on the finder's
+ * engine): "@" and words open the @ menu over the composer; ↵ makes the
+ * active row a chip; Send delivers the draft with the chip in its
+ * serialised form; a draft kept across a reload draws its chip again.
+ */
+async function composerMentions(
+  kit: Kit,
+  page: Page,
+  base: string,
+  session: string,
+  heard: () => string[]
+) {
+  await open(page, `${base}/session/${session}`, COMPOSER);
+  await settle(page, 300);
+  await page.click(COMPOSER);
+  await page.keyboard.type("ask @boundary qu", { delay: 15 });
+  const menu = "form.cin [role='listbox'] [data-find-row]";
+  await page.waitForSelector(menu, { timeout: 20_000 }).catch(() => undefined);
+  await settle(page);
+  const opened = await page.evaluate(
+    (sel) => ({
+      rows: document.querySelectorAll(sel).length,
+      first:
+        document.querySelector(`${sel} .title`)?.textContent?.trim() ?? null,
+    }),
+    menu
+  );
+  kit.check(
+    "composer: typing @ and words in a session's composer opens the @ menu on the finder's rows (“@boundary qu” → Boundary quiet fix first)",
+    opened.rows > 0 && opened.first === BOUNDARY,
+    JSON.stringify(opened)
+  );
+  await page.keyboard.press("Enter");
+  await settle(page);
+  const handle = await handleFor(page, "boundary quiet");
+  const sent = `@${BOUNDARY} <${handle}>`;
+  const [chip] = await composerChips(page);
+  kit.check(
+    "composer: ↵ puts a chip in the field that reads as the title and sends `@<title> <handle>`",
+    chip?.words === BOUNDARY && chip.mention === sent,
+    JSON.stringify({ chip, sent })
+  );
+  await page.keyboard.type("to review it");
+  await page.keyboard.press("Enter");
+  const delivered = await until(
+    "the message at the model",
+    () => heard().find((one) => one.includes("to review it")) ?? null,
+    Boolean,
+    60_000
+  ).catch(() => null);
+  kit.check(
+    "composer: Send delivers the draft with the chip in its serialised form",
+    !!delivered?.includes(`ask ${sent} to review it`),
+    JSON.stringify(delivered?.slice(0, 200))
+  );
+
+  // A draft kept across a reload: its chip is drawn again, the hub naming it.
+  await settle(page, 300);
+  await page.keyboard.type("later @orchestrate cockpit", { delay: 15 });
+  await page.waitForSelector(menu, { timeout: 20_000 }).catch(() => undefined);
+  await settle(page);
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("too");
+  const before = await composerChips(page);
+  await page.waitForTimeout(600);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector(`${COMPOSER} .mention-chip`, { timeout: 30_000 });
+  const restored = await until(
+    "the restored chip's facts from the hub",
+    () => composerChips(page),
+    (chips) => chips.length === 1 && chips[0]?.tip !== chips[0]?.handle,
+    20_000
+  ).catch(() => composerChips(page));
+  const text = await page.textContent(COMPOSER);
+  kit.check(
+    "composer: a draft restored after a reload shows its chip again, the same serialised mention, its facts from the hub",
+    before.length === 1 &&
+      restored.length === 1 &&
+      restored[0]?.mention === before[0]?.mention &&
+      // Two share the title: `<title> · <what tells it apart>`.
+      !!restored[0]?.words.startsWith(`${ORCH} · `) &&
+      restored[0]?.tip !== restored[0]?.handle &&
+      !!text?.startsWith("later ") &&
+      text.endsWith(" too"),
+    JSON.stringify({ before, restored, text })
+  );
+}
+
 async function deskHeights(kit: Kit, page: Page) {
   await openFinder(page);
   await words(page, "orchestrate fleet");
@@ -802,7 +919,7 @@ const spec: Spec = {
     const working = await fleet.spawn("claude", ORCH);
     const sleeping = await fleet.spawn("claude", ORCH);
     const boundary = await fleet.spawn("claude", BOUNDARY);
-    await fleet.spawn("claude", "Landing copy polish");
+    const landing = await fleet.spawn("claude", "Landing copy polish");
 
     await fleet.send(
       boundary,
@@ -853,6 +970,12 @@ const spec: Spec = {
     await deskHeights(kit, page);
     await mentions(kit, page);
     await chipWithLessMotion(kit, page);
+
+    const sessionPage = await kit.page("desk");
+    await sessionPage.setViewportSize(DESK);
+    await composerMentions(kit, sessionPage, base, landing, () =>
+      fleet.seen.map((s) => s.last)
+    );
 
     const phone = await kit.page("phone");
     await open(phone, `${base}/dev/finder`, "[data-composer]");

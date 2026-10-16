@@ -41,8 +41,8 @@ export function focusAfterMenu(event: Event): void {
   tick().then(() => {
     document
       .querySelector<HTMLElement>(
-        // The pane's composer field (Composer.svelte), not its hidden mirror.
-        `[data-leaf="${leafId}"] form.cin textarea:not([aria-hidden="true"])`
+        // The pane's composer field (Composer.svelte's MentionField), not its hidden mirror.
+        `[data-leaf="${leafId}"] form.cin [contenteditable="true"]`
       )
       ?.focus();
   });

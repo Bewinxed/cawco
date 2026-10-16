@@ -81,7 +81,7 @@
 import { join } from "node:path";
 import type { Frame, Locator } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
 import {
   docOf,
   dragFromIcon,
@@ -225,7 +225,7 @@ const setUp = async (kit: Kit): Promise<On> => {
       said.push(`error: ${message.text()}`);
     }
   });
-  await open(desk, `${base}/session/${session}`, "textarea");
+  await open(desk, `${base}/session/${session}`, COMPOSER);
   const cdp = await desk.context().newCDPSession(desk);
   return { call, cdp, fleet, kit, page: desk, said, session };
 };
@@ -1948,7 +1948,7 @@ const dismissChecks = async (on: On) => {
   await pageInComment(frame, true);
   const kept = await tapNew();
   await writeIn(on, kept.number, "Draft kept.");
-  await on.page.locator("textarea:not(.pin-card textarea)").first().click();
+  await on.page.locator(COMPOSER).first().click();
   const closedKept = await shut();
   await interactTab(on).click();
   await pageInComment(frame, false);

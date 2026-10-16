@@ -30,16 +30,6 @@
     request: PendingPermission;
   }
 
-  /** Something `@` can name: another session, a thread with Caw, or a machine. */
-  export interface Mention {
-    detail?: string;
-    /** What gets inserted, without the `@`. */
-    handle: string;
-    label: string;
-    /** A thread's tab id: its row leads with Caw's face. */
-    thread?: string;
-  }
-
   /**
    * One conversation's row above the composer: the offer standing on it and
    * its delegate tray. A composer keeps the row of every conversation it can
@@ -70,15 +60,19 @@
    * The shell does not change shape when it is focused. It used to grow and
    * re-round on click, which moved one of the three fixed anchors every time
    * the reader touched it; now there is one radius and one padding, and the
-   * only thing that grows is the textarea itself (motion/autosize.svelte.ts).
+   * only thing that grows is the field itself (motion/autosize.svelte.ts).
    * Attach and send stay bottom-aligned, so they hold their position as the
    * text runs to a second and a third line.
    *
-   * `/` and `@` are real: typing either opens a filtered menu above the input,
-   * driven from the textarea's own keyboard so focus never leaves the message
-   * being written.
+   * `/` and `@` are real: typing either opens a menu above the input, driven
+   * from the field's own keyboard so focus never leaves the message being
+   * written. The field is a MentionField (find/): an `@` pick is a chip in
+   * it, on the finder's engine, and the draft stays one plain string with
+   * each chip in its serialised form (`@<title> <handle>`), so a send, a
+   * queued edit, recall and the drafts store carry it as text.
    */
   import { type Snippet, tick, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
   import {
@@ -99,6 +93,7 @@
   import * as Command from "#lib/components/ui/command/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconChevronUp, IconSend, IconStop } from "#lib/icons.js";
   import { handBack, stages } from "../canvas/stage.svelte";
   import {
@@ -111,19 +106,18 @@
   import { cleanDetail } from "../command-detail";
   import { debugFault } from "../debug-fault";
   import { felt } from "../feel.svelte";
-  import { FindNames } from "../find-names.svelte";
+  import MentionField from "../find/MentionField.svelte";
+  import { readAs } from "../find/mention.svelte";
   import { mcpSignInIntent, signInToMcp } from "../fleet";
   import CawFace from "../home/CawFace.svelte";
   import { newId } from "../id";
   import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
-  import { inkExtras, inks } from "../preview/ink.svelte";
   import {
     loadSuggestSetting,
     type SuggestCandidate,
     suggestions,
   } from "../suggest.svelte";
-  import { threadTabId } from "../thread-tabs";
   import type { Message } from "../types";
   import AttachButton from "./AttachButton.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
@@ -305,7 +299,7 @@
     draft.text = typed ? `${typed} ${line}` : line;
     await tick();
     field?.focus();
-    field?.setSelectionRange(draft.text.length, draft.text.length);
+    mentionField?.select(draft.text.length);
   }
 
   // On screen, this composer is what the desk's toasts rise above.
@@ -324,7 +318,11 @@
       parked: standing - panel - lift,
     });
   });
-  let field = $state<HTMLTextAreaElement>();
+  /** The field (MentionField's editable box), and the MentionField, whose caret is in the draft's offsets. */
+  let field = $state<HTMLDivElement | null>(null);
+  let mentionField = $state<ReturnType<typeof MentionField>>();
+  /** A phone's @ menu: its rows wrap, and it drags down to go. */
+  const phone = new MediaQuery(NARROW_QUERY);
 
   /** The field's hint in full, and its first part, which fits any field. */
   const HINT = $derived(
@@ -343,7 +341,7 @@
   let hint = $state(untrack(() => HINT_SHORT));
   /** How far the perch stands above the pill: the parked cards stand clear of it, above. */
   let perchHeight = $state(0);
-  const fitHint = (node: HTMLTextAreaElement) => {
+  const fitHint = (node: HTMLElement) => {
     const probe = document.createElement("span");
     probe.setAttribute("aria-hidden", "true");
     probe.style.cssText =
@@ -502,8 +500,6 @@
     label: string;
     /** The plugin or MCP server it came from, shown as a quiet origin tag. */
     source?: string;
-    /** A thread's tab id (`@`): the row leads with Caw's face. */
-    thread?: string;
   }
 
   /** One titled section of the menu. */
@@ -670,7 +666,7 @@
    * it.
    */
   function restOf(
-    node: HTMLTextAreaElement,
+    node: HTMLElement,
     layer: HTMLElement,
     text: string
   ): { fitted: number; drop: number; from: number; to: number } {
@@ -768,7 +764,7 @@
    * why the words leaving are read before a switch and the words arriving
    * after it.
    */
-  function wrapOf(node: HTMLTextAreaElement): number {
+  function wrapOf(node: HTMLElement): number {
     const style = getComputedStyle(node);
     return (
       node.clientWidth -
@@ -796,7 +792,7 @@
    * that task.
    */
   let laidOut = { drop: 0, wrap: 0 };
-  function scrollCue(node: HTMLTextAreaElement) {
+  function scrollCue(node: HTMLElement) {
     const cue = () => {
       const hidden = node.scrollHeight - node.clientHeight;
       cueTop = hidden > 1 && node.scrollTop > 1;
@@ -880,7 +876,7 @@
     flight = { dir, out, outDrop, outRest, outWrap, from: start, text: to };
     flightFrame = requestAnimationFrame((began) => {
       // Both are on the page: the overlay rendered with the switch.
-      const node = field as HTMLTextAreaElement;
+      const node = field as HTMLDivElement;
       const layer = flightIn as HTMLElement;
       const ms = heightMs(node);
       // The words arriving wrap where the field, now in its new row, does;
@@ -952,7 +948,8 @@
       if (shown !== undefined && next !== shownDraft) {
         holdUntil(landing.done);
         if (motionOk.current && (flight || text !== shown)) {
-          fly(shown, text, switchDir);
+          // The words as they read, each chip its `@<label>`.
+          fly(readAs(shown), readAs(text), switchDir);
         } else {
           endFlight();
         }
@@ -968,38 +965,33 @@
   $effect(() => () => cancelAnimationFrame(flightFrame));
 
   /**
-   * The `/…` or `@…` the caret sits in the middle of, or null.
+   * The `/…` the caret sits in the middle of, or null. (`@` is the field's
+   * own: MentionField opens the @ menu.)
    *
    * A sigil only opens a menu at the start of a word — mid-token it is a path
-   * separator or an email, both of which the reader is entitled to type without
-   * a menu landing on top of them.
+   * separator, which the reader is entitled to type without a menu landing
+   * on top of it.
    */
-  const token = $derived.by(
-    (): { sigil: "/" | "@"; query: string; from: number } | null => {
-      const at = Math.min(caret, draft.text.length);
-      const before = draft.text.slice(0, at);
-      const start =
-        Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n")) + 1;
-      const word = before.slice(start);
-      if (word.length === 0) {
-        return null;
-      }
-      const [sigil] = word;
-      if (sigil !== "/" && sigil !== "@") {
-        return null;
-      }
-      const query = word.slice(1);
-      // A token with whitespace in it is no longer being typed as one.
-      if (TOKEN_WHITESPACE.test(query)) {
-        return null;
-      }
-      return { sigil, query, from: start };
+  const token = $derived.by((): { query: string; from: number } | null => {
+    const at = Math.min(caret, draft.text.length);
+    const before = draft.text.slice(0, at);
+    const start =
+      Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n")) + 1;
+    const word = before.slice(start);
+    if (!word.startsWith("/")) {
+      return null;
     }
-  );
+    const query = word.slice(1);
+    // A token with whitespace in it is no longer being typed as one.
+    if (TOKEN_WHITESPACE.test(query)) {
+      return null;
+    }
+    return { query, from: start };
+  });
 
   let slashMenuOpen = false;
   $effect(() => {
-    const open = token?.sigil === "/";
+    const open = token !== null;
     const rising = open && !slashMenuOpen;
     slashMenuOpen = open;
     if (rising) {
@@ -1007,74 +999,10 @@
     }
   });
 
-  /**
-   * What `@` names, as the hub finds it by name for the words after it
-   * (find.ts; no words: what moved last): one ranking with the Jump
-   * palette's. Only what a mention reaches: a result with a handle, never
-   * this conversation itself.
-   */
-  const names = new FindNames(["thread", "conversation", "machine"], 40);
-  $effect(() => {
-    const active = token;
-    if (active?.sigil === "@" && mentionsFrom !== null) {
-      names.update(active.query);
-    }
-  });
-  $effect(() => () => names.stop());
-  const mentions = $derived(
-    names.results.flatMap((result): Mention[] => {
-      if (
-        result.handle === null ||
-        (result.kind === "conversation" && result.instanceId === mentionsFrom)
-      ) {
-        return [];
-      }
-      switch (result.kind) {
-        case "thread":
-          return [
-            {
-              handle: result.handle,
-              label: result.title,
-              detail: result.project?.name ?? "",
-              thread: threadTabId(result.id),
-            },
-          ];
-        case "conversation":
-          return [
-            {
-              handle: result.handle,
-              label: result.title,
-              detail: result.project?.name ?? result.machine.name,
-            },
-          ];
-        case "machine":
-          return [
-            {
-              handle: result.handle,
-              label: result.title,
-              detail: result.online ? "online" : "offline",
-            },
-          ];
-        default:
-          return [];
-      }
-    })
-  );
-
   const entries = $derived.by((): Entry[] => {
     const active = token;
     if (!active) {
       return [];
-    }
-    if (active.sigil === "@") {
-      // The hub ranked them for these words: shown in its order, unfiltered.
-      return mentions.map((mention) => ({
-        id: `@${mention.handle}`,
-        insert: `@${mention.handle}`,
-        label: mention.label,
-        detail: mention.detail,
-        thread: mention.thread,
-      }));
     }
     const needle = active.query.toLowerCase();
     const rows: Entry[] = commands.map((command) => ({
@@ -1107,19 +1035,16 @@
   });
 
   /**
-   * The entries cut into titled sections. `/` groups by source — one heading per
-   * plugin and per MCP server, with skills and built-ins under their family name
-   * — ordered skills, plugins (by name), built-ins, MCP servers. `@` is one
-   * "Mentions" section. A section with no rows is never emitted.
+   * The entries cut into titled sections, by source — one heading per plugin
+   * and per MCP server, with skills and built-ins under their family name —
+   * ordered skills, plugins (by name), built-ins, MCP servers. A section with
+   * no rows is never emitted.
    */
   const sections = $derived.by((): Section[] => {
     if (entries.length === 0) {
       return [];
     }
     debugFault("composer-menu");
-    if (token?.sigil !== "/") {
-      return [{ key: "mentions", heading: "Mentions", entries }];
-    }
     const groups = new Map<
       string,
       { heading: string; rank: number; sub: string; entries: Entry[] }
@@ -1155,7 +1080,7 @@
   const menuOpen = $derived(!dismissed && entries.length > 0);
 
   /**
-   * A DOM id per visible row, so the textarea can point `aria-activedescendant`
+   * A DOM id per visible row, so the field can point `aria-activedescendant`
    * at the highlighted one. A screen reader on a combobox reads the active
    * descendant, not the input's value — without this the menu is invisible to
    * it, however well the arrow keys work. Keyed by position in the filtered
@@ -1183,7 +1108,7 @@
   });
 
   function noteCaret(event: Event): void {
-    caret = (event.currentTarget as HTMLTextAreaElement).selectionStart ?? 0;
+    caret = mentionField?.selection()[0] ?? 0;
     dismissed = false;
     if (event.type === "input") {
       sendBlock = "";
@@ -1203,10 +1128,10 @@
     draft.text = `${draft.text.slice(0, active.from)}${entry.insert} ${draft.text.slice(end)}`;
     const next = active.from + entry.insert.length + 1;
     dismissed = true;
-    // After the value lands, so the caret is set on the text that is there now.
-    queueMicrotask(() => {
+    // After the field has drawn the new text, so the caret is set in it.
+    tick().then(() => {
       field?.focus();
-      field?.setSelectionRange(next, next);
+      mentionField?.select(next);
       caret = next;
     });
   }
@@ -1251,7 +1176,7 @@
       sendBlock = "Finish switching conversations before sending.";
       return;
     }
-    if (!(draft.hasContent || inkWaiting)) {
+    if (!draft.hasContent) {
       sendBlock = "Write a message before sending.";
       return;
     }
@@ -1291,8 +1216,8 @@
       }
       return;
     }
-    if (draft.canvas || inkWaiting) {
-      sendWithArtifacts(via);
+    if (draft.canvas) {
+      sendWithCanvas(via);
       return;
     }
     // The text leaves the field for the one row it becomes (motion/share),
@@ -1300,61 +1225,31 @@
     // before it redraws empty.
     const { text, extras } = draft.take();
     const id = newId();
-    departBox(`sent:${id}`, field as HTMLTextAreaElement);
+    departBox(`sent:${id}`, field as HTMLDivElement);
     dismissed = true;
     via(text, extras, id);
   }
 
   /**
-   * The ink's pins and picture for a send: null with no ink waiting, false
-   * when the page could not give them (said under the chips).
-   */
-  async function readInk(): Promise<
-    Awaited<ReturnType<typeof inkExtras>> | false
-  > {
-    if (!(recallOf && inkWaiting)) {
-      return null;
-    }
-    inking = true;
-    try {
-      // The message's own canvas sends its own picture, strokes and all.
-      return await inkExtras(recallOf, {
-        picture: inkWaiting.artifactId !== draft.canvas?.id,
-      });
-    } catch (error) {
-      room.error = `The ink couldn't be read for sending: ${error instanceof Error ? error.message : String(error)}. Nothing was sent; send again.`;
-      return false;
-    } finally {
-      inking = false;
-    }
-  }
-
-  /**
-   * A message carrying the canvas or the person's ink: the canvas's picture
-   * is drawn now and its file, outline and picture join the send; the ink's
-   * pins go as `pins.md` and the page with its ink as a picture
-   * (preview/ink.svelte.ts); all of it through the attachments and images
+   * A message carrying the canvas: its picture is drawn now and its file,
+   * outline and picture join the send, through the attachments and images
    * the send already carries. The canvas's chip flies into the row the
    * message becomes when no words go with it; the words do otherwise. What
    * cannot go says why under the chips and nothing is sent.
    */
-  async function sendWithArtifacts(
+  async function sendWithCanvas(
     via: (text: string, extras: SendExtras, id: string) => void
   ): Promise<void> {
     const writing = draft;
     const { canvas } = draft;
-    const extra = canvas ? await room.extras() : null;
-    if (canvas && !extra) {
-      return;
-    }
-    const ink = await readInk();
-    if (ink === false || draft !== writing || draft.canvas !== canvas) {
+    const extra = await room.extras();
+    if (!extra || draft !== writing || draft.canvas !== canvas) {
       return;
     }
     const chip = canvas?.folded ? canvasChip : undefined;
     const id = newId();
     if (draft.text.trim() || !chip) {
-      departBox(`sent:${id}`, field as HTMLTextAreaElement);
+      departBox(`sent:${id}`, field as HTMLDivElement);
     } else {
       departBox(`sent:${id}`, chip, false);
     }
@@ -1362,19 +1257,13 @@
     dismissed = true;
     extras.attachments = [
       ...(extras.attachments ?? []),
-      ...(extra?.attachments ?? []),
-      ...(ink?.extras.attachments ?? []),
+      ...(extra.attachments ?? []),
     ];
-    extras.images = [
-      ...(extras.images ?? []),
-      ...(extra?.images ?? []),
-      ...(ink?.extras.images ?? []),
-    ];
+    extras.images = [...(extras.images ?? []), ...(extra.images ?? [])];
     via(text, extras, id);
     if (canvas) {
       room.sent(canvas.id);
     }
-    ink?.sent();
   }
 
   /**
@@ -1410,9 +1299,10 @@
    * everywhere else. True when a chip was added.
    */
   function chipKey(event: KeyboardEvent): boolean {
+    const [from, to] = mentionField?.selection() ?? [0, 0];
     if (
       event.key === "Tab" &&
-      field?.selectionStart === field?.selectionEnd &&
+      from === to &&
       chips?.take(event.shiftKey ? "all" : "first")
     ) {
       event.preventDefault();
@@ -1545,7 +1435,7 @@
     column: () => column,
     dock: () => dockEl,
     draft: () => draft,
-    field: () => field,
+    field: () => field ?? undefined,
     chip: () => canvasChip,
     pill: () => pill,
     session: () => recallOf,
@@ -1558,19 +1448,8 @@
   }
   /** The canvas is being made, or read for a send: Send waits, pending. */
   function canvasWorking(): boolean {
-    return room.working || inking;
+    return room.working;
   }
-  /** The person's unsent ink on this session's artifact: the next Send carries it. */
-  const inkWaiting = $derived(recallOf ? inks.get(recallOf) : undefined);
-  /**
-   * Its chip: none for ink on the message's own canvas, whose chip and
-   * picture already hold its strokes (its pins still go).
-   */
-  const inkChip = $derived(
-    inkWaiting?.artifactId === draft.canvas?.id ? undefined : inkWaiting
-  );
-  /** The ink's pins and picture are being read for a send. */
-  let inking = $state(false);
   /** The canvas stands over the field, or is on its way up or down: the grown shape is the composer. */
   const canvasUp = $derived(room.up);
   /** Its box over the field is laid out while the draft's canvas stands there. */
@@ -1714,7 +1593,7 @@
     if (!(recallOf && field) || recall || draft.lifted || askOpen || canvasUp) {
       return false;
     }
-    const { selectionStart: from, selectionEnd: to } = field;
+    const [from, to] = mentionField?.selection() ?? [0, 0];
     return from === to && (draft.text === "" || from === 0);
   }
 
@@ -1930,7 +1809,7 @@
     recall = {
       keys,
       text: draft.text,
-      caret: [field.selectionStart, field.selectionEnd],
+      caret: mentionField?.selection() ?? [0, 0],
       measured,
     };
     wheeling = true;
@@ -1993,7 +1872,7 @@
     deckOut();
     wheeling = false;
     if (recall && field) {
-      field.setSelectionRange(...recall.caret);
+      mentionField?.select(...recall.caret);
     }
   }
 
@@ -2024,8 +1903,8 @@
       // The caret after the pick, ready to edit. A pick past the field's
       // ceiling scrolls to its end, gliding rather than jumping there.
       const from = field.scrollTop;
-      field.setSelectionRange(draft.text.length, draft.text.length);
-      const to = field.scrollTop;
+      mentionField?.select(draft.text.length);
+      const to = Math.max(0, field.scrollHeight - field.clientHeight);
       if (to !== from) {
         field.scrollTop = from;
         field.scrollTo({
@@ -2373,8 +2252,7 @@
     felt("take");
     field.focus();
     await tick();
-    const end = draft.text.length;
-    field.setSelectionRange(end, end);
+    mentionField?.select(draft.text.length);
     if (!trip) {
       field.scrollTop = field.scrollHeight;
       return;
@@ -3174,7 +3052,6 @@
     <AttachmentChips
       canvasHidden={room.chipHidden}
       {draft}
-      ink={inkChip}
       onopencanvas={() => room.open()}
       onremovecanvas={() => room.remove()}
       bind:canvasChip
@@ -3305,9 +3182,9 @@
         {#if menuOpen}
           <!-- Above the input, not over it: the sentence being written stays legible
            while its next word is being chosen. -->
-          <!-- Focus never leaves the textarea: the menu swallows the mousedown that
+          <!-- Focus never leaves the field: the menu swallows the mousedown that
            would blur it, so a clicked row lands on the message being written. -->
-          <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the textarea, it is not a user interaction target. -->
+          <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the field, it is not a user interaction target. -->
           <div
             class="menu kit-pop"
             data-side="top"
@@ -3327,18 +3204,7 @@
                         onSelect={() => choose(entry)}
                         value={entry.id}
                       >
-                        {#if entry.thread}
-                          <span aria-hidden="true" class="e-face" data-box>
-                            <CawFace
-                              size={16}
-                              status={cawco.threadOf(entry.thread)?.status ??
-                                "ready"}
-                            />
-                          </span>
-                        {/if}
-                        <span class="e-label" class:name={token?.sigil === "@"}
-                          >{entry.label}</span
-                        >
+                        <span class="e-label">{entry.label}</span>
                         {#if entry.detail}
                           <span class="e-detail">{entry.detail}</span>
                         {/if}
@@ -3351,22 +3217,40 @@
           </div>
         {/if}
 
-        <!-- A label, so the pill's padding above and below the 34px field
-         focuses it: its touch area is the field's. -->
-        <label
+        <!-- The pill's padding above and below the 34px field focuses it,
+         the caret at the end: its touch area is the field's. -->
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <!-- biome-ignore lint/a11y/noStaticElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
+        <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a press on the field's padding only hands it the focus; keys reach the field itself -->
+        <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
+        <div
           class="field touch-hit"
           inert={askOpen}
           bind:this={fieldWrap}
           class:folded
+          onclick={(event) => {
+            if (field && !field.contains(event.target as Node)) {
+              field.focus();
+              mentionField?.select(draft.text.length);
+            }
+          }}
         >
-          <textarea
+          <MentionField
             aria-activedescendant={recall ? recallActive : activeDescendant}
-            aria-autocomplete="list"
             aria-controls={recall ? recallId : "composer-menu"}
             aria-describedby={recallOf ? `${recallId}-way` : undefined}
             aria-expanded={menuOpen || !!recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            aria-label={FIELD_LABEL}
+            class={{
+              "cue-bottom": cueBottom && !folded,
+              "cue-top": cueTop && !folded,
+              flying: flight !== null || !wordsLanded,
+              folding,
+            }}
+            here={mentionsFrom}
+            label={FIELD_LABEL}
+            menuHost={pill}
+            names={mentionsFrom !== null}
             onblur={() => {
               dismissed = true;
               refocus(false);
@@ -3379,7 +3263,6 @@
             {onkeydown}
             onkeyup={noteCaret}
             {onpaste}
-            onselect={noteCaret}
             ontransitioncancel={(event) => {
               if (event.propertyName === "height") {
                 folding = false;
@@ -3390,13 +3273,11 @@
                 folding = false;
               }
             }}
+            phone={phone.current}
             placeholder={hint}
-            role="combobox"
-            bind:this={field}
-            class:cue-bottom={cueBottom && !folded}
-            class:cue-top={cueTop && !folded}
-            class:flying={flight !== null || !wordsLanded}
-            class:folding
+            tabindex={0}
+            bind:this={mentionField}
+            bind:editor={field}
             bind:value={draft.text}
             {@attach autosize(() => draft.text, {
               held: () => holding,
@@ -3407,7 +3288,8 @@
               },
             })}
             {@attach fitHint}
-            {@attach scrollCue}></textarea>
+            {@attach scrollCue}
+          />
           {#if flight}
             <!-- Each layer is its text and, drawn clear after it, the rest of
                the text it will be (`data-rest`), so it lays out whole. The
@@ -3447,7 +3329,7 @@
               >Press Up to show what you sent</span
             >
           {/if}
-        </label>
+        </div>
 
         <!-- While the wheel is up its buttons fold into a deck at the pill's
              trailing end, which is not a control: Esc, ↓ past the draft or
@@ -3469,7 +3351,7 @@
             disabled={!(
               busy ||
               pending ||
-              ((draft.hasContent || !!inkWaiting) && !draft.uploading)
+              (draft.hasContent && !draft.uploading)
             )}
             onclick={whileIdle(() => pending, onaction)}
             type="button"
@@ -3800,20 +3682,22 @@
       color: transparent;
     }
   }
-  /* Above the label's .touch-hit area, which covers the field: a press on
-     the text lands on the textarea itself, so iOS's hold-to-select and its
-     Paste callout reach it; the area still takes the pill's padding. */
-  textarea {
+  /* The field (MentionField's editable box). Above the .touch-hit area,
+     which covers it: a press on the text lands on the field itself, so
+     iOS's hold-to-select and its Paste callout reach it; the area still
+     takes the pill's padding. */
+  .field > :global(.editor) {
     position: relative;
     z-index: 1;
     flex: 1 1 auto;
     border: 0;
     background: transparent;
-    resize: none;
     font-family: var(--font-body);
+    font-weight: var(--weight-body);
     font-size: 16px;
     line-height: var(--leading-ui);
     color: var(--ink-strong);
+    overflow-y: auto;
     /* Grows with what is in it (motion/autosize.svelte.ts), a line at a time
        over 120ms, from one line's worth of the control height to a ceiling,
        and scrolls past that. The control row sets the resting height so a
@@ -3837,7 +3721,7 @@
       transition: height var(--dur-control) var(--ease-out);
 
       /* Folding and opening a long draft. */
-      &.folding {
+      &:global(.folding) {
         transition-duration: var(--dur-morph);
       }
     }
@@ -3845,7 +3729,7 @@
   /* A pick taken off the recall wheel fits the field as the wheel folds
      away: the fold's clock and curve (RecallWheel). */
   @media (prefers-reduced-motion: no-preference) {
-    .settling textarea {
+    .settling .field > :global(.editor) {
       transition-duration: var(--dur-grow-exit);
       transition-timing-function: var(--ease-drawer);
     }
@@ -3855,7 +3739,7 @@
      rolls up, leaving as every row leaves, cut at the line's foot. The
      wheel writes `--roll-y` and `--roll-o` on the field's box while the
      roll is off the draft; with neither, nothing here applies. */
-  .field > :is(textarea, .more) {
+  .field > :is(:global(.editor), .more) {
     translate: 0 var(--roll-y);
     opacity: var(--roll-o);
     clip-path: inset(-100vh -100vw var(--roll-y));
@@ -3864,24 +3748,29 @@
      wrapped would be clipped to its first line. The hint shown is one the
      field's width holds (fitHint, which measures with this tracking). The
      title's tracking, so the short hint fits the narrowest phone's field:
-     at 320px the field is 149px and the hint 150px at the field's own. */
-  textarea {
+     at 320px the field is 149px and the hint 150px at the field's own. It
+     stands out of the text's flow, so the caret stands at the line's start
+     under it. */
+  .field > :global(.editor) {
     --hint-track: -0.01em;
+    --hint-ink: var(--ink-muted);
   }
-  textarea::placeholder {
-    color: var(--ink-muted);
+  .field > :global(.editor.empty::before) {
+    position: absolute;
+    color: var(--hint-ink);
     letter-spacing: var(--hint-track);
     white-space: nowrap;
+    transition: var(--hint-fade, none);
   }
   /* The scroll cue: the edge with text out of sight fades over about a
      line. A folded draft has no cue: it keeps its own fade (below). */
-  textarea.cue-top {
+  .field > :global(.editor.cue-top) {
     mask-image: linear-gradient(to bottom, transparent, #000 1lh);
   }
-  textarea.cue-bottom {
+  .field > :global(.editor.cue-bottom) {
     mask-image: linear-gradient(to top, transparent, #000 1lh);
   }
-  textarea.cue-top.cue-bottom {
+  .field > :global(.editor.cue-top.cue-bottom) {
     mask-image: linear-gradient(
       to bottom,
       transparent,
@@ -3890,17 +3779,20 @@
       transparent
     );
   }
-  textarea.flying {
+  /* While another draft's words fly in over it, the field draws none of its
+     own: text, chips, caret and hint clear. */
+  .field > :global(.editor.flying) {
+    --hint-ink: transparent;
     color: transparent;
     caret-color: transparent;
 
-    &::placeholder {
-      color: transparent;
+    & :global(.mention-chip) {
+      opacity: 0;
     }
   }
   /* A folded draft shows its first line, fading out where the line ends
      and clear under the "+N lines" standing there, and never a scrollbar. */
-  .folded textarea,
+  .folded > :global(.editor),
   .folded .flight {
     mask-image: linear-gradient(
       to right,
@@ -3908,7 +3800,7 @@
       transparent calc(100% - var(--more-room))
     );
   }
-  .folded textarea {
+  .folded > :global(.editor) {
     overflow: hidden;
   }
   .field {
@@ -3998,21 +3890,7 @@
     }
   }
 
-  .e-face {
-    flex: none;
-    display: grid;
-    place-items: center;
-    inline-size: var(--icon-md);
-  }
-  /* A command in the code face; a name (`@`: a thread, a session, a
-     machine) in the body's. */
-  .e-label.name {
-    font-family: inherit;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    flex: 0 1 auto;
-  }
+  /* A command, in the code face. */
   .e-label {
     font-family: var(--font-mono);
     font-weight: var(--weight-strong);
@@ -4149,22 +4027,26 @@
   /* An ask's card stands over the field: its own text, caret and hint are
      clear meanwhile. While the wheel is up the field's text is the draft's
      row (RecallWheel), with no caret. */
-  .asking textarea,
-  .asking textarea::placeholder {
+  .asking .field > :global(.editor) {
+    --hint-ink: transparent;
     color: transparent;
     caret-color: transparent;
+
+    & :global(.mention-chip) {
+      visibility: hidden;
+    }
   }
-  .wheeling textarea {
+  .wheeling .field > :global(.editor) {
     caret-color: transparent;
   }
   /* The field's hint is not drawn from the moment the wheel comes up until
      it has folded away: an empty draft's row on the line stands for it, and
      the two would read doubled. It fades back in once the rows are gone. */
-  .recalling textarea::placeholder {
-    color: transparent;
+  .recalling .field > :global(.editor) {
+    --hint-ink: transparent;
   }
-  .hint-back textarea::placeholder {
-    transition: color var(--dur-fade) var(--ease-out);
+  .hint-back .field > :global(.editor) {
+    --hint-fade: color var(--dur-fade) var(--ease-out);
   }
   .asking .more {
     visibility: hidden;

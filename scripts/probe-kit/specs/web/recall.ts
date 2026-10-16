@@ -33,10 +33,17 @@ import type { Page } from "playwright-core";
 import { Clock } from "../../anim";
 import { longest, tell, watch, watched } from "../../frames";
 import { r2 } from "../../geom";
-import { type Kit, open, type Spec, settle, THEMES } from "../../kit";
+import {
+  COMPOSER_FIELD,
+  type Kit,
+  open,
+  type Spec,
+  settle,
+  THEMES,
+} from "../../kit";
 
 const ROUTE = "/motion/recall";
-const FIELD = "textarea[role='combobox']";
+const FIELD = COMPOSER_FIELD;
 const WHEEL = ".ghosts[role='listbox']";
 /** Where the depth ends: the fifth row's of before, the third's on the phone. */
 const END = {
@@ -76,11 +83,9 @@ const rowsNow = (page: Page) =>
 
 /** The grown shape's top (its outline's box) and one row, against the window. */
 const shapeNow = (page: Page) =>
-  page.evaluate(() => {
+  page.evaluate((sel) => {
     const halo = document.querySelector(".grown-halo");
-    const field = document.querySelector<HTMLElement>(
-      "textarea[role='combobox']"
-    );
+    const field = document.querySelector<HTMLElement>(sel);
     const row = Number.parseFloat(
       getComputedStyle(field ?? document.body).getPropertyValue(
         "--c-composer-field"
@@ -91,7 +96,7 @@ const shapeNow = (page: Page) =>
       row: row || 34,
       height: innerHeight,
     };
-  });
+  }, FIELD);
 
 /** Puts the wheel away and leaves the field empty and unfocused. */
 async function putAway(page: Page) {
@@ -125,7 +130,7 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
   await settle(page, 400);
 
   const access = await page.evaluate((sel) => {
-    const field = document.querySelector<HTMLTextAreaElement>(sel);
+    const field = document.querySelector<HTMLElement>(sel);
     const hint = document.getElementById(
       field?.getAttribute("aria-describedby") ?? ""
     );

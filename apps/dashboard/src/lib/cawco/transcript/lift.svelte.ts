@@ -21,6 +21,7 @@
 import { untrack } from "svelte";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { cawco, commandRecord } from "../client.svelte";
+import { readAs } from "../find/mention.svelte";
 import { CURVE, dur, motionOk } from "../motion/curves.svelte";
 import { departBox } from "../motion/share.svelte";
 import type { Message } from "../types";
@@ -132,7 +133,7 @@ export function bubbleBox(words: HTMLElement, rise = 0): WordsBox | null {
  * height it has (or will have: `height`), scrolled as it is (or to its end).
  */
 export function fieldBox(
-  field: HTMLTextAreaElement,
+  field: HTMLElement,
   rest?: { height: number; whole: number }
 ): WordsBox {
   const box = field.getBoundingClientRect();
@@ -184,17 +185,18 @@ export function asBubble(words: HTMLElement): Node {
 }
 
 /**
- * The words as the field sets them: its face, size, leading and wrap. Not
- * its colour, which is clear while words land in it: the copy's own ink.
+ * The words as the field sets them: its face, size, leading and wrap, each
+ * chip as it reads (`@<label>`). Not its colour, which is clear while words
+ * land in it: the copy's own ink.
  */
-export function asField(field: HTMLTextAreaElement, text: string): Node {
+export function asField(field: HTMLElement, text: string): Node {
   const style = getComputedStyle(field);
   const words = document.createElement("div");
   words.style.font = style.font;
   words.style.letterSpacing = style.letterSpacing;
   words.style.whiteSpace = "pre-wrap";
   words.style.overflowWrap = "break-word";
-  words.textContent = text;
+  words.textContent = readAs(text);
   return words;
 }
 

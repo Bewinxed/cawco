@@ -528,8 +528,16 @@ async function middleClick(kit: Kit, base: string, ids: string[]) {
             `${el.tagName}.${el.className}:${el.scrollTop},${el.scrollLeft}`
         )
         .join("|"),
-      fields: [...document.querySelectorAll("textarea, input")]
-        .map((el) => (el as HTMLInputElement).value)
+      fields: [
+        ...document.querySelectorAll<HTMLElement>(
+          "textarea, input, [contenteditable='true']"
+        ),
+      ]
+        .map((el) =>
+          el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+            ? el.value
+            : (el.textContent ?? "")
+        )
         .join("|"),
       focus: document.activeElement?.tagName ?? "",
     }));

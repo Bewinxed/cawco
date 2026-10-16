@@ -153,7 +153,7 @@ export { default as IconPause } from "~icons/solar/pause-bold-duotone";
 /** A paused routine's state glyph. */
 export { default as IconPauseCircle } from "~icons/solar/pause-circle-bold-duotone";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
-/** The person's ink on an artifact: the composer's Ink chip, the pen of the stroke's icon. */
+/** A pen: a draft starter's glyph. */
 export { default as IconPen } from "~icons/solar/pen-bold-duotone";
 /** A result in words alone: what the session said it did. */
 export {

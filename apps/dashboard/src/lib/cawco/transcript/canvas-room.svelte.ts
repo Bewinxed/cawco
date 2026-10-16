@@ -58,7 +58,6 @@ import { closePreview, type SendExtras } from "../client.svelte";
 import { failureClause as errorOf } from "../hub-read";
 import { CURVE, dur, motionOk } from "../motion/curves.svelte";
 import { integrate, type Sample, spring } from "../motion/spring";
-import { inks } from "../preview/ink.svelte";
 import type { ComposerDraft, DraftCanvas } from "./composer-draft.svelte";
 import { boxCut, type ClipBox, GrownShape, measureShape } from "./grown";
 
@@ -108,7 +107,7 @@ export interface RoomParts {
   /** The whole dock: the column the canvas stands in. */
   dock: () => HTMLElement | undefined;
   draft: () => ComposerDraft;
-  field: () => HTMLTextAreaElement | undefined;
+  field: () => HTMLElement | undefined;
   pill: () => HTMLElement | undefined;
   /** The session the canvas is made in and sent to. */
   session: () => string | undefined;
@@ -727,20 +726,14 @@ export class CanvasRoom {
   }
 
   /**
-   * The chip's remove and the rail's Remove: the canvas leaves the message,
-   * and so does the ink drawn on it (its Ink chip, which the next Send would
-   * carry); the panel still lists it.
+   * The chip's remove and the rail's Remove: the canvas leaves the message;
+   * the panel still lists it.
    */
   remove(): void {
-    const id = this.draft.canvas?.id;
-    const session = this.#parts.session();
     this.#putAway();
     this.#letGoStage();
     this.draft.canvas = null;
     this.error = "";
-    if (id && session && inks.get(session)?.artifactId === id) {
-      inks.delete(session);
-    }
   }
 
   /**

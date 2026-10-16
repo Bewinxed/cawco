@@ -33,7 +33,7 @@
  */
 import type { Page } from "playwright-core";
 import { MACHINE } from "../../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { COMPOSER, type Kit, open, type Spec, settle } from "../../kit";
 
 type Rgba = [number, number, number, number];
 
@@ -371,7 +371,7 @@ const spec: Spec = {
         return edges;
       };
 
-      await open(page, `${base}/session/${id}`, "textarea", 90_000);
+      await open(page, `${base}/session/${id}`, COMPOSER, 90_000);
       await read("session");
 
       await open(page, `${base}/`, "button.burger", 90_000);

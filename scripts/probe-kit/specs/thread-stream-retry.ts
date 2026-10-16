@@ -32,7 +32,7 @@ import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const CAW = "You are Caw";
 const STREAM = /PROBE-STREAM-([A-Z]+)/g;
-const FIELD = 'textarea[aria-label="Message the project"]';
+const FIELD = '[role="combobox"][aria-label="Message the project"]';
 /** His words, one every 350 ms: about 4 s of streaming. */
 const SENTENCE = (tag: string) => [
   "Streamed ",

@@ -32,8 +32,6 @@ import {
   type PageAnchor,
   type Pin,
   type PinnedElement,
-  pinDelivered,
-  pinUnsent,
 } from "@cawco/core/comments";
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { getStroke } from "perfect-freehand";
@@ -86,12 +84,10 @@ interface Box {
   y: number;
 }
 
-/** What the overlay lends the ink: its own describers, the pins, the host's chrome, its word to the host. */
+/** What the overlay lends the ink: its own describers, the pins, the host's chrome. */
 export interface InkDeps {
   /** What a page's mark stands on, read from `el` as it is now. */
   anchorOf: (el: Element) => PageAnchor;
-  /** The page as a picture at `scale`, ink and all, the overlay's own UI left out. */
-  capture: (scale?: number) => Promise<{ png: string | null; error?: string }>;
   chrome: InkChrome;
   describe: (el: Element) => PinnedElement;
   elementAt: (x: number, y: number) => Element | null;
@@ -103,24 +99,19 @@ export interface InkDeps {
   ) => { by: "source" | "selector" | "text"; el: Element } | null;
   /** The pins, drawn after the ink each time it is drawn. */
   pins: () => Pins;
-  post: (type: string, payload?: object) => void;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
   waiting: (anchor: PageAnchor) => boolean;
 }
 
 export interface Ink {
-  /** The doc's ink changed, or the doc was replaced: drawn again, and the host told. */
+  /** The doc's ink changed, or the doc was replaced: drawn again. */
   changed: () => void;
-  /** The page's pins and a picture with the ink on it, for the composer's Ink chip. */
-  exported: () => Promise<{ md: string; png: string | null; canvas: boolean }>;
   /** A placed group's box in the page, px; null when it is not on the page. */
   groupBox: (id: string) => Box | null;
   /** The svg the ink is drawn in: a re-publish keeps it (overlay `kept`). */
   layer: SVGSVGElement;
   /** Draw every group again where its element stands now (after a morph). */
   replace: () => void;
-  /** The person sent what was unsent: stamped `sentAt`. */
-  sent: () => void;
 }
 
 /** `el`'s box in the top page, px, through any frames it stands in. */
@@ -780,34 +771,8 @@ export function startInk(deps: InkDeps): Ink {
     );
   });
 
-  // --- what Send takes ------------------------------------------------------
-
-  let thumbTimer: ReturnType<typeof setTimeout> | undefined;
-  /** The host hears how much ink is unsent, and a small picture of it once the pen rests. */
-  const tell = () => {
-    const { ink, pins } = maps();
-    const unsent = [...ink.values()].filter((group) => !group.sentAt).length;
-    const unsentPins = [...pins.values()].filter((pin) => !pin.sentAt).length;
-    deps.post("cawco:ink", { unsent, pins: unsentPins });
-    clearTimeout(thumbTimer);
-    if (unsent > 0 && !onCanvas()) {
-      thumbTimer = setTimeout(
-        async () => {
-          const { png } = await deps.capture(0.25);
-          if (png) {
-            deps.post("cawco:ink", { unsent, pins: unsentPins, thumb: png });
-          }
-        },
-        chrome.ms("--breath") / 2
-      );
-    }
-  };
-
-  /** The doc's ink changed (here, elsewhere, or a new doc): drawn again, and the host told. */
-  const changed = () => {
-    draw();
-    tell();
-  };
+  /** The doc's ink changed (here, elsewhere, or a new doc): drawn again. */
+  const changed = () => draw();
   // The window resizes or the page grows: every group stands where its element is now.
   addEventListener("resize", later);
   new ResizeObserver(() => later()).observe(document.documentElement);
@@ -821,29 +786,6 @@ export function startInk(deps: InkDeps): Ink {
     layer,
     replace: () => draw(),
     groupBox: (id) => placed.get(id)?.box ?? null,
-    exported: async () => {
-      const md = deps.pins().markdown();
-      if (onCanvas()) {
-        return { md, png: null, canvas: true };
-      }
-      const { png } = await deps.capture();
-      return { md, png, canvas: false };
-    },
-    sent: () => {
-      const { doc, ink, pins } = maps();
-      const at = new Date().toISOString();
-      doc.transact(() => {
-        for (const group of [...ink.values()]) {
-          if (!group.sentAt) {
-            ink.set(group.id, { ...group, sentAt: at });
-          }
-        }
-        // As the hub's own delivery stamps them, so it does not tell them again.
-        for (const pin of [...pins.values()].filter(pinUnsent)) {
-          pins.set(pin.id, pinDelivered(pin, at));
-        }
-      });
-    },
     changed,
   };
 }

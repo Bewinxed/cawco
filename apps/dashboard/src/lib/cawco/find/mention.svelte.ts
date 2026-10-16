@@ -77,6 +77,14 @@ function apart(result: FindResult, twins: FindResult[], now: number): string {
   return age(result.lastActivity, now);
 }
 
+/** The facts a chip says on hover or press: its row's state, meta and age. */
+const tipOf = (result: FindResult, now: number): string => {
+  const row = rowOf(result, now);
+  return [row.state.word, ...row.meta, age(result.lastActivity, now)]
+    .filter(Boolean)
+    .join(" · ");
+};
+
 /** The chip `result` becomes, beside the other candidates it was chosen from. */
 export function chipOf(
   result: FindResult,
@@ -90,16 +98,74 @@ export function chipOf(
   );
   const label =
     twins.length > 0 ? `${title} · ${apart(result, twins, now)}` : title;
-  const row = rowOf(result, now);
   return {
     result,
     handle,
     label,
     serialised: `@${label} <${handle}>`,
-    tip: [row.state.word, ...row.meta, age(result.lastActivity, now)]
-      .filter(Boolean)
-      .join(" · "),
+    tip: tipOf(result, now),
   };
+}
+
+/**
+ * A chip in a message's text, in its serialised form (`@<label> <handle>`):
+ * the label (a title, and what tells it apart after " · "), and the handle.
+ * A draft put back (restored, recalled, lifted for an edit) is parsed by it
+ * into its chips again.
+ */
+export const SERIALISED = /@([^\n<>@]+?) <([^\s<>]+)>/g;
+
+/** A message's text with each chip as it reads, `@<label>`: what a copy of the words shows. */
+export const readAs = (text: string): string =>
+  text.replace(SERIALISED, (_, label: string) => `@${label}`);
+
+/** Every chip made in this tab, by its serialised form: a draft put back finds its chips here. */
+const made = new Map<string, Chip>();
+
+/** `chip` was put in a message: its draft finds it again when put back. */
+export function remember(chip: Chip): void {
+  made.set(chip.serialised, chip);
+}
+
+/** The chip a serialised mention was made as in this tab, if it was. */
+export const madeChip = (serialised: string): Chip | undefined =>
+  made.get(serialised);
+
+const looking = new Map<string, Promise<Chip | null>>();
+
+/**
+ * The chip a serialised mention stands for, asked of the hub's names (a
+ * draft kept from another visit, whose chips this tab never made): the
+ * result with its handle among those its title finds. Its serialised form
+ * stays as the draft holds it; null when the hub names nothing by it.
+ */
+export function lookUp(label: string, handle: string): Promise<Chip | null> {
+  const serialised = `@${label} <${handle}>`;
+  const known = looking.get(serialised);
+  if (known) {
+    return known;
+  }
+  const title = label.split(" · ")[0]?.trim() ?? label;
+  const asked = findNames(title, { limit: 12 }).then((read) => {
+    const result = read?.ok
+      ? read.value.results.find((r) => r.handle === handle)
+      : undefined;
+    if (!result) {
+      looking.delete(serialised);
+      return null;
+    }
+    const chip: Chip = {
+      result,
+      handle,
+      label,
+      serialised,
+      tip: tipOf(result, Date.now()),
+    };
+    made.set(serialised, chip);
+    return chip;
+  });
+  looking.set(serialised, asked);
+  return asked;
 }
 
 export class MentionState {

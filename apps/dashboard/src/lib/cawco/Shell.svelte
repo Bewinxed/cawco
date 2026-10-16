@@ -35,7 +35,7 @@
   import { DRAWER_QUERY, NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconChevronLeft, IconSearch, IconSidebar } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
-  import { isTyping } from "#lib/utils/typing.js";
+  import { fieldKeeps } from "#lib/utils/typing.js";
   import { browser } from "$app/env";
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
@@ -339,17 +339,16 @@
   }
   $effect(() => shellShortcutsAre(act));
 
+  /**
+   * A shell combo (each one a ⌘ or Ctrl chord) is the shell's from anywhere,
+   * a text field included, as an artifact's page leaves it (preview-overlay
+   * page.ts): the field gets first claim, and one it handled
+   * (`defaultPrevented`) stays its own. On Apple's systems ⌃ in a field is
+   * the field's text key (`fieldKeeps`).
+   */
   function shortcut(event: KeyboardEvent) {
     const name = shellShortcutOf(event);
-    if (!name) {
-      return;
-    }
-    // A text field keeps the shortcuts, but for ⌘K in Jump's own field,
-    // which has the focus whenever Jump stands open.
-    const inJump = Boolean(
-      document.activeElement?.closest(".glass-face[data-face='jump']")
-    );
-    if (isTyping() && !(name === "jump" && inJump)) {
+    if (!name || event.defaultPrevented || fieldKeeps(event)) {
       return;
     }
     if (runShellShortcut(name)) {
