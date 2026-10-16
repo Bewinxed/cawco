@@ -440,6 +440,12 @@ export interface MainTask {
     root: string;
   }[];
   /**
+   * What the task ran first: an event dispatched (`click`, `keydown`), a
+   * timer, a frame's callbacks, or the frame's own rendering when it ran no
+   * script.
+   */
+  ran: string;
+  /**
    * What its layouts were asked for (`restyles` only): each layout
    * invalidation's reason and the element it named, with how many times.
    * A layout pass's `elements` are the layout objects it found dirty.
@@ -499,6 +505,8 @@ interface TraceEvent {
       nodeName?: string;
       reason?: string;
       stackTrace?: StackFrame[];
+      /** An EventDispatch's: the event's type. */
+      type?: string;
     };
     elementCount?: number;
     /** A Layout's: the box it was laid out from, as four corners (x, y pairs). */
@@ -659,11 +667,21 @@ export async function traceMain(
     one.args?.endData?.elementCount ??
     one.args?.beginData?.dirtyObjects ??
     0;
+  // The script that forced a pass and the three frames that called it, the
+  // nearest first: a library's read (a positioning pass) is named by the
+  // caller that asked it to measure. The trace's frames count lines from 1
+  // already.
   const forcedBy = (one: TraceEvent) => {
-    const [frame] =
+    const stack =
       one.args?.beginData?.stackTrace ?? one.args?.data?.stackTrace ?? [];
-    return frame
-      ? `${frame.functionName || "(anonymous)"}@${frame.url.split("/").pop()}:${frame.lineNumber + 1}:${frame.columnNumber + 1}`
+    return stack.length > 0
+      ? stack
+          .slice(0, 4)
+          .map(
+            (frame) =>
+              `${frame.functionName || "(anonymous)"}@${frame.url.split("/").pop()}:${frame.lineNumber}:${frame.columnNumber + 1}`
+          )
+          .join(" ← ")
       : "the frame";
   };
   const trackedAs = (name: string) =>
@@ -720,6 +738,17 @@ export async function traceMain(
         at: forcedBy(one),
         root: rootOf(one),
       }));
+  /** What a task can start with, in the order they ran (`MainTask.ran`). */
+  const starts = main
+    .filter((event) =>
+      [
+        "EventDispatch",
+        "TimerFire",
+        "FireAnimationFrame",
+        "FunctionCall",
+      ].includes(event.name)
+    )
+    .sort((a, b) => a.ts - b.ts);
   const samples = profile ? samplesOf(events, first.pid, first.tid) : [];
   const selfTime = (from: number, to: number): [string, number][] => {
     const counted = new Map<string, number>();
@@ -737,9 +766,23 @@ export async function traceMain(
       .filter((event) => event.name === "RunTask")
       .map((event) => {
         const end = event.ts + (event.dur ?? 0);
+        const opening = starts.find(
+          (one) => one.ts >= event.ts && one.ts < end
+        );
+        let ran = "the frame's rendering";
+        if (opening?.name === "EventDispatch") {
+          ran = `a ${opening.args?.data?.type ?? "?"} event`;
+        } else if (opening?.name === "TimerFire") {
+          ran = "a timer";
+        } else if (opening?.name === "FireAnimationFrame") {
+          ran = "a frame's callbacks";
+        } else if (opening) {
+          ran = opening.name;
+        }
         return {
           at: event.ts,
           end,
+          ran,
           wall: (event.dur ?? 0) / 1000,
           cpu: (event.tdur ?? 0) / 1000,
           restyled: recalcs

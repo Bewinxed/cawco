@@ -429,6 +429,18 @@ function scriptOf(sampled: MainThread, presses: number[]): string {
     .join("; ");
 }
 
+/**
+ * Which task a switch's longest is: what it ran, and how long after its
+ * switch it began. The click's own, a timer it set going, or a frame later.
+ */
+function whichOf(task: MainTask | null, madeOf: Map<MainTask, number>): string {
+  if (!task) {
+    return "";
+  }
+  const after = Math.round((task.at - (madeOf.get(task) ?? task.at)) / 1000);
+  return `${task.ran}, ${after}ms after the switch; `;
+}
+
 async function measure(
   kit: Kit,
   base: string,
@@ -505,17 +517,27 @@ async function measure(
     const own = main.tasks.filter((task) => task.at >= begun);
     const reaches: MainTask[] = [];
     const switches: MainTask[] = [];
+    /** Each switch's task, and the switch's mark it falls after. */
+    const madeOf = new Map<MainTask, number>();
+    const afterSwitch: (readonly [MainTask, number])[] = [];
     for (let n = 0; markAt(`two-pane:switch:${n}`) !== undefined; n += 1) {
       const reach = markAt(`two-pane:reach:${n}`) ?? 0;
       const made = markAt(`two-pane:switch:${n}`) ?? 0;
       reaches.push(...own.filter((task) => task.at >= reach && task.at < made));
-      switches.push(
-        ...own.filter(
-          (task) => task.at >= made && task.at < made + SETTLE_MS * 1000
-        )
+      afterSwitch.push(
+        ...own
+          .filter(
+            (task) => task.at >= made && task.at < made + SETTLE_MS * 1000
+          )
+          .map((task) => [task, made] as const)
       );
     }
+    for (const [task, made] of afterSwitch) {
+      switches.push(task);
+      madeOf.set(task, made);
+    }
     const longestSwitch = longestOf(switches);
+    const whichTask = whichOf(longestSwitch, madeOf);
     const longest = longestSwitch ?? longestOf(own);
     spans[name] = {
       from,
@@ -525,7 +547,7 @@ async function measure(
       reachCpu: longestOf(reaches)?.cpu ?? 0,
       switchCpu: longestSwitch?.cpu ?? 0,
       restyled: longest
-        ? `${longest.restyled} elements in ${Math.round(longest.styleMs)}ms of style, ${Math.round(longest.layoutMs)}ms of layout [${longest.passes
+        ? `${whichTask}${longest.restyled} elements in ${Math.round(longest.styleMs)}ms of style, ${Math.round(longest.layoutMs)}ms of layout [${longest.passes
             .filter((pass) => pass.ms >= 0.5)
             .map(
               (pass) =>
