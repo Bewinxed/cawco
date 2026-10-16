@@ -124,15 +124,36 @@
   let shownPin: string | null = null;
   $effect(() => {
     const count = pin.thread.length;
+    // A pin is shown once its room stands: the room waits on its words
+    // (`Body`), and opens at the newest entry when it comes.
+    if (!roomEl || count === 0) {
+      return;
+    }
     const fresh = pin.id !== shownPin;
     shownPin = pin.id;
-    if (roomEl && count > 0 && (fresh || atEnd)) {
+    if (fresh || atEnd) {
       const holder = roomEl;
       tick().then(() => {
         holder.scrollTop = holder.scrollHeight;
         atEnd = true;
       });
     }
+  });
+  // Read at its end, the room stays there as its entries take their height
+  // (their words are set once they have loaded, after the room stands).
+  $effect(() => {
+    const holder = roomEl;
+    const list = holder?.querySelector(".thread");
+    if (!(holder && list)) {
+      return;
+    }
+    const watch = new ResizeObserver(() => {
+      if (atEnd) {
+        holder.scrollTop = holder.scrollHeight;
+      }
+    });
+    watch.observe(list);
+    return () => watch.disconnect();
   });
   const readAt = () => {
     if (roomEl) {
