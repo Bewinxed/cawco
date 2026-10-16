@@ -397,6 +397,7 @@
         rehearsalOpen = false;
         close();
       }
+    }
   }
 >
   <HangCard
