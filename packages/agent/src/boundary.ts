@@ -3571,11 +3571,14 @@ const ghTokenCacheOf = (id: string): string => join(stateDir(id), "gh-token");
  * 0600 file and asks again only when the file is missing or gh's `hosts.yml`
  * is not older than it: `gh auth login`, `logout` and `switch` rewrite
  * `hosts.yml`. The newer answer replaces the file by a rename; no answer
- * removes it, and no token goes in. The fast path forks nothing.
+ * removes it, and no token goes in. The fast path forks nothing. A guarded
+ * workspace's commands get none ({@link guardedEnv}): the block reads the
+ * executor's `guarded` itself, so it is whole or absent, never an `if` left
+ * with no body when the machine has no gh.
  */
 const ghToken = (id: string, gh: string | undefined): string =>
   gh
-    ? `if [ -z "\${GH_TOKEN:-}" ]; then
+    ? `if [ -z "$guarded" ] && [ -z "\${GH_TOKEN:-}" ]; then
   gh_cache=${shellQuote(ghTokenCacheOf(id))}
   gh_hosts=\${GH_CONFIG_DIR:-\${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml
   if [ -s "$gh_cache" ] && [ "$gh_cache" -nt "$gh_hosts" ]; then
@@ -3778,9 +3781,7 @@ if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
 # Kept off other people's repositories (upstreamGuarded): no GitHub token.
 guarded=
 if grep -q '"guarded":true' ${shellQuote(upstreamRuleOf(id))} 2>/dev/null; then guarded=1; fi
-if [ -z "$guarded" ]; then
 ${ghToken(id, gh)}
-fi
 req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
