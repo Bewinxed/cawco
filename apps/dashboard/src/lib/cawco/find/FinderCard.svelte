@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { FinderState } from "./finder.svelte";
+  import { FinderState } from "./finder-state.svelte";
 
   /**
    * The dashboard's one finder: what was typed is there again when it opens
@@ -35,7 +35,7 @@
   import { routineHref, threadHref } from "../thread-tabs";
   import Finder from "./Finder.svelte";
   import type { FindMoment, FindResult, WaitingItem } from "./find-client";
-  import type { MachineAct, Opening } from "./finder.svelte";
+  import type { MachineAct, Opening } from "./finder-state.svelte";
 
   let { phone = false, onclose }: { phone?: boolean; onclose: () => void } =
     $props();

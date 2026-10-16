@@ -24,7 +24,7 @@
   import FindRow from "./FindRow.svelte";
   import type { FindResult } from "./find-client";
   import { rowOf } from "./find-rows";
-  import { GRACE_MS } from "./finder.svelte";
+  import { GRACE_MS } from "./finder-state.svelte";
   import type { MentionState } from "./mention.svelte";
 
   let {

@@ -19,7 +19,7 @@
     FinderState,
     type MachineAct,
     type Opening,
-  } from "#lib/cawco/find/finder.svelte.js";
+  } from "#lib/cawco/find/finder-state.svelte.js";
   import MentionField from "#lib/cawco/find/MentionField.svelte";
 
   const narrow = new MediaQuery("(max-width: 640px)");

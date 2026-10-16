@@ -8,7 +8,7 @@
    * the finder's listbox, so ↑↓ walk into it and ↵ opens there.
    */
   import { age, excerptParts } from "./find-rows";
-  import type { Spoken } from "./finder.svelte";
+  import type { Spoken } from "./finder-state.svelte";
 
   let {
     id,

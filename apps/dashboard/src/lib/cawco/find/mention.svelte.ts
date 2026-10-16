@@ -16,7 +16,7 @@ import {
   findNames,
 } from "./find-client";
 import { age, rowOf } from "./find-rows";
-import type { Answer } from "./finder.svelte";
+import type { Answer } from "./finder-state.svelte";
 
 const SPACES = /\s+/;
 const ENDS_IN_SPACE = /\s$/;

@@ -49,7 +49,7 @@
     type Spoken,
     type Stop,
     WHO,
-  } from "./finder.svelte";
+  } from "./finder-state.svelte";
 
   let {
     finder,
