@@ -3,7 +3,9 @@
  * "why is the titlebar there? waste of space and it duplicates the
  * project's title anyways (we already removed the titlebar in sessions in a
  * previous run)"). On the built dashboard against a scratch fleet, a
- * project with five kept views (eight tabs) and one session.
+ * project with five kept views (ten tabs: Board, Table, Pipeline, Routines
+ * and Decisions, then the five) and one session. Its name is no tab's, so
+ * a tab is never read as the project's name in the bar.
  *
  * Desk 1440, desk 1024 and a tablet held sideways (1024×768, touch):
  * - the bar holds the strip (its tablist inside the bar's box), and no
@@ -39,7 +41,7 @@ import { MACHINE, type Seen } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
 import { type Kit, open, ROOT, type Spec, settle } from "../../kit";
 
-const NAME = "Routines";
+const NAME = "Atlas";
 const VIEWS = [
   "weekly-review",
   "release-notes",
@@ -47,8 +49,11 @@ const VIEWS = [
   "launch-plan",
   "bug-bash",
 ];
-const TABS = 3 + VIEWS.length;
+// Board, Table, Pipeline, Routines (fb7aed352) and Decisions (f4a502a66), then the kept views.
+const TABS = 5 + VIEWS.length;
 const TABLIST = "[role='tablist'][aria-label='Views']";
+/** The session's row title in Jump, whole. */
+const ALPHA = /^Alpha$/;
 const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
 
 interface Rect {
@@ -396,9 +401,9 @@ async function motion(kit: Kit, url: string) {
       );
     }
   });
-  // Alpha's row the chosen one before Enter: the rows are the hub's answer
-  // to the query, and the list before it can name Alpha with another row
-  // chosen (JumpPalette `names`).
+  // Alpha's row the active one before Enter: the rows are the hub's names
+  // answer to the words, and the list before it can name Alpha with another
+  // row active (the finder's `names`).
   const toSession = async () => {
     await page.keyboard.press("Control+k");
     const jump = page.locator(".glass-face[data-face='jump']");
@@ -406,8 +411,8 @@ async function motion(kit: Kit, url: string) {
     await field.waitFor();
     await field.fill("Alpha");
     await jump
-      .locator("[data-slot='command-item'][data-selected]", {
-        has: page.getByText("Alpha", { exact: true }),
+      .locator("[data-find-row][data-active]", {
+        has: page.locator(".title", { hasText: ALPHA }),
       })
       .waitFor();
   };

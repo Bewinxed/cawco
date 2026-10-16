@@ -210,10 +210,10 @@ async function openByJump(page: Page, title: string) {
 }
 
 /**
- * Jump (⌘K) open with `title` found, its row the chosen one, ready for
- * Enter. The rows are the hub's answer to the query (JumpPalette `names`),
- * and until it comes the list is the last one, which can name `title` too
- * with another row chosen: Enter opened that one.
+ * Jump (⌘K) open with `title` found, its row the active one, ready for
+ * Enter. The rows are the hub's names answer to the words (the finder's
+ * `names`), and until it comes the list is the last one, which can name
+ * `title` too with another row active: Enter opened that one.
  */
 async function findInJump(page: Page, title: string) {
   await page.keyboard.press("Control+k");
@@ -222,8 +222,8 @@ async function findInJump(page: Page, title: string) {
   await field.waitFor();
   await field.fill(title);
   await jump
-    .locator("[data-slot='command-item'][data-selected]", {
-      has: page.getByText(title, { exact: true }),
+    .locator("[data-find-row][data-active]", {
+      has: page.locator(".title", { hasText: new RegExp(`^${title}$`) }),
     })
     .waitFor();
 }

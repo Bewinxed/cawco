@@ -236,6 +236,26 @@ async function menuItem(page: Page, name: RegExp) {
   await page.getByRole("menuitem", { name }).first().click();
 }
 
+/**
+ * The menu a question was asked from has closed. The question stands the
+ * moment its item is pressed, while the menu is still leaving, and an open
+ * bits-ui menu holds the body (`pointer-events: none`) until 24ms after its
+ * content unmounts (body-scroll-lock.svelte.js `scheduleCleanupIfNoNewLocks`):
+ * a read before then is the menu's hold, not the question's. A hold still
+ * there once the menu is gone is the page's, and the read says so.
+ */
+async function menuClosed(page: Page) {
+  await page
+    .waitForFunction(
+      () =>
+        !document.querySelector('[role="menu"]') &&
+        getComputedStyle(document.body).pointerEvents !== "none",
+      null,
+      { timeout: 5000 }
+    )
+    .catch(() => undefined);
+}
+
 async function finishedTab(page: Page) {
   await page.getByRole("tab", { name: FINISHED_TAB }).first().click();
 }
@@ -460,6 +480,7 @@ async function rowQuestion(kit: Kit, page: Page, q: RowQuestion) {
   await q.menu();
   await menuItem(page, q.item);
   await ask.waitFor();
+  await menuClosed(page);
   // Read once it has unfolded: no finite animation is still running on it,
   // in the row it opens under, or on any box around it (its own `unfold`,
   // the tree's fold, a list revealing the height it grew by), and its box
@@ -1280,6 +1301,7 @@ async function unlinkMarketplace(
   await page.click(more);
   await page.getByRole("menuitem", { name: UNLINK }).click();
   await page.locator(`[data-ask="${at}"]`).waitFor();
+  await menuClosed(page);
   const asked = await page.evaluate(askState, at);
   note(kit, "unlink, the question", asked);
   kit.check(
@@ -1713,6 +1735,7 @@ async function projectFlows(
   await page.getByRole("menuitem", { name: PICK_STAGES }).click();
   await page.getByRole("button", { name: SOCIAL }).click();
   await page.locator('[data-ask="social"]').waitFor();
+  await menuClosed(page);
   const templateAsked = await page.evaluate(askState, "social");
   note(kit, "stages, the question", templateAsked);
   kit.check(
@@ -1764,7 +1787,7 @@ async function projectFlows(
   await page.getByRole("button", { name: `More for ${project.name}` }).click();
   await page.getByRole("menuitem", { name: FORGET }).click();
   await page.waitForSelector(`[data-row="${session}"]`);
-  await page.waitForTimeout(400);
+  await menuClosed(page);
   const trayAsked = await page.evaluate(trayState, project.id);
   note(kit, "forget tray, asked", trayAsked);
   kit.check(
@@ -2037,6 +2060,7 @@ async function configureFlows(
   await page.click('button[aria-label="More for probe-mcp"]');
   await page.getByRole("menuitem", { name: REMOVE_EVERYWHERE }).click();
   await page.locator('[data-ask="probe-mcp"]').waitFor();
+  await menuClosed(page);
   const mcpAsked = await page.evaluate(askState, "probe-mcp");
   note(kit, "mcp remove, the question", mcpAsked);
   kit.check(
@@ -2230,6 +2254,7 @@ async function removeFlows(
   await machineRow.click({ button: "right" });
   await page.getByRole("menuitem", { name: REMOVE_MACHINE }).click();
   await page.locator(`[data-ask="${MACHINE}"]`).waitFor();
+  await menuClosed(page);
   const machineAsked = await page.evaluate(askState, MACHINE);
   note(kit, "machine remove, the question", machineAsked);
   kit.check(

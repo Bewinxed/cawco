@@ -5,10 +5,11 @@
  * type slash and try to type something the whole page goes like this 500":
  * the session listed a name twice and the menu's keyed rows threw.
  *
- * 1. The hub's answer to the menu's `supportedCommands` is rewritten on the
- *    socket to carry two unmarked `probe-twin` rows, and a `probe-own` pair
- *    whose second row Claude Code marks its own (`builtin`, the one `/name`
- *    runs). Typing `/probe`: each name is one row, `probe-own` reads the
+ * 1. The session's commands, wherever the page reads them (the answer to the
+ *    menu's `supportedCommands` on the socket, and the facts of each
+ *    transcript page), are rewritten to carry two unmarked `probe-twin` rows,
+ *    and a `probe-own` pair whose second row Claude Code marks its own
+ *    (`builtin`, the one `/name` runs). Typing `/probe`: each name is one row, `probe-own` reads the
  *    marked row's words, no console error, no page error, no failure line,
  *    no 500.
  * 2. With the DEBUG fault `composer-menu` set (debug-fault.ts), typing `/`
@@ -31,8 +32,12 @@ const FIELD = 'textarea[aria-controls="composer-menu"]';
 const TWIN = "probe-twin";
 const OWN = "probe-own";
 const OWN_WORDS = "The one Claude Code runs";
+/** The session the page opens on, by its title. */
+const FIRST = "Slash menu";
 /** Every socket the page opens: the hub's is the one that answers. */
 const ANY_SOCKET = /.*/;
+/** A transcript page the client reads out of band (links.ts `transcriptUrl`). */
+const TRANSCRIPT = /\/api\/instances\/[^/]+\/transcript(\?|$)/;
 
 /** The injected rows: what a session holding two commands by one name lists. */
 const INJECTED = [
@@ -47,38 +52,64 @@ const INJECTED = [
   },
 ];
 
-/** A hub frame answering `supportedCommands`, with the injected rows added. */
+/** A session's commands as the hub sends them: rows with a name and an argument hint. */
+const isCommandList = (value: unknown): value is object[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every(
+    (row) =>
+      typeof row?.name === "string" && typeof row?.argumentHint === "string"
+  );
+
+/**
+ * The injected rows added to every list of the session's commands a hub
+ * message carries. The menu reads two: the answer to its `supportedCommands`
+ * ask, and the `commands` facts a transcript page or a stream frame carries
+ * (`init`, `commands_changed`: client.svelte.ts `applyFacts`), which set the
+ * menu again whenever they land. Injected into the answer alone, a page read
+ * landing after it (a loaded machine) put the menu back to the session's own
+ * commands, `/probe` matched none and the menu closed.
+ */
+function inject(node: unknown): boolean {
+  if (typeof node !== "object" || node === null) {
+    return false;
+  }
+  const record = node as Record<string, unknown>;
+  let changed = false;
+  if (record.kind === "control_result" && isCommandList(record.result)) {
+    record.result = [...record.result, ...INJECTED];
+    changed = true;
+  }
+  const commands = record.commands as
+    { detailed?: unknown; names?: unknown } | undefined;
+  if (Array.isArray(commands?.names) && commands.names.length > 0) {
+    commands.names = [...commands.names, ...INJECTED.map((row) => row.name)];
+    if (isCommandList(commands.detailed)) {
+      commands.detailed = [...commands.detailed, ...INJECTED];
+    }
+    changed = true;
+  }
+  for (const value of Object.values(record)) {
+    changed = inject(value) || changed;
+  }
+  return changed;
+}
+
+/** A hub message, every commands list in it carrying the injected rows. */
 function rewrite(message: string | Buffer): string | Buffer {
   if (typeof message !== "string") {
     return message;
   }
-  let parsed: {
-    verb?: string;
-    payload?: { kind?: string; result?: unknown };
-  };
+  let parsed: unknown;
   try {
     parsed = JSON.parse(message);
   } catch {
     return message;
   }
-  const result = parsed.payload?.result;
-  const commands =
-    parsed.verb === "frames" &&
-    parsed.payload?.kind === "control_result" &&
-    Array.isArray(result) &&
-    result.length > 0 &&
-    result.every(
-      (row) =>
-        typeof row?.name === "string" && typeof row?.argumentHint === "string"
-    );
-  if (!(commands && parsed.payload)) {
-    return message;
-  }
-  parsed.payload.result = [...(result as object[]), ...INJECTED];
-  return JSON.stringify(parsed);
+  return inject(parsed) ? JSON.stringify(parsed) : message;
 }
 
-/** Every socket through the page, the hub's `supportedCommands` answers rewritten. */
+/** Every socket through the page, the hub's commands rewritten. */
 const relay = (ws: WebSocketRoute) => {
   const server = ws.connectToServer();
   ws.onMessage((message) => server.send(message));
@@ -126,6 +157,43 @@ const barOf = () => ({
     .length,
 });
 
+/**
+ * The bar come to rest on the open session, read before the fault: the strip
+ * holding both tabs (desk) or the crumb naming the session (tablet), and no
+ * swap running in it. A read the moment the page stood came while the crumb
+ * still said "Fleet" (the page's name until the session's row arrives) or
+ * mid-swap, both words drawn ("Slash menuFleetSlash menu"). A bar that never
+ * gets there is read as it stands, and the check says so.
+ */
+const barAtRest = (page: Page, view: View) =>
+  page
+    .waitForFunction(
+      ([desk, title]) => {
+        const top = document.querySelector("header.top");
+        const swapping = top
+          ?.getAnimations({ subtree: true })
+          .some(
+            (run) =>
+              run.playState === "running" &&
+              run.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY
+          );
+        if (!top || swapping) {
+          return false;
+        }
+        const crumb = top
+          .querySelector("span.crumb")
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim();
+        const tabs = top.querySelectorAll(
+          ".slot-tabs [data-session-tab]"
+        ).length;
+        return desk ? tabs === 2 : crumb === title;
+      },
+      [view === "desk", FIRST] as const,
+      { timeout: 30_000 }
+    )
+    .catch(() => undefined);
+
 /** Whether the page went to SvelteKit's error page: its words, and no composer field. */
 const fiveHundred = (field: string) =>
   document.body.innerText.includes("Internal Error") &&
@@ -149,7 +217,7 @@ const spec: Spec = {
       cwd: fleet.repo,
       caw: false,
     });
-    const first = await fleet.spawn("claude", "Slash menu", fleet.repo, {
+    const first = await fleet.spawn("claude", FIRST, fleet.repo, {
       projectId: project.id,
     });
     const second = await fleet.spawn("claude", "Other tab", fleet.repo, {
@@ -188,6 +256,11 @@ const spec: Spec = {
         { w: ws, f: fault }
       );
       await page.routeWebSocket(ANY_SOCKET, relay);
+      await page.route(TRANSCRIPT, async (route) => {
+        const response = await route.fetch();
+        const body = await response.text();
+        await route.fulfill({ response, body: rewrite(body) as string });
+      });
       const seen = watch(page);
       await open(page, `${base}/session/${first}`, FIELD);
       await settle(page, 600);
@@ -254,6 +327,7 @@ const spec: Spec = {
     for (const view of ["desk", "tablet"] as View[]) {
       // biome-ignore lint/performance/noAwaitInLoops: one view at a time
       const { page, seen } = await openSession(view, "composer-menu");
+      await barAtRest(page, view);
       const barBefore = await page.evaluate(barOf);
       await page.click(FIELD);
       await page.keyboard.type("/");
