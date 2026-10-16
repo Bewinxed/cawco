@@ -1017,8 +1017,18 @@ async function onSimulator(
         }
   );
   const { udid } = sim;
+  let journal: Subprocess | undefined;
   try {
     await sh(`xcrun simctl bootstatus ${udid} -b >/dev/null`);
+    // The gate's, the install's and the pushes' own words, kept with the run.
+    journal = Bun.spawn(
+      [
+        "bash",
+        "-c",
+        `exec xcrun simctl spawn ${udid} log stream --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Paywall" OR category == "Pro" OR category == "Push")' > "${join(kit.out, `release-${which}.log`)}"`,
+      ],
+      { stdout: "ignore", stderr: "ignore" }
+    );
     const pid = async (): Promise<string | undefined> => {
       const listed = await sh(
         `xcrun simctl spawn ${udid} launchctl list | grep 'UIKitApplication:dev.cawco.app' || true`
@@ -1361,6 +1371,7 @@ async function onSimulator(
       `pid ${after ?? "none"}`
     );
   } finally {
+    journal?.kill();
     await sim.release();
   }
 }
