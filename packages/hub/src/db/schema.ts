@@ -3107,6 +3107,92 @@ export const designOffers = sqliteTable("design_offers", {
   builtTaskId: text("built_task_id"),
 });
 
+/** One must-fix finding of a design check, tied to an element (design-verify.ts). */
+export interface DesignFinding {
+  file: string;
+  line: number;
+  problem: string;
+  selector: string;
+}
+
+/** The variant a design check judged to hold to the system best, and why. */
+export interface DesignPick {
+  variant: string;
+  why: string;
+}
+
+/**
+ * A design check (design-verify.ts): one round of a verifier session judging
+ * an attempt's design-shaped result, its whole working tree at one moment,
+ * against its project's design system, before the task reaches review.
+ * `checking` while the verifier works; `passed` lets that tree go on, committed
+ * or not; `findings` went back to the builder; `failed` when the verifier
+ * ended with no verdict, or its builder ended first.
+ */
+export const designChecks = sqliteTable(
+  "design_checks",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id").notNull(),
+    taskId: text("task_id").notNull(),
+    /** The builder's work item: the attempt whose result is judged. */
+    itemId: text("item_id").notNull(),
+    /** The builder's working tree judged, committed or not, as a git tree: what a pass holds for. */
+    tree: text("tree_sha").notNull(),
+    /** The commit that tree sat on; what it changed on top of it went to the verifier as a patch. */
+    head: text("head_sha").notNull(),
+    /** The verifier's own work item, once it started. */
+    verifierItemId: text("verifier_item_id"),
+    state: text("state")
+      .$type<"checking" | "passed" | "findings" | "failed">()
+      .notNull(),
+    /** The builder's `finish_item`, held while the verifier works; run again on a pass. */
+    submission: text("submission", {
+      mode: "json",
+    }).$type<WorkItemSubmission>(),
+    findings: text("findings", { mode: "json" }).$type<DesignFinding[]>(),
+    pick: text("pick", { mode: "json" }).$type<DesignPick>(),
+    createdAt: timestamp("created_at").notNull(),
+    endedAt: timestamp("ended_at"),
+  },
+  (table) => [index("design_checks_item").on(table.itemId)]
+);
+
+/** One file of a design proposal as its card draws it: before and after, text. */
+export interface DesignProposalFile {
+  after: string;
+  before: string;
+  path: string;
+}
+
+/**
+ * An agent's change to a project's design system, waiting for the person
+ * (design-system.ts): the call's files as it made them, applied through
+ * `design_write` on Approve, at the place it was proposed. Deleted once
+ * answered.
+ */
+export const designProposals = sqliteTable("design_proposals", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  /** The proposing session. */
+  instanceId: text("instance_id").notNull(),
+  /** Where design/ is written: a repository's root on a machine; both null for the project's folder. */
+  machineId: text("machine_id"),
+  root: text("root"),
+  why: text("why").notNull(),
+  /** The `design_write` call's files, written again whole on Approve. */
+  files: text("files", { mode: "json" })
+    .$type<{ content: string; encoding?: "utf8" | "base64"; path: string }[]>()
+    .notNull(),
+  /** What the write would change, as it stood when proposed: the card's diff. */
+  preview: text("preview", { mode: "json" })
+    .$type<DesignProposalFile[]>()
+    .notNull(),
+  /** The `design_write` call that made it: where its card is drawn in the session. */
+  toolUseId: text("tool_use_id"),
+  createdAt: timestamp("created_at").notNull(),
+});
+
 /**
  * A project's starters for one place (core `StarterPlace`: the board, the
  * Routines page, the Decisions tab) as they were last written

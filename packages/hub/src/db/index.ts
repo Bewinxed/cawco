@@ -101,6 +101,7 @@ import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
 import { type ConnectionsDb, connectionsDb } from "./connections";
+import { type DesignChecksDb, designChecksDb } from "./design-checks";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import { type FindDb, findDb } from "./find";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
@@ -780,6 +781,8 @@ export interface DbShape {
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
   readonly deleteWorkflowNotice: (id: number) => void;
+  /** Design checks and design proposals (design-verify.ts, design-system.ts). */
+  readonly designChecks: DesignChecksDb;
   /** Caw's one design-system offer per project (design-offers.ts). */
   readonly designOffers: DesignOffersDb;
   /** His turn is over: its row goes. */
@@ -9134,6 +9137,7 @@ const make = async (path: string): Promise<DbShape> => {
     accounts: accountsDb(db),
     turnUsage: turnUsageDb(db),
     atLimit: atLimitDb(db),
+    designChecks: designChecksDb(db),
     designOffers: designOffersDb(db),
     blocks: blocksDb(db),
     starters: startersDb(db),

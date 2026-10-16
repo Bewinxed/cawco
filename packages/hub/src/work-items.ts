@@ -199,6 +199,45 @@ export const routineParentId = (routineId: string): string =>
 export const isRoutineParent = (id: string | null | undefined): boolean =>
   !!id?.startsWith(ROUTINE_PARENT);
 
+/** What a design check's verifier names as its parent: `verifier:<the builder's item>`, which no session's row has. */
+const VERIFIER_PARENT = "verifier:";
+
+/**
+ * Whether a parent id is the hub's own, a routine's or a design check's
+ * (design-verify.ts): the item reports to no session, and the hub reads how
+ * it ended.
+ */
+export const isHubParent = (id: string | null | undefined): boolean =>
+  isRoutineParent(id) || isVerifierParent(id);
+
+/** Whether a parent id is a design check's: its session is that check's verifier. */
+export const isVerifierParent = (id: string | null | undefined): boolean =>
+  !!id?.startsWith(VERIFIER_PARENT);
+
+/**
+ * A design check's verifier's parent: the builder's item, in its project,
+ * its workspace cut from the builder's (so its clone holds the builder's
+ * commits), under the check's name.
+ */
+export const verifierParent = (builder: {
+  cwd: string;
+  itemId: string;
+  machineId: string;
+  projectId: string;
+}): Parent => ({
+  id: `${VERIFIER_PARENT}${builder.itemId}`,
+  projectId: builder.projectId,
+  machineId: builder.machineId,
+  cwd: builder.cwd,
+  title: "Design check",
+  launchDir: "unknown",
+  harness: "verifier",
+  model: null,
+  sessionId: null,
+  // The hub starts it: its own session is the leaf (its request's canDelegate).
+  canDelegate: true,
+});
+
 /**
  * A routine as its run's parent: its project, and the machine and checkout
  * the run's workspace is cut from, under the routine's name.
@@ -673,6 +712,19 @@ export interface WorkItemDeps {
     how?: CommandOptions
   ) => Promise<CommandResult>;
   readonly db: DbShape;
+  /** Whether a verifier is judging the item's result now: its turns ending quietly are waiting, not idle. */
+  readonly designHeld: (itemId: string) => boolean;
+  /**
+   * The design check (design-verify.ts) of a `finish_item`, before its
+   * checks run: the words the call answers while a verifier session judges
+   * the result against its project's design system, or nothing when the
+   * item goes on (not design work, no system to judge against, or passed
+   * at its commit).
+   */
+  readonly designHold: (
+    item: WorkItemRow,
+    submission: WorkItemSubmission
+  ) => Promise<string | undefined>;
   /**
    * Store stop intent and wait for the machine's positive end confirmation,
    * for `waitMs` at most. Returns at once for a session already ended or with
@@ -1684,6 +1736,8 @@ export const createWorkItems = ({
   call,
   command,
   db,
+  designHeld,
+  designHold,
   end,
   itemEnded,
   lifetime,
@@ -1857,7 +1911,7 @@ export const createWorkItems = ({
 
   /** The item's project's lead, when it has one that is not the item's own session. */
   const leadFor = (item: WorkItemRow): InstanceRow | undefined =>
-    isRoutineParent(item.parentInstanceId)
+    isHubParent(item.parentInstanceId)
       ? undefined
       : projectLead(item.projectId, item.instanceId);
 
@@ -1904,7 +1958,7 @@ export const createWorkItems = ({
   const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
     id: item.id,
     parentInstanceId: item.parentInstanceId,
-    leadInstanceId: isRoutineParent(item.parentInstanceId)
+    leadInstanceId: isHubParent(item.parentInstanceId)
       ? null
       : (projectLead(item.projectId, item.instanceId, item.parentInstanceId)
           ?.id ?? null),
@@ -2019,7 +2073,7 @@ export const createWorkItems = ({
    * included.
    */
   const reportsBack = (row: InstanceRow): boolean =>
-    !isRoutineParent(row.parentInstanceId) &&
+    !isHubParent(row.parentInstanceId) &&
     !!(row.workItemId || row.workflowStepId);
 
   /**
@@ -2410,7 +2464,7 @@ export const createWorkItems = ({
    * conversation of its own.
    */
   const heard = (item: WorkItemRow, row: InstanceRow): boolean =>
-    isRoutineParent(item.parentInstanceId) ||
+    isHubParent(item.parentInstanceId) ||
     cawOff(item) === item.parentInstanceId ||
     reportees(row).some(
       (reportee) =>
@@ -5544,12 +5598,13 @@ export const createWorkItems = ({
       checkQueues.get(itemId) ?? null,
 
     /**
-     * A routine's run (routines.ts): a fresh session in a new workspace cut
-     * from `parent.cwd` on `parent.machineId`, owned by the routine
-     * ({@link routineParent}). It reports to no session, the project's lead
-     * included: the routine reads how it ended from {@link WorkItemDeps.itemEnded}.
+     * The hub's own work: a routine's run (routines.ts, {@link routineParent})
+     * or a design check's verifier (design-verify.ts, {@link verifierParent}).
+     * A fresh session in a new workspace cut from `parent.cwd` on
+     * `parent.machineId`. It reports to no session, the project's lead
+     * included: its owner reads how it ended from {@link WorkItemDeps.itemEnded}.
      */
-    startForRoutine: (
+    startForHub: (
       request: Omit<
         WorkItemRequest,
         "parentInstanceId" | "workspace" | "fork" | "reuse"
@@ -5560,6 +5615,50 @@ export const createWorkItems = ({
 
     /** What an item's session has spent since the item began (its budget's dollars). */
     spentBy: (item: WorkItemRow): number => usedBy(item).usd,
+
+    /** A word from the hub to a session, as its own item's notices go (`tell`). */
+    tellSession: (instanceId: string, content: string): void => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (row) {
+        tell(row, content);
+      }
+    },
+
+    /**
+     * What an item's chip says while the hub holds it for something other
+     * than its checks (a design check's verifier, design-verify.ts); null
+     * clears it.
+     */
+    holdWords: (itemId: string, words: string | null): void =>
+      checkWait(itemId, words),
+
+    /**
+     * The hub's own item stopped by the hub, `why` kept as who stopped it: a
+     * design check's verifier whose builder ended (design-verify.ts). Its
+     * session ends; it reports to no session.
+     */
+    stopForHub(itemId: string, why: string): void {
+      const item = db.workItem(itemId);
+      if (!(
+        item &&
+        LIVE.has(item.state) &&
+        isHubParent(item.parentInstanceId)
+      )) {
+        return;
+      }
+      quiet.delete(item.id);
+      finish(item, {
+        state: "cancelled",
+        stoppedBy: { kind: "hub", why },
+        checkingSince: null,
+        submission: null,
+      });
+      end(item.instanceId).catch((error: unknown) =>
+        console.warn(
+          `[work-items] ${item.id} was stopped (${why}), and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    },
 
     /**
      * `delegate`: {@link start}, or, while a live item owns files this one
@@ -6046,6 +6145,11 @@ export const createWorkItems = ({
       if (turn.error === undefined && waitingTurn(item)) {
         return undefined;
       }
+      // A verifier judges its result: the turn that ended waits for its word.
+      if (turn.error === undefined && designHeld(item.id)) {
+        quiet.delete(item.id);
+        return undefined;
+      }
       const busy = busyAfter(row, endedAt);
       if (!item.checks) {
         return uncheckedTurn(item, turn, busy);
@@ -6115,6 +6219,12 @@ export const createWorkItems = ({
       const unticked = await untickedText(item);
       if (unticked) {
         return unticked;
+      }
+      // Design work in a project with a design system: a verifier session
+      // judges it first (design-verify.ts), and its pass runs this again.
+      const held = await designHold(item, request);
+      if (held) {
+        return held;
       }
       update(item.id, { submission: request, checkingSince: new Date() });
       return (await settleChecks(item, checks, request)).text;

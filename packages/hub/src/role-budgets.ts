@@ -141,6 +141,13 @@ import type { Tasks } from "./tasks";
  * its parent rebuilding it. One sentence and the bare field: about 50 tokens
  * (delegate 7,303 measured). Raised deliberately; the worker and the lead
  * are measured without a parent and do not change.
+ * 2026-10-16: design system proposals and checks (design-system.ts,
+ * design-verify.ts): design_write takes `why` and says a change to a
+ * system the project had is a proposal, its other words left to the
+ * design-system skill and its own refusals; `design_verdict` is listed to a
+ * design check's verifier alone (delegation-mcp.ts), so no role's typical
+ * session carries it. Within the same budgets (worker 24,991, delegate
+ * 7,300 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 25_000,
@@ -347,6 +354,7 @@ export const measureRoles = (): RoleSize[] => {
     // The hub's own tools, from the one list the server gives sessions.
     hubTools: createHubTools({
       askPerson: () => Promise.reject(new Error("measuring")),
+      designVerdict: () => Promise.reject(new Error("measuring")),
       designWrite: () => Promise.reject(new Error("measuring")),
       machineIds: () => [],
       pairing: () => false,

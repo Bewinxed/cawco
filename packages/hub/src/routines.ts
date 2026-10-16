@@ -17,7 +17,7 @@
  *   `skipped` ("the 09:00 run is still going"); so do the routine's daily
  *   cap, the project's spend cap, and, for a lead routine, the lead being
  *   off (§7 P2: with Caw off nothing wakes a model).
- * - **Delegate runs** are work items (work-items.ts `startForRoutine`) in a
+ * - **Delegate runs** are work items (work-items.ts `startForHub`) in a
  *   new workspace cut from a checkout of the project on a machine that is
  *   online (the hub's own checkout for a routine in no project), landing
  *   `none` unless the routine says, carrying the routine's budget. Their
@@ -314,10 +314,7 @@ export interface RoutineDeps {
   readonly quiets: (projectId: string) => string | undefined;
   /** The delegate types a project's sessions see (the fleet's without one). */
   readonly types: (projectId?: string | null) => DelegateType[];
-  readonly workItems: Pick<
-    WorkItems,
-    "archive" | "spentBy" | "startForRoutine"
-  >;
+  readonly workItems: Pick<WorkItems, "archive" | "spentBy" | "startForHub">;
 }
 
 /** A schedule, parsed; refused with Effect's own words when it does not parse. */
@@ -883,7 +880,7 @@ export const createRoutines = ({
     }
     const label = slotLabel(run.slot, routine.timeZone);
     const type = await runType(routine);
-    const begun = await workItems.startForRoutine(
+    const begun = await workItems.startForHub(
       {
         title: routine.name,
         prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. Its prompt:\n\n${routine.prompt}${as ? `\n\n${as.input}` : inputOf(run)}\n\n${CONTRACT}`,

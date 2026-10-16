@@ -31,18 +31,40 @@
  * preset, no fixed token vocabulary, no scan of values (plan §4): the one
  * deterministic step is generating tokens.css and tokens.ts, a build, not a
  * judgment.
+ *
+ * Changes arrive as proposals the person approves, as memory proposals do
+ * (spec §5.7). Which system is the project's is read from git, never a
+ * clock: in a workspace, one on its base branch on origin; in any other
+ * checkout, one at HEAD; in the project's folder, one first committed by
+ * anyone but the writing session (each folder write carries its session's
+ * trailer). An agent's `design_write` to the project's system writes
+ * nothing, and becomes the person's ask in
+ * Needs you with its diff (core permission-presentation.ts, the memory
+ * proposal's card), kept in `design_proposals` and parked again when the hub
+ * starts. Approve writes it through `design_write` where it was proposed and
+ * commits it as the person; Deny leaves design/ as it was. The proposing
+ * session is told either way. A system the session is building itself is
+ * written at once, and the person judges it in the task's review. The
+ * person's own edits are theirs, never proposals; Caw's folder_write refuses
+ * design/ (memory.ts `personsTier`).
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import {
   type CommandResult,
+  DESIGN_PROPOSAL_TOOL,
+  type Envelope,
   type InstanceRow,
   machineCalled,
+  type PermissionResult,
 } from "@cawco/core";
 import type { DbShape } from "./db";
+import type { DesignProposalRow } from "./db/design-checks";
+import type { DesignProposalFile } from "./db/schema";
 import { type BuiltTokens, buildTokens } from "./design-tokens";
 import { tokensIn } from "./dtcg-resolver";
+import { boardTitle } from "./labels";
 import { quote } from "./landing";
 import {
   FOLDER_FILE_LIMIT,
@@ -51,6 +73,7 @@ import {
   projectRoot,
   readFolderBytes,
   writeFolderFiles,
+  YOU,
 } from "./project-folder";
 
 export const DESIGN_DIR = "design";
@@ -201,8 +224,17 @@ const manifestOf = (
 
 /** Where a system is written: the files it holds now, and how to write more. */
 export interface DesignStore {
+  /** Commits design/ as it stands, with `message`; answers the commit (the one there when nothing changed). */
+  commit: (message: string) => Promise<string>;
   /** Each path's bytes now (relative to `design/`), or null when there is none. */
   read: (paths: string[]) => Promise<Map<string, Uint8Array | null>>;
+  /**
+   * Whether a system here is the project's, not one the writing session is
+   * building: its manifest on the repository's base commit, or first
+   * committed to the folder by anyone but that session. A change to it is a
+   * proposal.
+   */
+  theirs: () => Promise<boolean>;
   /** Said to the session: the repository root, or the project's folder. */
   where: string;
   /** Writes every file, or none. */
@@ -324,16 +356,25 @@ const tokensOf = async (at: {
     : undefined;
 };
 
+/** What a write would put in design/, worked out and not yet written. */
+interface DesignPlan {
+  kept: Set<string>;
+  out: { path: string; bytes: Uint8Array }[];
+  /** Whether a path holds a file once `out` is written. */
+  there: (path: string) => boolean;
+}
+
 /**
- * Writes `files` into a system: the person's files kept, tokens.json
- * checked against the manifest (every token has a source), tokens.css
- * generated from it, the manifest's fingerprints recorded. Refused whole,
- * with every problem, when a path, the manifest or the tokens do not hold.
+ * What writing `files` into a system would write: the person's files kept,
+ * tokens.json checked against the manifest (every token has a source),
+ * tokens.css generated from it, the manifest's fingerprints recorded.
+ * Refused whole, with every problem, when a path, the manifest or the
+ * tokens do not hold.
  */
-export const writeDesign = async (
+const planDesign = async (
   store: DesignStore,
   files: DesignFile[]
-): Promise<DesignWritten> => {
+): Promise<DesignPlan> => {
   const incoming = incomingFiles(files);
   const problems: string[] = [];
   const current = await store.read([
@@ -416,10 +457,21 @@ export const writeDesign = async (
       bytes: encoder.encode(`${JSON.stringify(ledger, null, 2)}\n`),
     },
   ];
-  await store.write(out);
+  return {
+    out,
+    kept,
+    there: (path) =>
+      out.some((file) => file.path === path) || now(path) !== null,
+  };
+};
 
-  const after = (path: string) =>
-    out.some((file) => file.path === path) || now(path) !== null;
+/** Writes `files` into a system ({@link planDesign}), and says what it wrote and kept. */
+export const writeDesign = async (
+  store: DesignStore,
+  files: DesignFile[]
+): Promise<DesignWritten> => {
+  const { out, kept, there } = await planDesign(store, files);
+  await store.write(out);
   return {
     where: store.where,
     written: out.map((file) => `${DESIGN_DIR}/${file.path}`),
@@ -427,10 +479,64 @@ export const writeDesign = async (
       path: `${DESIGN_DIR}/${path}`,
       why: KEPT_WHY,
     })),
-    missing: DESIGN_PARTS.filter((path) => !after(path)).map(
+    missing: DESIGN_PARTS.filter((path) => !there(path)).map(
       (path) => `${DESIGN_DIR}/${path}`
     ),
   };
+};
+
+/** The longest a file's text is drawn on a proposal's card. */
+const PREVIEW_CHARS = 60_000;
+/** Bytes that are text: UTF-8 with no NUL. */
+const textOf = (bytes: Uint8Array | null): string | null => {
+  if (!bytes) {
+    return "";
+  }
+  if (bytes.includes(0)) {
+    return null;
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    // Not UTF-8: drawn as binary.
+    return null;
+  }
+};
+const drawn = (bytes: Uint8Array | null): string => {
+  const text = textOf(bytes);
+  if (text === null) {
+    return `(binary, ${bytes?.length ?? 0} bytes)\n`;
+  }
+  return text.length > PREVIEW_CHARS
+    ? `${text.slice(0, PREVIEW_CHARS)}\n… (cut here)\n`
+    : text;
+};
+
+/**
+ * What writing `files` would change, drawn for the person: each file it
+ * writes, before and after, the hub's ledger (manifest.json) left out when
+ * only its fingerprints change. Refused as the write would be.
+ */
+export const previewDesign = async (
+  store: DesignStore,
+  files: DesignFile[]
+): Promise<DesignProposalFile[]> => {
+  const { out } = await planDesign(store, files);
+  const before = await store.read(out.map((file) => file.path));
+  const sourcesOf = (bytes: Uint8Array | null | undefined): string =>
+    JSON.stringify(bytes ? (manifestOf(bytes, [])?.sources ?? null) : null);
+  return out
+    .filter(
+      (file) =>
+        file.path !== MANIFEST ||
+        sourcesOf(before.get(MANIFEST)) !== sourcesOf(file.bytes)
+    )
+    .map((file) => ({
+      path: `${DESIGN_DIR}/${file.path}`,
+      before: drawn(before.get(file.path) ?? null),
+      after: drawn(file.bytes),
+    }))
+    .filter((file) => file.before !== file.after);
 };
 
 type Run = (
@@ -477,13 +583,42 @@ const writeTemporary = async (
   }
 };
 
-/** A system at a repository's root on a machine, read and written with its shell. */
+/**
+ * A system at a repository's root on a machine, read and written with its
+ * shell. `base` is the commit a system must be on to be the project's: a
+ * workspace's base branch on origin, else the checkout's HEAD.
+ */
 const repositoryStore = (
   run: Run,
   machineId: string,
-  root: string
+  root: string,
+  base = "HEAD"
 ): DesignStore => ({
   where: `${root}/${DESIGN_DIR}`,
+  theirs: async () => {
+    const result = await run(
+      machineId,
+      root,
+      `git rev-parse --verify -q ${quote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${quote(`${base}:${DESIGN_DIR}/${MANIFEST}`)} 2>/dev/null; then echo yes; else echo no; fi`,
+      COMMAND_MS
+    );
+    if (result.exitCode !== 0) {
+      throw failed("design/'s history could not be read", result);
+    }
+    return result.stdout.trim() === "yes";
+  },
+  commit: async (message) => {
+    const result = await run(
+      machineId,
+      root,
+      `git add -A -- ${DESIGN_DIR} && { git diff --cached --quiet -- ${DESIGN_DIR} || git commit -q -m ${quote(message)} -- ${DESIGN_DIR}; } && git rev-parse HEAD`,
+      COMMAND_MS
+    );
+    if (result.exitCode !== 0) {
+      throw failed("design/ could not be committed", result);
+    }
+    return result.stdout.trim().split("\n").at(-1) ?? "";
+  },
   read: async (paths) => {
     const result = await run(
       machineId,
@@ -531,13 +666,55 @@ const repositoryStore = (
   },
 });
 
-/** A system in a project's folder on the hub, committed as one change. */
+/** The trailer naming the session whose write a folder commit of design/ is. */
+const SESSION_TRAILER = "Session";
+
+/**
+ * A system in a project's folder on the hub, each write its own commit by
+ * `author` carrying the writing session's trailer: the session that first
+ * committed design/manifest.json there is the system's builder, and to any
+ * other session the system is the project's.
+ */
 const folderStore = (
   projectId: string,
   author: string,
-  changed: (projectId: string) => void
+  changed: (projectId: string) => void,
+  session: string,
+  message = "design: write the design system"
 ): DesignStore => ({
   where: `${projectRoot(projectId)}/${DESIGN_DIR}`,
+  theirs: () => {
+    const read = Bun.spawnSync(
+      [
+        "git",
+        "log",
+        "--diff-filter=A",
+        "--reverse",
+        `--format=%(trailers:key=${SESSION_TRAILER},valueonly)%x00`,
+        "--",
+        `${DESIGN_DIR}/${MANIFEST}`,
+      ],
+      { cwd: projectRoot(projectId) }
+    );
+    if (read.exitCode !== 0) {
+      // A folder git has no history for yet holds no system.
+      return Promise.resolve(false);
+    }
+    // A record a commit (`%x00` ends each), the oldest first; none: no system.
+    const out = read.stdout.toString();
+    if (!out.includes("\0")) {
+      return Promise.resolve(false);
+    }
+    // Committed by another session, by the person, or before trailers: the project's.
+    return Promise.resolve(out.split("\0")[0]?.trim() !== session);
+  },
+  // Every folder write is its own commit already.
+  commit: () =>
+    Promise.resolve(
+      Bun.spawnSync(["git", "-C", projectRoot(projectId), "rev-parse", "HEAD"])
+        .stdout.toString()
+        .trim()
+    ),
   read: async (paths) =>
     new Map(
       await Promise.all(
@@ -565,16 +742,15 @@ const folderStore = (
         path: `${DESIGN_DIR}/${file.path}`,
         content: file.bytes,
       })),
-      { author: { name: author }, message: "design: write the design system" }
+      {
+        author: { name: author },
+        message: `${message}\n\n${SESSION_TRAILER}: ${session}`,
+      }
     );
     changed(projectId);
   },
 });
 
-/**
- * `design_write` for a session: its system at the root of the repository it
- * works in, or in its project's folder when that is where it works.
- */
 /** What `git status` says of design/ that is not committed, a path a line. */
 const UNCOMMITTED = `git status --porcelain --untracked-files=all -- ${DESIGN_DIR}`;
 /** How many uncommitted paths a refusal names. */
@@ -596,15 +772,62 @@ const uncommittedLine = (
   return `design/ isn't committed in ${where}: ${named}${more}. Send it back so the builder commits it, then approve.`;
 };
 
+/** The ref a workspace's base branch is on origin as: what the project has, apart from the workspace's own commits. */
+export const baseRef = (base: string): string => `refs/remotes/origin/${base}`;
+
+/**
+ * Whether the workspace clone at `root` on `machineId` holds a design
+ * system on its base branch (`base`): the project's, which its session
+ * changes only through proposals and whose work is judged against it. One
+ * the session's own commits made is its build.
+ */
+export const designOnBase = (
+  run: Run,
+  machineId: string,
+  root: string,
+  base: string
+): Promise<boolean> =>
+  repositoryStore(run, machineId, root, baseRef(base)).theirs();
+
+/** The longest a proposal's reason runs: its commit's subject carries it. */
+const WHY_LIMIT = 500;
+
+/**
+ * Where a session's design/ is: a repository's root on a machine, with the
+ * commit a system must be on to be the project's (`base`), or the project's
+ * folder (both null). A proposal goes back here on Approve.
+ */
+interface ProposalPlace {
+  base?: string;
+  machineId: string | null;
+  root: string | null;
+}
+
 export const createDesignSystem = (deps: {
   run: Run;
   ownMachineId: Promise<string>;
   folderChanged: (projectId: string) => void;
-  db: Pick<DbShape, "listAgents" | "projectAttempts" | "workspacesNamed">;
+  db: Pick<
+    DbShape,
+    | "designChecks"
+    | "listAgents"
+    | "project"
+    | "projectAttempts"
+    | "workItem"
+    | "workspacesNamed"
+  >;
   online: (machineId: string) => boolean;
   /** Whether a task is design work (design-offers.ts `designShaped`, or the build itself). */
   designTask: (projectId: string, taskId: string) => Promise<boolean>;
+  /** Parks an ask for the person: the pending ledger, every dashboard, push. */
+  park: (envelope: Envelope) => void;
+  /** Takes a settled ask off the pending ledger. */
+  settle: (requestId: string) => void;
+  /** A word from the hub to a session (work-items.ts `tellSession`). */
+  tell: (instanceId: string, content: string) => void;
 }) => {
+  /** Open proposals, by id. */
+  const open = new Set<string>();
   /**
    * Why your approval of a design task waits: its newest attempt's
    * workspace, while it stands, or the project's folder on the hub holds
@@ -662,7 +885,8 @@ export const createDesignSystem = (deps: {
     return uncommittedLine("the builder's workspace", read.stdout);
   };
 
-  const storeFor = async (actor: InstanceRow): Promise<DesignStore> => {
+  /** Where a session's design/ is: its project's folder, or the root of the repository it works in. */
+  const placeOf = async (actor: InstanceRow): Promise<ProposalPlace> => {
     if (!actor.projectId) {
       throw new Error(
         "A design system belongs to a project; this session is in none."
@@ -673,11 +897,7 @@ export const createDesignSystem = (deps: {
       actor.machineId === (await deps.ownMachineId) &&
       (actor.cwd === folder || actor.cwd.startsWith(`${folder}/`))
     ) {
-      return folderStore(
-        actor.projectId,
-        actor.title ?? "CawCo",
-        deps.folderChanged
-      );
+      return { machineId: null, root: null };
     }
     const top = await deps.run(
       actor.machineId,
@@ -685,20 +905,223 @@ export const createDesignSystem = (deps: {
       "git rev-parse --show-toplevel",
       COMMAND_MS
     );
-    if (top.exitCode !== 0 || !top.stdout.trim()) {
+    const root = top.stdout.trim();
+    if (top.exitCode !== 0 || !root) {
       throw new Error(
         `${actor.cwd} is not inside a repository, so design/ has no root to go at. Work from the project's repository or its folder.`
       );
     }
-    return repositoryStore(deps.run, actor.machineId, top.stdout.trim());
+    // Its own workspace's clone: the project's system is what its base
+    // branch holds on origin, never its own commits.
+    const item = actor.workItemId
+      ? deps.db.workItem(actor.workItemId)
+      : undefined;
+    const [workspace] = item ? deps.db.workspacesNamed(item.workspaceId) : [];
+    return {
+      machineId: actor.machineId,
+      root,
+      ...(workspace?.path === root ? { base: baseRef(workspace.base) } : {}),
+    };
+  };
+
+  /**
+   * The store at a place, written for `session`: the folder's writes
+   * committed by `author` with `message`.
+   */
+  const storeAt = (
+    projectId: string,
+    place: ProposalPlace,
+    session: string,
+    author: string,
+    message?: string
+  ): DesignStore =>
+    place.machineId && place.root
+      ? repositoryStore(deps.run, place.machineId, place.root, place.base)
+      : folderStore(projectId, author, deps.folderChanged, session, message);
+
+  /** The proposal as the person's ask: drawn as its diff, answered by Approve or Deny, where it was made too. */
+  const envelopeOf = (row: DesignProposalRow, project: string): Envelope => ({
+    verb: "frames",
+    machineId: "hub",
+    instanceId: row.id,
+    requestId: row.id,
+    payload: {
+      kind: "permission_request",
+      instanceId: row.id,
+      requestId: row.id,
+      harness: "claude",
+      requestKind: "tool",
+      toolName: DESIGN_PROPOSAL_TOOL,
+      input: { files: row.preview, why: row.why, project },
+      designProposal: row.id,
+      projectId: row.projectId,
+      proposer: `Design system · ${project}`,
+      raisedAt: row.createdAt.getTime(),
+      originInstanceId: row.instanceId,
+      ...(row.toolUseId ? { toolUseId: row.toolUseId } : {}),
+    },
+  });
+
+  const park = (row: DesignProposalRow): void => {
+    const project = deps.db.project(row.projectId);
+    if (!project) {
+      return;
+    }
+    open.add(row.id);
+    deps.park(envelopeOf(row, project.name));
+  };
+
+  /**
+   * An agent's change to a system its project already had: kept, and parked
+   * for the person with its diff. design/ stays as it is until they approve.
+   */
+  const propose = async (
+    actor: InstanceRow,
+    projectId: string,
+    place: ProposalPlace,
+    files: DesignFile[],
+    rawWhy: string | undefined,
+    toolUseId: string | undefined
+  ) => {
+    const why = rawWhy?.trim() ?? "";
+    if (!why) {
+      throw new Error(
+        "Nothing was written. This changes the project's design system, which goes to the person as a proposal: say why, in one line (why)."
+      );
+    }
+    if (why.length > WHY_LIMIT) {
+      throw new Error(
+        `Nothing was written. why is ${why.length} characters long; say it in one line, under ${WHY_LIMIT}.`
+      );
+    }
+    const preview = await previewDesign(
+      storeAt(projectId, place, actor.id, boardTitle(actor)),
+      files
+    );
+    if (preview.length === 0) {
+      throw new Error(
+        "Nothing was written: design/ already holds exactly that."
+      );
+    }
+    const row: DesignProposalRow = {
+      id: `dp-${crypto.randomUUID()}`,
+      projectId,
+      instanceId: actor.id,
+      machineId: place.machineId,
+      root: place.root,
+      why,
+      files,
+      preview,
+      toolUseId: toolUseId ?? null,
+      createdAt: new Date(),
+    };
+    deps.db.designChecks.propose(row);
+    park(row);
+    console.log(
+      `[design] ${projectId}: ${row.id} proposes ${preview.map((file) => file.path).join(", ")}`
+    );
+    return {
+      proposal: row.id,
+      files: preview.map((file) => file.path),
+      waiting:
+        "design/ is unchanged: the person sees this in Needs you with its diff, and you're told their answer. Approved, it is written and committed here.",
+    };
+  };
+
+  /** Approve: written through design_write where it was proposed, and committed. Answers the commit. */
+  const apply = async (row: DesignProposalRow): Promise<string> => {
+    const place = { machineId: row.machineId, root: row.root };
+    if (place.machineId && !deps.online(place.machineId)) {
+      throw new Error(
+        `The proposal's repository is on ${machineCalled(place.machineId, deps.db.listAgents())}, which is offline. Approve once it is back.`
+      );
+    }
+    if (place.machineId && place.root) {
+      const there = await deps.run(
+        place.machineId,
+        "/",
+        `test -d ${quote(place.root)}`,
+        COMMAND_MS
+      );
+      if (there.exitCode !== 0) {
+        throw new Error(
+          `${place.root}, where this was proposed, is gone (its workspace was retired), so there is nowhere to commit it. Deny it; the change can be proposed again.`
+        );
+      }
+    }
+    const message = `design: ${row.why}\n\nProposal: ${row.id}`;
+    const store = storeAt(
+      row.projectId,
+      place,
+      row.instanceId,
+      YOU.name,
+      message
+    );
+    await writeDesign(store, row.files);
+    return await store.commit(message);
   };
 
   return {
     approvalRefusal,
+
+    /**
+     * `design_write`: a system the session is building itself is written at
+     * once; a change to the project's ({@link DesignStore.theirs}) is a
+     * proposal the person approves.
+     */
     write: async (
       actor: InstanceRow,
-      files: DesignFile[]
-    ): Promise<DesignWritten> => writeDesign(await storeFor(actor), files),
+      files: DesignFile[],
+      why: string | undefined,
+      toolUseId: string | undefined
+    ): Promise<DesignWritten | Awaited<ReturnType<typeof propose>>> => {
+      const place = await placeOf(actor);
+      const projectId = actor.projectId as string;
+      const store = storeAt(projectId, place, actor.id, actor.title ?? "CawCo");
+      if (await store.theirs()) {
+        return propose(actor, projectId, place, files, why, toolUseId);
+      }
+      return writeDesign(store, files);
+    },
+
+    /** Whether `requestId` is a design proposal waiting on the person. */
+    owns: (requestId: string): boolean => open.has(requestId),
+
+    /**
+     * The person's answer: approved, it is written and committed where it
+     * was proposed; denied, design/ stays as it was. Either way its session
+     * is told and the ask leaves the ledger; a write that fails throws, and
+     * its ask stays.
+     */
+    async answer(requestId: string, result: PermissionResult): Promise<void> {
+      const row = deps.db.designChecks.proposal(requestId);
+      if (row) {
+        const files = row.preview.map((file) => file.path).join(", ");
+        if (result.behavior === "allow") {
+          const sha = await apply(row);
+          deps.tell(
+            row.instanceId,
+            `The person approved your design proposal ${row.id} (${files}): it is written and committed as ${sha.slice(0, 9)} in ${row.root ?? "the project's folder"}.`
+          );
+        } else {
+          const reason = result.message.trim();
+          deps.tell(
+            row.instanceId,
+            `The person declined your design proposal ${row.id} (${files})${reason ? `: “${reason}”` : ""}. design/ is as it was; nothing was written.`
+          );
+        }
+        deps.db.designChecks.dropProposal(row.id);
+      }
+      open.delete(requestId);
+      deps.settle(requestId);
+    },
+
+    /** Every open proposal, parked again as the hub starts: the person's asks outlive it. */
+    start: (): void => {
+      for (const row of deps.db.designChecks.proposals()) {
+        park(row);
+      }
+    },
   };
 };
 

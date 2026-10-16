@@ -36,7 +36,7 @@ import {
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
 import type { FleetWatch } from "./fleet-watch";
-import { type createHubTools, HUB_TOOLS } from "./hub-tools";
+import { type createHubTools, DESIGN_VERDICT, HUB_TOOLS } from "./hub-tools";
 import { INGRESS_TOOLS, type Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { MEMORY_TOOLS, type Memory } from "./memory";
@@ -53,6 +53,7 @@ import { allows, CAW_TOOLS, refusal, roleOf, TRIAGE_TOOLS } from "./roles";
 import { ROUTINE_TOOLS, type Routines } from "./routines";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
+import { isVerifierParent } from "./work-items";
 
 type ToolFactory = typeof handoffTools;
 type CawTool = ReturnType<Caw["tools"]>[number];
@@ -270,7 +271,7 @@ export function createDelegationMcp(options: {
    * (hub-tools.ts): installing a build, which asks the person when the hub
    * requires paired devices, and writing its project's design system.
    */
-  hubTools?: (actor: InstanceRow | undefined) => HubTool[];
+  hubTools?: (actor: InstanceRow | undefined, toolUseId?: string) => HubTool[];
   /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
@@ -357,7 +358,8 @@ export function createDelegationMcp(options: {
    * context (a leaf gets no spawning tools, only a work item `finish_item`,
    * only a workflow step its step tools, only a session in a project the
    * project's tools, only one that may be made a project
-   * `project_from_session`). Without a session — OpenCode's shared
+   * `project_from_session`, only a design check's verifier
+   * `design_verdict`). Without a session — OpenCode's shared
    * discovery — every role's, the superset; the call enforces.
    */
   const toolsFor = (actor: InstanceRow | undefined) => {
@@ -418,7 +420,10 @@ export function createDelegationMcp(options: {
           (!!actor.projectId || !PROJECT_ONLY.has(tool.name)) &&
           (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor)) &&
           // Only a work item hands in a result on its task.
-          (tool.name !== "task_result" || !!actor.workItemId)
+          (tool.name !== "task_result" || !!actor.workItemId) &&
+          // Only a design check's verifier gives a verdict (design-verify.ts).
+          (tool.name !== DESIGN_VERDICT ||
+            isVerifierParent(actor.parentInstanceId))
       ),
       ...connections,
     ];
@@ -710,7 +715,8 @@ export function createDelegationMcp(options: {
   ): Promise<CallToolResult | undefined> => {
     let group: (ProjectTool | HubTool)[] | undefined;
     if (HUB_TOOLS.has(name)) {
-      group = options.hubTools?.(actor);
+      // The call's id: a design proposal it parks is drawn at that call.
+      group = options.hubTools?.(actor, toolUseId);
     } else if (MEMORY_TOOLS.has(name)) {
       group = options.memoryTools?.(actor, toolUseId);
     } else if (RELAY_TOOLS.has(name)) {

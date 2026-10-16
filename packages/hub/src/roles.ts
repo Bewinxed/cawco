@@ -181,8 +181,10 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     // handed in, from any machine.
     "folder_read",
     // The project's design system, the builder's one way to write it
-    // (design-system.ts).
+    // (design-system.ts), and a design check's verifier's verdict, refused
+    // to any session that is not one (design-verify.ts).
     "design_write",
+    "design_verdict",
   ]),
   lead: new Set([
     ...CORE,
@@ -234,6 +236,8 @@ const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
   ...CURATOR_OWN,
   "memory_propose",
   ...TRIAGE_TOOLS,
+  // A design check's verifier's alone, which is a delegate (design-verify.ts).
+  "design_verdict",
 ]);
 
 /** Whether a session in `role` may see and call the tool `name`. */

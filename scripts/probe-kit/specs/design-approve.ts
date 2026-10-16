@@ -27,6 +27,24 @@
  *    approved), the task reads approved, and `git log origin/main -1`
  *    names the builder's commit.
  *
+ * Then Harbour has a design system on main, and T3 (lands main) is design
+ * work in it (hub design-system.ts proposals, design-verify.ts checks):
+ *
+ * 4. Its builder's two token changes are proposals, not writes: each is an
+ *    ask in /api/pending drawn as design/tokens.json's diff, and its
+ *    workspace's tokens.json is unchanged. Deny the first: still unchanged,
+ *    and the builder is told it was declined. Approve the second: the new
+ *    ink is in tokens.json, committed in the builder's workspace with the
+ *    proposal's why, and the builder is told.
+ * 5. The builder hands in a home screen it has not committed: the task stays
+ *    in working, a verifier session (its item's parent `verifier:<the
+ *    builder's item>`) gets the uncommitted part as a patch in its inputs,
+ *    and its one finding reaches the builder as one message naming the
+ *    element's file:line and selector.
+ * 6. The builder fixes it and commits; the next hand-in is checked again,
+ *    passes, lands, and the task waits in review, its two rounds a finding
+ *    and a pass.
+ *
  *   bun scripts/probe-kit/run.ts design-approve
  */
 import { mkdir, writeFile } from "node:fs/promises";
@@ -36,6 +54,8 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
 
+const WAIT = "mcp__cawco__wait_item";
+const VERDICT = "mcp__cawco__design_verdict";
 const CREATE = "mcp__cawco__task_create";
 const START = "mcp__cawco__task_start";
 const DESIGN_WRITE = "mcp__cawco__design_write";
@@ -49,7 +69,29 @@ const BRIEF = "Your work item is an attempt at";
 const OWN_TASK = /Your work item is an attempt at tsk-\d+, “([^”]+)”/g;
 const T1 = "Harbour system draft PROBE-T1";
 const T2 = "Harbour system PROBE-T2";
+const T3 = "Harbour home screen PROBE-T3";
 const COMMIT = "Design system: Harbour";
+/** The two proposals' reasons: the first is denied, the second approved. */
+const WHY_DENIED = "A near-black ink, PROBE-DENIED";
+const WHY_APPROVED = "A softer ink for long reading, PROBE-APPROVED";
+/** A verifier's brief opens this way (hub design-verify.ts `VERIFIER_BRIEF`). */
+const VERIFIER_BRIEF = "You are the design system verifier";
+/** The commit a verifier's brief names: one verifier session a round. */
+const VERIFIER_AT = /sits on commit ([0-9a-f]{40})/;
+/** The finding round one gives: one element, tied to its file, line and selector. */
+const FINDING = {
+  file: "screens/home.html",
+  line: 3,
+  selector: "#hero",
+  problem:
+    "Its colour is a raw hex, #123456, not the system's ink: use var(--color-ink).",
+};
+/** What the builder's findings message carries of it. */
+const FINDING_WORDS = `\`${FINDING.file}:${FINDING.line}\` \`${FINDING.selector}\``;
+const HOME_RAW =
+  '<!doctype html><html><head><link rel="stylesheet" href="../design/tokens.css"></head><body>\n<main>\n<h1 id="hero" style="color:#123456">Harbour</h1>\n</main></body></html>\n';
+const HOME_FIXED =
+  '<!doctype html><html><head><link rel="stylesheet" href="../design/tokens.css"></head><body>\n<main>\n<h1 id="hero" style="color:var(--color-ink)">Harbour</h1>\n</main></body></html>\n';
 const PIN_WORDS = "The ink is too light on the paper here.";
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const TURN = /PROBE-CMD:\w+/g;
@@ -188,6 +230,115 @@ const attempts = new Map<string, Call[]>([
     ],
   ],
 ]);
+/** tokens.json with the ink at lightness `l`: a change to the system T2 put on main. */
+const tokensWithInk = (l: number) => ({
+  path: "tokens.json",
+  content: json({
+    color: {
+      paper: { $type: "color", $value: oklch(0.984, 0.004, 85) },
+      ink: { $type: "color", $value: oklch(l, 0.022, 265) },
+    },
+  }),
+});
+const INK_DENIED = 0.18;
+const INK_APPROVED = 0.31;
+
+/**
+ * T3's builder, a script a turn by what woke it (`t3Phase`): its brief, the
+ * person's answer to its second proposal, the verifier's findings. Any
+ * other wake (the first answer, a reminder) ends its turn.
+ */
+const t3Turns: Record<"start" | "approved" | "findings", Call[]> = {
+  start: [
+    {
+      name: DESIGN_WRITE,
+      input: { files: [tokensWithInk(INK_DENIED)], why: WHY_DENIED },
+    },
+    {
+      name: DESIGN_WRITE,
+      input: { files: [tokensWithInk(INK_APPROVED)], why: WHY_APPROVED },
+    },
+    // No reminder wakes it while the person answers.
+    {
+      name: WAIT,
+      input: { minutes: 30, reason: "the person answers my design proposals" },
+    },
+  ],
+  approved: [
+    {
+      name: BASH,
+      input: {
+        command: `mkdir -p screens && printf %s '${HOME_RAW}' > screens/home.html && git status --porcelain`,
+        description: "Write the home screen",
+      },
+    },
+    {
+      name: RESULT,
+      input: { summary: "Harbour's home screen, in the system." },
+    },
+    {
+      name: FINISH,
+      input: { headline: "Built the home screen.", summary: "Built it." },
+    },
+  ],
+  findings: [
+    {
+      name: BASH,
+      input: {
+        command: `printf %s '${HOME_FIXED}' > screens/home.html && git add -A && git commit -qm 'Home screen in the system ink' && git status --porcelain`,
+        description: "Fix the hero's colour and commit",
+      },
+    },
+    {
+      name: FINISH,
+      input: { headline: "Fixed the hero's ink.", summary: "Fixed it." },
+    },
+  ],
+};
+let t3Phase: keyof typeof t3Turns | "idle" = "idle";
+
+/** What woke T3's builder for a new turn. */
+const t3PhaseOf = (last: string): typeof t3Phase => {
+  if (last.includes(BRIEF)) {
+    return "start";
+  }
+  if (last.includes("approved your design proposal")) {
+    return "approved";
+  }
+  if (last.includes("must be fixed before your result reaches review")) {
+    return "findings";
+  }
+  return "idle";
+};
+
+/** Each verifier round's calls, in order; a verifier session takes the next round when it first asks. */
+const verifierRounds: Call[][] = [
+  [
+    {
+      name: BASH,
+      input: {
+        command: `test -s "$TMPDIR/inputs/design-check.patch" && echo PATCH-HANDED || echo PATCH-MISSING`,
+        description: "Look for the builder's uncommitted work",
+      },
+    },
+    {
+      name: VERDICT,
+      input: {
+        findings: [FINDING],
+        summary: "The hero ignores the system's ink.",
+      },
+    },
+  ],
+  [
+    {
+      name: VERDICT,
+      input: { findings: [], summary: "The home screen draws in the system." },
+    },
+  ],
+];
+/** The rounds' keys, in the order their sessions began. */
+const verifierKeys: string[] = [];
+
 /** The filer's calls, by a command's marker. */
 const commands = new Map<string, Call[]>();
 /** Every request the builder's sessions were asked with: where a pin's delivery shows. */
@@ -267,16 +418,39 @@ const next = (request: Seen, key: string | undefined): Reply => {
   return useTool(call.name, input);
 };
 
+/** A verifier's turn: its session's round, keyed by the commit its brief names. */
+const verifierNext = (request: Seen): Reply => {
+  const key = `VERIFIER:${VERIFIER_AT.exec(request.all)?.[1] ?? "?"}`;
+  if (!attempts.has(key)) {
+    attempts.set(key, verifierRounds.shift() ?? []);
+    verifierKeys.push(key);
+  }
+  return next(request, key);
+};
+
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
+  }
+  if (request.all.includes(VERIFIER_BRIEF)) {
+    return verifierNext(request);
   }
   if (request.all.includes(BRIEF)) {
     builderHeard.push(request.last);
     // The newest work item the session runs: its brief's first line names
     // its task (a session may carry more than one item).
     const own = [...request.all.matchAll(OWN_TASK)].at(-1)?.[1];
-    return next(request, own);
+    if (own !== T3) {
+      return next(request, own);
+    }
+    // T3's builder: a new turn takes the script of what woke it.
+    if (!request.afterTool) {
+      t3Phase = t3PhaseOf(request.last);
+      if (t3Phase !== "idle" && !attempts.has(`${T3}:${t3Phase}`)) {
+        attempts.set(`${T3}:${t3Phase}`, t3Turns[t3Phase]);
+      }
+    }
+    return t3Phase === "idle" ? text("ok") : next(request, `${T3}:${t3Phase}`);
   }
   return next(request, [...request.all.matchAll(TURN)].at(-1)?.[0]);
 };
@@ -300,6 +474,20 @@ const writtenBy = (said: string[]): string[] => {
   }
   return [];
 };
+
+/** A parked ask as /api/pending lists it. */
+interface Ask {
+  instanceId: string;
+  machineId: string;
+  payload: {
+    input: { why?: string };
+    presentation?: { changes: { path: string }[] };
+    toolName: string;
+  };
+  requestId: string;
+}
+/** The name a design proposal is parked under (core `DESIGN_PROPOSAL_TOOL`). */
+const PROPOSAL = "mcp__cawco__design_proposal";
 
 interface TaskRead {
   attempts: { state: string }[];
@@ -388,8 +576,8 @@ const run = async (kit: Kit) => {
     commands.set(`PROBE-CMD:${marker}`, calls);
     await fleet.send(filer, `PROBE-CMD:${marker}`);
   };
-  /** Files `title` and starts it; its id once it waits in review with a result. */
-  const reviewed = async (marker: string, title: string, lands: string) => {
+  /** Files `title` and starts it; its id once its attempt is asked for. */
+  const filed = async (marker: string, title: string, lands: string) => {
     await command(`${marker}FILE`, [
       {
         name: CREATE,
@@ -416,6 +604,12 @@ const run = async (kit: Kit) => {
       throw new Error(`${marker}: no task filed`);
     }
     await command(`${marker}START`, [{ name: START, input: { id: task.id } }]);
+    return task.id;
+  };
+  /** Files `title` and starts it; its id once it waits in review with a result. */
+  const reviewed = async (marker: string, title: string, lands: string) => {
+    const id = await filed(marker, title, lands);
+    const task = { id };
     try {
       await until(
         `${task.id} in review with its result`,
@@ -481,6 +675,68 @@ const run = async (kit: Kit) => {
       project.id,
       id
     )[0]?.instance_id ?? "";
+  /** The clone of a task's newest attempt, on this disk. */
+  const workspaceOf = (id: string) =>
+    fleet.query<{ path: string }>(
+      "SELECT w.path AS path FROM work_items i JOIN workspaces w ON w.id = i.workspace_id WHERE i.project_id = ? AND i.task_id = ? ORDER BY i.created_at DESC",
+      project.id,
+      id
+    )[0]?.path ?? "";
+  /** A task's design checks, oldest first (hub design-verify.ts). */
+  const checksOf = (id: string) =>
+    fleet.query<{ state: string }>(
+      "SELECT state FROM design_checks WHERE task_id = ? ORDER BY created_at",
+      id
+    );
+  /** The design proposals waiting on the person (hub design-system.ts). */
+  const proposalsOpen = async () =>
+    (await fleet.api<Ask[]>("/api/pending")).filter(
+      (ask) => ask.payload.toolName === PROPOSAL
+    );
+  /** Your answer, as the dashboard's card sends it. */
+  const answerAsk = async (requestId: string, result: object) => {
+    const ask = (await proposalsOpen()).find(
+      (one) => one.requestId === requestId
+    );
+    if (!ask) {
+      throw new Error(`no design proposal ${requestId} is waiting`);
+    }
+    await fleet.post({
+      type: "command",
+      commandId: crypto.randomUUID(),
+      kind: "permission.answer",
+      machineId: ask.machineId,
+      sessionId: ask.instanceId,
+      payload: { requestId, args: [requestId, result] },
+    });
+  };
+  /** Why T3 stalled, said whole (also kept as T3-stalled.json). */
+  const t3Stalled = async (
+    error: unknown,
+    id: string,
+    said: Record<string, string[]>
+  ): Promise<Error> => {
+    const report = {
+      task: await read(id).catch(() => undefined),
+      checks: checksOf(id),
+      items: fleet.query(
+        "SELECT id, state, parent_instance_id, error FROM work_items WHERE project_id = ? ORDER BY created_at",
+        project.id
+      ),
+      said,
+      verifiers: Object.fromEntries(
+        verifierKeys.map((key) => [key, answers.get(key) ?? []])
+      ),
+      hub: (await fleet.logs("hub"))
+        .split("\n")
+        .filter((line) => line.includes("[design") || line.includes(id))
+        .slice(-12),
+    };
+    await writeFile(join(kit.out, "T3-stalled.json"), json(report));
+    return new Error(
+      `${error instanceof Error ? error.message : String(error)}; ${JSON.stringify(report).slice(0, 2400)}`
+    );
+  };
 
   // ── 1. Approve with design/ uncommitted is refused with its line ─────
   const t1 = await reviewed("T1", T1, "none");
@@ -580,6 +836,152 @@ const run = async (kit: Kit) => {
       origin === `${fleet.base}/git/${project.id}.git` &&
       newest === COMMIT,
     `${approved.status}; stage ${after.stage}; origin ${origin}; origin/main -1 “${newest}”`
+  );
+
+  // ── 4. A change to the system is a proposal: denied, then approved ────
+  const t3 = await filed("T3", T3, "main");
+  const t3Answers = () =>
+    Object.fromEntries(
+      [...answers]
+        .filter(([key]) => key.startsWith(T3))
+        .map(([key, said]) => [key, said.map((one) => one.slice(0, 400))])
+    );
+  const asks = await until(
+    "T3's two design proposals in /api/pending",
+    proposalsOpen,
+    (waiting) => waiting.length === 2,
+    400_000
+  ).catch(async (error: unknown) => {
+    throw await t3Stalled(error, t3, t3Answers());
+  });
+  const builderT3 = builderOf(t3);
+  const tree = workspaceOf(t3);
+  const inkNow = async () =>
+    (await Bun.file(join(tree, "design/tokens.json")).json()) as {
+      color: { ink: { $value: { components: number[] } } };
+    };
+  const inkLightness = async () =>
+    (await inkNow()).color.ink.$value.components[0];
+  const byWhy = (why: string) =>
+    asks.find((ask) => ask.payload.input.why === why);
+  const denied = byWhy(WHY_DENIED);
+  const allowed = byWhy(WHY_APPROVED);
+  const drawn = (ask: Ask | undefined) =>
+    (ask?.payload.presentation?.changes ?? []).map((change) => change.path);
+  const before = await inkLightness();
+  kit.check(
+    "4a: the builder's two token changes are asks in /api/pending, each drawn as design/tokens.json's diff, and its workspace's tokens.json is unchanged",
+    Boolean(denied && allowed) &&
+      drawn(denied).includes("design/tokens.json") &&
+      drawn(allowed).includes("design/tokens.json") &&
+      before === 0.264,
+    `asks ${asks.map((ask) => `${ask.requestId} ${drawn(ask).join("+")}`).join(", ")}; ink ${before}`
+  );
+  await answerAsk(denied?.requestId ?? "", {
+    behavior: "deny",
+    message: "Too dark",
+  });
+  await until(
+    "the builder told its first proposal was declined",
+    () =>
+      builderHeard.filter((said) =>
+        said.includes("declined your design proposal")
+      ),
+    (heard) => heard.length > 0,
+    60_000
+  );
+  const afterDeny = await inkLightness();
+  kit.check(
+    "4b: Deny leaves design/ as it was and tells the builder",
+    afterDeny === before &&
+      !(await proposalsOpen()).some(
+        (ask) => ask.requestId === denied?.requestId
+      ),
+    `ink ${afterDeny}; told “${builderHeard.find((said) => said.includes("declined your design proposal"))?.slice(0, 200)}”`
+  );
+  await answerAsk(allowed?.requestId ?? "", { behavior: "allow" });
+  await until(
+    "the builder told its second proposal was approved",
+    () =>
+      builderHeard.filter((said) =>
+        said.includes("approved your design proposal")
+      ),
+    (heard) => heard.length > 0,
+    60_000
+  );
+  const afterAllow = await inkLightness();
+  const subject = (
+    await Bun.$`git log -1 --format=%s -- design/tokens.json`.cwd(tree).quiet()
+  )
+    .text()
+    .trim();
+  const designDirty = (
+    await Bun.$`git status --porcelain -- design`.cwd(tree).quiet()
+  )
+    .text()
+    .trim();
+  kit.check(
+    "4c: Approve writes the change through design_write, commits it in the builder's workspace with its why, and tells the builder",
+    afterAllow === INK_APPROVED &&
+      subject === `design: ${WHY_APPROVED}` &&
+      designDirty === "",
+    `ink ${afterAllow}; last design commit “${subject}”; design/ uncommitted “${designDirty}”`
+  );
+
+  // ── 5. A hand-in is checked first: one finding, tied, as one message ───
+  const roundOne = await until(
+    "T3's first design check with its verdict",
+    () => checksOf(t3),
+    (rows) => rows.some((row) => row.state === "findings"),
+    400_000
+  ).catch(async (error: unknown) => {
+    throw await t3Stalled(error, t3, t3Answers());
+  });
+  const verifiers = fleet.query<{ parent_instance_id: string }>(
+    "SELECT parent_instance_id FROM work_items WHERE id IN (SELECT verifier_item_id FROM design_checks WHERE task_id = ?)",
+    t3
+  );
+  const findingsSent = () =>
+    fleet.query<{ id: string }>(
+      "SELECT uuid AS id FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+      builderT3,
+      `%${FINDING_WORDS}%`
+    );
+  await until(
+    "the findings' delivery",
+    findingsSent,
+    (rows) => rows.length > 0,
+    90_000
+  );
+  const midway = await read(t3);
+  const handed = (answers.get(verifierKeys[0] ?? "") ?? []).join(" ");
+  kit.check(
+    "5: the uncommitted hand-in stays in working, its verifier (parent verifier:<item>) gets it as a patch, and its tied finding reaches the builder as one message",
+    midway.stage === "working" &&
+      roundOne.length === 1 &&
+      verifiers.every((row) =>
+        row.parent_instance_id.startsWith("verifier:")
+      ) &&
+      verifiers.length === 1 &&
+      handed.includes("PATCH-HANDED") &&
+      findingsSent().length === 1,
+    `stage ${midway.stage}; rounds ${roundOne.map((row) => row.state).join(", ")}; verifier parents ${verifiers.map((row) => row.parent_instance_id.slice(0, 18)).join(", ")}; verifier saw “${handed.slice(0, 120)}”; ${findingsSent().length} findings message(s)`
+  );
+
+  // ── 6. The fix is checked again, passes, lands, and waits in review ────
+  const landed = await until(
+    `${t3} in review`,
+    () => read(t3),
+    (now) => now.stage === "review",
+    400_000
+  ).catch(async (error: unknown) => {
+    throw await t3Stalled(error, t3, t3Answers());
+  });
+  const rounds = checksOf(t3).map((row) => row.state);
+  kit.check(
+    "6: the fixed hand-in is checked again, passes, lands, and its task waits in review",
+    landed.stage === "review" && rounds.join(",") === "findings,passed",
+    `stage ${landed.stage}; rounds ${rounds.join(", ")}`
   );
 };
 

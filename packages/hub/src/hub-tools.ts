@@ -9,7 +9,11 @@
  *   person first when the hub requires paired devices (admin-asks.ts), and
  *   runs at once while it trusts its network.
  * - `design_write`: the project's design system, written at the root of the
- *   caller's repository or in its project's folder (design-system.ts).
+ *   caller's repository or in its project's folder (design-system.ts): a
+ *   system being built is written at once; a change to one the project
+ *   already had is a proposal the person approves.
+ * - `design_verdict`: a design check's verifier's one answer (design-verify.ts):
+ *   its must-fix findings, each tied to an element, or none for a pass.
  *
  * One list, made here: the MCP server lists it to sessions (server.ts) and
  * the role budgets measure it (role-budgets.ts).
@@ -17,15 +21,27 @@
 import type { InstanceRow } from "@cawco/core";
 import { z } from "zod";
 import { tool } from "./admin-tools";
+import type { DesignFinding, DesignPick } from "./db/schema";
 import { DESIGN_WRITE_FILES, type DesignFile } from "./design-system";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
 
 /** The hub's own session tools, by name: what a call is routed by (delegation-mcp.ts). */
+/** A design check's verifier's verdict: listed to verifier sessions alone (delegation-mcp.ts). */
+export const DESIGN_VERDICT = "design_verdict";
+
 export const HUB_TOOLS: ReadonlySet<string> = new Set([
   "update_machines",
   "design_write",
+  DESIGN_VERDICT,
 ]);
+
+/** A verifier's verdict as `design_verdict` takes it. */
+export interface DesignVerdict {
+  findings: DesignFinding[];
+  pick?: DesignPick;
+  summary: string;
+}
 
 export interface HubToolsDeps {
   /** Parks the call as the person's ask and waits for their answer (admin-asks.ts). */
@@ -34,8 +50,18 @@ export interface HubToolsDeps {
     name: string,
     input: Record<string, unknown>
   ) => Promise<void>;
-  /** Writes the caller's project's design system (design-system.ts `write`). */
-  designWrite: (actor: InstanceRow, files: DesignFile[]) => Promise<unknown>;
+  /** A design check's verdict from its verifier (design-verify.ts `verdict`). */
+  designVerdict: (
+    actor: InstanceRow,
+    verdict: DesignVerdict
+  ) => Promise<unknown>;
+  /** Writes the caller's project's design system, or proposes the change (design-system.ts `write`). */
+  designWrite: (
+    actor: InstanceRow,
+    files: DesignFile[],
+    why: string | undefined,
+    toolUseId: string | undefined
+  ) => Promise<unknown>;
   /** The machines registered now: an install naming none goes to each. */
   machineIds: () => string[];
   /** Whether the hub requires paired devices (hub-auth.ts): an install asks the person first. */
@@ -44,7 +70,8 @@ export interface HubToolsDeps {
 
 /** The hub's own session tools, bound to the calling session (none for a listing). */
 export const createHubTools =
-  (deps: HubToolsDeps) => (actor: InstanceRow | undefined) => {
+  (deps: HubToolsDeps) =>
+  (actor: InstanceRow | undefined, toolUseId?: string) => {
     const me = (): InstanceRow => {
       if (!actor) {
         throw new Error("Discovery cannot execute tools");
@@ -130,7 +157,7 @@ export const createHubTools =
       ),
       tool(
         "design_write",
-        "Write files of the project's design system (design/, paths inside it); bytes as base64. tokens.css and tokens.ts are generated from tokens.json; every token needs a source in manifest.json. A file the person edited is kept.",
+        "Write files of the project's design/ system, as the design-system skill says. Changing a system the project already had is a proposal, with your why; you hear the person's answer.",
         {
           files: z
             .array(
@@ -142,8 +169,37 @@ export const createHubTools =
             )
             .min(1)
             .max(DESIGN_WRITE_FILES),
+          why: z.string().max(500).optional(),
         },
-        async ({ files }) => ok(await deps.designWrite(me(), files))
+        async ({ files, why }) =>
+          ok(await deps.designWrite(me(), files, why, toolUseId))
+      ),
+      tool(
+        DESIGN_VERDICT,
+        "Your verdict as this design check's verifier, once: every must-fix finding tied to one element (its file and line, its CSS selector, what is wrong and what the system says instead), or no findings for a pass. It finishes your item.",
+        {
+          findings: z
+            .array(
+              z.object({
+                file: z.string().min(1),
+                line: z.number().int().min(1),
+                selector: z.string().min(1),
+                problem: z.string().min(1).max(1000),
+              })
+            )
+            .max(50),
+          pick: z
+            .object({
+              variant: z.string().min(1),
+              why: z.string().min(1).max(500),
+            })
+            .optional()
+            .describe(
+              "When the result offers variants: the one that holds to the system best, and why."
+            ),
+          summary: z.string().min(1).max(2000),
+        },
+        async (verdict) => ok(await deps.designVerdict(me(), verdict))
       ),
     ];
   };

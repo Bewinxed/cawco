@@ -1075,6 +1075,52 @@ function memoryProposal(input: Record<string, unknown>): Presented {
   };
 }
 
+/**
+ * The name an agent's change to a project's design system is parked under
+ * (hub design-system.ts): no tool's, so a session's own `design_write` call
+ * is never drawn as one.
+ */
+export const DESIGN_PROPOSAL_TOOL = "mcp__cawco__design_proposal";
+
+/**
+ * A design proposal (Projects spec §5.7, "Changes arrive as proposals"): an
+ * agent's change to its project's design system, every file it writes as it
+ * stood (`before`) beside what it would hold (`after`), drawn as the memory
+ * proposal's card draws its file.
+ */
+function designProposal(input: Record<string, unknown>): Presented {
+  const files = Array.isArray(input.files)
+    ? input.files.filter(
+        (file): file is { after: string; before: string; path: string } =>
+          typeof file === "object" &&
+          file !== null &&
+          typeof (file as { path?: unknown }).path === "string" &&
+          typeof (file as { before?: unknown }).before === "string" &&
+          typeof (file as { after?: unknown }).after === "string"
+      )
+    : [];
+  const made = files.map((file) =>
+    changeOf(file.path, file.before, file.after)
+  );
+  const stat = made.reduce(
+    (sum, each) => ({
+      added: sum.added + each.stat.added,
+      removed: sum.removed + each.stat.removed,
+      sections: [],
+    }),
+    { added: 0, removed: 0, sections: [] } as LineStat
+  );
+  return {
+    summary:
+      files.length === 1
+        ? `Change ${files[0]?.path}`
+        : `Change ${plural(files.length, "design system file")}`,
+    detail: statWords(stat),
+    changes: made.map((each) => each.change),
+    fields: fieldsOf(input, ["files", "project"]),
+  };
+}
+
 /** The tool name a project's Caw changes his own project's settings by (hub project-settings.ts). */
 export const PROJECT_SETTINGS_TOOL = "mcp__cawco__project_settings";
 
@@ -1400,6 +1446,9 @@ export function presentPermission(
   }
   if (toolName === MEMORY_PROPOSAL_TOOL) {
     return { ...who, ...memoryProposal(input) };
+  }
+  if (toolName === DESIGN_PROPOSAL_TOOL) {
+    return { ...who, ...designProposal(input) };
   }
   if (toolName === PROJECT_SETTINGS_TOOL) {
     return { ...who, ...projectSettings(input) };

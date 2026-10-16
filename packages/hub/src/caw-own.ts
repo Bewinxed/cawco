@@ -1,6 +1,6 @@
 import type { DbShape } from "./db";
 import { roleOf } from "./roles";
-import { isRoutineParent } from "./work-items";
+import { isHubParent } from "./work-items";
 
 type ProjectRow = NonNullable<ReturnType<DbShape["project"]>>;
 type Row = ReturnType<DbShape["getInstancesByIds"]>[number];
@@ -26,14 +26,14 @@ export const topsAtCaw = (
   parentInstanceId: string,
   project: ProjectRow
 ): boolean => {
-  if (isRoutineParent(parentInstanceId)) {
+  if (isHubParent(parentInstanceId)) {
     return false;
   }
   const seen = new Set<string>();
   let [root] = db.getInstancesByIds([parentInstanceId]);
   while (root?.parentInstanceId && !seen.has(root.id)) {
     seen.add(root.id);
-    if (isRoutineParent(root.parentInstanceId)) {
+    if (isHubParent(root.parentInstanceId)) {
       return false;
     }
     const [parent] = db.getInstancesByIds([root.parentInstanceId]);

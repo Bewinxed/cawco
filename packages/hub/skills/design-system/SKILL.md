@@ -24,4 +24,8 @@ A project's **design system** is its `design/` folder: what it already looks lik
 
 ## Again, later
 
-A second build reads the system as it stands first. Write only what the new material changes; `design_write` keeps every file the person edited, and those go in the hand-in as kept.
+Once the project has a system (on the branch your workspace was cut from, not only in your own commits), every `design_write` is a **proposal**: nothing is written, the person sees the change in Needs you with its diff, and you're told their answer. Give each call a `why`, one line. Approved, it is written through `design_write` where you work and committed; declined, `design/` stays as it was. Never change `design/` with your own edits or commits.
+
+A second build reads the system as it stands first. Propose only what the new material changes; `design_write` keeps every file the person edited, and those go in the hand-in as kept.
+
+Design work in a project with a system is checked before it reaches review: when you hand in, a verifier session judges your committed result against the system, and its must-fix findings come back to you as one message. Fix each, commit, and call `finish_item` again; a pass lands your work and sends the task to review.

@@ -56,6 +56,7 @@
  * the Telegram bridge's `CAWCO_TELEGRAM_API` precedent.
  */
 import {
+  DESIGN_PROPOSAL_TOOL,
   type Envelope,
   type FleetWatchNotice,
   MEMORY_PROPOSAL_TOOL,
@@ -137,6 +138,8 @@ const LOOK_GRACE_MS = 5000;
 const TURN_ENDED = "Finished its turn";
 /** A memory proposal's visible title (memory.ts): what it is, its project under it. */
 const MEMORY_PROPOSAL_NAME = "Memory proposal";
+/** A design proposal's visible title (design-system.ts): what it is, its project under it. */
+const DESIGN_PROPOSAL_NAME = "Design system change";
 /** A project setting Caw asked about (project-settings.ts): what it is, its project under it. */
 const PROJECT_SETTING_NAME = "Project setting";
 
@@ -1141,6 +1144,9 @@ export const createPush = ({
   ): string => {
     if (payload.toolName === MEMORY_PROPOSAL_TOOL) {
       return MEMORY_PROPOSAL_NAME;
+    }
+    if (payload.toolName === DESIGN_PROPOSAL_TOOL) {
+      return DESIGN_PROPOSAL_NAME;
     }
     if (payload.toolName === PROJECT_SETTINGS_TOOL) {
       return PROJECT_SETTING_NAME;

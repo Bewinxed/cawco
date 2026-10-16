@@ -468,6 +468,7 @@ import {
   designShaped,
 } from "./design-offers";
 import { createDesignSystem } from "./design-system";
+import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
 import {
@@ -15375,6 +15376,15 @@ export const createServer = (
         }
         return;
       }
+      // A design proposal (design-system.ts): written and committed, or
+      // declined, its session told either way.
+      if (designSystem.owns(requestId)) {
+        await designSystem.answer(requestId, result);
+        if (receipt.outcome !== "answered") {
+          throw new Error("That request is no longer pending.");
+        }
+        return;
+      }
       // A hub-raised ask is settled here, never delivered to a machine: a
       // workflow's question, or an admin write waiting on the person.
       if (
@@ -17166,6 +17176,10 @@ export const createServer = (
     beforeCut: (projectId, machineId, cwd) =>
       placeRepos.beforeCut(projectId, machineId, cwd),
     db,
+    // The design check (design-verify.ts), made further down; nothing
+    // finishes an item before the hub is up.
+    designHold: (item, submission) => designVerify.hold(item, submission),
+    designHeld: (itemId) => designVerify.held(itemId),
     lifetime,
     // Whose turn a project's Caw is in, for what he starts in it. Caw is
     // made further down; nothing starts an item before the hub is up.
@@ -17208,6 +17222,7 @@ export const createServer = (
         caw.itemEnded(item);
         routines.itemEnded(item);
         projectStarters.itemEnded(item);
+        designVerify.itemEnded(item);
       }),
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),
@@ -18465,11 +18480,48 @@ export const createServer = (
         designShaped(db.project(projectId)?.template ?? null, task)
       );
     },
+    // An agent's change to a system its project had is the person's ask,
+    // as a memory proposal is, answered below with the rest.
+    park: (envelope) => parkForPerson(envelope),
+    settle: (requestId) => {
+      pending.resolve(requestId);
+    },
+    tell: (instanceId, content) => workItems.tellSession(instanceId, content),
   });
   designApproval = designSystem.approvalRefusal;
+  offBoot.push(() => designSystem.start());
+  // Design work in a project with a design system is judged by a verifier
+  // session before it reaches review (design-verify.ts).
+  const designVerify = createDesignVerify({
+    db,
+    artifact: (id) => {
+      const row = db.artifacts.get(id);
+      if (!row) {
+        return;
+      }
+      let html: string | null = null;
+      if (row.kind === "page") {
+        try {
+          html = readFileSync(join(ARTIFACTS_ROOT, id, "index.html"), "utf8");
+        } catch {
+          html = null;
+        }
+      }
+      return { kind: row.kind, name: row.name, html };
+    },
+    run: (machineId, cwd, cmd, timeoutMs) =>
+      runOnMachine(machineId, cwd, cmd, timeoutMs, undefined, {
+        what: "command",
+      }),
+    tasks,
+    workItems,
+  });
+  offBoot.push(() => designVerify.start());
   const hubTools = createHubTools({
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
-    designWrite: (actor, files) => designSystem.write(actor, files),
+    designVerdict: (actor, verdict) => designVerify.verdict(actor, verdict),
+    designWrite: (actor, files, why, toolUseId) =>
+      designSystem.write(actor, files, why, toolUseId),
     machineIds: () => registry.machineIds(),
     pairing: () => hubAuth.mode() === "pairing",
   });

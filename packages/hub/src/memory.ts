@@ -179,7 +179,8 @@ const answeredNote = (
 /**
  * Why no agent may write `rel` in a project's folder, or nothing: AGENTS.md
  * and `knowledge/` are the person's, `memory/` is the inbox and its
- * proposals, written through the memory tools alone.
+ * proposals, written through the memory tools alone, and `design/` is the
+ * design system, written through `design_write` alone (design-system.ts).
  */
 export const personsTier = (rel: string): string | undefined => {
   if (rel === AGENTS_FILE) {
@@ -190,6 +191,9 @@ export const personsTier = (rel: string): string | undefined => {
   }
   if (rel === MEMORY_DIR || rel.startsWith(`${MEMORY_DIR}/`)) {
     return "memory/ is the agents' inbox: write a note with memory_note.";
+  }
+  if (rel === "design" || rel.startsWith("design/")) {
+    return "design/ is the project's design system: it is written only with design_write, where a change goes to the person as a proposal. Delegate the change.";
   }
   return undefined;
 };

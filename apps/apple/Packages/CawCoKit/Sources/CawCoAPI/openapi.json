@@ -33098,6 +33098,9 @@
               "of"
             ]
           },
+          "selector": {
+            "type": "string"
+          },
           "rect": {
             "type": "object",
             "properties": {
@@ -33126,9 +33129,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "selector": {
-            "type": "string"
           },
           "styles": {
             "type": "object",
