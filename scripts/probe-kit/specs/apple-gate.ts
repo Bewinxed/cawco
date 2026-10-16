@@ -241,12 +241,12 @@ const run = async (kit: Kit) => {
   // which the mark below is read in.
   const shownAt = Date.now();
   fleet.write(
-    "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', 'gate-preview', ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+    "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source_port, source_workspace, revision, seq, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', 'gate-preview', ?, 5199, ?, 1, 0, 0, ?, ?, ?)",
     crypto.randomUUID(),
     parent,
     project.id,
     MACHINE,
-    JSON.stringify({ port: 5199, workspace: a.workspaceId }),
+    a.workspaceId,
     shownAt,
     shownAt,
     shownAt

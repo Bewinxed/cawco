@@ -517,19 +517,26 @@ write(
   cawAt
 );
 write(
-  "INSERT INTO thread_messages (id, thread_id, author, body, tasks, created_at) VALUES (?, ?, 'you', ?, NULL, ?)",
+  "INSERT INTO thread_messages (id, thread_id, author, body, created_at) VALUES (?, ?, 'you', ?, ?)",
   crypto.randomUUID(),
   thread,
   "Where are we on the launch posts?",
   youAt
 );
+const cawMessage = crypto.randomUUID();
 write(
-  "INSERT INTO thread_messages (id, thread_id, author, body, tasks, created_at) VALUES (?, ?, 'caw', ?, ?, ?)",
-  crypto.randomUUID(),
+  "INSERT INTO thread_messages (id, thread_id, author, body, created_at) VALUES (?, ?, 'caw', ?, ?)",
+  cawMessage,
   thread,
   "The Build in Public post is drafted and waits on your review: the post, two alternates for its opening, and the plan for a 20–30 s capture of the real board. The launch thread's first attempt failed its length check; I'll retry it once you've read this one.",
-  JSON.stringify([t1.id]),
   cawAt
+);
+// The task Caw's message is about (db `thread_message_tasks`).
+write(
+  "INSERT INTO thread_message_tasks (message_id, project_id, task_id) VALUES (?, ?, ?)",
+  cawMessage,
+  project.id,
+  t1.id
 );
 socket.close();
 

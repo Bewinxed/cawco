@@ -735,7 +735,15 @@ try {
     const posted = await pathOf(task.id);
     const before = await fileAt(posted);
     await fleet.stop("hub");
-    fleet.write("DELETE FROM project_tasks WHERE project_id = ?", projectId);
+    // A probe's connection keeps no foreign keys: a task's lists go by hand.
+    for (const table of [
+      "project_task_edges",
+      "project_task_labels",
+      "project_task_fields",
+      "project_tasks",
+    ]) {
+      fleet.write(`DELETE FROM ${table} WHERE project_id = ?`, projectId);
+    }
     fleet.launch("hub");
     await fleet.hubUp();
     const stages = await until(

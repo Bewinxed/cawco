@@ -654,6 +654,8 @@ const run = async (kit: Kit) => {
     // at A's reset, so the cases after this one start with A free.
     limited.delete(ACCOUNT);
     fleet.write("DELETE FROM account_bench WHERE account_id = ?", ACCOUNT);
+    // A probe's connection keeps no foreign keys: a reading's windows go by hand.
+    fleet.write("DELETE FROM account_windows WHERE account_id = ?", ACCOUNT);
     fleet.write("DELETE FROM account_readings WHERE account_id = ?", ACCOUNT);
   };
   if (runs("4")) {

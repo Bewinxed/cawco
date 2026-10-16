@@ -839,12 +839,12 @@ const cloneCase = async (
   if (cut) {
     const now = Date.now();
     fleet.write(
-      "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source, revision, seq, changes, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', 'clone-preview', ?, ?, 1, 0, '{}', 0, ?, ?, ?)",
+      "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source_port, source_workspace, revision, seq, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', 'clone-preview', ?, 5199, ?, 1, 0, 0, ?, ?, ?)",
       crypto.randomUUID(),
       cut.created_by_instance_id,
       coded.id,
       MACHINE,
-      JSON.stringify({ port: 5199, workspace: cut.id }),
+      cut.id,
       now,
       now,
       now
