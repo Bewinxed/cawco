@@ -9,25 +9,25 @@ import UIKit
 // words fly back and the bubble unfolds.
 
 /// One end of a flight: where the words stand in the window, how far that
-/// view has scrolled them, and how they are set there.
+/// view has scrolled them, and the role they are set in there.
 struct LiftEnd {
     let box: CGRect
     let scroll: Double
-    let attributes: [NSAttributedString.Key: Any]
+    let role: TypeRole
 
-    /// The words as a bubble sets them: the body role, wrapping.
+    /// The words as a bubble sets them: the body role.
     @MainActor
     static func bubble(_ view: UIView) -> LiftEnd {
-        LiftEnd(box: view.convert(view.bounds, to: nil), scroll: 0, attributes: wrapping(TypeScale.typeBody.attributes(color: Palette.inkStrong)))
+        LiftEnd(box: view.convert(view.bounds, to: nil), scroll: 0, role: TypeScale.typeBody)
     }
 
+    /// The role in the strong ink, wrapping.
     @MainActor
-    static func wrapping(_ attributes: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
-        var attributes = attributes
-        if let paragraph = (attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
-            paragraph.lineBreakMode = .byWordWrapping
-            attributes[.paragraphStyle] = paragraph
-        }
+    var attributes: [NSAttributedString.Key: Any] {
+        var attributes = role.attributes(color: Palette.inkStrong)
+        let paragraph = (attributes[.paragraphStyle] as! NSParagraphStyle).mutableCopy() as! NSMutableParagraphStyle
+        paragraph.lineBreakMode = .byWordWrapping
+        attributes[.paragraphStyle] = paragraph
         return attributes
     }
 }
@@ -47,8 +47,10 @@ enum LiftFlight {
             clip.layer.anchorPoint = .zero
             clip.bounds = CGRect(origin: .zero, size: end.box.size)
             clip.layer.position = end.box.origin
-            let label = UILabel()
-            label.numberOfLines = 0
+            let label = KitLabel(end.role, lines: 0)
+            // Laid out by frame, as its end's own words are.
+            label.translatesAutoresizingMaskIntoConstraints = true
+            label.lineBreakMode = .byWordWrapping
             label.attributedText = NSAttributedString(string: text, attributes: end.attributes)
             let height = label.sizeThatFits(CGSize(width: end.box.width, height: .greatestFiniteMagnitude)).height
             label.frame = CGRect(x: 0, y: -end.scroll, width: end.box.width, height: max(height, end.box.height + end.scroll))

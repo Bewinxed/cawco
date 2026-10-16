@@ -2850,7 +2850,7 @@ final class DockPill: UIControl {
 /// Open Settings when Local Network privacy refused it. It wraps rather than
 /// cuts: a phone gives it two lines, balanced as the web's.
 final class DockNote: UIView {
-    private let label = UILabel()
+    private let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private var button: UIButton?
     private var shown = false
     private var said = ""
@@ -2861,9 +2861,7 @@ final class DockNote: UIView {
     init() {
         super.init(frame: .zero)
         raise(self, radius: Radius.radiusMd)
-        label.numberOfLines = 0
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        label.adjustsFontForContentSizeCategory = false
         let button = KitButton.make("Try again", variant: .ghost, height: .sm) { [weak self] in
             guard let self, let actionTitle else { return }
             onAction(actionTitle)

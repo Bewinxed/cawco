@@ -102,7 +102,7 @@ private final class PromptTextView: UITextView {
 
 final class PromptEditorView: UIView, UITextViewDelegate {
     private let text = PromptTextView()
-    private let placeholder = UILabel()
+    private let placeholder: KitLabel
     private var height: NSLayoutConstraint!
     private let phone: Bool
     private let role: TypeRole
@@ -128,6 +128,7 @@ final class PromptEditorView: UIView, UITextViewDelegate {
     init(phone: Bool) {
         self.phone = phone
         role = TypeScale.typeBody.with(weight: .regular, points: phone ? 16 : nil, leading: 1.55)
+        placeholder = KitLabel(role, ink: Palette.inkSubtle)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         text.backgroundColor = .clear
@@ -144,11 +145,9 @@ final class PromptEditorView: UIView, UITextViewDelegate {
         addSubview(text)
         placeholder.isUserInteractionEnabled = false
         placeholder.isAccessibilityElement = false
-        placeholder.lineBreakMode = .byTruncatingTail
-        placeholder.translatesAutoresizingMaskIntoConstraints = false
         // The hint would only truncate at a phone's width; the question survives whole.
         let hint = phone ? "" : " @ machine or project · / skills and plugins"
-        placeholder.attributedText = NSAttributedString(string: "What should the agent do first?" + hint, attributes: role.attributes(color: Palette.inkSubtle))
+        placeholder.text = "What should the agent do first?" + hint
         addSubview(placeholder)
         height = heightAnchor.constraint(equalToConstant: phone ? 120 : 44)
         NSLayoutConstraint.activate([

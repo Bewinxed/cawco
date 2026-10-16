@@ -252,7 +252,11 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
     private let item: Item
     private let env: RowEnv
     private let pager = UIScrollView()
-    private let counter = UILabel()
+    private let counter: KitLabel = {
+        let counter = KitLabel(TypeScale.typeMeta)
+        counter.tabular = true
+        return counter
+    }()
     private let counterChip = UIView()
     private var index = 0
     private var zooms: [UIScrollView] = []
@@ -410,7 +414,7 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
     /// The counter and the bar, for the picture on screen.
     private func show(_ pictures: [Picture]) {
         counterChip.isHidden = pictures.count < 2
-        counter.attributedText = Styled.string("\(index + 1) / \(pictures.count)", TypeScale.typeMeta, color: Palette.inkStrong, tabular: true)
+        counter.text = "\(index + 1) / \(pictures.count)"
         guard pictures.indices.contains(index) else { return }
         let shown = pictures[index]
         lines.arrangedSubviews.forEach { $0.removeFromSuperview() }

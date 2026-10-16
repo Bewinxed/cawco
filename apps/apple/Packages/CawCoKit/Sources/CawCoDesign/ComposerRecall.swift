@@ -533,10 +533,9 @@ struct RecallFaces {
     let selected: [NSAttributedString.Key: Any]
     let muted: [NSAttributedString.Key: Any]
     let subtle: [NSAttributedString.Key: Any]
-    /// When it was sent (`font: 400 12px/22px` on the row's line box), with
-    /// tabular figures, muted and on the line; and the "Queued" tag.
-    let meta: [NSAttributedString.Key: Any]
-    let metaSelected: [NSAttributedString.Key: Any]
+    /// When it was sent (`font: 400 12px/22px` on the row's line box), set
+    /// with tabular figures, muted or in the selected ink; and the "Queued" tag.
+    let meta: TypeRole
     let queued: [NSAttributedString.Key: Any]
 
     init() {
@@ -546,21 +545,9 @@ struct RecallFaces {
         selected = field.attributes(color: Palette.selectedInk)
         muted = field.attributes(color: Palette.inkMuted)
         subtle = field.attributes(color: Palette.inkSubtle)
-        let role = TypeRole(weight: .regular, size: TypeScale.textMeta ... TypeScale.textMeta, leading: line / TypeScale.textMeta,
-                            family: FontFamily.fontBody)
-        queued = role.attributes(color: Palette.statusAttnInk)
-        func tabular(_ color: UIColor) -> [NSAttributedString.Key: Any] {
-            var attributes = role.attributes(color: color)
-            if let font = attributes[.font] as? UIFont {
-                attributes[.font] = UIFont(descriptor: font.fontDescriptor.addingAttributes([.featureSettings: [[
-                    UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
-                    UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector,
-                ]]]), size: font.pointSize)
-            }
-            return attributes
-        }
-        meta = tabular(Palette.inkMuted)
-        metaSelected = tabular(Palette.selectedInk)
+        meta = TypeRole(weight: .regular, size: TypeScale.textMeta ... TypeScale.textMeta, leading: line / TypeScale.textMeta,
+                        family: FontFamily.fontBody)
+        queued = meta.attributes(color: Palette.statusAttnInk)
     }
 }
 
@@ -597,8 +584,8 @@ final class RecallRow: UIView {
     /// clear of the field's line. Only then is a copy drawn for it or shown.
     var full = false
     private let content = UIView()
-    private let words = UILabel()
-    private let time = UILabel()
+    private let words = KitLabel(ComposerView.fieldRole)
+    private let time: KitLabel
     private let queuedTag = TagLabel()
     private let soft = UIImageView()
     private let faces: RecallFaces
@@ -644,14 +631,17 @@ final class RecallRow: UIView {
         self.date = date
         self.queued = queued
         self.showsMeta = showsMeta && kind == .sent
+        time = KitLabel(faces.meta, ink: Palette.inkMuted)
+        time.tabular = true
         super.init(frame: .zero)
         isUserInteractionEnabled = false
         layer.anchorPoint = CGPoint(x: 0.5, y: 1)
         addSubview(content)
         addSubview(soft)
         soft.alpha = 0
-        for label in [words, time] as [UILabel] {
-            label.numberOfLines = 1
+        for label in [words, time] {
+            // Laid out by frame (`layoutSubviews`).
+            label.translatesAutoresizingMaskIntoConstraints = true
             content.addSubview(label)
         }
         words.lineBreakMode = .byTruncatingTail
@@ -691,7 +681,8 @@ final class RecallRow: UIView {
         }
         if showsMeta {
             let ago = Recall.ago(date)
-            time.attributedText = NSAttributedString(string: queued ? " · \(ago)" : ago, attributes: picked ? faces.metaSelected : faces.meta)
+            time.ink = picked ? Palette.selectedInk : Palette.inkMuted
+            time.text = queued ? " · \(ago)" : ago
         }
         time.isHidden = !showsMeta
         accessibilityLabel = switch kind {

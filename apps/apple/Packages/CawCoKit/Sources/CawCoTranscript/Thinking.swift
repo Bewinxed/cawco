@@ -32,9 +32,12 @@ final class ThinkingIndicator: UIView {
         labels.clipsToBounds = true
         var widest = 0.0
         for word in Self.words {
-            let label = UILabel()
+            // Both laid out by frame.
+            let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+            label.translatesAutoresizingMaskIntoConstraints = true
             label.attributedText = Styled.string(word, TypeScale.typeLabel, color: Palette.inkMuted, leading: TypeScale.leadingBody)
-            let sheen = UILabel()
+            let sheen = KitLabel(TypeScale.typeLabel)
+            sheen.translatesAutoresizingMaskIntoConstraints = true
             sheen.attributedText = Styled.string(word, TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingBody)
             let band = CAGradientLayer()
             band.startPoint = CGPoint(x: 0, y: 0.5)
@@ -228,7 +231,7 @@ final class ThinkingView: RailRow, Recycled, Disclosing, FrameRow {
     private let cpu = GlyphView(.cpu)
     private let label = LineLabel(hug: .required, resist: .required)
     private let chevron = Chevron(size: Size.iconSm, tint: Palette.inkMuted)
-    private let tail = UILabel()
+    private let tail = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let tailFade = CAGradientLayer()
     private let steps = UIStackView()
     private let reveal: Reveal

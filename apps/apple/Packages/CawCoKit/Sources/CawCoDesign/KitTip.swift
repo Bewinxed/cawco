@@ -84,13 +84,12 @@ public final class KitTip: NSObject {
 
     private func show() {
         guard bubble == nil, let anchor, let window = anchor.window, !anchor.isHidden else { return }
-        let text = UILabel()
-        text.numberOfLines = 0
-        text.attributedText = NSAttributedString(string: label, attributes: TypeScale.typeMeta.attributes(color: Palette.onInk))
+        let text = KitLabel(TypeScale.typeMeta, ink: Palette.onInk, lines: 0)
+        text.text = label
         let row = UIStackView(arrangedSubviews: [text])
         if let keys {
-            let kbd = UILabel()
-            kbd.attributedText = NSAttributedString(string: keys, attributes: TypeScale.typeMeta.attributes(color: Palette.onInk))
+            let kbd = KitLabel(TypeScale.typeMeta, ink: Palette.onInk)
+            kbd.text = keys
             kbd.alpha = 0.7
             kbd.setContentCompressionResistancePriority(.required, for: .horizontal)
             row.addArrangedSubview(kbd)

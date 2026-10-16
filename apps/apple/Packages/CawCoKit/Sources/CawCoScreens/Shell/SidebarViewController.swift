@@ -48,7 +48,7 @@ final class SidebarViewController: ObservedViewController {
     private let startButton = HeadAction(.plus, label: "Start session", tint: Palette.inkMuted)
     private let fleetRow = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
     private let workflowsRow = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
-    private let fleetBadge = UILabel()
+    private let fleetBadge = KitLabel(TypeScale.typeMeta)
     private let fleetBadgeBox = UIView()
     private let homeSlot = UIView()
     private let projectsGroup = UIStackView()
@@ -348,8 +348,6 @@ final class SidebarViewController: ObservedViewController {
         fleetBadgeBox.translatesAutoresizingMaskIntoConstraints = false
         fleetBadgeBox.layer.cornerRadius = Radius.radiusXs
         fleetBadgeBox.isUserInteractionEnabled = false
-        fleetBadge.translatesAutoresizingMaskIntoConstraints = false
-        fleetBadge.font = TypeScale.typeMeta.font
         fleetBadgeBox.addSubview(fleetBadge)
         fleetRow.addSubview(fleetBadgeBox)
         NSLayoutConstraint.activate([
@@ -712,9 +710,9 @@ final class SidebarViewController: ObservedViewController {
         let blocked = blockedCount
         let count = blocked > 0 ? blocked : liveCount
         fleetBadgeBox.isHidden = count == 0
+        fleetBadge.ink = blocked > 0 ? Palette.statusAttnInk : Palette.statusLiveInk
         fleetBadge.text = "\(count)"
         fleetBadgeBox.backgroundColor = blocked > 0 ? Palette.statusAttnBg : Palette.statusLiveBg
-        fleetBadge.textColor = blocked > 0 ? Palette.statusAttnInk : Palette.statusLiveInk
         update(lists)
     }
 

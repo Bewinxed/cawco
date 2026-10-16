@@ -74,20 +74,38 @@ public struct TypeRole: Sendable {
     /// family and weight but restates its size (`font-size: var(--text-label)`
     /// on a mono run), scaled by Dynamic Type the same way.
     public func font(_ size: Double, weight: UIFont.Weight? = nil) -> UIFont {
-        let mono = family.first?.hasPrefix("JetBrains Mono") == true
-        let wordmark = family.first?.hasPrefix("Nunito") == true
-        let weight = weight ?? self.weight
-        let metrics = UIFontMetrics(forTextStyle: textStyle)
+        Self.face(mono: family.first?.hasPrefix("JetBrains Mono") == true, wordmark: family.first?.hasPrefix("Nunito") == true,
+                  weight: weight ?? self.weight, size: size, style: scales ? textStyle : nil)
+    }
+
+    /// A role's face at the Dynamic Type setting now: scaled as `style`, or
+    /// at `size` whatever the setting when `style` is nil.
+    private static func face(mono: Bool, wordmark: Bool, weight: UIFont.Weight, size: Double, style: UIFont.TextStyle?) -> UIFont {
+        let metrics = style.map { UIFontMetrics(forTextStyle: $0) }
         // The scaled size stands for the Dynamic Type setting in the key: a
         // number the setting moves, worked out without making a font.
         let key = FontKey(mono: mono, wordmark: wordmark, weight: weight.rawValue, size: size,
-                          scaled: scales ? metrics.scaledValue(for: size) : size, style: scales ? textStyle.rawValue : "")
-        if let font = Self.fonts.withLock({ $0[key] }) { return font }
-        let base = UIFont(descriptor: Self.descriptor(weight: weight, mono: mono, wordmark: wordmark), size: size)
-        let font = scales ? metrics.scaledFont(for: base) : base
-        Self.fonts.withLock { $0[key] = font }
+                          scaled: metrics.map { Double($0.scaledValue(for: size)) } ?? size, style: style?.rawValue ?? "")
+        if let font = fonts.withLock({ $0[key] }) { return font }
+        let base = UIFont(descriptor: descriptor(weight: weight, mono: mono, wordmark: wordmark), size: size)
+        let font = metrics?.scaledFont(for: base) ?? base
+        fonts.withLock { $0[key] = font }
+        made.withLock { $0[font] = key }
         return font
     }
+
+    /// `font` made again at the Dynamic Type setting now, when it is a role's
+    /// face that the setting scales; nil for any other font. A string set in
+    /// role faces by its caller is set again with these when the setting
+    /// changes (`KitLabel`).
+    public static func rescaled(_ font: UIFont) -> UIFont? {
+        guard let key = made.withLock({ $0[font] }), !key.style.isEmpty else { return nil }
+        return face(mono: key.mono, wordmark: key.wordmark, weight: UIFont.Weight(key.weight), size: key.size,
+                    style: UIFont.TextStyle(rawValue: key.style))
+    }
+
+    /// What each face made was made as: `rescaled` reads it back.
+    private static let made = Mutex<[UIFont: FontKey]>([:])
 
     /// A face at a size and a Dynamic Type setting (`font`).
     private struct FontKey: Hashable {

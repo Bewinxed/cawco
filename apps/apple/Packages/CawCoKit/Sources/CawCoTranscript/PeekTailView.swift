@@ -37,7 +37,7 @@ public final class PeekTailView: UIScrollView, UIScrollViewDelegate {
     private let hub: HubConnection
     private let instanceId: String
     private let column = UIStackView()
-    private let stream = UILabel()
+    private let stream = KitLabel(TypeScale.typeBody, ink: Palette.foreground, lines: 0)
     private var entries: [Entry] = []
     private var settled: (revision: Int, entries: [Entry])?
     private var atEnd = true
@@ -60,7 +60,6 @@ public final class PeekTailView: UIScrollView, UIScrollViewDelegate {
             column.leadingAnchor.constraint(equalTo: frameLayoutGuide.leadingAnchor, constant: 16),
             column.trailingAnchor.constraint(equalTo: frameLayoutGuide.trailingAnchor, constant: -16),
         ])
-        stream.numberOfLines = 0
         stream.isHidden = true
         pacer = StreamPacer { [weak self] text in self?.draw(stream: text) }
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PeekTailView, _: UITraitCollection) in

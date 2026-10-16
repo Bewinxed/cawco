@@ -1349,7 +1349,7 @@ extension ComposerView {
         let inset = field.textContainerInset
         let box = field.convert(CGRect(x: 0, y: field.contentOffset.y + inset.top, width: field.bounds.width,
                                        height: max(0, field.bounds.height - inset.top - inset.bottom)), to: nil)
-        return LiftEnd(box: box, scroll: field.contentOffset.y, attributes: LiftEnd.wrapping(Self.fieldRole.attributes(color: Palette.inkStrong)))
+        return LiftEnd(box: box, scroll: field.contentOffset.y, role: Self.fieldRole)
     }
 
     // MARK: The swipe

@@ -148,7 +148,7 @@ final class HarnessRail: UIView {
     private let thumb = UIView()
     private let column = UIStackView()
     private let tip = UIView()
-    private let tipText = UILabel()
+    private let tipText = KitLabel(TypeScale.typeMeta.with(weight: .regular, leading: 1), ink: Palette.neutral2)
     private var value = ""
     private var placed = false
     private var hovered = -1
@@ -191,6 +191,8 @@ final class HarnessRail: UIView {
         tip.boxShadow = Shadow.shadowRaised
         tip.isUserInteractionEnabled = false
         tip.alpha = 0
+        // Laid out by frame, to the words' own size (`hover`).
+        tipText.translatesAutoresizingMaskIntoConstraints = true
         tip.addSubview(tipText)
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hover(_:))))
         accessibilityLabel = "Harness"

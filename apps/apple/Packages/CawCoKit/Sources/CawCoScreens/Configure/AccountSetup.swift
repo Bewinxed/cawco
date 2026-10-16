@@ -706,7 +706,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             self?.nickname = field?.text ?? ""
             self?.requestRefresh()
         }, for: .editingChanged)
-        let nicknameLabel = UILabel()
+        let nicknameLabel = KitLabel(TypeScale.typeLabel)
         // "Nickname" in the label's weight, then "optional" in the body's, muted, a space between.
         let words = NSMutableAttributedString(string: Words.Accounts.Setup.nickname, attributes: [.font: TypeScale.typeLabel.font, .foregroundColor: Palette.inkStrong])
         words.append(NSAttributedString(string: " ", attributes: [.font: TypeScale.typeLabel.font]))

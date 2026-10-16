@@ -467,7 +467,9 @@ public final class KitLabel: UILabel {
     }
 
     /// A string of the caller's own making (two faces, a marked match): the
-    /// label wraps and cuts it as it stands and no longer restyles it.
+    /// label wraps and cuts it as it stands and no longer restyles it from
+    /// its role; when Dynamic Type changes, its role faces are set again at
+    /// the new setting (`textSizeChanged`).
     override public var attributedText: NSAttributedString? {
         get { super.attributedText }
         set { given = true; place(newValue) }
@@ -515,8 +517,53 @@ public final class KitLabel: UILabel {
         numberOfLines = lines
         translatesAutoresizingMaskIntoConstraints = false
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (label: KitLabel, _: UITraitCollection) in
-            label.render()
+            label.textSizeChanged()
         }
+    }
+
+    /// Dynamic Type changed: the label's own string is made again from its
+    /// role; a caller's string keeps its runs, its role faces set again.
+    private func textSizeChanged() {
+        guard given else { return render() }
+        guard let string = super.attributedText, string.length > 0 else { return }
+        place(Self.rescaled(string))
+    }
+
+    /// `string` with every role face made again at the Dynamic Type setting
+    /// now (`TypeRole.rescaled`), and what a role sets from its face's size
+    /// moved with it: its tracking (em, so a kern of the size), its line
+    /// height (a multiple of the size) and the baseline offset `LineBox`
+    /// centres a line with. Runs in any other font stay as they are.
+    static func rescaled(_ string: NSAttributedString) -> NSAttributedString {
+        let whole = NSRange(location: 0, length: string.length)
+        // A paragraph's line height follows the face it leads with.
+        var lead: Double?
+        string.enumerateAttribute(.font, in: whole) { value, _, stop in
+            guard let old = value as? UIFont, let new = TypeRole.rescaled(old) else { return }
+            lead = new.pointSize / old.pointSize
+            stop.pointee = true
+        }
+        guard let lead else { return string }
+        let out = NSMutableAttributedString(attributedString: string)
+        string.enumerateAttributes(in: whole) { attributes, range, _ in
+            var height: Double?
+            if let paragraph = attributes[.paragraphStyle] as? NSParagraphStyle, paragraph.maximumLineHeight > 0 {
+                let moved = paragraph.mutableCopy() as! NSMutableParagraphStyle
+                moved.minimumLineHeight = paragraph.minimumLineHeight * lead
+                moved.maximumLineHeight = paragraph.maximumLineHeight * lead
+                out.addAttribute(.paragraphStyle, value: moved, range: range)
+                height = moved.maximumLineHeight
+            }
+            guard let old = attributes[.font] as? UIFont, let new = TypeRole.rescaled(old) else { return }
+            out.addAttribute(.font, value: new, range: range)
+            if let kern = attributes[.kern] as? Double {
+                out.addAttribute(.kern, value: kern * new.pointSize / old.pointSize, range: range)
+            }
+            if attributes[.baselineOffset] != nil, let height {
+                out.addAttribute(.baselineOffset, value: LineBox.label(new, height: height).baselineOffset, range: range)
+            }
+        }
+        return out
     }
 
     @available(*, unavailable)

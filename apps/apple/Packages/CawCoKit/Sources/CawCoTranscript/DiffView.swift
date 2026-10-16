@@ -188,7 +188,9 @@ public final class DiffView: UIView {
         for part in parts {
             switch part {
             case let .collapsed(count):
-                let bar = UILabel(frame: CGRect(x: 0, y: y, width: 0, height: Size.txDiffBar))
+                let bar = KitLabel(TypeScale.typeMeta.with(family: FontFamily.fontMono), ink: Palette.inkMuted)
+                bar.translatesAutoresizingMaskIntoConstraints = true
+                bar.frame = CGRect(x: 0, y: y, width: 0, height: Size.txDiffBar)
                 bar.backgroundColor = palette.separator
                 bar.attributedText = Styled.string("  \(count) unmodified line\(count == 1 ? "" : "s")", TypeScale.typeMeta,
                                                    color: Palette.inkMuted, size: TypeScale.textMeta, mono: true)
@@ -216,7 +218,9 @@ public final class DiffView: UIView {
                         gutterBack.backgroundColor = palette.gutter
                         rows.addSubview(gutterBack)
                     }
-                    let number = UILabel(frame: CGRect(x: 0, y: y, width: gutter - Space.space2, height: row))
+                    let number = KitLabel(TypeScale.typeMeta.with(family: FontFamily.fontMono), ink: ink)
+                    number.translatesAutoresizingMaskIntoConstraints = true
+                    number.frame = CGRect(x: 0, y: y, width: gutter - Space.space2, height: row)
                     number.textAlignment = .right
                     number.attributedText = Styled.string((line.new ?? line.old).map(String.init) ?? "", TypeScale.typeMeta,
                                                           color: ink, size: TypeScale.textMeta, mono: true, tabular: true)
@@ -227,7 +231,8 @@ public final class DiffView: UIView {
                         if local.length > 0 { code.addAttribute(.foregroundColor, value: color, range: NSRange(location: local.location - offset, length: local.length)) }
                     }
                     offset += (line.text as NSString).length + 1
-                    let label = UILabel()
+                    let label = KitLabel(TypeScale.typeCode.with(points: TypeScale.textMeta), ink: Palette.codeInk)
+                    label.translatesAutoresizingMaskIntoConstraints = true
                     label.attributedText = code
                     let width = ceil(label.intrinsicContentSize.width)
                     label.frame = CGRect(x: gutter + Space.space2, y: y, width: width, height: row)

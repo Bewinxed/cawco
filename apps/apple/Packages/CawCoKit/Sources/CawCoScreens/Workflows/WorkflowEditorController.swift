@@ -638,10 +638,8 @@ final class WorkflowProgramView: UIView {
             } else {
                 text.append(NSAttributedString(string: problem.message, attributes: role.attributes(color: Palette.inkStrong)))
             }
-            let label = UILabel()
-            label.numberOfLines = 0
+            let label = KitLabel(role, lines: 0)
             label.attributedText = text
-            label.translatesAutoresizingMaskIntoConstraints = false
             let box = UIView()
             box.backgroundColor = Palette.surfaceRecess
             box.layer.cornerRadius = Radius.radiusSm
