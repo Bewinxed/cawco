@@ -37,6 +37,9 @@ export const VIEWS = {
   desk: { width: 1440, height: 900, touch: false },
   tablet: { width: 1024, height: 1366, touch: true },
   phone: { width: 390, height: 844, touch: true },
+  /** The simulators the iOS specs pair with: iPhone 16 Pro and iPad Pro 13-inch (M4), portrait. */
+  iphone: { width: 402, height: 874, touch: true },
+  ipad: { width: 1032, height: 1376, touch: true },
 } as const;
 export type View = keyof typeof VIEWS;
 export const THEMES = ["light", "dark"] as const;

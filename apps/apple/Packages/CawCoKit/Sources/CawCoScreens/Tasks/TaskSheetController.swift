@@ -1,7 +1,9 @@
 import CawCoCore
 import CawCoDesign
 import CawCoTranscript
+import OSLog
 import UIKit
+import WebKit
 
 /// A task, whole, in a sheet, read to review it (tasks/TaskSheet.svelte):
 /// what its attempts handed in (its result, each output drawn as the thing
@@ -143,6 +145,10 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private var sidePane: AttemptTranscriptPane?
     /// Ticks while an attempt is live, so its sentence counts on ("Working for 2 min").
     private var clock: Timer?
+    #if DEBUG
+    /// Reports the sheet's parts as `TaskSheet` lines once a second, those that changed.
+    private var probe: Timer?
+    #endif
 
     static let mono = TypeScale.typeCode.with(points: TypeScale.typeMeta.points)
 
@@ -171,6 +177,8 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRaised
         view.accessibilityIdentifier = "task-sheet"
+        review.accessibilityIdentifier = "task-review"
+        titleLabel.accessibilityIdentifier = "task-title"
         review.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(review)
         buildHead()
@@ -224,6 +232,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         // The sheet's close (`absolute top-4 right-4`, ghost `icon-sm`): over whichever pane is in front.
         closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.dismiss(animated: true) }
         closeButton.accessibilityLabel = "Close"
+        closeButton.accessibilityIdentifier = "task-close"
         view.addSubview(closeButton)
         NSLayoutConstraint.activate([
             closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: Space.space4),
@@ -339,11 +348,23 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         tick()
+        #if DEBUG
+        probe = probe ?? Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let body = self.collection else { return }
+                TaskSheetProbe.report(self.view, body: body)
+            }
+        }
+        #endif
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         guard isBeingDismissed || presentingViewController == nil else { return }
+        #if DEBUG
+        probe?.invalidate()
+        probe = nil
+        #endif
         clock?.invalidate()
         clock = nil
         inlinePane?.close()
@@ -657,6 +678,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         } else {
             hint.text = handedIn(task) ? "What the finished attempt handed in." : "What an attempt hands in shows here once one finishes."
         }
+        hint.accessibilityIdentifier = "task-result-hint"
         let stack = UIStackView(arrangedSubviews: [Self.sectionHead("Result", count: nil), hint])
         stack.axis = .vertical
         stack.accessibilityIdentifier = "task-result"
@@ -706,6 +728,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         let count = task.attempts.count
         let hint = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
         hint.text = "Each attempt is one session's try at this task. " + (count == 1 ? "It has had 1." : "It has had \(count).")
+        hint.accessibilityIdentifier = "task-attempts-hint"
         let words = UIStackView(arrangedSubviews: [Self.sectionHead("Attempts", count: nil), hint])
         words.axis = .vertical
         var again: UIView?
@@ -778,13 +801,14 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         stack.spacing = Space.space2
         stack.accessibilityIdentifier = "task-attempt"
         // How it ended when it did not land; what it said it did, where the Result's report is another attempt's.
-        var ended: [String] = []
-        if let how = attempt.endedHow { ended.append(how) }
-        if let headline = attempt.headline, task.result?.workItemId != attempt.workItemId { ended.append(headline) }
-        for words in ended {
+        var ended: [(id: String, words: String)] = []
+        if let how = attempt.endedHow { ended.append(("task-attempt-how", how)) }
+        if let headline = attempt.headline, task.result?.workItemId != attempt.workItemId { ended.append(("task-attempt-headline", headline)) }
+        for (id, words) in ended {
             let line = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
             line.lineBreakMode = .byCharWrapping
             line.text = words
+            line.accessibilityIdentifier = id
             stack.addArrangedSubview(line)
         }
         return stack
@@ -796,6 +820,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         if expanded {
             let hint = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
             hint.text = "\(name)'s transcript is open in its own pane."
+            hint.accessibilityIdentifier = "task-transcript-moved"
             return hint
         }
         if inlinePane?.instanceId != attempt.instanceId {
@@ -1530,3 +1555,71 @@ final class TaskTextPart: UIView, UITextViewDelegate {
     func textViewDidBeginEditing(_: UITextView) { paintEditor() }
     func textViewDidEndEditing(_: UITextView) { paintEditor() }
 }
+
+#if DEBUG
+/// The task sheet's parts as `TaskSheet` lines
+/// (scripts/probe-kit/specs/ios-task-review.ts): every view named
+/// `task-…` that stands in the window, its frame (in the body's content
+/// points for a part of the list, so a scroll moves none of them; in the
+/// window's for the frame's own panes), whether it shows, and what it says.
+/// A line is logged when a part comes, changes or goes.
+enum TaskSheetProbe {
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "TaskSheet")
+    private static var last: [String: String] = [:]
+
+    static func report(_ root: UIView, body: UICollectionView) {
+        var lines: [String: String] = [:]
+        var showing: Set<String> = []
+        visit(root) { view in
+            guard let id = view.accessibilityIdentifier, id.hasPrefix("task-") else { return }
+            let shows = !hidden(view)
+            // A row's last drawing can linger in a cell the list keeps hidden for reuse: the one shown wins.
+            guard shows || !showing.contains(id) else { return }
+            if shows { showing.insert(id) }
+            let inBody = view !== body && view.isDescendant(of: body)
+            let frame = view.convert(view.bounds, to: inBody ? body : nil)
+            var line = "part \(id) in=\(inBody ? "body" : "window") frame=\(box(frame)) shows=\(shows)"
+            if let words = says(view) { line += " says=\(words.replacing("\n", with: " "))" }
+            lines[id] = line
+        }
+        for (id, line) in lines.sorted(by: { $0.key < $1.key }) where last[id] != line {
+            log.notice("\(line, privacy: .public)")
+        }
+        for id in last.keys where lines[id] == nil {
+            log.notice("gone \(id, privacy: .public)")
+        }
+        last = lines
+    }
+
+    /// Every view under `view`, but not into a transcript, a page or a document, which hold no part.
+    private static func visit(_ view: UIView, _ each: (UIView) -> Void) {
+        each(view)
+        guard !(view is TranscriptView || view is WKWebView || view is MarkdownDocumentView) else { return }
+        for sub in view.subviews { visit(sub, each) }
+    }
+
+    private static func hidden(_ view: UIView) -> Bool {
+        var at: UIView? = view
+        while let current = at {
+            if current.isHidden || current.alpha == 0 { return true }
+            at = current.superview
+        }
+        return view.window == nil
+    }
+
+    private static func says(_ view: UIView) -> String? {
+        switch view {
+        case let output as TaskOutputView: "state=\(output.shown) head=\(output.head)"
+        case let tabs as KitSegmented: "selected=\(tabs.selectedIndex.map(String.init) ?? "none")"
+        case let list as UICollectionView: String(format: "offset=%.1f", list.contentOffset.y + list.adjustedContentInset.top)
+        case let label as UILabel: label.text
+        case let button as UIButton: button.configuration?.title ?? button.currentTitle ?? button.accessibilityLabel
+        default: view.accessibilityLabel
+        }
+    }
+
+    private static func box(_ rect: CGRect) -> String {
+        String(format: "%.1f,%.1f,%.1f,%.1f", rect.minX, rect.minY, rect.width, rect.height)
+    }
+}
+#endif

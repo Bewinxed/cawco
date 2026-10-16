@@ -75,6 +75,10 @@ final class TaskOutputView: UIView {
     private let name: String
     private let kind: ResultKind
     private let card: ResultCard
+    /// What it draws now: `reading`, `refused`, or what it drew the output as (the sheet's DEBUG probe reads it).
+    private(set) var shown = "reading"
+    /// Its kind's word and its title, as its card's head says them.
+    var head: String { [kind.word, card.title].compactMap(\.self).joined(separator: " · ") }
 
     /// `read` answers the output's bytes and the type the hub served them as.
     init(name: String, read: @escaping () async throws -> (data: Data, type: String)) {
@@ -132,11 +136,14 @@ final class TaskOutputView: UIView {
         let line = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
         line.text = reason
         card.setContent([line])
+        shown = "refused"
     }
 
     private func show(_ data: Data) {
         if kind == .picture {
-            card.setContent([Self.picture(data, name: name)])
+            let picture = Self.picture(data, name: name)
+            card.setContent([picture])
+            shown = picture is KitLabel ? "unreadable" : picture is ResultPage ? "svg" : "picture"
             return
         }
         let text = String(decoding: data, as: UTF8.self)
@@ -147,27 +154,34 @@ final class TaskOutputView: UIView {
             let body = MarkdownDocumentView(message: true)
             body.setSource(document.body)
             card.setContent([body])
+            shown = "document"
         case .page:
             card.setContent([ResultPage(html: text)])
+            shown = "page"
         case .data:
             do {
                 card.setContent([ResultDataView(try ResultJSON.parse(text))])
+                shown = "data"
             } catch {
                 let line = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
                 line.text = "This data does not read: \(error.reason)"
                 card.setContent([line])
+                shown = "unreadable"
             }
         case .table:
             let rows = ResultRead.delimited(text, tab: name.lowercased().hasSuffix(".tsv"))
             guard let head = rows.first else {
                 card.setContent([Self.preformatted(text)])
+                shown = "text"
                 return
             }
             card.setContent([KitTableView(columns: head, rows: rows.dropFirst().map { row in
                 head.indices.map { at in ResultDataView.cell(at < row.count ? .string(row[at]) : .null) }
             })])
+            shown = "table"
         case .mockup, .text, .picture:
             card.setContent([Self.preformatted(text)])
+            shown = "text"
         }
     }
 
