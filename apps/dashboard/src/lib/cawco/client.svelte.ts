@@ -5526,8 +5526,23 @@ function adoptThread(thread: ThreadSummary): void {
   ].sort(byLastAt);
 }
 
-/** A message added to a thread this tab has read; a thread not read yet is read whole when it opens. */
+/**
+ * The messages that reached a thread while a read of it was on its way, by
+ * thread id, with how many reads are: a read's answer may have been taken
+ * before them, so it lands them after its own ({@link readThread}). Held
+ * only while a read is in flight.
+ */
+const heardWhileReading = new Map<
+  string,
+  { heard: ThreadMessage[]; reads: number }
+>();
+
+/**
+ * A message added to a thread this tab has read, or is reading; a thread
+ * not read yet is read whole when it opens.
+ */
 function adoptThreadMessage(threadId: string, message: ThreadMessage): void {
+  heardWhileReading.get(threadId)?.heard.push(message);
   const messages = state.threadMessages[threadId];
   if (messages && !messages.some((held) => held.id === message.id)) {
     messages.push(message);
@@ -5588,17 +5603,37 @@ export const changeRoutine = (
 export const threadsOf = (projectId: string): ThreadSummary[] =>
   state.threads[projectId] ?? [];
 
-/** Reads a thread whole; `thread.message` frames keep it from then on. */
+/**
+ * Reads a thread whole; `thread.message` frames keep it from then on. A
+ * frame that lands while the read is on its way is newer than the read's
+ * answer (the hub took that answer before it), so the thread is the read's
+ * messages and then each such one the read does not have: the read never
+ * drops a message the frames already brought.
+ */
 export async function readThread(
   projectId: string,
   threadId: string
 ): Promise<ThreadRead> {
-  const read = await askHub<ThreadRead>(
-    `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}`
-  );
-  state.threadMessages[threadId] = read.messages;
-  adoptThread(read.thread);
-  return read;
+  const reading = heardWhileReading.get(threadId) ?? { heard: [], reads: 0 };
+  reading.reads += 1;
+  heardWhileReading.set(threadId, reading);
+  try {
+    const read = await askHub<ThreadRead>(
+      `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}`
+    );
+    const ids = new Set(read.messages.map((message) => message.id));
+    const after = reading.heard.filter(
+      (message) => !ids.has(message.id) && ids.add(message.id)
+    );
+    state.threadMessages[threadId] = [...read.messages, ...after];
+    adoptThread(read.thread);
+    return read;
+  } finally {
+    reading.reads -= 1;
+    if (reading.reads === 0) {
+      heardWhileReading.delete(threadId);
+    }
+  }
 }
 
 /**

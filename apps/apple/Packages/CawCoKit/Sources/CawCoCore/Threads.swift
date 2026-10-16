@@ -200,6 +200,16 @@ public final class ThreadsStore {
     /// The fleet lists the threads as rows (thread-tabs.ts `threadRowOf`).
     @ObservationIgnored var onThreads: () -> Void = {}
 
+    /// The messages that reached a thread while a read of it was on its way,
+    /// and how many reads are: a read's answer may have been taken before
+    /// them, so it lands them after its own (client.svelte.ts
+    /// `heardWhileReading`). Held only while a read is in flight.
+    private struct Reading {
+        var heard: [ThreadNote] = []
+        var reads = 0
+    }
+    @ObservationIgnored private var heardWhileReading: [String: Reading] = [:]
+
     private unowned let hub: HubConnection
     private let log = Logger(subsystem: "dev.cawco.app", category: "Threads")
 
@@ -235,8 +245,9 @@ public final class ThreadsStore {
         onThreads()
     }
 
-    /// A message added to a thread read here; one not read yet is read whole when it opens (`adoptThreadMessage`).
+    /// A message added to a thread read here, or being read; one not read yet is read whole when it opens (`adoptThreadMessage`).
     func adopt(_ note: ThreadNote) {
+        heardWhileReading[note.threadId]?.heard.append(note)
         guard var list = messages[note.threadId], !list.contains(where: { $0.id == note.id }) else { return }
         list.append(note)
         messages[note.threadId] = list
@@ -266,12 +277,24 @@ public final class ThreadsStore {
     }
 
     /// Reads a thread whole; its frames keep it from then on (`readThread`).
+    /// A frame that lands while the read is on its way is newer than the
+    /// read's answer, so the thread is the read's messages and then each such
+    /// one the read does not have: the read never drops a message the frames
+    /// already brought.
     public func read(projectId: String, threadId: String) async throws {
         guard let client = hub.client else { throw TaskRefusal(message: "No hub is connected.") }
+        heardWhileReading[threadId, default: Reading()].reads += 1
+        defer {
+            heardWhileReading[threadId]?.reads -= 1
+            if heardWhileReading[threadId]?.reads == 0 { heardWhileReading[threadId] = nil }
+        }
         let output = try await client.getApiProjectsByIdThreadsByThreadId(path: .init(id: projectId, threadId: threadId))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
         let read = try ok.body.json
-        messages[threadId] = read.messages.compactMap(ThreadNote.read)
+        let notes = read.messages.compactMap(ThreadNote.read)
+        var ids = Set(notes.map(\.id))
+        let after = (heardWhileReading[threadId]?.heard ?? []).filter { ids.insert($0.id).inserted }
+        messages[threadId] = notes + after
         adopt(read.thread)
         draw(threadId, history: true)
         #if DEBUG

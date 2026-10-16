@@ -236,11 +236,17 @@
     return words.join("\n\n").trim();
   });
 
-  /** The thread as the transcript's session: one object, its fields kept current. */
+  /**
+   * The thread as the transcript's session: one object, its fields kept
+   * current. Its id is the pane's address, which a new thread's first
+   * message moves to the thread it made: the transcript's turn, landing and
+   * sizes are that thread's from then on, never the next new thread's.
+   */
   const session = $state<SessionState>(
     untrack(() => ({ ...blankSession(viewId), harness: "claude" }))
   );
   $effect.pre(() => {
+    session.instanceId = viewId;
     const blocks = (messages ?? []).map(blockOf);
     // A withdrawn question's line stands after what was said before it went.
     for (const note of withdrawn) {

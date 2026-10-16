@@ -42,10 +42,21 @@ const HERO_TITLE = /^What's next for .+\?$/;
 const SPACING_PROP = /(padding|margin|gap)/;
 const HERO = `${DOCK} [data-thread-hero]`;
 
-const respond = (request: Seen): Reply =>
-  request.tools
-    ? { everyMs: 5, words: ["Ready."] }
-    : { everyMs: 5, words: ["Plan the launch"] };
+/** A tag in your words that the mock Caw answers by name: `PROBE-REPLY-<tag>`. */
+const REPLY_TAG = /PROBE-REPLY-(\w+)/g;
+
+/**
+ * The mock model: a title for a side call; a turn that read tagged words
+ * answers the newest tag in plain text (posted in its thread as his reply,
+ * caw.ts `answerUnreplied`), any other "Ready.".
+ */
+const respond = (request: Seen): Reply => {
+  if (!request.tools) {
+    return { everyMs: 5, words: ["Plan the launch"] };
+  }
+  const tag = [...request.last.matchAll(REPLY_TAG)].at(-1)?.[1];
+  return { everyMs: 5, words: [tag ? `Answer ${tag}` : "Ready."] };
+};
 
 /** Words that say money or spend: a currency amount, or the words themselves. */
 const MONEY = String.raw`[$€£¥]\s?\d|\d\s?(?:USD|EUR|GBP)\b|\bspen[dt]\b|\bcosts?\b`;
@@ -443,6 +454,303 @@ async function checkSettings(kit: Kit, page: Page, name: string) {
   await settle(page, 400);
 }
 
+type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
+
+/** A git checkout in the sandbox for a project of its own. */
+async function checkout(fleet: Fleet, name: string): Promise<string> {
+  const src = join(fleet.sandbox, name);
+  await mkdir(src, { recursive: true });
+  await Bun.$`git init -q -b main && echo caw > README.md && git add -A && git commit -qm 'First commit'`
+    .cwd(src)
+    .env({ ...process.env, HOME: fleet.env.HOME as string })
+    .quiet();
+  return src;
+}
+
+/** The composer's field (its measuring twin is aria-hidden). */
+const FIELD = 'textarea[aria-label="Message the project"]:not([aria-hidden])';
+
+/** What the page's sockets received that carries a `thread.message` frame, as sent. */
+function threadFrames(page: Page): string[] {
+  const heard: string[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framereceived", ({ payload }) => {
+      const words = typeof payload === "string" ? payload : payload.toString();
+      if (words.includes('"thread.message"')) {
+        heard.push(words);
+      }
+    });
+  });
+  return heard;
+}
+
+/** What the hub answered your words with: Caw's reply, or its note that he was not woken. */
+type Answered =
+  | { kind: "reply"; id: string; threadId: string }
+  | { kind: "not-woken"; id: string; threadId: string; why: string };
+
+/** The hub's answer to your message `yours`, once it has stored one. */
+const answerTo = (fleet: Fleet, yours: string, tag: string) =>
+  until<Answered>(
+    `the hub's answer to ${tag}`,
+    () => {
+      const [reply] = fleet.query<{ id: string; threadId: string }>(
+        "SELECT id, thread_id AS threadId FROM thread_messages WHERE author = 'caw' AND body = ?",
+        `Answer ${tag}`
+      );
+      if (reply) {
+        return { kind: "reply", ...reply };
+      }
+      const [note] = fleet.query<{ id: string; threadId: string; why: string }>(
+        "SELECT id, thread_id AS threadId, json_extract(event, '$.notWoken.words') AS why FROM thread_messages WHERE author = 'event' AND json_extract(event, '$.notWoken.message') = ?",
+        yours
+      );
+      return note ? { kind: "not-woken", ...note } : undefined;
+    },
+    Boolean,
+    90_000
+  ).catch(() => undefined);
+
+/** Whether `root` shows `words` with the thread's turn over (no Stop), within a second. */
+const showsSettled = (page: Page, root: string, words: string) =>
+  page
+    .waitForFunction(
+      ({ sel, want }) => {
+        const view = document.querySelector(sel);
+        return (
+          !!view?.textContent?.includes(want) &&
+          !view.querySelector('button[aria-label="Stop the agent"]')
+        );
+      },
+      { sel: root, want: words },
+      { timeout: 1000 }
+    )
+    .then(
+      () => true,
+      () => false
+    );
+
+/** Whether `root` draws every not-woken note its thread holds (RowFault `data-not-woken`), within a second. */
+const notesDrawn = (
+  fleet: Fleet,
+  page: Page,
+  root: string,
+  threadId: string
+) => {
+  const [{ n } = { n: 0 }] = fleet.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM thread_messages WHERE thread_id = ? AND json_extract(event, '$.notWoken.message') IS NOT NULL",
+    threadId
+  );
+  return page
+    .waitForFunction(
+      ({ sel, want }) =>
+        document.querySelectorAll(`${sel} [data-not-woken]`).length === want,
+      { sel: root, want: n },
+      { timeout: 1000 }
+    )
+    .then(
+      () => `yes (${n})`,
+      () => `no (${n} in the thread)`
+    );
+};
+
+/**
+ * Your words sent from the composer in `root`, tagged; the mock Caw answers
+ * them in plain text and the hub stores it as his reply. Within a second of
+ * the hub storing it, `root` shows it with his turn over, with no reload: a
+ * reply that streamed in this view settles under the live row's key
+ * (rows.ts `keepLive`), so it is read by its words, and with the turn over
+ * those words are the stored message's, since the frame that ends the turn
+ * also drops the live words (caw.ts `said`, then the thread's row). Answers
+ * the thread it went to.
+ */
+async function replyLands(
+  kit: Kit,
+  fleet: Fleet,
+  page: Page,
+  heard: string[],
+  name: string,
+  root: string,
+  tag: string
+): Promise<string | undefined> {
+  const words = `Live check: reply with PROBE-REPLY-${tag}.`;
+  const field = page.locator(`${root} ${FIELD}`);
+  await field.fill(words);
+  await field.press("Enter");
+  const yours = await until(
+    `your words ${tag} in the hub`,
+    () =>
+      fleet.query<{ id: string }>(
+        "SELECT id FROM thread_messages WHERE author = 'you' AND body = ?",
+        words
+      )[0]?.id,
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  if (!kit.check(`${name}: the hub stores your words`, !!yours)) {
+    return;
+  }
+  const answer = await answerTo(fleet, yours as string, tag);
+  const framed = (id: string) => heard.some((frame) => frame.includes(id));
+  const tail = async () =>
+    (
+      await page.evaluate(
+        (sel) => document.querySelector(sel)?.textContent?.slice(-240) ?? "",
+        root
+      )
+    ).replace(/\s+/g, " ");
+  if (answer?.kind !== "reply") {
+    // Caw could not start: the hub's note says so through the same frame,
+    // and the view draws every such note the thread holds.
+    const noted =
+      answer && (await notesDrawn(fleet, page, root, answer.threadId));
+    kit.check(
+      `${name}: the hub stores Caw's reply`,
+      false,
+      answer
+        ? `Caw was not woken: ${answer.why}; the hub's note ${answer.id} reached the page: ${framed(answer.id)}; the view draws the thread's not-woken notes within a second: ${noted}`
+        : "the hub stored neither his reply nor a note"
+    );
+    return answer?.threadId;
+  }
+  const drawn = await showsSettled(page, root, `Answer ${tag}`);
+  kit.check(
+    `${name}: Caw's reply renders in the open view within a second of the hub storing it, no reload`,
+    drawn,
+    `reply ${answer.id} in thread ${answer.threadId}; its thread.message frame reached the page: ${framed(answer.id)}; the view ends “${await tail()}”`
+  );
+  return answer.threadId;
+}
+
+/** Picks from the dock's threads menu: New thread, or the thread titled `title`. */
+async function pickThread(page: Page, title: string) {
+  await page.click(`${DOCK} .threads-trigger`);
+  await page.waitForSelector('[role="menu"][data-state="open"]', {
+    timeout: 10_000,
+  });
+  await page.getByRole("menuitem", { name: title }).first().click();
+  await settle(page, 400);
+}
+
+/**
+ * The invariant: a message Caw posts to a thread appears in every open view
+ * of it within a second of the hub storing it, with no reload, including a
+ * thread the view itself made by sending its first message. In the dock: its
+ * New thread (the owner's live case, 2026-10-16), the thread it then shows,
+ * a thread chosen from its menu, and New thread with Caw on; in a thread
+ * tab: a new thread, then the thread it made.
+ */
+async function checkReplies(kit: Kit, fleet: Fleet, base: string) {
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Caw replies",
+    machineId: MACHINE,
+    cwd: await checkout(fleet, "replies"),
+    caw: false,
+  });
+  // A task on the board: Caw sits in the head (his seat), not over it.
+  await fleet.api(`/api/projects/${project.id}/tasks`, { title: "A task" });
+  const page = await kit.page("desk");
+  page.setDefaultTimeout(60_000);
+  const heard = threadFrames(page);
+  // What the page threw, or said failed: a pane that throws as it mounts is
+  // taken down by its region's boundary (a thread reopened in the dock,
+  // 2026-10-16), and nothing of its thread shows.
+  const thrown: string[] = [];
+  page.on("pageerror", (error) => thrown.push(error.message));
+  page.on("console", (line) => {
+    if (line.type() === "error") {
+      thrown.push(line.text().slice(0, 300));
+    }
+  });
+  const seat = ".project-head button.caw-seat";
+  await open(page, `${base}/project/${project.id}`, seat);
+  await settle(page, 400);
+  await page.click(seat);
+  await page.waitForSelector(`${DOCK} ${FIELD}`, { timeout: 30_000 });
+  // A thread to come back to, so the dock has a menu to pick New thread from.
+  await fleet.api(`/api/projects/${project.id}/threads`, {
+    body: "First thread",
+  });
+  await page.waitForSelector(`${DOCK} .threads-trigger`, { timeout: 30_000 });
+  await pickThread(page, "New thread");
+  await page.waitForSelector(HERO, { timeout: 15_000 });
+  await replyLands(
+    kit,
+    fleet,
+    page,
+    heard,
+    "dock, New thread, Caw off",
+    DOCK,
+    "DOCKNEW"
+  );
+  await replyLands(
+    kit,
+    fleet,
+    page,
+    heard,
+    "dock, the thread its first words made",
+    DOCK,
+    "DOCKMADE"
+  );
+  await pickThread(page, "First thread");
+  await page.waitForSelector(`${DOCK} .tx-columns`, { timeout: 30_000 });
+  await replyLands(
+    kit,
+    fleet,
+    page,
+    heard,
+    "dock, a thread chosen from its menu",
+    DOCK,
+    "DOCKPICKED"
+  );
+  const on = await fetch(`${fleet.base}/api/projects/${project.id}/caw`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ on: true }),
+  });
+  if (kit.check("Caw turned on", on.ok, `${on.status}`)) {
+    await pickThread(page, "New thread");
+    await page.waitForSelector(HERO, { timeout: 15_000 });
+    await replyLands(
+      kit,
+      fleet,
+      page,
+      heard,
+      "dock, New thread, Caw on",
+      DOCK,
+      "DOCKON"
+    );
+  }
+  kit.check(
+    "the dock threw nothing as its threads were made, answered and switched",
+    thrown.length === 0,
+    thrown.join(" | ")
+  );
+  // A thread tab: its first message makes the thread and re-addresses it.
+  const tab = await kit.page("desk");
+  tab.setDefaultTimeout(60_000);
+  const tabHeard = threadFrames(tab);
+  await open(tab, `${base}/session/thread:new:${project.id}`, FIELD, 90_000);
+  await replyLands(
+    kit,
+    fleet,
+    tab,
+    tabHeard,
+    "thread tab, a new thread",
+    "body",
+    "TABNEW"
+  );
+  await replyLands(
+    kit,
+    fleet,
+    tab,
+    tabHeard,
+    "thread tab, the thread it made",
+    "body",
+    "TABMADE"
+  );
+}
+
 const spec: Spec = {
   name: "caw-dock",
   async run(kit) {
@@ -456,23 +764,19 @@ const spec: Spec = {
     await fleet.agentUp();
     await fleet.accountSignedIn();
     const home = fleet.env.HOME as string;
-    const src = join(fleet.sandbox, "src");
-    await mkdir(src, { recursive: true });
     await writeFile(
       join(home, ".gitconfig"),
       "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
     );
-    await Bun.$`git init -q -b main && echo caw > README.md && git add -A && git commit -qm 'First commit'`
-      .cwd(src)
-      .env({ ...process.env, HOME: home })
-      .quiet();
+    const src = await checkout(fleet, "src");
+    const base = await fleet.dashboard();
+    await checkReplies(kit, fleet, base);
     const project = await fleet.api<{ id: string; name: string }>(
       "/api/projects",
       { name: "Caw dock", machineId: MACHINE, cwd: src, caw: false }
     );
     // A task on the board: Caw sits in the head (his seat), not over it.
     await fleet.api(`/api/projects/${project.id}/tasks`, { title: "A task" });
-    const base = await fleet.dashboard();
     const url = `${base}/project/${project.id}`;
     const seat = ".project-head button.caw-seat";
 

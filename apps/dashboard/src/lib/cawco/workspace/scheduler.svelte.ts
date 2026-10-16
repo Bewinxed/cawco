@@ -35,6 +35,8 @@
  * show up as a flicker much later.
  */
 
+import { untrack } from "svelte";
+
 /**
  * How often a turn comes up. Our choice: 4Hz keeps a peripheral transcript
  * visibly alive while bounding the cost to one rebuild per slot — about 1.4%
@@ -129,6 +131,17 @@ export const rebuildScheduler = {
    * The first fingerprint is recorded rather than acted on: the pane has just
    * built its rows, or is about to catch up on its own account, so a rebuild
    * on the next tick would be work for an unchanged picture.
+   *
+   * It is read untracked. A transcript joins from its own `$effect`, and a
+   * fingerprint read there made every field it reads that effect's
+   * dependency: each change re-ran the effect, which joined again with the
+   * changed fingerprint as `last`, so no tick ever saw a change and no
+   * unfocused transcript was rebuilt after it joined (Caw's dock froze on
+   * the first words of a thread, 2026-10-16).
+   *
+   * The turn given back is this registrant's alone: a pane joining under
+   * the same id (a new thread's pane mounted as the last one goes) keeps
+   * its own.
    */
   join(
     id: string,
@@ -136,12 +149,20 @@ export const rebuildScheduler = {
     bump: () => void,
     tier: Tier = "visible"
   ): () => void {
-    registry.set(id, { fingerprint, bump, last: fingerprint(), tier });
+    const entry: Registrant = {
+      fingerprint,
+      bump,
+      last: untrack(fingerprint),
+      tier,
+    };
+    registry.set(id, entry);
     start();
     return () => {
-      registry.delete(id);
-      if (registry.size === 0) {
-        stop();
+      if (registry.get(id) === entry) {
+        registry.delete(id);
+        if (registry.size === 0) {
+          stop();
+        }
       }
     };
   },

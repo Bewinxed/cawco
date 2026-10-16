@@ -72,6 +72,9 @@
     titleControl={title}
   >
     {#key chosen}
+      <!-- The dock's thread is the transcript being read beside the page:
+           focused, so its rows follow every message as it lands and it
+           rides the tail (Transcript `focused`). -->
       <ThreadPane
         active
         docked={{
@@ -80,6 +83,7 @@
             fresh = false;
           },
         }}
+        focused
         {viewId}
         visible
       />

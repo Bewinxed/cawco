@@ -332,6 +332,15 @@
   // the first one (the server evaluates the rows during init).
   /** Every id this view has held: rows, the calls inside runs, the live tail's rows. */
   const known = new Set<string>();
+  /**
+   * The rows whose ids are all in `known`. A build keeps every row it did
+   * not fold again as the same object, and a row's ids never change, so a
+   * row seen once is never read for its ids again: a long transcript's every
+   * row was, on every streamed frame. Declared here with the rest of the
+   * ledger: a transcript mounting on a session whose sizes it kept builds
+   * during init (`cache`), and read further down it was not yet initialised.
+   */
+  const recorded = new WeakSet<Row>();
   /** Arrivals decided and not yet mounted. A row takes its own, once. */
   const tickets = new Map<string, Ticket>();
   /** The array the last build folded. Live frames push onto it; history replaces it. */
@@ -2809,14 +2818,6 @@
         glanced.has(m.metadata?.toolId ?? m.toolCallId ?? "")
     );
   }
-
-  /**
-   * The rows whose ids are all in `known`. A build keeps every row it did
-   * not fold again as the same object, and a row's ids never change, so a
-   * row seen once is never read for its ids again: a long transcript's every
-   * row was, on every streamed frame.
-   */
-  const recorded = new WeakSet<Row>();
 
   /** The ids this build holds that this view never has — recorded as held now. */
   function unheld(candidates: Row[]): { id: string; row: Row }[] {
