@@ -11,6 +11,7 @@
  *  - "Pick the chip's wrap": parked on an AskUserQuestion card;
  *  - "Approve the deploy push": parked on a Bash permission;
  *  - "Lay out the chip wraps": an artifact page it made;
+ *  - "Name the hang card's states": a question it asked, answered;
  *  - the project "cawco": tasks and a routine;
  *  - a workflow and one finished run of it.
  * The mock model plays a script per message: the message carries
@@ -137,6 +138,34 @@ const plans = (repo: string): Record<string, Step[]> => ({
     { words: REPLY },
   ],
   sub: [{ words: "The label never shrinks, so the badge is cut first." }],
+  named: [
+    {
+      tool: {
+        name: "AskUserQuestion",
+        input: {
+          questions: [
+            {
+              question: NAMED_QUESTION,
+              header: "Names",
+              multiSelect: false,
+              options: [
+                {
+                  label: NAMED_ANSWER,
+                  description:
+                    "The card at rest, standing open, and hanging from its tab.",
+                },
+                {
+                  label: "Shut, standing, hanging",
+                  description: "Named for what the card is doing.",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    { words: "I'll name them rest, open and hung." },
+  ],
   wrap: [
     {
       tool: {
@@ -201,6 +230,9 @@ const plans = (repo: string): Record<string, Step[]> => ({
 });
 
 const ARTIFACT_CREATE = "mcp__cawco__artifact_create";
+/** The question the "named" session asks and the scene answers: the transcript's answered card. */
+const NAMED_QUESTION = "Which names do the hang card's three states take?";
+const NAMED_ANSWER = "Rest, open, hung";
 /** Claude Code's subagent tool, by the name a plan writes it under; its other name is `Agent`. */
 const SUBAGENT = "Task";
 const SUBAGENT_NAMES = ["Task", "Agent"];
@@ -219,20 +251,29 @@ const ARTIFACT_PAGE = `<!doctype html>
 
 /** Each marker's plan as its first request found the tools (`settle`). */
 const settled = new Map<string, Step[]>();
+/** A plan step whose tool the session was not offered: the scene stops on it once its turns rest (`seedScene`). */
+const unoffered: string[] = [];
 
 /**
  * A plan as the tools its first request offers make it: the subagent step
- * under the name Claude Code offers it by (`Task`, or `Agent`), and gone
- * where neither is; a ToolSearch step gone when the tool it looks for is
- * offered already.
+ * under the name Claude Code offers it by (`Task`, or `Agent`); a
+ * ToolSearch step gone when the tool it looks for is offered already. A
+ * subagent step neither name is offered for is kept and said
+ * (`unoffered`): the scene is then not what it says it is.
  */
-function settle(written: Step[], offered: string[]): Step[] {
+function settle(marker: string, written: Step[], offered: string[]): Step[] {
   const subagent = SUBAGENT_NAMES.find((n) => offered.includes(n));
-  const named = written.flatMap((one): Step[] => {
+  const named = written.map((one): Step => {
     if (!("tool" in one && one.tool.name === SUBAGENT)) {
-      return [one];
+      return one;
     }
-    return subagent ? [{ tool: { ...one.tool, name: subagent } }] : [];
+    if (!subagent) {
+      unoffered.push(
+        `${marker}: neither ${SUBAGENT_NAMES.join(" nor ")} is offered (the fleet denies Claude Code's subagents)`
+      );
+      return one;
+    }
+    return { tool: { ...one.tool, name: subagent } };
   });
   return named.filter((one, i) => {
     const next = named[i + 1];
@@ -262,7 +303,7 @@ export const scriptedReply =
     }
     let plan = settled.get(name);
     if (!plan) {
-      plan = settle(written, request.toolNames);
+      plan = settle(name, written, request.toolNames);
       settled.set(name, plan);
     }
     // The tool results since the marker's message: the steps already taken.
@@ -275,9 +316,18 @@ export const scriptedReply =
     return { everyMs: 2, words: [], tool: step.tool };
   };
 
+/** A permission the hub holds, as `/api/pending` lists it. */
+interface PendingAsk {
+  instanceId: string;
+  machineId: string;
+  payload: { input: Record<string, unknown> };
+  requestId: string;
+}
+
 /** What the scene made, by name: the tape's `scene`, read by the surfaces' routes. */
 export interface Scene {
   account: string;
+  answered: string;
   art: string;
   artifact: string;
   ask: string;
@@ -297,6 +347,29 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
     "# Tray\n\nThe tray holds a session's chips: its branch, its machine and its count.\n"
   );
   await Bun.$`git -C ${fleet.repo} -c user.email=p@p -c user.name=p add -A && git -C ${fleet.repo} -c user.email=p@p -c user.name=p commit -qm 'The tray readme'`.quiet();
+
+  // Claude Code's own subagents allowed, so the chips turn runs one: the
+  // fleet's "Use delegates instead" off (fleet-choices.ts), heard by the
+  // machine before the session spawns (its sidecar, which spawns read).
+  const choices = await fetch(`${fleet.base}/api/fleet/choices`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ delegates: false }),
+  });
+  if (!choices.ok) {
+    throw new Error(
+      `PUT /api/fleet/choices: ${choices.status} ${await choices.text()}`
+    );
+  }
+  await until(
+    "the machine allowing Claude Code's subagents",
+    () =>
+      Bun.file(join(fleet.home, ".claude", "cawco-fleet.json"))
+        .text()
+        .catch(() => ""),
+    (text) => text.length > 0 && !text.includes('"Task"'),
+    60_000
+  );
 
   const chips = await fleet.spawn(
     "claude",
@@ -320,6 +393,16 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   await fleet.send(permission, "Push the deploy key's commit. PROBE-STEP:push");
   const art = await fleet.spawn("claude", "Lay out the chip wraps", fleet.repo);
   await fleet.send(art, "Put the three wraps on a page. PROBE-STEP:art");
+  const answered = await fleet.spawn(
+    "claude",
+    "Name the hang card's states",
+    fleet.repo,
+    { permissionMode: "default" }
+  );
+  await fleet.send(
+    answered,
+    "Ask me what the hang card's states are called. PROBE-STEP:named"
+  );
 
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "cawco",
@@ -376,10 +459,46 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
     120_000
   );
 
-  // Every turn at rest: the chips and art sessions done, the other two parked on their asks.
+  // The named session's question, answered as the dashboard answers it:
+  // its transcript keeps the answered card (QuestionCard).
+  const asked = await until(
+    "the named session parked on its question",
+    () =>
+      fleet
+        .api<PendingAsk[]>("/api/pending")
+        .then((rows) => rows.find((row) => row.instanceId === answered))
+        .catch(() => undefined),
+    Boolean,
+    180_000
+  );
+  await fleet.post({
+    type: "command",
+    commandId: crypto.randomUUID(),
+    kind: "permission.answer",
+    machineId: asked.machineId,
+    sessionId: answered,
+    payload: {
+      instanceId: answered,
+      requestId: asked.requestId,
+      method: "resolvePermission",
+      args: [
+        asked.requestId,
+        {
+          behavior: "allow",
+          updatedInput: {
+            ...asked.payload.input,
+            answers: { [NAMED_QUESTION]: NAMED_ANSWER },
+          },
+        },
+      ],
+    },
+  });
+
+  // Every turn at rest: the chips, art and named sessions done, the other two parked on their asks.
   for (const [what, id] of [
     ["the chips session's turn done", chips],
     ["the art session's turn done", art],
+    ["the named session's turn done", answered],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one session at a time
     await until(
@@ -412,14 +531,18 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
       180_000
     );
   }
+  if (unoffered.length > 0) {
+    throw new Error(`the scene is not what it says: ${unoffered.join("; ")}`);
+  }
   kit.note(
-    `scene: sessions ${chips}, ${ask}, ${permission}, ${art}; artifact ${artifact}; project ${project.id} with ${tasks.length} tasks`
+    `scene: sessions ${chips}, ${ask}, ${permission}, ${art}, ${answered}; artifact ${artifact}; project ${project.id} with ${tasks.length} tasks`
   );
   return {
     chips,
     ask,
     permission,
     art,
+    answered,
     artifact: artifact as string,
     project: project.id,
     task: tasks[0] as string,
