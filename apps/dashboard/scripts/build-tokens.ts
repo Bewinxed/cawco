@@ -47,6 +47,8 @@ const built = await buildTokens(
     ].join("\n"),
     layer: "theme",
     include: isProductToken,
+    // The specifier spells the file (scripts/lib-import-check.ts).
+    typesFrom: "#lib/tokens/tokens.js",
   }
 );
 await Promise.all([

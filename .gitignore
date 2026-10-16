@@ -41,6 +41,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .cache
 *.tsbuildinfo
 .fast-check/
+# A stage's host, bundled at its Vite root (agent stage.ts HOST_DIR, `.cawco/stage/`).
+# The daemon excludes it through .git/info/exclude; a host run by hand or by
+# the probe kit in a source checkout does not, so every Vite root here keeps it out.
+.cawco/
 
 # IntelliJ based IDEs
 .idea

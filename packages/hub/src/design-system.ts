@@ -105,6 +105,11 @@ export const buildDesignTokens = (
     header: HEADER,
     layer: "tokens",
     colorScheme: true,
+    // `.js` for the `.ts`: right under TypeScript's bundler and node16
+    // resolution alike.
+    typesFrom: "../design/tokens.js",
+    typesFromNote:
+      "the path from the component's file to design/, ending in tokens.js",
   });
 
 const isTokenFile = (path: string): boolean =>

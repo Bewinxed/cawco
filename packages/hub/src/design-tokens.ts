@@ -65,6 +65,10 @@ export interface TokensCssOptions {
   include?: (token: TransformedToken) => boolean;
   /** The cascade layer the custom properties sit in. */
   layer: string;
+  /** Where a component imports the typed module from, as its import line writes it (`#lib/tokens/tokens.js`): said under its header. */
+  typesFrom: string;
+  /** What the import line's path depends on, when it is not the same from every file. */
+  typesFromNote?: string;
 }
 
 /** The custom property's name: the token's last path segment. */
@@ -425,8 +429,16 @@ const TYPE_MEMBERS: Record<TokenType, (token: ViewToken) => boolean> = {
  */
 export function tokenTypes(
   view: TokenView,
-  options: Pick<TokensCssOptions, "header" | "include">
+  options: Pick<
+    TokensCssOptions,
+    "header" | "include" | "typesFrom" | "typesFromNote"
+  >
 ): string {
+  const usage = [
+    "/* A component prop typed with one of these is offered the system's names in",
+    `   a sheet's inspector, and no other prop is. Import them as${options.typesFromNote ? ` (${options.typesFromNote})` : ""}:`,
+    `     import type { ${Object.keys(TOKEN_TYPES).join(", ")} } from "${options.typesFrom}"; */`,
+  ].join("\n");
   const tokens = view.tokens.filter((token) =>
     options.include ? options.include(token.original) : true
   );
@@ -438,7 +450,13 @@ export function tokenTypes(
       ? `export type ${name} = never;`
       : `export type ${name} =\n${members.join("\n")};`;
   });
-  return [options.header, "", ...types.flatMap((one) => [one, ""])].join("\n");
+  return [
+    options.header,
+    "",
+    usage,
+    "",
+    ...types.flatMap((one) => [one, ""]),
+  ].join("\n");
 }
 
 /** A system built: its files settled and checked against the DTCG schemas, its view, its stylesheet and its typed module. */
