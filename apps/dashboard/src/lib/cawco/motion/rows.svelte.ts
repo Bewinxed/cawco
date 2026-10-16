@@ -770,9 +770,18 @@ const closing = () => ({
  * nothing to show arriving: a long list mounting a chunk at a time past the
  * fold would otherwise start two animations a row for rows nobody sees.
  */
+/**
+ * In the viewport and drawn: a row arriving under `visibility: hidden` (an
+ * offer kept for a conversation the composer is not writing to) is laid out
+ * where it would show and seen by nobody, so it arrives without an entrance.
+ */
 function onScreen(element: HTMLElement): boolean {
   const { top, bottom } = element.getBoundingClientRect();
-  return bottom > 0 && top < window.innerHeight;
+  return (
+    bottom > 0 &&
+    top < window.innerHeight &&
+    element.checkVisibility({ visibilityProperty: true })
+  );
 }
 
 /**
