@@ -576,6 +576,16 @@ export const placedOnly = (scope: MemoryScope | undefined): boolean =>
   !!scope?.projectIds?.length &&
   !(scope.briefer || scope.role || scope.model || scope.delegateTypes?.length);
 
+/** A scope as one string, every field in order and every list sorted: two scopes are the same when their keys are. */
+export const scopeKey = (scope: MemoryScope | undefined): string =>
+  JSON.stringify([
+    scope?.role ?? null,
+    [...(scope?.delegateTypes ?? [])].sort(),
+    scope?.model ?? null,
+    [...(scope?.projectIds ?? [])].sort(),
+    scope?.briefer === true,
+  ]);
+
 /** Why a scope cannot be stored, in a sentence, or nothing when it can. */
 export const memoryScopeProblem = (scope: MemoryScope): string | undefined => {
   if (scope.delegateTypes?.length === 0) {

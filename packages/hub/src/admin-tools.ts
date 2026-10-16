@@ -14,6 +14,7 @@ import {
   MCP_PLATFORMS,
   MEMORY_ROLES,
   type MemoryScope,
+  scopeKey,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
@@ -950,18 +951,9 @@ export function adminTools() {
             memoryDocs?: { scope?: MemoryScope }[];
           };
           const docs = fleet.memoryDocs ?? [];
-          const sameList = (a?: string[], b?: string[]) =>
-            [...(a ?? [])].sort().join() === [...(b ?? [])].sort().join();
           return ok({
             docs: scope
-              ? docs.filter(
-                  (doc) =>
-                    doc.scope?.role === scope.role &&
-                    doc.scope?.model === scope.model &&
-                    doc.scope?.briefer === scope.briefer &&
-                    sameList(doc.scope?.delegateTypes, scope.delegateTypes) &&
-                    sameList(doc.scope?.projectIds, scope.projectIds)
-                )
+              ? docs.filter((doc) => scopeKey(doc.scope) === scopeKey(scope))
               : docs,
           });
         }

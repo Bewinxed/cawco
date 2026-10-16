@@ -40144,7 +40144,7 @@
           },
           "memoryHook": {
             "$ref": "#/components/schemas/FleetItemState",
-            "description": "The SessionStart hook that shows a session the document for the model it is\nrunning. Absent from a daemon that predates the set, and from one the set\ngave nothing to register."
+            "description": "The model-memory SessionStart hook an earlier cawco registered, while a\nmachine has not managed to take it back (agent fleet.ts\n`retireMemoryHook`): always `failed`, with why. Absent once it is gone."
           },
           "plugins": {
             "type": "object"
