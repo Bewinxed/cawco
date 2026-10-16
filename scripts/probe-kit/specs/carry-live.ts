@@ -736,10 +736,10 @@ const run = async (kit: Kit) => {
       Date.now()
     );
     fleet.write('UPDATE accounts SET "order" = 2 WHERE id = ?', B);
-    // The agent reads its accounts' logins as it starts.
-    await fleet.stop("agent");
-    fleet.launch("agent");
-    await fleet.agentUp();
+    // The running agent reads its account dirs again within a minute
+    // (daemon.ts CLAUDE_LOGIN_CHECK_INTERVAL_MS) and reports C's login: no
+    // restart, which would leave the sessions of the cases before this one
+    // in custody to be decided.
     const cIn = await until(
       "account C signed in",
       () =>
@@ -748,7 +748,7 @@ const run = async (kit: Kit) => {
           C
         )[0],
       (row) => row?.state === "signed-in",
-      120_000
+      180_000
     ).catch(() => undefined);
     kit.check(`${name}: C, in another organization, is signed in`, !!cIn);
     const s = await start("Organization move", ACCOUNT);
