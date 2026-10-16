@@ -1012,21 +1012,31 @@ final class MessageBody: UIView {
     }
 
     override var intrinsicContentSize: CGSize {
-        CGSize(width: UIView.noIntrinsicMetric, height: height(for: fitWidth ?? laidWidth ?? 0))
+        let height = height(for: fitWidth ?? laidWidth ?? 0)
+        if fitWidth == nil, laidWidth != nil { reported = height }
+        return CGSize(width: UIView.noIntrinsicMetric, height: height)
     }
+
+    /// The height last told to the layout around it, at the width it was laid at.
+    private var reported: CGFloat?
 
     override func layoutSubviews() {
         super.layoutSubviews()
         redrawForViewport()
         let width = bounds.width
-        // Its height is its height at its width: laid at a new one, it says
-        // so to the layout around it, and the row it stands in, measured at
-        // the width it last stood at, is measured again (a list's cell sizes
-        // itself before its content lays out, so it read the old height).
-        if fitWidth == nil, laidWidth.map({ abs($0 - width) > 0.5 }) ?? true {
+        // Its height is its height at its width: laid at a new one whose
+        // height differs from the one it told, it says so to the layout
+        // around it, and the row it stands in, measured at the width it last
+        // stood at, is measured again (a list's cell sizes itself before its
+        // content lays out, so it read the old height). Only when the height
+        // changes: a cell that lays it out at a passing width while sizing
+        // itself would otherwise be told, and size itself, without end.
+        if fitWidth == nil, width > 0, laidWidth.map({ abs($0 - width) > 0.5 }) ?? true {
             laidWidth = width
-            invalidateIntrinsicContentSize()
-            remeasureRow()
+            if reported.map({ abs($0 - height(for: width)) > 0.5 }) ?? true {
+                invalidateIntrinsicContentSize()
+                remeasureRow()
+            }
         }
         var y: CGFloat = 0
         for (view, gap) in zip(views, gaps) {

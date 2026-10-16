@@ -1,6 +1,11 @@
 import CawCoCore
 import CawCoDesign
+import OSLog
 import UIKit
+
+#if DEBUG
+private let remeasureLog = Logger(subsystem: "dev.cawco.app", category: "TaskSheet")
+#endif
 
 /// What every row view reads beyond its own block: the columns at this width,
 /// the reader's disclosures, the hub to fetch pictures and history from, the
@@ -740,6 +745,11 @@ extension UIView {
             cell.invalidateIntrinsicContentSize()
             return
         }
+        #if DEBUG
+        // Who asks a list's cell to size itself again, and at what width
+        // (scripts/probe-kit/specs/ios-task-review.ts reads these).
+        remeasureLog.notice("remeasure \(String(describing: type(of: self)), privacy: .public) width=\(Double(self.bounds.width), format: .fixed(precision: 1)) cell=\(String(describing: type(of: cell)), privacy: .public)")
+        #endif
         DispatchQueue.main.async { [weak cell] in cell?.invalidateIntrinsicContentSize() }
     }
 }

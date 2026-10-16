@@ -1094,6 +1094,8 @@ public final class WrapLayout: UIView {
     private let rowGap: Double
     private let centred: Bool
     private var laidWidth = 0.0
+    /// The height last told to the layout around it.
+    private var reported: Double?
 
     public init(_ items: [UIView], gap: Double = Space.space2, rowGap: Double? = nil, centred: Bool = false) {
         self.items = items
@@ -1112,17 +1114,25 @@ public final class WrapLayout: UIView {
         fatalError("WrapLayout is built in code")
     }
 
+    /// Its height at the width it stands at; before it has stood at one, at
+    /// the last it stood at, and only with none at all a guess. Said again to
+    /// the layout around it only when that height changes: told at every new
+    /// width, a self-sizing cell that lays it out at a passing width while it
+    /// sizes itself measured it again, and again, a line taller each time
+    /// (the task sheet's attempt line, 20pt then 30pt, every frame).
     override public var intrinsicContentSize: CGSize {
-        CGSize(width: UIView.noIntrinsicMetric, height: arrange(width: bounds.width, apply: false))
+        let width = bounds.width > 0 ? bounds.width : laidWidth
+        let height = arrange(width: width, apply: false)
+        if width > 0 { reported = height }
+        return CGSize(width: UIView.noIntrinsicMetric, height: height)
     }
 
     override public func layoutSubviews() {
         super.layoutSubviews()
-        _ = arrange(width: bounds.width, apply: true)
-        if laidWidth != bounds.width {
-            laidWidth = bounds.width
-            invalidateIntrinsicContentSize()
-        }
+        guard bounds.width > 0 else { return }
+        let height = arrange(width: bounds.width, apply: true)
+        laidWidth = bounds.width
+        if reported.map({ abs($0 - height) > 0.5 }) ?? true { invalidateIntrinsicContentSize() }
     }
 
     private func arrange(width: Double, apply: Bool) -> Double {
