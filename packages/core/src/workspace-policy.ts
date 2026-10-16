@@ -377,7 +377,8 @@ export const ownerOnlyIn = (root: string): Promise<string[]> =>
  * What in a lead's place shares its inodes with files elsewhere: each
  * installed dependencies dir (bun installs by hardlinking from its cache),
  * and every other file with more than one link. A clone's are copied apart
- * (boundary.ts `ownInodes`); a person's own folder is never rewritten, so
+ * but those linked to the workspaces' own bun cache (boundary.ts
+ * `ownInodes`); a person's own folder is never rewritten, so
  * these are only denied for writing: a write through one would change a file
  * the host runs.
  */

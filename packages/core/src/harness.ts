@@ -1728,9 +1728,18 @@ export interface PlacePush {
 export const WORKSPACE_GIT_TIMEOUT_MS = 300_000;
 /** How long a new boundary may take to announce readiness. */
 export const WORKSPACE_BOUNDARY_START_TIMEOUT_MS = 15_000;
-/** Git and boundary budgets, plus a minute for setup, teardown and control transport. */
+/**
+ * How long each of a cut's two dependency installs may take (agent
+ * seed-deps.ts): the one on the host that links from the workspaces' cache,
+ * then the one in its boundary that runs the install scripts.
+ */
+export const WORKSPACE_INSTALL_TIMEOUT_MS = 180_000;
+/** Git, boundary and install budgets, plus a minute for setup, teardown and control transport. */
 export const WORKSPACE_CREATE_TIMEOUT_MS =
-  WORKSPACE_GIT_TIMEOUT_MS + WORKSPACE_BOUNDARY_START_TIMEOUT_MS + 60_000;
+  WORKSPACE_GIT_TIMEOUT_MS +
+  WORKSPACE_BOUNDARY_START_TIMEOUT_MS +
+  2 * WORKSPACE_INSTALL_TIMEOUT_MS +
+  60_000;
 
 /** Where {@link CONTROL_WORKSPACE_CREATE} put a workspace. */
 export interface WorkspaceCheckout {

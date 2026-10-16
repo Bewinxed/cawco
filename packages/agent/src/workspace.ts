@@ -80,6 +80,7 @@ import {
   LFS_FILTERS,
   withoutCredential,
 } from "./move";
+import { finishInstall, seedDependencies } from "./seed-deps";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
 import { cloneHolding } from "./workspace-records";
@@ -366,7 +367,12 @@ export const createWorkspace = async (
     if (typeof projectId === "string" && projectId) {
       await setProject(id, projectId);
     }
+    // Before the boundary: inside it bun copies every file (seed-deps.ts).
+    const seeded = await seedDependencies(id, path);
     const boundary = await ensureBoundary({ id, path });
+    if (seeded) {
+      await finishInstall({ id, path });
+    }
     return {
       repoRoot,
       path,

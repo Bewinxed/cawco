@@ -3882,25 +3882,53 @@ const linkGitConfig = async (configHome: string): Promise<void> => {
 /** How many files {@link ownInodes} copies at once. */
 const OWN_INODE_BATCH = 64;
 
-/**
- * Gives every file in a Linux clone an inode of its own, and answers how
- * many it copied. bun installs by hardlinking from its cache, so a clone
- * installed outside a boundary shares inodes with the host's bun cache and
- * every host tree installed from it, and a write inside the clone would
- * change a file the host runs. Inside a boundary the cache is the workspaces'
- * own: what a command installs there shares inodes with that cache alone,
- * which no host tree runs. It copies and renames files in place, so it runs
- * only before a boundary starts with no sandbox of the workspace running
- * (its first start, a start after a reboot, a replacement once the one before
- * is stopped), never beside an older generation still running in the clone
- * at a handover ({@link launch}).
- */
-const ownInodes = async (path: string): Promise<number> => {
+/** A multi-linked file as `find -printf '%D %i %p\0'` names it: its device, inode and path. */
+const LINKED_FILE = /^(\d+) (\d+) (.*)$/s;
+
+/** The files under `root` with more than one link, each with its inode as `<device> <inode>`. */
+const linkedFiles = async (
+  root: string
+): Promise<{ inode: string; file: string }[]> => {
   const listed =
-    await Bun.$`/usr/bin/find ${path} -xdev -type f -links +1 -print0`
+    await Bun.$`/usr/bin/find ${root} -xdev -type f -links +1 -printf ${"%D %i %p\\0"}`
       .quiet()
       .nothrow();
-  const files = listed.stdout.toString().split("\0").filter(Boolean);
+  return listed.stdout
+    .toString()
+    .split("\0")
+    .flatMap((line) => {
+      const [, device, inode, file] = LINKED_FILE.exec(line) ?? [];
+      return file ? [{ inode: `${device} ${inode}`, file }] : [];
+    });
+};
+
+/**
+ * Gives every file in a Linux clone an inode of its own, but one it shares
+ * with the workspaces' bun cache, and answers how many it copied. bun
+ * installs by hardlinking from its cache, so a clone installed from the
+ * host's bun cache shares inodes with it and every host tree installed from
+ * it, and a write inside the clone would change a file the host runs. A file
+ * linked to the workspaces' own bun cache (`workspaceCacheEnv`) stays linked:
+ * the cut links each clone's dependencies there (seed-deps.ts), every
+ * workspace writes that cache already, and no host tree is installed from
+ * it. It copies and renames files in place, so it runs only before a
+ * boundary starts with no sandbox of the workspace running (its first start,
+ * a start after a reboot, a replacement once the one before is stopped),
+ * never beside an older generation still running in the clone at a handover
+ * ({@link launch}).
+ */
+const ownInodes = async (path: string): Promise<number> => {
+  const linked = await linkedFiles(path);
+  const cached = new Set(
+    linked.length > 0
+      ? (await linkedFiles(workspaceCacheEnv().BUN_INSTALL_CACHE_DIR)).map(
+          ({ inode }) => inode
+        )
+      : []
+  );
+  const files = linked
+    .filter(({ inode }) => !cached.has(inode))
+    .map(({ file }) => file);
   for (let at = 0; at < files.length; at += OWN_INODE_BATCH) {
     // biome-ignore lint/performance/noAwaitInLoops: a bounded batch of copies at a time
     await Promise.all(
