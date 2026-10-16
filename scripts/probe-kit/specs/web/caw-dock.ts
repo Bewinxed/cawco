@@ -32,8 +32,10 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the token read runs in the page, one self-contained pass (page.evaluate takes no outer helpers).
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Page } from "playwright-core";
+import type { Page, WebSocketRoute } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
+import { r2 } from "../../geom";
+import { contrast } from "../../ink";
 import {
   COMPOSER_FIELD,
   type Kit,
@@ -66,6 +68,682 @@ const respond = (request: Seen): Reply => {
   const tag = [...request.last.matchAll(REPLY_TAG)].at(-1)?.[1];
   return { everyMs: 5, words: [tag ? `Answer ${tag}` : "Ready."] };
 };
+
+/** How many words `text` has. */
+const SPACES = /\s+/;
+const wordCount = (text: string): number => text.split(SPACES).length;
+
+/** A 40-word question: the lede wraps at body size and is never clamped. */
+const LONG_QUESTION =
+  "Before I write the launch notes for the redesigned board, should I cover every surface that changed since the last release, including the settings pages, the phone layout and the new keyboard shortcuts, or only the board and its cards?";
+/** A 30-word description under one option. */
+const LONG_DESC =
+  "Every surface lands in one release: the board, the settings pages, the phone layout and shortcuts, so nobody meets half of the new design next to half of the old.";
+/** The eight files of the second question: one an unbroken path, wider than the card. */
+const EIGHT = [
+  "README.md",
+  "CHANGELOG.md",
+  "DESIGN.md",
+  "apps/dashboard/src/lib/cawco/transcript/Prompt.svelte",
+  "WORDS.md",
+  "JOURNEY.md",
+  "PRODUCT.md",
+  "docs/launch-notes-for-the-redesigned-board.md",
+];
+/**
+ * Caw's question card: two described options (and Other), eight options
+ * (more than Claude Code's AskUserQuestion takes, as a harness with no such
+ * cap asks them), a 40-word question over two bare options (a chip row),
+ * and a 30-word description.
+ */
+const ASKED = [
+  {
+    question: "Which voice should the launch notes take?",
+    header: "Voice",
+    multiSelect: false,
+    options: [
+      { label: "Plain", description: "Short sentences, the facts first." },
+      { label: "Warm", description: "Second person, the story first." },
+    ],
+  },
+  {
+    question: "Which file should the notes link to first?",
+    header: "Link",
+    multiSelect: false,
+    options: EIGHT.map((label) => ({ label, description: "" })),
+  },
+  {
+    question: LONG_QUESTION,
+    header: "Scope",
+    multiSelect: false,
+    options: [
+      { label: "Every surface", description: "" },
+      { label: "The board", description: "" },
+    ],
+  },
+  {
+    question: "How should the redesign ship?",
+    header: "Ship",
+    multiSelect: false,
+    options: [
+      { label: "All at once", description: LONG_DESC },
+      { label: "In slices", description: "One surface a week." },
+    ],
+  },
+];
+/**
+ * The page's socket, routed to the hub as it is, with a way to hand the
+ * page Caw's question ({@link ASKED}) parked in `threadId`: the frame his
+ * session's AskUserQuestion arrives as, so the panel's composer grows into
+ * the real card without a session asking it (a boundary for Caw cannot
+ * start inside a workspace).
+ */
+async function askRoute(page: Page) {
+  let route: WebSocketRoute | null = null;
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws/dashboard",
+    (ws) => {
+      route = ws;
+      const server = ws.connectToServer();
+      ws.onMessage((message) => server.send(message));
+      server.onMessage((message) => ws.send(message));
+    }
+  );
+  return {
+    ask(threadId: string, project: string): boolean {
+      if (!route) {
+        return false;
+      }
+      route.send(
+        JSON.stringify({
+          verb: "frames",
+          machineId: MACHINE,
+          payload: {
+            kind: "permission_request",
+            requestId: `probe-ask-${threadId}`,
+            instanceId: `probe-caw-${threadId}`,
+            toolName: "AskUserQuestion",
+            input: { questions: ASKED },
+            presentation: {
+              asker: "Caw",
+              changes: [],
+              fields: [],
+              project,
+              summary: "Caw asks",
+            },
+            threadId,
+            raisedAt: Date.now(),
+          },
+        })
+      );
+      return true;
+    },
+  };
+}
+
+/**
+ * Each glyph `selector` names, as drawn on what stands behind it (the first
+ * opaque background up its tree, with any translucent ones over it): the
+ * ground, its full-ink layer and its duotone layer (`[opacity]`, at its
+ * computed opacity), composited in the page's own canvas, as rgb.
+ */
+const glyphInks = (
+  page: Page,
+  selector: string,
+  inkAs?: string,
+  duoAs?: number
+) =>
+  page.evaluate(
+    ({ sel, as, duo: duoAt0 }) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      const read = (): [number, number, number] => {
+        const [r = 0, g = 0, b = 0] = ctx.getImageData(0, 0, 1, 1).data;
+        return [r, g, b];
+      };
+      const paint = (fill: string, alpha = 1) => {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = fill;
+        ctx.fillRect(0, 0, 1, 1);
+        ctx.globalAlpha = 1;
+      };
+      const opaque = (fill: string): boolean => {
+        paint("#fff");
+        paint(fill);
+        const onWhite = read().join();
+        paint("#000");
+        paint(fill);
+        return read().join() === onWhite;
+      };
+      return [...document.querySelectorAll<SVGElement>(sel)].map((svg) => {
+        const grounds: string[] = [];
+        for (let el: Element | null = svg; el; el = el.parentElement) {
+          const bg = getComputedStyle(el).backgroundColor;
+          if (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") {
+            grounds.push(bg);
+            if (opaque(bg)) {
+              break;
+            }
+          }
+        }
+        const ground = () => {
+          paint("#fff");
+          for (const fill of [...grounds].reverse()) {
+            paint(fill);
+          }
+        };
+        // `as`: the glyph read in another ink (a token), as it was drawn before.
+        if (as) {
+          svg.style.color = `var(${as})`;
+        }
+        const ink = getComputedStyle(svg).color;
+        svg.style.color = "";
+        const duoAt = svg.querySelector("[opacity]");
+        // `duo`: the duotone layer read at another opacity.
+        const duoOpacity =
+          duoAt0 ?? (duoAt ? Number(getComputedStyle(duoAt).opacity) : 1);
+        ground();
+        const behind = read();
+        paint(ink);
+        const full = read();
+        ground();
+        paint(ink, duoOpacity);
+        const duo = read();
+        return {
+          what: svg.closest("button, li, .rail-row")?.textContent?.trim() ?? "",
+          ink,
+          duoOpacity,
+          behind,
+          full,
+          duo,
+        };
+      });
+    },
+    { sel: selector, as: inkAs, duo: duoAs }
+  );
+
+/** The page in `dark` or light, its colours landed. */
+async function scheme(page: Page, dark: boolean): Promise<void> {
+  await page.evaluate(
+    (on) => document.documentElement.classList.toggle("dark", on),
+    dark
+  );
+  await settle(page, 300);
+}
+
+/**
+ * Each glyph's layers against its ground, in light and in dark (the page
+ * put back as it was): the full-ink layer's contrast, the duotone layer's,
+ * and the full layer's over the duotone one (a clock's hands on its disc).
+ */
+async function glyphContrast(
+  page: Page,
+  selector: string,
+  inkAs?: string,
+  duoAs?: number
+) {
+  const was = await page.evaluate(() =>
+    document.documentElement.classList.contains("dark")
+  );
+  const out: {
+    scheme: string;
+    what: string;
+    full: number;
+    duo: number;
+    fullOverDuo: number;
+    duoOpacity: number;
+  }[] = [];
+  for (const dark of [false, true]) {
+    await scheme(page, dark);
+    for (const one of await glyphInks(page, selector, inkAs, duoAs)) {
+      out.push({
+        scheme: dark ? "dark" : "light",
+        what: one.what.slice(0, 40),
+        full: r2(contrast(one.full, one.behind)),
+        duo: r2(contrast(one.duo, one.behind)),
+        fullOverDuo: r2(contrast(one.full, one.duo)),
+        duoOpacity: one.duoOpacity,
+      });
+    }
+  }
+  await scheme(page, was);
+  return out;
+}
+
+/** The panel's question card, in its composer's grown shape (Composer `.ask`). */
+const CARD = `${PANEL} .ask .hitl[aria-label="Question from Caw"]`;
+
+/**
+ * The card as it stands: every box of it that reaches past `.ask` across
+ * (each by how far), each part of it (title, body, foot) that reaches past
+ * it down; each option group's form and its options' labels, the last
+ * one's included; each description, scrolled into the body's view, and
+ * whether it shows whole there; the long lede's box and type.
+ */
+const readCard = (page: Page) =>
+  page.evaluate(
+    ({ panel, descriptions, long }) => {
+      const ask = document.querySelector(`${panel} .ask`);
+      const card = ask?.querySelector(".hitl");
+      const body = card?.querySelector<HTMLElement>(".body");
+      if (!(ask && card && body)) {
+        return null;
+      }
+      const a = ask.getBoundingClientRect();
+      const label = (el: Element) =>
+        `${el.tagName.toLowerCase()}${[...el.classList]
+          .slice(0, 2)
+          .map((c) => `.${c}`)
+          .join("")}`;
+      const across: string[] = [];
+      for (const el of [card, ...card.querySelectorAll("*")]) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) {
+          continue;
+        }
+        const left = a.left - r.left;
+        const right = r.right - a.right;
+        if (left > 0.5 || right > 0.5) {
+          across.push(
+            `${label(el)} past ${Math.round(Math.max(left, right) * 10) / 10}px`
+          );
+        }
+      }
+      const down = [...card.children]
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .filter(({ r }) => r.top < a.top - 0.5 || r.bottom > a.bottom + 0.5)
+        .map(({ el }) => label(el));
+      const groups = [...card.querySelectorAll("[data-toggle-group-root]")].map(
+        (group) => ({
+          list: group.classList.contains("list"),
+          labels: [...group.querySelectorAll(".opt-label")].map(
+            (el) => el.textContent?.trim() ?? ""
+          ),
+        })
+      );
+      const shownWhole = (el: Element) => {
+        el.scrollIntoView({ block: "nearest" });
+        const r = el.getBoundingClientRect();
+        const b = body.getBoundingClientRect();
+        return (
+          el.checkVisibility({ opacityProperty: true }) &&
+          r.width > 0 &&
+          r.top >= b.top - 0.5 &&
+          r.bottom <= b.bottom + 0.5 &&
+          r.left >= a.left - 0.5 &&
+          r.right <= a.right + 0.5
+        );
+      };
+      const descs = [...card.querySelectorAll(".opt-desc")];
+      const described = descriptions.map((words) => {
+        const el = descs.find((one) => one.textContent?.trim() === words);
+        return {
+          words: words.slice(0, 24),
+          shown: el ? shownWhole(el) : false,
+        };
+      });
+      body.scrollTop = 0;
+      const lede = [...card.querySelectorAll<HTMLElement>(".lede")].find(
+        (el) => el.textContent?.trim() === long
+      );
+      const style = lede ? getComputedStyle(lede) : null;
+      // The body role's size, resolved as the card resolves it.
+      const swatch = document.createElement("span");
+      swatch.style.fontSize = "var(--text-body)";
+      card.append(swatch);
+      const bodySize = getComputedStyle(swatch).fontSize;
+      swatch.remove();
+      return {
+        ask: { w: Math.round(a.width), h: Math.round(a.height) },
+        across,
+        down,
+        groups,
+        described,
+        lede: lede
+          ? {
+              lines: Math.round(
+                lede.getBoundingClientRect().height /
+                  Number.parseFloat(style?.lineHeight ?? "1")
+              ),
+              clamped: lede.scrollHeight > lede.clientHeight + 1,
+              size: style?.fontSize,
+              bodySize,
+              lineClamp: style?.getPropertyValue("-webkit-line-clamp"),
+            }
+          : null,
+        fades: body.classList.contains("kit-edge-fade-block"),
+      };
+    },
+    {
+      panel: PANEL,
+      descriptions: ASKED.flatMap((q) =>
+        q.options.map((o) => o.description).filter(Boolean)
+      ),
+      long: LONG_QUESTION,
+    }
+  );
+
+/** Each question's picked options, by their labels, and the box of the second voice option. */
+const picks = (page: Page) =>
+  page.evaluate((card) => {
+    const root = document.querySelector(card);
+    const second = root?.querySelectorAll(
+      "[data-toggle-group-root] .kit-chip"
+    )[1];
+    const r = second?.getBoundingClientRect();
+    return {
+      picked: [
+        ...(root?.querySelectorAll("[data-toggle-group-root]") ?? []),
+      ].map((group) =>
+        [...group.querySelectorAll(".kit-chip.sel .opt-label")].map(
+          (el) => el.textContent?.trim() ?? ""
+        )
+      ),
+      second: r ? { w: r.width, h: r.height } : null,
+    };
+  }, CARD);
+
+/**
+ * Caw's question card, parked in the thread his panel shows ({@link ASKED},
+ * through {@link askRoute}), at `view`: every box fits `.ask` whatever its
+ * words; every description is drawn and shows whole; described or long
+ * questions list their options, Other last, and the bare one keeps its
+ * chips; the 40-word question wraps at body size, unclamped, in a body
+ * that fades its edges; the digits pick an option on each question in
+ * turn, and a pick changes no option's size.
+ */
+async function checkQuestion(
+  kit: Kit,
+  base: string,
+  project: { id: string; name: string },
+  threadId: string,
+  view: View,
+  name: string
+) {
+  const page = await kit.page(view);
+  page.setDefaultTimeout(60_000);
+  const route = await askRoute(page);
+  const seat = ".project-head button.caw-seat";
+  await open(page, `${base}/project/${project.id}`, seat);
+  await settle(page, 400);
+  await page.click(seat);
+  await page.waitForSelector(`${PANEL} .tx-columns`, { timeout: 30_000 });
+  const asked = route.ask(threadId, project.name);
+  const shown = await page
+    .waitForSelector(CARD, { timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (
+    !kit.check(
+      `${name}: Caw's question parked in his thread grows the panel's composer into his card`,
+      asked && shown
+    )
+  ) {
+    return;
+  }
+  await settle(page, 600);
+  const card = await readCard(page);
+  kit.note(`${name} card: ${JSON.stringify(card)}`);
+  if (!kit.check(`${name}: the card stands in .ask`, !!card)) {
+    return;
+  }
+  const read = card as NonNullable<typeof card>;
+  kit.check(
+    `${name}: no box of the card reaches past .ask (${read.ask.w}px) across, and no part of it down`,
+    read.across.length === 0 && read.down.length === 0,
+    `across: ${read.across.join("; ")}; down: ${read.down.join("; ")}`
+  );
+  kit.check(
+    `${name}: every description is drawn and shows whole in the card (${read.described.length})`,
+    read.described.length > 0 && read.described.every((one) => one.shown),
+    JSON.stringify(read.described)
+  );
+  const want = ASKED.map((q) => [...q.options.map((o) => o.label), "Other"]);
+  kit.check(
+    `${name}: described and 8-option questions list their options, the bare one keeps its chip row, Other last in each`,
+    JSON.stringify(read.groups.map((g) => g.list)) ===
+      JSON.stringify([true, true, false, true]) &&
+      JSON.stringify(read.groups.map((g) => g.labels)) === JSON.stringify(want),
+    JSON.stringify(read.groups)
+  );
+  kit.check(
+    `${name}: the ${wordCount(LONG_QUESTION)}-word question wraps at body size, never clamped, in a body that fades its edges`,
+    !!read.lede &&
+      read.lede.lines > 1 &&
+      !read.lede.clamped &&
+      read.lede.size === read.lede.bodySize &&
+      read.fades,
+    JSON.stringify(read.lede)
+  );
+  // The digits, from inside the card: each picks on the question in turn.
+  const before = await picks(page);
+  await page
+    .locator(`${CARD} [data-toggle-group-root] [tabindex="0"]`)
+    .first()
+    .focus();
+  for (const key of ["2", "8", "1", "2"]) {
+    await page.keyboard.press(key);
+    await settle(page, 200);
+  }
+  const after = await picks(page);
+  kit.check(
+    `${name}: digits 2, 8, 1, 2 pick Warm, the eighth file, Every surface and In slices, each on its question in turn`,
+    JSON.stringify(after.picked) ===
+      JSON.stringify([["Warm"], [EIGHT[7]], ["Every surface"], ["In slices"]]),
+    JSON.stringify(after.picked)
+  );
+  kit.check(
+    `${name}: a pick changes no option's size`,
+    !!before.second &&
+      !!after.second &&
+      Math.abs(before.second.w - after.second.w) < 0.5 &&
+      Math.abs(before.second.h - after.second.h) < 0.5,
+    `${JSON.stringify(before.second)} → ${JSON.stringify(after.second)}`
+  );
+  await page.close();
+}
+
+/** A 40-word reason, as the hub's words for a wake that failed say one. */
+const LONG_REASON =
+  "Caw's session could not start on this machine because the boundary that holds his place exited as it started, and the host's sandbox profile denies every capability to what runs beneath it, so nothing he runs can start there yet.";
+
+/** The not-woken row `row` names, and its reason line, read: its box, the message rows', its glyph and words. */
+const readUnread = (page: Page, rowSel: string) =>
+  page.evaluate(
+    ({ panel, sel }) => {
+      const row = document.querySelector<HTMLElement>(sel);
+      if (!row) {
+        return null;
+      }
+      const r = row.getBoundingClientRect();
+      const reason = row.querySelector(".row-fault .reason");
+      const rr = reason?.getBoundingClientRect();
+      const lh = reason
+        ? Number.parseFloat(getComputedStyle(reason).lineHeight)
+        : 1;
+      // The transcript's message rows: your words and his, each a `[data-row]`.
+      const messages = [
+        ...document.querySelectorAll(`${panel} .tx-columns [data-row]`),
+      ]
+        .filter((el) => !el.querySelector("[data-unread-note], .note"))
+        .map((el) => el.getBoundingClientRect().height)
+        .filter((h) => h > 0);
+      return {
+        h: Math.round(r.height * 10) / 10,
+        w: Math.round(r.width * 10) / 10,
+        messageMin: messages.length ? Math.min(...messages) : null,
+        coded:
+          row.hasAttribute("data-code") ||
+          !!row.closest("[data-code]") ||
+          !!row.querySelector("[data-code]"),
+        title: row.querySelector(".ftitle")?.textContent?.trim(),
+        time: !!row.querySelector("time.eat"),
+        reason: reason?.textContent?.trim() ?? null,
+        reasonLines: rr ? Math.round(rr.height / lh) : 0,
+        reasonInside: rr
+          ? rr.left >= r.left - 0.5 && rr.right <= r.right + 0.5
+          : false,
+        again:
+          row.querySelector(".row-fault .again")?.textContent?.trim() ?? null,
+      };
+    },
+    { panel: PANEL, sel: rowSel }
+  );
+
+/**
+ * Your words in a thread with no machine online: the hub's not-woken note
+ * is one row on the transcript's rail, as tall as its message rows, no
+ * dashed code box; its clock's darker layer stands at 3:1 or more on the
+ * row in light and dark; its title and time, the no-machine reason, and
+ * Try again saying "Waking Caw…" while its wake is out. Then the same note
+ * with a 40-word reason of the hub's own, which wraps inside the row.
+ */
+async function checkUnread(
+  kit: Kit,
+  fleet: Fleet,
+  base: string,
+  project: { id: string; name: string },
+  threadId: string
+) {
+  // Your words, and the hub's note that no machine was online for them, as
+  // the thread keeps them (caw.ts `wakeForYou`): a send the hub took and a
+  // wake that found every machine gone. The hub refuses a send outright
+  // while none is online, so the note is only ever left by that race; it is
+  // written here as the hub writes it, and read back by the real page.
+  const now = Date.now();
+  const yours = crypto.randomUUID();
+  const noteId = crypto.randomUUID();
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, created_at) VALUES (?, ?, 'you', ?, ?)",
+    yours,
+    threadId,
+    "Words written as the last machine went away.",
+    now
+  );
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, note_title, event, created_at) VALUES (?, ?, 'event', '', 'Caw · not woken', ?, ?)",
+    noteId,
+    threadId,
+    JSON.stringify({
+      kind: "caw",
+      what: "not-woken",
+      notWoken: {
+        message: yours,
+        reason: "no-machine",
+        words:
+          "No machine is online, so Caw can't start. Bring a machine online, then write here.",
+      },
+    }),
+    now + 1
+  );
+  const seat = ".project-head button.caw-seat";
+  const page = await kit.page("desk");
+  page.setDefaultTimeout(60_000);
+  // Try again's wake, held while the button is read.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  await page.route("**/wake", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await open(page, `${base}/project/${project.id}`, seat);
+  await settle(page, 400);
+  await page.click(seat);
+  const rowSel = `${PANEL} [data-unread-note="${noteId}"]`;
+  await page.waitForSelector(rowSel, { timeout: 30_000 });
+  await settle(page, 400);
+  const row = await readUnread(page, rowSel);
+  kit.note(`not-woken row: ${JSON.stringify(row)}`);
+  kit.check(
+    "the not-woken note is one row on the rail, at least as tall as the transcript's message rows, with no dashed code box",
+    !!row && row.messageMin !== null && row.h >= row.messageMin && !row.coded,
+    JSON.stringify(row)
+  );
+  kit.check(
+    "it says “Caw hasn't read this” with its time, and why: no machine was online, he reads it when one is back",
+    row?.title === "Caw hasn't read this" &&
+      row.time &&
+      row.reason ===
+        "No machine was online when you wrote. He reads it when one is back.",
+    JSON.stringify(row)
+  );
+  const glyph = `${rowSel} .rail-cell svg`;
+  const clock = await glyphContrast(page, glyph);
+  kit.note(
+    `the clock in ink-muted, as the old note drew its glyph: ${JSON.stringify(await glyphContrast(page, glyph, "--ink-muted"))}`
+  );
+  kit.note(
+    `the clock with its duotone at the status-glyph opacity (0.81): ${JSON.stringify(await glyphContrast(page, glyph, undefined, 0.81))}`
+  );
+  kit.check(
+    "its clock's darker layer stands at 3:1 or more on the row, and its hands at 3:1 or more on its disc, in light and in dark",
+    clock.length === 2 &&
+      clock.every((one) => one.full >= 3 && one.fullOverDuo >= 3),
+    JSON.stringify(clock)
+  );
+  const again = page.locator(`${rowSel} .row-fault .again`);
+  const offered = (await again.count()) > 0;
+  if (kit.check("it offers Try again at the end of its reason", offered)) {
+    await again.click();
+    const pending = await page
+      .waitForFunction(
+        (sel) =>
+          document.querySelector(sel)?.textContent?.includes("Waking Caw…"),
+        `${rowSel} .row-fault .again`,
+        { timeout: 5000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    kit.check("Try again says “Waking Caw…” while its wake is out", pending);
+    release();
+    await settle(page, 400);
+  }
+  await page.close();
+  // The same note with a 40-word reason of the hub's own, as the thread's read carries it.
+  const long = await kit.page("desk");
+  long.setDefaultTimeout(60_000);
+  await long.route(
+    `**/api/projects/${project.id}/threads/${threadId}`,
+    async (route) => {
+      const response = await route.fetch();
+      const read = (await response.json()) as {
+        messages: {
+          id: string;
+          event?: { notWoken?: { reason: string; words: string } };
+        }[];
+      };
+      for (const message of read.messages) {
+        if (message.id === noteId && message.event?.notWoken) {
+          message.event.notWoken.reason = "failed";
+          message.event.notWoken.words = LONG_REASON;
+        }
+      }
+      await route.fulfill({ response, json: read });
+    }
+  );
+  await open(long, `${base}/project/${project.id}`, seat);
+  await settle(long, 400);
+  await long.click(seat);
+  await long.waitForSelector(`${rowSel} .row-fault .reason`, {
+    timeout: 30_000,
+  });
+  await settle(long, 400);
+  const wrapped = await readUnread(long, rowSel);
+  kit.check(
+    `a ${wordCount(LONG_REASON)}-word reason wraps inside the row`,
+    wrapped?.reason === LONG_REASON &&
+      wrapped.reasonLines > 1 &&
+      wrapped.reasonInside,
+    JSON.stringify(wrapped)
+  );
+  await long.close();
+}
 
 /** Words that say money or spend: a currency amount, or the words themselves. */
 const MONEY = String.raw`[$€£¥]\s?\d|\d\s?(?:USD|EUR|GBP)\b|\bspen[dt]\b|\bcosts?\b`;
@@ -343,6 +1021,16 @@ async function checkHero(kit: Kit, page: Page, name: string) {
     `${name}: the project's starters stand under him as the kit's chips, each with its glyph`,
     hero.chips.length > 0 && hero.chips.every(Boolean) && hero.cards === 0,
     JSON.stringify(hero)
+  );
+  const glyphs = `${PANEL} .caw-starters .starter-glyph`;
+  const inks = await glyphContrast(page, glyphs);
+  kit.note(
+    `${name}: starter glyphs as drawn before, in ink-muted: ${JSON.stringify(await glyphContrast(page, glyphs, "--ink-muted"))}`
+  );
+  kit.check(
+    `${name}: every starter's glyph has its darker layer at 3:1 or more on its chip, in light and in dark`,
+    inks.length === hero.chips.length * 2 && inks.every((one) => one.full >= 3),
+    JSON.stringify(inks)
   );
   kit.check(
     `${name}: Caw stands on the hero, not on the composer, until the first words`,
@@ -1042,6 +1730,19 @@ const spec: Spec = {
       kit.check(`${name}: Escape puts the panel away`, gone);
       await checkSettings(kit, page, name);
     }
+    // His question card and the not-woken note, in the thread the panel
+    // opens on (the project's newest).
+    const [thread] = fleet.query<{ id: string }>(
+      "SELECT id FROM project_threads WHERE project_id = ? ORDER BY rowid DESC LIMIT 1",
+      project.id
+    );
+    if (!kit.check("the panel's project has a thread", !!thread)) {
+      return;
+    }
+    const threadId = (thread as { id: string }).id;
+    await checkQuestion(kit, base, project, threadId, "desk", "panel 380");
+    await checkQuestion(kit, base, project, threadId, "phone", "phone 390");
+    await checkUnread(kit, fleet, base, project, threadId);
   },
 };
 export default spec;

@@ -52,10 +52,13 @@
     display: flex;
     max-inline-size: 100%;
   }
+  /* The glyph in the words' own ink: a Solar duotone's half-ink layer in
+     muted ink fades into the chip (the magnifier's handle went, its lens
+     left as a grey dot), in the strong ink each layer stands clear. */
   .caw-starters :global(.starter-glyph) {
     flex: none;
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
-    color: var(--ink-muted);
+    color: var(--ink-strong);
   }
 </style>

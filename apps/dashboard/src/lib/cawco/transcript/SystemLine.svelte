@@ -14,6 +14,7 @@
     IconArtifactPage,
     IconArtifactSheet,
     IconChevronRight,
+    IconClock,
     IconError,
     IconInfo,
     IconStop,
@@ -97,6 +98,8 @@
    * and when it happened is said in the reader's own time.
    */
   const wokeCaw = $derived(message?.metadata?.noteKind === CAW_EVENT);
+  /** Your words in a thread that did not wake Caw: a row of its own, not a code line. */
+  const unread = $derived(wokeCaw && message?.metadata?.notWoken === true);
   /** A session made a routine: Keep, Turn off and Open under its line. */
   const routineMade = $derived(
     wokeCaw ? message?.metadata?.routineMade : undefined
@@ -105,10 +108,10 @@
   const designOffer = $derived(
     wokeCaw ? message?.metadata?.designOffer : undefined
   );
-  /** The pane's word under an event's line (a not-woken note's reason and Try again). */
+  /** The pane's word under a not-woken note's title: the reason and Try again. */
   const voice = useVoice();
   const under = $derived(
-    wokeCaw && message && voice?.event
+    unread && message && voice?.event
       ? { snippet: voice.event, id: message.id }
       : null
   );
@@ -295,6 +298,26 @@
       <p class="stayed rail-hang">{message.content}</p>
     {/if}
   </div>
+{:else if unread}
+  <!-- Your words he has not read: one row on the rail, drawn as a failure's
+       is but in no fail hue, since nothing failed and the words are kept.
+       The clock in the glyph cell, the title on the line with its time, and
+       under it, at the text column, why and the way on (the pane's
+       `event`: the reason and Try again). -->
+  <div class="note unread rail-row" data-unread-note={message?.id}>
+    <span class="hline rail-line">
+      <span class="rail-cell"><IconClock /></span>
+      <span class="ftitle">Caw hasn't read this</span>
+      {#if eventAt}
+        <time class="eat num" datetime={eventAt.toISOString()}
+          >{eventClock}</time
+        >
+      {/if}
+    </span>
+    {#if under}
+      <div class="why rail-hang">{@render under.snippet(under.id)}</div>
+    {/if}
+  </div>
 {:else if isFail}
   <!-- A failure takes the rail like every other line, in the fail colours:
        what failed on the line, why under it. -->
@@ -332,9 +355,6 @@
     {#if designOffer}
       <DesignOfferActions offer={designOffer} />
     {/if}
-    {#if under}
-      {@render under.snippet(under.id)}
-    {/if}
   </div>
 {:else}
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
@@ -354,9 +374,6 @@
     {/if}
     {#if designOffer}
       <DesignOfferActions offer={designOffer} />
-    {/if}
-    {#if under}
-      {@render under.snippet(under.id)}
     {/if}
   </div>
 {/if}
@@ -546,6 +563,28 @@
      not a dump. */
   .hbody {
     margin-block-start: var(--space-3);
+  }
+  /* Your words he has not read: the rows' height (`space-2` above and
+     below), the clock at the 16px glyph size with both its tones standing
+     clear of the row, the title in the strong ink, and what hangs under it
+     at the text column free to shrink and wrap. */
+  .note.unread {
+    padding-block: var(--space-2);
+
+    & .hline {
+      color: var(--ink-strong);
+    }
+    & .ftitle {
+      overflow-wrap: anywhere;
+      text-wrap: pretty;
+    }
+    & .rail-cell :global(svg) {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+    }
+    & .why {
+      min-inline-size: 0;
+    }
   }
   /* A failure: the rail, the mark, the title and the reason, all in the
      fail ink — last, so it wins over the note's muted ink on the same

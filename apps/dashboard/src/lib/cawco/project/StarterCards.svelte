@@ -144,11 +144,13 @@
     cursor: pointer;
     transition: background-color var(--dur-control) var(--ease-out);
   }
+  /* The glyph in the words' own ink, so its duotone's darker layer stands
+     clear of the card (CawStarters' chips the same). */
   .starter :global(.starter-glyph) {
     flex: none;
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
-    color: var(--ink-muted);
+    color: var(--ink-strong);
   }
   @media (hover: hover) {
     .starter:hover {

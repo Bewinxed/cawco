@@ -172,6 +172,15 @@
    */
   const OTHER = "\u0000other";
 
+  /**
+   * A question whose options say more than their labels, or that has more
+   * than a row of chips holds, lists them instead: one full-width row per
+   * option, its label over its description. Three or fewer bare labels stay
+   * a row of chips.
+   */
+  const listed = (q: UserQuestion): boolean =>
+    q.options.length > 3 || q.options.some((o) => !!o.description?.trim());
+
   /** Focus to a question's tab stop: the option it last left from, or its first. */
   async function focusQuestion(index: number): Promise<void> {
     await tick();
@@ -480,8 +489,10 @@
    * keycap on the `current` question, Enter sends once every question has an
    * answer. Tab, Shift+Tab, the arrows and Space are the option groups' own
    * (bits-ui's roving focus); these are the rest. They are heard only
-   * from inside the card's own pane (its workspace group, `[data-leaf]`): a key
-   * pressed with focus elsewhere, or on nothing at all, is not meant for it.
+   * from inside the card's own pane (its workspace group, `[data-leaf]`, or
+   * Caw's panel floating over a project's page, `[data-caw-panel]`, which no
+   * workspace group holds): a key pressed with focus elsewhere, or on
+   * nothing at all, is not meant for it.
    * Escape is never one of them: it closes menus, dialogs and peeks all over
    * the page, and a question is put down only by its own Dismiss button. A
    * test script's Escape on a page with nothing focused once dismissed the
@@ -495,7 +506,7 @@
    */
   let card = $state<HTMLElement | null>(null);
   const inPane = (target: EventTarget | null): boolean => {
-    const pane = card?.closest("[data-leaf]");
+    const pane = card?.closest("[data-leaf], [data-caw-panel]");
     return !!pane && target instanceof Node && pane.contains(target);
   };
 
@@ -678,7 +689,11 @@
 >
   {#if questions}
     {@render title(`Question from ${asker}`)}
-    <div class="body part" style:--part="1" class:railed={questions.length > 1}>
+    <div
+      class="body part kit-edge-fade-block"
+      style:--part="1"
+      class:railed={questions.length > 1}
+    >
       {#if rail}
         <span
           aria-hidden="true"
@@ -689,9 +704,28 @@
       {/if}
       {#each questions as q, qi (q.question)}
         {@const own = q.options.length}
+        {@const list = listed(q)}
         <p class="lede" id="{claimId}-q{qi}" bind:this={ledes[qi]}>
           {q.question}
         </p>
+        <!-- An option's keycap and words: in a list, the keycap stands on
+             the label's first line and the description runs under the
+             label; in a chip row, the label beside it. -->
+        {#snippet face(digit: number, label: string, description?: string)}
+          {#if list}
+            <span class="mark-cell"
+              ><span class="kit-keycap">{digit}</span></span
+            ><span class="opt-text"
+              ><span class="opt-label">{label}</span>{#if description}<span
+                  class="opt-desc">{description}</span
+                >{/if}</span
+            >
+          {:else}
+            <span class="kit-keycap">{digit}</span><span class="opt-label"
+              >{label}</span
+            >
+          {/if}
+        {/snippet}
         {#snippet chips()}
           {#each q.options as opt, i (opt.label)}
             {@const live = ownsKeys && qi === current && i < 9}
@@ -703,7 +737,7 @@
               type="button"
               value={opt.label}
             >
-              <span class="kit-keycap">{i + 1}</span><span>{opt.label}</span>
+              {@render face(i + 1, opt.label, opt.description?.trim())}
             </ToggleGroup.Item>
           {/each}
           <!-- The reader's own answer, written in the field it opens. -->
@@ -722,7 +756,7 @@
               type="button"
               value={OTHER}
             >
-              <span class="kit-keycap">{own + 1}</span><span>Other</span>
+              {@render face(own + 1, "Other")}
             </ToggleGroup.Item>
           {/if}
         {/snippet}
@@ -731,7 +765,7 @@
         {#if q.multiSelect}
           <ToggleGroup.Root
             aria-labelledby="{claimId}-q{qi}"
-            class="qopts kit-chips"
+            class={["qopts kit-chips", { list }]}
             onfocusin={() => {
               current = qi;
             }}
@@ -745,7 +779,7 @@
         {:else}
           <ToggleGroup.Root
             aria-labelledby="{claimId}-q{qi}"
-            class="qopts kit-chips"
+            class={["qopts kit-chips", { list }]}
             onfocusin={() => {
               current = qi;
             }}
@@ -919,10 +953,14 @@
     max-block-size: var(--ask-max, none);
     padding: var(--space-3) var(--space-3) var(--space-2);
   }
+  /* Every box sizes to the card: the body, and what stands in it, may
+     shrink below its words' longest run, which then wraps (`overflow-wrap`
+     on the lede and the labels) rather than pushing past the card. */
   .body {
     position: relative;
     flex: 1 1 auto;
     min-block-size: 0;
+    min-inline-size: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -1034,6 +1072,8 @@
     color: var(--ink-strong);
     margin-block-end: var(--space-2);
     max-inline-size: 72ch;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
   }
   /* Every lede of a several-question ask stands off the rail's edge by the
      same step, railed or not, so nothing moves as the rail does. */
@@ -1186,6 +1226,45 @@
      app.css); the card only sets where it sits. */
   .body :global(.qopts) {
     margin-block: 2px var(--space-2);
+  }
+  /* An option's label shrinks with its chip and wraps inside it. */
+  .body :global(.qopts .opt-label) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  /* The list form: the chip recipe grown to one full-width row per option.
+     The rows are one column the card's width (`minmax(0, 1fr)`), and each
+     row sizes its own two columns: the keycap's cell at its own width,
+     standing on the label's first line (`.mark-cell`), and the words in
+     the rest, which may shrink to nothing and wrap. The label keeps the
+     chip's label type and ink; the description runs under it in meta and
+     muted ink. A pick changes the edge, the fill and the keycap, never the
+     row's size. */
+  .body :global(.qopts.list) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+
+    & > :global(.kit-chip) {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      min-inline-size: 0;
+    }
+    & :global(.opt-text) {
+      display: block;
+      min-inline-size: 0;
+    }
+    & :global(.opt-label) {
+      display: block;
+    }
+    & :global(.opt-desc) {
+      display: block;
+      font: var(--type-meta);
+      color: var(--ink-muted);
+      overflow-wrap: anywhere;
+      text-wrap: pretty;
+    }
   }
   /* The chips stand flush in a scroller that clips (`.body`), so the kit's
      ring sits on each chip's own border box (The One Ring Rule) rather than

@@ -99,7 +99,8 @@
 <style>
   /* One line under the row, from where the row's words start (the caller
      sets --fault-indent to its mark's column): the reason in the fail
-     status's ink, the way on beside it, wrapping under it when narrow. */
+     status's ink (or the caller's --fault-ink, where nothing failed), the
+     way on beside it, wrapping under it when narrow. */
   .row-fault {
     min-width: 0;
   }
@@ -118,7 +119,7 @@
     min-width: 0;
     margin: 0;
     font: var(--type-meta);
-    color: var(--status-fail-ink);
+    color: var(--fault-ink, var(--status-fail-ink));
     overflow-wrap: anywhere;
   }
   .line > :global(.again) {

@@ -25,13 +25,20 @@ function carriedOn(message: ThreadMessage): Message["metadata"] {
     : undefined;
 }
 
-/** An event's line as code, with what SystemLine draws under it: a made routine's or a design offer's actions. */
+/**
+ * An event's line as code, with what SystemLine draws under it: a made
+ * routine's or a design offer's actions. A not-woken note is no code line:
+ * it is marked so SystemLine draws its own row.
+ */
 function eventMetadata(message: EventThreadMessage): Message["metadata"] {
   const made = routineMadeOf(message);
   const offer = designOfferOf(message);
   return {
     noteTitle: message.noteTitle,
     noteKind: CAW_EVENT,
+    ...(message.event?.kind === "caw" && message.event.notWoken
+      ? { notWoken: true as const }
+      : {}),
     ...(made
       ? {
           routineMade: {

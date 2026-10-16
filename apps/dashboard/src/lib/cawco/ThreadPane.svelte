@@ -742,8 +742,10 @@
 {/snippet}
 
 {#snippet eventUnder(id: string)}
-  <!-- A not-woken note: why, in the hub's words, and the way on with the
-       words he has not read (only on the note that still stands for them). -->
+  <!-- A not-woken note: why, and the way on with the words he has not read
+       (only on the note that still stands for them). With no machine
+       online it says what happens next; every other reason is the hub's
+       own words. -->
   {@const why = notWokenOf(
     (messages ?? []).find((message) => message.id === id)
   )}
@@ -753,7 +755,9 @@
       again={retryable === id ? () => wakeAgain(id) : undefined}
       againPending="Waking Caw…"
       data-not-woken={why.reason}
-      reason="Caw hasn't read your message: {why.words}"
+      reason={why.reason === "no-machine"
+        ? "No machine was online when you wrote. He reads it when one is back."
+        : why.words}
     />
   {/if}
 {/snippet}
@@ -1087,10 +1091,10 @@
   .state :global(.tx-columns) {
     --x-rail: 0px;
   }
-  /* A not-woken note's reason and Try again under its line, from where the
-     line's words start inside its dashed box (SystemLine `.note[data-code]`). */
+  /* A not-woken note's reason and Try again under its title, at the text
+     column (SystemLine `.note.unread`): muted, since nothing failed. */
   .state :global(.not-woken) {
-    --fault-indent: var(--space-2);
+    --fault-ink: var(--ink-muted);
   }
   .veil {
     position: absolute;
