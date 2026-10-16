@@ -540,7 +540,12 @@ interface TraceEvent {
     };
     elementCount?: number;
     /** A Layout's: the box it was laid out from, as four corners (x, y pairs). */
-    endData?: { elementCount?: number; root?: number[] };
+    endData?: {
+      elementCount?: number;
+      /** Each box a layout was laid out from, as Blink names them: its depth and its quads. */
+      layoutRoots?: { depth?: number; nodeId?: number; quads?: number[][] }[];
+      root?: number[];
+    };
   };
   cat: string;
   dur?: number;
@@ -764,14 +769,23 @@ export async function traceMain(
       .slice(0, 8);
   };
   /** How big the box a layout was laid out from is: the page's, or one inside it. */
-  const rootOf = (one: TraceEvent): string => {
-    const quad = one.args?.endData?.root;
+  const sizeOf = (quad: number[] | undefined): string => {
     if (!quad || quad.length < 8) {
       return "";
     }
     const xs = [quad[0], quad[2], quad[4], quad[6]];
     const ys = [quad[1], quad[3], quad[5], quad[7]];
     return `${Math.round(Math.max(...xs) - Math.min(...xs))}×${Math.round(Math.max(...ys) - Math.min(...ys))}`;
+  };
+  /** Every box a layout was laid out from: its size, and its depth in the tree. */
+  const rootOf = (one: TraceEvent): string => {
+    const roots = one.args?.endData?.layoutRoots;
+    if (roots && roots.length > 0) {
+      return roots
+        .map((at) => `${sizeOf(at.quads?.[0])} at depth ${at.depth ?? "?"}`)
+        .join(", ");
+    }
+    return sizeOf(one.args?.endData?.root);
   };
   const passesIn = (from: number, to: number) =>
     [...recalcs, ...layouts]
