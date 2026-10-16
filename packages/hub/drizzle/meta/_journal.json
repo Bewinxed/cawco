@@ -1331,6 +1331,13 @@
       "when": 1792157215932,
       "tag": "0189_session_subagents",
       "breakpoints": true
+    },
+    {
+      "idx": 190,
+      "version": "6",
+      "when": 1792157231232,
+      "tag": "0190_fleet_denied_tools",
+      "breakpoints": true
     }
   ]
 }

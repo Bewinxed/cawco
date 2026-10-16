@@ -2334,16 +2334,18 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
   /** Always `'supervisor'`: the hub has one, and a table with a key says so cheaply. */
   id: text("id").primaryKey(),
   /**
-   * Fleet-wide tool denials — JSON `string[]`. Every spawned session and every
-   * `~/.claude/settings.json` convergence reads this list. `null` only before
-   * the seeding migration; once seeded, always a concrete list (possibly empty
-   * when the operator has removed all denials).
+   * Whether the fleet's tool denials (`fleet_denied_tools`) are set. False
+   * only before the seeding migration or a fresh hub's first choice, when
+   * every daemon falls back to its compiled list; once set, the rows are the
+   * list, possibly none when the operator has removed all denials.
    */
-  deniedTools: text("denied_tools", { mode: "json" }).$type<string[]>(),
+  deniedSeeded: integer("denied_seeded", { mode: "boolean" })
+    .notNull()
+    .default(false),
   /**
    * The fleet's "CawCo's to-dos" choice (§5.2): every session is denied its
    * harness's own list and plan mode, added at spawn (`cawcoTodosDenied`),
-   * never stored in `denied_tools`.
+   * never stored in `fleet_denied_tools`.
    */
   cawcoTodos: integer("cawco_todos", { mode: "boolean" })
     .notNull()
@@ -2357,6 +2359,16 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
   updatedAt: timestamp("updated_at")
     .notNull()
     .$defaultFn(() => new Date()),
+});
+
+/**
+ * Fleet-wide tool denials, one row per tool name, in the order they were
+ * added (rowid). Every spawned session and every `~/.claude/settings.json`
+ * convergence reads them, once `supervisor_config.denied_seeded` says they
+ * are set.
+ */
+export const fleetDeniedTools = sqliteTable("fleet_denied_tools", {
+  tool: text("tool").primaryKey(),
 });
 
 /**

@@ -3,7 +3,7 @@
  *
  * - **delegates**: use CawCo's delegates instead of each harness's own
  *   subagents — kept on the denied-tools baseline
- *   (`supervisor_config.denied_tools`): Claude Code's `Task`/`Agent`,
+ *   (`fleet_denied_tools`): Claude Code's `Task`/`Agent`,
  *   OpenCode's `subagent`.
  * - **todos**: use CawCo's to-dos instead of each harness's own list — its
  *   own flag (`supervisor_config.cawco_todos`), never names in the baseline.
@@ -69,14 +69,27 @@ export interface StoredChoices {
   upstreamPosts: boolean | null;
 }
 
-/** The baseline with "delegates" turned on or off; every other name stays where it was. */
-const withDelegates = (list: readonly string[], on: boolean): string[] => {
+/**
+ * A change to the baseline (`fleet_denied_tools`): `seed` first when it was
+ * never set, then the names removed and added; every other name stays where
+ * it was.
+ */
+export interface DeniedToolsChange {
+  add: readonly string[];
+  remove: readonly string[];
+  seed: readonly string[];
+}
+
+/** "Delegates" turned on or off: Claude Code's subagent tools added, or every harness's removed. */
+const delegatesChange = (on: boolean): DeniedToolsChange => {
   const names = NATIVE_TOOLS.subagents;
-  if (on) {
-    return [...list, ...names.claude.filter((name) => !list.includes(name))];
-  }
-  const off = new Set<string>([...names.claude, ...names.opencode]);
-  return list.filter((name) => !off.has(name));
+  return on
+    ? { seed: DEFAULT_DENIED_TOOLS, add: names.claude, remove: [] }
+    : {
+        seed: DEFAULT_DENIED_TOOLS,
+        add: [],
+        remove: [...names.claude, ...names.opencode],
+      };
 };
 
 export const readChoices = ({
@@ -104,8 +117,9 @@ export interface FleetChoicesStore {
   /** Keeps the upstream answer; every machine hears it with its next beat (upstream.ts). */
   setUpstream: (posts: boolean) => void;
   synced: () => void;
+  /** Stores the choices named, the baseline's change with them, in one transaction. */
   write: (choices: {
-    deniedTools?: string[];
+    denied?: DeniedToolsChange;
     cawcoTodos?: boolean;
     choicesSetAt: Date;
   }) => void;
@@ -129,16 +143,10 @@ export const setFleetChoices = (
   if (choices.delegates === undefined && choices.todos === undefined) {
     return readChoices(store.read());
   }
-  const stored = store.read();
   store.write({
     ...(choices.delegates === undefined
       ? {}
-      : {
-          deniedTools: withDelegates(
-            stored.deniedTools ?? DEFAULT_DENIED_TOOLS,
-            choices.delegates
-          ),
-        }),
+      : { denied: delegatesChange(choices.delegates) }),
     ...(choices.todos === undefined ? {} : { cawcoTodos: choices.todos }),
     choicesSetAt: new Date(),
   });

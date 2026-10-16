@@ -117,6 +117,7 @@ import {
   credentials,
   delegateEvents,
   fleetAgents,
+  fleetDeniedTools,
   fleetHookHistory,
   fleetHooks,
   fleetMcpOauth,
@@ -1506,9 +1507,17 @@ export interface DbShape {
     error?: string;
     files?: SkillFile[];
   }) => FleetSkillMeta;
-  /** Upserts the fleet's choices row (single-row table). */
+  /**
+   * Upserts the fleet's choices row (single-row table) and, with `denied`,
+   * changes its tool denials in the same transaction: `seed` first when they
+   * were never set, then `remove` and `add`, every other name where it was.
+   */
   readonly putSupervisorConfig: (config: {
-    deniedTools?: string[] | null;
+    denied?: {
+      seed: readonly string[];
+      add: readonly string[];
+      remove: readonly string[];
+    };
     cawcoTodos?: boolean;
     /** When the fleet's choices were set through `PUT /api/fleet/choices`. */
     choicesSetAt?: Date | null;
@@ -2454,6 +2463,14 @@ const make = async (path: string): Promise<DbShape> => {
   /** A workflow's columns but its program: what the list carries. */
   const { program: _program, ...workflowListColumns } =
     getTableColumns(workflows);
+  /** The fleet's tool denials, in the order they were added. */
+  const deniedToolNames = (): string[] =>
+    db
+      .select({ tool: fleetDeniedTools.tool })
+      .from(fleetDeniedTools)
+      .orderBy(sql`rowid`)
+      .all()
+      .map(({ tool }) => tool);
   /** Dollars the project's booked Caw turns cost since `since` (ms epoch). */
   const cawSince = (projectId: string, since: number): number =>
     db
@@ -5322,14 +5339,14 @@ const make = async (path: string): Promise<DbShape> => {
         ...(() => {
           const row = db
             .select({
-              deniedTools: supervisorConfig.deniedTools,
+              deniedSeeded: supervisorConfig.deniedSeeded,
               cawcoTodos: supervisorConfig.cawcoTodos,
             })
             .from(supervisorConfig)
             .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
             .get();
           return {
-            deniedTools: row?.deniedTools ?? undefined,
+            deniedTools: row?.deniedSeeded ? deniedToolNames() : undefined,
             cawcoTodos: row?.cawcoTodos ?? false,
           };
         })(),
@@ -8020,44 +8037,63 @@ const make = async (path: string): Promise<DbShape> => {
         .get();
       return row
         ? {
-            deniedTools: row.deniedTools,
+            deniedTools: row.deniedSeeded ? deniedToolNames() : null,
             cawcoTodos: row.cawcoTodos,
             choicesSetAt: row.choicesSetAt,
             updatedAt: row.updatedAt,
           }
         : undefined;
     },
-    putSupervisorConfig: (config) => {
-      const stored = db
-        .select()
-        .from(supervisorConfig)
-        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-        .get();
-      const values = {
-        id: SUPERVISOR_CONFIG_ID,
-        deniedTools:
-          config.deniedTools === undefined
-            ? (stored?.deniedTools ?? null)
-            : config.deniedTools,
-        cawcoTodos: config.cawcoTodos ?? stored?.cawcoTodos ?? false,
-        choicesSetAt:
-          config.choicesSetAt === undefined
-            ? (stored?.choicesSetAt ?? null)
-            : config.choicesSetAt,
-        updatedAt: new Date(),
-      };
-      db.insert(supervisorConfig)
-        .values(values)
-        .onConflictDoUpdate({
-          target: supervisorConfig.id,
-          set: {
-            deniedTools: values.deniedTools,
-            cawcoTodos: values.cawcoTodos,
-            choicesSetAt: values.choicesSetAt,
-            updatedAt: values.updatedAt,
-          },
-        })
-        .run();
+    putSupervisorConfig: ({ denied, ...config }) => {
+      db.transaction((tx) => {
+        const stored = tx
+          .select()
+          .from(supervisorConfig)
+          .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+          .get();
+        const values = {
+          id: SUPERVISOR_CONFIG_ID,
+          deniedSeeded: Boolean(denied) || (stored?.deniedSeeded ?? false),
+          cawcoTodos: config.cawcoTodos ?? stored?.cawcoTodos ?? false,
+          choicesSetAt:
+            config.choicesSetAt === undefined
+              ? (stored?.choicesSetAt ?? null)
+              : config.choicesSetAt,
+          updatedAt: new Date(),
+        };
+        tx.insert(supervisorConfig)
+          .values(values)
+          .onConflictDoUpdate({
+            target: supervisorConfig.id,
+            set: {
+              deniedSeeded: values.deniedSeeded,
+              cawcoTodos: values.cawcoTodos,
+              choicesSetAt: values.choicesSetAt,
+              updatedAt: values.updatedAt,
+            },
+          })
+          .run();
+        if (!denied) {
+          return;
+        }
+        const add = (names: readonly string[]) => {
+          if (names.length > 0) {
+            tx.insert(fleetDeniedTools)
+              .values(names.map((tool) => ({ tool })))
+              .onConflictDoNothing()
+              .run();
+          }
+        };
+        if (!stored?.deniedSeeded) {
+          add(denied.seed);
+        }
+        if (denied.remove.length > 0) {
+          tx.delete(fleetDeniedTools)
+            .where(inArray(fleetDeniedTools.tool, [...denied.remove]))
+            .run();
+        }
+        add(denied.add);
+      });
     },
     fleetWatchOn: () =>
       db
