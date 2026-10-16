@@ -86,6 +86,8 @@ type Phase = (typeof PHASES)[number];
 const REACH_MS = 300;
 /** How long after a switch its tasks are its own: the glide, the catch-up behind it. */
 const SETTLE_MS = 900;
+/** How long after a switch the view is read frame by frame (`viewFrames`): the brief's 300ms. */
+const LANDING_MS = 300;
 /** Between two ways of switching: every pane a reach warmed has gone cold (warm.svelte.ts `COOL_MS`). */
 const REST_MS = 2000;
 /** The longest a switch's own task may take on the slower CPU, ms: two frames. */
@@ -400,6 +402,77 @@ const revealAlone = (
     },
     [selector, hides] as const
   );
+
+/**
+ * The drawn transcript, frame by frame for `ms` after a switch: its first row
+ * in view (its top in the view and its words), how tall its content stands,
+ * and how far the view stands from its tail. Read each frame in its
+ * callbacks, apart from every timed pass (each read lays the page out).
+ */
+const viewFrames = (page: Page, ms: number): Promise<string[][]> =>
+  page.evaluate(
+    (within) =>
+      new Promise<string[][]>((done) => {
+        const out: string[][] = [];
+        const stop = performance.now() + within;
+        const step = () => {
+          const view = document.querySelector<HTMLElement>(
+            ".pane:not(.pane-hidden, .pane-settling) .tr"
+          );
+          if (view) {
+            const { top } = view.getBoundingClientRect();
+            const rows = view.querySelectorAll<HTMLElement>(
+              ".listing > div > div"
+            );
+            const first = [...rows].find(
+              (row) => row.getBoundingClientRect().bottom > top + 1
+            );
+            out.push([
+              first
+                ? `${(first.getBoundingClientRect().top - top).toFixed(1)}|${(first.textContent ?? "").trim().slice(0, 40)}`
+                : "none",
+              String(view.scrollHeight),
+              (view.scrollHeight - view.clientHeight - view.scrollTop).toFixed(
+                1
+              ),
+            ]);
+          }
+          if (performance.now() < stop) {
+            requestAnimationFrame(step);
+          } else {
+            done(out);
+          }
+        };
+        requestAnimationFrame(step);
+      }),
+    ms
+  );
+
+/**
+ * What in `frames` moved what the reader sees once the view had landed (the
+ * first frame at its tail, `viewFrames`): a frame whose content stood as tall
+ * as the frame before and whose first row in view is not the same, or a frame
+ * the view stood off its tail in.
+ */
+function movedAfterLanding(frames: string[][]): string[] {
+  const landed = frames.findIndex(([, , gap]) => Number(gap) <= 1);
+  const moved: string[] = [];
+  for (
+    let i = Math.max(1, landed + 1);
+    landed >= 0 && i < frames.length;
+    i += 1
+  ) {
+    const [row, height, gap] = frames[i];
+    const [rowBefore, heightBefore] = frames[i - 1];
+    if (height === heightBefore && row !== rowBefore) {
+      moved.push(`frame ${i}: ${rowBefore} → ${row}`);
+    }
+    if (Number(gap) > 1) {
+      moved.push(`frame ${i}: ${gap}px off the tail`);
+    }
+  }
+  return moved;
+}
 
 /**
  * What putting the pane on screen away costs alone, the switch's other half:
@@ -940,6 +1013,23 @@ async function measure(
   );
   kit.note(
     `${mode} pane(s), the drawn pane put away alone (\`.pane-hidden\` put on): ${hidden.join("; ")}`
+  );
+  // What the reader sees after each switch, frame by frame, apart from the
+  // timed passes: once a catch-up has landed at the tail, nothing mounted
+  // after it moves the first row in view.
+  const moved: string[] = [];
+  for (const [n, id] of order.entries()) {
+    await ways.point.reach(tabOf(id));
+    await page.waitForTimeout(REACH_MS);
+    await ways.point.make(tabOf(id));
+    const seen = movedAfterLanding(await viewFrames(page, LANDING_MS));
+    moved.push(...seen.map((what) => `switch ${n}, ${what}`));
+    await page.waitForTimeout(REST_MS);
+  }
+  kit.check(
+    `two-pane-perf: ${mode} pane(s): once a switch has landed at the tail, nothing that follows in ${LANDING_MS}ms moves the first row in view`,
+    moved.length === 0,
+    moved.slice(0, 8).join("; ") || "nothing moved"
   );
   const seen = await page.evaluate(
     () => (window as unknown as { __cost: Cost }).__cost
