@@ -301,6 +301,8 @@ export type TaskEvent =
       id: string;
       kind: "moved";
       projectId: string;
+      /** Why, as the mover gave it with the move; absent when none was given. */
+      reason?: string;
       to: string;
     }
   | {
@@ -3079,6 +3081,7 @@ export const createTasks = (store: TaskStore) => {
               id: task.id,
               actor,
               ...moved,
+              ...(why ? { reason: why } : {}),
               ...(approved ? { approved: true as const } : {}),
             },
             task
