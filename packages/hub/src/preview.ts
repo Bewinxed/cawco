@@ -420,7 +420,10 @@ async function serveSession(
     return ping();
   }
   if (pathname === OVERLAY_PATH) {
-    return overlayResponse(previewParents());
+    return overlayResponse(
+      previewParents(),
+      request.headers.get("accept-encoding")
+    );
   }
   const synced = pathname.match(ARTIFACT_PATH);
   if (synced) {

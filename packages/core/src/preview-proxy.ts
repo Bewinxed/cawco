@@ -51,21 +51,38 @@ export function loadOverlay(): Promise<string> {
 /** The window global the overlay reads its host's allowed origins from (host-origin.ts). */
 export const PARENTS_GLOBAL = "__cawcoParents";
 
+/** The last overlay gzipped, by its whole text: the parents line changes only when the hub's addresses do. */
+let zipped: { text: string; body: Uint8Array<ArrayBuffer> } | undefined;
+const GZIP = /\bgzip\b/i;
+
 /**
  * The overlay as a response to {@link OVERLAY_PATH}, the origins a host may
  * frame it from (`parents`, the dashboards the hub is reached from) frozen
  * on the window before it runs: its hello is heard from those alone, so a
  * page of another site that frames the preview can't take its picks.
+ * Gzipped for a browser that takes it (`accepts`, the request's
+ * Accept-Encoding): it is loaded into every preview, uncached, and was most
+ * of an artifact's own tab's JS (220 KB of its 640).
  */
 export async function overlayResponse(
-  parents: readonly string[]
+  parents: readonly string[],
+  accepts: string | null
 ): Promise<Response> {
   const named = `Object.defineProperty(window,${JSON.stringify(PARENTS_GLOBAL)},{value:Object.freeze(${JSON.stringify(parents).replaceAll("<", "\\u003c")})});`;
-  return new Response(`${named}\n${await loadOverlay()}`, {
-    headers: {
-      "content-type": "text/javascript",
-      "cache-control": "no-store",
-    },
+  const text = `${named}\n${await loadOverlay()}`;
+  const headers = {
+    "content-type": "text/javascript",
+    "cache-control": "no-store",
+    vary: "accept-encoding",
+  };
+  if (!(accepts && GZIP.test(accepts))) {
+    return new Response(text, { headers });
+  }
+  if (zipped?.text !== text) {
+    zipped = { text, body: new Uint8Array(Bun.gzipSync(text)) };
+  }
+  return new Response(zipped.body, {
+    headers: { ...headers, "content-encoding": "gzip" },
   });
 }
 

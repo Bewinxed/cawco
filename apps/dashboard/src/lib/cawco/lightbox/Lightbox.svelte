@@ -32,7 +32,6 @@
     IconClose,
     IconZoomIn,
   } from "#lib/icons.js";
-  import MessageBody from "../MessageBody.svelte";
   import { dur, ease, motionOk } from "../motion/curves.svelte";
   import { closeInto, land } from "../motion/share.svelte";
   import { extensionOf } from "./extension";
@@ -280,7 +279,11 @@
       </header>
       <div class="doc-body">
         {#if extension === "md" || extension === "markdown"}
-          <MessageBody source={doc.content} />
+          <!-- The markdown loads when a document needs it: an artifact's own
+               tab mounts the lightbox and seldom opens a document. -->
+          {#await import("../MessageBody.svelte") then { default: Body }}
+            <Body source={doc.content} />
+          {/await}
         {:else if extension === "json"}
           <OutputBlock language="json" text={pretty(doc.content)} />
         {:else}

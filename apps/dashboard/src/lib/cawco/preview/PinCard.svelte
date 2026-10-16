@@ -29,7 +29,7 @@
    * the field holds is the pin's draft, which the pane keeps with the pin.
    */
   import type { Pin } from "@cawco/core/comments";
-  import { tick, untrack } from "svelte";
+  import { type Component, tick, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
@@ -43,7 +43,6 @@
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import RowMenu from "../config/RowMenu.svelte";
   import { copyToClipboard } from "../copy";
-  import MessageBody from "../MessageBody.svelte";
   import { pressOutside } from "../press-outside";
   import Turn from "../turn/Turn.svelte";
   import Well from "../turn/Well.svelte";
@@ -90,6 +89,22 @@
     ondelete: () => Promise<void>;
     onclose: () => void;
   } = $props();
+
+  /**
+   * The thread's words as the transcript sets them (MessageBody and its
+   * markdown), loaded once a pin with a thread opens: an artifact's own tab
+   * never draws one before then, and the markdown is the heaviest thing it
+   * would otherwise load at first paint. The thread's room stands once it
+   * has, so it opens at its newest entry as before.
+   */
+  let Body = $state<Component<{ source: string }> | null>(null);
+  $effect(() => {
+    if (pin.thread.length > 0 && !Body) {
+      import("../MessageBody.svelte").then((loaded) => {
+        Body = loaded.default;
+      });
+    }
+  });
 
   let height = $state(0);
   let width = $state(0);
@@ -329,7 +344,7 @@
   <!-- What the pin holds, the one part that scrolls: the head stands over it
        and the field and its actions under it, never a scroll away; the
        house edge fade says there is more above or below. -->
-  {#if pin.thread.length > 0}
+  {#if pin.thread.length > 0 && Body}
     <div
       class={["room kit-edge-fade-block", squeezed && "whole"]}
       data-pin-room
@@ -353,13 +368,13 @@
                   {#if grouped}
                     <Who grouped name="You" timestamp={entry.at} you />
                   {/if}
-                  <MessageBody source={entry.text} />
+                  <Body source={entry.text} />
                 </Well>
               </Turn>
             {:else}
               <Turn {grouped}>
                 <Who {grouped} name={agentName} timestamp={entry.at} />
-                <MessageBody source={entry.text} />
+                <Body source={entry.text} />
               </Turn>
             {/if}
             {#if entry.by === "agent" && entry.files?.length}

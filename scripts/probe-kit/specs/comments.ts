@@ -353,6 +353,7 @@ const run = async (kit: Kit) => {
     () => dismissChecks(on),
     () => roomChecks(on),
     () => wordlessChecks(on),
+    () => documentChecks(on),
   ]) {
     // biome-ignore lint/performance/noAwaitInLoops: the checks run in order, one after another
     await shutList(on);
@@ -2252,6 +2253,48 @@ const wordlessChecks = async (on: On) => {
   );
   await on.page.keyboard.press("Escape");
   await on.page.keyboard.press("Escape");
+};
+
+/**
+ * 8. A markdown document opens in the lightbox with its words set as
+ * markdown: the lightbox loads them (MessageBody) when a document first
+ * needs them. Attached in the composer and opened from its chip; never sent.
+ */
+const documentChecks = async (on: On) => {
+  await on.page
+    .locator("input.hidden-file")
+    .first()
+    .setInputFiles({
+      name: "notes.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("# Notes heading\n\nSome **bold** words."),
+    });
+  const chip = on.page.getByRole("button", { name: "Open notes.md" }).first();
+  await chip.waitFor({ timeout: 10_000 }).catch(() => undefined);
+  await chip.click().catch(() => undefined);
+  const doc = await until(
+    "the document's markdown in the lightbox",
+    () =>
+      on.page.evaluate(() => {
+        const body = document.querySelector(".doc-body");
+        const heading = body?.querySelector("h1, h2")?.textContent?.trim();
+        const strong = body?.querySelector("strong")?.textContent?.trim();
+        return heading && strong ? { heading, strong } : null;
+      }),
+    Boolean,
+    10_000
+  ).catch(() => null);
+  on.kit.check(
+    "8: a markdown document opens in the lightbox with its words set as markdown (its heading a heading, its bold strong)",
+    doc?.heading === "Notes heading" && doc.strong === "bold",
+    JSON.stringify(doc)
+  );
+  await on.page.keyboard.press("Escape");
+  await on.page
+    .getByRole("button", { name: "Remove notes.md" })
+    .first()
+    .click()
+    .catch(() => undefined);
 };
 
 /** Pin `number`'s card in the pane, and whether its field has the keyboard. */
