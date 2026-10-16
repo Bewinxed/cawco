@@ -969,6 +969,67 @@ async function widths(kit: Kit, fleet: KitFleet) {
   }
 }
 
+/**
+ * One row more than the scenario seeds (the fleet's upstream question, asked
+ * again): the list stands inside the panel, the panel inside the viewport,
+ * and the list scrolls inside itself, down to its last row, never sideways.
+ */
+async function extraRow(kit: Kit, fleet: KitFleet) {
+  fleet.write("DELETE FROM upstream_settings");
+  const base = await fleet.dashboard();
+  for (const view of ["desk", "phone"] as View[]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one width at a time
+    const page = await kit.page(view);
+    await openPanel(page, base);
+    await page.waitForSelector('.caw-pop .row[data-kind="choice"]', {
+      timeout: 30_000,
+    });
+    const box = await page.evaluate(() => {
+      const pop = document.querySelector(".caw-pop") as HTMLElement;
+      const list = pop.querySelector(".list") as HTMLElement;
+      const p = pop.getBoundingClientRect();
+      const l = list.getBoundingClientRect();
+      const rest = list.scrollHeight;
+      list.scrollTop = list.scrollHeight;
+      const last = list.lastElementChild?.getBoundingClientRect();
+      return {
+        inPanel:
+          l.top >= p.top - 0.5 &&
+          l.bottom <= p.bottom + 0.5 &&
+          l.left >= p.left - 0.5 &&
+          l.right <= p.right + 0.5,
+        onScreen: p.top >= -0.5 && p.bottom <= window.innerHeight + 0.5,
+        scrolls:
+          rest > list.clientHeight &&
+          getComputedStyle(list).overflowY === "auto",
+        sideways: list.scrollWidth > list.clientWidth,
+        lastReached: !!last && last.bottom <= l.bottom + 0.5,
+        fit: `${list.scrollWidth}×${rest} in ${list.clientWidth}×${list.clientHeight}; list ${Math.round(l.top)}–${Math.round(l.bottom)} in panel ${Math.round(p.top)}–${Math.round(p.bottom)} of ${window.innerHeight}`,
+      };
+    });
+    kit.check(
+      `one row more: the list stands in the panel and scrolls inside it to its last row, never sideways (${view})`,
+      box.inPanel &&
+        box.onScreen &&
+        box.scrolls &&
+        !box.sideways &&
+        box.lastReached,
+      `${JSON.stringify({ ...box, fit: undefined })} ${box.fit}`
+    );
+    await page.close();
+  }
+  const answered = await fetch(`${fleet.base}/api/fleet/choices`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ upstream: false }),
+  });
+  kit.check(
+    "the fleet's upstream choice answered again",
+    answered.ok,
+    `${answered.status}`
+  );
+}
+
 async function peek(kit: Kit, fleet: KitFleet) {
   const base = await fleet.dashboard();
   // The transcript's permission card, desk and phone.
@@ -1251,6 +1312,7 @@ const spec: Spec = {
         movedIds.join(", ")
       );
       await widths(kit, fleet);
+      await extraRow(kit, fleet);
       // Sessions for the home's lists: one at work, one finished.
       const work = await fleet.spawn("claude", WORK_TITLE, fleet.workdir, {
         permissionMode: "default",
