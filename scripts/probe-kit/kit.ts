@@ -64,9 +64,45 @@ export interface Spec {
   run: (kit: Kit) => Promise<void>;
 }
 
+/**
+ * What `--approve` asks of one spec: every baseline it writes
+ * (`--approve <spec>`), or the entries named (`--approve <spec>:<entry>,…`).
+ */
+export type Approval = "all" | readonly string[];
+
+/**
+ * A baseline entry's name as `--approve` names it: lower case, every run of
+ * other characters one dash ("phone 390" is `phone-390`).
+ */
+export const entrySlug = (entry: string): string =>
+  entry
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+/**
+ * Where approved baselines live: `baselines/` beside the kit, or the folder
+ * `PROBE_BASELINES` names (a scratch copy, to prove an approve on).
+ */
+const BASELINES_ROOT =
+  process.env.PROBE_BASELINES ?? join(import.meta.dir, "baselines");
+
 export interface Kit {
-  /** Whether `--approve` names this spec: its diffs write their baselines. */
+  /**
+   * Whether `--approve` names this spec: this run writes baselines, the
+   * entries `approves` names, and a spec skips what reads against them.
+   */
   approve: boolean;
+  /**
+   * Whether this run writes `entry`'s baseline (a capture's name, or a
+   * spec's own entry such as a leg): every one for `--approve <spec>`, only
+   * those named for `--approve <spec>:<entry>,…`, matched by `entrySlug`.
+   * A spec asks it of every entry it could write: a name it never asks of
+   * fails the run, so a misspelt entry never passes as approved.
+   */
+  approves: (entry: string) => boolean;
+  /** This spec's approved baselines: `baselines/web/<spec>/`. */
+  baselines: string;
   /** The dev server against no hub: the `/motion/` benches, which need none. */
   bench: () => Promise<string>;
   /** The built dashboard against no hub (built once per run): a bench a runtime spec times. */
@@ -296,7 +332,11 @@ export class Run {
   }
 
   /** Runs one spec with its own pages and fleets, closed after it however it ends. */
-  async spec(spec: Spec, approve: boolean): Promise<void> {
+  async spec(spec: Spec, approval: Approval | null): Promise<void> {
+    const named = approval === null || approval === "all" ? [] : approval;
+    const asked = named.map(entrySlug);
+    /** Every entry the spec asked `approves` of: what it could write. */
+    const offered = new Set<string>();
     const contexts: BrowserContext[] = [];
     const ends: (() => Promise<void>)[] = [];
     const out = join(
@@ -310,7 +350,13 @@ export class Run {
     await mkdir(out, { recursive: true });
     const kit: Kit = {
       spec: spec.name,
-      approve,
+      approve: approval !== null,
+      approves: (entry) => {
+        const slug = entrySlug(entry);
+        offered.add(slug);
+        return approval === "all" || asked.includes(slug);
+      },
+      baselines: join(BASELINES_ROOT, "web", spec.name),
       out,
       check: (assertion, ok, detail) => {
         console.log(
@@ -406,6 +452,14 @@ export class Run {
     const started = performance.now();
     try {
       await spec.run(kit);
+      const unknown = asked.filter((entry) => !offered.has(entry));
+      if (unknown.length > 0) {
+        kit.check(
+          "--approve names entries this spec writes",
+          false,
+          `no ${unknown.join(", ")}; it writes ${[...offered].join(", ") || "none"}`
+        );
+      }
     } catch (error) {
       kit.check(
         "runs to its end",

@@ -6,9 +6,11 @@
  * a failed diff writes the region that changed, cropped, beside the capture
  * for a reviewer, and names its path.
  *
- * `--approve <spec>` writes the spec's captures as its baselines: the
+ * `--approve <spec>` writes the spec's captures as its baselines, and
+ * `--approve <spec>:<name>,…` the captures named alone (`kit.approves`): the
  * orchestrator runs it, after the owner approves what they show. A capture
- * with no baseline yet is a note, written for that review, not a pass.
+ * not named is held to its baseline as in any run. A capture with no
+ * baseline yet is a note, written for that review, not a pass.
  */
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -17,8 +19,6 @@ import pixelmatch from "pixelmatch";
 import type { Page } from "playwright-core";
 import { PNG } from "pngjs";
 import type { Kit } from "./kit";
-
-const BASELINES = join(import.meta.dir, "baselines", "web");
 
 export interface DiffOptions {
   /** The page region, css px; the viewport when left out. */
@@ -45,11 +45,11 @@ export async function diff(
     animations: "allow",
     caret: "hide",
   });
-  const baseline = join(BASELINES, kit.spec, `${name}.png`);
+  const baseline = join(kit.baselines, `${name}.png`);
   const capture = join(kit.out, `${name}.png`);
   await mkdir(dirname(capture), { recursive: true });
   await writeFile(capture, shot);
-  if (kit.approve) {
+  if (kit.approves(name)) {
     await mkdir(dirname(baseline), { recursive: true });
     await writeFile(baseline, shot);
     kit.note(`${name}: baseline approved (${baseline})`);

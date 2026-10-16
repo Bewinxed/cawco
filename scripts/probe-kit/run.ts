@@ -2,7 +2,7 @@
 /**
  * The probe kit: every web UI proof, read from the engine, not the picture.
  *
- *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>]
+ *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]]
  *   bun scripts/probe-kit/run.ts <spec>
  *
  * The second form runs one spec of its own in `specs/<spec>.ts`, beside the
@@ -16,8 +16,13 @@
  * `PASS <spec>: <assertion>` / `FAIL <spec>: …` per assertion, then
  * `ALL PASS` or `N FAILED`. Exits 0 only when every assertion passed.
  *
- * `--approve <spec>` writes that spec's pixel baselines from this run
- * (diff.ts): only after the owner has approved what they show.
+ * `--approve <spec>` writes every baseline that spec keeps from this run
+ * (diff.ts's captures, a spec's own file such as project-bar's legs);
+ * `--approve <spec>:<entry>,…` writes only the entries named (a capture's
+ * name, or a leg's as a slug: `project-bar:phone-390`), every other entry
+ * left as it is to the byte. Only after the owner has approved what they
+ * show. `PROBE_BASELINES=<dir>` reads and writes the baselines under `<dir>`
+ * instead: a scratch copy, to prove an approve on.
  *
  * What each level proves is the fleet's rule 7: state and geometry first
  * (geom.ts), motion by seeking the clock (anim.ts), regressions by pixel
@@ -28,7 +33,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { ensureDeps } from "../lib/deps";
-import type { Spec } from "./kit";
+import type { Approval, Spec } from "./kit";
 
 // The dependencies first (lib/deps.ts): the kit and the fleet load after them.
 await ensureDeps();
@@ -50,12 +55,30 @@ const [kind, ...rest] = args;
 const own = kind ? join(import.meta.dir, "specs", `${kind}.ts`) : undefined;
 if (kind !== "web" && !(own && existsSync(own))) {
   console.error(
-    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>]\n       bun scripts/probe-kit/run.ts <spec>  (a spec in specs/)"
+    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]]\n       bun scripts/probe-kit/run.ts <spec>  (a spec in specs/)"
   );
   process.exit(2);
 }
 const approveAt = rest.indexOf("--approve");
-const approve = approveAt === -1 ? null : (rest[approveAt + 1] ?? null);
+const approveArg = approveAt === -1 ? null : (rest[approveAt + 1] ?? null);
+// `<spec>` approves every baseline it writes; `<spec>:<entry>,…` those named.
+const colon = approveArg?.indexOf(":") ?? -1;
+const approve =
+  approveArg === null || colon === -1 ? approveArg : approveArg.slice(0, colon);
+const entries =
+  approveArg === null || colon === -1
+    ? null
+    : approveArg
+        .slice(colon + 1)
+        .split(",")
+        .filter((entry) => entry.length > 0);
+if (entries?.length === 0) {
+  console.error(
+    `--approve ${approveArg}: name an entry after the colon, or none and no colon for all`
+  );
+  process.exit(2);
+}
+const approval: Approval | null = approve === null ? null : (entries ?? "all");
 const named =
   kind === "web"
     ? rest.filter(
@@ -94,7 +117,7 @@ try {
   for (const name of chosen) {
     // biome-ignore lint/performance/noAwaitInLoops: one spec at a time, each with the machine to itself
     const spec = (await import(join(dir, `${name}.ts`))).default as Spec;
-    await run.spec(spec, approve === name);
+    await run.spec(spec, approve === name ? approval : null);
   }
 } finally {
   await run.close();

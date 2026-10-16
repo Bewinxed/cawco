@@ -21,18 +21,23 @@
  * them. Its entry was read again on main at fe73d0f7b: the name in the head
  * stands in a 1px edge, clear at rest (7817bf0a8), 1.99px taller.
  *
- * `--approve project-bar` writes `before.json` from this run: on main, once.
- * The wide legs' entries are the page from before the strip moved into the
- * bar (they hold its row), so they are never approved again.
+ * CAUTION: the wide legs' entries (desk 1440, desk 1024, tablet 1024
+ * sideways) are the page from before the strip moved into the bar: they
+ * hold its row, which no longer exists. Approving them from any run since
+ * loses what the row-gone checks read against. Approve a leg by its name:
+ * `--approve project-bar:phone-390` rewrites that entry of `before.json`
+ * alone, every other leg left as it is to the byte. A bare
+ * `--approve project-bar` rewrites every leg.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one step at a time, as a hand makes them
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Page } from "playwright-core";
+import { format, resolveConfig } from "prettier";
 import { MACHINE, type Seen } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { type Kit, open, ROOT, type Spec, settle } from "../../kit";
 
 const NAME = "Routines";
 const VIEWS = [
@@ -43,15 +48,6 @@ const VIEWS = [
   "bug-bash",
 ];
 const TABS = 3 + VIEWS.length;
-const BASELINE = join(
-  import.meta.dir,
-  "..",
-  "..",
-  "baselines",
-  "web",
-  "project-bar",
-  "before.json"
-);
 const TABLIST = "[role='tablist'][aria-label='Views']";
 const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
 
@@ -442,6 +438,47 @@ async function motion(kit: Kit, url: string) {
   await page.close();
 }
 
+/**
+ * Writes the legs `--approve` names into `before.json` from this run, every
+ * other leg kept as it stands, in the legs' order, formatted as the
+ * repository formats it (prettier on its `.prettierrc`), so a leg not named
+ * keeps its text to the byte.
+ */
+async function approveLegs(
+  kit: Kit,
+  file: string,
+  read: Record<string, Layout>
+): Promise<void> {
+  const kept = existsSync(file)
+    ? (JSON.parse(await readFile(file, "utf8")) as Record<string, Layout>)
+    : {};
+  const next: Record<string, Layout> = {};
+  const written: string[] = [];
+  for (const leg of LEGS) {
+    if (kit.approves(leg.name)) {
+      next[leg.name] = read[leg.name] as Layout;
+      written.push(leg.name);
+    } else if (kept[leg.name]) {
+      next[leg.name] = kept[leg.name] as Layout;
+    }
+  }
+  if (written.length === 0) {
+    return;
+  }
+  // The config is the repository's whatever folder the file is in (a
+  // scratch copy too): resolved from a file at its root.
+  const config = await resolveConfig(join(ROOT, "package.json"));
+  // Laid out first as the file is (an object prettier finds broken over
+  // lines it keeps broken), then formatted.
+  const text = await format(`${JSON.stringify(next, null, 2)}\n`, {
+    ...config,
+    parser: "json",
+  });
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, text);
+  kit.note(`wrote ${written.join(", ")} into ${file}`);
+}
+
 const spec: Spec = {
   name: "project-bar",
   async run(kit) {
@@ -490,17 +527,16 @@ const spec: Spec = {
       read[leg.name] = await layout(page, NAME);
       await page.close();
     }
+    const baseline = join(kit.baselines, "before.json");
     if (kit.approve) {
-      await mkdir(join(BASELINE, ".."), { recursive: true });
-      await writeFile(BASELINE, `${JSON.stringify(read, null, 2)}\n`);
-      kit.note(`wrote ${BASELINE}`);
+      await approveLegs(kit, baseline, read);
       return;
     }
-    if (!existsSync(BASELINE)) {
-      kit.check("before.json exists (approve on main)", false, BASELINE);
+    if (!existsSync(baseline)) {
+      kit.check("before.json exists (approve on main)", false, baseline);
       return;
     }
-    const before = JSON.parse(await readFile(BASELINE, "utf8")) as Record<
+    const before = JSON.parse(await readFile(baseline, "utf8")) as Record<
       string,
       Layout
     >;
