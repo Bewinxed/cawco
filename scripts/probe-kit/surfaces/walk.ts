@@ -147,7 +147,7 @@ export async function passPage(
 /**
  * Waits until the page stops changing: fonts and images in, every animation
  * held, and its elements, their boxes and their inline styles the same on
- * four reads in a row 100ms apart.
+ * four reads in a row 60ms apart.
  */
 export async function stand(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
@@ -171,7 +171,7 @@ export async function stand(page: Page): Promise<void> {
     });
     still = now === last ? still + 1 : 0;
     last = now;
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(60);
   }
   await holdStill(page);
 }
