@@ -45,6 +45,14 @@ import { join, relative } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 const SOURCES = ["apps/dashboard/src"];
+/**
+ * The Tailwind variants generated from the components' own attribute
+ * selectors (`bun run variants`): it names every `data-` attribute a
+ * component styles (`tone-fail:` is `[data-tone="fail"]`), yet styles no
+ * element itself. A variant reaches only an element whose own markup writes
+ * the attribute, and that file is counted.
+ */
+const NAMED_VARIANTS = "apps/dashboard/src/lib/tokens/variants.css";
 const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
 const ALLOW = /^\/\*\s*css-scope:\s*\S/;
 /** `/* css-scope .a .b: why *\/`: names this component owns though another file uses them. */
@@ -329,6 +337,9 @@ function wordIndex(): Map<string, Set<string>> {
   const index = new Map<string, Set<string>>();
   for (const file of files) {
     const at = relative(ROOT, file);
+    if (at === NAMED_VARIANTS) {
+      continue;
+    }
     // A module's path names no element (`…/ui/thinking-steps/index.js`).
     const text = readFileSync(file, "utf8").replace(IMPORTED, "");
     for (const [word] of text.matchAll(WORD)) {
