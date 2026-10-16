@@ -8,15 +8,17 @@
 # HTTP) and the machines its checks need. Each check prints one line ending in PASS (with its seconds), FAIL or NOT RUN.
 # PROOF_ONLY (an extended regex) runs only the rigs whose name, or one of whose checks' names, matches it; PROOF_LIST=1
 # says which rigs and checks a run would run and stops. PROOF_RIGS caps how many rigs run at once (default: all).
-#   bash scripts/binary/prove-stage2.sh --image-only /ABSOLUTE/OUTPUT
+#   bash scripts/binary/prove-stage2.sh --image-only [OUTPUT]
 # builds only the proof's images (host and machine) into the proof cache's store, prints their tags, and exits 0, or
-# with the build's error; it needs podman and bun, and no binaries.
+# with the build's error; it needs podman and bun, and no binaries. Its recipes go in OUTPUT (default: image-only in the
+# proof cache).
 set -uo pipefail
 IMAGE_ONLY=
 if [[ ${1:-} == --image-only ]]; then
   IMAGE_ONLY=1
   shift
-  [[ $# == 1 && "$1" = /* ]] || { echo "usage: $0 --image-only /absolute/output" >&2; exit 2; }
+  (( $# <= 1 )) || { echo "usage: $0 --image-only [output]" >&2; exit 2; }
+  set -- "${1:-${CAWCO_PROOF_CACHE:-$HOME/.cache/cawco-proof}/image-only}"
 else
   [[ $# == 2 && "$1" = /* && "$2" = /* ]] || { echo "usage: $0 /absolute/fresh/output /absolute/binaries" >&2; exit 2; }
 fi
