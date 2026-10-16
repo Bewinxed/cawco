@@ -711,11 +711,13 @@ async function measure(
     document.addEventListener(
       "scroll",
       (event) => {
+        // Where, not how far: the offset is a read of the page's layout,
+        // which styled it inside the very task being measured.
         const box = event.target;
         if (box instanceof HTMLElement) {
           later.push({
             at: performance.now(),
-            line: `scrolled ${paneOf(box)} ${box.className.split(" ")[0]} to ${Math.round(box.scrollTop)}px`,
+            line: `scrolled ${paneOf(box)} ${box.className.split(" ")[0]}`,
           });
         }
       },
