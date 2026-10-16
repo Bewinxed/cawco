@@ -104,14 +104,20 @@
   /* The session's tabs at the top: the phone's tab row under the floating
      bar, or the wide bar hosting them on their shelf. Under the narrow
      query the bar draws itself raised even while hosting (Shell). */
+  /* The bar is read down its own line of parents, the page's root to the
+     Shell's (app.html's body div, Shell `.shell` > `.main` > `.top`): asked
+     as `:root:has(.top.floating)`, every style pass after anything went into
+     the page searched the whole document for it, twice — every streamed
+     message, every forced read in a tab switch. Down a line of children it
+     is four elements, and it is answered in the page the server sends. */
   /* css-scope: reads the Shell's bar from the root to colour the top edge */
-  :global(:root:has(.top.floating)),
-  :global(:root:has(.top.hosting)) {
+  :global(:root:has(> body > div > .shell > .main > .top.floating)),
+  :global(:root:has(> body > div > .shell > .main > .top.hosting)) {
     --edge-top-under: var(--surface-shelf);
   }
   @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
     /* css-scope: reads the Shell's bar from the root to colour the top edge */
-    :global(:root:has(.top.hosting)) {
+    :global(:root:has(> body > div > .shell > .main > .top.hosting)) {
       --edge-top-under: var(--surface-raised);
     }
   }

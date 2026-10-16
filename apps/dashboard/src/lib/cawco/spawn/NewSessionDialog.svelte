@@ -2306,8 +2306,10 @@
     /* The sheet leaves as the dialog does: --dur-exit on --ease-out, with
        its scrim, instead of vaul's 500ms slide. */
     :global(.session-card[data-vaul-drawer][data-state="closed"]),
+    /* The sheet is portalled straight into <body>: asked of the body's own
+       children, so a change anywhere in the page is not a search of it. */
     :global(
-      body:has(.session-card[data-vaul-drawer])
+      body:has(> .session-card[data-vaul-drawer])
         [data-vaul-overlay][data-state="closed"]
     ) {
       animation-duration: var(--dur-exit);
