@@ -55,7 +55,7 @@
         type="button"
         class:visible={selected}
       >
-        <IconTrash class="size-3" />
+        <IconTrash class="size-icon-sm" />
       </button>
     {/if}
   </div>

@@ -14,7 +14,7 @@
 </script>
 
 <ul
-  class={cn("flex w-full min-w-0 flex-col gap-1", className)}
+  class={cn("flex w-full min-w-0 flex-col gap-space-1", className)}
   data-sidebar="menu"
   data-slot="sidebar-menu"
   bind:this={ref}

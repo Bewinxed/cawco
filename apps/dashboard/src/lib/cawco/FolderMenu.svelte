@@ -131,20 +131,18 @@
     <ContextMenu.Sub>
       <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
       <ContextMenu.SubTrigger class="gap-2.5">
-        <IconPalette class="size-4" />
+        <IconPalette class="size-icon-md" />
         <span>Customize</span>
       </ContextMenu.SubTrigger>
       <ContextMenu.SubContent
         class="w-64 rounded-[var(--radius-lg)] p-3 shadow-xl"
       >
-        <div class="flex items-center justify-between pb-2 pl-1">
-          <span class="text-label font-medium text-muted-foreground"
-            >Colour</span
-          >
+        <div class="flex items-center justify-between pb-2 pl-space-1">
+          <span class="text-label font-medium text-ink-muted">Colour</span>
           {#if pickedHue !== undefined}
             <button
-              class="rounded-full px-2 py-0.5 text-label text-muted-foreground
-                     transition-colors duration-(--dur-control) hover:bg-accent hover:text-foreground"
+              class="rounded-full px-2 py-0.5 text-label text-ink-muted
+                     transition-colors duration-(--dur-control) hover:bg-accent hover:text-ink-strong"
               onclick={() => folderPrefs.setHue(cwd, undefined)}
               type="button"
             >
@@ -160,7 +158,7 @@
             {@const on = folderPrefs.hue(cwd) === hue}
             <button
               aria-pressed={on}
-              class="focus-inset flex size-8 items-center justify-center rounded-full transition-colors
+              class="focus-inset flex size-space-8 items-center justify-center rounded-full transition-colors
                      duration-(--dur-control)
                      aria-pressed:outline-solid aria-pressed:outline-[length:var(--focus-ring-width)]
                      aria-pressed:outline-offset-[var(--focus-ring-inset)] aria-pressed:outline-[var(--ink-strong)]
@@ -174,7 +172,7 @@
               <!-- The chosen hue is ringed where the focus ring would be, in
                    ink; focus on it recolours that one ring. -->
               <span
-                class="identity-ink size-5 rounded-full bg-current"
+                class="identity-ink size-icon-lg rounded-full bg-current"
                 style={swatch(hue)}
               ></span>
             </button>

@@ -147,7 +147,7 @@
     </form>
   {:else}
     <Button
-      class="self-start text-muted-foreground"
+      class="self-start text-ink-muted"
       onclick={() => {
         adding = true;
       }}

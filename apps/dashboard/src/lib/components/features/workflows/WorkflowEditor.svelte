@@ -480,7 +480,7 @@
             type="button"
           >
             <span class="kind-mark" class:filled={entry.kind === "step"}
-              ><entry.icon class="size-4" /></span
+              ><entry.icon class="size-icon-md" /></span
             >
             {#if !paletteCollapsed || narrow.current}
               <span transition:crossIn

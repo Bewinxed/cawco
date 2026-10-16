@@ -78,7 +78,7 @@
   <Dialog.Content
     aria-label={`Diff: ${filePath}`}
     bodyClass="flex h-full flex-col gap-0 overflow-hidden p-0"
-    class="h-[90vh] w-[95vw] sm:max-w-7xl"
+    class="h-[90vh] w-[95vw] phone:max-w-320"
   >
     <header class="head">
       <div class="flex min-w-0 items-center gap-3">
@@ -94,8 +94,8 @@
           />
         </div>
         <div class="num flex items-center gap-2 text-meta">
-          <span class="text-success">+{stats.additions}</span>
-          <span class="text-error">-{stats.deletions}</span>
+          <span class="text-success-9">+{stats.additions}</span>
+          <span class="text-error-9">-{stats.deletions}</span>
         </div>
       </div>
       <ToggleGroup.Root

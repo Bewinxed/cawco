@@ -39,7 +39,7 @@
           />
         {:else if item.lead.kind === "machine"}
           <span class="lead" data-box
-            ><OsMark class="size-4" os={item.lead.os} /></span
+            ><OsMark class="size-icon-md" os={item.lead.os} /></span
           >
         {:else}
           <span class="lead" data-box

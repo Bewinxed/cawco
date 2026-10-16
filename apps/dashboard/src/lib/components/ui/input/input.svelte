@@ -34,11 +34,11 @@
       "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
       "text-body file:inline-flex file:h-7",
       "file:border-0 file:bg-transparent file:font-medium",
-      "file:text-foreground file:text-label",
-      "placeholder:text-muted-foreground",
+      "file:text-ink-strong file:text-label",
+      "placeholder:text-ink-muted",
       "disabled:pointer-events-none disabled:cursor-not-allowed",
-      "disabled:opacity-50 aria-invalid:border-destructive",
-      "dark:aria-invalid:border-destructive/50",
+      "disabled:opacity-50 aria-invalid:border-error-9",
+      "dark:aria-invalid:border-error-9/50",
       className
     )}
     data-slot={dataSlot}
@@ -56,11 +56,11 @@
       "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
       "text-body file:inline-flex file:h-7",
       "file:border-0 file:bg-transparent file:font-medium",
-      "file:text-foreground file:text-label",
-      "placeholder:text-muted-foreground",
+      "file:text-ink-strong file:text-label",
+      "placeholder:text-ink-muted",
       "disabled:pointer-events-none disabled:cursor-not-allowed",
-      "disabled:opacity-50 aria-invalid:border-destructive",
-      "dark:aria-invalid:border-destructive/50",
+      "disabled:opacity-50 aria-invalid:border-error-9",
+      "dark:aria-invalid:border-error-9/50",
       className
     )}
     data-slot={dataSlot}

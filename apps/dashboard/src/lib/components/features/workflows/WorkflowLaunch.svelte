@@ -139,7 +139,7 @@
   }}
   bind:open={shown}
   ><Dialog.Content
-    class="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+    class="max-h-[90dvh] overflow-y-auto phone:max-w-144"
     escapeKeydownBehavior={busy ? "ignore" : "close"}
     interactOutsideBehavior={busy ? "ignore" : "close"}
     bind:ref={content}

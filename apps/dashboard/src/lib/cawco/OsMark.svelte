@@ -36,11 +36,11 @@
 </script>
 
 {#if shape === "unknown"}
-  <IconServer class={cn("size-4 shrink-0", className)} />
+  <IconServer class={cn("size-icon-md shrink-0", className)} />
 {:else}
   <svg
     aria-hidden="true"
-    class={cn("size-4 shrink-0", className)}
+    class={cn("size-icon-md shrink-0", className)}
     fill="currentColor"
     viewBox="0 0 16 16"
   >

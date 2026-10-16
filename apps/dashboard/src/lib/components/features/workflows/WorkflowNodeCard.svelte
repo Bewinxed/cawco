@@ -98,7 +98,7 @@
   {/if}
   <header class="mark-line">
     <span class="glyph" class:filled={modelled} data-box
-      ><Glyph aria-hidden="true" class="size-4" /></span
+      ><Glyph aria-hidden="true" class="size-icon-md" /></span
     ><strong>{title}</strong>
   </header>
   <div class="body">

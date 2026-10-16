@@ -484,7 +484,7 @@
             }}
           >
             <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
-            <label class="flex flex-col gap-1 text-meta text-muted-foreground">
+            <label class="flex flex-col gap-space-1 text-meta text-ink-muted">
               First prompt (optional)
               <Input
                 autocomplete="off"
@@ -685,7 +685,7 @@
   />
 {/if}
 <!-- A forget asked from `⋯`, under the head, from where its title starts. -->
-<ForgetProjectTray at={forgetAt} class="head-forget max-w-lg" />
+<ForgetProjectTray at={forgetAt} class="head-forget max-w-128" />
 
 <style>
   /* The head's own leading padding, so the tray starts where its words do;

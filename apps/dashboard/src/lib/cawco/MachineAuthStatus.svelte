@@ -61,7 +61,7 @@
           tabindex="-1"
           {@attach (node) => node.focus()}
         >
-          <span class="mark text-muted-foreground">
+          <span class="mark text-ink-muted">
             <Spinner aria-hidden="true" class="size-6" role="presentation" />
           </span>
           <p class="title" id={titleId}>{working.title}</p>
@@ -76,7 +76,7 @@
       {:else if answer}
         <!-- mark-line: a column; the mark stands above the title -->
         <div class="flex flex-col gap-[var(--space-2)]" role="status">
-          <span class="mark enter {ok ? 'text-success' : 'text-warning'}">
+          <span class="mark enter {ok ? 'text-success-9' : 'text-warning-9'}">
             {#if ok}
               <IconSuccess class="size-9" />
             {:else}

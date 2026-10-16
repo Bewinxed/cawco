@@ -18,13 +18,13 @@
     "peer group/switch relative inline-flex shrink-0 items-center",
     "rounded-[var(--radius-pill)] border border-transparent",
     "kit-switch touch-hit pointer-hit",
-    "aria-invalid:border-destructive",
+    "aria-invalid:border-error-9",
     "data-[size=default]:h-[18.4px] data-[size=sm]:h-[14px]",
     "data-[size=default]:w-[32px] data-[size=sm]:w-[24px]",
-    "data-disabled:cursor-not-allowed data-checked:bg-action-solid",
-    "data-unchecked:bg-input data-disabled:opacity-50",
-    "dark:data-unchecked:bg-input/80",
-    "dark:aria-invalid:border-destructive/50",
+    "state-checked:bg-action-solid data-disabled:cursor-not-allowed",
+    "state-unchecked:bg-input data-disabled:opacity-50",
+    "dark:state-unchecked:bg-input/80",
+    "dark:aria-invalid:border-error-9/50",
     className
   )}
   data-size={size}
@@ -34,7 +34,7 @@
   {...restProps}
 >
   <SwitchPrimitive.Thumb
-    class="rounded-[var(--radius-pill)] bg-background group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-on-action group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-foreground kit-switch-thumb pointer-events-none block ring-0 rtl:data-[state=checked]:translate-x-[calc(-100%)]"
+    class="rounded-[var(--radius-pill)] bg-surface-page group-data-[size=default]/switch:size-icon-md group-data-[size=sm]/switch:size-icon-sm group-data-[size=default]/switch:state-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:state-checked:translate-x-[calc(100%-2px)] dark:state-checked:bg-on-action group-data-[size=default]/switch:state-unchecked:translate-x-0 group-data-[size=sm]/switch:state-unchecked:translate-x-0 dark:state-unchecked:bg-ink-strong kit-switch-thumb pointer-events-none block ring-0 rtl:data-[state=checked]:translate-x-[calc(-100%)]"
     data-slot="switch-thumb"
   />
 </SwitchPrimitive.Root>

@@ -53,7 +53,7 @@
         onclick={ondismiss}
         type="button"
       >
-        <IconClose aria-hidden="true" class="size-3" />
+        <IconClose aria-hidden="true" class="size-icon-sm" />
       </button>
     </span>
   {/if}

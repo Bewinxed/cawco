@@ -340,7 +340,7 @@
   <span class="end" {@attach trailWidth}>
     <span class="cell num trail mark-line" title={pending ?? hint}>
       {#if compact && (pending || renaming !== null)}
-        <Spinner aria-hidden="true" class="size-3.5" />
+        <Spinner aria-hidden="true" class="size-space-4" />
       {:else}
         <span>{trail}</span>
       {/if}

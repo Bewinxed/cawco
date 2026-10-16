@@ -129,19 +129,19 @@
       {...restProps}
     >
       {#snippet loadingIcon()}
-        <Spinner class="size-4" />
+        <Spinner class="size-icon-md" />
       {/snippet}
       {#snippet successIcon()}
-        <IconSuccess class="size-4" />
+        <IconSuccess class="size-icon-md" />
       {/snippet}
       {#snippet errorIcon()}
-        <IconError class="size-4" />
+        <IconError class="size-icon-md" />
       {/snippet}
       {#snippet infoIcon()}
-        <IconInfo class="size-4" />
+        <IconInfo class="size-icon-md" />
       {/snippet}
       {#snippet warningIcon()}
-        <IconWarningTriangle class="size-4" />
+        <IconWarningTriangle class="size-icon-md" />
       {/snippet}
     </Sonner>
   </div>

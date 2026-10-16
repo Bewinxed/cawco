@@ -345,23 +345,24 @@
             {#each steps as step, index (index)}
               <li class="mark-line" class:current={index === steps.length - 1}>
                 {#if index === steps.length - 1}
-                  <Spinner class="size-4" />
+                  <Spinner class="size-icon-md" />
                 {:else}
-                  <IconSuccess aria-hidden="true" class="size-4 done" />
+                  <IconSuccess aria-hidden="true" class="size-icon-md done" />
                 {/if}
                 <span>{step}</span>
               </li>
             {:else}
               <li class="current mark-line">
-                <Spinner class="size-4" /><span>Connecting over SSH</span>
+                <Spinner class="size-icon-md" /><span>Connecting over SSH</span>
               </li>
             {/each}
           </ol>
           <details class="output">
             <summary class="mark-line">
-              <IconChevronRight aria-hidden="true" class="chev size-4" /><span
-                >Output</span
-              >
+              <IconChevronRight
+                aria-hidden="true"
+                class="chev size-icon-md"
+              /><span>Output</span>
             </summary>
             <pre {@attach followTail()}>{job.lines.join("\n")}</pre>
           </details>
@@ -416,7 +417,7 @@
 
           <details class="output" bind:open={keyOpen}>
             <summary class="mark-line">
-              <IconChevronRight aria-hidden="true" class="chev size-4" />
+              <IconChevronRight aria-hidden="true" class="chev size-icon-md" />
               <span>This hub's SSH key</span>
             </summary>
             <div class="flex flex-col gap-[var(--space-2)] pt-[var(--space-2)]">
@@ -462,7 +463,7 @@
     <Button onclick={close} variant="outline">Cancel</Button>
     <Button disabled={!canStart} form="ssh-join" type="submit">
       {#if starting}
-        <Spinner class="size-4" />
+        <Spinner class="size-icon-md" />
       {/if}
       <span>{job?.state === "failed" ? "Retry" : "Add machine"}</span>
     </Button>
@@ -524,7 +525,7 @@
     }
   >
     <!-- Joined, Close is the one act the dialog offers, so it is the one button. -->
-    <Dialog.Content class="sm:max-w-lg" showCloseButton={!joined}>
+    <Dialog.Content class="phone:max-w-128" showCloseButton={!joined}>
       <Dialog.Header>
         <Dialog.Title>Connect a machine</Dialog.Title>
         {#if !joined}

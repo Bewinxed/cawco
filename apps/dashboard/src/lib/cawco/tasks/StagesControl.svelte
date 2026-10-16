@@ -192,8 +192,8 @@
       {:else if !problem}
         {#each [0, 1, 2, 3, 4, 5, 6] as row (row)}
           <li class="template-skeleton">
-            <Skeleton class="h-3.5 w-24" />
-            <Skeleton class="h-3 w-full" />
+            <Skeleton class="h-space-4 w-24" />
+            <Skeleton class="h-icon-sm w-full" />
           </li>
         {/each}
       {/if}

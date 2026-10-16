@@ -44,18 +44,18 @@
       return "font-medium";
     }
     if (task.status === "completed") {
-      return "text-muted-foreground";
+      return "text-ink-muted";
     }
     return "";
   };
 </script>
 
 {#snippet glyph(task: SessionTask)}
-  <span class="flex w-3 shrink-0 items-center justify-center">
+  <span class="flex w-icon-sm shrink-0 items-center justify-center">
     {#if task.status === "completed"}
       <svg
         aria-hidden="true"
-        class="text-success"
+        class="text-success-9"
         height="12"
         viewBox="0 0 12 12"
         width="12"
@@ -70,10 +70,9 @@
         />
       </svg>
     {:else if task.status === "in_progress"}
-      <span class="size-1.5 rounded-full bg-warning"></span>
+      <span class="size-1.5 rounded-full bg-warning-9"></span>
     {:else}
-      <span class="size-1.5 rounded-full border border-muted-foreground/40"
-      ></span>
+      <span class="size-1.5 rounded-full border border-ink-muted/40"></span>
     {/if}
   </span>
 {/snippet}
@@ -87,18 +86,18 @@
   >
   {#if task.owner}
     <span
-      class="shrink-0 rounded-full bg-muted px-1.5 text-label text-muted-foreground"
+      class="shrink-0 rounded-full bg-neutral-2 px-1.5 text-label text-ink-muted"
     >
       {task.owner}
     </span>
   {/if}
   {#if blocker}
-    <span class="ml-auto shrink-0 text-meta text-muted-foreground"
+    <span class="ml-auto shrink-0 text-meta text-ink-muted"
       >after #{blocker}</span
     >
   {/if}
   <span
-    class="shrink-0 font-mono text-meta text-muted-foreground tabular-nums {blocker
+    class="shrink-0 font-mono text-meta text-ink-muted tabular-nums {blocker
       ? ''
       : 'ml-auto'}"
     data-tabular>#{task.id}</span
@@ -107,12 +106,9 @@
 
 <div class="flex flex-col">
   {#if !dense}
-    <div class="flex items-baseline gap-2 px-3 pt-2 pb-1">
+    <div class="flex items-baseline gap-2 px-3 pt-2 pb-space-1">
       <span class="text-label">Tasks</span>
-      <span
-        class="ml-auto text-meta text-muted-foreground tabular-nums"
-        data-tabular
-      >
+      <span class="ml-auto text-meta text-ink-muted tabular-nums" data-tabular>
         {progress.done}
         of {progress.total}
       </span>
@@ -122,7 +118,7 @@
   {#each tasks as task (task.id)}
     {@const blocker = blockerOf(task, tasks)}
     {@const row = `flex w-full items-center gap-2 text-left ${
-      dense ? "min-h-8 px-2" : "min-h-9 px-3"
+      dense ? "min-h-space-8 px-2" : "min-h-9 px-3"
     } ${blocker ? "opacity-60" : ""}`}
     {#if task.description}
       <Collapsible.Root
@@ -140,7 +136,7 @@
           <p
             class="max-w-[60ch] pb-2 text-body whitespace-pre-line {dense
               ? 'pr-2 pl-7'
-              : 'pr-3 pl-8'}"
+              : 'pr-3 pl-space-8'}"
           >
             {task.description}
           </p>

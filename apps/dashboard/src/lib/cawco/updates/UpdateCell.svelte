@@ -30,7 +30,8 @@
   /** The machine's whole error, unfolded in place under the cell. */
   let reading = $state(false);
   const refused = $derived(updates.refused.get(machine.machineId));
-  const CHIP = "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-1 text-start";
+  const CHIP =
+    "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start";
 </script>
 
 <div class="cell" {@attach morph()}>
@@ -41,18 +42,18 @@
       {:else if cell.text}
         {#if cell.icon === "spinner"}
           <span class="line mark-line">
-            <Spinner class="size-4 shrink-0 text-muted-foreground" />
+            <Spinner class="size-icon-md shrink-0 text-ink-muted" />
             <span class="words">{cell.text}</span>
           </span>
         {:else}
           <Badge class={CHIP} variant={cell.fail ? "destructive" : "ghost"}>
             {#if cell.fail}
-              <span class="size-2 shrink-0 rounded-full bg-error" data-box
+              <span class="size-2 shrink-0 rounded-full bg-error-9" data-box
               ></span>
             {:else if cell.icon === "clock"}
-              <IconClock class="size-4 shrink-0" />
+              <IconClock class="size-icon-md shrink-0" />
             {:else if cell.icon === "download"}
-              <IconDownload class="size-4 shrink-0" />
+              <IconDownload class="size-icon-md shrink-0" />
             {/if}
             <span>{cell.text}</span>
           </Badge>
@@ -63,7 +64,7 @@
         {#each cell.buttons as button (button)}
           {#if button === "retry"}
             <Button
-              class="text-muted-foreground"
+              class="text-ink-muted"
               label="Retry"
               onclick={() => updates.installNow(machine)}
               size="xs"
@@ -72,7 +73,7 @@
           {:else if button === "error"}
             <Button
               aria-expanded={reading}
-              class="text-muted-foreground"
+              class="text-ink-muted"
               label={reading ? "Hide the error" : "Read the error"}
               onclick={() => {
                 reading = !reading;
@@ -82,7 +83,7 @@
             />
           {:else if button === "cancel"}
             <Button
-              class="text-muted-foreground"
+              class="text-ink-muted"
               label="Cancel"
               onclick={() => updates.cancel(machine)}
               size="xs"

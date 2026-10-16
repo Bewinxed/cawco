@@ -77,14 +77,14 @@
   transition:appear
 >
   <h2 class="pick-title">Pick a machine and folder</h2>
-  <div class="flex flex-col gap-1">
-    <span class="text-label text-muted-foreground" id="place-machine-label"
+  <div class="flex flex-col gap-space-1">
+    <span class="text-label text-ink-muted" id="place-machine-label"
       >Machine</span
     >
     <Select.Root type="single" bind:value={machineId}>
       <Select.Trigger
         aria-labelledby="place-machine-label"
-        class="w-full text-foreground"
+        class="w-full text-ink-strong"
         size="sm"
       >
         {machine ? `${machine.hostname} · ${machine.os}` : "No machines online"}
@@ -101,10 +101,8 @@
       </Select.Content>
     </Select.Root>
   </div>
-  <div class="flex flex-col gap-1">
-    <label class="text-label text-muted-foreground" for="place-folder"
-      >Folder</label
-    >
+  <div class="flex flex-col gap-space-1">
+    <label class="text-label text-ink-muted" for="place-folder">Folder</label>
     <Input
       autocomplete="off"
       class="font-mono"
@@ -128,7 +126,7 @@
       value={path}
     />
   {/if}
-  <div class="flex flex-wrap items-center gap-3 pt-1">
+  <div class="flex flex-wrap items-center gap-3 pt-space-1">
     <Button
       class="pressable"
       failed={problem !== null}
@@ -140,7 +138,8 @@
     />
     <Button label="Cancel" onclick={oncancel} size="sm" variant="ghost" />
     {#if problem}
-      <span class="text-label text-error" role="alert" in:appear>{problem}</span
+      <span class="text-label text-error-9" role="alert" in:appear
+        >{problem}</span
       >
     {/if}
   </div>

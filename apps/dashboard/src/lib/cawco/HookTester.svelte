@@ -33,9 +33,9 @@
     regex: "Regular expression",
   };
   const KIND_TONE: Record<HookMatcherKind, string> = {
-    all: "border-border text-muted-foreground",
-    exact: "border-success text-success",
-    regex: "border-warning text-warning",
+    all: "border-border text-ink-muted",
+    exact: "border-success-9 text-success-9",
+    regex: "border-warning-9 text-warning-9",
   };
   const KIND_HOW: Record<HookMatcherKind, string> = {
     all: "An empty matcher or a bare * runs on every value this event carries.",
@@ -57,15 +57,15 @@
     <Badge class="shrink-0 {KIND_TONE[kind]}" variant="outline"
       ><span>{KIND_LABEL[kind]}</span></Badge
     >
-    <span class="text-meta text-muted-foreground">{KIND_HOW[kind]}</span>
+    <span class="text-meta text-ink-muted">{KIND_HOW[kind]}</span>
   </div>
 
   {#if info?.suggests && info.suggests.length > 0}
     <div class="flex flex-wrap items-center gap-1.5" in:unfold out:unfold>
-      <span class="text-label text-muted-foreground">Real values:</span>
+      <span class="text-label text-ink-muted">Real values:</span>
       {#each info.suggests as suggestion (suggestion)}
         <button
-          class="pointer-hit pressable rounded-[var(--radius-sm)] border border-border px-2 py-0.5 font-mono text-label text-foreground transition-colors hover:bg-accent"
+          class="pointer-hit pressable rounded-[var(--radius-sm)] border border-border px-2 py-0.5 font-mono text-label text-ink-strong transition-colors hover:bg-accent"
           onclick={() => {
             matcher = suggestion;
           }}
@@ -78,11 +78,11 @@
   {/if}
 
   <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
-  <label class="flex flex-col gap-1.5 text-meta text-muted-foreground">
+  <label class="flex flex-col gap-1.5 text-meta text-ink-muted">
     Try it — {info?.filters ?? "the value this event carries"}
     <Input
       autocomplete="off"
-      class="font-mono text-label md:text-label"
+      class="font-mono text-label"
       placeholder={info?.suggests?.[0] ?? "a sample value"}
       spellcheck="false"
       bind:value={sample}
@@ -101,7 +101,7 @@
     >
       {#key hit}
         <span
-          class={hit ? "text-success" : "text-muted-foreground"}
+          class={hit ? "text-success-9" : "text-ink-muted"}
           in:crossIn
           out:crossOut
           >{hit

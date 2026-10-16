@@ -10,7 +10,7 @@
 </script>
 
 <SelectPrimitive.Group
-  class={cn("scroll-my-1 p-1", className)}
+  class={cn("scroll-my-space-1 p-space-1", className)}
   data-slot="select-group"
   bind:ref
   {...restProps}

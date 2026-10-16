@@ -86,7 +86,7 @@
       problem={refused}
     >
       <NativeSelect
-        class="w-full max-w-sm"
+        class="w-full max-w-96"
         id="spend-on-cap"
         onchange={(event) =>
           choose((event.currentTarget as HTMLSelectElement).value as OnCap)}

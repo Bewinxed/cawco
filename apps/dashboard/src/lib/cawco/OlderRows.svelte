@@ -208,7 +208,7 @@
   data-flip={flip && !still ? "box" : undefined}
   style="--older-h:{height}"
 >
-  <Sidebar.MenuSubButton class="{ROW} text-muted-foreground" data-branch-item>
+  <Sidebar.MenuSubButton class="{ROW} text-ink-muted" data-branch-item>
     {#snippet child({ props })}
       <!-- Busy from the press until its rows are drawn: the glyph gives way
            to the kit's spinner, as a pending Button's icon does. -->
@@ -231,9 +231,11 @@
                  icon swap). Out of the button's name: `aria-busy` says it,
                  and a status in here was read into the name at rest. -->
             <span class="older-face icon-swap">
-              <span data-active={!pending}><IconHistory class="size-4" /></span>
+              <span data-active={!pending}
+                ><IconHistory class="size-icon-md" /></span
+              >
               <span data-active={pending}
-                ><Spinner class="size-3" role="presentation" /></span
+                ><Spinner class="size-icon-sm" role="presentation" /></span
               >
             </span>
           {/snippet}

@@ -155,7 +155,7 @@
         >
         <!-- 16px, the control size, so this unfold mark matches the one on
              the disclosure trigger. -->
-        <IconUnfold class="size-4 shrink-0 opacity-50" />
+        <IconUnfold class="size-icon-md shrink-0 opacity-50" />
       </Button>
     {/snippet}
   </Popover.Trigger>
@@ -177,7 +177,7 @@
                 <ProviderLogo model={trimmed} />
                 <span class="flex flex-col" data-box>
                   <span>Use <span class="font-mono">{trimmed}</span></span>
-                  <span class="text-meta text-muted-foreground">
+                  <span class="text-meta text-ink-muted">
                     Sent to the selected harness exactly as typed
                   </span>
                 </span>
@@ -219,7 +219,7 @@
             >
               <span class="flex flex-col" data-box>
                 <span>Default</span>
-                <span class="text-meta text-muted-foreground">
+                <span class="text-meta text-ink-muted">
                   Whatever the selected harness would have picked
                 </span>
               </span>
@@ -236,9 +236,7 @@
               <ProviderLogo model={row.value} />
               <span class="flex flex-col" data-box>
                 <span>{row.displayName}</span>
-                <span class="text-meta text-muted-foreground"
-                  >{row.description}</span
-                >
+                <span class="text-meta text-ink-muted">{row.description}</span>
               </span>
             </Command.Item>
           {/each}
@@ -263,9 +261,9 @@
 
       {#if note}
         <p
-          class="border-t border-foreground/5 px-3 py-2 text-meta {models.error
-            ? 'text-error'
-            : 'text-muted-foreground'}"
+          class="border-t border-ink-strong/5 px-3 py-2 text-meta {models.error
+            ? 'text-error-9'
+            : 'text-ink-muted'}"
           role={models.error ? "alert" : undefined}
         >
           {note}

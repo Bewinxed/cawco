@@ -17,7 +17,7 @@
 
 <div
   class={cn(
-    "flex flex-col-reverse gap-2 gap-2 sm:flex-row sm:justify-end",
+    "flex phone:flex-row flex-col-reverse phone:justify-end gap-2 gap-2",
     className
   )}
   data-slot="dialog-footer"

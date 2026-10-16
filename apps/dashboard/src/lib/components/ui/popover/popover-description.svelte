@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("text-muted-foreground", className)}
+  class={cn("text-ink-muted", className)}
   data-slot="popover-description"
   bind:this={ref}
   {...restProps}

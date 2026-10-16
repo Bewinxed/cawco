@@ -643,7 +643,7 @@
                         in:crossIn
                         out:crossOut
                       >
-                        <Spinner class="size-4 shrink-0" /><span
+                        <Spinner class="size-icon-md shrink-0" /><span
                           >Reading that version…</span
                         >
                       </p>
@@ -795,7 +795,7 @@
                         in:crossIn
                         out:crossOut
                       >
-                        <Spinner class="size-4 shrink-0" /><span
+                        <Spinner class="size-icon-md shrink-0" /><span
                           >Reading this machine's copy…</span
                         >
                       </p>

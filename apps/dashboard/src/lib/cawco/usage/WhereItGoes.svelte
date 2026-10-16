@@ -548,7 +548,7 @@
               data-key="head:{id}"
               style={headStyle(entry.kind, id)}
             >
-              <OsMark class="size-4 shrink-0" os={entry.group.os} />
+              <OsMark class="size-icon-md shrink-0" os={entry.group.os} />
               <span>{entry.group.name}</span>
             </h3>
           {/if}
@@ -604,7 +604,7 @@
       <a class="name" href={item.href} title={item.label}>{item.label}</a>
     {:else if item.os}
       <span class="name machine-name mark-line">
-        <OsMark class="size-4 shrink-0" os={item.os} />
+        <OsMark class="size-icon-md shrink-0" os={item.os} />
         <span>{item.label}</span>
       </span>
     {:else}

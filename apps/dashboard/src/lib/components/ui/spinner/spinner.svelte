@@ -12,7 +12,7 @@
 
 <svg
   aria-label={ariaLabel}
-  class={cn("size-4 animate-spin", className)}
+  class={cn("size-icon-md animate-spin", className)}
   fill="none"
   {role}
   stroke="currentColor"

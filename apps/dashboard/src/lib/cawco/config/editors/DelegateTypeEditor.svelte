@@ -271,7 +271,7 @@
     />
     <Field id="type-model" label="Model" problem={problemFor("model")}>
       <ModelCombobox
-        class="w-full min-w-0 max-w-md"
+        class="w-full min-w-0 max-w-112"
         harness={draft.harness}
         onchoose={(model) => {
           draft.model = model;

@@ -178,7 +178,7 @@
   {#if !read}
     <div class="loading" data-slot="skeleton-rows">
       <Skeleton class="h-7 w-24" />
-      <Skeleton class="h-4 w-3/4" />
+      <Skeleton class="h-icon-md w-3/4" />
       <div class="grid">
         {#each [0, 1, 2] as one (one)}
           <Skeleton class="h-48 w-full" />

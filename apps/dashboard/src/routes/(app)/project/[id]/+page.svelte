@@ -1655,7 +1655,7 @@
     </div>
   {:else if empty && !adding}
     {#if !lead.view}
-      <Skeleton class="h-48 w-full max-w-xl rounded-[var(--radius-lg)]" />
+      <Skeleton class="h-48 w-full max-w-144 rounded-[var(--radius-lg)]" />
     {:else if canTalk}
       <div class="state caw-empty">
         <EmptyState line={cawLine} title="Nothing on the board yet">
@@ -1751,7 +1751,7 @@
 
 {#if !project}
   <div class="flex flex-1 items-center justify-center p-6">
-    <p class="text-body text-muted-foreground">
+    <p class="text-body text-ink-muted">
       No such project. It may have been removed; pick another from the rail.
     </p>
   </div>
@@ -1921,7 +1921,7 @@
       <div aria-hidden="true" class="board-skeleton" out:crossOut>
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
           <div class="skeleton-column">
-            <Skeleton class="h-3.5 w-3/5" />
+            <Skeleton class="h-space-4 w-3/5" />
             <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
             <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
           </div>

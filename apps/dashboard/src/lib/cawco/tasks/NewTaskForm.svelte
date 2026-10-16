@@ -133,7 +133,7 @@
   </Button>
 {:else}
   <Button
-    class="add-task justify-start text-muted-foreground"
+    class="add-task justify-start text-ink-muted"
     onclick={() => {
       open = true;
     }}

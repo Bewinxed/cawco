@@ -252,7 +252,7 @@
       <p class="note">No machine is online to ask.</p>
     {:else if Object.keys(reading).length > 0}
       <p class="note busy mark-line" role="status">
-        <Spinner class="size-4 shrink-0" />
+        <Spinner class="size-icon-md shrink-0" />
         <span>Asking the machines…</span>
       </p>
     {:else if discovered.length === 0}
@@ -271,7 +271,7 @@
             name={row.name}
           >
             {#snippet tile()}
-              <OsMark class="size-4" os={machine.os} />
+              <OsMark class="size-icon-md" os={machine.os} />
             {/snippet}
             {#snippet trailing()}
               {#if same}

@@ -231,7 +231,9 @@
   @media (hover: hover) {
     .controls
       :global(
-        .bg-transparent.border-transparent:not(.text-link):hover:not(:disabled)
+        .bg-transparent.border-transparent:not(.text-link-ink):hover:not(
+            :disabled
+          )
       ) {
       background: light-dark(var(--surface-fill-strong), var(--surface-hover));
     }

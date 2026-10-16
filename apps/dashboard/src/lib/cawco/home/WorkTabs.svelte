@@ -614,7 +614,7 @@
   {@const finished = shown === "finished" ? finishedOn(group.machineId) : []}
   <!-- Where these run, said once for the rows under it. -->
   <h3 class="machine mark-line" data-key="head:{group.machineId}" {style}>
-    <OsMark class="size-3.5" os={group.os} />
+    <OsMark class="size-space-4" os={group.os} />
     <span>{group.name}</span>
     {#if finished.length > 0}
       <!-- Everything this machine has finished, failures too, off the list

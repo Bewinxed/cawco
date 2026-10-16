@@ -158,9 +158,9 @@
 
 <Collapsible.Root class="flex flex-col" onOpenChange={toggle} {open}>
   <Collapsible.Trigger
-    class="mark-line flex items-center gap-1.5 self-start text-meta text-muted-foreground transition-colors hover:text-foreground"
+    class="mark-line flex items-center gap-1.5 self-start text-meta text-ink-muted transition-colors hover:text-ink-strong"
   >
-    <IconFolder class="size-4" />
+    <IconFolder class="size-icon-md" />
     <span>Browse</span>
   </Collapsible.Trigger>
 
@@ -176,9 +176,8 @@
         >
           <IconArrowUp />
         </Button>
-        <span
-          class="truncate font-mono text-meta text-muted-foreground"
-          title={path}>{path}</span
+        <span class="truncate font-mono text-meta text-ink-muted" title={path}
+          >{path}</span
         >
       </div>
 
@@ -189,13 +188,13 @@
               <div aria-label="Reading directory" role="status">
                 {#each SKELETON_WIDTHS as width (width)}
                   <div class="flex h-[30px] items-center gap-[7px] px-[11px]">
-                    <Skeleton class="size-4 shrink-0" />
-                    <Skeleton class="h-3 {width}" />
+                    <Skeleton class="size-icon-md shrink-0" />
+                    <Skeleton class="h-icon-sm {width}" />
                   </div>
                 {/each}
               </div>
             {:else if errorMessage}
-              <span class="block px-2 py-1 text-meta text-destructive"
+              <span class="block px-2 py-space-1 text-meta text-error-9"
                 >{errorMessage}</span
               >
             {:else}
@@ -214,7 +213,7 @@
                   >
                 </Button>
               {:else}
-                <span class="block px-2 py-1 text-meta text-muted-foreground"
+                <span class="block px-2 py-space-1 text-meta text-ink-muted"
                   >No subdirectories.</span
                 >
               {/each}

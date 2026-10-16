@@ -85,7 +85,7 @@
         onclick={() => zoomBy(zoomOut)}
         type="button"
       >
-        <IconMinus class="size-4" />
+        <IconMinus class="size-icon-md" />
       </button>
     {/snippet}
   </Tip><span>{Math.round(zoom * 100)}%</span><Tip label="Zoom in">
@@ -97,7 +97,7 @@
         onclick={() => zoomBy(zoomIn)}
         type="button"
       >
-        <IconPlus class="size-4" />
+        <IconPlus class="size-icon-md" />
       </button>
     {/snippet}
   </Tip>
@@ -110,7 +110,7 @@
         onclick={fit}
         type="button"
       >
-        <IconMaximize class="size-4" />
+        <IconMaximize class="size-icon-md" />
       </button>
     {/snippet}
   </Tip>
@@ -125,7 +125,7 @@
           onclick={undo}
           type="button"
         >
-          <IconReset class="size-4" />
+          <IconReset class="size-icon-md" />
         </button>
       {/snippet}
     </Tip><Tip label="Redo">
@@ -138,7 +138,7 @@
           onclick={redo}
           type="button"
         >
-          <IconReset class="size-4 rotate-180" />
+          <IconReset class="size-icon-md rotate-180" />
         </button>
       {/snippet}
     </Tip>

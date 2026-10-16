@@ -65,12 +65,12 @@
   class="flex flex-col gap-2 rounded-[var(--radius-md)] bg-[var(--surface-recess)] p-3"
 >
   <div class="flex flex-wrap items-baseline justify-between gap-2">
-    <span class="text-label text-foreground">Try it</span>
+    <span class="text-label text-ink-strong">Try it</span>
     <span
       aria-live="polite"
       class="text-meta transition-colors duration-(--dur-pop) ease-out {firing
-        ? 'text-success'
-        : 'text-muted-foreground'}"
+        ? 'text-success-9'
+        : 'text-ink-muted'}"
       role="status"
     >
       {verdict}
@@ -79,7 +79,7 @@
 
   <Textarea
     aria-label="Sample text to test this rule against"
-    class="resize-y bg-background font-mono text-label md:text-label"
+    class="resize-y bg-surface-page font-mono text-label"
     placeholder="I've fixed the parser. One honest caveat: the error path is still untested."
     rows={3}
     spellcheck="false"
@@ -91,14 +91,14 @@
          one cell: when the hits move, the new marks cross-fade over the old
          over --dur-control while the words stay put. -->
     <div
-      class="preview relative grid max-h-40 overflow-y-auto rounded-[var(--radius-sm)] bg-background font-mono text-label leading-relaxed"
+      class="preview relative grid max-h-40 overflow-y-auto rounded-[var(--radius-sm)] bg-surface-page font-mono text-label leading-relaxed"
     >
       <p class="layer">{sample}</p>
       {#key marked}
         <p aria-hidden="true" class="layer marks" in:crossIn out:crossOut>
           {#each segments as segment, index (index)}
             {#if segment.hit}
-              <mark class="rounded-[var(--radius-xs)] bg-success/25"
+              <mark class="rounded-[var(--radius-xs)] bg-success-9/25"
                 >{segment.text}</mark
               >
             {:else}

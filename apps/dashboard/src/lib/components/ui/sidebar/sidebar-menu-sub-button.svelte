@@ -19,7 +19,7 @@
 
   const mergedProps = $derived({
     class: cn(
-      "mark-line focus-inset flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-[var(--radius-sm)] px-2 text-sidebar-foreground hover:text-foreground active:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-label data-[size=sm]:text-meta data-active:text-selected-ink group-data-[collapsible=icon]:hidden [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-foreground",
+      "mark-line focus-inset flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-[var(--radius-sm)] px-2 text-ink-strong hover:text-ink-strong active-true:text-selected-ink active:text-ink-strong disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-label data-[size=sm]:text-meta group-data-[collapsible=icon]:hidden [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 [&>svg]:text-ink-strong",
       className
     ),
     "data-slot": "sidebar-menu-sub-button",
