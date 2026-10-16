@@ -1,6 +1,7 @@
 public import CawCoAPI
 import Foundation
 import Observation
+import OpenAPIRuntime
 
 /// One delegate's work item as its parent's delegate tray reads it.
 public typealias WorkItem = Components.Schemas.WorkItemSummary
@@ -93,14 +94,23 @@ public final class WorkItemsStore {
         items[item.id] = item
     }
 
-    /// Takes a chip off its tray on every screen: the hub records the dismissal.
-    public func dismiss(_ id: String) async throws {
-        switch try await hub.api.delegates.dismiss(.init(path: .init(id: id))) {
+    /// Takes a failed chip off its tray on every screen, with the reader's
+    /// reason: the hub records both.
+    public func dismiss(_ id: String, reason: String) async throws {
+        let asked = Operations.PostApiWorkItemsByIdDismiss.Input(
+            path: .init(id: id), body: .json(.init(value1: .init(reason: reason))))
+        switch try await hub.api.delegates.dismiss(asked) {
         case let .ok(ok):
             adopt(try ok.body.json)
+        case let .badRequest(answer):
+            throw Refused(message: try await Self.said(answer.body.plainText, or: 400))
         case let .notFound(answer):
-            let said = try await String(collecting: answer.body.plainText, upTo: 64000)
-            throw Refused(message: said.isEmpty ? "The hub answered 404, so the delegate was not dismissed." : said)
+            throw Refused(message: try await Self.said(answer.body.plainText, or: 404))
+        case let .conflict(answer):
+            throw Refused(message: try await Self.said(answer.body.plainText, or: 409))
+        case let .unprocessableContent(answer):
+            throw Refused(message: (try? answer.body.applicationProblemJson).flatMap { Wire.words(problem: $0) }
+                ?? "The hub answered 422, so the delegate was not dismissed.")
         case let .undocumented(statusCode, payload):
             throw Refused(message: await Wire.words(payload.body) ?? "The hub answered \(statusCode), so the delegate was not dismissed.")
         }
@@ -114,5 +124,11 @@ public final class WorkItemsStore {
     private struct Refused: LocalizedError {
         let message: String
         var errorDescription: String? { message }
+    }
+
+    /// A refusal's words, as the hub said them, or its status when it said none.
+    private static func said(_ body: HTTPBody, or status: Int) async throws -> String {
+        let words = try await String(collecting: body, upTo: 64000)
+        return words.isEmpty ? "The hub answered \(status), so the delegate was not dismissed." : words
     }
 }

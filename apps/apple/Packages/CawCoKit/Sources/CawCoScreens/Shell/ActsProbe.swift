@@ -236,25 +236,8 @@ enum ActsProbe {
         log.notice("machine menu [probe-mac] sign in: \(accounts.count, privacy: .public) Accounts section(s) on screen")
         shell.go(.fleet)
         await wait(1.5)
-
-        // 8. The delegate tray: Dismiss taken, then refused for an item the hub no longer has.
-        shell.openSession("p-cont")
-        hub.workItems.load(parent: "p-cont")
-        await wait(4)
-        let trays = (shell.view.window?.windowScene?.windows ?? []).flatMap { views(DelegateTrayView.self, in: $0) }.filter { $0.window != nil }
-        log.notice("tray: \(trays.count, privacy: .public) tray(s) on screen, \(hub.workItems.of(parent: "p-cont").count, privacy: .public) item(s)")
-        if let tray = trays.first {
-            for id in ["w-ok", "w-gone"] {
-                if id == "w-gone" {
-                    log.notice("tray: ready to dismiss w-gone")
-                    await wait(8)
-                }
-                let pressed = tray.probeDismiss(id)
-                log.notice("tray dismiss in flight [\(id, privacy: .public)] pressed=\(pressed, privacy: .public): \(tray.probePanel(id), privacy: .public)")
-                await wait(2.5)
-                log.notice("tray dismiss answered [\(id, privacy: .public)]: \(tray.probePanel(id), privacy: .public)")
-            }
-        }
+        // The delegate tray's Dismiss is gone until the shelf's Mac port
+        // (web 1eb7dfe4): ending a failure is the shelf's.
         log.notice("acts probe: done")
     }
 
