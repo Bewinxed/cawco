@@ -699,7 +699,7 @@
   });
 
   /** What the composer stands over the foot: the fade and "Jump to latest" rest on it. */
-  let foot = $state<ComposerFoot>({ stack: 0, perch: 0, parked: 0 });
+  let foot = $state<ComposerFoot>({ stack: 0, perch: 0, parked: 0, shelf: 0 });
   /**
    * Scrolled away from the tail, the way back rests on the composer's stack,
    * beside Caw; the foot's fade is solid to the higher of his top and its
@@ -903,6 +903,7 @@
             shown = drawn;
           }}
           parkedHeight={writable ? foot.parked : 0}
+          shelfHeight={writable ? foot.shelf : 0}
           {session}
           {visible}
         />

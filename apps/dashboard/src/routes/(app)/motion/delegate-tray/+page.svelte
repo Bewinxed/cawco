@@ -8,7 +8,8 @@
    * queued behind files another item owns. Only the client's state is
    * seeded (dev's `__cawcoDebug`).
    *
-   * `?theme=dark` draws it at night.
+   * `?theme=dark` draws it at night; `?case=` (1r, 1f, 3r2f, 5f, 7r13f,
+   * 20r) seeds running and failed delegates instead of the twelve.
    */
   import type { SessionPulse, WorkItemSummary } from "@cawco/core";
   import { onMount } from "svelte";
@@ -138,7 +139,50 @@
       })),
     },
   };
-  WORK.forEach((work, i) => {
+  /**
+   * `?case=` seeds the tray's cases instead (the shelf's spec,
+   * tray-shelf): running and failed delegates, in creation order, the
+   * failures spread among the running so each has later items.
+   */
+  const CASES: Record<string, { running: number; failed: number }> = {
+    "1r": { running: 1, failed: 0 },
+    "1f": { running: 0, failed: 1 },
+    "3r2f": { running: 3, failed: 2 },
+    "5f": { running: 0, failed: 5 },
+    "7r13f": { running: 7, failed: 13 },
+    "20r": { running: 20, failed: 0 },
+  };
+  const ERRORS = [
+    "bun run typecheck exited 2: 3 errors in apps/dashboard",
+    "The machine went away while the checks ran.",
+    "Budget reached: 40 turns.",
+    "finish_item: the probe spec failed 2 of 9 assertions",
+    "Rebase onto main conflicted in DelegateTray.svelte",
+  ];
+  const seeded = CASES[page.url.searchParams.get("case") ?? ""];
+  const plan: (typeof WORK)[number][] = seeded
+    ? Array.from(
+        { length: seeded.running + seeded.failed },
+        (_, i): (typeof WORK)[number] => ({
+          title: `${WORK[i % WORK.length].title}${i >= WORK.length ? " again" : ""}`,
+          state: "running",
+        })
+      )
+    : WORK;
+  /** Which of the seeded delegates failed: every other one first, then the rest. */
+  const failedAt = new Set<number>();
+  if (seeded) {
+    const total = seeded.running + seeded.failed;
+    for (let i = 0; i < total && failedAt.size < seeded.failed; i += 2) {
+      failedAt.add(i);
+    }
+    for (let i = total - 1; i >= 0 && failedAt.size < seeded.failed; i -= 1) {
+      failedAt.add(i);
+    }
+  }
+  plan.forEach((work, i) => {
+    const failed = failedAt.has(i);
+    const createdAt = now - (60 - i) * 60_000;
     const item: WorkItemSummary = {
       id: `wi-tray-${i}`,
       instanceId: `ds-tray-${i}`,
@@ -146,11 +190,17 @@
       leadInstanceId: null,
       machinePaused: null,
       title: work.title,
-      state: work.state,
-      createdAt: now - (60 - i) * 60_000,
-      endedAt: null,
+      state: failed ? "failed" : work.state,
+      createdAt,
+      endedAt: failed ? createdAt + (20 + i) * 60_000 : null,
       dismissedAt: null,
-      firstLines: { brief: work.title, result: "", error: "" },
+      dismissReason: null,
+      replacedBy: null,
+      firstLines: {
+        brief: work.title,
+        result: "",
+        error: failed ? ERRORS[i % ERRORS.length] : "",
+      },
       queued: work.owns ? { owns: work.owns, paused: null } : null,
       checkQueue: work.slot
         ? {

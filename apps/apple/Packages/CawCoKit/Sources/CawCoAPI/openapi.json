@@ -16981,6 +16981,41 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "replacedBy": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "replacedBy"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
         "operationId": "postApiWorkItemsByIdDismiss",
         "responses": {
           "200": {
@@ -16993,8 +17028,85 @@
               }
             }
           },
+          "400": {
+            "description": "postApiWorkItemsByIdDismiss 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "postApiWorkItemsByIdDismiss 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkItemsByIdDismiss 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiWorkItemsByIdDismiss 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work-items/{id}/retry": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiWorkItemsByIdRetry",
+        "responses": {
+          "200": {
+            "description": "postApiWorkItemsByIdRetry 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiWorkItemsByIdRetry 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkItemsByIdRetry 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -42006,6 +42118,13 @@
               "number"
             ]
           },
+          "dismissReason": {
+            "description": "Why the reader dismissed it, in their words; null unless dismissed with a reason.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "endedAt": {
             "type": [
               "null",
@@ -42077,6 +42196,13 @@
               "paused"
             ]
           },
+          "replacedBy": {
+            "description": "The later item of the same tray the reader said took over its work; null otherwise.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "state": {
             "$ref": "#/components/schemas/WorkItemState"
           },
@@ -42099,6 +42225,7 @@
         },
         "required": [
           "createdAt",
+          "dismissReason",
           "dismissedAt",
           "endedAt",
           "firstLines",
@@ -42107,6 +42234,7 @@
           "leadInstanceId",
           "machinePaused",
           "parentInstanceId",
+          "replacedBy",
           "state",
           "title",
           "waitReason",

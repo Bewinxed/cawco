@@ -100,6 +100,7 @@
     onshown,
     bare = false,
     parkedHeight = 0,
+    shelfHeight = 0,
     latestInset,
 
     /**
@@ -142,6 +143,14 @@
      * every row in the list each time.
      */
     parkedHeight?: number;
+    /**
+     * The delegate tray's shelf open between the composer's tray row and
+     * its panel, px (0 shut). Unlike a parked card it is followed: the room
+     * past the end grows by it, and a view held at the tail stays at the
+     * tail, while a view scrolled away keeps its place. Set on the boxes
+     * that read it, as `parkedHeight` is.
+     */
+    shelfHeight?: number;
     /** Where the way back to the tail rests over the foot, when the pane says (a thread). */
     latestInset?: string;
   } = $props();
@@ -1690,6 +1699,8 @@
   let spare = $state(0);
   /** The room past the end for what rises past the composer (the markup). */
   let parkedRoom = $state<HTMLElement>();
+  /** The room past the end for the tray's open shelf (the markup). */
+  let shelfRoom = $state<HTMLElement>();
   /** The room under the list that clears the composer (the markup). */
   let foot = $state<HTMLElement>();
   /**
@@ -1715,12 +1726,12 @@
     if (!(viewport > 0 && rooms.measured)) {
       return false;
     }
-    const { foot: clear, parked } = rooms;
+    const { foot: clear, parked, shelf } = rooms;
     if (height + clear <= viewport) {
       return false;
     }
     const over =
-      (((viewport - olderRoom - height - parked - clear) % 1) + 1) % 1;
+      (((viewport - olderRoom - height - parked - shelf - clear) % 1) + 1) % 1;
     const next = over < 0.001 || over > 0.999 ? 0 : over;
     if (Math.abs(next - spare) <= 0.001) {
       return false;
@@ -1759,31 +1770,59 @@
    * the room is first laid out and whenever it resizes (the composer's
    * clearance changing), and the list is made whole again for it.
    */
-  const rooms = { foot: 0, parked: 0, measured: false };
+  const rooms = { foot: 0, parked: 0, shelf: 0, measured: false };
   $effect(() => {
     const footNode = foot;
     const parkedNode = parkedRoom;
-    if (!(footNode && parkedNode)) {
+    const shelfNode = shelfRoom;
+    if (!(footNode && parkedNode && shelfNode)) {
       return;
     }
     const seen = new Set<Element>();
     const sizes = new ResizeObserver((entries) => {
+      // The shelf's room moved: a view at the tail follows it, frame by
+      // frame as the shelf opens; one scrolled away keeps its place.
+      let shelf = 0;
       for (const entry of entries) {
         const size = entry.borderBoxSize[0]?.blockSize ?? 0;
         seen.add(entry.target);
         if (entry.target === footNode) {
           rooms.foot = size;
+        } else if (entry.target === shelfNode) {
+          shelf = size - rooms.shelf;
+          rooms.shelf = size;
         } else {
           rooms.parked = size;
         }
       }
-      rooms.measured = seen.size === 2;
-      if (keepWhole() && pinned()) {
+      rooms.measured = seen.size === 3;
+      // At the end before the shelf's room grew: the tail is followed
+      // whether or not this pane holds the pin (a pane beside the one
+      // worked in keeps where it stands, and where it stands is the end).
+      const atEnd =
+        shelf > 0 &&
+        !!scroller &&
+        scroller.scrollHeight -
+          scroller.clientHeight -
+          scroller.scrollTop -
+          shelf <=
+          0.5;
+      if ((keepWhole() && pinned()) || atEnd || (shelf > 0 && pinned())) {
         pinBottom();
+      } else if (
+        shelf < 0 &&
+        scroller &&
+        scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <=
+          0.5
+      ) {
+        // Shut under a view at the end, the browser clamps it: its scroll
+        // event is this component's own, not the reader's (as `wholeHeight`).
+        lastWrite = scroller.scrollTop;
       }
     });
     sizes.observe(footNode);
     sizes.observe(parkedNode);
+    sizes.observe(shelfNode);
     return () => {
       sizes.disconnect();
       rooms.measured = false;
@@ -3512,6 +3551,15 @@
     style:--parked-room="{parkedHeight}px"
     bind:this={parkedRoom}
   ></div>
+  <!-- Room for the delegate tray's open shelf, which the tail follows
+       (`shelfHeight`): the dock grows up over the foot, and a reader at the
+       tail keeps the last row clear above it. -->
+  <div
+    aria-hidden="true"
+    class="shelf-room"
+    style:--shelf-room="{shelfHeight}px"
+    bind:this={shelfRoom}
+  ></div>
   <div aria-hidden="true" class="foot" bind:this={foot}></div>
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
@@ -3519,7 +3567,7 @@
   <div
     class="dock"
     style:--latest-inset={latestInset}
-    style:--parked-room="{parkedHeight}px"
+    style:--parked-room="{parkedHeight + shelfHeight}px"
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
     {#if behind}
@@ -3654,6 +3702,10 @@
      so an inset is net of the foot's padding (the clearance). */
   .parked-room {
     block-size: var(--parked-room, 0px);
+    pointer-events: none;
+  }
+  .shelf-room {
+    block-size: var(--shelf-room, 0px);
     pointer-events: none;
   }
   /* The foot clears the composer's standing box: the pill at one line, the

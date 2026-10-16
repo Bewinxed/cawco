@@ -1327,6 +1327,16 @@ export const workItems = sqliteTable(
      */
     dismissedAt: timestamp("dismissed_at"),
     /**
+     * Why a failed item is no longer owed, in the reader's words, when they
+     * dismissed it with a reason. Null otherwise.
+     */
+    dismissReason: text("dismiss_reason"),
+    /**
+     * The later item of the same tray that took over a failed one's work,
+     * when the reader dismissed it as replaced by that one. Null otherwise.
+     */
+    replacedBy: text("replaced_by"),
+    /**
      * The group it was delegated in, under its parent: the parent hears one
      * combined report once every item of the group has ended (a failure
      * still reports at once). Null: it reports on its own.

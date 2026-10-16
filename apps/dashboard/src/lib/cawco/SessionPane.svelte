@@ -135,6 +135,8 @@
   let side = $state<ReturnType<typeof SideSplit>>();
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
+  /** The delegate tray's open shelf: room past the end that a pinned tail follows. */
+  let shelfRoom = $state(0);
   /** The session's plan has something to show: its ring opens it (SideSplit). */
   const plan = $derived(cawco.planOf(viewId));
   const planProgressNow = $derived(
@@ -1034,6 +1036,7 @@
     },
     onfoot: (next) => {
       parkedRoom = next.parked;
+      shelfRoom = next.shelf;
     },
     get planRing() {
       return planProgressNow ? planRing : undefined;
@@ -1186,6 +1189,7 @@
                     shown = drawn;
                   }}
                   parkedHeight={writable ? parkedRoom : 0}
+                  shelfHeight={writable ? shelfRoom : 0}
                   {session}
                   {visible}
                 />

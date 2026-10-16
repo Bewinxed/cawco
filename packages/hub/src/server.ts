@@ -416,6 +416,7 @@ import type {
   ProjectRow,
   PublicInstanceRow,
   SentMessageRow,
+  WorkItemRow,
   WorkspaceRow,
 } from "./db";
 import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
@@ -4300,8 +4301,65 @@ export const createServer = (
     ) {
       lead?.sendLeft(moved.instanceId, moved.uuid, moved.state === "read");
       leadRuns?.sendLeft(moved);
+      sendSettles.get(moved.uuid)?.(moved);
     }
     return moved;
+  };
+  /** Who waits on a send leaving `pending`, by its uuid (a tray's Retry). */
+  const sendSettles = new Map<string, (row: SentMessageRow) => void>();
+
+  /**
+   * A tray's Retry: the reader's word to the failed delegate's own session,
+   * through the one send path ({@link deliverSend}), which reopens the same
+   * item once its process reads it (workItems.reopen). Settles when the
+   * send has been read, or is owed (its machine away in its grace, an update
+   * installing: it is the session's next send once the hold ends, and the
+   * item reopens then). Answers why not, when it does not go.
+   */
+  const retryFromTray = async (
+    item: WorkItemRow
+  ): Promise<string | undefined> => {
+    if (item.state !== "failed") {
+      return `${item.title} is ${item.state}, not failed.`;
+    }
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    const refused = inputRefusal(item.instanceId, { kind: "human" });
+    if (!row || refused) {
+      return refused?.reason ?? "This session is gone.";
+    }
+    const uuid = crypto.randomUUID();
+    const settled = new Promise<SentMessageRow>((resolve) => {
+      sendSettles.set(uuid, resolve);
+    });
+    const error = item.error?.split("\n")[0]?.trim();
+    const sent = deliverSend({
+      verb: "send",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        instanceId: row.id,
+        message: {
+          type: "user",
+          uuid,
+          message: {
+            role: "user",
+            content: error
+              ? `Your work failed: ${error}\nTry it again.`
+              : "Your work failed. Try it again.",
+          },
+          parent_tool_use_id: null,
+          origin: { kind: "human" },
+        },
+      },
+    });
+    const owed = sent?.state === "pending" && sent.owed !== null;
+    const outcome =
+      owed || (sent && sent.state !== "pending") ? sent : await settled;
+    sendSettles.delete(uuid);
+    if (!outcome || owed || outcome.state === "read") {
+      return undefined;
+    }
+    return outcome.reason ?? `The retry was not read (${outcome.state}).`;
   };
 
   /**
@@ -21098,10 +21156,46 @@ export const createServer = (
         { query: t.Object({ parent: t.String() }) },
         ({ query }) => workItems.trayOf(query.parent)
       )
-      // Dismissed from the tray: gone from it on every screen, and after reload.
-      .post("/api/work-items/:id/dismiss", ({ params, status }) => {
-        const item = workItems.dismiss(params.id);
-        return item ?? status(404, `no work item ${params.id}`);
+      // Dismissed from the tray: gone from it on every screen, and after
+      // reload, with why: the reader's reason, or the later item that
+      // replaced it.
+      .post(
+        "/api/work-items/:id/dismiss",
+        {
+          body: t.Union([
+            t.Object({ reason: t.String({ minLength: 1 }) }),
+            t.Object({ replacedBy: t.String({ minLength: 1 }) }),
+          ]),
+        },
+        ({ params, body, status }) => {
+          const why = "reason" in body ? { reason: body.reason.trim() } : body;
+          if ("reason" in why && !why.reason) {
+            return status(400, "Say why it is no longer owed.");
+          }
+          try {
+            const item = workItems.dismiss(params.id, why);
+            return item ?? status(404, `no work item ${params.id}`);
+          } catch (error) {
+            return status(
+              409,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
+        }
+      )
+      // Retry from the tray: the reader's word to the failed delegate's own
+      // session, through the one send path, which reopens the same item once
+      // its process reads it (workItems.reopen). Answers when the send has
+      // been read (the item running again) or has failed, with why.
+      .post("/api/work-items/:id/retry", async ({ params, status }) => {
+        const item = workItems.item(params.id);
+        if (!item) {
+          return status(404, `no work item ${params.id}`);
+        }
+        const refused = await retryFromTray(item);
+        return refused
+          ? status(409, refused)
+          : (workItems.summary(item.id) ?? status(404, "gone"));
       })
       // The catalog is code, so it ships with the answer rather than being stored:
       // a dashboard reads what tools exist and what the fleet has decided about

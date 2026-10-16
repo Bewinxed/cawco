@@ -2088,6 +2088,8 @@ export interface DbShape {
         | "error"
         | "endedAt"
         | "dismissedAt"
+        | "dismissReason"
+        | "replacedBy"
         | "checks"
         | "checkingSince"
         | "submission"

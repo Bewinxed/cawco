@@ -1996,16 +1996,47 @@ async function loadWorkItems(instanceId: string): Promise<void> {
   }
 }
 
-/** Takes a chip off its tray on every screen: the hub records the dismissal. */
-export async function dismissWorkItem(id: string): Promise<void> {
+/**
+ * Takes a failed chip off its tray on every screen, with why: the reader's
+ * reason, or the later item that replaced it. The hub records both.
+ */
+export function dismissWorkItem(
+  id: string,
+  why: { reason: string } | { replacedBy: string }
+): Promise<void> {
+  return workItemAct(id, "dismiss", why, "so the delegate was not dismissed");
+}
+
+/**
+ * Retry: the reader's word to the failed delegate's own session, which
+ * reopens the same item there; answered once the session has read it.
+ */
+export function retryWorkItem(id: string): Promise<void> {
+  return workItemAct(id, "retry", undefined, "so the delegate was not retried");
+}
+
+async function workItemAct(
+  id: string,
+  act: "dismiss" | "retry",
+  body: object | undefined,
+  outcome: string
+): Promise<void> {
   const response = await fetch(
-    `/api/work-items/${encodeURIComponent(id)}/dismiss`,
-    { method: "POST" }
+    `/api/work-items/${encodeURIComponent(id)}/${act}`,
+    {
+      method: "POST",
+      ...(body
+        ? {
+            body: JSON.stringify(body),
+            headers: { "content-type": "application/json" },
+          }
+        : {}),
+    }
   );
   if (!response.ok) {
     throw new Error(
       (await response.text()) ||
-        `The hub answered ${response.status}, so the delegate was not dismissed.`
+        `The hub answered ${response.status}, ${outcome}.`
     );
   }
   const item = (await response.json()) as WorkItemSummary;

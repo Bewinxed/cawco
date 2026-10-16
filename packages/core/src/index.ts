@@ -1246,6 +1246,8 @@ export interface WorkItemSummary {
   checkQueue: { words: string; since: number } | null;
   createdAt: number;
   dismissedAt: number | null;
+  /** Why the reader dismissed it, in their words; null unless dismissed with a reason. */
+  dismissReason: string | null;
   endedAt: number | null;
   /**
    * The glance of each: what it was asked, what it reported (its
@@ -1274,6 +1276,8 @@ export interface WorkItemSummary {
    * started.
    */
   queued: { owns: string[]; paused: string | null } | null;
+  /** The later item of the same tray the reader said took over its work; null otherwise. */
+  replacedBy: string | null;
   state: "starting" | "running" | "done" | "failed" | "cancelled";
   title: string;
   waitReason: string | null;

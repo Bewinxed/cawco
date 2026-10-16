@@ -1868,6 +1868,8 @@ export const createWorkItems = ({
     createdAt: item.createdAt.getTime(),
     endedAt: item.endedAt?.getTime() ?? null,
     dismissedAt: item.dismissedAt?.getTime() ?? null,
+    dismissReason: item.dismissReason,
+    replacedBy: item.replacedBy,
     waitUntil: item.waitUntil?.getTime() ?? null,
     waitReason: item.waitReason,
     checkQueue: checkQueues.get(item.id) ?? null,
@@ -1877,6 +1879,29 @@ export const createWorkItems = ({
       error: firstLine(item.error),
     },
   });
+
+  /**
+   * The item the reader says took over `item`'s work: a later one of the
+   * same parent, or of the same project. Its id, or a throw with why not.
+   */
+  const replacementOf = (
+    item: WorkItemRow,
+    { replacedBy }: { replacedBy: string }
+  ): string => {
+    const by = replacedBy === item.id ? undefined : db.workItem(replacedBy);
+    if (!by) {
+      throw new Error(`There is no later work item ${replacedBy}.`);
+    }
+    const kin =
+      by.parentInstanceId === item.parentInstanceId ||
+      (item.projectId !== null && by.projectId === item.projectId);
+    if (!kin || by.createdAt.getTime() <= item.createdAt.getTime()) {
+      throw new Error(
+        `${by.title} (${by.id}) was not delegated after ${item.title} by the same session, so it cannot have replaced it.`
+      );
+    }
+    return by.id;
+  };
 
   /**
    * A queued `delegate` as the trays read it: starting, under the ids its
@@ -1911,6 +1936,8 @@ export const createWorkItems = ({
       createdAt: queued.queuedAt.getTime(),
       endedAt: null,
       dismissedAt: dismissedAt?.getTime() ?? null,
+      dismissReason: null,
+      replacedBy: null,
       waitUntil: null,
       waitReason: null,
       checkQueue: null,
@@ -6126,6 +6153,12 @@ export const createWorkItems = ({
     /** One item, as `stop_delegate` and its callers read it. */
     item: (id: string): WorkItemRow | undefined => db.workItem(id),
 
+    /** One item as its tray reads it (a tray's Retry answers with it). */
+    summary(id: string): WorkItemSummary | undefined {
+      const item = db.workItem(id);
+      return item ? summaryOf(item) : undefined;
+    },
+
     /** Whether the session's work item is over: done, failed or cancelled. */
     over(row: InstanceRow): boolean {
       const item = itemOf(row);
@@ -6331,18 +6364,29 @@ export const createWorkItems = ({
 
     /**
      * The reader dismissed its chip: gone from the tray and from
-     * `delegate_list`'s live read on every screen. A dismissed item that is
-     * still live is over: cancelled, and its session ended if it still has a
-     * process. One whose checks this hub runs now ends with them.
+     * `delegate_list`'s live read on every screen, with why: their reason in
+     * their words, or the later item of the same parent that took over its
+     * work (`replacedBy`), which must exist and have been made after it. A
+     * dismissed item that is still live is over: cancelled, and its session
+     * ended if it still has a process. One whose checks this hub runs now
+     * ends with them. Throws with the sentence when the replacement is not
+     * one.
      */
-    dismiss(id: string): WorkItemSummary | undefined {
+    dismiss(
+      id: string,
+      why: { reason: string } | { replacedBy: string }
+    ): WorkItemSummary | undefined {
       const item = db.workItem(id);
       if (!item) {
         return undefined;
       }
+      const said =
+        "reason" in why
+          ? { dismissReason: why.reason, replacedBy: null }
+          : { dismissReason: null, replacedBy: replacementOf(item, why) };
       const dismissedAt = new Date();
       if (!LIVE.has(item.state) || finishing.has(item.id)) {
-        const kept = update(id, { dismissedAt });
+        const kept = update(id, { dismissedAt, ...said });
         return kept ? summaryOf(kept) : undefined;
       }
       quiet.delete(item.id);
@@ -6350,6 +6394,7 @@ export const createWorkItems = ({
         state: "cancelled",
         stoppedBy: { kind: "person" },
         dismissedAt,
+        ...said,
         checkingSince: null,
         submission: null,
       });

@@ -8,11 +8,14 @@
    * panel with the tray row and what stands on it, or the grown ask when it
    * reaches higher; `perch`, how far Caw perched on the pill rises over its
    * top (0 with no perch, or while an ask has it stepped aside); `parked`,
-   * what stands higher than the panel and its tray row (0 with nothing).
+   * what stands higher than the panel and its tray row (0 with nothing);
+   * `shelf`, the delegate tray's shelf open between its row and the panel
+   * (0 shut), which the transcript makes room for and a pinned tail follows.
    */
   export interface ComposerFoot {
     parked: number;
     perch: number;
+    shelf: number;
     stack: number;
   }
 
@@ -316,6 +319,7 @@
       stack: standing,
       perch: perch && !askRaised ? perchHeight : 0,
       parked: standing - panel - lift,
+      shelf: showing ? (shelves[showing] ?? 0) : 0,
     });
   });
   /** The field (MentionField's editable box), and the MentionField, whose caret is in the draft's offsets. */
@@ -2900,6 +2904,8 @@
   /** The rows with an offer to stand on the tray row, and those with a tray. */
   const offered = $derived(trayRows.filter((row) => row.prompts));
   const trayed = $derived(trayRows.filter((row) => row.delegatesOf));
+  /** Each row's tray shelf as drawn, px (0 shut): the one shown is the foot's `shelf`. */
+  const shelves: Record<string, number> = $state({});
   /** The box the offers stand in: a `reflow` container. */
   let offers = $state<HTMLElement>();
   /*
@@ -2974,7 +2980,12 @@
        tray's fixed row, and the suggestion chips standing on it (out of
        flow). Both rows are kept clear at every transcript's foot (app.css
        `--c-tray-row`, `--c-suggest-room`). An offer stands on top of both. -->
-  <div class="lift" inert={askRaised} bind:clientHeight={lift}>
+  <div
+    class="lift"
+    inert={askRaised}
+    bind:clientHeight={lift}
+    style:--shelf-rise={shelves[showing] ? `${shelves[showing]}px` : null}
+  >
     {#if minimized && ask && askQuestions}
       <!-- The minimized question, in the tray row's place: Caw's needs-you
            face, what it asks, and the chevron it comes back up by. The
@@ -3021,7 +3032,7 @@
     {#if trayed.length > 0}
       <div
         class="tray-slot"
-        style:padding-inline-end={planRing
+        style:--ring-room={planRing
           ? `calc(${ringWidth}px + var(--space-2))`
           : undefined}
       >
@@ -3029,7 +3040,13 @@
              the next, the one written to fades in over the last. -->
         {#each trayed as row (row.id)}
           <div class="tray" class:away={row.id !== showing}>
-            <DelegateTray {held} parentId={row.delegatesOf} />
+            <DelegateTray
+              {held}
+              onshelf={(px) => {
+                shelves[row.id] = px;
+              }}
+              parentId={row.delegatesOf}
+            />
           </div>
         {/each}
       </div>
@@ -3511,7 +3528,8 @@
      tray's line: the step off the panel the delegate chips stand on. */
   .progress-slot {
     position: absolute;
-    inset-block-end: 0;
+    /* On the tray's line: risen by the tray's shelf while it is open. */
+    inset-block-end: var(--shelf-rise, 0px);
     inset-inline-end: 0;
     z-index: 1;
     display: flex;
@@ -3525,7 +3543,9 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     align-items: end;
-    block-size: var(--c-tray-row);
+    /* The row, and the tray's shelf under it while it is open: the dock
+       grows up by the shelf, and the transcript keeps the room. */
+    min-block-size: var(--c-tray-row);
   }
   /* What the column measures into the composer's height: the cards and
      the step under them, and nothing at all with no card parked. */
