@@ -830,33 +830,6 @@ export const instances = sqliteTable("instances", {
    * from before the hub kept it, until its next turn.
    */
   turnOpenAt: integer("turn_open_at"),
-  /**
-   * The session started on a machine its project was moved to for it (core
-   * `MOVED_HERE`): when, and the move's ready line, what moved and what
-   * stayed. Its transcript opens on that line.
-   */
-  movedHere: text("moved_here", { mode: "json" }).$type<{
-    at: number;
-    moved: string;
-    stayed?: string;
-  }>(),
-  /**
-   * The limits its keeper held the session to (core `LIMIT_REACHED`): when,
-   * and the line its machine said, newest last and the last few kept
-   * (db `LIMIT_NOTES_KEPT`). Its transcript says each where it happened.
-   */
-  limitNotes: text("limit_notes", { mode: "json" }).$type<
-    { at: number; id: string; content: string }[]
-  >(),
-  /**
-   * What fleet watch did about this session, or for it as the lead (core
-   * `FLEET_WATCH`): when, and the line with the triage's reason under it,
-   * newest last and the last few kept (db `WATCH_LINES_KEPT`). Its
-   * transcript says each where it happened.
-   */
-  watchLines: text("watch_lines", { mode: "json" }).$type<
-    { at: number; id: string; content: string }[]
-  >(),
   keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
     .notNull()
     .default(false),
@@ -2693,6 +2666,42 @@ export const continuations = sqliteTable("continuations", {
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
+
+/**
+ * What kind of line the hub keeps in a session's transcript:
+ * - `limit`: a limit its keeper held it to (core `LIMIT_REACHED`), the line
+ *   its machine said;
+ * - `watch`: what fleet watch did about it, or for it as the lead (core
+ *   `FLEET_WATCH`), the line with the triage's reason under it;
+ * - `moved`: it started on a machine its project was moved to for it (core
+ *   `MOVED_HERE`), the move's ready line: what moved and what stayed. Its
+ *   transcript opens on it; one per session.
+ */
+export type SessionLineKind = "limit" | "watch" | "moved";
+
+/**
+ * Lines the hub writes into a session's transcript, each where it happened,
+ * one row each: when, and what it says. `limit` and `watch` keep their last
+ * few (db `LIMIT_NOTES_KEPT`, `WATCH_LINES_KEPT`), in the order written
+ * (rowid).
+ */
+export const sessionLines = sqliteTable(
+  "session_lines",
+  {
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<SessionLineKind>().notNull(),
+    /** The line's own id; `moved` for a session's one move line. */
+    id: text("id").notNull(),
+    at: timestamp("at").notNull(),
+    /** The line; a move's: what moved. */
+    content: text("content").notNull(),
+    /** A move's: what stayed. */
+    stayed: text("stayed"),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.kind, table.id] })]
+);
 
 /**
  * The harness conversations a session had before the one it runs now

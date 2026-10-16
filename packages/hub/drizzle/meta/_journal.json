@@ -1436,6 +1436,13 @@
       "when": 1792157354821,
       "tag": "0204_instance_conversations",
       "breakpoints": true
+    },
+    {
+      "idx": 205,
+      "version": "6",
+      "when": 1792157363005,
+      "tag": "0205_session_lines",
+      "breakpoints": true
     }
   ]
 }

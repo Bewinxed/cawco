@@ -178,10 +178,11 @@ const nudgesTo = (instanceId: string) =>
     "SELECT uuid FROM sent_messages WHERE instance_id = ? AND body LIKE '%[Fleet watch]%'",
     instanceId
   );
+/** A session's fleet-watch lines (session_lines), as one JSON list of `{at, id, content}`. */
 const linesOf = (instanceId: string) =>
   (
     fleet.query<{ lines: string | null }>(
-      "SELECT watch_lines AS lines FROM instances WHERE id = ?",
+      "SELECT json_group_array(json_object('at', at, 'id', id, 'content', content)) AS lines FROM (SELECT * FROM session_lines WHERE instance_id = ? AND kind = 'watch' ORDER BY rowid)",
       instanceId
     )[0]?.lines ?? "[]"
   ).toString();

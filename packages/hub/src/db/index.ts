@@ -181,9 +181,11 @@ import {
   routines,
   ruleState,
   rules,
+  type SessionLineKind,
   sentMessages,
   sessionIdentities,
   sessionLimits,
+  sessionLines,
   sessionPlans,
   sessionSubagents,
   sessionTaints,
@@ -267,25 +269,25 @@ export type PublicInstanceRow = Omit<
   | "owedAt"
   | "freshStartAt"
   | "turnOpenAt"
-  | "movedHere"
-  | "limitNotes"
-  | "watchLines"
-  | "conversations"
 >;
-/** A limit line kept on a session's row ({@link DbShape.noteLimit}). */
-export type LimitNote = NonNullable<
-  (typeof instances.$inferSelect)["limitNotes"]
->[number];
-/** How many of a session's limit lines its row keeps. */
+/** A limit line kept for a session ({@link DbShape.noteLimit}). */
+export interface LimitNote {
+  at: number;
+  content: string;
+  id: string;
+}
+/** How many of a session's limit lines are kept. */
 export const LIMIT_NOTES_KEPT = 20;
-/** A fleet-watch line kept on a session's row ({@link DbShape.noteWatchLine}). */
+/** A fleet-watch line kept for a session ({@link DbShape.noteWatchLine}). */
 export type WatchLine = LimitNote;
-/** How many of a session's fleet-watch lines its row keeps. */
+/** How many of a session's fleet-watch lines are kept. */
 export const WATCH_LINES_KEPT = 20;
 /** A session's move line ({@link DbShape.noteMovedHere}). */
-export type MovedHere = NonNullable<
-  (typeof instances.$inferSelect)["movedHere"]
->;
+export interface MovedHere {
+  at: number;
+  moved: string;
+  stayed?: string;
+}
 export type BoardInstanceRow = PublicInstanceRow;
 /** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
 export type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling">;
@@ -2538,9 +2540,6 @@ const make = async (path: string): Promise<DbShape> => {
     owedAt: _owedAt,
     freshStartAt: _freshStartAt,
     turnOpenAt: _turnOpenAt,
-    movedHere: _movedHere,
-    limitNotes: _limitNotes,
-    watchLines: _watchLines,
     tooling: _tooling,
     ...publicColumns
   } = getTableColumns(instances);
@@ -2722,6 +2721,63 @@ const make = async (path: string): Promise<DbShape> => {
   }
 
   type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+  /** A session's lines of one kind, in the order written. */
+  const linesOf = (instanceId: string, kind: SessionLineKind) =>
+    db
+      .select()
+      .from(sessionLines)
+      .where(
+        and(
+          eq(sessionLines.instanceId, instanceId),
+          eq(sessionLines.kind, kind)
+        )
+      )
+      .orderBy(sql`rowid`)
+      .all()
+      .map((row) => ({ ...row, at: row.at.getTime() }));
+
+  /**
+   * Keeps a line of a session's, and the last `kept` of its kind, in one
+   * transaction; false when one under its id is kept already, or the hub
+   * keeps no row for the session.
+   */
+  const keepLine = (
+    instanceId: string,
+    kind: SessionLineKind,
+    line: LimitNote,
+    kept: number
+  ): boolean =>
+    db.transaction((tx) => {
+      if (
+        !tx
+          .select({ id: instances.id })
+          .from(instances)
+          .where(eq(instances.id, instanceId))
+          .get()
+      ) {
+        return false;
+      }
+      const added = tx
+        .insert(sessionLines)
+        .values({
+          instanceId,
+          kind,
+          id: line.id,
+          at: new Date(line.at),
+          content: line.content,
+        })
+        .onConflictDoNothing()
+        .returning({ id: sessionLines.id })
+        .all();
+      if (added.length === 0) {
+        return false;
+      }
+      tx.run(
+        sql`DELETE FROM ${sessionLines} WHERE instance_id = ${instanceId} AND kind = ${kind} AND rowid NOT IN (SELECT rowid FROM ${sessionLines} WHERE instance_id = ${instanceId} AND kind = ${kind} ORDER BY rowid DESC LIMIT ${kept})`
+      );
+      return true;
+    });
 
   /** A session's prior conversations, oldest first. */
   const conversationsOf = (
@@ -7959,57 +8015,45 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .get()?.at ?? null,
     noteMovedHere: (id, line) => {
-      db.update(instances)
-        .set({ movedHere: line })
-        .where(eq(instances.id, id))
+      const values = {
+        at: new Date(line.at),
+        content: line.moved,
+        stayed: line.stayed ?? null,
+      };
+      db.insert(sessionLines)
+        .values({ instanceId: id, kind: "moved", id: "moved", ...values })
+        .onConflictDoUpdate({
+          target: [sessionLines.instanceId, sessionLines.kind, sessionLines.id],
+          set: values,
+        })
         .run();
     },
-    movedHereOf: (id) =>
-      db
-        .select({ line: instances.movedHere })
-        .from(instances)
-        .where(eq(instances.id, id))
-        .get()?.line ?? null,
+    movedHereOf: (id) => {
+      const [row] = linesOf(id, "moved");
+      return row
+        ? {
+            at: row.at,
+            moved: row.content,
+            ...(row.stayed === null ? {} : { stayed: row.stayed }),
+          }
+        : null;
+    },
     noteWatchLine: (id, line) => {
-      const kept =
-        db
-          .select({ lines: instances.watchLines })
-          .from(instances)
-          .where(eq(instances.id, id))
-          .get()?.lines ?? [];
-      db.update(instances)
-        .set({ watchLines: [...kept, line].slice(-WATCH_LINES_KEPT) })
-        .where(eq(instances.id, id))
-        .run();
+      keepLine(id, "watch", line, WATCH_LINES_KEPT);
     },
     watchLinesOf: (id) =>
-      db
-        .select({ lines: instances.watchLines })
-        .from(instances)
-        .where(eq(instances.id, id))
-        .get()?.lines ?? [],
-    noteLimit: (id, note) => {
-      const kept =
-        db
-          .select({ notes: instances.limitNotes })
-          .from(instances)
-          .where(eq(instances.id, id))
-          .get()?.notes ?? [];
-      if (kept.some((each) => each.id === note.id)) {
-        return false;
-      }
-      db.update(instances)
-        .set({ limitNotes: [...kept, note].slice(-LIMIT_NOTES_KEPT) })
-        .where(eq(instances.id, id))
-        .run();
-      return true;
-    },
+      linesOf(id, "watch").map(({ id: lineId, at, content }) => ({
+        id: lineId,
+        at,
+        content,
+      })),
+    noteLimit: (id, note) => keepLine(id, "limit", note, LIMIT_NOTES_KEPT),
     limitNotesOf: (id) =>
-      db
-        .select({ notes: instances.limitNotes })
-        .from(instances)
-        .where(eq(instances.id, id))
-        .get()?.notes ?? [],
+      linesOf(id, "limit").map(({ id: lineId, at, content }) => ({
+        id: lineId,
+        at,
+        content,
+      })),
     takeOwedSend: (uuid) => {
       const owed = db
         .select({ owed: sentMessages.owed })
