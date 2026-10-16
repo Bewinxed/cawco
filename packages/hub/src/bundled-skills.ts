@@ -36,18 +36,18 @@ export const BUNDLED_SKILLS = [
 ] as const;
 
 /**
- * Each template's starter skills, by the work its stages run. A design
- * system is built "as needed" (§5.7), so `design-system` reaches every
- * session and is also named for the templates whose work calls for one.
+ * Each template's starter skills, by the work its stages run. A skill in
+ * {@link BUNDLED_SKILLS} is never one too: it already reaches every
+ * session, and a second, project-bound copy would list it twice.
  */
 export const TEMPLATE_SKILLS: Record<StagesTemplate, readonly string[]> = {
   code: ["review-attempt"],
-  launch: ["launch-plan", "design-system"],
+  launch: ["launch-plan"],
   seo: ["seo-brief"],
-  brand: ["brand-extract", "design-system"],
-  // design-explore reaches every session (BUNDLED_SKILLS): any agent's design preview takes it.
-  design: ["design-system"],
-  social: ["social-post", "design-system"],
+  brand: ["brand-extract"],
+  // design-explore and design-system reach every session (BUNDLED_SKILLS).
+  design: [],
+  social: ["social-post"],
   outreach: ["outreach-message"],
 };
 
