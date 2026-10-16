@@ -57,6 +57,7 @@ import { docOf, type On, pageFrame, screenBox } from "./ink";
 const CREATE = "mcp__cawco__artifact_create";
 const READ = "mcp__cawco__artifact_read";
 const FINISH = "mcp__cawco__finish_item";
+const WAIT = "mcp__cawco__wait_item";
 const STORY = "apps/dashboard/src/lib/cawco/turn/Who.stories.ts";
 const COMPONENT = "apps/dashboard/src/lib/cawco/turn/Who.svelte";
 /** The files as the stage names them, from its Vite root. */
@@ -67,8 +68,9 @@ const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 /** The stage's errors notice (core injected.ts `artifactErrorsNotice`) and its section's place. */
 const ERRORS_NOTICE = /does not compile on its stage/;
-const ERROR_AT =
-  /## Compile error at src\/lib\/cawco\/transcript\/Who\.svelte:(\d+):(\d+)/;
+const ERROR_AT = new RegExp(
+  `## Compile error at ${COMPONENT_AT_ROOT.replaceAll(/[./]/g, "\\$&")}:(\\d+):(\\d+)`
+);
 /** The errors an `artifact_read` of the sheet answers, as its JSON spells them. */
 const READ_ERRORS = /"errors":(\[[^\]]*\])/;
 /** The marks' quiet period, the hub's send and the model's request (artifacts/service.ts `MARKS_QUIET_MS`). */
@@ -110,7 +112,45 @@ const toolResultOf = (body: string): string => {
     : "";
 };
 
-/** The delegate: installs the checkout first, then calls whatever tool the probe asks (`PROBE-CALL:<n>`), loading it through ToolSearch when deferred. */
+/** The name of the tool the request's previous assistant message called, if it called one. */
+const calledLast = (body: string): string | undefined => {
+  const sent = JSON.parse(body) as {
+    messages?: { content?: unknown; role?: string }[];
+  };
+  const content = sent.messages?.findLast(
+    (message) => message.role === "assistant"
+  )?.content;
+  return Array.isArray(content)
+    ? (content as { name?: string; type?: string }[]).find(
+        (one) => one.type === "tool_use"
+      )?.name
+    : undefined;
+};
+
+/**
+ * A turn of the delegate's that ends with `words`: first it declares that it
+ * waits (`wait_item`), as a delegate waiting for its parent does, so the hub
+ * neither nudges nor fails its item for quiet turns (work-items.ts
+ * `QUIET_TURNS`); every message that wakes it ends that wait, so each turn
+ * declares it again.
+ */
+const restIn = (request: Seen, words: string): Reply => {
+  const last = calledLast(request.body);
+  if (
+    last === WAIT ||
+    (last === "ToolSearch" && !request.toolNames.includes(WAIT))
+  ) {
+    return text(words);
+  }
+  if (request.toolNames.includes(WAIT)) {
+    return tool(WAIT, { minutes: 120, reason: "The probe's next call." });
+  }
+  return request.toolNames.includes("ToolSearch")
+    ? tool("ToolSearch", { query: `select:${WAIT}`, max_results: 1 })
+    : text(words);
+};
+
+/** The delegate: installs the checkout first, then calls whatever tool the probe asks (`PROBE-CALL:<n>`), loading it through ToolSearch when deferred; each turn ends in a declared wait. */
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
@@ -138,16 +178,16 @@ const respond = (request: Seen): Reply => {
     request.afterTool
   ) {
     answered.set(marker, toolResultOf(request.body));
-    return text("done");
+    return restIn(request, "done");
   }
   if (ERRORS_NOTICE.test(request.last)) {
-    return text("Heard the compile error.");
+    return restIn(request, "Heard the compile error.");
   }
   if (!(marker && ask)) {
-    return text("Installed.");
+    return restIn(request, "Installed.");
   }
   if (issued.has(marker)) {
-    return text("done");
+    return restIn(request, "done");
   }
   if (request.toolNames.includes(ask.name)) {
     issued.add(marker);
@@ -155,7 +195,7 @@ const respond = (request: Seen): Reply => {
   }
   return request.toolNames.includes("ToolSearch")
     ? tool("ToolSearch", { query: `select:${ask.name}`, max_results: 1 })
-    : text(`${ask.name} is not offered`);
+    : restIn(request, `${ask.name} is not offered`);
 };
 
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
