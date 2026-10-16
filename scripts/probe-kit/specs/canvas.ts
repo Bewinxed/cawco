@@ -392,7 +392,7 @@ const NOT_IMAGE =
 
 /** A canvas's frame in a page's panel, by its artifact id, once its host page has drawn. */
 const frameOf = async (page: Page, id: string): Promise<Frame> => {
-  const sel = `[data-slot="canvas-stage"][data-docked][data-artifact="${id}"] iframe`;
+  const sel = `[data-slot="canvas-stage"][data-canvas-stages-docked][data-artifact="${id}"] iframe`;
   await until(
     "the canvas in the panel",
     () => page.frameLocator(sel).locator(".canvas-host .excalidraw").count(),
@@ -514,7 +514,7 @@ const imageChecks = async (on: OnCanvas) => {
   // has the focus, and places it at the pointer.
   const well = (await page
     .locator(
-      `[data-slot="canvas-stage"][data-docked][data-artifact="${id}"] iframe`
+      `[data-slot="canvas-stage"][data-canvas-stages-docked][data-artifact="${id}"] iframe`
     )
     .boundingBox()) as { x: number; y: number; width: number; height: number };
   await frame.click('.rail-box[aria-label^="Select"]');
