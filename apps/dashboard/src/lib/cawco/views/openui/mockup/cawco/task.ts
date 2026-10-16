@@ -40,6 +40,7 @@ export const mockTask = (
     duplicateOf: null,
     fields: {},
     foundIn: null,
+    outputs: [],
     parent: null,
     path: `tasks/${id}.md`,
     problem: null,

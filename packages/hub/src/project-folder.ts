@@ -717,6 +717,21 @@ export const IMAGE_TYPES: Record<string, string> = {
   svg: "image/svg+xml",
 };
 
+/** The videos and sounds the hub serves a task's output as, by extension. */
+export const MEDIA_TYPES: Record<string, string> = {
+  mp4: "video/mp4",
+  m4v: "video/x-m4v",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  oga: "audio/ogg",
+  flac: "audio/flac",
+};
+
 /** A path's extension, lowercase, without its dot (`png`); empty when none. */
 export const fileExtension = (path: string): string => {
   const name = basename(path);
@@ -729,7 +744,10 @@ export const fileExtension = (path: string): string => {
  * anything else, read again every time, and an SVG opened on its own runs
  * nothing.
  */
-export const servedFile = (bytes: Uint8Array<ArrayBuffer>, type: string) =>
+export const servedFile = (
+  bytes: Uint8Array<ArrayBuffer> | Blob,
+  type: string
+) =>
   new Response(bytes, {
     headers: {
       "content-type": type,
@@ -740,20 +758,23 @@ export const servedFile = (bytes: Uint8Array<ArrayBuffer>, type: string) =>
     },
   });
 
+/** The largest file the raw route serves: a task's video or audio output. */
+export const FOLDER_RAW_LIMIT = 256 * 1024 * 1024;
+
 /**
- * One file's bytes, whole, text or not, up to `limit`: what a mockup draws
- * from a project's design (a font, an image), or an output an attempt
- * handed in. Refused like a read: a path out of the folder, a link out of
- * it, a folder, or too large.
+ * One file of the folder, text or not, up to `limit`: where it really is and
+ * its size, for what is drawn or served rather than read as text. Refused
+ * like a read: a path out of the folder, a link out of it, a folder, or too
+ * large.
  */
-export const readFolderBytes = async (
+export const folderFileRaw = async (
   projectId: string,
   rawPath: string,
-  limit: number
-): Promise<{ bytes: Uint8Array<ArrayBuffer>; path: string }> => {
+  limit = FOLDER_RAW_LIMIT
+): Promise<{ path: string; real: string; size: number }> => {
   const rel = folderPath(rawPath);
   if (!rel) {
-    throw new FolderRefusal(400, "Name a file to read.");
+    throw new FolderRefusal(400, "Name a file, like media/cover.png.");
   }
   const root = await forReading(projectId);
   const real = await readable(root, rel);
@@ -764,10 +785,24 @@ export const readFolderBytes = async (
   if (info.size > limit) {
     throw new FolderRefusal(
       413,
-      `${rel} is ${size(info.size)}; reads stop at ${size(limit)}.`
+      `${rel} is ${size(info.size)}; files open up to ${size(limit)}.`
     );
   }
-  return { path: rel, bytes: new Uint8Array(await readFile(real)) };
+  return { path: rel, real, size: info.size };
+};
+
+/**
+ * One file's bytes, whole, text or not, up to `limit`: what a mockup draws
+ * from a project's design (a font, an image), or an output an attempt
+ * handed in.
+ */
+export const readFolderBytes = async (
+  projectId: string,
+  rawPath: string,
+  limit: number
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; path: string }> => {
+  const file = await folderFileRaw(projectId, rawPath, limit);
+  return { path: file.path, bytes: new Uint8Array(await readFile(file.real)) };
 };
 
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
@@ -1774,6 +1809,31 @@ export const projectFolderRoutes = (
         try {
           known(params.id);
           return await readFolderFile(params.id, query.path);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    .get(
+      "/api/projects/:id/folder/raw",
+      { query: t.Object({ path: t.String() }) },
+      async ({ params, query }) => {
+        try {
+          known(params.id);
+          const file = await folderFileRaw(params.id, query.path);
+          const body = Bun.file(file.real);
+          // Served on the dashboard's own origin: a page or a drawing in the
+          // folder is shown, never run (no script, no frame, no form).
+          return new Response(body, {
+            headers: {
+              "Content-Type": body.type || "application/octet-stream",
+              "Content-Length": String(file.size),
+              "Content-Disposition": "inline",
+              "Content-Security-Policy": "sandbox; default-src 'none'",
+              "X-Content-Type-Options": "nosniff",
+              "Cache-Control": "no-cache",
+            },
+          });
         } catch (error) {
           return refused(error);
         }

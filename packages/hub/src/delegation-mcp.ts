@@ -421,7 +421,9 @@ export function createDelegationMcp(options: {
         (tool) =>
           allows(role, tool.name) &&
           (!!actor.projectId || !PROJECT_ONLY.has(tool.name)) &&
-          (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor))
+          (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor)) &&
+          // Only a work item hands in a result on its task.
+          (tool.name !== "task_result" || !!actor.workItemId)
       ),
       ...connections,
     ];

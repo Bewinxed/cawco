@@ -1502,6 +1502,137 @@
         }
       }
     },
+    "/api/projects/{id}/folder/raw": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdFolderRaw",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdFolderRaw 200",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdFolderRaw 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdFolderRaw 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdFolderRaw 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdFolderRaw 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdFolderRaw 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdFolderRaw 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdFolderRaw 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdFolderRaw 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdFolderRaw 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/folder/history": {
       "get": {
         "parameters": [
@@ -29466,6 +29597,13 @@
           "number": {
             "type": "number"
           },
+          "outputs": {
+            "description": "The project folder files its work produces (`outputs:`).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "parent": {
             "type": [
               "null",
@@ -29630,6 +29768,7 @@
           "liveAttempt",
           "needsYou",
           "number",
+          "outputs",
           "parent",
           "path",
           "problem",
@@ -29657,7 +29796,7 @@
             ]
           },
           "endedHow": {
-            "description": "How it ended when it did not land, in a sentence the task shows: failed,\n`Attempt failed: <why>` (the first line of what the hub reported);\ncancelled, `Stopped by <who>` (`Stopped` when the hub did not hear who).\nNull while live and once done.",
+            "description": "How it ended when it did not land, in a sentence the task shows beside\nits Failed or Stopped badge: failed, the first line of what the hub\nreported (`It failed without a reason.` when nothing was); cancelled,\n`Stopped by <who>` (`Stopped` when the hub did not hear who). Null while\nlive and once done.",
             "type": [
               "null",
               "string"
@@ -29673,6 +29812,10 @@
           "instanceId": {
             "description": "The session running it.",
             "type": "string"
+          },
+          "result": {
+            "description": "What its session handed in (`task_result`); null while it has not.",
+            "$ref": "#/components/schemas/AttemptResult"
           },
           "startedAt": {
             "description": "When it was filed, ms epoch.",
@@ -29694,6 +29837,131 @@
           "state",
           "workItemId"
         ]
+      },
+      "AttemptResult": {
+        "description": "An attempt's result (`task_result`, hub task-tools.ts): what the session\nthat worked it says it did, what the reviewer should check, and what it\nhanded in, in the order it is drawn. One per attempt; a later call\nreplaces it. (A task's `TaskResult`, hub tasks.ts, is its newest\nfinished attempt's `finish_item` report.)",
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResultArtifact"
+            }
+          },
+          "at": {
+            "description": "When it was handed in, ms epoch.",
+            "type": "number"
+          },
+          "check": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifacts",
+          "at",
+          "check",
+          "summary"
+        ]
+      },
+      "ResultArtifact": {
+        "description": "One thing an attempt handed in, as the review draws it.",
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "file",
+                      "post"
+                    ],
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "link"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "url"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "artifact"
+                    ]
+                  },
+                  "artifactId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "artifactId",
+                  "kind"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "ArtifactBase": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "What its chip says; left out, the file's name, the link's host or the artifact's id.",
+            "type": "string"
+          },
+          "primary": {
+            "description": "The one the reviewer sees first.",
+            "type": "boolean"
+          }
+        }
       },
       "WorkItemState": {
         "description": "A work item's life. Only `starting` and `running` take messages.",

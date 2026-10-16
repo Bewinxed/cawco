@@ -2101,6 +2101,7 @@ export interface DbShape {
         | "instanceId"
         | "origin"
         | "stoppedBy"
+        | "taskResult"
       >
     >
   ) => WorkItemRow | undefined;

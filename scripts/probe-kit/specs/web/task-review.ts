@@ -1,615 +1,514 @@
 /**
- * The task sheet as a review (TaskSheet and what it draws: the task's
- * result, its attempts, the attempt's transcript), on the built dashboard
- * against a stub hub that answers as the hub does for one project with one
- * task: two attempts (a failed one, then one that finished in a minute with
- * its report), and four outputs handed in, served by the task's outputs
- * route (`/tasks/:taskId/outputs/file?name=`): a post (`post.md`), a
- * schedule (`schedule.json`), an OpenUI mockup (`board.oui`) and a picture
- * (`cover.png`). The owner's pins on the task-review preview (2026-10-15),
- * read from the DOM:
+ * A task's review is a message from the session that worked it, then what
+ * that session presented. On the built dashboard against a scratch fleet
+ * seeded by scripts/task-review-preview/seed.ts:
+ * - (a) tsk-2: its session presented a page artifact, with a file and a
+ *   link: the stage holds the artifact's frame, loaded;
+ * - (b) tsk-1: files only: the stage is its words, the files attachments;
+ * - (c) tsk-7: its session failed: Try again in the decision band;
+ * - (d) tsk-5: two sessions: Details › Sessions lists both.
+ * In each, at a desk's split (1440) and a phone's page (390): only the
+ * stage scrolls, the decision band stands at the pane's foot, and nothing
+ * shows a file's name as a heading.
  *
- *  a. No file names: the sheet says none of the outputs' names anywhere,
- *     and lists none.
- *  b. The result leads with the attempt's own report: its headline, then
- *     its words.
- *  c. The post is drawn as text: its words, no front matter.
- *  d. The .json is drawn as what it says: its title, its fields by name, its
- *     posts as a table, never "schedule.json" or a brace.
- *  e. The OpenUI result mounts: the mockup frame draws its parts, no errors.
- *  f. The picture is drawn as a picture.
- *  g. A Try again button, and the attempt's state as "Finished in 1 min".
- *  h. The transcript is the session's own (its rows drawn), with non-zero
- *     padding, and Expand grows it to the sheet's full height in its own
- *     pane: beside the task at 1440 and 1024, over it at 390.
- *  i. Actions and labels differ in role and computed style: a button is a
- *     focusable <button> with an edge and a control's radius; a label is a
- *     span no key reaches, with no edge, a badge's radius and no pointer.
+ * Then one assertion per pin the owner left on the review (2026-10-15),
+ * each read from the engine:
+ *  1. "it's not clear if these are tags or action buttons": the labels are
+ *     badges on the facts line that take no press (not focusable, no
+ *     pointer, no role), and the decision's actions are buttons.
+ *  2. "what are tehse parts supposed to indicate?": no strip of chips; the
+ *     pane's only tabs are Review and Details, and what the session
+ *     attached is a row of links, each opening what it names.
+ *  3. "why are you spamming the files etc in a vertical view? what is the
+ *     .json suppsoed to say?": one stage, holding one thing (the presented
+ *     page, or the session's words), no raw JSON anywhere in the pane.
+ *  4. "what are attempts? are weable to even attempt again?, what does the
+ *     Done or time mean": the word Attempt, Done and a duration appear
+ *     nowhere; a failed session says Failed and the hub's reason, with Try
+ *     again in Approve's place.
+ *  5. "we talked before about giving a way for the agents to present their
+ *     results": what the session presented with artifact_create is drawn by
+ *     the artifact panel's own renderer (PreviewPane, inset).
+ *  6. (an empty pin on the side card): the task stands beside the board,
+ *     the board live and wide beside it, never a sheet over it.
+ *  7. "no padding or even proper layout for the transcript? no way to
+ *     expand it?": Open ↗ shows the session's own transcript, its padding
+ *     and columns, at the page's full height, the task beside it.
  *
- * Each width (1440, 1024, 390) writes the sheet, and the sheet with its
- * transcript expanded, to the spec's folder for the critique.
+ * Each case writes its capture at both widths to the spec's folder for the
+ * critique.
  *
  *   bun scripts/probe-kit/run.ts web task-review
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one width at a time, each its own page
+// biome-ignore-all lint/performance/noAwaitInLoops: one page, one task at a time
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each pin is read in order, one assertion after another
-import { readFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { type Kit, open, type Spec, settle, type View } from "../../kit";
-import { photo } from "./oui-mockup/bytes";
+import { respond } from "../../../task-review-preview/mock";
+import { type Kit, open, ROOT, type Spec, settle } from "../../kit";
 
-const PROJECT = "p-review";
-const TASK = "tsk-7";
-const SESSION_DONE = "i-attempt-2";
-const SESSION_FAILED = "i-attempt-1";
-const NOW = Date.now();
-const MINUTE = 60_000;
-const NEWLINES = /\n/g;
-
-const POST = `---
-title: Harbour is live
----
-# Harbour is live
-
-Today we open Harbour to everyone. Book a berth in two taps, pay at the quay, and sail.
-
-We built it for the people who keep boats, not for the people who sell them.
-`;
-
-const SCHEDULE = {
-  title: "Launch week",
-  channel: "X",
-  starts_at: "2026-10-19",
-  posts: [
-    { day: "Monday", time: "09:00", text: "Harbour is live." },
-    { day: "Wednesday", time: "12:30", text: "How berth booking works." },
-    { day: "Friday", time: "17:00", text: "A week on the water." },
-  ],
-};
-
-const MOCKUP = await readFile(
-  join(import.meta.dir, "oui-mockup", "board.oui"),
-  "utf8"
-);
-
-/** Each output the task names, as the hub serves it: its bytes and type. */
-const OUTPUTS: Record<
-  string,
-  { body: string | Uint8Array<ArrayBuffer>; type: string }
-> = {
-  "post.md": { body: POST, type: "text/plain; charset=utf-8" },
-  "schedule.json": {
-    body: JSON.stringify(SCHEDULE, null, 2),
-    type: "text/plain; charset=utf-8",
-  },
-  "board.oui": { body: MOCKUP, type: "text/plain; charset=utf-8" },
-  "cover.png": { body: new Uint8Array(photo()), type: "image/png" },
-};
-const NAMES = Object.keys(OUTPUTS);
-
-const HEADLINE = "Wrote the launch post and planned launch week's three posts.";
-const REPORT =
-  "The post leads with booking a berth in two taps. The week goes out Monday, Wednesday and Friday, each post under 280 characters.";
-
-const attempts = [
-  {
-    workItemId: "wi-2",
-    instanceId: SESSION_DONE,
-    state: "done",
-    startedAt: NOW - 10 * MINUTE,
-    endedAt: NOW - 10 * MINUTE + 65_000,
-    endedHow: null,
-    headline: HEADLINE,
-  },
-  {
-    workItemId: "wi-1",
-    instanceId: SESSION_FAILED,
-    state: "failed",
-    startedAt: NOW - 40 * MINUTE,
-    endedAt: NOW - 37 * MINUTE,
-    endedHow: "Attempt failed: the post ran past 280 characters.",
-    headline: null,
-  },
-];
-
-const flags = {
-  attempts,
-  blockedBy: [],
-  lastAttemptFailed: false,
-  lastAttemptStopped: false,
-  liveAttempt: false,
-  queuedStart: false,
-  startProblem: null,
-};
-
-const summary = {
-  ...flags,
-  after: [],
-  foundIn: null,
-  id: TASK,
-  kind: "you",
-  labels: ["launch"],
-  needsYou: true,
-  number: 7,
-  parent: null,
-  path: `tasks/${TASK}-launch-post.md`,
-  problem: null,
-  rank: "a0",
-  related: [],
-  stage: "review",
-  title: "Write the launch post and its week of posts",
-  todos: { done: 2, total: 2 },
-  type: "writer",
-  createdAt: NOW - 2 * 60 * MINUTE,
-  updatedAt: NOW - 9 * MINUTE,
-};
-
-const view = {
-  ...summary,
-  acceptance: "The post reads in under a minute. Each day has one post.",
-  checks: [],
-  description:
-    "The launch post for Harbour, and what goes out each day of launch week.",
-  extra: [],
-  hash: "0".repeat(64),
-  lands: "none",
-  outputs: NAMES,
-  problems: [],
-  result: {
-    workItemId: "wi-2",
-    at: NOW - 10 * MINUTE + 65_000,
-    headline: HEADLINE,
-    report: REPORT,
-  },
-  sections: [],
-  todos: [
-    {
-      depth: 0,
-      done: true,
-      id: "td-1",
-      path: "1",
-      promoted: null,
-      proposed: false,
-      text: "Draft the post",
-    },
-    {
-      depth: 0,
-      done: true,
-      id: "td-2",
-      path: "2",
-      promoted: null,
-      proposed: false,
-      text: "Plan the week",
-    },
-  ],
-};
-
-const stages = {
-  moves: [{ from: "*", to: "*", who: ["you"] }],
-  problems: [],
-  source: "file",
-  stages: [
-    { name: "todo", kind: "todo", hooks: {} },
-    { name: "review", kind: "you", hooks: {} },
-    { name: "done", kind: "done", hooks: {} },
-  ],
-  starters: [],
-  template: null,
-  views: [],
-};
-
-const project = {
-  appleGate: false,
-  caw: false,
-  createdAt: new Date(NOW - 24 * 60 * MINUTE).toISOString(),
-  id: PROJECT,
-  name: "Harbour",
-  places: [],
-  primaryPlaceId: null,
-  remote: null,
-  review: false,
-};
-
-const library = {
-  assets: [],
-  css: "",
-  design: { system: "cawco", assets: [], specimens: [] },
-  fonts: [],
-  hash: "stub",
-  prompt: "",
-  roles: {},
-  templates: {},
-};
-
-const block = (id: string, type: string, content: string, step: number) => ({
-  id,
-  instanceId: SESSION_DONE,
-  type,
-  content,
-  timestamp: new Date(NOW - 10 * MINUTE + step * 10_000).toISOString(),
-});
-
-const transcript = {
-  blocks: [
-    block(
-      "b1",
-      "user",
-      "Write the launch post for Harbour and plan its week of posts.",
-      0
-    ),
-    block(
-      "b2",
-      "assistant",
-      "I'll draft the post first, then lay the week out day by day.",
-      1
-    ),
-    block(
-      "b3",
-      "assistant",
-      "The post is written and the week is planned: three posts, Monday, Wednesday and Friday.",
-      5
-    ),
-  ],
-  branches: [],
-  cursor: null,
-  seq: 0,
-  where: { cwd: "/w", harness: "claude", machineId: "m-1", sessionKey: "k-1" },
-};
-
-/** The hub's answer to one read, or null: the stub does not serve it. */
-function answer(method: string, url: URL, body: string): Response | null {
-  const at = url.pathname;
-  const base = `/api/projects/${PROJECT}`;
-  const reads: Record<string, () => unknown> = {
-    "GET /api/projects": () => [project],
-    "GET /api/agents": () => [],
-    [`GET ${base}/tasks`]: () => ({
-      problems: [],
-      stagesProblems: [],
-      tasks: [summary],
-      tracker: "cawco",
-    }),
-    [`GET ${base}/stages`]: () => stages,
-    [`GET ${base}/tasks/${TASK}`]: () => view,
-    [`GET ${base}/mockups/library`]: () => library,
-    [`POST ${base}/mockups/check`]: () => ({
-      components: [],
-      source: (JSON.parse(body) as { source: string }).source,
-    }),
-    [`GET /api/instances/${SESSION_DONE}/transcript`]: () => transcript,
-    [`GET /api/instances/${SESSION_FAILED}/transcript`]: () => ({
-      ...transcript,
-      blocks: [],
-    }),
-  };
-  if (method === "GET" && at === `${base}/tasks/${TASK}/outputs/file`) {
-    const output = OUTPUTS[url.searchParams.get("name") ?? ""];
-    return output
-      ? new Response(output.body, { headers: { "content-type": output.type } })
-      : null;
-  }
-  const read = reads[`${method} ${at}`];
-  return read ? Response.json(read()) : null;
+interface Seeded {
+  project: string;
 }
 
-/** A hub that answers the reads the project page and its task sheet make. */
-function stubHub(unserved: Set<string>) {
-  return Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      const url = new URL(request.url);
-      const body = request.method === "GET" ? "" : await request.text();
-      const answered = answer(request.method, url, body);
-      if (!answered) {
-        unserved.add(`${request.method} ${url.pathname}`);
-        return Response.json("The stub hub serves no such read.", {
-          status: 404,
-        });
-      }
-      return answered;
-    },
-  });
-}
+/** A file's name as a heading would say it: `post.json`, `plan.md`. */
+const FILE_NAME = /\.[a-z0-9]{2,5}$/i;
+/** What a pane says of attempts, a bare Done, or a run's length. */
+const ATTEMPT_WORDS = /\bAttempt\b|\bDone ·|· Done\b|Finished in|\b\d+ min\b/;
+/** JSON as a file holds it: an object's opening, a quoted key. */
+const RAW_JSON = /\{\s*"|"kind"\s*:/;
+const WHITESPACE = /\s+/g;
+/** An overflow that scrolls. */
+const SCROLLABLE = /(auto|scroll)/;
+/** The hub's reason tsk-7's session failed (seed.ts). */
+const FAILED_WHY = "post 3 is 312 characters";
 
-const SHEET = ".task-sheet";
-
-/** Everything a width reads before and after the transcript is expanded. */
-const readSheet = (page: Page) =>
-  page.evaluate((names) => {
-    const sheet = document.querySelector<HTMLElement>(".task-sheet");
-    const text = sheet?.innerText ?? "";
-    const part = (kind: string) =>
-      sheet?.querySelector<HTMLElement>(`[data-result-kind='${kind}']`);
-    const data = part("data")?.querySelector<HTMLElement>("[data-result-data]");
-    const frame = part("mockup")?.querySelector<HTMLElement>(
-      "[data-mockup-frame]"
-    );
-    const picture = part("picture")?.querySelector("img");
-    const report = sheet?.querySelector<HTMLElement>("[data-task-report]");
-    const pane = sheet?.querySelector<HTMLElement>("[data-task-transcript]");
-    const tr = pane?.querySelector<HTMLElement>(".tr");
-    const trStyle = tr ? getComputedStyle(tr) : null;
-    // Any list one of whose items names an output's file.
-    const fileLists = [...(sheet?.querySelectorAll("ul, ol") ?? [])].filter(
-      (list) =>
-        [...list.querySelectorAll("li")].some((item) =>
-          names.some((name) => item.textContent?.includes(name))
-        )
-    ).length;
-    const style = (el: Element | null | undefined) => {
-      if (!el) {
-        return null;
-      }
-      const s = getComputedStyle(el);
-      return {
-        tag: el.tagName,
-        role: el.getAttribute("role"),
-        focusable: (el as HTMLElement).tabIndex >= 0,
-        border: Number.parseFloat(s.borderTopWidth),
-        radius: Number.parseFloat(s.borderTopLeftRadius),
-        cursor: s.cursor,
-      };
-    };
-    return {
-      names: names.filter((name) => text.includes(name)),
-      fileLists,
-      report: report?.innerText ?? "",
-      doc: {
-        text: part("document")?.innerText ?? "",
-        paragraphs: part("document")?.querySelectorAll("p").length ?? 0,
-      },
-      data: {
-        text: data?.innerText ?? "",
-        headers: [...(data?.querySelectorAll("th") ?? [])].map((th) =>
-          th.textContent?.trim()
-        ),
-      },
-      mockup: {
-        mounted: Boolean(frame),
-        parts: frame?.querySelectorAll("[data-mk]").length ?? 0,
-        errors: Number(frame?.dataset.mockupErrors ?? -1),
-      },
-      picture: {
-        width: picture?.naturalWidth ?? 0,
-        drawn: picture?.getBoundingClientRect().width ?? 0,
-      },
-      tryAgain: style(sheet?.querySelector("[data-try-again]")),
-      tryAgainText:
-        sheet?.querySelector("[data-try-again]")?.textContent?.trim() ?? "",
-      status:
-        sheet?.querySelector("[data-attempt-status]")?.textContent?.trim() ??
-        "",
-      expand: style(sheet?.querySelector("[data-transcript-expand]")),
-      labels: [
-        ...(sheet?.querySelectorAll("[data-label], [data-attempt-status]") ??
-          []),
-      ].map(style),
-      transcript: {
-        drawn: pane?.innerText.includes("lay the week out day by day") ?? false,
-        paddingStart: trStyle
-          ? Number.parseFloat(trStyle.paddingInlineStart)
-          : 0,
-        paddingEnd: trStyle ? Number.parseFloat(trStyle.paddingInlineEnd) : 0,
-        height: pane?.getBoundingClientRect().height ?? 0,
-        width: pane?.getBoundingClientRect().width ?? 0,
-        expanded: pane?.dataset.expanded === "true",
-      },
-      sheet: {
-        height: sheet?.getBoundingClientRect().height ?? 0,
-        width: sheet?.getBoundingClientRect().width ?? 0,
-      },
-      // Result table cells whose words run past their cell.
-      clipped: [
-        ...(sheet?.querySelectorAll<HTMLElement>(
-          "[data-result-kind] td, [data-result-kind] th"
-        ) ?? []),
-      ]
-        .filter((cell) => cell.scrollWidth > cell.clientWidth + 1)
-        .map((cell) => cell.textContent?.trim() ?? ""),
-      // Result tables wider than their place (they scroll sideways).
-      wideTables: [
-        ...(sheet?.querySelectorAll<HTMLElement>(
-          "[data-result-kind] [data-slot='table-container']"
-        ) ?? []),
-      ]
-        .filter((box) => box.scrollWidth > box.clientWidth + 1)
-        .map((box) => `${box.scrollWidth}/${box.clientWidth}px`),
-      // Result table cells broken inside a word ("09:0 / 0"): one word, more than one line.
-      brokenWords: [
-        ...(sheet?.querySelectorAll<HTMLElement>(
-          "[data-result-kind] td, [data-result-kind] th"
-        ) ?? []),
-      ]
-        .filter((cell) => {
-          const words = cell.textContent?.trim() ?? "";
-          if (!words || [...words].some((char) => char.trim() === "")) {
-            return false;
-          }
-          const range = document.createRange();
-          range.selectNodeContents(cell);
-          const tops = new Set(
-            [...range.getClientRects()].map((rect) => Math.round(rect.top))
+/** What the open task's pane shows, read from the engine. */
+const read = (page: Page) =>
+  page.evaluate(
+    ({ fileName, attemptWords, rawJson, scrollable }) => {
+      const pane = document.querySelector<HTMLElement>("[data-task-pane]");
+      const box = (el: Element | null | undefined) =>
+        el ? el.getBoundingClientRect() : null;
+      const scrollers: string[] = [];
+      const scrolls = new RegExp(scrollable);
+      for (const el of pane ? [pane, ...pane.querySelectorAll("*")] : []) {
+        const style = getComputedStyle(el);
+        if (
+          scrolls.test(style.overflowY) &&
+          el.scrollHeight > el.clientHeight + 1
+        ) {
+          scrollers.push(
+            (el as HTMLElement).dataset.band ??
+              `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`
           );
-          return tops.size > 1;
-        })
-        .map((cell) => cell.textContent?.trim() ?? ""),
-      reviewShown: (() => {
-        const review = sheet?.querySelector<HTMLElement>(".review");
-        return review ? getComputedStyle(review).display !== "none" : false;
-      })(),
-    };
-  }, NAMES);
-
-/** The desk's reading of every pin but the transcript's expansion. */
-async function pins(kit: Kit, page: Page) {
-  const before = await readSheet(page);
-  kit.check(
-    "a. the sheet names none of the outputs' files",
-    before.names.length === 0,
-    before.names.join(", ")
-  );
-  kit.check(
-    "a. no list of file names",
-    before.fileLists === 0,
-    `${before.fileLists} lists`
-  );
-  kit.check(
-    "b. the result leads with the attempt's report: its headline, then its words",
-    before.report.includes(HEADLINE) &&
-      before.report.includes("booking a berth in two taps"),
-    before.report.slice(0, 140).replace(NEWLINES, " / ")
-  );
-  kit.check(
-    "c. the post is drawn as text, no front matter",
-    before.doc.text.includes("Book a berth in two taps") &&
-      before.doc.paragraphs >= 2 &&
-      !before.doc.text.includes("title:") &&
-      !before.doc.text.includes("---"),
-    before.doc.text.slice(0, 120).replace(NEWLINES, " / ")
-  );
-  kit.check(
-    "d. the .json is drawn as what it says",
-    before.data.text.includes("Launch week") &&
-      before.data.text.includes("Channel") &&
-      before.data.text.includes("Wednesday") &&
-      ["Day", "Time", "Text"].every((h) => before.data.headers.includes(h)) &&
-      !before.data.text.includes("schedule.json") &&
-      !before.data.text.includes("{"),
-    `${before.data.headers.join("|")} · ${before.data.text.slice(0, 80).replace(NEWLINES, " / ")}`
-  );
-  kit.check(
-    "e. the OpenUI result mounts and draws its parts",
-    before.mockup.mounted &&
-      before.mockup.parts > 0 &&
-      before.mockup.errors === 0,
-    JSON.stringify(before.mockup)
-  );
-  kit.check(
-    "f. the picture is drawn as a picture",
-    before.picture.width > 0 && before.picture.drawn > 0,
-    `${before.picture.width}px wide, drawn ${before.picture.drawn.toFixed(0)}px`
-  );
-  // By its accessible name: its label and its pending wording ("Starting…")
-  // stand in one cell, so its text holds both.
-  const named = await page
-    .locator(SHEET)
-    .getByRole("button", { name: "Try again", exact: true })
-    .count();
-  kit.check(
-    "g. a Try again button",
-    before.tryAgain?.tag === "BUTTON" && named === 1,
-    `${named} button named "Try again"; its text "${before.tryAgainText}"`
-  );
-  kit.check(
-    'g. the attempt says "Finished in 1 min"',
-    before.status.startsWith("Finished in 1 min"),
-    before.status
-  );
-  kit.check(
-    "h. the transcript draws the session's rows with non-zero padding",
-    before.transcript.drawn &&
-      before.transcript.paddingStart > 0 &&
-      before.transcript.paddingEnd > 0,
-    `padding ${before.transcript.paddingStart}/${before.transcript.paddingEnd}px`
-  );
-  const labels = before.labels.filter((each) => each !== null);
-  const buttons = [before.tryAgain, before.expand].filter(
-    (each) => each !== null
-  );
-  const buttonsAre = buttons.every(
-    (b) => b.tag === "BUTTON" && b.focusable && b.border > 0
-  );
-  const labelsAre =
-    labels.length > 0 &&
-    labels.every(
-      (l) =>
-        l.tag === "SPAN" &&
-        l.role === null &&
-        !l.focusable &&
-        l.border === 0 &&
-        l.cursor !== "pointer" &&
-        buttons.every((b) => b.radius !== l.radius)
-    );
-  kit.check(
-    "i. actions are buttons and labels are not, by role and computed style",
-    buttons.length === 2 && buttonsAre && labelsAre,
-    `buttons ${JSON.stringify(buttons)} · labels ${JSON.stringify(labels.slice(0, 2))} (${labels.length})`
-  );
-  return before;
-}
-
-async function width(kit: Kit, base: string, at: View) {
-  const page = await kit.page(at);
-  await open(
-    page,
-    `${base}/project/${PROJECT}?task=${TASK}`,
-    () =>
-      Boolean(
-        document.querySelector(
-          ".task-sheet [data-result-kind='mockup'] [data-mockup-frame]"
-        ) &&
-        document.querySelector(
-          ".task-sheet [data-result-kind='picture'] img"
-        ) &&
-        document.querySelector(".task-sheet [data-task-transcript] .tr") &&
-        document
-          .querySelector(".task-sheet [data-task-transcript]")
-          ?.textContent?.includes("lay the week out day by day")
-      ),
-    90_000
-  );
-  await settle(page);
-  await page.screenshot({ path: join(kit.out, `${at}-sheet.png`) });
-  const before = at === "desk" ? await pins(kit, page) : await readSheet(page);
-  kit.check(
-    `d. ${at}: every result table cell holds its words, none broken inside a word`,
-    before.clipped.length === 0 &&
-      before.wideTables.length === 0 &&
-      before.brokenWords.length === 0,
-    [
-      ...before.clipped,
-      ...before.wideTables,
-      ...before.brokenWords.map((word) => `broken: ${word}`),
-    ].join(" | ")
-  );
-
-  await page.click(`${SHEET} [data-transcript-expand]`);
-  await page.waitForSelector(
-    `${SHEET} [data-task-transcript][data-expanded='true'] .tr`
-  );
-  await settle(page);
-  const after = await readSheet(page);
-  await page.screenshot({ path: join(kit.out, `${at}-expanded.png`) });
-  const full = Math.abs(after.transcript.height - after.sheet.height) <= 2;
-  const besides = at === "phone" ? !after.reviewShown : after.reviewShown;
-  kit.check(
-    `h. ${at}: Expand grows the transcript to the sheet's full height in its own pane`,
-    after.transcript.expanded &&
-      after.transcript.height > before.transcript.height &&
-      full &&
-      besides &&
-      after.transcript.paddingStart > 0,
-    `${before.transcript.height.toFixed(0)} → ${after.transcript.height.toFixed(0)}px of ${after.sheet.height.toFixed(0)}, ${after.transcript.width.toFixed(0)}px wide, review ${after.reviewShown ? "beside it" : "under it"}`
-  );
-}
-
-const run = async (kit: Kit) => {
-  const unserved = new Set<string>();
-  const hub = stubHub(unserved);
-  try {
-    const base = await kit.builtFor(`http://127.0.0.1:${hub.port}`);
-    for (const at of ["desk", "tablet", "phone"] as const) {
-      await width(kit, base, at);
+        }
+      }
+      const decide = pane?.querySelector("[data-band=decide]");
+      const stage = pane?.querySelector<HTMLElement>("[data-band=stage]");
+      const meta = pane?.querySelector(".meta");
+      const control = (el: Element) => {
+        const style = getComputedStyle(el);
+        return {
+          text: el.textContent?.replace(/\s+/g, " ").trim() ?? "",
+          tag: el.tagName,
+          role: el.getAttribute("role"),
+          focusable: (el as HTMLElement).tabIndex >= 0,
+          cursor: style.cursor,
+          inFacts: !!meta?.contains(el),
+        };
+      };
+      const frame = stage?.querySelector<HTMLIFrameElement>(
+        ".preview-pane.preview-inset iframe"
+      );
+      const text = pane?.innerText ?? "";
+      return {
+        scrollers,
+        paneBottom: box(pane)?.bottom ?? 0,
+        decideBottom: box(decide)?.bottom ?? null,
+        viewport: innerHeight,
+        headings: [
+          ...(pane?.querySelectorAll(
+            "h1, h2, h3, h4, h5, h6, [role=heading]"
+          ) ?? []),
+        ]
+          .map((el) => el.textContent?.trim() ?? "")
+          .filter((words) => new RegExp(fileName, "i").test(words)),
+        badges: [...(pane?.querySelectorAll("[data-slot=badge]") ?? [])].map(
+          control
+        ),
+        actions: [...(decide?.querySelectorAll("button") ?? [])].map(
+          (button) => ({
+            ...control(button),
+            name: button.getAttribute("aria-label") ?? "",
+          })
+        ),
+        tabs: [...(pane?.querySelectorAll("[role=tab]") ?? [])].map(
+          (tab) => tab.textContent?.trim() ?? ""
+        ),
+        frame: frame
+          ? {
+              src: frame.getAttribute("src") ?? "",
+              ready: frame.classList.contains("ready"),
+              height: Math.round(frame.getBoundingClientRect().height),
+            }
+          : null,
+        /** What the stage holds, one entry per thing drawn in it. */
+        staged: [...(stage?.children ?? [])].map((el) =>
+          [...el.classList].join(".")
+        ),
+        attachments: [...(pane?.querySelectorAll(".attachment") ?? [])].map(
+          (el) => ({
+            text: el.textContent?.trim() ?? "",
+            tag: el.tagName,
+            href: el.getAttribute("href") ?? "",
+            glyph: !!el.querySelector("svg"),
+          })
+        ),
+        stageText: stage?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        attemptWords: text.match(new RegExp(attemptWords))?.[0] ?? null,
+        rawJson: new RegExp(rawJson).test(text),
+        session: pane?.querySelector(".session")?.textContent ?? "",
+        ended: pane?.querySelector(".ended")?.textContent?.trim() ?? "",
+      };
+    },
+    {
+      fileName: FILE_NAME.source,
+      attemptWords: ATTEMPT_WORDS.source,
+      rawJson: RAW_JSON.source,
+      scrollable: SCROLLABLE.source,
     }
-    kit.note(
-      `the stub hub refused: ${[...unserved].sort().join(", ") || "nothing"}`
+  );
+
+type Seen = Awaited<ReturnType<typeof read>>;
+
+/** The decision band's button by its accessible name (its pending words share its cell). */
+const decision = (page: Page, task: string, name: string) =>
+  page
+    .locator(`[data-task-pane="${task}"] [data-band=decide]`)
+    .getByRole("button", { name, exact: true })
+    .count();
+
+async function views(kit: Kit, base: string, seeded: Seeded) {
+  for (const view of ["desk", "phone"] as const) {
+    const page = await kit.page(view);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    const show = async (task: string) => {
+      await open(
+        page,
+        `${base}/project/${seeded.project}?task=${task}`,
+        `[data-task-pane="${task}"] [data-band=result]`
+      );
+      await settle(page, 400);
+    };
+    const shoot = (task: string) =>
+      page.screenshot({ path: join(kit.out, `${view}-${task}.png`) });
+    const bands = (task: string, seen: Seen) => {
+      kit.check(
+        `${view} ${task}: only the stage scrolls`,
+        seen.scrollers.every((name) => name === "stage"),
+        seen.scrollers.join(", ") || "nothing scrolls"
+      );
+      kit.check(
+        `${view} ${task}: the decision band stands at the pane's foot`,
+        seen.decideBottom !== null &&
+          Math.abs(seen.decideBottom - seen.paneBottom) <= 1 &&
+          seen.decideBottom <= seen.viewport + 1,
+        `decide ${seen.decideBottom}, pane ${seen.paneBottom}, viewport ${seen.viewport}`
+      );
+      kit.check(
+        `${view} ${task}: no file's name as a heading`,
+        seen.headings.length === 0,
+        seen.headings.join(", ")
+      );
+      kit.check(
+        `${view} ${task}: pin 4, no Attempt, no bare Done, no run's length`,
+        seen.attemptWords === null,
+        seen.attemptWords ?? ""
+      );
+    };
+
+    // (a) the presented page artifact, drawn in the stage.
+    await show("tsk-2");
+    await page
+      .waitForSelector(
+        '[data-task-pane="tsk-2"] [data-band=stage] .preview-inset iframe.ready',
+        { timeout: 60_000 }
+      )
+      .catch(() => undefined);
+    const a = await read(page);
+    await shoot("tsk-2");
+    bands("tsk-2", a);
+    const labels = a.badges.filter((badge) =>
+      ["x", "launch"].includes(badge.text)
     );
-    kit.note(`captures in ${kit.out}`);
-  } finally {
-    await hub.stop(true);
+    kit.check(
+      `${view} tsk-2: pin 1, labels are badges on the facts line that take no press; actions are buttons`,
+      labels.length === 2 &&
+        labels.every(
+          (badge) =>
+            badge.inFacts &&
+            !badge.focusable &&
+            badge.role === null &&
+            badge.cursor !== "pointer"
+        ) &&
+        a.actions.length >= 2 &&
+        a.actions.every(
+          (action) => action.tag === "BUTTON" && action.focusable
+        ),
+      `labels ${JSON.stringify(labels)} · actions ${a.actions.map((action) => action.text).join(" | ")}`
+    );
+    kit.check(
+      `${view} tsk-2: pin 2, no chip strip: the only tabs are Review and Details; what it attached are links that open it`,
+      a.tabs.join("|") === "Review|Details" &&
+        a.attachments.length === 2 &&
+        a.attachments.every(
+          (one) => one.tag === "A" && one.href.length > 0 && one.glyph
+        ) &&
+        a.attachments.some((one) => one.text === "press-notes.md") &&
+        a.attachments.some((one) => one.text.startsWith("Launch card · ")),
+      `tabs ${a.tabs.join("|")} · ${JSON.stringify(a.attachments)}`
+    );
+    kit.check(
+      `${view} tsk-2: pin 3, one stage holding one thing, the page itself, no raw JSON`,
+      a.staged.length === 1 &&
+        a.staged[0]?.includes("preview-inset") === true &&
+        !a.rawJson,
+      `${JSON.stringify(a.staged)} · raw JSON ${a.rawJson}`
+    );
+    kit.check(
+      `${view} tsk-2: pin 5, what it presented is drawn by the artifact panel's renderer, loaded`,
+      !!a.frame?.src && a.frame.ready && a.frame.height > 200,
+      JSON.stringify(a.frame)
+    );
+    if (view === "desk") {
+      const beside = await page.evaluate(() => {
+        const board = document
+          .querySelector(".view-pane-side")
+          ?.getBoundingClientRect();
+        const pane = document
+          .querySelector("[data-task-pane]")
+          ?.getBoundingClientRect();
+        return {
+          board: board ? { right: board.right, width: board.width } : null,
+          pane: pane ? { left: pane.left, width: pane.width } : null,
+          cards: document.querySelectorAll(".view-pane-side a[href*='task=']")
+            .length,
+          overlay: !!document.querySelector(
+            "[data-slot=sheet-overlay], [data-dialog-overlay]"
+          ),
+        };
+      });
+      kit.check(
+        "desk tsk-2: pin 6, the task stands beside the board, the board live beside it, no sheet over it",
+        !!beside.board &&
+          !!beside.pane &&
+          beside.board.width > 600 &&
+          beside.pane.left >= beside.board.right - 1 &&
+          beside.cards > 0 &&
+          !beside.overlay,
+        JSON.stringify(beside)
+      );
+    }
+
+    // (b) files only: the words are the stage.
+    await show("tsk-1");
+    const b = await read(page);
+    await shoot("tsk-1");
+    bands("tsk-1", b);
+    kit.check(
+      `${view} tsk-1: pin 3, its words are the one stage, its files attachments, no raw JSON`,
+      b.frame === null &&
+        b.staged.length === 1 &&
+        b.stageText.startsWith("Drafted the Build in Public post") &&
+        b.stageText.includes("Check") &&
+        b.attachments.map((one) => one.text).join(" | ") ===
+          "tsk-1.post.json | tsk-1.plan.md" &&
+        b.attachments.every((one) =>
+          one.href.includes("/tasks/tsk-1/outputs/file?name=")
+        ) &&
+        !b.rawJson,
+      `${b.stageText.slice(0, 60)}… · ${b.attachments.map((one) => one.href).join(" | ")}`
+    );
+    const markers = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          '[data-task-pane="tsk-1"] [data-band=stage] .check-list li'
+        ),
+      ].map((item) => getComputedStyle(item).listStyleType)
+    );
+    kit.check(
+      `${view} tsk-1: what to check is a list, each line with its marker`,
+      markers.length === 2 && markers.every((type) => type === "disc"),
+      markers.join(", ")
+    );
+    if (view === "desk") {
+      const served = await page.evaluate(async (href) => {
+        const response = await fetch(href);
+        return { status: response.status, text: await response.text() };
+      }, b.attachments[1]?.href ?? "");
+      kit.check(
+        "desk tsk-1: an attachment opens the output the hub keeps",
+        served.status === 200 && served.text.startsWith("# Build in Public"),
+        `${served.status} ${served.text.slice(0, 40)}`
+      );
+    }
+
+    // Open ↗: its session's page, the task standing beside the transcript.
+    if (view === "desk") {
+      const session = await page.getAttribute(
+        '[data-task-pane="tsk-1"] [data-session]',
+        "data-session"
+      );
+      await page
+        .getByRole("link", { name: "Open its session beside this task" })
+        .click();
+      await page
+        .waitForSelector(
+          '.transcript-pane .tr [data-row], [data-task-pane="tsk-1"]',
+          {
+            timeout: 60_000,
+          }
+        )
+        .catch(() => undefined);
+      await settle(page, 800);
+      await shoot("tsk-1-session");
+      const beside = await page.evaluate(() => {
+        const pane = document
+          .querySelector('[data-task-pane="tsk-1"]')
+          ?.getBoundingClientRect();
+        const transcript = document.querySelector(".transcript-pane");
+        const rows = transcript?.querySelector<HTMLElement>(".tr");
+        const style = rows ? getComputedStyle(rows) : null;
+        const at = transcript?.getBoundingClientRect();
+        return {
+          path: location.pathname,
+          pane: pane ? { left: pane.left, width: pane.width } : null,
+          transcript: at
+            ? {
+                right: at.right,
+                width: at.width,
+                top: at.top,
+                height: at.height,
+              }
+            : null,
+          padding: style
+            ? [
+                Number.parseFloat(style.paddingInlineStart),
+                Number.parseFloat(style.paddingInlineEnd),
+              ]
+            : null,
+          columns: rows?.classList.contains("tx-columns") ?? false,
+          viewport: innerHeight,
+        };
+      });
+      kit.check(
+        "desk tsk-1: pin 7, Open ↗ shows its session's own transcript, padded, in its columns, full height, the task beside it",
+        beside.path === `/session/${session}` &&
+          !!beside.pane &&
+          !!beside.transcript &&
+          beside.transcript.width > 300 &&
+          beside.transcript.height >=
+            beside.viewport - beside.transcript.top - 2 &&
+          beside.pane.left >= beside.transcript.right - 1 &&
+          !!beside.padding &&
+          beside.padding.every((pad) => pad > 0) &&
+          beside.columns,
+        JSON.stringify(beside)
+      );
+    }
+
+    // (c) a failed session: Failed, the hub's words, Try again.
+    await show("tsk-7");
+    const c = await read(page);
+    await shoot("tsk-7");
+    bands("tsk-7", c);
+    const tryAgain = await decision(page, "tsk-7", "Try again");
+    const approve = await page
+      .locator('[data-task-pane="tsk-7"] [data-band=decide] button')
+      .filter({ hasText: "Approve" })
+      .count();
+    kit.check(
+      `${view} tsk-7: pin 4, its session says Failed and the hub's reason, with Try again in Approve's place`,
+      c.session.includes("Failed") &&
+        c.ended.includes(FAILED_WHY) &&
+        tryAgain === 1 &&
+        approve === 0,
+      `${c.session.replace(WHITESPACE, " ").trim()} · ${c.ended} · Try again ${tryAgain}, Approve ${approve}`
+    );
+
+    // (d) two sessions: Details › Sessions.
+    await show("tsk-5");
+    bands("tsk-5", await read(page));
+    await page
+      .locator('[data-task-pane="tsk-5"]')
+      .getByRole("tab", { name: "Details" })
+      .click();
+    await settle(page, 300);
+    const sessions = await page.evaluate(() => {
+      const pane = document.querySelector('[data-task-pane="tsk-5"]');
+      const head = [...(pane?.querySelectorAll("h3") ?? [])].find((el) =>
+        el.textContent?.trim().startsWith("Sessions")
+      );
+      return {
+        head: head?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+        rows: pane?.querySelectorAll(".sessions > li").length ?? 0,
+        attempts: (pane as HTMLElement | null)?.innerText.includes("Attempt"),
+      };
+    });
+    await shoot("tsk-5-details");
+    kit.check(
+      `${view} tsk-5: pin 4, Details › Sessions lists its two sessions, no Attempt`,
+      sessions.head === "Sessions 2" &&
+        sessions.rows === 2 &&
+        !sessions.attempts,
+      JSON.stringify(sessions)
+    );
+
+    kit.check(
+      `${view}: no page errors`,
+      errors.length === 0,
+      errors.join(" | ")
+    );
   }
+}
+
+const spec: Spec = {
+  name: "task-review",
+  async run(kit) {
+    const fleet = await kit.fleet(respond);
+    fleet.launch("sessiond");
+    await fleet.sessiondUp();
+    fleet.launch("hub");
+    await fleet.hubUp();
+    fleet.fileAccount();
+    fleet.launch("agent");
+    await fleet.agentUp();
+    await fleet.accountSignedIn();
+
+    // The seed, on this fleet.
+    await mkdir(kit.out, { recursive: true });
+    const infoPath = join(kit.out, "info.json");
+    await writeFile(
+      infoPath,
+      JSON.stringify({
+        base: fleet.base,
+        sandbox: fleet.sandbox,
+        home: fleet.home,
+        db: join(fleet.sandbox, "hub", "hub.db"),
+        workdir: fleet.workdir,
+        repo: fleet.repo,
+      })
+    );
+    const seeding = Bun.spawn(
+      ["bun", join(ROOT, "scripts", "task-review-preview", "seed.ts")],
+      {
+        cwd: ROOT,
+        env: { ...process.env, TASK_REVIEW_INFO: infoPath },
+        stdout: "ignore",
+        stderr: "pipe",
+      }
+    );
+    const seededOk = (await seeding.exited) === 0;
+    if (
+      !kit.check(
+        "the seed ran",
+        seededOk,
+        seededOk ? "" : await new Response(seeding.stderr).text()
+      )
+    ) {
+      return;
+    }
+    const seeded = (await Bun.file(
+      join(kit.out, "seeded.json")
+    ).json()) as Seeded;
+
+    const base = await fleet.dashboard();
+    await views(kit, base, seeded);
+    kit.note(`captures in ${kit.out}`);
+  },
 };
 
-export default { name: "task-review", run } satisfies Spec;
+export default spec;

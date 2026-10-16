@@ -14,7 +14,7 @@
    * group composer yet, draws one here. The half-typed message is this
    * pane's either way — `draft` below.
    */
-  import { untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import {
     crossIn,
     crossOut,
@@ -53,9 +53,20 @@
   import { moveOf } from "./move.svelte";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
+  import {
+    listTasks,
+    movesFrom,
+    moveTask,
+    readStages,
+    type StagesView,
+    type TaskSummary,
+    type TaskView,
+  } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
+  import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
+  import TaskPane from "./tasks/TaskPane.svelte";
   import { inLists, threadIdOf, threadTabId } from "./thread-tabs";
   import Composer, {
     type ComposerAsk,
@@ -132,6 +143,52 @@
   const planProgressNow = $derived(
     planShows(plan) && plan ? planProgress(plan) : null
   );
+
+  /*
+   * A task standing beside the session (tasks/beside.svelte.ts): its review
+   * opened the session that worked it. Its project's tasks and stages are
+   * read for the pane, again when they change.
+   */
+  const beside = $derived(besideOf(viewId));
+  let besideTasks = $state<TaskSummary[]>([]);
+  let besideStages = $state<StagesView | null>(null);
+  let besideReads = 0;
+  async function readBeside(projectId: string): Promise<void> {
+    besideReads += 1;
+    const ticket = besideReads;
+    const [{ tasks }, stagesNow] = await Promise.all([
+      listTasks(projectId),
+      readStages(projectId),
+    ]);
+    if (ticket === besideReads && beside?.projectId === projectId) {
+      besideTasks = tasks;
+      besideStages = stagesNow;
+    }
+  }
+  $effect(() => {
+    const projectId = beside?.projectId;
+    if (!projectId) {
+      besideStages = null;
+      return;
+    }
+    // biome-ignore lint/complexity/noVoid: read-only dependency
+    void cawco.tasksChangedOf(projectId);
+    untrack(() => {
+      readBeside(projectId).catch(() => undefined);
+    });
+  });
+  /** Another task (an edge, a blocker) in this one's place. */
+  function showBeside(taskId: string): void {
+    if (beside) {
+      standBeside(viewId, { projectId: beside.projectId, taskId });
+    }
+  }
+  async function moveBeside(taskId: string, stage: string): Promise<TaskView> {
+    const projectId = beside?.projectId ?? "";
+    const moved = await moveTask(projectId, taskId, stage);
+    readBeside(projectId).catch(() => undefined);
+    return moved;
+  }
 
   /** The hub answered 404: no row, no stored file, no machine that knows the id. */
   let missing = $state(false);
@@ -1043,6 +1100,26 @@
   </EmptyState>
 {/snippet}
 
+{#snippet besideSurface(switcher: Snippet | undefined)}
+  {#if beside && besideStages}
+    <TaskPane
+      allowedFrom={(stage) =>
+        besideStages ? movesFrom(besideStages, stage) : new Set()}
+      onchanged={() => {
+        readBeside(beside?.projectId ?? "").catch(() => undefined);
+      }}
+      onclose={() => putAway(viewId)}
+      onmove={moveBeside}
+      onopen={showBeside}
+      projectId={beside.projectId}
+      stages={besideStages}
+      {switcher}
+      taskId={beside.taskId}
+      tasks={besideTasks}
+    />
+  {/if}
+{/snippet}
+
 {#snippet missingState()}
   <EmptyState
     class={STATEFUL}
@@ -1068,6 +1145,8 @@
       {active}
       {phone}
       planOf={viewId}
+      task={besideStages ? besideSurface : undefined}
+      taskOpen={!!beside}
       {viewId}
       {visible}
       bind:this={side}

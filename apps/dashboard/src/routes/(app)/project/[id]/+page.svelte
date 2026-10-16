@@ -17,6 +17,12 @@
    * The view and the open task live in the URL (`?view=`, `?task=`), so a
    * link opens the same. Needs you is a filter, not a stage: the tasks whose
    * stage is of kind `you`.
+   *
+   * A task opens in the page (DESIGN.md, The Open Page Rule): on a desk
+   * beside the view it came from, in a resizable split (Split) whose width
+   * and expansion the project keeps, the view live beside it, another card
+   * swapping the task in place; under 900px it is its own page, with Back
+   * (a history entry of its own, so the browser's back is Back too).
    */
   import type { ProjectView } from "@cawco/core";
   import { untrack } from "svelte";
@@ -74,12 +80,14 @@
   } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import SideSplit from "#lib/cawco/side/SideSplit.svelte";
+  import Split from "#lib/cawco/side/Split.svelte";
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
+  import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
   import StagesControl from "#lib/cawco/tasks/StagesControl.svelte";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import TaskFilterPopover from "#lib/cawco/tasks/TaskFilterPopover.svelte";
-  import TaskSheet from "#lib/cawco/tasks/TaskSheet.svelte";
+  import TaskPane from "#lib/cawco/tasks/TaskPane.svelte";
   import TaskTable from "#lib/cawco/tasks/TaskTable.svelte";
   import {
     activeCount,
@@ -104,6 +112,7 @@
     calendarField,
   } from "#lib/cawco/views/ViewCalendar.svelte";
   import ViewCanvas from "#lib/cawco/views/ViewCanvas.svelte";
+  import ViewMade from "#lib/cawco/views/ViewMade.svelte";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import ViewPipeline from "#lib/cawco/views/ViewPipeline.svelte";
   import ViewRoutines from "#lib/cawco/views/ViewRoutines.svelte";
@@ -145,6 +154,7 @@
       : null;
   });
   const projectId = $derived(data.project?.id ?? "");
+  setTaskProject(() => projectId);
 
   /** A refused read, as a sentence with its status for support. */
   const refusal = (read: HubRead<unknown>): string | null =>
@@ -158,7 +168,10 @@
     data.stages.ok ? data.stages.value : null
   );
   let stagesProblem = $derived(refusal(data.stages));
-  let openTask = $derived<string | null>(data.task);
+  /** The task open beside the view, or as its own page on a phone: the URL's `?task=`. */
+  const openTask = $derived(
+    (page.shallow?.url ?? page.url).searchParams.get("task")
+  );
   let needsOnly = $state(false);
   let adding = $state(false);
   /** Moves the hub has not answered yet: the card already stands in its new column. */
@@ -176,11 +189,19 @@
         return task;
       }
       const kind = kindByStage.get(stage) ?? null;
-      return { ...task, stage, kind, needsYou: kind === "you" };
+      return {
+        ...task,
+        stage,
+        kind,
+        needsYou: kind === "you" || task.lastAttemptFailed,
+      };
     })
   );
   const kindById = $derived(new Map(tasks.map((task) => [task.id, task.kind])));
-  const needsYou = $derived(tasks.filter((task) => task.kind === "you"));
+  /** What waits on you: the hub's reasons, a session's ask, an action (needs.svelte.ts). */
+  const needsYou = $derived(
+    tasks.filter((task) => waitsOnYou(projectId, task))
+  );
   /** The filter holds only while something needs you. */
   const filtering = $derived(needsOnly && needsYou.length > 0);
   /** What narrows every view of the tasks, kept in the URL (task-filter). */
@@ -194,8 +215,13 @@
   const shownTasks = $derived(
     applyFilter(filtering ? needsYou : tasks, filter, find.ids)
   );
+  /** Needs you on, the columns those tasks stand in. */
   const shownStages = $derived(
-    filtering ? stageList.filter((stage) => stage.kind === "you") : stageList
+    filtering
+      ? stageList.filter((stage) =>
+          needsYou.some((task) => task.stage === stage.name)
+        )
+      : stageList
   );
   const newIn = $derived(firstTodoStage(stageList)?.name);
   const empty = $derived(list !== null && list.tasks.length === 0);
@@ -361,6 +387,10 @@
     ...(dateField
       ? [{ value: "calendar", label: "Calendar", draft: false }]
       : []),
+    // What the project's tasks made, while one has made something.
+    ...(tasks.some((task) => task.outputs.length > 0)
+      ? [{ value: "made", label: "Made", draft: false }]
+      : []),
     ...views.map((view) => ({
       value: `view:${view.name}`,
       label: viewLabel(view.name),
@@ -472,7 +502,11 @@
       return;
     }
     try {
-      goto(hrefOf(openTask), { shallow: true, replace: true });
+      goto(hrefOf(openTask), {
+        shallow: true,
+        replace: true,
+        state: page.state,
+      });
     } catch {
       // Before the router is ready the URL is already right.
     }
@@ -512,10 +546,52 @@
     remember();
   }
 
+  /**
+   * Under 900px a task is its own page (the session split's line), read off
+   * the screen, the line Caw's dock rises as a sheet by: the page narrowing
+   * beside the dock never turns the task into a page.
+   */
+  const phone = $derived(browser ? sheetQuery.current : !hosted);
+
+  /**
+   * Opens a task: on a desk beside the view, swapping the one open in place;
+   * on a phone as its own page, a history entry of its own.
+   */
   function openOne(id: string) {
-    openTask = id;
-    remember();
+    if (id === openTask) {
+      return;
+    }
+    if (phone) {
+      goto(hrefOf(id), { shallow: true, state: { taskOpened: true } });
+    } else {
+      goto(hrefOf(id), { shallow: true, replace: true, state: page.state });
+    }
   }
+
+  /** Close on a desk, Back on a phone: the view, as it stood. */
+  function closeTask() {
+    if (phone && page.state.taskOpened) {
+      history.back();
+      return;
+    }
+    goto(hrefOf(null), { shallow: true, replace: true, state: {} });
+  }
+
+  /**
+   * The task the split's side holds: the open one, kept while the side
+   * closes, so it leaves as it stood.
+   */
+  let sideTask = $state<string | null>(null);
+  $effect(() => {
+    if (openTask) {
+      sideTask = openTask;
+    }
+  });
+  const viewWord = $derived(
+    (
+      tabs.find((each) => each.value === current)?.label ?? "Board"
+    ).toLowerCase()
+  );
 
   // --- the hub's writes ---------------------------------------------------------
 
@@ -583,6 +659,7 @@
         )
       ),
       labels: task.labels,
+      outputs: task.outputs,
       rank: task.rank,
       type: task.type,
       todos: {
@@ -1379,6 +1456,14 @@
     />
   {:else if value === "calendar" && dateField && dated}
     <ViewCalendar field={dateField} onopen={openOne} tasks={dated} />
+  {:else if value === "made"}
+    <ViewMade
+      hrefOf={(id) => hrefOf(id)}
+      onopen={openOne}
+      open={openTask}
+      {projectId}
+      tasks={shownTasks}
+    />
   {:else}
     <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
   {/if}
@@ -1411,145 +1496,199 @@
     viewId="caw:{projectId}"
     visible
   >
-    <!-- The frame the phone's views bar docks in, over the page's foot. -->
-    <div class="project-frame">
-      <div class="project-page">
-        <ProjectHead
-          bind:this={head}
-          {lead}
-          {machine}
-          onask={canTalk ? ask : null}
-          onfilter={(anchor) => {
-            filterAnchor = anchor;
-            filterOpen = true;
-          }}
-          onnewtask={() => {
-            choose("board");
-            adding = true;
-          }}
-          onstages={stages?.source === "template"
-            ? (anchor) => {
-                stagesAnchor = anchor;
-                stagesOpen = true;
-              }
-            : null}
-          {project}
-          seated={!standing}
+    {#if phone && openTask && stages}
+      <!-- A phone: the task is its own page, with Back to the view. -->
+      <div class="project-page task-only">
+        <TaskPane
+          {allowedFrom}
+          backLabel={project.name}
+          onchanged={changed}
+          onclose={closeTask}
+          onmove={(id, stage) => move(id, stage)}
+          onopen={openOne}
+          page
+          {projectId}
+          {stages}
+          taskId={openTask}
+          {tasks}
         />
+      </div>
+    {:else}
+      <!-- The frame the phone's views bar docks in, over the page's foot. -->
+      <div class="project-frame">
+        <div class="project-page">
+          <ProjectHead
+            bind:this={head}
+            {lead}
+            {machine}
+            onask={canTalk ? ask : null}
+            onfilter={(anchor) => {
+              filterAnchor = anchor;
+              filterOpen = true;
+            }}
+            onnewtask={() => {
+              choose("board");
+              adding = true;
+            }}
+            onstages={stages?.source === "template"
+              ? (anchor) => {
+                  stagesAnchor = anchor;
+                  stagesOpen = true;
+                }
+              : null}
+            {project}
+            seated={!standing}
+          />
 
-        {#if lead.view?.problem}
-          <Alert class="notice" variant="warning">
-            <AlertDescription>{lead.view.problem}</AlertDescription>
-          </Alert>
-        {/if}
-        {#if stages && stages.problems.length > 0}
-          <Alert class="notice" variant="warning">
-            <AlertDescription>{unreadStages}</AlertDescription>
-          </Alert>
-        {:else if stagesProblem}
-          <Alert class="notice" variant="warning">
-            <AlertDescription>
-              The project's stages could not be read: {stagesProblem}
-            </AlertDescription>
-          </Alert>
-        {/if}
-        {#if list && list.problems.length > 0}
-          <Alert class="notice" variant="warning">
-            <AlertDescription>{list.problems.join(" ")}</AlertDescription>
-          </Alert>
-        {/if}
-        {#if viewsProblem}
-          <Alert class="notice" variant="warning">
-            <AlertDescription
-              >The project's views could not be read:
-              {viewsProblem}</AlertDescription
-            >
-          </Alert>
-        {/if}
+          {#if lead.view?.problem}
+            <Alert class="notice" variant="warning">
+              <AlertDescription>{lead.view.problem}</AlertDescription>
+            </Alert>
+          {/if}
+          {#if stages && stages.problems.length > 0}
+            <Alert class="notice" variant="warning">
+              <AlertDescription>{unreadStages}</AlertDescription>
+            </Alert>
+          {:else if stagesProblem}
+            <Alert class="notice" variant="warning">
+              <AlertDescription>
+                The project's stages could not be read: {stagesProblem}
+              </AlertDescription>
+            </Alert>
+          {/if}
+          {#if list && list.problems.length > 0}
+            <Alert class="notice" variant="warning">
+              <AlertDescription>{list.problems.join(" ")}</AlertDescription>
+            </Alert>
+          {/if}
+          {#if viewsProblem}
+            <Alert class="notice" variant="warning">
+              <AlertDescription
+                >The project's views could not be read:
+                {viewsProblem}</AlertDescription
+              >
+            </Alert>
+          {/if}
 
-        {#if !hosted}
-          <!-- Under the head from 640px; a phone's views are its bar's. -->
-          <div class="under-head">{@render strip(false)}</div>
-        {/if}
+          {#if !hosted}
+            <!-- Under the head from 640px; a phone's views are its bar's. -->
+            <div class="under-head">{@render strip(false)}</div>
+          {/if}
 
-        <div
-          aria-busy={cawco.hub === "unreachable" || awaiting || reading}
-          class={[
-            "pane",
-            current !== "board" &&
-              current !== "canvas" &&
-              paneView !== "decisions-page" &&
-              paneView !== "decisions-graph" &&
-              !reading &&
-              "kit-edge-fade-block",
-          ]}
-          data-view={reading ? "board" : paneView}
-        >
-          {#if reading}
-            <!-- The board at its real layout, its columns standing empty: the
-             next project's read cross-fades in over it. -->
-            <div aria-hidden="true" class="board-skeleton" out:crossOut>
-              {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
-                <div class="skeleton-column">
-                  <Skeleton class="h-3.5 w-3/5" />
-                  <Skeleton
-                    class="h-[54px] w-full rounded-[var(--radius-sm)]"
-                  />
-                  <Skeleton
-                    class="h-[54px] w-full rounded-[var(--radius-sm)]"
-                  />
-                </div>
-              {/each}
-            </div>
+          {#if phone}
+            <!-- Under 900px a task is its own page: the view stands alone,
+                 the page's one scroller on a phone. -->
+            {@render viewPane()}
           {:else}
-            <div class="swap" in:crossIn>
-              {#key shown}
-                <div
-                  class="current"
-                  style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
-                  out:leave
-                >
-                  {#if shown === "awaiting"}
-                    <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
-                  {:else}
-                    {@render pane(shown)}
-                  {/if}
-                </div>
-              {/key}
-            </div>
+            <Split
+              backLabel="Back to {viewWord}"
+              defaultWidth={40}
+              keys={{
+                width: `cawco.task.width.${projectId}`,
+                expanded: `cawco.task.expanded.${projectId}`,
+              }}
+              main={viewPane}
+              mainClass="view-pane-side"
+              open={!!openTask && !!stages}
+              side={taskSide}
+            />
           {/if}
         </div>
-      </div>
-      {#if !hosted}
-        <ViewBar
-          {current}
-          needs={needsYou.length}
-          needsOn={filtering}
-          onchoose={choose}
-          onnewsession={(anchor) => head?.newSessionFrom(anchor)}
-          ontoggleneeds={() => {
-            needsOnly = !filtering;
-          }}
-          views={barViews}
-        >
-          {#snippet tools()}
-            <!-- As the strip draws it on a narrow screen: its glyph and count
+        {#if !hosted}
+          <ViewBar
+            {current}
+            needs={needsYou.length}
+            needsOn={filtering}
+            onchoose={choose}
+            onnewsession={(anchor) => head?.newSessionFrom(anchor)}
+            ontoggleneeds={() => {
+              needsOnly = !filtering;
+            }}
+            views={barViews}
+          >
+            {#snippet tools()}
+              <!-- As the strip draws it on a narrow screen: its glyph and count
                  while a filter stands; the head's ⋯ opens it. -->
-            {#if filterHere && narrowed > 0}
-              <TaskFilterPopover
-                compact
-                {filter}
-                {find}
-                onchange={setFilter}
-                tasks={[...tasks, ...archived]}
-              />
-            {/if}
-          {/snippet}
-        </ViewBar>
-      {/if}
-    </div>
+              {#if filterHere && narrowed > 0}
+                <TaskFilterPopover
+                  compact
+                  {filter}
+                  {find}
+                  onchange={setFilter}
+                  tasks={[...tasks, ...archived]}
+                />
+              {/if}
+            {/snippet}
+          </ViewBar>
+        {/if}
+      </div>
+    {/if}
   </SideSplit>
+{/if}
 
+{#snippet taskSide()}
+  {#if sideTask && stages}
+    <TaskPane
+      {allowedFrom}
+      onchanged={changed}
+      onclose={closeTask}
+      onmove={(id, stage) => move(id, stage)}
+      onopen={openOne}
+      {projectId}
+      {stages}
+      taskId={sideTask}
+      {tasks}
+    />
+  {/if}
+{/snippet}
+
+{#snippet viewPane()}
+  <div
+    aria-busy={cawco.hub === "unreachable" || awaiting || reading}
+    class={[
+      "pane",
+      current !== "board" &&
+        current !== "canvas" &&
+        paneView !== "decisions-page" &&
+        paneView !== "decisions-graph" &&
+        !reading &&
+        "kit-edge-fade-block",
+    ]}
+    data-view={reading ? "board" : paneView}
+  >
+    {#if reading}
+      <!-- The board at its real layout, its columns standing empty: the
+             next project's read cross-fades in over it. -->
+      <div aria-hidden="true" class="board-skeleton" out:crossOut>
+        {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
+          <div class="skeleton-column">
+            <Skeleton class="h-3.5 w-3/5" />
+            <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
+            <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <div class="swap" in:crossIn>
+        {#key shown}
+          <div
+            class="current"
+            style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
+            out:leave
+          >
+            {#if shown === "awaiting"}
+              <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+            {:else}
+              {@render pane(shown)}
+            {/if}
+          </div>
+        {/key}
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+{#if project}
   <Popover.Root bind:open={askOpen}>
     <Popover.Content
       align="end"
@@ -1587,24 +1726,6 @@
     tasks={list?.tasks ?? []}
     bind:open={stagesOpen}
   />
-
-  {#if stages}
-    <TaskSheet
-      {allowedFrom}
-      onchanged={changed}
-      onmove={(id, stage) => move(id, stage)}
-      {projectId}
-      {stages}
-      {tasks}
-      bind:taskId={
-        () => openTask,
-        (id) => {
-          openTask = id;
-          remember();
-        }
-      }
-    />
-  {/if}
 {/if}
 
 <style>

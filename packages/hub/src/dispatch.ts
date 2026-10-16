@@ -77,7 +77,13 @@
  * changing, a machine with a checkout coming online. A slow timer looks
  * again as a safety net and starts nothing when nothing is ready.
  */
-import { type InstanceRow, type LandsMode, namesAmong } from "@cawco/core";
+import {
+  deliverableKind,
+  type InstanceRow,
+  type LandsMode,
+  namesAmong,
+  POST_OUTPUT_RULE,
+} from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
@@ -468,6 +474,9 @@ const briefOf = (
     ...(task.outputs.length > 0
       ? [`It produces: ${task.outputs.join(", ")}.`]
       : []),
+    ...(task.outputs.some((path) => deliverableKind(path) === "post")
+      ? [POST_OUTPUT_RULE]
+      : []),
     ...(task.owns.length > 0
       ? [
           `It owns: ${task.owns.join(", ")}. No other live work item writes these files while you run; stay inside them.`,
@@ -487,11 +496,21 @@ const briefOf = (
       task.checks.length === 0 ? `\n\n${uncheckedLine(lands, task)}` : ""
     }`,
     `## Where it sits\n\n${sits.length > 0 ? sits.join("\n") : "Nothing waits on it, and it waits for nothing."}`,
+    `## Handing it in\n\n${RESULT_LINE}`,
     ...(context ? [context] : []),
     ...(retry ? [retrySection(task, retry)] : []),
     ...(comments.length > 0 ? [commentsSection(comments)] : []),
   ].join("\n\n");
 };
+
+/**
+ * How an attempt hands in its work (task-tools.ts `task_result`): what the
+ * task's review shows first, its words over the artifact it presented. The
+ * review draws a presented artifact with the artifact panel's renderer and
+ * never a file's format, so the brief asks for the artifact first.
+ */
+const RESULT_LINE =
+  'Before finish_item, show your work, then hand it in. Show it with artifact_create: a page that draws what you made as its reader will meet it (the post as it will read, the report, the screen), or a preview of the app running. The review draws that artifact whole; it draws no file. Then call task_result: `summary`, what you did in a few sentences; `check`, what the reviewer should look at, one line each; `artifacts`, that artifact first (`kind: "artifact"`, its `artifactId`, `primary: true`), then each file by its path from the project folder and each link by its url. Words alone only when there is nothing to show.';
 
 /** The most comments a brief carries: the newest. */
 const BRIEF_COMMENTS_MAX = 20;

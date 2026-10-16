@@ -1,5 +1,5 @@
 /**
- * The task tracker on the dashboard (TaskSheet's labels, fields, relations
+ * The task tracker on the dashboard (TaskPane's labels, fields, relations
  * and activity; the board's filter, ticks and bulk bar), through a real hub
  * on a scratch fleet, read from the engine (the page's DOM and the hub's own
  * answers), at desk 1440 and phone 390. A project is seeded with four
@@ -99,12 +99,13 @@ async function hub<T>(
   return JSON.parse(text) as T;
 }
 
-const SHEET = ".task-sheet";
+const SHEET = "[data-task-pane]";
 
 /** The sheet's activity, as it reads. */
 const activityText = (page: Page) =>
   page.evaluate(
-    () => document.querySelector(".task-sheet .activity")?.textContent ?? ""
+    () =>
+      document.querySelector("[data-task-pane] .activity")?.textContent ?? ""
   );
 
 /** a, b, c: the sheet on `task`, at `view`. */
@@ -119,8 +120,8 @@ async function sheet(
   const one = `/api/projects/${url.split("/project/")[1]}/tasks/${task}`;
   await open(page, `${url}?task=${task}`, () =>
     Boolean(
-      document.querySelector(".task-sheet .activity .change") &&
-      document.querySelector(".task-sheet .activity textarea")
+      document.querySelector("[data-task-pane] .activity .change") &&
+      document.querySelector("[data-task-pane] .activity textarea")
     )
   );
   await settle(page);
@@ -135,9 +136,9 @@ async function sheet(
   await composer.press("Enter");
   await page.waitForFunction(
     (words) =>
-      [...document.querySelectorAll(".task-sheet .activity .comment")].some(
-        (each) => each.textContent?.includes(words)
-      ),
+      [
+        ...document.querySelectorAll("[data-task-pane] .activity .comment"),
+      ].some((each) => each.textContent?.includes(words)),
     said
   );
   const stored = await hub<Task>(fleet, "GET", one);
@@ -161,7 +162,7 @@ async function sheet(
   await page.waitForFunction(
     () =>
       document
-        .querySelector('.task-sheet button[title="Edit priority"]')
+        .querySelector('[data-task-pane] button[title="Edit priority"]')
         ?.textContent?.trim() === "urgent"
   );
   await page.getByRole("button", { name: "Add field" }).click();
@@ -179,11 +180,11 @@ async function sheet(
   // c. Who changed what, as the hub's commit says it.
   await page.waitForFunction(() =>
     document
-      .querySelector(".task-sheet .activity")
+      .querySelector("[data-task-pane] .activity")
       ?.textContent?.includes("changed priority")
   );
   const lines = await page.evaluate(() =>
-    [...document.querySelectorAll(".task-sheet .activity .change")].map(
+    [...document.querySelectorAll("[data-task-pane] .activity .change")].map(
       (each) => each.textContent?.replace(/\s+/g, " ").trim() ?? ""
     )
   );
@@ -200,7 +201,7 @@ async function sheet(
   // a. After a reload, the comment still stands.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForFunction(() =>
-    Boolean(document.querySelector(".task-sheet .activity .change"))
+    Boolean(document.querySelector("[data-task-pane] .activity .change"))
   );
   await settle(page);
   const again = await activityText(page);
@@ -210,7 +211,9 @@ async function sheet(
     again.slice(0, 200)
   );
   const fit = await page.evaluate(() => {
-    const body = document.querySelector<HTMLElement>(".task-sheet .body");
+    const body = document.querySelector<HTMLElement>(
+      "[data-task-pane] .task-body"
+    );
     return body ? body.scrollWidth - body.clientWidth : -1;
   });
   kit.check(
@@ -222,8 +225,8 @@ async function sheet(
     const left = (selector: string) =>
       document.querySelector(selector)?.getBoundingClientRect().left ?? -1;
     return {
-      fields: left(".task-sheet dl.grid dd"),
-      relations: left(".task-sheet .edge-list"),
+      fields: left("[data-task-pane] dl.grid dd"),
+      relations: left("[data-task-pane] .edge-list"),
     };
   });
   kit.check(

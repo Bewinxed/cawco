@@ -7,7 +7,9 @@
    * again, a wait on you, or the date it is set for.
    *
    * The card is a link to the task (`?task=tsk-12`), so it opens in a new
-   * tab and is shared like one; a plain click opens the drawer in place. It
+   * tab and is shared like one; a plain click opens it beside what it was
+   * pressed in (`onopen`), or follows the link where nothing stands beside
+   * it (a thread on a phone: the task's own page). It
    * is also what a drag carries, and the one object a move flies (`land`):
    * a card that changes column travels there from where it was drawn.
    */
@@ -27,6 +29,7 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { dragTask } from "./board-dnd.svelte.js";
+  import { actionsOf, asksOf, taskProject } from "./needs.svelte";
 
   let {
     task,
@@ -42,7 +45,8 @@
     date?: string | null;
     /** The kind of another task's stage, to say whether what it waits on has landed. */
     kindOf: (id: string) => StageKind | null | undefined;
-    onopen: (id: string) => void;
+    /** Opens it in place; left out, the card is a plain link. */
+    onopen?: (id: string) => void;
     /**
      * A drag carries it to another column (the board). Off where a drag is
      * the surface's own (the canvas pans).
@@ -51,6 +55,13 @@
   } = $props();
 
   const flags = $derived(flagsOf(task));
+  /** The project the card stands in: an action names its task within it. */
+  const project = taskProject();
+  /** Its session asks you, or an action filed for it waits on you. */
+  const asks = $derived(asksOf(task).length > 0);
+  const approves = $derived(
+    project ? actionsOf(project(), task.id).length > 0 : false
+  );
   const retry = $derived(isRetry(task));
   /**
    * What it waits on that has not landed: the hub's word when it gives one,
@@ -69,6 +80,7 @@
 
   function open(event: MouseEvent) {
     if (
+      !onopen ||
       event.button !== 0 ||
       event.metaKey ||
       event.ctrlKey ||
@@ -110,9 +122,13 @@
     {/if}
   </span>
   <span class="title">{task.title}</span>
-  {#if flags.live || task.kind === "you" || date}
+  {#if flags.live || task.kind === "you" || asks || approves || date}
     <span class="live-foot mark-line">
-      {#if flags.live}
+      {#if asks || approves}
+        <!-- Waiting on you outranks working: the attempt is stopped on you. -->
+        <IconNeedsYou aria-hidden="true" class="attn" />
+        <span>{asks ? "its session asks you" : "an action waits on you"}</span>
+      {:else if flags.live}
         <span aria-hidden="true" class="dot live" data-box></span>
         {#if retry}
           <span>retrying · attempt {task.attempts.length}</span>

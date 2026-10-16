@@ -102,10 +102,18 @@ import type { Tasks } from "./tasks";
  * each; the design-preview clause shortened to pay for part of it. About
  * 110 tokens for the worker, the delegate and the lead (worker 24,488,
  * delegate 6,703, lead 15,913 measured). Raised deliberately.
+ * 2026-10-16: `task_result` (task-tools.ts), the one way an attempt hands
+ * in its words, what to check and its artifacts for the task's review, is
+ * listed to a work item's session alone; its description asks for the work
+ * shown with artifact_create and that artifact handed in first: the review
+ * draws it, never a file's format. About 230 tokens for the delegate, its
+ * description cut to two sentences (the worker's measure is a session with
+ * no work item, which is not listed it) (delegate 6,931 measured). Raised
+ * deliberately.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 24_590,
-  delegate: 6710,
+  delegate: 6940,
   lead: 15_915,
   overseer: 770,
   "web-facing": 3400,

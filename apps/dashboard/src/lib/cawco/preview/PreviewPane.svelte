@@ -96,8 +96,15 @@
     sheet = false,
     linkSession = false,
     ownTab = false,
+    inset = false,
   }: {
     instanceId: string;
+    /**
+     * Drawn inside another surface (a task's review, TaskReview's stage):
+     * the page in its well and what stands over it, with no head of its
+     * own. The surface around it names it and holds its controls.
+     */
+    inset?: boolean;
     /**
      * The artifact's own tab (routes/artifact/[id]): the same pane at full
      * width, with no Open in new tab, and Close back to the session.
@@ -1489,21 +1496,38 @@
   </Popover.Root>
 {/if}
 
-<SideSurface
-  actions={controls}
-  class={["preview-pane", mode !== "interact" && !isCanvas && `mode-${mode}`]
-    .filter(Boolean)
-    .join(" ")}
-  closeFailed={failure?.again === "close"}
-  {closing}
-  label="Preview"
-  onclose={ownTab ? backToSession : close}
-  subtitle={page ? "" : displayPath || (source ? previewPlace(source) : "")}
-  {switcher}
-  titleControl={artifact ? artifactTitle : undefined}
-  bind:section
-  bind:well
->
+{#if inset}
+  <!-- Inset: no head and no modes; the page as the panel draws it. -->
+  <section
+    aria-label={artifact?.name ?? "Preview"}
+    class="preview-pane preview-inset"
+    bind:this={section}
+  >
+    <div class="inset-well" bind:this={well}>{@render framed()}</div>
+  </section>
+{:else}
+  <SideSurface
+    actions={controls}
+    class={["preview-pane", mode !== "interact" && !isCanvas && `mode-${mode}`]
+      .filter(Boolean)
+      .join(" ")}
+    closeFailed={failure?.again === "close"}
+    {closing}
+    label="Preview"
+    onclose={ownTab ? backToSession : close}
+    subtitle={page ? "" : displayPath || (source ? previewPlace(source) : "")}
+    {switcher}
+    titleControl={artifact ? artifactTitle : undefined}
+    bind:section
+    bind:well
+  >
+    {@render framed()}
+  </SideSurface>
+{/if}
+
+<!-- The page in the well, and what stands over it: the panel's and an
+     inset's alike. -->
+{#snippet framed()}
   {#if isCanvas}
     <!-- The canvas's stage stands over this box: its one iframe. -->
     <div aria-hidden="true" class="canvas-slot" bind:this={canvasSlot}></div>
@@ -1742,9 +1766,28 @@
       {/if}
     </div>
   {/if}
-</SideSurface>
+{/snippet}
 
 <style>
+  /* Inset: the host's surface around it; the well is the panel's own
+     (SideSurface `.side-well`): the recess inside its hairline. */
+  .preview-inset {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-block-size: 0;
+  }
+  .inset-well {
+    position: relative;
+    flex: 1;
+    min-block-size: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-well);
+    border-radius: var(--radius-sm);
+    background: var(--surface-well);
+  }
   /* The header's controls are the card's (SideSurface); in Comment and
      Draw the ones that would leave the page wait. */
   :global(.preview-pane:is(.mode-comment, .mode-draw) .other) {

@@ -434,7 +434,7 @@ export function contextOf(sessionId: string): SessionContext | null {
 }
 
 /** The session id a URL names, or `null` for the board. */
-export function sessionIdOf(url: URL): string | null {
+export function sessionIdOf(url: { readonly pathname: string }): string | null {
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts[0] !== "session") {
     return null;

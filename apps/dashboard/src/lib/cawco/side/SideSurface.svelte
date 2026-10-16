@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * The card beside a conversation (SideSplit), one for whatever it holds:
-   * the plan or the preview. One header, one well:
+   * The card beside a page (Split), one for whatever it holds: a
+   * conversation's plan or preview, a project's task. One header, one well:
    * - the header leads with the Plan | Preview switch while both are there,
    *   then what is on show (`title`, `subtitle`): the words the switch does
    *   not already say, so "Preview" or "Plan" is never said twice; then the
@@ -95,10 +95,10 @@
     {#if expand?.available}
       <button
         aria-keyshortcuts={expanded ? "Escape" : undefined}
-        aria-label={expanded ? "Back to conversation" : "Expand"}
+        aria-label={expanded ? expand.backLabel : "Expand"}
         class="touch-hit"
         onclick={() => expand.toggle()}
-        title={expanded ? "Back to conversation (Esc)" : "Expand"}
+        title={expanded ? `${expand.backLabel} (Esc)` : "Expand"}
         type="button"
       >
         {#if expanded}

@@ -679,6 +679,8 @@
     --c-pin-list-min: 260px;
     /* The Comments panel at its widest. */
     --c-pin-list-max: 340px;
+    /* A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview). */
+    --c-review-words: 320px;
     --c-mark: 26px;
     --c-mark-glyph: 16px;
     --c-row-mark: 18px;

@@ -9,6 +9,7 @@
  * Not to be confused with `tasks.svelte.ts`, which reads a session's own plan
  * off its machine (WORDS.md: plan).
  */
+import { type AttemptResult, outputArtifacts } from "@cawco/core";
 import { HUB_UNREACHABLE, HubUnreachable, unreachedAnswer } from "./hub-read";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind). */
@@ -102,8 +103,8 @@ export interface TaskAttempt {
   /** When it ended, ms epoch; null while it is live. */
   endedAt: number | null;
   /**
-   * How it ended when it did not land, as the hub words it: `Attempt
-   * failed: <why>`, or `Stopped by <who>` (`Stopped` when the hub did not
+   * How it ended when it did not land, as the hub words it: the first line
+   * of why it failed, or `Stopped by <who>` (`Stopped` when the hub did not
    * hear who). Null while live and once done.
    */
   endedHow: string | null;
@@ -111,6 +112,8 @@ export interface TaskAttempt {
   headline: string | null;
   /** The session running it. */
   instanceId: string;
+  /** What its session handed in (`task_result`); null while it has not. */
+  result: AttemptResult | null;
   /** When it was filed, ms epoch. */
   startedAt: number;
   state: AttemptState;
@@ -118,9 +121,8 @@ export interface TaskAttempt {
 }
 
 /**
- * What a task's newest finished attempt handed back (the hub's
- * `TaskResult`): its session's report of what it did, the way an attempt
- * presents its result, beside the outputs it handed in.
+ * What a task's newest finished attempt said as it finished (the hub's
+ * `TaskResult`): its session's `finish_item` report of what it did.
  */
 export interface TaskResult {
   /** When the attempt finished, ms epoch. */
@@ -129,6 +131,52 @@ export interface TaskResult {
   /** Its report, in full (markdown). */
   report: string;
   workItemId: string;
+}
+
+/**
+ * What a task's review shows: the newest session's word on its work, with
+ * that session. A session hands its work in with `task_result` (its words,
+ * what to check, what it presented and attached); a session that finished
+ * without one said what it did in its finish report, whose words stand as
+ * its summary (its headline the line, the report whole), with the task's
+ * `outputs` as what it attached. Null when no session has said anything
+ * and the task names no outputs.
+ */
+export function reviewOf(
+  task: Pick<TaskView, "attempts" | "outputs" | "result">
+): {
+  attempt: TaskAttempt | null;
+  result: AttemptResult;
+  /** Its words whole, as markdown: where the review draws them in full. */
+  whole: string;
+} | null {
+  const report = task.result;
+  const newest = task.attempts.find(
+    (attempt) =>
+      attempt.result !== null || attempt.workItemId === report?.workItemId
+  );
+  if (newest?.result) {
+    return {
+      attempt: newest,
+      result: newest.result,
+      whole: newest.result.summary,
+    };
+  }
+  if (!report && task.outputs.length === 0) {
+    return null;
+  }
+  return {
+    attempt: newest ?? task.attempts[0] ?? null,
+    result: {
+      summary: report ? (report.headline ?? report.report) : "",
+      check: [],
+      artifacts: outputArtifacts(task.outputs),
+      at: report?.at ?? 0,
+    },
+    whole: report
+      ? [report.headline, report.report].filter(Boolean).join("\n\n")
+      : "",
+  };
 }
 
 /** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */
@@ -185,6 +233,8 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   labels: string[];
   needsYou: boolean;
   number: number;
+  /** The project folder files its work produces (`outputs:`). */
+  outputs: string[];
   parent: string | null;
   path: string;
   problem: string | null;
@@ -400,6 +450,12 @@ export const findTasks = (
     })}`
   );
 
+/** The project's tasks the hub says wait on you (`needsYou`): Caw's Needs you lists them. */
+export const listTasksWaiting = async (
+  projectId: string
+): Promise<TaskSummary[]> =>
+  (await send<TaskList>(`${base(projectId)}/tasks?needsYou=1`)).tasks;
+
 export const readStages = (projectId: string): Promise<StagesView> =>
   send(`${base(projectId)}/stages`);
 
@@ -493,6 +549,10 @@ export const retryTask = (
     json("POST", parentInstanceId ? { parentInstanceId } : {})
   );
 
+/** A file of the project's folder as its bytes, for an image, video or audio output. */
+export const folderRawHref = (projectId: string, path: string): string =>
+  `${base(projectId)}/folder/raw?${new URLSearchParams({ path })}`;
+
 export const readTemplates = (): Promise<StagesTemplateView[]> =>
   send("/api/stage-templates");
 
@@ -554,6 +614,49 @@ export const movesFrom = (stages: StagesView, from: string): Set<string> =>
       .map((to) => to.name)
   );
 
+/**
+ * Where a task waiting on you goes once you approve it: the first stage
+ * after its own, in the project's order, that the moves allow you, short
+ * of a dropped one (social: review → scheduled; seo: review → approved).
+ * Null when none is open to you.
+ */
+export const approveTarget = (
+  stages: StagesView,
+  from: string
+): Stage | null => {
+  const allowed = movesFrom(stages, from);
+  const at = stages.stages.findIndex((stage) => stage.name === from);
+  return (
+    stages.stages
+      .slice(at + 1)
+      .find((stage) => stage.kind !== "dropped" && allowed.has(stage.name)) ??
+    null
+  );
+};
+
+/**
+ * Where a task you send back goes: the nearest stage before its own, in
+ * the project's order, where the work is done (kind `active`), else the
+ * nearest to-do one, that the moves allow you (social: review → draft).
+ * Null when none is open to you.
+ */
+export const sendBackTarget = (
+  stages: StagesView,
+  from: string
+): Stage | null => {
+  const allowed = movesFrom(stages, from);
+  const at = stages.stages.findIndex((stage) => stage.name === from);
+  const before = stages.stages
+    .slice(0, Math.max(at, 0))
+    .reverse()
+    .filter((stage) => allowed.has(stage.name));
+  return (
+    before.find((stage) => stage.kind === "active") ??
+    before.find((stage) => stage.kind === "todo") ??
+    null
+  );
+};
+
 /** What a card and a row say about a task's attempts and edges. */
 export function flagsOf(task: TaskSummary | TaskView): {
   blockedBy: string[];
@@ -574,24 +677,9 @@ export function flagsOf(task: TaskSummary | TaskView): {
 }
 
 /**
- * A fresh attempt at a task, reporting to the session named or the project's
- * lead: what Try again runs when the last attempt finished (a failed or
- * stopped one is retried in its own workspace, `retryTask`).
- */
-export const startAttempt = (
-  projectId: string,
-  taskId: string,
-  parentInstanceId?: string
-): Promise<AttemptStart> =>
-  send(
-    `${one(projectId, taskId)}/attempts`,
-    json("POST", parentInstanceId ? { parentInstanceId } : {})
-  );
-
-/**
  * One output an attempt handed in, by the name the task file gives it
- * (`outputs: [post.md]`): the hub serves it from where it copied it, a
- * picture as itself and anything else as text.
+ * (`outputs: [post.md]`): the hub serves it from where it copied it
+ * (`assets/<task>/`), a picture as itself and anything else as text.
  */
 export const outputUrl = (
   projectId: string,
@@ -600,15 +688,12 @@ export const outputUrl = (
 ): string =>
   `${one(projectId, taskId)}/outputs/file?name=${encodeURIComponent(name)}`;
 
-/**
- * An output, whole, as the hub served it: read as text, or as a picture's
- * bytes. Throws the hub's sentence when it refuses.
- */
-export async function readOutput(
+/** An output's words, whole, as the hub served it; throws the hub's sentence when it refuses. */
+export async function readOutputText(
   projectId: string,
   taskId: string,
   name: string
-): Promise<Response> {
+): Promise<string> {
   const response = await fetch(outputUrl(projectId, taskId, name));
   if (unreachedAnswer(response)) {
     throw new HubUnreachable(HUB_UNREACHABLE);
@@ -616,47 +701,15 @@ export async function readOutput(
   if (!response.ok) {
     throw new Error(await said(response));
   }
-  return response;
+  return response.text();
 }
 
-/** A span of time in plain words: `40 s`, `12 min`, `2 h 5 min`. */
-export const spanWords = (ms: number): string => {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  if (seconds < 60) {
-    return `${seconds} s`;
-  }
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes} min`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest > 0 ? `${hours} h ${rest} min` : `${hours} h`;
-};
-
-/** The status tint an attempt's state takes (DESIGN.md, status chips). */
-export type AttemptTone = "live" | "done" | "fail" | "idle";
-
-/**
- * An attempt's state said in plain words, with how long it took or has taken
- * so far (WORDS.md: attempt): "Finished in 1 min", "Failed after 3 min",
- * "Stopped after 40 s", "Working for 2 min".
- */
-export const attemptSentence = (
-  attempt: TaskAttempt,
-  now: number
-): { tone: AttemptTone; text: string; word: string } => {
-  const took = spanWords((attempt.endedAt ?? now) - attempt.startedAt);
-  switch (attempt.state) {
-    case "starting":
-      return { word: "Starting", tone: "live", text: "Starting" };
-    case "running":
-      return { word: "Working", tone: "live", text: `Working for ${took}` };
-    case "done":
-      return { word: "Finished", tone: "done", text: `Finished in ${took}` };
-    case "failed":
-      return { word: "Failed", tone: "fail", text: `Failed after ${took}` };
-    default:
-      return { word: "Stopped", tone: "idle", text: `Stopped after ${took}` };
-  }
-};
+/** A session's state on a task as a status word (WORDS.md: working / done / failed). */
+export const attemptWord = (state: AttemptState): string =>
+  ({
+    starting: "Working",
+    running: "Working",
+    done: "Done",
+    failed: "Failed",
+    cancelled: "Stopped",
+  })[state];

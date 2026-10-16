@@ -56,7 +56,10 @@
   import PaneDeck from "#lib/cawco/workspace/PaneDeck.svelte";
   import PaneGrid from "#lib/cawco/workspace/PaneGrid.svelte";
   import PaneHost from "#lib/cawco/workspace/PaneHost.svelte";
-  import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
+  import {
+    sessionIdOf,
+    workspace,
+  } from "#lib/cawco/workspace/workspace.svelte.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { browser } from "$app/env";
   import { afterNavigate } from "$app/navigation";
@@ -225,7 +228,10 @@
         }
       });
     }
-    if (workspace.activeSessionId !== null) {
+    // An address that names a session is that session's to fill: arriving
+    // from another route (a task's Open), the effect runs before the URL is
+    // followed (onMount below), and landing here took the tab elsewhere.
+    if (workspace.activeSessionId !== null || sessionIdOf(page.url) !== null) {
       return;
     }
     const { landing } = fleetHome;

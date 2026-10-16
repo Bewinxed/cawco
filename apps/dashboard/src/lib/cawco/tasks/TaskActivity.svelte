@@ -42,11 +42,11 @@
     /** Reads the history again. */
     rereadHistory: () => unknown;
     /**
-     * Where your comment goes past the file: `live`, the working attempt
-     * (named) reads it; `resumes`, its last session continues or a fresh
-     * attempt starts; null, it waits in the file for the next brief.
+     * Where your comment goes past the file: `live`, the working session
+     * (by its name) reads it; `resumes`, its last session continues or a
+     * new one starts; null, it waits in the file for the next brief.
      */
-    reaches: { kind: "live"; attempt: string } | { kind: "resumes" } | null;
+    reaches: { kind: "live"; session: string } | { kind: "resumes" } | null;
     /** Writes the comment; throws the hub's refusal. */
     oncomment: (text: string) => Promise<void>;
   } = $props();
@@ -257,19 +257,19 @@
   <div class="composer">
     <CawField
       label={reaches?.kind === "live"
-        ? `Comment, read by ${reaches.attempt}`
+        ? `Comment, read by ${reaches.session}`
         : "Comment on this task"}
       onsend={oncomment}
       placeholder="Add a comment…"
     />
     {#if reaches?.kind === "live"}
       <p class="hint">
-        {reaches.attempt} is working on this task and reads your comment now.
+        {reaches.session} is working on this task and reads your comment now.
       </p>
     {:else if reaches?.kind === "resumes"}
       <p class="hint">
         Your comment picks the work up again: its last session continues, or a
-        fresh attempt starts.
+        new session starts on it.
       </p>
     {/if}
   </div>

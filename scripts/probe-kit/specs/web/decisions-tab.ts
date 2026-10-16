@@ -10,7 +10,7 @@
  *   origin holds the five picks, and the composer offers I'm done picking;
  * - the decided page is its record: a card per decision with its question,
  *   the chosen chip, `Left open` for the one left open, the person's note
- *   led by their mark, and task chips that open the task's sheet, which says
+ *   led by their mark, and task chips that open the task's pane, which says
  *   `Decided on Price the hosted plan › What shape is the plan?`;
  * - no element's text holds a card or option id;
  * - a card's fold opens over the update notice's fold and shows the options
@@ -326,13 +326,13 @@ async function decided(kit: Kit, page: Page, view: View, url: string) {
   );
   await shot(kit, page, view, "decided");
 
-  // A task chip opens the task's sheet in place, which names its decision.
+  // A task chip opens the task beside the view, which names its decision.
   await page.locator(".record .tasks a").first().click();
   const sheet = await page
     .waitForFunction(
       () =>
         document
-          .querySelector(".task-sheet .decided")
+          .querySelector("[data-task-pane] .decided")
           ?.textContent?.replace(/\s+/g, " ")
           .trim() ?? null,
       null,
@@ -341,7 +341,7 @@ async function decided(kit: Kit, page: Page, view: View, url: string) {
     .then((handle) => handle.jsonValue())
     .catch(() => null);
   kit.check(
-    `${view}: a task chip opens its sheet, which says where it was decided`,
+    `${view}: a task chip opens its pane, which says where it was decided`,
     sheet === "Decided on Price the hosted plan › What shape is the plan?",
     `sheet says ${JSON.stringify(sheet)}`
   );

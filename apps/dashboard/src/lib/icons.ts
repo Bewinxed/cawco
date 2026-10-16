@@ -46,6 +46,8 @@ export { default as IconCalendar } from "~icons/solar/calendar-bold-duotone";
 export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
 /** Comment: the artifact panel's mode and the radial menu's sector (DESIGN.md, Artifact panel, canvas and ink). */
 export { default as IconComment } from "~icons/solar/chat-round-dots-bold-duotone";
+/** A task review's Transcript chip: the attempt's session, read in place. */
+export { default as IconTranscript } from "~icons/solar/chat-round-line-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
@@ -93,6 +95,7 @@ export { default as IconFilter } from "~icons/solar/filter-bold-duotone";
 export { default as IconFire } from "~icons/solar/fire-bold-duotone";
 export { default as IconFolder } from "~icons/solar/folder-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
+export { default as IconImage } from "~icons/solar/gallery-bold-duotone";
 export {
   default as IconAgent,
   default as IconGhost,
@@ -105,6 +108,8 @@ export {
 export { default as IconGraphUp } from "~icons/solar/graph-up-bold-duotone";
 /** A person is asked for: the Needs-you glyph (DESIGN.md, Session status). */
 export { default as IconNeedsYou } from "~icons/solar/hand-shake-bold-duotone";
+/** A post a task made (`*.post.json`). */
+export { default as IconPost } from "~icons/solar/hashtag-square-bold-duotone";
 export { default as IconHistory } from "~icons/solar/history-bold-duotone";
 /** A routine turning itself off soon unless kept. */
 export { default as IconHourglass } from "~icons/solar/hourglass-bold-duotone";
@@ -134,6 +139,7 @@ export { default as IconMinusCircle } from "~icons/solar/minus-circle-bold-duoto
 export { default as IconMonitor } from "~icons/solar/monitor-bold-duotone";
 export { default as IconMoon } from "~icons/solar/moon-bold-duotone";
 export { default as IconMoonSleep } from "~icons/solar/moon-sleep-bold-duotone";
+export { default as IconAudio } from "~icons/solar/music-note-bold-duotone";
 export { default as IconToolNotebook } from "~icons/solar/notebook-bold-duotone";
 export { default as IconFileLog } from "~icons/solar/notes-bold-duotone";
 /** Solar's own spelling. The `palette-*` cut is a board; this one is the palette. */
@@ -147,7 +153,9 @@ export { default as IconPauseCircle } from "~icons/solar/pause-circle-bold-duoto
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
 /** The person's ink on an artifact: the composer's Ink chip, the pen of the stroke's icon. */
 export { default as IconPen } from "~icons/solar/pen-bold-duotone";
+/** A result in words alone: what the session said it did. */
 export {
+  default as IconResult,
   default as IconArtifactCanvas,
   default as IconPenLine,
   default as IconToolWrite,
@@ -211,6 +219,7 @@ export {
   default as IconSubagents,
   default as IconToolTask,
 } from "~icons/solar/users-group-rounded-bold-duotone";
+export { default as IconVideo } from "~icons/solar/video-library-bold-duotone";
 export { default as IconSoundOff } from "~icons/solar/volume-cross-bold-duotone";
 export { default as IconSound } from "~icons/solar/volume-loud-bold-duotone";
 export { default as IconColumns } from "~icons/solar/widget-2-bold-duotone";

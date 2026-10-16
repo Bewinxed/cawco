@@ -6,6 +6,7 @@ import type {
   AccountOverage,
   AccountProvider,
   AtLimit,
+  AttemptResult,
   AuthState,
   BuildInfo,
   CapPeriod,
@@ -559,6 +560,11 @@ export const projectTasks = sqliteTable(
     duplicateOf: text("duplicate_of"),
     rank: text("rank"),
     labels: text("labels", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    /** The project folder files its work produces (`outputs:`): what the project's Made list draws. */
+    outputs: text("outputs", { mode: "json" })
       .$type<string[]>()
       .notNull()
       .default([]),
@@ -1213,6 +1219,12 @@ export const workItems = sqliteTable(
      * finishes; one missing sends it back to its session. Null: none.
      */
     outputs: text("outputs", { mode: "json" }).$type<string[]>(),
+    /**
+     * What its session handed in on its task (`task_result`): its words,
+     * what to check, and its artifacts. A later call replaces it. Null:
+     * none yet, or the item is no task's attempt.
+     */
+    taskResult: text("task_result", { mode: "json" }).$type<AttemptResult>(),
     /**
      * The pull request its landing opened or found open, when it lands `pr`:
      * what a poller watches to move its task on when it merges.

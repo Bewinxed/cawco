@@ -24,6 +24,7 @@
    * send him from the hero to his seat on it.
    */
   import type { CawView, PermissionResult, ThreadMessage } from "@cawco/core";
+  import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -39,6 +40,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { browser } from "$app/env";
+  import { goto } from "$app/navigation";
   import { barGlass } from "./bar-glass.svelte";
   import { failureWords, unreachable } from "./hub-read";
 
@@ -83,8 +85,10 @@
   import RegionBoundary from "./RegionBoundary.svelte";
   import RowFault from "./RowFault.svelte";
   import SideSplit from "./side/SideSplit.svelte";
+  import { setTaskProject, waitsOnYou } from "./tasks/needs.svelte";
   import TaskCard from "./tasks/TaskCard.svelte";
-  import TaskSheet from "./tasks/TaskSheet.svelte";
+  import TaskNeedsFor from "./tasks/TaskNeedsFor.svelte";
+  import TaskPane from "./tasks/TaskPane.svelte";
   import { threadBlockOf } from "./thread-blocks";
   import { newThreadProjectOf, threadIdOf, threadTabId } from "./thread-tabs";
   import Composer, {
@@ -132,6 +136,7 @@
   const projectId = $derived(
     thread?.projectId ?? newThreadProjectOf(viewId) ?? ""
   );
+  setTaskProject(() => projectId);
 
   let paneWidth = $state(0);
   const coarse = new MediaQuery("(pointer: coarse)");
@@ -414,6 +419,33 @@
     tasks.find((task) => task.id === id)?.kind;
   const taskHref = (id: string) =>
     `/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(id)}`;
+  /**
+   * A card opens its task beside the conversation on a desk; on a phone the
+   * task is its own page, whose Back comes back here. Docked beside the
+   * project page, the page stands it beside its board.
+   */
+  function openTaskOf(id: string) {
+    if (phone || docked) {
+      goto(taskHref(id), { state: { taskOpened: true } });
+      return;
+    }
+    openTask = id;
+  }
+  // Narrowed to a phone, the task beside the conversation is put away.
+  $effect(() => {
+    if (phone) {
+      openTask = null;
+    }
+  });
+  /** A move from the thread: the list is read again, so every card follows. */
+  async function moveIn(id: string, stage: string): Promise<TaskView> {
+    const moved = await moveTask(projectId, id, stage);
+    readTasks().catch(() => undefined);
+    return moved;
+  }
+  const changedIn = () => {
+    readTasks().catch(() => undefined);
+  };
 
   // --- your words he has not read ----------------------------------------------
 
@@ -685,15 +717,19 @@
     {#each ids as id (id)}
       {@const task = tasks.find((each) => each.id === id)}
       {#if task}
-        <li>
-          <TaskCard
-            href={taskHref(id)}
-            {kindOf}
-            onopen={(open) => {
-              openTask = open;
-            }}
-            {task}
-          />
+        <li class="thread-task">
+          <TaskCard href={taskHref(id)} {kindOf} onopen={openTaskOf} {task} />
+          {#if stages && waitsOnYou(projectId, task)}
+            <TaskNeedsFor
+              onchanged={changedIn}
+              onmove={moveIn}
+              onopen={openTaskOf}
+              {projectId}
+              {stages}
+              summary={task}
+              {tasks}
+            />
+          {/if}
         </li>
       {/if}
     {/each}
@@ -821,6 +857,8 @@
         {phone}
         planOf={lead}
         previewOf={lead}
+        task={stages ? taskSurface : undefined}
+        taskOpen={openTask !== null}
         {viewId}
         {visible}
         bind:this={side}
@@ -888,23 +926,24 @@
   </div>
 </div>
 
-{#if stages}
-  <TaskSheet
-    allowedFrom={(stage) => (stages ? movesFrom(stages, stage) : new Set())}
-    onchanged={() => {
-      readTasks().catch(() => undefined);
-    }}
-    onmove={async (id, stage) => {
-      const moved: TaskView = await moveTask(projectId, id, stage);
-      readTasks().catch(() => undefined);
-      return moved;
-    }}
-    {projectId}
-    {stages}
-    {tasks}
-    bind:taskId={openTask}
-  />
-{/if}
+{#snippet taskSurface(switcher: Snippet | undefined)}
+  {#if stages && openTask}
+    <TaskPane
+      allowedFrom={(stage) => (stages ? movesFrom(stages, stage) : new Set())}
+      onchanged={changedIn}
+      onclose={() => {
+        openTask = null;
+      }}
+      onmove={moveIn}
+      onopen={openTaskOf}
+      {projectId}
+      {stages}
+      {switcher}
+      taskId={openTask}
+      {tasks}
+    />
+  {/if}
+{/snippet}
 
 <style>
   .pane {
@@ -1034,6 +1073,18 @@
     margin: var(--space-3) 0 0;
     padding: 0;
     list-style: none;
+  }
+  /* A task that needs you takes the row: its card, then what it needs and
+     the way to act, collapsed to the deliverable's first lines. */
+  .thread-task {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+  .thread-task:has(:global(.needs-stack)) {
+    grid-column: 1 / -1;
+    max-inline-size: 74ch;
   }
   .board-link {
     margin-block-start: var(--space-3);

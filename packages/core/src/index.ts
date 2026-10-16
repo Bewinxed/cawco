@@ -20,6 +20,8 @@ export * from "./continuation";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.
 export * from "./delegate-types";
+// A task's deliverables by kind, and a post task's `*.post.json`.
+export * from "./deliverables";
 // Finding things across the fleet: what /api/find answers (find.ts).
 export * from "./find";
 // Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).

@@ -175,6 +175,8 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...CORE,
     ...DELEGATE_SESSION,
     ...TASK_READ,
+    // An attempt at a task hands in its result (task-tools.ts).
+    "task_result",
     "memory_note",
     // Its own project's folder, read only (caw.ts): what an earlier delegate
     // handed in, from any machine.

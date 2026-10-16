@@ -18,7 +18,13 @@ declare global {
     }
     // interface Locals {}
     // interface PageData {}
-    // interface PageState {}
+    interface PageState {
+      /**
+       * A project's task page was opened on a phone from the page before it
+       * in this tab's history: its Back is the browser's back.
+       */
+      taskOpened?: boolean;
+    }
     // interface Platform {}
   }
 }

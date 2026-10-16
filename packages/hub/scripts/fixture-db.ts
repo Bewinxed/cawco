@@ -148,6 +148,7 @@ function seedTasksAndThreads(db: HubDb, projects: string[]): void {
         title: pick(WORDS),
         stage: pick(["inbox", "next", "doing", "review", "done"]),
         type: pick(["bug", "feature", null]),
+        outputs: [],
         after: t > 2 ? [`tsk-${t}`] : [],
         parent: t > 10 ? "tsk-1" : null,
         related: [],

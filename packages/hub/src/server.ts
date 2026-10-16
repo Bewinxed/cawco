@@ -16717,6 +16717,9 @@ export const createServer = (
       fanOutFleet();
     },
     attempts: db.projectAttempts,
+    saveResult: (workItemId, taskResult) => {
+      db.updateWorkItem(workItemId, { taskResult });
+    },
     // The lead reviews, never the doer (lead-gate.ts `reviewProblem`).
     leadReview: (projectId, taskId) =>
       reviewProblem(db.leadCalls.since(projectId, new Date(0)), {

@@ -36,7 +36,13 @@
  * Changes to one project's tasks are taken one at a time: two to-dos ticked
  * at once both land.
  */
-import type { EndedBy, InstanceRow, LandsMode } from "@cawco/core";
+import type {
+  AttemptResult,
+  EndedBy,
+  InstanceRow,
+  LandsMode,
+  ResultArtifact,
+} from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
@@ -44,21 +50,24 @@ import type { Tracker, WorkBudget, WorkItemState } from "./db/schema";
 import {
   deleteFolderFile,
   type Exclusive,
+  FOLDER_RAW_LIMIT,
   type FolderAuthor,
   FolderRefusal,
   FolderTaken,
   type FolderWriteOptions,
   fileExtension,
   folderFileNames,
+  folderFileRaw,
   folderFileTimes,
   folderHistory,
+  folderPath,
   folderUncommitted,
   HISTORY_LIMIT,
   hasProjectFolder,
   IMAGE_TYPES,
   listFolder,
+  MEDIA_TYPES,
   moveFolderFile,
-  readFolderBytes,
   readFolderFile,
   readFolderFileAt,
   refused,
@@ -207,10 +216,11 @@ export interface TaskAttempt {
   /** When it ended, ms epoch; null while it is live. */
   endedAt: number | null;
   /**
-   * How it ended when it did not land, in a sentence the task shows: failed,
-   * `Attempt failed: <why>` (the first line of what the hub reported);
-   * cancelled, `Stopped by <who>` (`Stopped` when the hub did not hear who).
-   * Null while live and once done.
+   * How it ended when it did not land, in a sentence the task shows beside
+   * its Failed or Stopped badge: failed, the first line of what the hub
+   * reported (`It failed without a reason.` when nothing was); cancelled,
+   * `Stopped by <who>` (`Stopped` when the hub did not hear who). Null while
+   * live and once done.
    */
   endedHow: string | null;
   /**
@@ -220,6 +230,8 @@ export interface TaskAttempt {
   headline: string | null;
   /** The session running it. */
   instanceId: string;
+  /** What its session handed in (`task_result`); null while it has not. */
+  result: AttemptResult | null;
   /** When it was filed, ms epoch. */
   startedAt: number;
   state: WorkItemState;
@@ -334,6 +346,7 @@ export interface TaskStore {
     | "stoppedBy"
     | "summary"
     | "taskId"
+    | "taskResult"
   >[];
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
@@ -361,6 +374,8 @@ export interface TaskStore {
   readonly put: (rows: TaskIndexRow[]) => void;
   /** The tasks whose hook start waits for a slot (dispatch.ts). */
   readonly queuedStarts?: (projectId: string) => string[];
+  /** Keeps an attempt's result, replacing the one it had. */
+  readonly saveResult: (workItemId: string, result: AttemptResult) => void;
   /** Records the template a project's stages came from: its starter skills follow it. */
   readonly setTemplate: (id: string, template: StagesTemplate) => void;
   readonly setTracker: (id: string, tracker: Tracker) => void;
@@ -411,6 +426,8 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
    */
   needsYou: boolean;
   number: number;
+  /** The project folder files its work produces (`outputs:`). */
+  outputs: string[];
   parent: string | null;
   path: string;
   /** What in the file could not be read, or a stage the project lacks, in a sentence; null when all is well. */
@@ -644,6 +661,45 @@ const refuse = (code: 400 | 403 | 404 | 409 | 422, message: string): never => {
 const hashOf = (content: string): string =>
   new Bun.CryptoHasher("sha256").update(content).digest("hex");
 
+const WEB_LINK = /^https?:\/\//i;
+
+/**
+ * Refuses an artifact a result may not hand in, in a sentence naming it: a
+ * file or a post that is neither one of the task's `outputs` nor in the
+ * project folder, a post that is no `*.post.json`, a link that is not http(s).
+ */
+const artifactProblem = async (
+  projectId: string,
+  outputs: string[],
+  artifact: ResultArtifact
+): Promise<void> => {
+  if (artifact.kind === "link") {
+    if (!WEB_LINK.test(artifact.url)) {
+      refuse(422, `${artifact.url} is not an http(s) link.`);
+    }
+    return;
+  }
+  if (artifact.kind === "artifact") {
+    if (!artifact.artifactId.trim()) {
+      refuse(422, "Name the page artifact by its id.");
+    }
+    return;
+  }
+  const path = folderPath(artifact.path);
+  if (artifact.kind === "post" && !path.endsWith(".post.json")) {
+    refuse(422, `${path} is no post: a post is a <task>.post.json file.`);
+  }
+  if (outputs.includes(path)) {
+    return;
+  }
+  await folderFileRaw(projectId, path).catch(() =>
+    refuse(
+      422,
+      `${path} is neither one of the task's outputs nor a file in the project folder. Name it as the task's outputs do, from the folder's root.`
+    )
+  );
+};
+
 // --- what a caller may write ------------------------------------------------------
 
 const oneLine = (what: string, text: string, limit: number): string => {
@@ -851,9 +907,9 @@ const endedHowOf = (
   }
   const why = item.error?.trim().split("\n")[0]?.trim();
   if (!why) {
-    return "Attempt failed";
+    return "It failed without a reason.";
   }
-  return `Attempt failed: ${why.length > WHY_LIMIT ? `${why.slice(0, WHY_LIMIT - 1)}…` : why}`;
+  return why.length > WHY_LIMIT ? `${why.slice(0, WHY_LIMIT - 1)}…` : why;
 };
 
 /** An attempt as a task read shows it. */
@@ -863,6 +919,7 @@ const attemptOf = (
   workItemId: item.id,
   state: item.state,
   instanceId: item.instanceId,
+  result: item.taskResult ?? null,
   startedAt: item.createdAt.getTime(),
   endedAt: item.endedAt?.getTime() ?? null,
   endedHow: endedHowOf(item),
@@ -936,6 +993,7 @@ const summaryOf = (
     duplicateOf: row.duplicateOf,
     rank: row.rank,
     labels: row.labels,
+    outputs: row.outputs,
     fields: row.fields,
     todos: { done: row.todosDone, total: row.todosTotal },
     ...times,
@@ -1573,6 +1631,7 @@ export const createTasks = (store: TaskStore) => {
       duplicateOf: parsed.fields.duplicateOf,
       rank: parsed.fields.rank,
       labels: parsed.fields.labels,
+      outputs: parsed.fields.outputs,
       fields: doc.extraFields(),
       todosDone: parsed.todos.filter((todo) => todo.done).length,
       todosTotal: parsed.todos.length,
@@ -3130,6 +3189,60 @@ export const createTasks = (store: TaskStore) => {
     },
 
     /**
+     * Keeps what an attempt's session handed in on its task (`task_result`),
+     * replacing what it handed in before. A file or a post names one of the
+     * task's `outputs` (the hub copies those in as the attempt finishes) or a
+     * file the project folder holds; a post is a `*.post.json`; a link is
+     * http(s). One artifact at most is primary; none marked, the first is.
+     * Listeners hear the task changed, so every screen reads it again.
+     */
+    async result(
+      projectId: string,
+      ref: string,
+      workItemId: string,
+      written: {
+        summary: string;
+        check?: string[];
+        artifacts?: ResultArtifact[];
+      }
+    ): Promise<AttemptResult> {
+      known(projectId);
+      const { path, number } = await locate(projectId, ref);
+      const { content } = await readFolderFile(projectId, path);
+      const { outputs } = new TaskDoc(path, content).read().fields;
+      const summary = written.summary.trim();
+      if (!summary) {
+        refuse(
+          422,
+          "Say what you did in `summary`: the reviewer reads it first."
+        );
+      }
+      const artifacts = written.artifacts ?? [];
+      for (const artifact of artifacts) {
+        // biome-ignore lint/performance/noAwaitInLoops: a handful of artifacts, each checked in turn
+        await artifactProblem(projectId, outputs, artifact);
+      }
+      if (artifacts.filter((artifact) => artifact.primary).length > 1) {
+        refuse(
+          422,
+          "Mark one artifact `primary` at most: the one the reviewer sees first."
+        );
+      }
+      const result: AttemptResult = {
+        summary,
+        check: (written.check ?? []).map((line) => line.trim()).filter(Boolean),
+        artifacts: artifacts.map((artifact) =>
+          artifact.kind === "link" || artifact.kind === "artifact"
+            ? artifact
+            : { ...artifact, path: folderPath(artifact.path) }
+        ),
+        at: Date.now(),
+      };
+      store.saveResult(workItemId, result);
+      return told({ kind: "changed", projectId, id: taskId(number) }, result);
+    },
+
+    /**
      * Archives a task (`archived`, the default): its file moves to
      * tasks/archive/ in one commit, off every list but `archived`, done for
      * every task that waits on it, and kept with its history; refused while
@@ -3489,8 +3602,9 @@ export const taskRoutes = (tasks: Tasks) =>
     })
     // One output an attempt handed in, by the name the task gives it
     // (`outputs: [post.md]`), from where the hub copied it
-    // (`assets/tsk-12/post.md`): a picture as itself, anything else as
-    // text, so a page reads every output the one way and draws it.
+    // (`assets/tsk-12/post.md`): a picture, a video or a sound as itself,
+    // anything else as text, so a page reads every output the one way and
+    // draws it.
     .get(
       "/api/projects/:id/tasks/:taskId/outputs/file",
       { query: t.Object({ name: t.String() }) },
@@ -3503,15 +3617,16 @@ export const taskRoutes = (tasks: Tasks) =>
               `${task.id} hands in no output named ${query.name}; its outputs are ${task.outputs.join(", ") || "none"}.`
             );
           }
-          const { bytes } = await readFolderBytes(
+          const extension = fileExtension(query.name);
+          const media = MEDIA_TYPES[extension];
+          const file = await folderFileRaw(
             params.id,
             `${outputsFolder({ id: "", taskId: task.id })}/${query.name}`,
-            OUTPUT_FILE_LIMIT
+            media ? FOLDER_RAW_LIMIT : OUTPUT_FILE_LIMIT
           );
           return servedFile(
-            bytes,
-            IMAGE_TYPES[fileExtension(query.name)] ??
-              "text/plain; charset=utf-8"
+            Bun.file(file.real),
+            IMAGE_TYPES[extension] ?? media ?? "text/plain; charset=utf-8"
           );
         } catch (error) {
           return refused(error);

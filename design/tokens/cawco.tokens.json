@@ -2384,6 +2384,11 @@
       "$value": "340px",
       "$description": "The Comments panel at its widest."
     },
+    "c-review-words": {
+      "$type": "dimension",
+      "$value": "320px",
+      "$description": "A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview)."
+    },
     "c-mark": {
       "$type": "dimension",
       "$value": "26px"

@@ -515,6 +515,8 @@ public enum Size {
     public static let cPinListMin: Double = 260
     /// The Comments panel at its widest.
     public static let cPinListMax: Double = 340
+    /// A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview).
+    public static let cReviewWords: Double = 320
     public static let cMark: Double = 26
     public static let cMarkGlyph: Double = 16
     public static let cRowMark: Double = 18
