@@ -4535,7 +4535,25 @@ const start = async (
 ): Promise<Boundary> => {
   const gen = randomBytes(4).toString("hex");
   await makeDirs(ref.id);
-  await mkdir(generationDir(ref.id, gen), { recursive: true });
+  await mkdir(join(stateDir(ref.id), "boundaries"), { recursive: true });
+  // Its generation's dir is made here and nowhere else, and only by this
+  // start: one already there is another start's, whose files this one
+  // neither uses nor cleans away as it fails.
+  const made = await mkdir(generationDir(ref.id, gen)).then(
+    () => true,
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "EEXIST") {
+        return false;
+      }
+      throw error;
+    }
+  );
+  if (!made) {
+    throw refusal(
+      ref.id,
+      `its boundary generation ${gen} is already another start's`
+    );
+  }
   try {
     return await launch(client, ref, gen);
   } catch (error) {
