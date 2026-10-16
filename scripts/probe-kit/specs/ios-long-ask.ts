@@ -1090,11 +1090,35 @@ async function onSimulator(
       frame.width > 0 &&
       frame.y >= 0 &&
       frame.y + frame.height <= height;
+    /**
+     * Taps what passes `test` once its frame holds still between two reads:
+     * read off a list still moving (a project just folded), a tap lands on
+     * whatever has slid under that point, Change hub's paywall once.
+     */
     const tap = async (test: (label: string) => boolean): Promise<boolean> => {
-      const all = await labels();
-      const frame = all.find(
-        (node) => test(node.label) && onScreen(node.frame)
-      )?.frame;
+      const find = async () => {
+        const all = await labels();
+        return {
+          all,
+          frame: all.find((node) => test(node.label) && onScreen(node.frame))
+            ?.frame,
+        };
+      };
+      let { all, frame } = await find();
+      for (let look = 0; frame && look < 6; look += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: one read, then another to see it still
+        await pause(300);
+        const again = await find();
+        const still =
+          again.frame &&
+          again.frame.x === frame.x &&
+          again.frame.y === frame.y &&
+          again.frame.width === frame.width;
+        ({ all, frame } = again);
+        if (still) {
+          break;
+        }
+      }
       if (!frame) {
         screens += 1;
         writeFileSync(
@@ -1138,6 +1162,28 @@ async function onSimulator(
         if (await card()) {
           return true;
         }
+      }
+      return false;
+    };
+    /**
+     * The ask's banner, tapped. It is SpringBoard's, so the app's tree
+     * (`describe-ui`) never holds it; `describe-ui --point` reads it, at
+     * points down the middle of the screen's top, three passes at most.
+     */
+    const tapBanner = async (): Promise<boolean> => {
+      const middle = which === "27" ? 220 : 201;
+      for (let pass = 0; pass < 3; pass += 1) {
+        for (let y = 56; y <= 160; y += 8) {
+          // biome-ignore lint/performance/noAwaitInLoops: one point read after another
+          const at = await sh(
+            `${AXE} describe-ui --point ${middle},${y} --udid ${udid}`
+          );
+          if (at.includes(INPUT.description) || at.includes("Probe: long ask")) {
+            await sh(`${AXE} tap -x ${middle} -y ${y} --udid ${udid}`);
+            return true;
+          }
+        }
+        await pause(1000);
       }
       return false;
     };
@@ -1223,14 +1269,10 @@ async function onSimulator(
       () => "",
       (error: unknown) => String(error)
     );
-    await pause(2500);
-    const banner =
-      !refused &&
-      (await toCard(
-        (label) =>
-          label.includes(INPUT.description) || label.includes("Probe: long ask")
-      ));
-    await pause(2000);
+    await pause(1000);
+    const tapped = !refused && (await tapBanner());
+    await pause(5000);
+    const banner = tapped && (await card());
     id = (await pid()) ?? id;
     const fromBanner = await rest(id, "card-from-notification");
     report(
