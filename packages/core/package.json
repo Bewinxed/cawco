@@ -37,6 +37,7 @@
     "./comments": "./src/comments.ts",
     "./stage": "./src/stage.ts",
     "./canvas-host": "./src/canvas-host.ts",
+    "./shell-shortcuts": "./src/shell-shortcuts.ts",
     "./paths": "./src/paths.ts",
     "./state-file": "./src/state-file.ts",
     "./workspace-policy": "./src/workspace-policy.ts",

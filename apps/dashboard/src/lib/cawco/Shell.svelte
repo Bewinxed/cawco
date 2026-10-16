@@ -1,4 +1,8 @@
 <script lang="ts">
+  import {
+    type ShellShortcut,
+    shellShortcutOf,
+  } from "@cawco/core/shell-shortcuts";
   /**
    * The app chrome: the management rail on the left, a slim bar across the top,
    * and everything else underneath. Ported from mocks/v2-fleet.html (`aside` +
@@ -51,6 +55,7 @@
   import RegionBoundary from "./RegionBoundary.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
+  import { runShellShortcut, shellShortcutsAre } from "./shell-shortcut";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
   import { floor } from "./visible-viewport.svelte";
@@ -300,45 +305,58 @@
     railOpen = false;
   });
 
+  /**
+   * The shell's shortcuts (core `SHELL_SHORTCUTS`), from the dashboard's own
+   * keys or forwarded from an artifact's page (shell-shortcut.ts): whether
+   * it acted.
+   */
+  function act(name: ShellShortcut): boolean {
+    switch (name) {
+      case "new-session":
+        newSession();
+        return true;
+      // ⌘K opens and closes Jump (DESIGN.md, "The glass's cards").
+      case "jump":
+        barGlass.toggle("jump");
+        return true;
+      // Split the focused group, putting the conversation in front into the
+      // new half. `mod+\` is the binding VS Code uses for exactly this, and
+      // this is a straight copy of that model — borrowing the gesture's name
+      // too costs nothing and saves the reader learning a second one.
+      case "split-right":
+      case "split-down": {
+        const here = workspace.activeSessionId;
+        if (!(onSession && here && workspace.openIds.length >= 2)) {
+          return false;
+        }
+        workspace.split(
+          workspace.focusedLeafId,
+          name === "split-down" ? "bottom" : "right",
+          here
+        );
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+  $effect(() => shellShortcutsAre(act));
+
   function shortcut(event: KeyboardEvent) {
-    if (!(event.metaKey || event.ctrlKey)) {
+    const name = shellShortcutOf(event);
+    if (!name) {
       return;
     }
-    const key = event.key.toLowerCase();
     // A text field keeps the shortcuts, but for ⌘K in Jump's own field,
-    // which has the focus whenever Jump stands open: ⌘K opens and closes
-    // Jump (DESIGN.md, "The glass's cards").
+    // which has the focus whenever Jump stands open.
     const inJump = Boolean(
       document.activeElement?.closest(".glass-face[data-face='jump']")
     );
-    if (isTyping() && !(key === "k" && inJump)) {
+    if (isTyping() && !(name === "jump" && inJump)) {
       return;
     }
-    if (key === "n" && event.shiftKey) {
+    if (runShellShortcut(name)) {
       event.preventDefault();
-      newSession();
-      return;
-    }
-    if (key === "k") {
-      event.preventDefault();
-      barGlass.toggle("jump");
-      return;
-    }
-    // Split the focused group, putting the conversation in front into the new
-    // half. `mod+\` is the binding VS Code uses for exactly this, and this is
-    // a straight copy of that model — borrowing the gesture's name too costs
-    // nothing and saves the reader learning a second one.
-    if (key === "\\" && onSession) {
-      const here = workspace.activeSessionId;
-      if (!here || workspace.openIds.length < 2) {
-        return;
-      }
-      event.preventDefault();
-      workspace.split(
-        workspace.focusedLeafId,
-        event.shiftKey ? "bottom" : "right",
-        here
-      );
     }
   }
 

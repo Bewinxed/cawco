@@ -32,6 +32,7 @@
 import { Database } from "bun:sqlite";
 import { mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Page } from "playwright-core";
 import type {
   FindAnswer,
   FindConversation,
@@ -864,23 +865,84 @@ const AT_ROWS = () =>
     ),
   ].map((row) => row.getAttribute("data-value") ?? "");
 
+/** Whether Jump stands open with its field focused, and how many groups the workspace has. */
+const SHELL_STATE = () => ({
+  jump: document.activeElement?.classList.contains("jump-field") ?? false,
+  open: !!document.querySelector(".jump-field"),
+  groups: document.querySelectorAll("[data-leaf]").length,
+});
+
+/** The frame of the panel's `title`d iframe, once it stands with `ready` in it. */
+const frameOf = async (page: Page, title: string, ready: string) => {
+  const handle = await page.waitForSelector(`iframe[title="${title}"]`, {
+    state: "attached",
+    timeout: 60_000,
+  });
+  const frame = await handle.contentFrame();
+  if (!frame) {
+    throw new Error(`the ${title} iframe has no frame`);
+  }
+  await frame.waitForSelector(ready, { timeout: 60_000 });
+  return frame;
+};
+
 /**
  * h: the dashboard names things as the hub ranks them: Jump's first row for
  * words in any order is the hub's first, and the composer's `@` offers the
  * hub's handles in its order, never this conversation's own; choosing one
- * writes the handle a mention reaches.
+ * writes the handle a mention reaches. And the shell's shortcuts hold with
+ * the keyboard inside an artifact's page (core `SHELL_SHORTCUTS`): a page
+ * that leaves ⌘K alone gives Jump, a canvas keeps it (Excalidraw's link
+ * editor claims it), and a combo the canvas leaves alone (⌘\) reaches the
+ * shell from there.
  */
-const checkScreens = async ({ kit, fleet, sender, find }: Probe) => {
+const checkScreens = async (
+  { kit, fleet, sender, live, find }: Probe,
+  call: (name: string, input: object) => Promise<string>
+) => {
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
+  // Two conversations open in one group, the sender's in front: what ⌘\ splits.
+  const ws = {
+    v: 1,
+    root: { t: "l", id: "probe-leaf", tabs: [live, sender], active: sender },
+    focusedLeaf: "probe-leaf",
+    ctx: {},
+  };
+  await page.context().addCookies([
+    {
+      name: "cawco-workspace",
+      value: encodeURIComponent(JSON.stringify(ws)),
+      url: base,
+    },
+  ]);
+  await page.context().addInitScript((w) => {
+    localStorage.setItem("cawco-workspace", JSON.stringify(w));
+  }, ws);
   await open(page, `${base}/session/${sender}`, FIELD);
   const words = "harness quiet boundary";
   const hub = await find(
     `q=${encodeURIComponent(words)}&transcripts=0&kinds=project,thread,machine,conversation`
   );
-  // Jump opens from its glass, as a person opens it; its field takes the focus.
-  await page.click("[data-share='jump']");
-  await page.waitForSelector(JUMP_FIELD);
+  // ⌘K with the keyboard in the panel's page (the agent's page from step e),
+  // which leaves it alone: Jump opens, its field focused.
+  const pageFrame = await frameOf(page, "Preview", "h1");
+  await pageFrame.click("h1");
+  const inPage = await page.evaluate(
+    () => document.activeElement?.tagName === "IFRAME"
+  );
+  await page.keyboard.press("Control+k");
+  const fromPage = await until(
+    "Jump from the page's ⌘K",
+    () => page.evaluate(SHELL_STATE),
+    (state) => state.jump,
+    10_000
+  ).catch(() => page.evaluate(SHELL_STATE));
+  kit.check(
+    "h. ⌘K with the keyboard in an agent's page artifact opens Jump, its field focused",
+    inPage && fromPage.jump,
+    JSON.stringify({ inPage, after: fromPage })
+  );
   await page.focus(JUMP_FIELD);
   await page.keyboard.type(words);
   const jumped = await until(
@@ -923,6 +985,50 @@ const checkScreens = async ({ kit, fleet, sender, find }: Probe) => {
       !offered.some((row) => row.endsWith(sender.slice(0, 8))) &&
       written === `${handles[0]} `,
     JSON.stringify([handles.slice(0, 3), offered.slice(0, 3), written])
+  );
+  // A canvas in the panel, with the keyboard on its drawing.
+  await call(CREATE, {
+    kind: "canvas",
+    name: "find-sketch",
+    mermaid: "flowchart LR; A --> B",
+  });
+  const canvas = await frameOf(page, "Canvas", "canvas");
+  // What the canvas itself made of each key: read after every listener of
+  // its own, before the overlay's own last word (page.ts `leftToShell`).
+  await canvas.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { probeKeys: string[] }).probeKeys = seen;
+    window.addEventListener("keydown", (event) => {
+      if (event.ctrlKey) {
+        seen.push(`${event.key}:${event.defaultPrevented}`);
+      }
+    });
+  });
+  const box = await (await canvas.$("canvas"))?.boundingBox();
+  await canvas.click("canvas", {
+    position: { x: 12, y: Math.max(12, (box?.height ?? 200) - 12) },
+  });
+  const before = await page.evaluate(SHELL_STATE);
+  await page.keyboard.press("Control+k");
+  await page.waitForTimeout(1000);
+  const afterK = await page.evaluate(SHELL_STATE);
+  await page.keyboard.press("Control+\\");
+  const afterSplit = await until(
+    "the split from the canvas's ⌘\\",
+    () => page.evaluate(SHELL_STATE),
+    (state) => state.groups > before.groups,
+    10_000
+  ).catch(() => page.evaluate(SHELL_STATE));
+  const keys = await canvas.evaluate(
+    () => (window as unknown as { probeKeys: string[] }).probeKeys
+  );
+  kit.check(
+    "h. a canvas keeps ⌘K (Excalidraw claims it, Jump stays shut); its ⌘\\, left alone, splits the group",
+    keys.includes("k:true") &&
+      !afterK.open &&
+      keys.includes("\\:false") &&
+      afterSplit.groups === before.groups + 1,
+    JSON.stringify({ keys, before, afterK, afterSplit })
   );
 };
 
@@ -1165,7 +1271,7 @@ const run = async (kit: Kit) => {
   await checkCawThread(probe, call);
   await checkStored(probe);
   await checkWaiting(probe, call);
-  await checkScreens(probe);
+  await checkScreens(probe, call);
   await checkCoverage(probe);
   await timeNames(probe, `${probe.rows.length + 2} sessions`);
   await timeTranscripts(probe);

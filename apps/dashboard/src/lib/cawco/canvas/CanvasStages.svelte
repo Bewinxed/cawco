@@ -17,7 +17,9 @@
   import { untrack } from "svelte";
   import { theme } from "#lib/theme.svelte.js";
   import { heardInk } from "../preview/ink.svelte";
+  import { previewShortcut, SHORTCUT_MESSAGE } from "../preview/wire";
   import { watchInput } from "../reload.svelte";
+  import { runShellShortcut } from "../shell-shortcut";
   import { type Handle, type Stage, slotSizes, stages } from "./stage.svelte";
 
   const LABELS: Record<Handle, string> = {
@@ -80,6 +82,14 @@
       case "cawco:remove":
         actions?.remove?.();
         break;
+      case SHORTCUT_MESSAGE: {
+        // A shell combo the canvas left unhandled: the shell's, as from its own keys.
+        const name = previewShortcut(event.data);
+        if (name) {
+          runShellShortcut(name);
+        }
+        break;
+      }
       // A press on an element (no drag), for whoever hosts the dashboard (the Decisions tab);
       // a held stroke snapped to its shape, for the app that plays its selection tick.
       case "cawco:element-press":

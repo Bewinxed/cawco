@@ -56,6 +56,7 @@
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
   import { watchInput } from "../reload.svelte";
+  import { runShellShortcut } from "../shell-shortcut";
   import { sideExpand } from "../side/expand";
   import SideSurface from "../side/SideSurface.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
@@ -84,8 +85,10 @@
     previewPinAt,
     previewPinId,
     previewPng,
+    previewShortcut,
     previewTitle,
     previewUrl,
+    SHORTCUT_MESSAGE,
   } from "./wire";
 
   let {
@@ -1184,6 +1187,14 @@
         // The page left Comment or Draw on its own Esc: the pane follows, and keeps it.
         setMode("interact");
         break;
+      case SHORTCUT_MESSAGE: {
+        // A shell combo the page left unhandled: the shell's, as from its own keys.
+        const name = previewShortcut(message);
+        if (name) {
+          runShellShortcut(name);
+        }
+        break;
+      }
       case "cawco:error": {
         const said = previewError(message.message);
         const of = previewErrorOf(message.of);

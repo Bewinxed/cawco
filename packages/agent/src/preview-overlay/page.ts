@@ -22,6 +22,7 @@ import {
   withdrawPin,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
+import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import { domToPng } from "modern-screenshot";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
@@ -1336,6 +1337,57 @@ window.addEventListener(
       return;
     }
     post("cawco:key", { key });
+  },
+  true
+);
+
+/*
+ * The shell's own combos (core `SHELL_SHORTCUTS`: ⌘K Jump, ⌘⇧N, ⌘\ and
+ * ⌘⇧\), pressed while the page has the keyboard. The page has the first
+ * claim on every key; the shell takes only a combo the page left unhandled.
+ * That is decided at the very end of the event's dispatch, after every
+ * listener the page has: the capture listener here (the first thing on the
+ * window to hear it) puts `leftToShell` at the end of the window's own
+ * bubbling listeners, which run last. "Let listeners be a clone of event's
+ * currentTarget attribute value's event listener list. This avoids event
+ * listeners added after this point from being run." (DOM Standard, invoke,
+ * https://dom.spec.whatwg.org/#concept-event-listener-invoke): the window's
+ * bubbling list is cloned when that phase starts, after this capture, so
+ * the listener added here is in it, last. Unhandled (not
+ * `defaultPrevented`), the overlay takes it: it prevents the default there
+ * and then, so the browser's own Ctrl+K (Chrome's "Search from anywhere on
+ * the page") does not run beside Jump, and tells the host. A page that
+ * handles the combo keeps it: one that prevents its default, stops its
+ * propagation (`leftToShell` never runs), or adds a bubbling listener of
+ * its own on the window in this same dispatch. Never from a field: the
+ * shell's own handler leaves a text field its keys (Shell.svelte `shortcut`).
+ */
+let shortcutPress: KeyboardEvent | null = null;
+
+function leftToShell(event: KeyboardEvent) {
+  window.removeEventListener("keydown", leftToShell);
+  if (event !== shortcutPress) {
+    return;
+  }
+  shortcutPress = null;
+  const name = shellShortcutOf(event);
+  if (!name || event.defaultPrevented) {
+    return;
+  }
+  event.preventDefault();
+  post("cawco:shortcut", { name });
+}
+
+window.addEventListener(
+  "keydown",
+  (event) => {
+    window.removeEventListener("keydown", leftToShell);
+    shortcutPress = null;
+    if (!shellShortcutOf(event) || typing(event.target)) {
+      return;
+    }
+    shortcutPress = event;
+    window.addEventListener("keydown", leftToShell);
   },
   true
 );

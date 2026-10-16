@@ -110,8 +110,6 @@
   /** The face about to mount by a swap: whether it fades in. */
   let arriving: { card: Card; fade: boolean } | null = null;
 
-  /** The last thing that could change it was a pointer press, not a key. */
-  let byPointer = false;
   /** What had the focus before the first card opened. */
   let returnTo: HTMLElement | null = null;
   /** It is closing on a press outside it, or on the glass: the focus stays. */
@@ -123,7 +121,7 @@
     node.querySelector<HTMLElement>(FOCUS[card])?.focus({
       preventScroll: true,
       // After a press, no ring: a script's focus would draw it.
-      ...(byPointer && card !== "jump" ? { focusVisible: false } : {}),
+      ...(barGlass.byPointer && card !== "jump" ? { focusVisible: false } : {}),
     } as FocusOptions);
   }
   /** Focus into a face that came in by a swap; Caw's a task after its frame. */
@@ -282,7 +280,7 @@
     if (from === to) {
       return;
     }
-    barGlass.instant = to === "jump" && !byPointer;
+    barGlass.instant = to === "jump" && !barGlass.byPointer;
     if (from === null && !folding) {
       settle(to);
       return;
@@ -353,10 +351,10 @@
 
 <svelte:window
   onkeydowncapture={() => {
-    byPointer = false;
+    barGlass.byPointer = false;
   }}
   onpointerdowncapture={() => {
-    byPointer = true;
+    barGlass.byPointer = true;
   }}
 />
 
@@ -444,7 +442,7 @@
       if (!node) {
         return;
       }
-      if (card === "caw" && byPointer) {
+      if (card === "caw" && barGlass.byPointer) {
         // Once it stands open, and in a task after the frame it landed in:
         // taken in the press's own task, the style and layout it forced
         // held back the open's first frame, and taken in the landing's, its

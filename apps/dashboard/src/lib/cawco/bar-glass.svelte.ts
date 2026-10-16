@@ -36,6 +36,13 @@ class BarGlass {
    * card opens; without it, what had the focus then.
    */
   invoker: HTMLElement | null = null;
+  /**
+   * The last thing that could open a card was a pointer press, not a key
+   * (GlassCard reads it: a keyboard's Jump stands open at once). Set from the
+   * dashboard's own window, and by a shell shortcut forwarded from an
+   * artifact's page, whose keys never reach that window.
+   */
+  byPointer = false;
   /** Opens `card`, or shuts it when it is the one standing. */
   toggle(card: GlassCard): void {
     this.open = this.open === card ? null : card;

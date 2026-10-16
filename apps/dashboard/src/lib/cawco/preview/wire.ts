@@ -6,6 +6,11 @@
  * come in, and the rest of the pane works on shapes it knows.
  */
 
+import {
+  type ShellShortcut,
+  shellShortcutNamed,
+} from "@cawco/core/shell-shortcuts";
+
 const ERROR_MAX = 300;
 /** A base64 PNG this long is ~3 MB: a page's thumbnail, a pin's picture. */
 const PNG_MAX = 4_000_000;
@@ -103,5 +108,20 @@ export type PaneKey = "v" | "c" | "d" | "C" | "j" | "k" | "Enter" | "Escape";
 export function previewKey(value: unknown): PaneKey | null {
   return typeof value === "string" && PANE_KEYS.has(value)
     ? (value as PaneKey)
+    : null;
+}
+
+/**
+ * `cawco:shortcut`: one of the shell's own combos (core `SHELL_SHORTCUTS`)
+ * pressed in a page, an app under preview or a canvas, that the page left
+ * unhandled (overlay page.ts). Its `name`, or null when it names none.
+ */
+export const SHORTCUT_MESSAGE = "cawco:shortcut";
+export function previewShortcut(message: {
+  name?: unknown;
+  type?: unknown;
+}): ShellShortcut | null {
+  return message.type === SHORTCUT_MESSAGE
+    ? shellShortcutNamed(message.name)
     : null;
 }
