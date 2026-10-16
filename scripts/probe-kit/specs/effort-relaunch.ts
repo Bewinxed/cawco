@@ -399,6 +399,7 @@ const compactedDelegate = async (kit: Kit, fleet: Fleet, parent: string) => {
   const delegated = await fleet.api<{
     instanceId: string;
     workItemId: string;
+    workspaceId: string;
   }>("/api/work-items", {
     parentInstanceId: parent,
     title: "OpenCode relaunch probe",
@@ -472,11 +473,30 @@ const compactedDelegate = async (kit: Kit, fleet: Fleet, parent: string) => {
     "SELECT state, error FROM work_items WHERE id = ?",
     delegated.workItemId
   );
+  const answered =
+    after !== undefined && item?.state === "running" && !row?.last_error;
   kit.check(
     "OpenCode delegate after compaction: its next send reaches the model, its item still running, no error on its row",
-    after !== undefined && item?.state === "running" && !row?.last_error,
+    answered,
     JSON.stringify({ asked: after !== undefined, row, item })
   );
+  if (!answered) {
+    // What the agent and its keeper said of the delegate's workspace and
+    // session: the one record of a boundary start that failed.
+    const ws = delegated.workspaceId.slice(0, 8);
+    const said = (await fleet.logs("agent"))
+      .split("\n")
+      .filter(
+        (line) =>
+          line.includes(ws) ||
+          line.includes(high) ||
+          line.includes("[sessiond]")
+      )
+      .slice(-120);
+    kit.note(`agent log, workspace ${ws} and the keeper:\n${said.join("\n")}`);
+    const keeper = (await fleet.logs("sessiond")).split("\n").slice(-60);
+    kit.note(`sessiond log, last lines:\n${keeper.join("\n")}`);
+  }
 };
 
 export default { name: "effort-relaunch", run } satisfies Spec;
