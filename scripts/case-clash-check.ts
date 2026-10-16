@@ -22,19 +22,26 @@ if (proc.exitCode !== 0) {
 const seen = new Map<string, string>();
 const clashes = new Set<string>();
 for (const file of proc.stdout.toString().split("\0")) {
-  if (!file) continue;
+  if (!file) {
+    continue;
+  }
   const parts = file.split("/");
-  for (let i = 1; i <= parts.length; i++) {
+  for (let i = 1; i <= parts.length; i += 1) {
     const path = parts.slice(0, i).join("/");
     const key = path.toLowerCase();
     const prior = seen.get(key);
-    if (prior === undefined) seen.set(key, path);
-    else if (prior !== path) clashes.add(`${prior}  <->  ${path}`);
+    if (prior === undefined) {
+      seen.set(key, path);
+    } else if (prior !== path) {
+      clashes.add(`${prior}  <->  ${path}`);
+    }
   }
 }
 
 if (clashes.size > 0) {
   console.error("Paths that differ only by letter case (one file on macOS):");
-  for (const c of clashes) console.error(`  ${c}`);
+  for (const c of clashes) {
+    console.error(`  ${c}`);
+  }
   process.exit(1);
 }
