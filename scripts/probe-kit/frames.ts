@@ -431,7 +431,14 @@ export interface MainTask {
    * that forced it (`url:line:column`), or "the frame" when the frame's own
    * rendering ran it.
    */
-  passes: { at: string; elements: number; ms: number; name: string }[];
+  passes: {
+    at: string;
+    elements: number;
+    ms: number;
+    name: string;
+    /** A layout's root box, `width×height` px; empty for a style pass. */
+    root: string;
+  }[];
   /**
    * What its layouts were asked for (`restyles` only): each layout
    * invalidation's reason and the element it named, with how many times.
@@ -494,7 +501,8 @@ interface TraceEvent {
       stackTrace?: StackFrame[];
     };
     elementCount?: number;
-    endData?: { elementCount?: number };
+    /** A Layout's: the box it was laid out from, as four corners (x, y pairs). */
+    endData?: { elementCount?: number; root?: number[] };
   };
   cat: string;
   dur?: number;
@@ -691,6 +699,16 @@ export async function traceMain(
       .sort((a, b) => whole(b[0]) - whole(a[0]) || b[1] - a[1])
       .slice(0, 8);
   };
+  /** How big the box a layout was laid out from is: the page's, or one inside it. */
+  const rootOf = (one: TraceEvent): string => {
+    const quad = one.args?.endData?.root;
+    if (!quad || quad.length < 8) {
+      return "";
+    }
+    const xs = [quad[0], quad[2], quad[4], quad[6]];
+    const ys = [quad[1], quad[3], quad[5], quad[7]];
+    return `${Math.round(Math.max(...xs) - Math.min(...xs))}×${Math.round(Math.max(...ys) - Math.min(...ys))}`;
+  };
   const passesIn = (from: number, to: number) =>
     [...recalcs, ...layouts]
       .filter((one) => one.ts >= from && one.ts < to)
@@ -700,6 +718,7 @@ export async function traceMain(
         elements: elementsOf(one),
         ms: (one.dur ?? 0) / 1000,
         at: forcedBy(one),
+        root: rootOf(one),
       }));
   const samples = profile ? samplesOf(events, first.pid, first.tid) : [];
   const selfTime = (from: number, to: number): [string, number][] => {

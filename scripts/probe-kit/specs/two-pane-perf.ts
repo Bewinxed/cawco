@@ -529,7 +529,7 @@ async function measure(
             .filter((pass) => pass.ms >= 0.5)
             .map(
               (pass) =>
-                `${pass.name === "Layout" ? "layout" : "style"} ${pass.elements || ""} ${pass.ms.toFixed(1)}ms by ${pass.at}`
+                `${pass.name === "Layout" ? "layout" : "style"} ${pass.elements || ""} ${pass.ms.toFixed(1)}ms by ${pass.at}${pass.root ? ` from a ${pass.root} root` : ""}`
             )
             .join("; ")}], asked for by ${
             longest.invalidated
