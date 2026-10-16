@@ -147,8 +147,6 @@ interface TraceEvent {
 
 interface Leg {
   fade: Fade;
-  /** Where the scroller stood after the gesture down and after it back up, against its run, px. */
-  reached: { foot: number; run: number; top: number };
   /** Frames drawn over the leg. */
   frames: number;
   /** The load through it: at its start, and the most. */
@@ -162,6 +160,8 @@ interface Leg {
   p95Ms: number;
   /** Paint on the main thread over the leg, CPU ms. */
   paintMs: number;
+  /** Where the scroller stood after the gesture down and after it back up, against its run, px. */
+  reached: { foot: number; run: number; top: number };
   /** Style recalculations over the leg: how many, their CPU ms, the elements they styled. */
   style: { elements: number; ms: number; n: number };
 }
