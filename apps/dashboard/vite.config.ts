@@ -391,8 +391,6 @@ export default defineConfig(({ command }) => {
       // refuses a directory import (ERR_UNSUPPORTED_DIR_IMPORT) where vite's
       // resolver follows it. Bundled, the server never resolves them at all.
       noExternal: [
-        "tw-animate-css",
-        "shadcn-svelte",
         "@fontsource-variable/figtree",
         "@fontsource-variable/jetbrains-mono",
         "@fontsource/fredoka",

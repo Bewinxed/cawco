@@ -579,6 +579,10 @@
     --leading-root: 1.5;
     /* A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14. */
     --leading-prose-sm: 1.7142857;
+    /* The kit's form fields: a field's label, title and content (components/ui/field, Tailwind's snug). */
+    --leading-snug: 1.375;
+    /* The permission rule tester's preview of what a rule matches (RuleTester, Tailwind's relaxed). */
+    --leading-relaxed: 1.625;
     /* prose-sm: above an h2, in the heading's own ems. */
     --prose-sm-title-before: 1.6;
     /* prose-sm: below an h1 or h2, in the heading's own ems. */
@@ -605,6 +609,8 @@
     --track-display: -0.008em;
     --track-title: -0.01em;
     --track-caps: 0.06em;
+    /* A menu item's keyboard shortcut (the kit's command, dropdown and context menu shortcuts, Tailwind's widest). */
+    --track-widest: 0.1em;
     /* Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric. */
     --type-meta: 400 var(--text-meta) / 1.35 var(--font-body);
     --type-label: 500 var(--text-label) / 1.3 var(--font-body);

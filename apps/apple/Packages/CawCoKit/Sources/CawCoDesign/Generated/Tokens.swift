@@ -399,6 +399,10 @@ public enum TypeScale {
     public static let leadingRoot: Double = 1.5
     /// A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14.
     public static let leadingProseSm: Double = 1.714286
+    /// The kit's form fields: a field's label, title and content (components/ui/field, Tailwind's snug).
+    public static let leadingSnug: Double = 1.375
+    /// The permission rule tester's preview of what a rule matches (RuleTester, Tailwind's relaxed).
+    public static let leadingRelaxed: Double = 1.625
     /// prose-sm: above an h2, in the heading's own ems.
     public static let proseSmTitleBefore: Double = 1.6
     /// prose-sm: below an h1 or h2, in the heading's own ems.
@@ -428,6 +432,9 @@ public enum TypeScale {
     public static let trackTitle: Double = -0.01
     /// In em: multiply by the font size for points.
     public static let trackCaps: Double = 0.06
+    /// A menu item's keyboard shortcut (the kit's command, dropdown and context menu shortcuts, Tailwind's widest).
+    /// In em: multiply by the font size for points.
+    public static let trackWidest: Double = 0.1
     /// Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric.
     public static let typeMeta = TypeRole(weight: .regular, size: 12...12, leading: 1.35, family: FontFamily.fontBody)
     public static let typeLabel = TypeRole(weight: .medium, size: 13...13, leading: 1.3, family: FontFamily.fontBody)
