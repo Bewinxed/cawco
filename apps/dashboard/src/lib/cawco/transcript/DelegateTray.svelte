@@ -54,6 +54,7 @@
   import { pressOutside } from "../press-outside";
   import RowFault from "../RowFault.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
+  import { layoutScale } from "./grown";
   import { askDetailOf, askShortOf, matchesSession } from "./present";
   import {
     admit,
@@ -644,9 +645,10 @@
   /** The room over the tray, up to the top of the composer's dock. */
   const roomOver = (tray: HTMLElement): number => {
     const dock = tray.closest(".dock") ?? document.documentElement;
-    return (
-      tray.getBoundingClientRect().top - dock.getBoundingClientRect().top - 16
-    );
+    // In the layout's px: the panel may still be rising out of its scale.
+    const over =
+      tray.getBoundingClientRect().top - dock.getBoundingClientRect().top;
+    return over / layoutScale(tray) - 16;
   };
 
   function open(key: string, pin: boolean): void {

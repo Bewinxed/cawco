@@ -803,6 +803,9 @@
      edge, not a band across the content. */
   .kit-edge-fade,
   .kit-edge-fade-block {
+    /* A faded scroller is its own stacking context, whatever its mask:
+       nothing in it rises over its fades, whatever its z-index. */
+    isolation: isolate;
     animation-name: kit-edge-fade-start, kit-edge-fade-end;
     animation-duration: auto;
     animation-timing-function: linear;

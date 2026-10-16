@@ -1158,6 +1158,9 @@
     min-block-size: 0;
     padding: var(--space-6) var(--space-5) var(--composer-clearance);
     overflow-y: auto;
+    /* Its own stacking: what is raised inside it (an Earlier row's mark)
+       stays under the foot fade as it scrolls past the composer. */
+    isolation: isolate;
   }
   .hero :global(.kit-empty) {
     align-items: center;

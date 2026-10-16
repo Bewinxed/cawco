@@ -1440,6 +1440,331 @@ async function checkEarlier(kit: Kit, page: Page, name: string) {
 }
 
 /**
+ * The grown shape's cut on the panel's question card, read off `.ask`'s
+ * clip-path: its right edge (an SVG path's box) against the card's laid-out
+ * width, and how far the panel's transforms scale it on the screen now.
+ */
+const readClip = (page: Page) =>
+  page.evaluate((panel) => {
+    const ask = document.querySelector<HTMLElement>(`${panel} .ask`);
+    const clip = ask?.style.clipPath ?? "";
+    // Run in the page, where no module constant reaches: no regex here.
+    const d =
+      clip.startsWith('path("') && clip.endsWith('")') ? clip.slice(6, -2) : "";
+    if (!(ask && d)) {
+      return null;
+    }
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute(
+      "style",
+      "position:fixed;inset-inline-start:-9999px;inline-size:1px;block-size:1px"
+    );
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+    document.body.append(svg);
+    const box = path.getBBox();
+    svg.remove();
+    return {
+      left: Math.round(box.x * 10) / 10,
+      right: Math.round((box.x + box.width) * 10) / 10,
+      width: ask.offsetWidth,
+      scale:
+        Math.round(
+          (ask.getBoundingClientRect().width / ask.offsetWidth) * 1000
+        ) / 1000,
+    };
+  }, PANEL);
+
+/**
+ * The panel opened on a thread where Caw's question already waits: the
+ * card grows as the panel rises out of its open scale, and the grown
+ * shape's cut is the card's own width, at its first frame and once the
+ * panel stands (owner's preview, 10-16: the right ~26px of a 328px card
+ * stayed clipped for good, cut at 301.8px under `--pop-scale`).
+ */
+async function checkClipAtOpen(
+  kit: Kit,
+  base: string,
+  project: { id: string; name: string },
+  threadId: string,
+  name: string
+) {
+  const page = await kit.page("desk");
+  page.setDefaultTimeout(60_000);
+  const route = await askRoute(page);
+  const seat = ".project-head button.caw-seat";
+  await open(page, `${base}/project/${project.id}`, seat);
+  await settle(page, 400);
+  route.ask(threadId, project.name);
+  await settle(page, 300);
+  await page.click(seat);
+  // Waiting as the panel comes up: said again the moment it is in the page,
+  // still rising out of its scale (the same request, so one card).
+  await page.waitForSelector(PANEL, { timeout: 30_000 });
+  const asked = route.ask(threadId, project.name);
+  // The first frame the card's cut is written, the panel still rising.
+  const first = await page
+    .waitForFunction(
+      (panel) =>
+        (
+          document.querySelector<HTMLElement>(`${panel} .ask`)?.style
+            .clipPath ?? ""
+        ).startsWith("path("),
+      PANEL,
+      { polling: "raf", timeout: 30_000 }
+    )
+    .then(() => readClip(page))
+    .catch(() => null);
+  await settle(page, 1200);
+  const after = await readClip(page);
+  kit.note(`${name} clip: ${JSON.stringify({ first, after })}`);
+  for (const [when, read] of [
+    ["at open", first],
+    ["once the panel stands", after],
+  ] as const) {
+    kit.check(
+      `${name}: the question waiting as the panel opens, the card's cut reaches its whole width ${when}`,
+      asked &&
+        !!read &&
+        Math.abs(read.left) <= 0.5 &&
+        Math.abs(read.right - read.width) <= 0.5,
+      JSON.stringify(read)
+    );
+  }
+  await page.close();
+}
+
+/**
+ * A child of `scroller` (a selector), at the top of every stacking order
+ * (`z-index` the most there is), against the fade standing over that
+ * scroller's foot or head (`fade`): what the screen shows topmost where
+ * they overlap. The fade takes no pointer, so it takes one for the read.
+ * With `loose`, the scroller's own stacking is undone for the read, the
+ * control: the same child then stands over the fade.
+ */
+const fadeOverChild = (
+  page: Page,
+  scroller: string,
+  fade: string,
+  loose = false
+) =>
+  page.evaluate(
+    ({ scroller: sel, fade: fadeSel, loose: undo }) => {
+      const host = document.querySelector<HTMLElement>(sel);
+      const over = document.querySelector<HTMLElement>(fadeSel);
+      if (!(host && over)) {
+        return { read: false, fadeOnTop: false, isolation: "" };
+      }
+      const child = document.createElement("div");
+      child.setAttribute(
+        "style",
+        "position:fixed;inset:0;z-index:2147483647;pointer-events:auto"
+      );
+      host.append(child);
+      if (undo) {
+        host.style.isolation = "auto";
+      }
+      over.style.pointerEvents = "auto";
+      const a = child.getBoundingClientRect();
+      const b = over.getBoundingClientRect();
+      const x = (Math.max(a.left, b.left) + Math.min(a.right, b.right)) / 2;
+      const top = Math.max(a.top, b.top);
+      const span = Math.min(a.bottom, b.bottom) - top;
+      const ours = (el: Element | undefined) =>
+        !!el && (el === child || el === over || over.contains(el));
+      // Down the fade, the first point where it or the child is what shows:
+      // what stands over the fade on purpose (a dock, a composer) is not read.
+      let hit: Element | undefined;
+      for (let i = 1; i < 20 && !hit; i += 1) {
+        const [first] = document.elementsFromPoint(x, top + (span * i) / 20);
+        if (ours(first)) {
+          hit = first;
+        }
+      }
+      const { isolation } = getComputedStyle(host);
+      over.style.pointerEvents = "";
+      host.style.isolation = "";
+      child.remove();
+      return {
+        read: !!hit,
+        fadeOnTop: !!hit && (hit === over || over.contains(hit)),
+        isolation,
+      };
+    },
+    { scroller, fade, loose }
+  );
+
+/** One faded scroller: a child at the top `z-index` stays under its fade, and only because of the scroller's own stacking. */
+export async function checkUnderFade(
+  kit: Kit,
+  page: Page,
+  what: string,
+  scroller: string,
+  fade: string
+) {
+  const read = await fadeOverChild(page, scroller, fade);
+  const control = await fadeOverChild(page, scroller, fade, true);
+  kit.check(
+    `${what}: a child at z-index 2147483647 sits under the fade (and over it with the scroller's stacking undone)`,
+    read.read && read.fadeOnTop && !control.fadeOnTop,
+    JSON.stringify({ read, control })
+  );
+}
+
+/**
+ * Faded scrollers are their own stacking contexts: Caw's hero scrolling
+ * his Earlier rows under the composer (owner's preview, 10-16: a row's
+ * avatar, `.tree-mark` at z-index 2, painted over the foot fade under the
+ * composer), the panel's transcript, and the question card's body (the
+ * house edge fade). In a short window, so the hero scrolls.
+ */
+async function checkFades(
+  kit: Kit,
+  fleet: Fleet,
+  base: string,
+  project: { id: string; name: string },
+  threadId: string
+) {
+  const seat = ".project-head button.caw-seat";
+  // The question card's body, the house edge fade (a mask on the scroller),
+  // in the thread the panel opens on, while it is still the newest.
+  const asking = await kit.page("desk");
+  asking.setDefaultTimeout(60_000);
+  const route = await askRoute(asking);
+  await open(asking, `${base}/project/${project.id}`, seat);
+  await settle(asking, 400);
+  await asking.click(seat);
+  await asking.waitForSelector(`${PANEL} .tx-columns`, { timeout: 30_000 });
+  route.ask(threadId, project.name);
+  const card = await asking
+    .waitForSelector(`${CARD} .body`, { timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  await settle(asking, 600);
+  const edge = await asking.evaluate(() =>
+    [...document.querySelectorAll(".kit-edge-fade, .kit-edge-fade-block")].map(
+      (el) => ({
+        what: `${el.tagName.toLowerCase()}.${[...el.classList].slice(0, 2).join(".")}`,
+        isolation: getComputedStyle(el).isolation,
+      })
+    )
+  );
+  kit.check(
+    `every house edge-faded scroller on the page, the question card's body among them, is its own stacking context (${edge.length})`,
+    card &&
+      edge.some((one) => one.what.startsWith("div.body")) &&
+      edge.every((one) => one.isolation === "isolate"),
+    JSON.stringify(edge)
+  );
+  await asking.close();
+  // Rows enough under the hero's chips to scroll in a short panel.
+  for (const body of ["One more", "And another", "A third", "A fourth"]) {
+    await fleet.api(`/api/projects/${project.id}/threads`, { body });
+  }
+  const page = await kit.page("desk");
+  page.setDefaultTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 560 });
+  await open(page, `${base}/project/${project.id}`, seat);
+  await settle(page, 400);
+  await page.click(seat);
+  await page.waitForSelector(`${PANEL} .tx-columns`, { timeout: 30_000 });
+  await settle(page, 600);
+  await checkUnderFade(
+    kit,
+    page,
+    "panel's transcript, its rows",
+    `${PANEL} .tx-columns > .listing`,
+    `${PANEL} .foot-fade`
+  );
+  await pickThread(page, "New thread");
+  await page.waitForSelector(`${HERO} .earlier li`, { timeout: 30_000 });
+  await settle(page, 400);
+  await checkUnderFade(kit, page, "Caw's hero", HERO, `${PANEL} .foot-fade`);
+  // The owner's scene: an Earlier row's mark scrolled into the gap under
+  // the composer, and what stands topmost there.
+  const scene = await page.evaluate(
+    ({ hero, panel }) => {
+      const scroller = document.querySelector<HTMLElement>(hero);
+      const fade = document.querySelector<HTMLElement>(`${panel} .foot-fade`);
+      const shell = document.querySelector<HTMLElement>(
+        `${panel} .shell:has([role="combobox"])`
+      );
+      const marks = [
+        ...document.querySelectorAll<HTMLElement>(
+          `${hero} .earlier .tree-mark`
+        ),
+      ];
+      if (!(scroller && fade && shell && marks.length > 0)) {
+        return null;
+      }
+      // Where the fade shows past the composer: the gap under it, then the
+      // band of it over the composer, top down.
+      const s = shell.getBoundingClientRect();
+      const f = fade.getBoundingClientRect();
+      const under = f.bottom - s.bottom;
+      const above = s.top - f.top;
+      const heights = [
+        ...(under >= 4 ? [(s.bottom + f.bottom) / 2] : []),
+        ...[0.2, 0.4, 0.6, 0.8].map((t) => f.top + Math.max(0, above) * t),
+      ];
+      const max = scroller.scrollHeight - scroller.clientHeight;
+      const was = scroller.scrollTop;
+      const at0 = marks.map((mark) => {
+        const r = mark.getBoundingClientRect();
+        return Math.round(r.top + r.height / 2 + was);
+      });
+      // The first height a mark scrolls to, and what shows topmost there.
+      for (const y of heights) {
+        for (const mark of marks) {
+          const r = mark.getBoundingClientRect();
+          const to = scroller.scrollTop + (r.top + r.height / 2 - y);
+          if (to < 0 || to > max) {
+            continue;
+          }
+          scroller.scrollTop = to;
+          const at = mark.getBoundingClientRect();
+          const x = at.left + at.width / 2;
+          fade.style.pointerEvents = "auto";
+          const [hit] = document.elementsFromPoint(x, y);
+          // The mark's own place in the order, the fade's pointer let go.
+          fade.style.pointerEvents = "";
+          return {
+            scrolls: max > 0,
+            gap: Math.round(under),
+            band: Math.round(above),
+            y: Math.round(y),
+            markUnder: at.top <= y && at.bottom >= y,
+            fadeOnTop: !!hit && (hit === fade || fade.contains(hit)),
+            hit: hit
+              ? `${hit.tagName.toLowerCase()}.${[...hit.classList].join(".")}`
+              : null,
+          };
+        }
+      }
+      return {
+        scrolls: max > 0,
+        gap: Math.round(under),
+        band: Math.round(above),
+        y: heights.map(Math.round).join(","),
+        marks: at0.join(","),
+        max: Math.round(max),
+        markUnder: false,
+        fadeOnTop: false,
+        hit: null,
+      };
+    },
+    { hero: HERO, panel: PANEL }
+  );
+  kit.check(
+    "Caw's hero scrolled: a hit-test in the gap under the composer, on an Earlier row's mark, lands on the foot fade",
+    !!scene && scene.scrolls && scene.markUnder && scene.fadeOnTop,
+    JSON.stringify(scene)
+  );
+  await page.close();
+}
+
+/**
  * Caw's model, changed where any session's model is: his name in the
  * panel opens his lead session's card (SessionDetails), its model chip the
  * models (ModelSection); the model picked there is the hub's lead record
@@ -1750,7 +2075,10 @@ const spec: Spec = {
     const threadId = (thread as { id: string }).id;
     await checkQuestion(kit, base, project, threadId, "desk", "panel 380");
     await checkQuestion(kit, base, project, threadId, "phone", "phone 390");
+    await checkClipAtOpen(kit, base, project, threadId, "panel 380");
     await checkUnread(kit, fleet, base, project, threadId);
+    // Last: it adds threads, and the panel opens on the newest.
+    await checkFades(kit, fleet, base, project, threadId);
     jev.stop();
   },
 };

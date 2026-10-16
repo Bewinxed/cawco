@@ -29,6 +29,7 @@ import {
 } from "../../../decisions-preview/seed";
 import { MACHINE } from "../../../scratch-fleet";
 import { type Kit, open, type Spec, settle, type View } from "../../kit";
+import { checkUnderFade } from "./caw-dock";
 
 const IDS = [
   ...[LANDING, PRICING, ONBOARDING].flatMap((page) =>
@@ -237,6 +238,14 @@ async function decided(kit: Kit, page: Page, view: View, url: string) {
         note,
       }))
     )
+  );
+  // The record scrolls under the dock's foot fade, its own stacking context.
+  await checkUnderFade(
+    kit,
+    page,
+    `${view}: the decided page's record`,
+    ".decisions .page-scroll",
+    ".decisions .page-scroll ~ .foot-fade"
   );
   const chips = cards.flatMap((card) => card.tasks);
   kit.check(

@@ -127,6 +127,8 @@ export class GrownShape {
   #done: (() => void) | null = null;
   /** What the drop waits on after the next morph lands, besides it. */
   #after: Promise<void> | null = null;
+  /** The shell's laid-out width, followed: the shape is always as wide as it. */
+  readonly #follow: ResizeObserver;
 
   constructor(
     host: HTMLElement,
@@ -202,6 +204,21 @@ export class GrownShape {
     const stops = this.#halo.querySelectorAll("stop");
     this.#mid = stops[1];
     this.#edge = stops[4];
+    // The shell resized (the window, the panel): the shape takes its width,
+    // its border box as laid out, which no transform it stands in changes.
+    // Its first report lands the fraction `offsetWidth` rounded away.
+    this.#follow = new ResizeObserver(([entry]) => {
+      const w = entry?.borderBoxSize[0]?.inlineSize ?? host.offsetWidth;
+      if (w > 0 && Math.abs(w - this.#size.w) >= 0.01) {
+        this.#size.w = w;
+        this.#sides = null;
+        this.paint();
+        if (this.#drop.classList.contains("settled")) {
+          this.#settle();
+        }
+      }
+    });
+    this.#follow.observe(host);
   }
 
   get base(): number {
@@ -605,6 +622,7 @@ export class GrownShape {
   }
 
   remove(): void {
+    this.#follow.disconnect();
     cancelAnimationFrame(this.#frame);
     this.#done?.();
     this.#halo.remove();
@@ -664,6 +682,18 @@ export interface ViewBox {
 }
 
 /**
+ * How much the transforms `el` stands under scale it on the screen now (a
+ * popover rising out of `--pop-scale`): its box's width over its laid-out
+ * width. A length read off `getBoundingClientRect()` divided by it is the
+ * layout's, which is what a shape drawn in that box is cut in.
+ */
+export function layoutScale(el: HTMLElement): number {
+  const laid = el.offsetWidth;
+  const shown = el.getBoundingClientRect().width;
+  return laid > 0 && shown > 0 ? shown / laid : 1;
+}
+
+/**
  * The sizes a grown shape stands on, read in one pass: the shell and where
  * it stands in the window, its pill, the field's one-line height (one wheel
  * row) and its last line. The room over the top row is a step of the
@@ -678,19 +708,26 @@ export function measureShape(
   const box = shell.getBoundingClientRect();
   const text = field.getBoundingClientRect();
   const style = getComputedStyle(shell);
+  // The shape is drawn in the shell's own box, under any transform it
+  // stands in: a popover still at its open scale shows the shell smaller
+  // than it is laid out, and a shape cut to that box clips the card for
+  // good. Its sizes are the layout's; the rects' offsets are scaled back.
+  // The shape then follows the shell's border box as it resizes (GrownShape).
+  const w = shell.offsetWidth;
+  const scale = layoutScale(shell);
   return {
     view: { bottom: box.bottom, height: window.innerHeight },
     size: {
-      w: box.width,
+      w,
       base: pill.offsetHeight,
       r: Number.parseFloat(getComputedStyle(pill).borderTopLeftRadius) || 0,
       headroom: Number.parseFloat(style.getPropertyValue("--space-2")),
       row: Number.parseFloat(style.getPropertyValue("--c-composer-field")),
     },
     line: {
-      left: text.left - box.left,
-      bottom: box.bottom - text.bottom,
-      height: text.height,
+      left: (text.left - box.left) / scale,
+      bottom: (box.bottom - text.bottom) / scale,
+      height: text.height / scale,
       width: field.clientWidth,
     },
   };

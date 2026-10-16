@@ -353,6 +353,8 @@
     min-block-size: 0;
     padding-block-end: calc(var(--dock-room) + var(--space-4));
     overflow-y: auto;
+    /* Its own stacking: nothing in it rises over the foot fade. */
+    isolation: isolate;
   }
   /* The live page scrolls itself and pads for the dock (its inset): it runs
      under the dock to the pane's foot. */

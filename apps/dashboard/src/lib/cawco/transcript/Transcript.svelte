@@ -3663,6 +3663,12 @@
       padding-inline: var(--space-5);
     }
   }
+  /* What scrolls here is its own stacking context, so nothing in it (a
+     row's raised mark, a card's z-index) rises over the pane's fades
+     (FootFade, HeadFade). Only the dock stands over them. */
+  .tr > :not(.dock) {
+    isolation: isolate;
+  }
   .empty {
     font-size: var(--text-meta);
     font-weight: var(--weight-body);

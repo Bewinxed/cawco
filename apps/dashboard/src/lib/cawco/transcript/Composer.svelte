@@ -128,7 +128,7 @@
   import type { ComposerDraft } from "./composer-draft.svelte";
   import { stand } from "./composer-presence.svelte";
   import DelegateTray from "./DelegateTray.svelte";
-  import { GrownShape, measureShape } from "./grown";
+  import { GrownShape, layoutScale, measureShape } from "./grown";
   import {
     asBubble,
     asField,
@@ -360,7 +360,12 @@
         node.clientWidth -
         Number.parseFloat(style.paddingInlineStart) -
         Number.parseFloat(style.paddingInlineEnd);
-      hint = probe.getBoundingClientRect().width <= room ? HINT : HINT_SHORT;
+      // Laid out, as the room is: a panel rising out of its scale shows the
+      // probe narrower than the hint will stand.
+      hint =
+        probe.getBoundingClientRect().width / layoutScale(node) <= room
+          ? HINT
+          : HINT_SHORT;
     };
     const sizes = new ResizeObserver(fit);
     sizes.observe(node);
@@ -2625,7 +2630,9 @@
       getComputedStyle(shell).getPropertyValue("--space-8")
     );
     const { top } = dockEl.getBoundingClientRect();
-    return Math.max(0, shell.getBoundingClientRect().top - top - gap);
+    // In the layout's px: the panel may still be rising out of its scale.
+    const over = (shell.getBoundingClientRect().top - top) / layoutScale(shell);
+    return Math.max(0, over - gap);
   }
 
   /** The shape takes the card's height, from wherever it is drawn. */
