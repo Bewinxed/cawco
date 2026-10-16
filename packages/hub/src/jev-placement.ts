@@ -31,6 +31,7 @@ import type {
 import { askJev, type JevAccess } from "./jev";
 import {
   PLACE_QUESTION,
+  reasonRefusal,
   refsOf,
   STARTER_BOUNDS,
   STARTER_RECENT_DAYS,
@@ -822,10 +823,12 @@ export const STARTER_THRESHOLD = 0.5;
 const NONE =
   "Nothing about it is worth offering now: it is fine as it is, or another starter covers it.";
 
-/** What one starters call came to: each place's set in Jev's order, and how many answers the grounding gate dropped. */
+/** What one starters call came to: each place's set in Jev's order, how many answers the grounding gate dropped, and the reasons the reason gate refused. */
 export interface JevStarters {
   /** Answers about something not in the inputs, or naming a source not in them: never offered. */
   dropped: number;
+  /** Chosen asks whose reason breaks starter-asks.ts `reasonRefusal`'s rules, each with its refusal: never offered. */
+  refused: { reason: string; why: string }[];
   starters: Record<StarterPlace, ProjectStarter[]>;
 }
 
@@ -833,9 +836,10 @@ export interface JevStarters {
  * Starters with Jev on, every place in one call: one choice per thing in
  * the project (starter-asks.ts `subjectsOf`) over the asks that fit it now
  * and `none`. Kept, per place: a chosen ask at or above
- * {@link STARTER_THRESHOLD}, every source in the inputs; the likeliest
- * first, at most six. Jev steers by `shown`, the starters offered before and
- * what the person did with each.
+ * {@link STARTER_THRESHOLD}, every source in the inputs, its reason one
+ * plain sentence (`reasonRefusal`); the likeliest first, at most six. Jev
+ * steers by `shown`, the starters offered before and what the person did
+ * with each.
  */
 export async function jevStarters(
   access: JevAccess,
@@ -845,6 +849,7 @@ export async function jevStarters(
   const subjects = subjectsOf(inputs);
   const none = (): JevStarters => ({
     dropped: 0,
+    refused: [],
     starters: { board: [], routines: [], decisions: [] },
   });
   if (subjects.size === 0) {
@@ -912,6 +917,7 @@ export async function jevStarters(
   const result = await askRow("starters", projectId, access, state, questions);
   const refs = refsOf(inputs);
   let dropped = 0;
+  const refused: JevStarters["refused"] = [];
   const kept: { p: number; place: StarterPlace; starter: ProjectStarter }[] =
     [];
   for (const [id, answer] of Object.entries(
@@ -931,6 +937,11 @@ export async function jevStarters(
       !ask.sources.every((source) => refs.has(`${source.kind}:${source.ref}`))
     ) {
       dropped += 1;
+      continue;
+    }
+    const why = reasonRefusal(ask.reason);
+    if (why !== null) {
+      refused.push({ reason: ask.reason, why });
       continue;
     }
     kept.push({
@@ -962,6 +973,7 @@ export async function jevStarters(
   };
   return {
     dropped,
+    refused,
     starters: Object.fromEntries(
       STARTER_PLACES.map((place) => [place, setOf(place)])
     ) as Record<StarterPlace, ProjectStarter[]>,

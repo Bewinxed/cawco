@@ -72,7 +72,7 @@ export interface StarterSource {
  */
 export interface ProjectStarter {
   glyph: StarterGlyph;
-  /** Why it is offered, naming what in the project it comes from; at most 120 characters. */
+  /** Why it is offered: one plain sentence, at most 14 words and 120 characters, with no ids, slugs or shorthand (hub starter-asks.ts `reasonRefusal`); `sources` name what it comes from. */
   reason: string;
   sources: StarterSource[];
   /** At most 90 characters. */

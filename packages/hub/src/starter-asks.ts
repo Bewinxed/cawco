@@ -205,8 +205,79 @@ const fitted = (
 };
 const text = (make: (q: string) => string, quoted: string) =>
   fitted(make, quoted, STARTER_BOUNDS.text);
-const reason = (make: (q: string) => string, quoted: string) =>
-  fitted(make, quoted, STARTER_BOUNDS.reason);
+
+// --- reasons: why a starter is offered --------------------------------------------
+
+/**
+ * A reason's word cap. The owner's call ("at most ~14 words"): a line read
+ * at a glance under the starter's own words.
+ */
+export const REASON_WORDS = 14;
+
+/**
+ * How every reason below is written, the rules {@link reasonRefusal} holds
+ * them to. The owner, on reasons like the two bad ones: "the subtitle is
+ * the same weight and no way to understand what's going on, is this just a
+ * text or am i supposed to read sth here?"
+ *
+ * - One plain sentence a person reads at a glance: why this is offered, in
+ *   the project's words, at most {@link REASON_WORDS} words, ending in a full
+ *   stop.
+ * - It says why; the starter's text already names the thing, so the reason
+ *   does not repeat its title.
+ * - No ids or slugs (`tsk-3`, `th-launch-email`, a commit sha, an event kind
+ *   like `issue.opened`), no file paths or routes unless they are the thing
+ *   itself, nothing set in mono.
+ * - No shorthand: no `2d` for two days, no `·` lists.
+ *
+ * Good: "It has waited on you in Review for 2 days." / "No routine took the
+ * 4 issues opened on acme/site in 14 days."
+ * Bad: "/book · 3 errors in the last run" / "th-launch-email · 2d, no reply"
+ *
+ * `sources` carry what a starter comes from, for the grounding gate; they
+ * never reach a reason's words.
+ */
+const REASON_RULES: [RegExp, string][] = [
+  [/[·•|]/, "it lists with “·”"],
+  [/`/, "it sets words in mono"],
+  [/\b\d+(?:d|h|m|w|mo|y|hr|min)\b/i, "it shortens a duration (“2d”)"],
+  [/\b[a-z]{1,4}-[a-z0-9]*\d[a-z0-9]*\b/i, "it names an id"],
+  [/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/i, "it names a sha"],
+  [/\b[a-z0-9]+(?:-[a-z0-9]+){2,}\b/i, "it names a slug"],
+  [/\b[a-z0-9]+_[a-z0-9_]+\b/i, "it names an identifier"],
+  [/\b[a-z]+\.[a-z]+\b/i, "it names a dotted id or a file"],
+  [/(?:^|\s)\/\S/, "it names a route"],
+];
+const SENTENCE_END = /[.!?](?=\s+\S)/;
+const ENDS = /[.!?]$/;
+
+/**
+ * Why `reason` breaks the rules above, in words, or null when it holds to
+ * them. Pure; the write path drops a starter whose reason it refuses
+ * (jev-placement.ts `jevStarters`).
+ */
+export const reasonRefusal = (reason: string): string | null => {
+  const said = reason.trim();
+  const words = said.split(SPACES).filter(Boolean).length;
+  if (words === 0) {
+    return "it is empty";
+  }
+  if (words > REASON_WORDS) {
+    return `it is ${words} words; the cap is ${REASON_WORDS}`;
+  }
+  if (said.length > STARTER_BOUNDS.reason) {
+    return `it is ${said.length} characters; the cap is ${STARTER_BOUNDS.reason}`;
+  }
+  for (const [rule, why] of REASON_RULES) {
+    if (rule.test(said)) {
+      return why;
+    }
+  }
+  if (SENTENCE_END.test(said) || !ENDS.test(said)) {
+    return "it is not one sentence";
+  }
+  return null;
+};
 
 /** One ask Jev may choose for a thing in the project: what it means to Jev, and the starter it becomes. */
 export interface Ask {
@@ -226,6 +297,14 @@ export interface Subject {
 
 const days = (n: number): string => (n === 1 ? "1 day" : `${n} days`);
 const named = (title: string) => `“${title}”`;
+/** "It waits on you in Review." or, days on, "It has waited on you in Review for 2 days." */
+const waited = (
+  on: "waited on you" | "waited on your pick",
+  task: StarterTask
+) =>
+  task.days > 0
+    ? `It has ${on} in ${task.stage} for ${days(task.days)}.`
+    : `It ${on.replace("waited", "waits")} in ${task.stage}.`;
 
 // --- board: what to start with Caw ------------------------------------------------
 
@@ -234,8 +313,6 @@ const taskAsks = (task: StarterTask): Record<string, Ask> => {
   const source: StarterSource[] = [{ kind: "task", ref: task.id }];
   const say = (make: (q: string) => string) =>
     text((title) => make(named(title)), task.title);
-  const why = (make: (q: string) => string) =>
-    reason((title) => make(named(title)), task.title);
   const asks: Record<string, Ask> = {};
   if (task.waitsOnYou) {
     asks.answer = {
@@ -243,10 +320,7 @@ const taskAsks = (task: StarterTask): Record<string, Ask> => {
         "It waits on the person: they want Caw to walk them through what it needs from them.",
       glyph: "reply",
       text: say((q) => `Walk me through what ${q} needs from me`),
-      reason: why(
-        (q) =>
-          `${task.id} ${q} waits on you in ${task.stage}${task.days > 0 ? ` for ${days(task.days)}` : ""}`
-      ),
+      reason: waited("waited on you", task),
       sources: source,
     };
   }
@@ -255,10 +329,7 @@ const taskAsks = (task: StarterTask): Record<string, Ask> => {
       about: "Its last attempt failed: find why, and try it again.",
       glyph: "bug",
       text: say((q) => `Find out why ${q} failed and try it again`),
-      reason: reason(
-        (failure) => `${task.id}'s last attempt failed: ${failure}`,
-        task.failed || "no reason given"
-      ),
+      reason: "Its last attempt failed, and no one has tried it again.",
       sources: source,
     };
   }
@@ -271,21 +342,21 @@ const taskAsks = (task: StarterTask): Record<string, Ask> => {
       about: "It has sat in its stage for days: find what holds it up.",
       glyph: "triage",
       text: say((q) => `Find out why ${q} is stuck in ${task.stage}`),
-      reason: why(
-        (q) => `${task.id} ${q} has sat in ${task.stage} for ${days(task.days)}`
-      ),
+      reason: `It has sat in ${task.stage} for ${days(task.days)} without moving.`,
       sources: source,
     };
   }
   if (task.kind === "todo") {
+    const still =
+      task.days > 0
+        ? `It has sat in ${task.stage} for ${days(task.days)}, not started.`
+        : `It is in ${task.stage} and not started yet.`;
     if (!task.blocked) {
       asks.start = {
         about: "It is clear enough and nothing blocks it: start it now.",
         glyph: "rocket",
         text: say((q) => `Start ${q}`),
-        reason: why(
-          (q) => `${task.id} ${q} is in ${task.stage} and nothing blocks it`
-        ),
+        reason: `It is in ${task.stage}, and nothing blocks it.`,
         sources: source,
       };
     }
@@ -293,26 +364,19 @@ const taskAsks = (task: StarterTask): Record<string, Ask> => {
       about: "It is too vague to start: grill the person until it has a spec.",
       glyph: "grill",
       text: say((q) => `Grill me on ${q} until it has a spec`),
-      reason: why((q) => `${task.id} ${q} is still in ${task.stage}`),
+      reason: still,
       sources: source,
     };
     asks.split = {
       about: "It is too big for one go: break it into smaller tasks.",
       glyph: "tasks",
       text: say((q) => `Break ${q} into smaller tasks`),
-      reason: why((q) => `${task.id} ${q} is still in ${task.stage}`),
+      reason: still,
       sources: source,
     };
   }
   return asks;
 };
-
-/** What a thread's last words are, as a reason. */
-const lastSaid = (thread: StarterInputs["threads"][number]): string =>
-  reason(
-    (last) => `Last said in “${within(thread.title, 40)}”: ${last}`,
-    thread.last
-  );
 
 /** A thread with words in it: pick it up, or turn what it settled into tasks. */
 const threadSubject = (thread: StarterInputs["threads"][number]): Subject => {
@@ -327,14 +391,14 @@ const threadSubject = (thread: StarterInputs["threads"][number]): Subject => {
           "The conversation stopped before it was done: pick it up where it left off.",
         glyph: "reply",
         text: say((q) => `Pick up ${q} where we left off`),
-        reason: lastSaid(thread),
+        reason: "This conversation stopped before it was done.",
         sources,
       },
       tasks: {
         about: "It settled what to do: turn that into tasks.",
         glyph: "tasks",
         text: say((q) => `Turn what we settled in ${q} into tasks`),
-        reason: lastSaid(thread),
+        reason: "This conversation settled what to do next.",
         sources,
       },
     },
@@ -354,10 +418,7 @@ const routineSubject = (
         (name) => `Find out why the “${name}” routine failed and fix it`,
         failure.name
       ),
-      reason: reason(
-        (why) => `“${within(failure.name, 40)}” failed its last run: ${why}`,
-        failure.reason || "no reason given"
-      ),
+      reason: "This routine's last run failed.",
       sources: [{ kind: "routine", ref: failure.id }],
     },
   },
@@ -378,11 +439,7 @@ const commitSubject = (
         (subject) => `Check what landed in “${subject}”`,
         commit.subject
       ),
-      reason: reason(
-        (subject) =>
-          `${commit.sha.slice(0, 9)} landed on ${branch ?? "the default branch"}: ${subject}`,
-        commit.subject
-      ),
+      reason: `It is one of the latest commits on ${branch ?? "the default branch"}.`,
       sources: [{ kind: "commit", ref: commit.sha }],
     },
   },
@@ -397,7 +454,6 @@ const designSubject = (inputs: StarterInputs): Subject | undefined => {
     return;
   }
   const designTasks = inputs.tasks.filter((task) => task.design);
-  const [firstDesign] = designTasks;
   return {
     at: "repository.has_design_system",
     asks: {
@@ -409,17 +465,10 @@ const designSubject = (inputs: StarterInputs): Subject | undefined => {
           inputs.commits.length > 0
             ? "Build a design system from our site and code"
             : "Build a design system from our site and notes",
-        reason: firstDesign
-          ? reason(
-              (title) =>
-                `No design/ yet, and ${firstDesign.id} “${title}” is design work`,
-              firstDesign.title
-            )
-          : reason(
-              (name) =>
-                `No design/ yet, and ${name} is a ${inputs.template} project`,
-              inputs.name
-            ),
+        reason:
+          designTasks.length > 0
+            ? "Its tasks are design work, and it has no design system yet."
+            : `It is a ${inputs.template} project with no design system yet.`,
         sources: designTasks
           .slice(0, DESIGN_SOURCES_MAX)
           .map((task) => ({ kind: "task", ref: task.id })),
@@ -451,19 +500,12 @@ const projectSubject = (inputs: StarterInputs): Subject | undefined => {
             "It has no open tasks and nothing says what it is for: grill the person until it does.",
           glyph: "grill",
           text: text((name) => `Grill me on what ${name} is for`, inputs.name),
-          reason: reason(
-            (name) =>
-              `${name} has no open tasks, and AGENTS.md says nothing of what it is for`,
-            inputs.name
-          ),
+          reason: "It has no open tasks, and nothing says what it is for.",
           sources: [{ kind: "path", ref: AGENTS_PATH }],
         },
       },
     };
   }
-  const said = inputs.agents
-    ? "AGENTS.md says what it is for"
-    : `knowledge/ holds ${inputs.knowledge.length} files`;
   return {
     at: "project",
     asks: {
@@ -475,10 +517,7 @@ const projectSubject = (inputs: StarterInputs): Subject | undefined => {
           (name) => `Read ${name}'s notes and file its first tasks`,
           inputs.name
         ),
-        reason: reason(
-          (name) => `${name} has no open tasks; ${said}`,
-          inputs.name
-        ),
+        reason: "It has no open tasks, and its notes say what it is for.",
         sources: notes,
       },
     },
@@ -517,45 +556,60 @@ const boardSubjects = (inputs: StarterInputs): Map<string, Subject> => {
 
 // --- routines: what the project repeats or waits on --------------------------------
 
-/** An event, in the words a routine's sentence starts with, and what to do with it. */
+/**
+ * An event, in the words a routine's sentence starts with, what to do with
+ * it, and what its events are called in a reason (one, and many).
+ */
 const EVENT_WORDS: Record<
   string,
-  { act: string; glyph: StarterGlyph; when: string }
+  {
+    act: string;
+    glyph: StarterGlyph;
+    noun: [one: string, many: string];
+    when: string;
+  }
 > = {
   "issue.opened": {
     when: "an issue opens",
     act: "triage it into a task",
     glyph: "triage",
+    noun: ["issue opened", "issues opened"],
   },
   "issue.closed": {
     when: "an issue closes",
     act: "check its task is done",
     glyph: "tasks",
+    noun: ["issue closed", "issues closed"],
   },
   "issue.labeled": {
     when: "an issue is labeled",
     act: "file it where it belongs",
     glyph: "triage",
+    noun: ["issue labeled", "issues labeled"],
   },
   "pr.opened": {
     when: "a pull request opens",
     act: "review it",
     glyph: "search",
+    noun: ["pull request opened", "pull requests opened"],
   },
   "pr.merged": {
     when: "a pull request merges",
     act: "write it into the changelog",
     glyph: "brief",
+    noun: ["pull request merged", "pull requests merged"],
   },
   "pr.closed": {
     when: "a pull request closes",
     act: "tidy what it leaves",
     glyph: "tasks",
+    noun: ["pull request closed", "pull requests closed"],
   },
   "comment.created": {
     when: "someone comments",
     act: "draft a reply",
     glyph: "reply",
+    noun: ["comment", "comments"],
   },
 };
 
@@ -582,11 +636,7 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
             (name) => `Every Monday, triage the week's new “${name}” tasks`,
             kind.name
           ),
-          reason: reason(
-            (name) =>
-              `${kind.count} “${name}” tasks filed in the last ${STARTER_RECENT_DAYS} days`,
-            kind.name
-          ),
+          reason: `${kind.count} tasks like these were filed in the last ${STARTER_RECENT_DAYS} days.`,
           sources: kind.tasks.map((ref) => ({ kind: "task", ref })),
         },
       },
@@ -604,7 +654,8 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
             (title) => `Every Monday, do what “${title}” asked`,
             thread.title
           ),
-          reason: lastSaid(thread),
+          reason:
+            "This conversation asks for work that comes back again and again.",
           sources: [{ kind: "thread", ref: thread.id }],
         },
       },
@@ -626,10 +677,8 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
               `Every morning, run “${title}”'s checks and tell me what fails`,
             failure.name
           ),
-          reason: reason(
-            (why) => `${failure.id}'s last attempt failed: ${why}`,
-            failure.reason || "no reason given"
-          ),
+          reason:
+            "Its last attempt failed, so its checks are worth a daily run.",
           sources: [{ kind: "task", ref: failure.id }],
         },
       },
@@ -640,7 +689,9 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
       when: `a “${event.kind}” event comes in`,
       act: "handle it",
       glyph: "routine",
+      noun: ["event", "events"],
     };
+    const [one, many] = words.noun;
     const from = sourceName(event.source);
     subjects.set(`event:${event.source} ${event.kind}`, {
       at: `unrouted (${event.source} ${event.kind})`,
@@ -653,11 +704,10 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
             (name) => `When ${words.when} on ${name}, ${words.act}`,
             from
           ),
-          reason: reason(
-            (name) =>
-              `${event.count} ${event.kind} events from ${name} in ${STARTER_RECENT_DAYS} days reached no routine`,
-            from
-          ),
+          reason:
+            event.count === 1
+              ? `No routine took the ${one} on ${from} in the last ${STARTER_RECENT_DAYS} days.`
+              : `No routine took the ${event.count} ${many} on ${from} in ${STARTER_RECENT_DAYS} days.`,
           sources: [{ kind: "event", ref: `${event.source} ${event.kind}` }],
         },
       },
@@ -687,11 +737,7 @@ const decisionSubjects = (inputs: StarterInputs): Map<string, Subject> => {
             (title) => `Write a decision page for “${title}”`,
             task.title
           ),
-          reason: reason(
-            (title) =>
-              `${task.id} “${title}” waits on your pick in ${task.stage}`,
-            task.title
-          ),
+          reason: waited("waited on your pick", task),
           sources: [{ kind: "task", ref: task.id }],
         },
       },
@@ -709,7 +755,7 @@ const decisionSubjects = (inputs: StarterInputs): Map<string, Subject> => {
             (title) => `Lay out the options in “${title}” as a decision page`,
             thread.title
           ),
-          reason: lastSaid(thread),
+          reason: "Its last answer lays out options for you to choose between.",
           sources: [{ kind: "thread", ref: thread.id }],
         },
       },
@@ -728,10 +774,7 @@ const decisionSubjects = (inputs: StarterInputs): Map<string, Subject> => {
             (view) => `Help me decide on the “${view}” draft view`,
             name
           ),
-          reason: reason(
-            (draft) => `${draft} is a draft no one has kept or dropped`,
-            path
-          ),
+          reason: "Caw drafted this view, and no one has kept or dropped it.",
           sources: [{ kind: "path", ref: path }],
         },
       },

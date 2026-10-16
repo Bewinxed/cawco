@@ -435,7 +435,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       starters: written.starters,
     });
     console.log(
-      `[starters] project=${projectId} trigger=${trigger}: wrote ${STARTER_PLACES.map((place) => `${place} ${written.starters[place].length}`).join(", ")}${written.dropped > 0 ? `; dropped ${written.dropped} not grounded in the inputs` : ""}`
+      `[starters] project=${projectId} trigger=${trigger}: wrote ${STARTER_PLACES.map((place) => `${place} ${written.starters[place].length}`).join(", ")}${written.dropped > 0 ? `; dropped ${written.dropped} not grounded in the inputs` : ""}${written.refused.map((each) => `; refused “${each.reason}”: ${each.why}`).join("")}`
     );
     for (const place of STARTER_PLACES) {
       publish(projectId, place, written.starters[place]);

@@ -8,8 +8,10 @@
  *
  * d. Jev off: a new project gets no starters (served or on its board), and
  *    the hub logs `[jev off] Starters project=<id>: none offered, Jev is off`.
- * a. A project with a task gets starters whose reasons and sources cite that
- *    task, in the order Jev's probabilities give; Caw's panel hero shows
+ * a. A project with a task gets starters whose sources cite that task and
+ *    whose reasons are each one plain sentence with no id (hub
+ *    starter-asks.ts `reasonRefusal`, as in g and h), in the order Jev's
+ *    probabilities give; Caw's panel hero shows
  *    them in the hub's order. An empty project's board shows its own set
  *    (its commit, its notes, design/ missing) in the hub's order, laid out
  *    in the recipe's columns for however many there are.
@@ -43,6 +45,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { reasonRefusal } from "../../../packages/hub/src/starter-asks";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type JevCall, jevMock, jevOn, type StarterPick } from "../jev-mock";
 import { COMPOSER_FIELD, type Kit, open, type Spec, settle } from "../kit";
@@ -384,8 +387,11 @@ const run = async (kit: Kit) => {
   const harbourCalls = jev.starterCalls("harbour");
   const order = harbourSet.map((starter) => starter.sources[0]?.kind ?? "");
   kit.check(
-    "a: a project with a task gets starters whose reasons and sources cite that task, in Jev's order (task, then commit)",
-    lead?.reason.includes(task.id) === true &&
+    "a: a project with a task gets starters whose sources cite that task and whose reasons are plain sentences with no id, in Jev's order (task, then commit)",
+    lead !== undefined &&
+      harbourSet.every(
+        (s) => reasonRefusal(s.reason) === null && !s.reason.includes(task.id)
+      ) &&
       lead.sources.some(
         (source) => source.kind === "task" && source.ref === task.id
       ) &&
@@ -505,10 +511,11 @@ const run = async (kit: Kit) => {
     );
   }
   kit.check(
-    "a: the empty project's starters carry their reasons: design/ missing, its notes, its commit; a thread under the confidence gate is not offered",
-    wrenSet.some(
-      (s) => s.glyph === "system" && s.reason.startsWith("No design/ yet")
-    ) &&
+    "a: the empty project's starters carry their reasons, each a plain sentence: no design system yet, its notes, its commit; a thread under the confidence gate is not offered",
+    wrenSet.every((s) => reasonRefusal(s.reason) === null) &&
+      wrenSet.some(
+        (s) => s.glyph === "system" && s.reason.includes("no design system yet")
+      ) &&
       wrenSet.some((s) => s.sources.some((x) => x.kind === "commit")) &&
       !wrenSet.some((s) => s.sources.some((x) => x.kind === "thread")),
     wrenSet
@@ -674,7 +681,8 @@ const run = async (kit: Kit) => {
       routineTexts.includes(
         "When an issue opens on acme/site, triage it into a task"
       ) &&
-      !routineTexts.some((text) => text.includes("ghost")),
+      !routineTexts.some((text) => text.includes("ghost")) &&
+      routineSet.every((s) => reasonRefusal(s.reason) === null),
     described(routineSet)
   );
   kit.check(
@@ -732,7 +740,8 @@ const run = async (kit: Kit) => {
       decisionTexts.includes("Help me decide on the “pricing” draft view") &&
       !decisionSet.some((starter) =>
         starter.sources.some((source) => source.ref === "tsk-999")
-      ),
+      ) &&
+      decisionSet.every((s) => reasonRefusal(s.reason) === null),
     `draft written ${drafted.status}; ${described(decisionSet)}`
   );
   kit.check(
