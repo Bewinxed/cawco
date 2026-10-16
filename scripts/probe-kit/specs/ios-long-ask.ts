@@ -686,11 +686,15 @@ async function run(kit: Kit): Promise<void> {
                   return false;
                 }
                 await pause(2000);
+                // The drawer lists a project's sessions under its row (SidebarViewController, unless it is folded).
+                const title = await sessionTitle();
+                if (await tap((label) => label.includes(title))) {
+                  return true;
+                }
                 if (!(await tap((label) => label.startsWith(PROJECT)))) {
                   return false;
                 }
                 await pause(3000);
-                const title = await sessionTitle();
                 return await tap((label) => label.includes(title));
               },
             },
