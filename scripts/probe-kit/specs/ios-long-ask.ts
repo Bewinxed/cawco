@@ -868,8 +868,9 @@ const PROBE_PROMPT = [
  * mode in that project, asks for the long call; the app is measured with
  * that ask raised on iOS 27.0 (the owner's phone and OS: at rest from
  * launch, as nothing taps there from a workspace) and on iOS 18.5, reached
- * through Needs you, the drawer and the ask's notification, then its whole
- * command opened and its Deny tapped. Only the probe's own ask is touched,
+ * through Needs you and the drawer, then its whole command opened and its
+ * Deny tapped (its notification takes no push on an unauthorised simulator
+ * app; that route is the Debug runs' `-push-route`). Only the probe's own ask is touched,
  * found by its ids; the probe is stopped and archived at the end.
  */
 async function askLive(kit: Kit, app: string, live: LiveHub): Promise<void> {
@@ -1142,39 +1143,14 @@ async function onSimulator(
       drawer,
       await rest(id, "card-from-drawer")
     );
-    // The ask's notification, the app in the background: its banner tapped.
-    const ask = await ours();
-    await sh(`xcrun simctl launch ${udid} com.apple.Preferences >/dev/null`);
-    await pause(2000);
-    const payload = join(kit.out, "release-push.json");
-    writeFileSync(
-      payload,
-      JSON.stringify({
-        aps: {
-          alert: { title: "Probe: long ask", body: INPUT.description },
-          sound: "default",
-        },
-        cawco: {
-          kind: "ask",
-          instanceId: ask?.instanceId,
-          requestId: ask?.requestId,
-        },
-      })
+    // The ask's notification is not reachable here: a Release simulator app
+    // takes no push until it is authorised, `simctl privacy` grants every
+    // service but notifications, and a first launch asks for none. Its route
+    // (`deliver`) is the one the Debug runs drive with `-push-route`.
+    kit.note(
+      `live ${tag} (Release): the ask's notification not tried: no push reaches an unauthorised simulator app (its route proven in Debug through -push-route)`
     );
-    await sh(`xcrun simctl push ${udid} dev.cawco.app "${payload}" >/dev/null`);
-    await pause(2500);
-    const banner = await tap(
-      (label) =>
-        label.includes(INPUT.description) || label.includes("Probe: long ask")
-    );
-    await pause(5000);
-    id = (await pid()) ?? id;
-    report(
-      "the probe's card from its notification",
-      banner,
-      await rest(id, "card-from-notification")
-    );
-    // The whole command opened, then Deny.
+    // On the drawer's card: the whole command opened, then Deny.
     const opened = await tap((label) => label === "Show the whole command");
     await pause(2000);
     report(
