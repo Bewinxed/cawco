@@ -82,6 +82,7 @@
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
+  import { sameRow } from "./same-row";
   import { newSession } from "./spawn/new-session.svelte";
   import { inLists, isThreadTab } from "./thread-tabs";
   import { rooted, tree } from "./tree";
@@ -393,26 +394,15 @@
   const NO_SPLIT: Split = { recent: NOTHING, older: NOTHING };
 
   /**
-   * Whether two rows draw the same: the same row, or one whose every field
-   * a session row shows is the same (its status, name, place, age when it
-   * has no pulse, and where it hangs). Activity and pulses are read by the
-   * rows themselves, per row.
+   * `next`, or `was` where it lists the same rows in the same order, each
+   * the same in every field (same-row.ts): the kept rows are the ones the
+   * rows' menus act on. Activity and pulses are read by the rows themselves,
+   * per row.
    */
-  const drawsAlike = (a: InstanceRow, b: InstanceRow): boolean =>
-    a === b ||
-    (a.id === b.id &&
-      a.status === b.status &&
-      a.title === b.title &&
-      a.cwd === b.cwd &&
-      a.machineId === b.machineId &&
-      a.parentInstanceId === b.parentInstanceId &&
-      a.updatedAt === b.updatedAt);
-
-  /** `next`, or `was` where it lists the same rows in the same order, drawn alike. */
   const keep = (next: InstanceRow[], was: InstanceRow[] | undefined) =>
     was !== undefined &&
     next.length === was.length &&
-    next.every((row, i) => drawsAlike(row, was[i]))
+    next.every((row, i) => sameRow(row, was[i]))
       ? was
       : next;
 

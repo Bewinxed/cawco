@@ -48,6 +48,7 @@ import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
 import { folderOf } from "../projects";
 import { rail } from "../rail.svelte";
+import { sameRow } from "../same-row";
 import { onRow } from "../session-acts.svelte";
 import { threadIdOf, threadTabId } from "../thread-tabs";
 import { hasParent, rooted, tree } from "../tree";
@@ -559,11 +560,13 @@ function mergeByRecency(
 }
 
 /**
- * Whether two hub rows name a stored session alike: the same row, or one
- * whose every field `catalogTitle` and `conversationHref` read is the same.
- * A row holding no session, or one that is listed (`running`), only lends
- * its id: a stored transcript of a listed session is not in Recent's stored
- * half, and a row is looked up by session only through its session.
+ * Whether two hub rows name a stored session alike: the same row in every
+ * field (same-row.ts), since what names it (`catalogTitle`,
+ * `conversationHref`, `placeOfRow` and its project) reads what it likes of
+ * the row. A row holding no session, or one that is listed (`running`),
+ * only lends its id: a stored transcript of a listed session is not in
+ * Recent's stored half, and a row is looked up by session only through its
+ * session.
  */
 function namesAlike(
   a: InstanceRow,
@@ -579,13 +582,7 @@ function namesAlike(
   if (!a.sessionId || running.has(a.sessionId)) {
     return true;
   }
-  return (
-    a.machineId === b.machineId &&
-    a.cwd === b.cwd &&
-    a.title === b.title &&
-    a.titleSource === b.titleSource &&
-    a.updatedAt === b.updatedAt
-  );
+  return sameRow(a, b);
 }
 
 /** When a session last moved: its pulse, else the hub's own update time. */
