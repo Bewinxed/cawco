@@ -137,9 +137,31 @@
   /**
    * Ranks the stack for the choice at `chosen` (the lifted tab over every
    * other), writes each tab's rank (`--z`) and folds the sides that stand
-   * under a tab above them.
+   * under a tab above them. It watches them while anything moves them only
+   * when something can: a slide follows a change to the tabs' order (a tab
+   * opening, closing, or put elsewhere) or to a lift, a frame after the
+   * change ranks the stack. Ranked again with the same tabs in the same
+   * order, nothing lifted or let go and the hang where it was (a choice, a
+   * come-forward's flip, the tabs measured anew as a streamed reply resizes
+   * one), its folds are where the track measured them; watched, every frame
+   * of the watch asked each tab for its runs and restyled the page
+   * (two-pane-perf: 75-140ms of `getAnimations` over a stream, 4ms of style
+   * in a keyboard switch's frame).
    */
   function stack(track: HTMLElement, items: HTMLElement[], chosen: number) {
+    // The same tabs in the same order, compared tab by tab: the order is
+    // handed in as a new array each time (335 of a stream's 20s re-ranks
+    // held the same six tabs in one).
+    const sameOrder =
+      items.length === stood.items.length &&
+      items.every((item, i) => item === stood.items[i]);
+    const watch = !(
+      sameOrder &&
+      lifted === null &&
+      stood.lifted === null &&
+      hung === stood.hung
+    );
+    stood = { items, lifted, hung };
     const n = items.length;
     ranks.clear();
     items.forEach((item, i) => {
@@ -152,7 +174,9 @@
       }
     });
     fold(items, laidOut);
-    watchFolds(track);
+    if (watch) {
+      watchFolds(track);
+    }
   }
   /** Half a pixel: an edge as drawn, rounded. */
   const EDGE = 0.5;
@@ -533,6 +557,16 @@
   /** The tab the stack was last ranked for, and the tabs the strip held then. */
   let shown: HTMLElement | null = null;
   let held = new Set<HTMLElement>();
+  /** The order, the lift and the hang the stack was last ranked with. */
+  let stood: {
+    items: HTMLElement[];
+    lifted: HTMLElement | null;
+    hung: HTMLElement | null;
+  } = {
+    items: [],
+    lifted: null,
+    hung: null,
+  };
   $effect(() => {
     const track = node;
     const { items } = rects;
