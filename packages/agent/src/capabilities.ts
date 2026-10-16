@@ -7,6 +7,7 @@ import type {
 } from "@cawco/core/capabilities";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
+import { claudeHostVersion } from "./claude-version";
 import { opencodeBinary } from "./harnesses/opencode-client";
 import { probeStarted } from "./probe-count";
 import { installAdvice, resolveBin } from "./tools";
@@ -96,7 +97,7 @@ const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/;
  * read (and under Bun, spawnSync's private loop misplaces the agent's own
  * polls: oven-sh/bun#34069).
  */
-export async function toolVersion(path: string): Promise<string | undefined> {
+async function toolVersion(path: string): Promise<string | undefined> {
   const child = Bun.spawn([path, "--version"], {
     // Never the embedded pi's package dir: `pi --version` would read CawCo's pi as its own.
     env: hostEnvironment(),
@@ -112,11 +113,18 @@ export async function toolVersion(path: string): Promise<string | undefined> {
   return exitCode === 0 ? (VERSION.exec(text)?.[0] ?? text) : undefined;
 }
 
+/** Claude Code's version is the version gate's own read (claude-version.ts), so the two never disagree. */
+const claudeVersion = async (): Promise<string | undefined> => {
+  const said = await claudeHostVersion();
+  return said.kind === "answered" ? said.value : undefined;
+};
+
 async function readVersion(item: MachineCapability): Promise<void> {
   if (!(item.available && item.path && VERSIONED.includes(item.id))) {
     return;
   }
-  const version = await toolVersion(item.path);
+  const version =
+    item.id === "claude" ? await claudeVersion() : await toolVersion(item.path);
   if (version) {
     item.version = version;
   } else {

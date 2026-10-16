@@ -458,6 +458,14 @@ export const cawcoDataDir = (): string => join(xdgDataHome(), "cawco");
 export const sessionWakeupsDir = (): string =>
   join(cawcoDataDir(), "session-wakeups");
 
+/**
+ * This machine's Claude Code version as its last `claude --version` answered,
+ * with the binary it was read from (agent `claude-version.ts`), so an agent's
+ * restart, which every update is, starts knowing it.
+ */
+export const claudeVersionPath = (): string =>
+  join(cawcoDataDir(), "claude-version.json");
+
 /** Where an installed hub keeps its database (`cawco.db`) and the backups beside it. */
 export const hubDataDir = (): string =>
   process.platform === "darwin"

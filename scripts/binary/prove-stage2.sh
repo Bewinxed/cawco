@@ -47,8 +47,9 @@ PROOF_TIME_SCALE=6
 #    manager beside the pace above): past the agent's 2000 ms wait for a listing (agent keepers.ts LIST_TIMEOUT_MS),
 #    as a keeper slow to list did when a reattach gave up on it ("no keeper that answered holds …") and failed an item.
 #  - Through an update, the machine's Claude Code answers `--version` and `auth status` this late (claude-late.sh):
-#    past the agent's bounds on them (5 s and 20 s, capabilities.ts and accounts.ts `authStatusIn`), as a Claude Code
-#    on an overloaded host answered them (a timed-out `claude auth status` read as signed out).
+#    past the agent's bounds on them (its 5 s wait for the version, claude-version.ts, and 20 s on `auth status`,
+#    accounts.ts `authStatusIn`), as a Claude Code on an overloaded host answered them (a timed-out `claude auth
+#    status` read as signed out). The stand-in is a new binary to the agent, so its version is read once, late.
 #  - The hub restarts while messages are on their way (stage2-sends.ts sends one every 3 s through the hub's own
 #    machine's update).
 PROOF_RETIRING_LIST_MS=3000
@@ -377,7 +378,7 @@ process.exit(row?.status === "online" && row?.custody?.state === "available" ? 0
 TS
   n=0
   until curl -fsS --max-time 5 http://127.0.0.1:3456/health > /dev/null 2>&1 &&
-    HOST="$(hostname)" BUN_BE_BUN=1 "$HOME/.local/bin/cawco" /tmp/agent-custody.ts 2> /dev/null; do
+    HOST="$(hostname)" BUN_BE_BUN=1 "$HOME/.cawco-proof/run" /tmp/agent-custody.ts 2> /dev/null; do
     n=$((n + 1))
     [ "$n" -lt 240 ] || { echo "after the stub was removed the hub or its agent did not come back"; exit 1; }
     sleep 0.5
@@ -642,6 +643,15 @@ user_exec() {
     --env XDG_RUNTIME_DIR=/run/user/1000 --env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
     --env CAWCO_RELEASE_HOST="${FEED_OVERRIDE:-$feed}" "$c" "$@"
 }
+# The proof's own scripts (/shared/*.ts) run as Bun on machine $1 through PROOF_RUNNER, a hard link to the build the
+# machine was installed with, made as it is installed (proof_runner). Never through ~/.local/bin/cawco: from there a
+# script is a live process of the build `current` names, and the product keeps on disk every build a live process runs
+# (core live-processes.ts `versionsInUse`), so a script that ran through an update held the build before. Nightly
+# d0ca43009, handover: the sender started on 0.0.1-test.2 kept it after the hub's machine had moved on, and the wait
+# for its removal timed out.
+PROOF_RUNNER=/home/cawco/.cawco-proof/run
+proof_runner() { as_user "$1" sh -c 'mkdir -p "${2%/*}" && ln -f "$(readlink -f "$HOME/.local/bin/cawco")" "$2"' sh "$PROOF_RUNNER"; }
+run_script() { local c=$1; shift; as_user "$c" env BUN_BE_BUN=1 "$PROOF_RUNNER" "$@"; }
 need_hub() {
   as_user "$hubc" curl -fsS --max-time 10 http://127.0.0.1:3456/health > /dev/null 2>&1 || { echo "the hub is not answering"; return 1; }
 }
@@ -692,12 +702,12 @@ spawn_child() {
 watch_install() {
   local container=$1 hub=$2 machine=$3 prefix=$4 file=$5
   : > "$file"
-  as_user "$container" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-during-install.ts "$hub" "$machine" "$prefix" > "$file" 2>&1 &
+  run_script "$container" /shared/stage2-during-install.ts "$hub" "$machine" "$prefix" > "$file" 2>&1 &
 }
 # The ids the watcher recorded as accepted while the machine was installing, one per line.
 watched_ids() { sed -n 's/^accepted //p' "$1"; }
 # Asks the hub, from inside its own container, to start a session on a machine, the way the dashboard does.
-start_session() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-start-session.ts http://127.0.0.1:3456 "$1" "$2"; }
+start_session() { run_script "$hubc" /shared/stage2-start-session.ts http://127.0.0.1:3456 "$1" "$2"; }
 # Keeps asking until the stop file appears. A start is written down only if the hub accepted it while the machine was
 # installing, as the hub itself reported before and after.
 start_loop() {
@@ -800,7 +810,7 @@ accepted_ran_once() {
 # The main process of a keeper's unit (the current keeper's when no unit is named).
 keeper_pid() { as_user "$1" systemctl --user show -p MainPID --value "${2:-$(current_unit "$1")}"; }
 # Asks the hub, from inside its own container, to stop a session, the way the dashboard does.
-stop_session() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-stop-session.ts http://127.0.0.1:3456 "$1" "$2"; }
+stop_session() { run_script "$hubc" /shared/stage2-stop-session.ts http://127.0.0.1:3456 "$1" "$2"; }
 untouched() { as_user "$1" sh -c 'test ! -e "$HOME/.local/share/cawco" && test ! -e "$HOME/.local/bin/cawco" && echo untouched'; }
 # A check ends what it started, on every way out. on_exit adds a step, a command, to what the check runs as it exits,
 # passed or failed; the steps run last-added first, and one that fails is passed over, so the next still runs and the
@@ -855,7 +865,8 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # reads the new policy; one already under way says `installing` to the hub the moment it raises its fence
 # (binary-update.ts `#drain` → `#tellHub`), before any helper starts.
 settled() { [[ "$(phase "$1")" =~ ^(none|available|installed|failed|failed-rolled-back|waiting-for-channel|waiting-sessions)$ ]]; }
-export -f diagnose as_user put_executable user_exec need_hub hub_api api_on now_ms json jsonl machine_id build_version phase field retiring wait_until use_feed \
+export PROOF_RUNNER
+export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl machine_id build_version phase field retiring wait_until use_feed \
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
@@ -930,6 +941,7 @@ install_hub() {
   [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
   [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == "versions/$version" ]]
   as_user "$hubc" sh -c 'for tool in git bun node; do if command -v $tool > /dev/null; then echo "$tool appeared"; exit 1; fi; done; echo still-none'
+  proof_runner "$hubc"
 }
 join_machine() {
   need_hub
@@ -943,6 +955,7 @@ join_machine() {
   [[ $rc == 0 ]]
   grep -qE 'prompts answered: [1-9]' "$rigdir/join.out"
   [[ "$(hub_api /api/agents | json 'd => d.filter(a => a.status === "online").length')" == 2 ]]
+  proof_runner "$joinerc"
 }
 # The machines given (hub, joiner) are signed in to one CawCo account, made through the hub's API, each in its own
 # dir; the hub records each sign-in before the first session starts. A Claude session runs only on such a machine.
@@ -996,7 +1009,14 @@ export -f install_hub join_machine signed_in_on sign_in
 # unless `nosends`, a message goes to the session every 3 s (stage2-sends.ts), through the update and the hub's own
 # restarts, until update_sends_stop. Sampling and sending run on in the background past the check that started them;
 # the checks below end them.
-signin_state() { hub_api /api/accounts | json "d => d.signins.find(s => s.accountId === '$1' && s.machineId === '$2')?.state"; }
+# Fails when the hub does not answer. Not a pipe from hub_api: a check's shell has no pipefail (`bash -eEx -c`), and
+# `json` reads no input as no value, so a hub that was away read as `none` (nightly d0ca43009: handover's one `none`
+# at 19:18:38.920, the hub's helper "the hub does not answer" at 19:18:38.778, its restart in the update).
+signin_state() {
+  local accounts
+  accounts=$(hub_api /api/accounts) || return 1
+  json "d => d.signins.find(s => s.accountId === '$1' && s.machineId === '$2')?.state" <<< "$accounts"
+}
 # `<epoch ms> <state>` every second until the stop file is there; `hub-away` while the hub does not answer.
 signin_sampler() {
   local machine=$1 file=$2 stop=$3 aid state
@@ -1012,6 +1032,8 @@ claude_calls() { as_user "$1" sh -c 'cat "$HOME/.cawco-proof/claude-calls.log" 2
 # The late `auth status` reads of machine $1's Claude Code that have ended since $2 (epoch ms): answered, or `cut` by
 # their caller at its bound.
 auth_reads_ended_since() { claude_calls "$1" | awk -v since="$2" '$1 >= since && ($2 == "cut" || $2 == "answered") && / auth status /' | wc -l; }
+# When the last late `auth status` read of machine $1's Claude Code ended (epoch ms), 0 before any.
+auth_read_last_ended() { claude_calls "$1" | awk '($2 == "cut" || $2 == "answered") && / auth status / { t = $1 } END { print t + 0 }'; }
 # Every message a session's turn took on machine $1, whichever agent took it (proof-harnesses.ts `tookTurn`):
 # `<epoch ms> <instanceId> <uuid> <words>`. The hub's transcript is no record of it across a hub restart.
 turns_on() { as_user "$1" sh -c 'cat "$HOME/.cawco-proof/turns.log" 2> /dev/null || true'; }
@@ -1041,7 +1063,7 @@ update_outcomes_start() {
   # The file holds the sender's own words and nothing of the check's: its trace (-x) is off in the subshell before the
   # redirection, or every helper line it traced reads as a message the hub did not take (nightly 90bdbf7b9: all 13
   # sends "accepted", and the check failed on "+ [as_user:0] user_exec …").
-  ( set +x; as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-sends.ts http://127.0.0.1:3456 \
+  ( set +x; run_script "$hubc" /shared/stage2-sends.ts http://127.0.0.1:3456 \
     "$machine" "$session" "$session-midupdate" /tmp/outcomes-sends.stop > "$rigdir/outcomes-sends.txt" 2>&1 ) &
   wait_until 30 'grep -qE "^[0-9]+ " "$rigdir/outcomes-sends.txt"'
 }
@@ -1085,8 +1107,10 @@ update_sends_delivered() {
 }
 # The machine's Claude account read signed in all through its update, though its Claude Code answered `auth status`
 # CLAUDE_LATE_S late, past the agent's 20 s bound on it (accounts.ts `authStatusIn`): from before the update until a
-# late read of it had ended (cut at the bound, or answered under a longer one) and 15 s more (the agent's report
-# follows its reads within 2 s, slow-harness-cli.ts), the hub said signed-in at every sample it answered.
+# late read of it had ended (cut at the bound, or answered under a longer one) and 15 s past the last read that ended
+# (the agent's report follows its reads within 2 s, slow-harness-cli.ts), the hub said signed-in at every sample it
+# answered. The 15 s run from the last read, not the first: the agent reads each minute, and a fixed wait after the
+# first could end a moment after another read, with no sample of the hub's word on it.
 update_signin_kept() {
   local c machine since bad last
   [[ -s "$rigdir/outcomes-of" ]] || { echo "ASSERTION FAILED: the update's check ended before the sign-in was watched"; return 1; }
@@ -1094,11 +1118,10 @@ update_signin_kept() {
   on_exit "touch \"\$rigdir/outcomes-signin.stop\"; claude_late $c 0"
   wait_until 300 '(( $(auth_reads_ended_since "$c" "$since") >= 1 ))' \
     || { echo "ASSERTION FAILED: no late read of the machine's account ended after its update began, so none was proven"; claude_calls "$c"; return 1; }
-  sleep 15
+  wait_until 120 'last=$(auth_read_last_ended "$c") && (( $(now_ms) - last >= 15000 ))'
   touch "$rigdir/outcomes-signin.stop"
   echo "== the Claude Code stand-in's late calls (<epoch ms> start|answered|cut <pid> <args>)"
   claude_calls "$c"
-  last=$(claude_calls "$c" | awk '($2 == "cut" || $2 == "answered") && / auth status / { t = $1 } END { print t + 0 }')
   bad=$(awk '$2 != "signed-in" && $2 != "hub-away"' "$rigdir/outcomes-signin.txt")
   echo "the hub's word on the sign-in: $(wc -l < "$rigdir/outcomes-signin.txt") samples since $since, $(awk '$2 == "hub-away"' "$rigdir/outcomes-signin.txt" | wc -l) while the hub was away"
   [[ -z $bad ]] || { echo "ASSERTION FAILED: a read that timed out changed the machine's account: the hub said"; awk '{ print $1, $2 }' <<< "$bad" | uniq -f 1 | head -n 20; return 1; }
@@ -1115,7 +1138,7 @@ update_session_reattached() {
   cat "$rigdir/outcomes-session.txt"
   survived "$c" "$rigdir/outcomes-session.txt"
 }
-export -f signin_state signin_sampler claude_late claude_calls auth_reads_ended_since turns_on turns_of all_reached \
+export -f signin_state signin_sampler claude_late claude_calls auth_reads_ended_since auth_read_last_ended turns_on turns_of all_reached \
   update_outcomes_start update_sends_stop update_sends_delivered update_signin_kept update_session_reattached
 
 # ================================================================ THE RIGS
@@ -1996,7 +2019,7 @@ ws_preview_close() {
   [[ -n $id ]] || { echo "the preview's create answered no id: $(cat "$rigdir/ws-preview-open")"; return 1; }
   ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_delete '{\"id\":\"$id\"}'"
 }
-ws_preview_port() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$(cat "$rigdir/ws-delegate")"; }
+ws_preview_port() { run_script "$hubc" /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$(cat "$rigdir/ws-delegate")"; }
 # What the preview answers, through the hub's preview listener, the joined machine's agent and its bridge.
 ws_preview_says() { as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$(cat "$rigdir/ws-preview-port")/" 2>&1 || true; }
 # Host mode, the owner's: one listener on the preview range's first port routes each request by its Host, a name of
@@ -2090,7 +2113,7 @@ ws_hook_calls_start() {
   local state clone
   state=$(ws_state)
   clone=$(cat "$rigdir/ws-clone")
-  ( set +x; as_user "$joinerc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-hook-calls.ts "$state" "$clone" /tmp/ws-hook-calls.stop > "$rigdir/ws-hook-calls.txt" 2>&1 ) &
+  ( set +x; run_script "$joinerc" /shared/stage2-hook-calls.ts "$state" "$clone" /tmp/ws-hook-calls.stop > "$rigdir/ws-hook-calls.txt" 2>&1 ) &
   wait_until 30 'grep -q " ran$" "$rigdir/ws-hook-calls.txt"'
 }
 ws_hook_calls_stop() {
@@ -2439,7 +2462,7 @@ cgroup_of() { as_user "$1" sed -n 's/^0:://p' "/proc/$2/cgroup"; }
 # A counter in a flat-keyed cgroup file (pids.events, memory.events), 0 when absent.
 counter_on() { as_user "$1" sh -c 'sed -n "s/^$2 //p" "$1" 2> /dev/null' sh "$2" "$3" | awk '{ n = $1 } END { print n + 0 }'; }
 transcript_of() { hub_api "/api/instances/$1/transcript"; }
-send_message() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-send.ts http://127.0.0.1:3456 "$1" "$2" "$3"; }
+send_message() { run_script "$hubc" /shared/stage2-send.ts http://127.0.0.1:3456 "$1" "$2" "$3"; }
 put_session_limits() { hub_api /api/session-limits -X PUT -H 'content-type: application/json' -d "$1"; }
 # The hub machine's agent's word that it holds the hub's session limits, since a moment (unix seconds).
 agent_said_limits() { as_user "$hubc" journalctl --user --no-pager -o cat -u cawco-agent.service --since "@$1" | grep -F "[sessiond] session limits from the hub: $2" || true; }

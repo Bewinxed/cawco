@@ -2012,8 +2012,9 @@ class ClaudeSession implements HarnessSession {
     if (runs === undefined) {
       return;
     }
-    const host = await claudeHostVersion();
-    if (!host || versionRefusal(host) || runs === host) {
+    const said = await claudeHostVersion();
+    const host = said.kind === "answered" ? said.value : undefined;
+    if (!host || versionRefusal(said) || runs === host) {
       return;
     }
     return {
@@ -3717,15 +3718,16 @@ export class ClaudeHarness implements Harness {
   async detect(): Promise<MachineHarnessReport> {
     probeStarted();
     const installed = resolveClaudeExecutable() !== undefined;
-    // Side by side: each is bounded on its own (`auth status` 20 s, `--version` 5 s).
-    const [read, version] = await Promise.all([
+    // Side by side: each is bounded on its own (`auth status` 20 s, the wait for `--version` 5 s).
+    const [read, said] = await Promise.all([
       accountReports(),
       installed ? claudeHostVersion() : undefined,
     ]);
     const signins = await claudeSignins(read);
     // Dirs that gave no answer leave the machine's word as it was.
     this.auth = signins.auth ?? this.auth;
-    const refused = installed ? versionRefusal(version) : CLAUDE_NOT_INSTALLED;
+    const version = said?.kind === "answered" ? said.value : undefined;
+    const refused = said ? versionRefusal(said) : CLAUDE_NOT_INSTALLED;
     return {
       harness: "claude",
       installed,
