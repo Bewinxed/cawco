@@ -1532,13 +1532,23 @@ export const workItems = sqliteTable(
  * row's id. Kept here across a hub restart.
  */
 export const queuedWorkItems = sqliteTable("queued_work_items", {
+  /** The id its item takes when it starts (`queuedAs.id`). */
   id: text("id").primaryKey(),
   parentInstanceId: text("parent_instance_id").notNull(),
   /**
-   * The request as `delegate` made it, with the ids it stands under while it
-   * waits (work-items.ts `WorkItemRequest`, `queuedAs`).
+   * The request as `delegate` made it (work-items.ts `WorkItemRequest`),
+   * read whole; what the queue reads of it is its own columns: the task it
+   * starts, the session id it stands under, the globs it owns.
    */
   request: text("request", { mode: "json" }).$type<unknown>().notNull(),
+  /** The project of the task it starts (`task.projectId`); null for no task. */
+  projectId: text("project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
+  /** The task it starts (`task.id`), `tsk-…`. */
+  taskId: text("task_id"),
+  /** The session id it stands under while it waits (`queuedAs.instanceId`): minted, no row yet. */
+  queuedInstanceId: text("queued_instance_id").notNull(),
   title: text("title").notNull(),
   queuedAt: timestamp("queued_at")
     .notNull()

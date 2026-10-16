@@ -365,7 +365,15 @@ export type WorkflowLogRow = typeof workflowRunLog.$inferSelect;
 export type WorkflowNoticeRow = typeof workflowNotices.$inferSelect;
 export type WorkItemRow = typeof workItems.$inferSelect;
 export type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
-export type QueuedWorkItemRow = typeof queuedWorkItems.$inferSelect;
+/**
+ * A queued delegate as the queue hands it out: its request whole again,
+ * the task, session id and globs it stands under put back in it from their
+ * columns and rows.
+ */
+export type QueuedWorkItemRow = Omit<
+  typeof queuedWorkItems.$inferSelect,
+  "projectId" | "taskId" | "queuedInstanceId"
+>;
 /** Its paths named as {@link MachinePath}, which the API's schema reads as the string it is on the wire. */
 export type WorkspaceRow = Omit<
   typeof workspaces.$inferSelect,
@@ -8020,6 +8028,17 @@ const make = async (path: string): Promise<DbShape> => {
         tx.delete(queuedTaskStarts)
           .where(eq(queuedTaskStarts.projectId, dupId))
           .run();
+        // A queued delegate for one of its tasks starts the task it is now.
+        for (const queued of tx
+          .select({ id: queuedWorkItems.id, taskId: queuedWorkItems.taskId })
+          .from(queuedWorkItems)
+          .where(eq(queuedWorkItems.projectId, dupId))
+          .all()) {
+          tx.update(queuedWorkItems)
+            .set({ projectId: keepId, taskId: renamed(queued.taskId) })
+            .where(eq(queuedWorkItems.id, queued.id))
+            .run();
+        }
         // Its index rows and the rest of its own rows go with it (cascade).
         tx.delete(projects).where(eq(projects.id, dupId)).run();
         return { places, sessions, threads, workItems: items.length };
@@ -8413,19 +8432,39 @@ const make = async (path: string): Promise<DbShape> => {
         .from(queuedWorkItems)
         .orderBy(asc(queuedWorkItems.queuedAt), asc(queuedWorkItems.id))
         .all()
-        .map((row) => {
+        .map(({ projectId, taskId, queuedInstanceId, ...row }) => {
           const owned = globs.get(row.id);
-          return owned
-            ? { ...row, request: { ...(row.request as object), owns: owned } }
-            : row;
+          return {
+            ...row,
+            request: {
+              ...(row.request as object),
+              ...(owned ? { owns: owned } : {}),
+              ...(projectId && taskId
+                ? { task: { id: taskId, projectId } }
+                : {}),
+              queuedAs: { id: row.id, instanceId: queuedInstanceId },
+            },
+          };
         });
     },
+    // What the queue reads of a request is columns and rows; the rest of it
+    // is kept as `delegate` made it.
     queueWorkItem: ({ request, ...row }) =>
       db.transaction((tx) => {
-        const { owns, ...rest } = request as { owns?: string[] };
+        const { owns, task, queuedAs, ...rest } = request as {
+          owns?: string[];
+          queuedAs: { id: string; instanceId: string };
+          task?: { id: string; projectId: string };
+        };
         const queued = tx
           .insert(queuedWorkItems)
-          .values({ ...row, request: rest })
+          .values({
+            ...row,
+            request: rest,
+            projectId: task?.projectId ?? null,
+            taskId: task?.id ?? null,
+            queuedInstanceId: queuedAs.instanceId,
+          })
           .returning()
           .get();
         const owned = [...new Set(owns ?? [])];
@@ -8434,7 +8473,13 @@ const make = async (path: string): Promise<DbShape> => {
             .values(owned.map((glob) => ({ queuedId: queued.id, glob })))
             .run();
         }
-        return { ...queued, request };
+        return {
+          id: queued.id,
+          parentInstanceId: queued.parentInstanceId,
+          title: queued.title,
+          queuedAt: queued.queuedAt,
+          request,
+        };
       }),
     dropQueuedWorkItem: (id) => {
       db.delete(queuedWorkItems).where(eq(queuedWorkItems.id, id)).run();
