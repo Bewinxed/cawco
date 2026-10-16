@@ -12,6 +12,7 @@
 import { lstat, readlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { readKeeperVersion } from "@cawco/core/binary-installation";
+import { RETIRING_LIST_MS } from "@cawco/core/clock";
 import { detach } from "@cawco/core/detach";
 import { MACHINE_ENDPOINT, publishKeeper } from "@cawco/core/keepers";
 import { runtimeVersion } from "@cawco/core/runtime";
@@ -52,6 +53,17 @@ const main = async (): Promise<void> => {
   const server = new SessiondServer({
     build: { version: runtimeVersion, startedAt: Date.now() },
     ...(placement?.children ? { children: placement.children } : {}),
+    // The stage 2 proof's pace alone (clock.ts): a keeper the `keeper` link no
+    // longer names, a retiring one, answers each `list` that late.
+    ...(RETIRING_LIST_MS > 0
+      ? {
+          listLate: async () =>
+            basename(endpoint) !== MACHINE_ENDPOINT &&
+            ((await readKeeperVersion()) ?? runtimeVersion) !== runtimeVersion
+              ? RETIRING_LIST_MS
+              : 0,
+        }
+      : {}),
   });
   await server.listen(endpoint);
   console.log(

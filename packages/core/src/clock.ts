@@ -16,3 +16,11 @@ export const TIME_SCALE = 1;
 
 /** A timer's length in milliseconds. */
 export const timerMs = (ms: number): number => ms;
+
+/**
+ * How late a retiring keeper (one the machine's `keeper` link no longer
+ * names, still holding what it started before a handover) answers a `list`:
+ * at once in this build. The stage 2 proof's builds answer it as late as
+ * their machines set, as a keeper on a loaded machine does.
+ */
+export const RETIRING_LIST_MS = 0;

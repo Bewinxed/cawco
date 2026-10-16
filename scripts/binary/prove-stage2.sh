@@ -41,6 +41,19 @@ export BASE=0.0.1-test.2 NEXT=0.0.1-test.3 LEGACY=0.0.1-test.1
 # scripts/binary/proof-clock.ts): the trial window (180 s), the confirm hold (60 s), the first retry delay (60 s) and
 # how long a retiring keeper sits empty (20 s) run this many times faster. Builds 2 and 3 only: build 1 is old code.
 PROOF_TIME_SCALE=6
+# The stand-ins are as slow and as late as production gets, never faster: what reached the person on 2026-10-16 came
+# from slowness the rigs did not have.
+#  - A retiring keeper answers each `list` this late (proof-clock.ts RETIRING_LIST_MS, set in every machine's service
+#    manager beside the pace above): past the agent's 2000 ms wait for a listing (agent keepers.ts LIST_TIMEOUT_MS),
+#    as a keeper slow to list did when a reattach gave up on it ("no keeper that answered holds …") and failed an item.
+#  - Through an update, the machine's Claude Code answers `--version` and `auth status` this late (claude-late.sh):
+#    past the agent's bounds on them (5 s and 20 s, capabilities.ts and accounts.ts `authStatusIn`), as a Claude Code
+#    on an overloaded host answered them (a timed-out `claude auth status` read as signed out).
+#  - The hub restarts while messages are on their way (stage2-sends.ts sends one every 3 s through the hub's own
+#    machine's update).
+PROOF_RETIRING_LIST_MS=3000
+CLAUDE_LATE_S=30
+export CLAUDE_LATE_S
 
 # ---------------------------------------------------------------- which rigs run
 # A rig is a function rig_<name> below; its checks are its `check "<name>" …` lines.
@@ -158,7 +171,7 @@ RUN apt-get update \\
  && printf '[Service]\\nKeyringMode=inherit\\n' > /etc/systemd/system/service.d/proof-keyring.conf \\
  && printf '[Service]\\nTasksMax=infinity\\n' > /etc/systemd/system/user@.service.d/proof-tasks.conf \\
  && printf '[Slice]\\nTasksMax=infinity\\n' > /etc/systemd/system/user-.slice.d/proof-tasks.conf \\
- && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE\\n' > /etc/systemd/user.conf.d/proof.conf
+ && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE CAWCO_PROOF_RETIRING_LIST_MS=$PROOF_RETIRING_LIST_MS\\n' > /etc/systemd/user.conf.d/proof.conf
 COPY --from=claude --chown=cawco:cawco /home/cawco/.local /home/cawco/.local
 RUN HOME=/tmp/claude-check /home/cawco/.local/bin/claude --version | grep -F '$claude_version' \\
  && rm -rf /tmp/claude-check && ! command -v openssl
@@ -235,7 +248,7 @@ orchestrate() {
       fixture broken-binary "$out/shared/broken-cawco" &&
       fixture broken-binary "$out/shared/migrating-cawco" migrates &&
       bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))" &&
-      cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-send.ts" "$here/stage2-during-install.ts" "$here/stage2-hook-calls.ts" "$here/stage2-preview-port.ts" "$here/stage2-answer-prompts.py" "$out/shared/" &&
+      cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-send.ts" "$here/stage2-sends.ts" "$here/stage2-during-install.ts" "$here/stage2-hook-calls.ts" "$here/stage2-preview-port.ts" "$here/stage2-answer-prompts.py" "$out/shared/" &&
       write_machine_scripts "$out/shared"
   }
   echo "preparing (images and fixtures at once)"
@@ -382,6 +395,42 @@ mkdir -p -m 700 "$dir"
 umask 077
 printf '{"claudeAiOauth":{"accessToken":"sk-ant-oat01-proof-not-a-token","refreshToken":"sk-ant-ort01-proof-not-a-token","expiresAt":4102444800000,"scopes":["user:inference","user:profile"],"subscriptionType":"max"}}\n' > "$dir/.credentials.json"
 printf '{"oauthAccount":{"accountUuid":"00000000-0000-4000-8000-000000000001","emailAddress":"proof@cawco.test","organizationUuid":"00000000-0000-4000-8000-000000000002","organizationName":"CawCo proof","organizationRole":"admin"}}\n' > "$dir/.claude.json"
+EOF
+# The machine's Claude Code as a loaded host's answers: the one its installer placed, answering `--version` and
+# `auth status` $1 seconds late (0: at once), then running as itself. The first call puts the stand-in in the
+# launcher's place, ~/.local/bin/claude, where the agent finds it on its PATH (auth.ts resolveClaudeExecutable), and
+# moves the installer's link aside to ~/.local/bin/.claude-installed; every call sets how late. A late call that is
+# ended at its caller's bound (SIGTERM, Bun.spawn's `timeout`) ends its wait with it, as a CLI killed mid-answer does.
+# Each late call is a line of ~/.cawco-proof/claude-calls.log: `<epoch ms> start|answered|cut <pid> <args>`.
+cat > "$dir/claude-late.sh" <<'EOF'
+set -eu
+mkdir -p "$HOME/.cawco-proof"
+bin="$HOME/.local/bin/claude"
+kept="$HOME/.local/bin/.claude-installed"
+if [ ! -e "$kept" ]; then
+  mv "$bin" "$kept"
+  cat > "$bin.new" <<'SH'
+#!/bin/sh
+late=$(cat "$HOME/.cawco-proof/claude-late" 2> /dev/null || echo 0)
+log="$HOME/.cawco-proof/claude-calls.log"
+case " $* " in
+  *" --version "*|*" auth status "*)
+    if [ "${late:-0}" -gt 0 ]; then
+      echo "$(date +%s%3N) start $$ $*" >> "$log"
+      trap 'echo "$(date +%s%3N) cut $$ $*" >> "$log"; kill "$nap" 2> /dev/null; exit 143' TERM INT
+      sleep "$late" &
+      nap=$!
+      wait "$nap"
+      trap - TERM INT
+      echo "$(date +%s%3N) answered $$ $*" >> "$log"
+    fi ;;
+esac
+exec "$HOME/.local/bin/.claude-installed" "$@"
+SH
+  chmod 755 "$bin.new"
+  mv "$bin.new" "$bin"
+fi
+echo "$1" > "$HOME/.cawco-proof/claude-late"
 EOF
 cat > "$dir/diagnose-machine.sh" <<'EOF'
 binary="$HOME/.local/share/cawco/binary"
@@ -927,6 +976,139 @@ fleet() {
 }
 export -f install_hub join_machine signed_in_on sign_in
 
+# ---------------------------------------------------------------- the person's side of an update, its stand-ins slow
+# What reached the person through updates on 2026-10-16, which no rig saw while its stand-ins were fast: a message
+# sent while the machine updated was refused inside the hub's reconnect window; a reattach gave up on a keeper slow to
+# list ("no keeper that answered holds …") and failed an item; a workspace's judge stayed down; a timed-out
+# `claude auth status` read the machine's account as signed out. Each is a check of its own, reading what the
+# update's check left in $rigdir/outcomes-*, so each says its own verdict whatever the update's check said.
+#
+# update_outcomes_start CONTAINER MACHINE SESSION [nosends], called by the update's check before the update is asked
+# for, on the machine that updates and a session running there (its pid kept): from then the machine's Claude Code
+# answers `--version` and `auth status` CLAUDE_LATE_S late (claude-late.sh), what the hub says of the machine's
+# sign-in is sampled every second, and,
+# unless `nosends`, a message goes to the session every 3 s (stage2-sends.ts), through the update and the hub's own
+# restarts, until update_sends_stop. Sampling and sending run on in the background past the check that started them;
+# the checks below end them.
+signin_state() { hub_api /api/accounts | json "d => d.signins.find(s => s.accountId === '$1' && s.machineId === '$2')?.state"; }
+# `<epoch ms> <state>` every second until the stop file is there; `hub-away` while the hub does not answer.
+signin_sampler() {
+  local machine=$1 file=$2 stop=$3 aid state
+  aid=$(cat "$rigdir/account-id")
+  while [[ ! -e $stop ]]; do
+    state=$(signin_state "$aid" "$machine" 2> /dev/null) || state=hub-away
+    echo "$(date +%s%3N) ${state:-none}" >> "$file"
+    sleep 1
+  done
+}
+claude_late() { as_user "$1" sh /shared/claude-late.sh "$2"; }
+claude_calls() { as_user "$1" sh -c 'cat "$HOME/.cawco-proof/claude-calls.log" 2> /dev/null || true'; }
+# The late `auth status` reads of machine $1's Claude Code that have ended since $2 (epoch ms): answered, or `cut` by
+# their caller at its bound.
+auth_reads_ended_since() { claude_calls "$1" | awk -v since="$2" '$1 >= since && ($2 == "cut" || $2 == "answered") && / auth status /' | wc -l; }
+# Every message a session's turn took on machine $1, whichever agent took it (proof-harnesses.ts `tookTurn`):
+# `<epoch ms> <instanceId> <uuid> <words>`. The hub's transcript is no record of it across a hub restart.
+turns_on() { as_user "$1" sh -c 'cat "$HOME/.cawco-proof/turns.log" 2> /dev/null || true'; }
+# How many turns of session $2 took the words $3, in the turns text $1.
+turns_of() { awk -v id="$2" -v words="$3" '$2 == id && $4 == words' <<< "$1" | wc -l; }
+# Every one of the words given ($3…) has reached session $2 on machine $1.
+all_reached() {
+  local c=$1 session=$2 text words
+  shift 2
+  text=$(turns_on "$c")
+  for words in "$@"; do
+    (( $(turns_of "$text" "$session" "$words") >= 1 )) || return 1
+  done
+}
+update_outcomes_start() {
+  local c=$1 machine=$2 session=$3 sends=${4:-sends}
+  [[ -n $c && -n $machine && -n $session ]]
+  echo "$session $(child_pids "$c" "$session")" > "$rigdir/outcomes-session.txt"
+  [[ "$(cut -d' ' -f2 "$rigdir/outcomes-session.txt")" =~ ^[0-9]+$ ]] || { echo "the session $session holds no one process: $(cat "$rigdir/outcomes-session.txt")"; return 1; }
+  echo "$c $machine $session $(date +%s%3N) $sends" > "$rigdir/outcomes-of"
+  claude_late "$c" "$CLAUDE_LATE_S"
+  rm -f "$rigdir/outcomes-signin.stop"
+  : > "$rigdir/outcomes-signin.txt"
+  signin_sampler "$machine" "$rigdir/outcomes-signin.txt" "$rigdir/outcomes-signin.stop" < /dev/null > /dev/null 2>&1 &
+  [[ $sends != nosends ]] || return 0
+  as_user "$hubc" rm -f /tmp/outcomes-sends.stop
+  as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-sends.ts http://127.0.0.1:3456 \
+    "$machine" "$session" "$session-midupdate" /tmp/outcomes-sends.stop > "$rigdir/outcomes-sends.txt" 2>&1 &
+  wait_until 30 'grep -qE "^[0-9]+ " "$rigdir/outcomes-sends.txt"'
+}
+# No message goes after this; the last one sent has had its answer or its 120 s.
+update_sends_stop() {
+  [[ -s "$rigdir/outcomes-sends.txt" ]] || return 0
+  grep -q '^done ' "$rigdir/outcomes-sends.txt" && return 0
+  as_user "$hubc" touch /tmp/outcomes-sends.stop
+  wait_until 150 'grep -q "^done " "$rigdir/outcomes-sends.txt"'
+}
+# Every message sent to the session while its machine updated, the hub restarting among it, was taken by the hub and
+# answered once by the session once the machine was back: none refused, none lost, none twice.
+update_sends_delivered() {
+  local c session sends taken words n missing="" twice="" text untaken
+  [[ -s "$rigdir/outcomes-of" ]] || { echo "ASSERTION FAILED: the update's check ended before any message was sent"; return 1; }
+  read -r c _ session _ sends < "$rigdir/outcomes-of"
+  [[ $sends != nosends ]]
+  update_sends_stop
+  echo "== the messages sent to $session while its machine updated (<epoch ms> <words> <outcome> <tries>)"
+  cat "$rigdir/outcomes-sends.txt"
+  untaken=$(grep -vE '^[0-9]+ [^ ]+ accepted [0-9]+$|^done sent=' "$rigdir/outcomes-sends.txt" || true)
+  [[ -z $untaken ]] || { echo "ASSERTION FAILED: the hub did not take these messages, sent while the machine updated:"; echo "$untaken"; return 1; }
+  taken=$(awk '$3 == "accepted" { print $2 }' "$rigdir/outcomes-sends.txt")
+  (( $(wc -w <<< "$taken") >= 3 )) || { echo "ASSERTION FAILED: fewer than 3 messages went while the machine updated"; return 1; }
+  # shellcheck disable=SC2086
+  if ! wait_until 180 'all_reached "$c" "$session" $taken'; then
+    text=$(turns_on "$c")
+    for words in $taken; do
+      (( $(turns_of "$text" "$session" "$words") >= 1 )) || missing+=" $words"
+    done
+    echo "ASSERTION FAILED: these messages, taken by the hub while the machine updated, never reached the session:$missing"
+    return 1
+  fi
+  text=$(turns_on "$c")
+  for words in $taken; do
+    n=$(turns_of "$text" "$session" "$words")
+    (( n == 1 )) || twice+=" $words ($n turns)"
+  done
+  [[ -z $twice ]] || { echo "ASSERTION FAILED: these messages reached the session more than once:$twice"; return 1; }
+  echo "$(wc -w <<< "$taken") messages sent while the machine updated, each taken by one turn of the session"
+}
+# The machine's Claude account read signed in all through its update, though its Claude Code answered `auth status`
+# CLAUDE_LATE_S late, past the agent's 20 s bound on it (accounts.ts `authStatusIn`): from before the update until a
+# late read of it had ended (cut at the bound, or answered under a longer one) and 15 s more (the agent's report
+# follows its reads within 2 s, slow-harness-cli.ts), the hub said signed-in at every sample it answered.
+update_signin_kept() {
+  local c machine since bad last
+  [[ -s "$rigdir/outcomes-of" ]] || { echo "ASSERTION FAILED: the update's check ended before the sign-in was watched"; return 1; }
+  read -r c machine _ since _ < "$rigdir/outcomes-of"
+  on_exit "touch \"\$rigdir/outcomes-signin.stop\"; claude_late $c 0"
+  wait_until 300 '(( $(auth_reads_ended_since "$c" "$since") >= 1 ))' \
+    || { echo "ASSERTION FAILED: no late read of the machine's account ended after its update began, so none was proven"; claude_calls "$c"; return 1; }
+  sleep 15
+  touch "$rigdir/outcomes-signin.stop"
+  echo "== the Claude Code stand-in's late calls (<epoch ms> start|answered|cut <pid> <args>)"
+  claude_calls "$c"
+  last=$(claude_calls "$c" | awk '($2 == "cut" || $2 == "answered") && / auth status / { t = $1 } END { print t + 0 }')
+  bad=$(awk '$2 != "signed-in" && $2 != "hub-away"' "$rigdir/outcomes-signin.txt")
+  echo "the hub's word on the sign-in: $(wc -l < "$rigdir/outcomes-signin.txt") samples since $since, $(awk '$2 == "hub-away"' "$rigdir/outcomes-signin.txt" | wc -l) while the hub was away"
+  [[ -z $bad ]] || { echo "ASSERTION FAILED: a read that timed out changed the machine's account: the hub said"; awk '{ print $1, $2 }' <<< "$bad" | uniq -f 1 | head -n 20; return 1; }
+  (( $(awk -v t="$last" '$1 > t && $2 == "signed-in"' "$rigdir/outcomes-signin.txt" | wc -l) >= 5 )) \
+    || { echo "ASSERTION FAILED: the hub said nothing of the sign-in after the last read that timed out"; return 1; }
+}
+# The session running on the machine before its update is the same process after it, reattached and running, though
+# the keeper holding it, retiring, answers its listing late.
+update_session_reattached() {
+  local c
+  [[ -s "$rigdir/outcomes-of" ]] || { echo "ASSERTION FAILED: the update's check ended before the session was recorded"; return 1; }
+  read -r c _ _ _ _ < "$rigdir/outcomes-of"
+  need_hub
+  cat "$rigdir/outcomes-session.txt"
+  survived "$c" "$rigdir/outcomes-session.txt"
+}
+export -f signin_state signin_sampler claude_late claude_calls auth_reads_ended_since turns_on turns_of all_reached \
+  update_outcomes_start update_sends_stop update_sends_delivered update_signin_kept update_session_reattached
+
 # ================================================================ THE RIGS
 
 # ---------------------------------------------------------------- install: a pristine machine installs the hub, and
@@ -1263,6 +1445,13 @@ keeper_cannot_start_with_held() {
   held=$(child_pids "$hubc" boundary-k1hold)
   keeper=$(keeper_pid "$hubc")
   [[ -n "$held" && -n "$keeper" ]]
+  # The person's side of the update (update_outcomes_start): a session running before it, its messages through the
+  # hub's own restarts (the update's, and the agent's and hub's again once the stub goes), and the sign-in, with the
+  # machine's Claude Code answering late.
+  start_session "$hid" outcome-1 > /dev/null
+  wait_until 60 'session_running outcome-1'
+  update_outcomes_start "$hubc" "$hid" outcome-1
+  on_exit update_sends_stop
   stub_when_staged break-when-staged "$NEXT" sessiond
   use_feed next
   learn
@@ -1292,6 +1481,7 @@ keeper_cannot_start_with_held() {
   # wait above read off the hub.
   [[ "$(apply_log_count "keeper $NEXT: units")" == 1 ]]
   [[ "$(keeper_link "$hubc")" == "$before" ]]
+  update_sends_stop
 }
 helper_killed_mid_handover() {
   need_hub
@@ -1303,6 +1493,13 @@ helper_killed_mid_handover() {
   held=$(child_pids "$hubc" boundary-k2hold)
   keeper=$(keeper_pid "$hubc")
   [[ -n "$held" && -n "$keeper" ]]
+  # The person's side of the update (update_outcomes_start): a session running before it, which the keeper before
+  # holds on through the handover, answering its listing late once it retires; its messages through the hub's own
+  # restart; and the sign-in, with the machine's Claude Code answering late.
+  start_session "$hid" outcome-1 > /dev/null
+  wait_until 60 'session_running outcome-1'
+  update_outcomes_start "$hubc" "$hid" outcome-1
+  on_exit update_sends_stop
   # The new keeper takes 10 s to start (under the helper's 45 s wait for its welcome, binary-apply.ts HEALTH_MS).
   stub_when_staged slow-when-staged "$NEXT" 10
   use_feed next
@@ -1332,17 +1529,24 @@ helper_killed_mid_handover() {
   start_session "$hid" keeperlive-7
   wait_until 60 'session_running keeperlive-7'
   [[ "$(holder_of "$hubc" keeperlive-7)" == "$(endpoint_of $NEXT)" ]]
+  update_sends_stop
 }
 export -f keeper_cannot_start_with_held helper_killed_mid_handover
 rig_keeperheld() {
   fleet base "$BASE" hub hub
   setup_done
   check "with a child held, a build whose keeper cannot start is not undone, leaves the child and its keeper as they were and nothing of its own keeper behind, sessions still start, and it is not tried again" keeper_cannot_start_with_held 900
+  check "a session running on the hub's machine before its update, whose new keeper cannot start, is the same process after it, reattached and running" update_session_reattached 300
+  check "every message sent to a session on the hub's machine while it updates, the hub restarting under some, reaches the session once the machine is back, once each" update_sends_delivered 600
+  check "the hub's machine's Claude account reads signed in all through its update, though its Claude Code answers auth status past the agent's bound" update_signin_kept 600
 }
 rig_keeperkilled() {
   fleet base "$BASE" hub hub
   setup_done
   check "a helper killed while the keeper it hands over to is starting leaves the machine whole, and the decider that resumes finishes the handover" helper_killed_mid_handover 900
+  check "a session running on the hub's machine before a handover a killed helper left, held on by the retiring keeper that answers its listing late, is the same process after it, reattached and running" update_session_reattached 300
+  check "every message sent to a session on the hub's machine while a killed helper's handover is finished, the hub restarting under some, reaches the session once the machine is back, once each" update_sends_delivered 600
+  check "the hub's machine's Claude account reads signed in all through its update, though its Claude Code answers auth status past the agent's bound" update_signin_kept 600
 }
 
 # ---------------------------------------------------------------- handover: a joined machine with sessions on its
@@ -1371,6 +1575,11 @@ handover_on_joined_machine() {
   [[ "$oldend" == "$(endpoint_of "$old")" && -n "$oldpid" ]]
   # Three sessions running on the joined machine's keeper before its update.
   start_before "$jid" "$joinerc" "$rigdir/handover-before.txt" handover-1 handover-2 handover-3
+  # The person's side of both updates (update_outcomes_start): from here the joined machine's Claude Code answers
+  # late and its sign-in is watched, and a message goes to handover-1 every 3 s, through the hub's own restart and the
+  # joined machine's update, until the agent's restart in the middle of the handover has been taken.
+  update_outcomes_start "$joinerc" "$jid" handover-1
+  on_exit update_sends_stop
   # The new build reaches the hub's machine. While the helper decides its trial, the build it would restore is still on
   # disk; once the build is confirmed the trial is gone, the keeper has been handed over to it, and nothing runs or
   # names the build before, so it is pruned.
@@ -1411,6 +1620,7 @@ handover_on_joined_machine() {
   wait_until 120 'session_running handover-new'
   [[ "$(holder_of "$joinerc" handover-new)" == "$(endpoint_of "$new")" ]]
   [[ "$(keeper_pid "$joinerc" "$oldunit")" == "$oldpid" ]]
+  update_sends_stop
   # An old session answers: stopped through the hub, the keeper before ends it.
   read -r id pid < "$rigdir/handover-before.txt"
   stop_session "$jid" "$id"
@@ -1440,6 +1650,8 @@ rig_handover() {
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
   check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once (carrying only the CAWCO_* its tools read), the old sessions run on and answer through an agent restart, and the old keeper goes when they end; the hub's machine keeps the build its trial would restore until the trial is confirmed" handover_on_joined_machine 1200
+  check "every message sent to a session on the joined machine while the hub's machine and then the joined machine update, the hub restarting under some, reaches the session once the machine is back, once each" update_sends_delivered 600
+  check "the joined machine's Claude account reads signed in all through its update, though its Claude Code answers auth status past the agent's bound" update_signin_kept 600
 }
 
 # ---------------------------------------------------------------- Install now on a joined machine
@@ -1489,6 +1701,12 @@ joiner_command_mid_drain() {
   on_exit "hub_api /api/workflows/${first[0]} -X DELETE > /dev/null"
   on_exit "hub_api /api/workflow-runs/${first[1]}/cancel -X POST > /dev/null"
   wait_until 60 'as_user "$joinerc" pgrep -f "sleep 601" > /dev/null'
+  # The person's side of the joined machine's update (update_outcomes_start): a session running before it, which its
+  # keeper before holds on, answering its listing late once it retires; and the sign-in, with the machine's Claude
+  # Code answering late. No messages: a turn is work the pass could wait on, and this check times the pass's drain.
+  start_session "$jid" outcome-1 > /dev/null
+  wait_until 60 'session_running outcome-1'
+  update_outcomes_start "$joinerc" "$jid" outcome-1 nosends
   # Auto-update on: the joined machine's own pass stages the hub's build and drains on that command for 45 s. The
   # command outlasts the drain, so the build waits, staged, for it to end.
   put_policy stable true
@@ -1566,6 +1784,8 @@ rig_drain() {
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
   check "Install now sent while a joined machine's own auto-update pass drains for the build applies on that command: one helper, at once, with no agent restart by hand, and a prune while the build waits staged leaves it" joiner_command_mid_drain 900
+  check "a session running on the joined machine before its update, held on by the retiring keeper that answers its listing late, is the same process after it, reattached and running" update_session_reattached 300
+  check "the joined machine's Claude account reads signed in all through its update, though its Claude Code answers auth status past the agent's bound" update_signin_kept 600
 }
 rig_retry() {
   fleet base "$BASE" "hub joiner" "hub joiner"
@@ -1875,9 +2095,31 @@ ws_hook_calls_answered() {
   [[ ${from:-} =~ ^[0-9]+$ && ${to:-} =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: the agent's journal does not say it keeps the workspace's boundary while its listener runs"; return 1; }
   inside=$(awk -v from="$from" -v to="$to" '$1 ~ /^[0-9]+$/ && $1 >= from && $1 <= to' "$rigdir/ws-hook-calls.txt" | wc -l)
   echo "the new build's agent started at $from ms and kept the boundary as it is at $to ms; $inside calls went through the hook between them"
-  grep -v ' ran$' "$rigdir/ws-hook-calls.txt" || true
   (( inside >= 1 )) || { echo "ASSERTION FAILED: no call went through the hook between the agent's start and its keeping the boundary"; return 1; }
-  grep -qE '^done calls=[0-9]+ ran=[0-9]+ refused=0 failed=0$' "$rigdir/ws-hook-calls.txt" || { echo "ASSERTION FAILED: a call through the workspace's hook was refused or did not run"; return 1; }
+  ws_hook_calls_clean
+}
+# No call the hook was handed so far was refused or failed to run: every line but the last is `<ms> ran`.
+ws_hook_calls_clean() {
+  local bad
+  bad=$(grep -vE '^[0-9]+ ran$|^done calls=' "$rigdir/ws-hook-calls.txt" || true)
+  [[ -z $bad ]] || { echo "ASSERTION FAILED: calls through the workspace's hook were refused or did not run:"; echo "$bad"; return 1; }
+}
+# The calls through the hook since $1 (epoch ms).
+ws_hook_calls_after() { awk -v t="$1" '$1 ~ /^[0-9]+$/ && $1 > t' "$rigdir/ws-hook-calls.txt" | wc -l; }
+# The workspace's judge answers after the update, as before it: the calls begun before the joined machine's update
+# (ws_hook_calls_start, one a second) go on through it, through the boundary kept as it is while its listener runs,
+# the older keeper retiring and answering its listing late, and the boundary's handover to the new build's form once
+# the listener stops, and every one was answered by a live judge and ran, at least 20 of them after the update was
+# installed. The calls end here.
+ws_judge_answers_after_update() {
+  local installed
+  [[ -s "$rigdir/ws-installed-at" ]] || { echo "ASSERTION FAILED: the update's check ended before the joined machine had installed it, with its hook calls running"; return 1; }
+  installed=$(cat "$rigdir/ws-installed-at")
+  wait_until 120 '(( $(ws_hook_calls_after "$installed") >= 20 ))' \
+    || { echo "ASSERTION FAILED: $(ws_hook_calls_after "$installed") calls went through the hook in the 120 s after the update was installed, one a second asked"; tail -n 20 "$rigdir/ws-hook-calls.txt"; return 1; }
+  ws_hook_calls_stop
+  echo "$(ws_hook_calls_after "$installed") calls went through the hook after the update was installed; $(tail -n 1 "$rigdir/ws-hook-calls.txt")"
+  ws_hook_calls_clean
 }
 workspace_opens() {
   need_hub
@@ -1960,6 +2202,11 @@ workspace_across_update() {
   # The delegate's work item is live going into the update.
   ws_item_live || { echo "ASSERTION FAILED: before the update the work item is $(ws_item_says)"; return 1; }
   echo "before the update the work item is $(ws_item_says)"
+  # The person's side of both updates (update_outcomes_start): the session that delegated, running before them; a
+  # message to it every 3 s through the hub's own restart and the joined machine's update, until the delegate has
+  # answered after it; and the joined machine's sign-in, its Claude Code answering late.
+  update_outcomes_start "$joinerc" "$jid" wsparent-1
+  on_exit update_sends_stop
   # The new build reaches the hub's machine, then the joined machine, which installs it with the workspace open.
   use_feed next
   learn
@@ -1967,12 +2214,13 @@ workspace_across_update() {
   wait_until 400 '[[ "$(build_version $hid)" == $NEXT && "$(phase $hid)" == installed ]]'
   learn
   wait_until 120 '[[ "$(field $jid availableVersion)" == $NEXT ]]'
-  # From before the install until the boundary is handed over, a shell call goes through the workspace's hook every
-  # second: the window between the agent restarting and the new build's keeper taking the machine among them.
+  # From before the install, a shell call goes through the workspace's hook every second: the window between the
+  # agent restarting and the new build's keeper taking the machine among them. The calls go on past this check, until
+  # the judge's own check after it (ws_judge_answers_after_update) ends them.
   ws_hook_calls_start
-  on_exit 'as_user "$joinerc" touch /tmp/ws-hook-calls.stop'
   install_now_request "$jid" > /dev/null
   wait_until 400 '[[ "$(build_version $jid)" == $NEXT && "$(phase $jid)" == installed ]]'
+  date +%s%3N > "$rigdir/ws-installed-at"
   # The job ran through the update: the same process, in the sandbox it started in.
   as_user "$joinerc" kill -0 "$job"
   [[ "$(ns_of "$job")" == "$old_ns" ]]
@@ -1982,7 +2230,6 @@ workspace_across_update() {
   wait_until 180 'as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep -q "'"$id"': its boundary .* is kept as it is while its work listens on .*'"$WS_LISTENER_PORT"'"' || { echo "ASSERTION FAILED: the new build's agent did not say it keeps the boundary while its listener runs"; as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id" | tail -n 8; return 1; }
   as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its boundary .* is kept as it is while its work listens on .*$WS_LISTENER_PORT" | tail -n 1
   # Through all of it, no call the hook was handed was refused.
-  ws_hook_calls_stop
   ws_hook_calls_answered
   # The generation is the one it had, its srt host still held, nothing retiring beside it, and the next command runs in
   # its sandbox, reading no credential.
@@ -2005,6 +2252,7 @@ workspace_across_update() {
   echo "the delegate answered $token after the update"
   ws_item_live || { echo "ASSERTION FAILED: after its answer the work item is $(ws_item_says)"; return 1; }
   echo "after its answer the work item is $(ws_item_says)"
+  update_sends_stop
   # The listener ran through the update. The preview, started again by the hub at the new agent's register, answers
   # from its server, which the new agent's stage keeps or starts again at the preview's first request, in the
   # generation kept for the listener (the session's port is read again, as a dashboard learns it after the hub's own
@@ -2136,7 +2384,7 @@ workspace_archive_ends_all() {
   [[ -z "$(ws_served_pid)" ]] || { echo "ASSERTION FAILED: a served listener $(ws_served_pid) runs after the archive"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_archive_ends_all
 export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from
@@ -2145,7 +2393,11 @@ rig_workspace() {
   setup_done
   check "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" workspace_opens 600
   check "a workspace open across an update keeps its job and a setsid listener running in the generation they started in, kept as it is while the listener runs: its next command reaches the listener, and the preview's served server, kept or started again by the stage, answers by port and by host behind the lock; once the preview and the listener stop the next command runs in the new build's boundary and the old one closes, and the preview made again is served in the new generation in both modes" workspace_across_update 900 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
+  check "the workspace's judge answers every call its hook is handed from before the joined machine's update until well after it, through the boundary kept, its keeper retiring and the handover to a new generation" ws_judge_answers_after_update 300
   check "archiving a workspace ends a setsid listener, its preview's served server and every other process its sandbox started" workspace_archive_ends_all 300 "a workspace open across an update keeps its job and a setsid listener running in the generation they started in, kept as it is while the listener runs: its next command reaches the listener, and the preview's served server, kept or started again by the stage, answers by port and by host behind the lock; once the preview and the listener stop the next command runs in the new build's boundary and the old one closes, and the preview made again is served in the new generation in both modes"
+  check "the session that delegated, running on the joined machine before both updates and held on by its retiring keeper that answers its listing late, is the same process after them, reattached and running" update_session_reattached 300
+  check "every message sent to the session that delegated while the hub's machine and then the joined machine update, the hub restarting under some, reaches the session once the machine is back, once each" update_sends_delivered 600
+  check "the joined machine's Claude account reads signed in all through its update with a workspace open, though its Claude Code answers auth status past the agent's bound" update_signin_kept 600
 }
 
 # ---------------------------------------------------------------- one session's runaway is its own

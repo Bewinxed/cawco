@@ -15,6 +15,9 @@
  * list, no account changes to take).
  */
 
+import { appendFile, mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import {
   accountReports,
   claudeSignins,
@@ -96,6 +99,26 @@ const toolCalls = async (procId: string, text: string): Promise<string[]> => {
   return said;
 };
 
+/**
+ * Every message a session's turn took on this machine, one line each in
+ * ~/.cawco-proof/turns.log (`<epoch ms> <instanceId> <uuid> <first line of
+ * its words>`), whichever agent process took it: what reached the session,
+ * read by the proof on the machine itself. The hub's transcript is no record
+ * of it here, for this harness reads no history back once the hub restarts.
+ */
+const tookTurn = async (
+  instanceId: string,
+  uuid: string,
+  text: string
+): Promise<void> => {
+  const dir = join(homedir(), ".cawco-proof");
+  await mkdir(dir, { recursive: true });
+  await appendFile(
+    join(dir, "turns.log"),
+    `${Date.now()} ${instanceId} ${uuid} ${text.split("\n")[0]}\n`
+  );
+};
+
 /** A session held by `client`'s keeper, as a real session keeps the keeper it was started or adopted on. */
 function session(
   kind: "claude" | "pi",
@@ -127,6 +150,7 @@ function session(
       ctx.busy(true);
       client
         .write(procId, `${text}\n`)
+        .then(() => tookTurn(instanceId, message.uuid, text))
         .then(() => toolCalls(procId, text))
         .then(
           (said) => {
