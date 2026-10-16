@@ -4387,9 +4387,9 @@ export const createWorkItems = ({
   ): Promise<CheckRun> => {
     const state = await checkedState(workspace, item);
     const kept = passes.get(item.id);
-    const prior = checks.map((check) => {
+    const prior = checks.map((check): string | undefined => {
       if (!state) {
-        return;
+        return undefined;
       }
       const { key, said } = passKey(check, state);
       return priorPass(check, kept?.get(key) ?? [], said);
