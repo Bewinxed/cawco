@@ -809,6 +809,45 @@ export const designOnBase = (
     baseRef(workspace.base)
   ).theirs();
 
+/** What an attempt reads first of the system, and what it fetches on demand (spec §5.7, "Use"; Open Design's order). */
+const READ_FIRST = `Read \`${DESIGN_DIR}/DESIGN.md\` and \`${DESIGN_DIR}/${STYLESHEET}\` first; \`${DESIGN_DIR}/${RESOLVER}\`, \`${DESIGN_DIR}/${MANIFEST}\`, fonts and specimens only as the work needs them.`;
+
+/**
+ * An attempt's brief's `## Design system` section (dispatch.ts): the
+ * project's system as the attempt's clone holds it, design/ at its root,
+ * read inside its boundary as every command in a live clone is. Its usage
+ * guide (design/SKILL.md) whole, then what to read first. Empty when the
+ * clone holds no design/.
+ */
+export const designSection = async (
+  run: Run,
+  clone: { id: string; machineId: string; path: string }
+): Promise<string> => {
+  const read = await runIn(run, {
+    machineId: clone.machineId,
+    root: clone.path,
+    workspace: { id: clone.id, path: clone.path },
+  })(
+    `if [ -d ${DESIGN_DIR} ]; then echo system; if [ -f ${DESIGN_DIR}/SKILL.md ]; then cat ${DESIGN_DIR}/SKILL.md; fi; fi`
+  );
+  if (read.exitCode !== 0) {
+    throw failed("design/ could not be read in the attempt's clone", read);
+  }
+  const [mark, ...rest] = read.stdout.split("\n");
+  if (mark !== "system") {
+    return "";
+  }
+  const guide = rest.join("\n").trim();
+  return [
+    "## Design system",
+    guide
+      ? `This project has a design system, at \`${DESIGN_DIR}/\` in your clone. Its usage guide, \`${DESIGN_DIR}/SKILL.md\`:`
+      : `This project has a design system, at \`${DESIGN_DIR}/\` in your clone.`,
+    ...(guide ? [guide] : []),
+    READ_FIRST,
+  ].join("\n\n");
+};
+
 /** The longest a proposal's reason runs: its commit's subject carries it. */
 const WHY_LIMIT = 500;
 

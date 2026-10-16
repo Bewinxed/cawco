@@ -468,7 +468,7 @@ import {
   designOfferRoutes,
   designShaped,
 } from "./design-offers";
-import { createDesignSystem } from "./design-system";
+import { createDesignSystem, designSection } from "./design-system";
 import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
@@ -18384,6 +18384,15 @@ export const createServer = (
   const dispatcher = createDispatcher({
     // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
     context: (projectId, task) => projectMemory.contextFor(projectId, task),
+    // Its design system, read in the attempt's clone inside its boundary.
+    designSection: (clone) =>
+      designSection(
+        (machineId, cwd, cmd, timeoutMs, workspace) =>
+          runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
+            what: "command",
+          }),
+        clone
+      ),
     db,
     lifetime,
     tasks,

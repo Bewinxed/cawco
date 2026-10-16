@@ -88,6 +88,7 @@ import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
 import type { Origin, WorkBudget, WorkItemCheck } from "./db/schema";
+import { needsDesignSystem } from "./design-offers";
 import type { JevAccess } from "./jev";
 import {
   criteriaOf,
@@ -121,6 +122,7 @@ import {
 } from "./tasks";
 import {
   budgetProblem,
+  type CloneRef,
   DEFAULT_DELEGATE_TYPE,
   isLive,
   OwnsOverlap,
@@ -150,6 +152,13 @@ export interface DispatchDeps {
     | "setProjectDispatch"
     | "workItemByPrUrl"
   >;
+  /**
+   * The brief's `## Design system` section, read from the attempt's clone
+   * (design-system.ts `designSection`): "" when the clone holds no design/.
+   * Asked only for a task that needs the system (design-offers.ts
+   * `needsDesignSystem`).
+   */
+  readonly designSection: (clone: CloneRef) => Promise<string>;
   /**
    * The project's lead: its Caw session, started now if it has none (caw.ts
    * `lead`): for your ask on or off, for the dispatcher's own (`event`) only
@@ -430,7 +439,9 @@ const titleOf = (task: TaskView): string => {
 /**
  * The brief: the task file as it stands, the open to-dos to start the plan
  * from (with their ids), the checks finish_item runs, where the task sits
- * among its edges, and the project's context (memory.ts `contextFor`).
+ * among its edges, the project's context (memory.ts `contextFor`), and its
+ * design system when the task needs it (`design`, read from the attempt's
+ * clone: design-system.ts `designSection`).
  */
 const briefOf = (
   project: ProjectRow,
@@ -440,6 +451,7 @@ const briefOf = (
   lands: LandsMode,
   comments: TaskComment[],
   context: string,
+  design: string,
   retry?: RetryContext
 ): string => {
   const byId = new Map(all.map((each) => [each.id, each]));
@@ -497,6 +509,7 @@ const briefOf = (
     `## Where it sits\n\n${sits.length > 0 ? sits.join("\n") : "Nothing waits on it, and it waits for nothing."}`,
     `## Handing it in\n\n${RESULT_LINE}`,
     ...(context ? [context] : []),
+    ...(design ? [design] : []),
     ...(retry ? [retrySection(task, retry)] : []),
     ...(comments.length > 0 ? [commentsSection(comments)] : []),
   ].join("\n\n");
@@ -625,6 +638,7 @@ const failure = (
 export const createDispatcher = ({
   context,
   db,
+  designSection,
   lead,
   lifetime,
   online,
@@ -1058,9 +1072,8 @@ export const createDispatcher = ({
       : [];
     try {
       const known = await context(project.id, task);
-      const started = await start({
-        parentInstanceId: parent.id,
-        prompt: briefOf(
+      const brief = (design: string): string =>
+        briefOf(
           project,
           task,
           all,
@@ -1068,8 +1081,20 @@ export const createDispatcher = ({
           lands,
           comments,
           known,
+          design,
           retry
-        ),
+        );
+      const started = await start({
+        parentInstanceId: parent.id,
+        prompt: brief(""),
+        // The project's design system, as the attempt's clone holds it, for
+        // a task that needs it (spec §5.7, "Use").
+        ...(needsDesignSystem(project.template ?? null, task)
+          ? {
+              briefFromClone: async (clone: CloneRef) =>
+                brief(await designSection(clone)),
+            }
+          : {}),
         title: titleOf(task),
         type,
         checks,

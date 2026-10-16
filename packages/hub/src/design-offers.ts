@@ -74,6 +74,34 @@ export const designShaped = (
   task.labels.some((label) => DESIGN_LABELS.has(label.toLowerCase())) ||
   task.outputs.some((path) => PICTURE.test(path) || SCREEN.test(path));
 
+/**
+ * The skills that are design work, as a task names one in its own words:
+ * "the design-system skill", "`restyle` skill" (Build's description does).
+ */
+const DESIGN_SKILLS = [
+  DESIGN_SKILL,
+  "screen",
+  "restyle",
+  "drift",
+  "design-explore",
+] as const;
+const NAMES_DESIGN_SKILL = new RegExp(
+  `(?:^|[^\\w-])\`?(?:${DESIGN_SKILLS.join("|")})\`?\\s+skill\\b`,
+  "i"
+);
+
+/**
+ * Whether a task's attempt needs its project's design system (Projects spec
+ * §5.7, "Use"): design work by {@link designShaped}, the one rule Caw's ask
+ * uses, or a task whose words name a design skill.
+ */
+export const needsDesignSystem = (
+  template: StagesTemplate | null,
+  task: Pick<TaskView, "description" | "labels" | "outputs" | "title">
+): boolean =>
+  designShaped(template, task) ||
+  NAMES_DESIGN_SKILL.test(`${task.title}\n${task.description}`);
+
 /** "a, b and c". */
 const listed = (words: string[]): string =>
   words.length <= 1

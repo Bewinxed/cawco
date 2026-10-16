@@ -622,8 +622,37 @@ const sourceName = (source: string): string => {
   return scheme === "conn" ? (rest.split(":")[0] ?? rest) : rest || source;
 };
 
+/**
+ * A project with a design system (design/): a weekly drift check of its work
+ * against it, with the drift skill (Projects spec §5.7). The signal only;
+ * Jev decides, and `routines` says whether one runs already.
+ */
+const driftSubject = (inputs: StarterInputs): Subject | undefined =>
+  inputs.hasDesign === true
+    ? {
+        at: "repository.has_design_system",
+        asks: {
+          drift: {
+            about:
+              "It has a design system (design/): a weekly routine could run the drift skill against it and say where the work has drifted from it.",
+            glyph: "system",
+            text: "Every Monday, run the drift skill against our design system",
+            reason:
+              "It keeps a design system, and nothing checks the work against it.",
+            // design/ is the repository's, not the project's folder: no
+            // folder path stands for it.
+            sources: [],
+          },
+        },
+      }
+    : undefined;
+
 const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
   const subjects = new Map<string, Subject>();
+  const drift = driftSubject(inputs);
+  if (drift) {
+    subjects.set("design:drift", drift);
+  }
   for (const kind of inputs.recentKinds) {
     subjects.set(`kind:${kind.name}`, {
       at: `recent_kinds["${kind.name}"]`,

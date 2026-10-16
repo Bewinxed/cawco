@@ -557,9 +557,25 @@ export const resolveSpawnType = (
 };
 
 /** What `delegate` asks for. */
+/** An item's clone as a brief reads it: its workspace, on its machine (commands in it run inside its boundary). */
+export interface CloneRef {
+  id: string;
+  machineId: string;
+  path: string;
+}
+
 export interface WorkItemRequest {
   /** The account its session must run on (an id or label); placement chooses when absent. */
   account?: string;
+  /**
+   * The brief, written from the item's clone once it is cut or reused and
+   * before the item is filed: what the clone holds that the brief carries
+   * (an attempt's design system, dispatch.ts). Its answer is the brief the
+   * item stores and its session reads; `prompt` is that brief as it reads
+   * before any clone, for what is said of the request before one is cut. Set
+   * by the hub alone.
+   */
+  briefFromClone?: (clone: CloneRef) => Promise<string>;
   /** What it may spend before the hub stops it; the project's default fills what this leaves out. */
   budget?: WorkBudget;
   /**
@@ -3773,7 +3789,7 @@ export const createWorkItems = ({
           again,
           settingsOf(request, parent),
           parent,
-          request,
+          await briefedFrom(request, again),
           inputs
         );
       }
@@ -3827,13 +3843,33 @@ export const createWorkItems = ({
       }
       // In its scratch dir before its session starts.
       await handIn(workspace, inputs);
-      return spawnIn(workspace, settings, parent, request, inputs, {
-        instanceId,
-        placement,
-      });
+      return spawnIn(
+        workspace,
+        settings,
+        parent,
+        await briefedFrom(request, workspace),
+        inputs,
+        { instanceId, placement }
+      );
     }
     return await startFollowUp(request.workspace, request, parent, inputs);
   };
+
+  /** The request with its brief written from its clone, when it asks for that ({@link WorkItemRequest.briefFromClone}). */
+  const briefedFrom = async (
+    request: WorkItemRequest,
+    workspace: WorkspaceRow
+  ): Promise<WorkItemRequest> =>
+    request.briefFromClone
+      ? {
+          ...request,
+          prompt: await request.briefFromClone({
+            id: workspace.id,
+            machineId: workspace.machineId,
+            path: workspace.path,
+          }),
+        }
+      : request;
 
   /**
    * The follow-up in the workspace `needle` names. A retired one is cut
