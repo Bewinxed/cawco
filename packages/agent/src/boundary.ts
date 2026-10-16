@@ -3420,8 +3420,36 @@ const QUIET_SWEEP_MS = 60_000;
  */
 const liveAt = new Map<string, number>();
 
-/** Each workspace's quiet close under way ({@link closeQuietly}); it never rejects. An ensure waits for it. */
+/** Each workspace's close under way (quiet, {@link closeQuietly}, or an archive's, {@link closedWhile}); it never rejects. An ensure waits for it. */
 const closing = new Map<string, Promise<void>>();
+
+/**
+ * Runs an archive's close of workspace `id` (`close`) as one step against its
+ * starts: after the start under way, if any, has ended and the close before
+ * it has finished, and with an ensure arriving meanwhile waiting until it is
+ * done ({@link ensureNow}). A start the close did not wait for would run on
+ * with its generation's dir, FIFO and state dir taken from under it, or start
+ * a boundary the close has already passed.
+ */
+const closedWhile = async <T>(
+  id: string,
+  close: () => Promise<T>
+): Promise<T> => {
+  const before = [starting.get(id), closing.get(id)];
+  const work = Promise.allSettled(before).then(close);
+  const held = work.then(
+    () => undefined,
+    () => undefined
+  );
+  closing.set(id, held);
+  try {
+    return await work;
+  } finally {
+    if (closing.get(id) === held) {
+      closing.delete(id);
+    }
+  }
+};
 
 /**
  * What the agent knows holds a workspace that this module cannot read for
@@ -3598,7 +3626,11 @@ const closeQuietly = (id: string, why: string): Promise<void> => {
         `[workspace] ${id}: its boundary could not be closed: ${error instanceof Error ? error.message : String(error)}`
       );
     })
-    .finally(() => closing.delete(id));
+    .finally(() => {
+      if (closing.get(id) === work) {
+        closing.delete(id);
+      }
+    });
   closing.set(id, work);
   return work;
 };
@@ -4616,12 +4648,15 @@ const signalHeld = async (
  * Its clone, state dir (its accounts, project, hook and policy), scratch dir
  * and stand-ins stay, so its next {@link ensureBoundary} starts one as a
  * quiet close leaves it. What an archive does first (workspace.ts
- * `closeClone`): nothing writes the clone from here on. Answers the inner
- * pids of the sandboxes it stopped (Linux).
+ * `closeClone`): nothing writes the clone from here on. A start under way
+ * ends first, and one asked for meanwhile waits ({@link closedWhile}).
+ * Answers the inner pids of the sandboxes it stopped (Linux).
  */
-export const stopWorkspaceBoundary = async (
-  ref: WorkspaceRef
-): Promise<number[]> => {
+export const stopWorkspaceBoundary = (ref: WorkspaceRef): Promise<number[]> =>
+  closedWhile(ref.id, () => stopNow(ref));
+
+/** {@link stopWorkspaceBoundary}'s stop itself, inside its hold. */
+const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
   forgetStale(ref.id);
   forgetRetiring(ref.id);
   forgetStubbed(ref.id);
@@ -4656,10 +4691,16 @@ export const stopWorkspaceBoundary = async (
  * machine but its clone: on Linux, once its sandboxes are gone, the deny
  * stand-ins in its clone go (`stand-ins.ts`). Then its state and its scratch
  * dir go, and on Linux srt's temp dirs with the sockets srt leaves there
- * (REPORT.md §5o); then the dir its sockets were in.
+ * (REPORT.md §5o); then the dir its sockets were in. All of it in one hold
+ * against starts ({@link closedWhile}): no start runs on in a state dir it
+ * takes away.
  */
-export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
-  const inners = await stopWorkspaceBoundary(ref);
+export const closeBoundary = (ref: WorkspaceRef): Promise<void> =>
+  closedWhile(ref.id, () => closeAll(ref));
+
+/** {@link closeBoundary}'s close itself, inside its hold. */
+const closeAll = async (ref: WorkspaceRef): Promise<void> => {
+  const inners = await stopNow(ref);
   if (process.platform === "linux") {
     if (await sandboxesGone(inners)) {
       // Only once no sandbox holds a mount on them: each goes if it is still
