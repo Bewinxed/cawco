@@ -99,6 +99,7 @@ const importCanvas = (deps: ImportDeps, canvas: LegacyCanvas): void => {
   const row = deps.db.create({
     id: crypto.randomUUID(),
     instanceId: canvas.instanceId,
+    madeBy: canvas.instanceId,
     projectId: place.projectId,
     kind: place.kind,
     name,

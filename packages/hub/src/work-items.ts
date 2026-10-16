@@ -6307,6 +6307,12 @@ export const createWorkItems = ({
       return workspace ? refOf(workspace) : undefined;
     },
 
+    /** Workspace `id` as a spawn or a stage is bounded to it; undefined when no workspace has that id. */
+    workspaceRef(id: string): WorkspaceRef | undefined {
+      const workspace = db.workspacesNamed(id).find((one) => one.id === id);
+      return workspace ? refOf(workspace) : undefined;
+    },
+
     /**
      * What a held workspace holds that is nowhere else, as its machine read
      * it once its boundary was closed ({@link HeldWork}). Refused for one

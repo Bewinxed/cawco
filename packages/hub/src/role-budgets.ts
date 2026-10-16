@@ -135,10 +135,16 @@ import type { Tasks } from "./tasks";
  * words its folder's alone. About 100 tokens for the worker, the delegate
  * and the lead (worker 24,992, delegate 7,248, lead 16,150 measured).
  * Raised deliberately; the lead's fits as it stands.
+ * 2026-10-16: artifact_create's `to: "parent"`, listed only to a session
+ * with a parent, so the delegate alone carries it: a delegate's one way to
+ * put what it made in front of the person, in its parent's panel, instead of
+ * its parent rebuilding it. One sentence and the bare field: about 50 tokens
+ * (delegate 7,303 measured). Raised deliberately; the worker and the lead
+ * are measured without a parent and do not change.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 25_000,
-  delegate: 7255,
+  delegate: 7310,
   lead: 16_220,
   overseer: 770,
   "web-facing": 3400,

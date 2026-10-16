@@ -1534,6 +1534,13 @@
       "when": 1792167404566,
       "tag": "0218_starter_places",
       "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "6",
+      "when": 1792173637228,
+      "tag": "0219_artifact_made_by",
+      "breakpoints": true
     }
   ]
 }

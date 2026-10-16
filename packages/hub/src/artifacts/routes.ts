@@ -2,7 +2,8 @@
  * The artifact routes (Projects spec §5.10), on the session that made the
  * artifact: the panel's list, its Show and Remove, what the six tools call, and the
  * lookup an artifact's own tab opens with. A session reaches only its own
- * artifacts; any other id is 404. The person's Send is on the preview
+ * artifacts, and those it put in its parent's panel (update, read, show);
+ * any other id is 404. The person's Send is on the preview
  * listener, beside the doc's socket (sync.ts `artifactSend`).
  */
 import { ARTIFACT_NAME, PREVIEW_START_PATH, SHOWN_FAILURES } from "@cawco/core";
@@ -204,6 +205,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             })
           ),
           draft: t.Optional(t.Boolean()),
+          // A delegate puts it in its parent's panel.
+          to: t.Optional(t.Literal("parent")),
         }),
       },
       async ({ params, body }) => {

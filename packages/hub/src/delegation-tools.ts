@@ -7,6 +7,7 @@ import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   artifactCreate,
+  artifactCreateToParent,
   artifactDelete,
   artifactList,
   artifactPromote,
@@ -1091,12 +1092,20 @@ export function handoffTools(deps: HandoffDeps) {
         openWorldHint: false,
       }
     ),
-    tool(
-      artifactCreate.name,
-      artifactCreate.description,
-      artifactCreate.input,
-      async (input) => json(await actions.artifactCall("POST", "", input))
-    ),
+    // A delegate may put it in its parent's panel instead (`to`).
+    deps.hasParent
+      ? tool(
+          artifactCreate.name,
+          artifactCreate.description + artifactCreateToParent.description,
+          { ...artifactCreate.input, ...artifactCreateToParent.input },
+          async (input) => json(await actions.artifactCall("POST", "", input))
+        )
+      : tool(
+          artifactCreate.name,
+          artifactCreate.description,
+          artifactCreate.input,
+          async (input) => json(await actions.artifactCall("POST", "", input))
+        ),
     tool(
       artifactUpdate.name,
       artifactUpdate.description,

@@ -38,6 +38,7 @@ import {
 } from "./harness";
 import {
   parseArtifactComments,
+  parseArtifactHanded,
   parseArtifactResponses,
   parseDelegateAsk,
   parseFleetWatchNudge,
@@ -1677,6 +1678,25 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
 }
 
 /**
+ * A delegate put an artifact in this session's panel (core
+ * `artifactHandedNotice`): one quiet note saying who and what, never the
+ * person's bubble.
+ */
+function handedBlock(text: string, base: BlockBase): TranscriptBlock | null {
+  const handed = parseArtifactHanded(text);
+  return handed
+    ? {
+        ...base,
+        type: "ui.system_note",
+        content: "",
+        metadata: {
+          noteTitle: `${handed.from} put the ${handed.kind} "${handed.name}" in your panel`,
+        },
+      }
+    : null;
+}
+
+/**
  * A message sent to the session, as a row: cawco's own (a rule, a hand-off,
  * a delegate's report or ask) by its marker line, anything else as the
  * reader's words. A send's record and a stored user turn the hub has no
@@ -1688,7 +1708,8 @@ export function sentRow(
   base: BlockBase
 ): TranscriptBlock {
   return (
-    injectedBlock(text, base) ?? {
+    injectedBlock(text, base) ??
+    handedBlock(text, base) ?? {
       ...base,
       ...userBody(text, transcriptUserImages(message)),
     }

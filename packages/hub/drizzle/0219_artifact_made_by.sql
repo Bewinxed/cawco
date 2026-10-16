@@ -1,0 +1,1 @@
+ALTER TABLE `artifacts` ADD `made_by` text REFERENCES instances(id) ON DELETE set null;

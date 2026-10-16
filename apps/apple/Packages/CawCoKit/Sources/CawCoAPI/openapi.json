@@ -4634,6 +4634,10 @@
                   },
                   "draft": {
                     "type": "boolean"
+                  },
+                  "to": {
+                    "type": "string",
+                    "const": "parent"
                   }
                 },
                 "required": [
@@ -32402,6 +32406,10 @@
           },
           "kind": {
             "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "madeBy": {
+            "description": "The delegate that put it in this session's panel, when another session made it.",
+            "type": "string"
           },
           "name": {
             "type": "string"

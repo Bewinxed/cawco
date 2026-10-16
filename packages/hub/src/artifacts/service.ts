@@ -132,11 +132,23 @@ export interface ArtifactInput {
    */
   serve?: { command: string; cwd?: string | undefined } | undefined;
   /**
+   * `parent`: a delegate puts it in its parent's panel. The parent owns it
+   * (its panel, its list, the person's picks and pins on it), and is told
+   * once; the delegate stays its maker ({@link ArtifactRow.madeBy}).
+   */
+  to?: "parent" | undefined;
+  /**
    * The workspace whose dev server a port is: the caller's own, or one of its
    * delegates'. Omitted, the caller's own when it runs in one, unless
    * `machine` names the host the port is on.
    */
   workspace?: string | undefined;
+}
+
+/** Whose panel a create puts the artifact in (`owner`), and whose call it was (`maker`): one session, or a delegate and its parent. */
+interface Making {
+  maker: InstanceRow;
+  owner: InstanceRow;
 }
 
 /** A skeleton element as the agent writes it: a type, an optional id, and Excalidraw's own fields. */
@@ -278,6 +290,8 @@ const CHOICE_ATTRIBUTE = /\bdata-cawco-choice="([^"]+)"/g;
 export interface ArtifactStatus {
   id: string;
   kind: ArtifactKind;
+  /** The delegate that put it in this session's panel, when another session made it. */
+  madeBy?: string;
   name: string;
   /** Whether the person has had its latest revision on screen. */
   opened: boolean;
@@ -609,6 +623,13 @@ export interface MarksDelivery {
 /** Whether someone took a delivery of the marks; why not, when no one did. */
 export type MarksOutcome = { ok: true } | { ok: false; reason: string };
 
+/**
+ * Where a stage runs: a session's own workspace (a sheet being made), or
+ * the workspace a sheet was made in (every use after), whichever session's
+ * panel it is in.
+ */
+export type StageAt = { session: InstanceRow } | { workspace: string };
+
 export interface ArtifactServiceDeps {
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => Promise<void>;
@@ -631,6 +652,16 @@ export interface ArtifactServiceDeps {
   docs: ArtifactDocs;
   /** Whether a session has ended: it takes no input now, so its marks go to its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
+  /**
+   * Tells `parent` once that its delegate `maker` put `artifact` in its
+   * panel (core `artifactHandedNotice`), on the channel the person's picks
+   * take (server.ts `handArtifactUp`).
+   */
+  handedUp: (
+    parent: InstanceRow,
+    maker: InstanceRow,
+    artifact: ArtifactRow
+  ) => Promise<void>;
   instance: (id: string) => InstanceRow | undefined;
   /**
    * The projects session `instance` leads (their Caw): an ended writer's
@@ -717,13 +748,13 @@ export interface ArtifactServiceDeps {
     responses: { since: number }
   ) => Promise<void>;
   /**
-   * The stage story file `file` runs on in session `instance`'s workspace
-   * (agent stage.ts `ensureStage`), started or woken there and waited on:
-   * its port, root and state, the sheet's stories, with the workspace and
-   * its machine. Throws an {@link ArtifactRefusal} saying why it can't run.
+   * The stage story file `file` runs on in a workspace (agent stage.ts
+   * `ensureStage`), started or woken there and waited on: its port, root and
+   * state, the sheet's stories, with the workspace and its machine. Throws
+   * an {@link ArtifactRefusal} saying why it can't run.
    */
   stage: (
-    instance: InstanceRow,
+    at: StageAt,
     file: string
   ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
   /** The components of the Vite root `dir` names in session `instance`'s workspace (agent stage.ts `stageComponents`). */
@@ -732,14 +763,11 @@ export interface ArtifactServiceDeps {
     dir: string | undefined
   ) => Promise<{ components: Found[]; dir: string }>;
   /**
-   * A write to a sheet's story file in session `instance`'s workspace, made
-   * by its stage (agent stage.ts `writeSheet`): the lines it changed and the
-   * sheet after. Throws an {@link ArtifactRefusal} saying why it can't.
+   * A write to a sheet's story file in its workspace, made by its stage
+   * (agent stage.ts `writeSheet`): the lines it changed and the sheet after.
+   * Throws an {@link ArtifactRefusal} saying why it can't.
    */
-  stageWrite: (
-    instance: InstanceRow,
-    write: SheetWrite
-  ) => Promise<SheetWritten>;
+  stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
   /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
   unserve: (machineId: string, workspace: string, port: number) => void;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
@@ -776,6 +804,66 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
     }
     return row;
+  };
+
+  /**
+   * Artifact `id`, when the session owns it or made it: a delegate goes on
+   * updating, reading and showing what it put in its parent's panel.
+   */
+  const ownedOrMade = (instance: InstanceRow, id: string): ArtifactRow => {
+    const row = db.get(id);
+    if (row?.madeBy === instance.id) {
+      return row;
+    }
+    return own(instance, id);
+  };
+
+  /**
+   * Whose panel a create puts the artifact in: the caller's own, or with
+   * `to: "parent"` the session that started it; refused for a session with
+   * no parent, or one whose parent is gone.
+   */
+  const ownerFor = (maker: InstanceRow, input: ArtifactInput): InstanceRow => {
+    if (input.to !== "parent") {
+      return maker;
+    }
+    if (input.draft) {
+      throw new ArtifactRefusal(
+        400,
+        "A draft canvas is the person's own: it goes to no parent."
+      );
+    }
+    const parentId = maker.parentInstanceId;
+    if (!parentId) {
+      throw new ArtifactRefusal(
+        409,
+        'This session has no parent to put an artifact in front of: leave out to: "parent".'
+      );
+    }
+    const parent = deps.instance(parentId);
+    if (!parent) {
+      throw new ArtifactRefusal(
+        404,
+        `Your parent session ${parentId.slice(0, 8)} is gone, so nothing was put in its panel.`
+      );
+    }
+    return parent;
+  };
+
+  /**
+   * Tells the owner, once, that its delegate put the artifact in its panel:
+   * when it first arrives from that maker (new, or one the owner had from
+   * someone else). The maker's own panel, and its re-creates, are not told.
+   */
+  const handUp = async (
+    { owner, maker }: Making,
+    before: ArtifactRow | undefined,
+    row: ArtifactRow
+  ): Promise<void> => {
+    if (owner.id === maker.id || before?.madeBy === maker.id) {
+      return;
+    }
+    await deps.handedUp(owner, maker, row);
   };
 
   /**
@@ -981,9 +1069,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ...(docs.viewers(row.id) > 0 ? { openedRevision: row.revision + 1 } : {}),
   });
 
-  /** A page or preview as the session reads it, which counts as its read. */
-  const read = (row: ArtifactRow, since?: number): ArtifactRead => {
-    db.update(row.id, { readSeq: row.seq });
+  /**
+   * A page or preview as the session reads it, which counts as its read
+   * when `ownersRead`: its owner's. A maker's read leaves the owner's unread.
+   */
+  const read = (
+    row: ArtifactRow,
+    since?: number,
+    ownersRead = true
+  ): ArtifactRead => {
+    if (ownersRead) {
+      db.update(row.id, { readSeq: row.seq });
+    }
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
     const meta = metaOf(doc);
@@ -1559,16 +1656,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       .map(({ key }) => key)
       .filter((id) => present.has(id));
 
-  /** A canvas as the session reads it, which counts as its read. */
+  /** A canvas as the session reads it, which counts as its read when `ownersRead`: its owner's. */
   const readCanvas = (
     row: ArtifactRow,
     since?: number,
-    png = false
+    png = false,
+    ownersRead = true
   ): ArtifactRead => {
     const entries = canvasEntries(docs, row.id);
     const present = new Set(entries.map((entry) => entry.el.id));
     const meta = docs.doc(row.id).getMap("meta");
-    db.update(row.id, { deliveredSeq: row.seq, readSeq: row.seq });
+    if (ownersRead) {
+      db.update(row.id, { deliveredSeq: row.seq, readSeq: row.seq });
+    }
     return {
       id: row.id,
       kind: row.kind,
@@ -1637,6 +1737,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const row = db.create({
       id: crypto.randomUUID(),
       instanceId: instance.id,
+      madeBy: instance.id,
       projectId: instance.projectId ?? null,
       kind: "canvas",
       name: free,
@@ -1667,13 +1768,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Makes a canvas (or opens the one of that name) and shows it; with
-   * elements or Mermaid, waits for a screen to join and draws them.
+   * Makes a canvas in `owner`'s panel (or opens the one of that name) and
+   * shows it; with elements or Mermaid, waits for a screen to join and
+   * draws them. `maker` is whose call it was.
    */
   const createCanvas = async (
-    instance: InstanceRow,
+    making: Making,
     input: ArtifactInput
   ): Promise<Created> => {
+    const { owner, maker } = making;
     if (input.elements !== undefined && input.mermaid !== undefined) {
       throw new ArtifactRefusal(
         400,
@@ -1681,13 +1784,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       );
     }
     const now = new Date();
-    const before = db.byName(instance.id, "canvas", input.name);
+    const before = db.byName(owner.id, "canvas", input.name);
     const row =
-      (before && db.update(before.id, { updatedAt: now })) ??
+      (before && db.update(before.id, { madeBy: maker.id, updatedAt: now })) ??
       db.create({
         id: crypto.randomUUID(),
-        instanceId: instance.id,
-        projectId: instance.projectId ?? null,
+        instanceId: owner.id,
+        madeBy: maker.id,
+        projectId: owner.projectId ?? null,
         kind: "canvas",
         name: input.name,
         machineId: null,
@@ -1703,6 +1807,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         shownAt: null,
       });
     stampMeta(row, null);
+    await handUp(making, before, row);
     const made = {
       id: row.id,
       kind: row.kind,
@@ -1710,8 +1815,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       route: routeOf(row.id),
       ...openedOf(await show(row)),
     };
+    // Its outline as it stands, read as the owner's read only when the owner made it.
+    const outlineNow = () =>
+      readCanvas(
+        db.get(row.id) as ArtifactRow,
+        undefined,
+        false,
+        owner.id === maker.id
+      ).outline;
     if (input.elements === undefined && input.mermaid === undefined) {
-      const { outline } = readCanvas(db.get(row.id) as ArtifactRow);
+      const outline = outlineNow();
       return {
         ...made,
         outline,
@@ -1737,14 +1850,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return {
       ...made,
       wrote,
-      outline: readCanvas(db.get(row.id) as ArtifactRow).outline,
+      outline: outlineNow(),
     };
   };
 
-  /** A canvas's change: elements added or replaced by id, ids deleted, or Mermaid appended. */
+  /** A canvas's change: elements added or replaced by id, ids deleted, or Mermaid appended; read after as `ownersRead` says. */
   const updateCanvas = async (
     row: ArtifactRow,
-    change: CanvasChange
+    change: CanvasChange,
+    ownersRead: boolean
   ): Promise<ArtifactRead> => {
     if ("delete" in change) {
       if (change.delete.length > CANVAS_LIMITS.deletePerCall) {
@@ -1755,7 +1869,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const { deleted, missing } = deleteElements(docs, row.id, change.delete);
       return {
-        ...readCanvas(db.get(row.id) as ArtifactRow),
+        ...readCanvas(
+          db.get(row.id) as ArtifactRow,
+          undefined,
+          false,
+          ownersRead
+        ),
         deleted,
         ...(missing.length > 0 ? { missing } : {}),
       };
@@ -1772,7 +1891,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : [];
     const wrote = await draw(row, change);
     return {
-      ...readCanvas(db.get(row.id) as ArtifactRow),
+      ...readCanvas(
+        db.get(row.id) as ArtifactRow,
+        undefined,
+        false,
+        ownersRead
+      ),
       wrote,
       ...(underYou.length > 0
         ? { changedUnderYou: underYou.map((id) => `${id} changed under you`) }
@@ -1916,16 +2040,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * A write to sheet `row`'s story file by its stage: one story's args, or
-   * a story added, duplicated, removed or moved. The sheet's doc keeps the
-   * sheet as it reads after; the person's write is owed to the session on
-   * the marks' channel, since it changed a file in the session's workspace.
+   * A write to sheet `row`'s story file by the stage of the workspace it was
+   * made in: one story's args, or a story added, duplicated, removed or
+   * moved. The sheet's doc keeps the sheet as it reads after; the person's
+   * write is owed to the sheet's owner on the marks' channel, since it
+   * changed a file in that workspace. A write is its owner's read when
+   * `ownersRead`.
    */
   const writeSheet = async (
-    instance: InstanceRow,
     row: ArtifactRow,
     change: SheetChange,
-    by: "agent" | "person"
+    by: "agent" | "person",
+    ownersRead = true
   ): Promise<ArtifactRead> => {
     const sheet = sheetOf(row);
     if (!sheet) {
@@ -1936,7 +2062,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const file = join(sheet.dir, sheet.file);
     const edit = await deps.stageWrite(
-      instance,
+      { workspace: sheet.workspace },
       "args" in change
         ? { file, args: change.args }
         : { file, story: change.story }
@@ -1953,17 +2079,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       marked(row.id);
     }
     return {
-      ...read(db.get(row.id) as ArtifactRow),
+      ...read(db.get(row.id) as ArtifactRow, undefined, ownersRead),
       sheet: edit.sheet,
       edit: { file: edit.file, lines: edit.lines },
     };
   };
 
-  /** Makes a sheet (or opens the one of that name) on its workspace's stage, and shows it. */
+  /**
+   * Makes a sheet in `owner`'s panel (or opens the one of that name) on the
+   * stage of its maker's workspace, and shows it.
+   */
   const createSheet = async (
-    instance: InstanceRow,
+    making: Making,
     input: ArtifactInput
   ): Promise<Created> => {
+    const { owner, maker } = making;
     if (input.file === undefined) {
       throw new ArtifactRefusal(
         400,
@@ -1971,7 +2101,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       );
     }
     const { machineId, opened, workspace } = await deps.stage(
-      instance,
+      { session: maker },
       input.file
     );
     const source: PreviewSource = {
@@ -1981,18 +2111,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       stage: { dir: opened.dir, file: opened.file },
     };
     const now = new Date();
-    const before = db.byName(instance.id, "sheet", input.name);
+    const before = db.byName(owner.id, "sheet", input.name);
     const row = before
       ? (db.update(before.id, {
           source,
           machineId,
+          madeBy: maker.id,
           revision: before.revision + 1,
           updatedAt: now,
         }) as ArtifactRow)
       : db.create({
           id: crypto.randomUUID(),
-          instanceId: instance.id,
-          projectId: instance.projectId ?? null,
+          instanceId: owner.id,
+          madeBy: maker.id,
+          projectId: owner.projectId ?? null,
           kind: "sheet",
           name: input.name,
           machineId,
@@ -2013,6 +2145,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       discard(row);
       throw new ArtifactRefusal(503, shown.why);
     }
+    await handUp(making, before, row);
     return {
       id: row.id,
       kind: row.kind,
@@ -2026,21 +2159,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * A sheet as the session reads it: its picks, and its stories and stage
-   * read afresh, which is a use that keeps the stage awake (or wakes it). A
-   * stage that can't be reached is read as the doc last had it, its status
-   * `error` with why.
+   * read afresh on the workspace it was made in, which is a use that keeps
+   * the stage awake (or wakes it). A stage that can't be reached is read as
+   * the doc last had it, its status `error` with why. Its owner's read when
+   * `ownersRead`.
    */
   const readSheet = async (
-    instance: InstanceRow,
     row: ArtifactRow,
-    since?: number
+    since?: number,
+    ownersRead = true
   ): Promise<ArtifactRead> => {
     const sheet = sheetOf(row);
     let failure: string | null = null;
     if (sheet) {
       try {
         const { opened } = await deps.stage(
-          instance,
+          { workspace: sheet.workspace },
           join(sheet.dir, sheet.file)
         );
         writeStage(row, opened.state, opened.sheet);
@@ -2052,7 +2186,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const stage = meta.get("stage") as StageState | undefined;
     const sheetNow = meta.get("sheet") as SheetRead | undefined;
     return {
-      ...read(row, since),
+      ...read(row, since, ownersRead),
       ...(sheetNow ? { sheet: sheetNow } : {}),
       ...(stage
         ? {
@@ -2066,15 +2200,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** A canvas (or the composer's draft) and a sheet are each made their own way; a page or preview is null here, made by `create` itself. */
   const madeOwnWay = (
-    instance: InstanceRow,
+    making: Making,
     input: ArtifactInput
   ): Promise<Created> | null => {
     if (input.kind === "canvas") {
       return input.draft
-        ? Promise.resolve(createDraft(instance, input))
-        : createCanvas(instance, input);
+        ? Promise.resolve(createDraft(making.owner, input))
+        : createCanvas(making, input);
     }
-    return input.kind === "sheet" ? createSheet(instance, input) : null;
+    return input.kind === "sheet" ? createSheet(making, input) : null;
   };
 
   /** A decision page's choice ids, as its HTML declares them; empty for any other page. */
@@ -2092,6 +2226,51 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...new Set([...html.matchAll(CHOICE_ATTRIBUTE)].map((match) => match[1])),
     ];
   };
+
+  /**
+   * A page or preview put in the owner's panel: the one of that kind and
+   * name it has, its source moved and its revision with it, or a new one;
+   * the maker becomes its maker either way. Answers it, and what was there.
+   */
+  const placed = (
+    { owner, maker }: Making,
+    input: Pick<ArtifactInput, "kind" | "name">,
+    at: { machineId: string | null; source: PreviewSource }
+  ): { before: ArtifactRow | undefined; row: ArtifactRow } => {
+    const now = new Date();
+    const before = db.byName(owner.id, input.kind, input.name);
+    if (before) {
+      const row = db.update(before.id, {
+        ...at,
+        madeBy: maker.id,
+        revision: before.revision + 1,
+        updatedAt: now,
+      }) as ArtifactRow;
+      return { before, row };
+    }
+    const row = db.create({
+      id: crypto.randomUUID(),
+      instanceId: owner.id,
+      madeBy: maker.id,
+      projectId: owner.projectId ?? null,
+      kind: input.kind,
+      name: input.name,
+      ...at,
+      revision: 1,
+      seq: 0,
+      deliveredSeq: 0,
+      readSeq: 0,
+      openedRevision: null,
+      createdAt: now,
+      updatedAt: now,
+      shownAt: null,
+    });
+    return { before, row };
+  };
+
+  /** The delegate that put it in its owner's panel, as `artifact_list` names it; nothing when the owner made it. */
+  const handedBy = (row: ArtifactRow): { madeBy?: string } =>
+    row.madeBy && row.madeBy !== row.instanceId ? { madeBy: row.madeBy } : {};
 
   /** One artifact as `artifact_list` answers it, read for `caller`. */
   const statusOf = (caller: InstanceRow, row: ArtifactRow): ArtifactStatus => {
@@ -2138,6 +2317,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       kind: row.kind,
       name: row.name,
       ...(row.instanceId === caller.id ? {} : { session: row.instanceId }),
+      ...handedBy(row),
       shown,
       opened,
       updatedAt: row.updatedAt.toISOString(),
@@ -2186,9 +2366,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Makes an artifact and shows it in the session's panel. A page or preview
-     * the session already has under the same kind and name is replaced in
-     * place: its doc, and so every pick, stays.
+     * Makes an artifact and shows it in the session's panel, or with
+     * `to: "parent"` in its parent's ({@link ownerFor}), the parent told once
+     * ({@link handUp}). A page or preview the panel's owner already has under
+     * the same kind and name is replaced in place: its doc, and so every
+     * pick, stays, and the caller becomes its maker. What it is made from (a
+     * page's folder, a preview's workspace, a sheet's stage) is the caller's.
      */
     create: async (
       instanceId: string,
@@ -2205,7 +2388,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (stray) {
         throw new ArtifactRefusal(400, stray);
       }
-      const ownWay = madeOwnWay(instance, input);
+      const making: Making = {
+        maker: instance,
+        owner: ownerFor(instance, input),
+      };
+      const ownWay = madeOwnWay(making, input);
       if (ownWay !== null) {
         return await ownWay;
       }
@@ -2218,32 +2405,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ({ machineId, source } = previewSource(instance, input));
       }
       const stage = await serveFirst(source, machineId);
-      const now = new Date();
-      const before = db.byName(instance.id, input.kind, input.name);
-      const row = before
-        ? (db.update(before.id, {
-            source,
-            machineId,
-            revision: before.revision + 1,
-            updatedAt: now,
-          }) as ArtifactRow)
-        : db.create({
-            id: crypto.randomUUID(),
-            instanceId: instance.id,
-            projectId: instance.projectId ?? null,
-            kind: input.kind,
-            name: input.name,
-            machineId,
-            source,
-            revision: 1,
-            seq: 0,
-            deliveredSeq: 0,
-            readSeq: 0,
-            openedRevision: null,
-            createdAt: now,
-            updatedAt: now,
-            shownAt: null,
-          });
+      const { before, row } = placed(making, input, { source, machineId });
       if (html !== null) {
         writePage(row.id, html);
       }
@@ -2256,6 +2418,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         discard(row);
         throw new ArtifactRefusal(503, shown.why);
       }
+      await handUp(making, before, row);
       return {
         id: row.id,
         kind: row.kind,
@@ -2270,7 +2433,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * New HTML for a page (its revision moves and every open view morphs to
      * it, its state kept), or a JSON Patch (RFC 6902) over its `state` applied as one
      * transaction; the state after the change. A canvas's elements, deletes
-     * or Mermaid; its outline after the change.
+     * or Mermaid; its outline after the change. Its owner's or its maker's
+     * to call ({@link ownedOrMade}); what it answers is the owner's read only.
      */
     update: async (
       instanceId: string,
@@ -2278,7 +2442,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       change: PageChange | CanvasChange
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
-      let row = own(instance, id);
+      let row = ownedOrMade(instance, id);
+      const ownersRead = row.instanceId === instance.id;
       const forCanvas = !("html" in change || "patch" in change);
       if (forCanvas !== (row.kind === "canvas")) {
         throw new ArtifactRefusal(
@@ -2289,7 +2454,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         );
       }
       if (!("html" in change || "patch" in change)) {
-        return await updateCanvas(row, change);
+        return await updateCanvas(row, change, ownersRead);
       }
       if ("html" in change) {
         if (row.kind !== "page") {
@@ -2307,7 +2472,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         // Every page open on it hears the new revision in the doc and morphs
         // in place (the overlay); nothing reloads.
         stampMeta(row, pageHash(html));
-        return read(row);
+        return read(row, undefined, ownersRead);
       }
       const doc = docs.doc(row.id);
       const before = stateOf(doc);
@@ -2336,13 +2501,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           state.delete(key);
         }
       });
-      return read(db.get(row.id) as ArtifactRow);
+      return read(db.get(row.id) as ArtifactRow, undefined, ownersRead);
     },
 
     /**
      * The state, meta and sentAt; a canvas's outline and what the person
      * changed, with its picture when `png`; with no id, the session's
-     * newest artifact.
+     * newest artifact. Its maker reads one it put in its parent's panel
+     * too, which leaves the parent's unread as it was.
      */
     read: async (
       instanceId: string,
@@ -2351,32 +2517,40 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       png = false
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
-      const row =
-        id === undefined
-          ? db.ofInstance(instance.id)[0]
-          : readable(instance, id);
+      const handed = id === undefined ? undefined : db.get(id);
+      let row: ArtifactRow | undefined = handed;
+      if (id === undefined) {
+        [row] = db.ofInstance(instance.id);
+      } else if (handed?.madeBy !== instance.id) {
+        row = readable(instance, id);
+      }
       if (!row) {
         throw new ArtifactRefusal(
           404,
           "This session has made no artifact yet."
         );
       }
+      // Its maker's read leaves its owner's unread; a lead reading his
+      // project's pages has always counted as their read.
+      const ownersRead =
+        row.instanceId === instance.id || row.madeBy !== instance.id;
       if (row.kind === "canvas") {
-        return readCanvas(row, since, png);
+        return readCanvas(row, since, png, ownersRead);
       }
       return row.kind === "sheet"
-        ? await readSheet(instance, row, since)
-        : read(row, since);
+        ? await readSheet(row, since, ownersRead)
+        : read(row, since, ownersRead);
     },
 
-    /** The session's `artifact_update` of a sheet: one story's args, or one story op, written by its stage. */
+    /** `artifact_update` of a sheet by its owner or its maker: one story's args, or one story op, written by its stage. */
     sheetUpdate: (
       instanceId: string,
       id: string,
       change: SheetChange
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
-      return writeSheet(instance, own(instance, id), change, "agent");
+      const row = ownedOrMade(instance, id);
+      return writeSheet(row, change, "agent", row.instanceId === instance.id);
     },
 
     /**
@@ -2387,14 +2561,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       id: string,
       change: SheetChange
-    ): Promise<ArtifactRead> => {
-      const instance = sessionOf(instanceId);
-      const row = db.get(id);
-      if (!row || row.instanceId !== instance.id) {
-        throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
-      }
-      return writeSheet(instance, row, change, "person");
-    },
+    ): Promise<ArtifactRead> =>
+      writeSheet(own(sessionOf(instanceId), id), change, "person"),
 
     /** `components_list`: the components of a Vite root in the session's workspace, each with the sheets that show it. */
     components: (
@@ -2512,12 +2680,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Brings an artifact to the front of its session's panel and waits for a
+     * Brings an artifact to the front of its owner's panel and waits for a
      * view to have it on screen ({@link Opened}); a refusal when its server
-     * could not be started.
+     * could not be started. Its owner's or its maker's to call.
      */
     show: async (instanceId: string, id: string): Promise<Opened> => {
-      const shown = await show(own(sessionOf(instanceId), id));
+      const shown = await show(ownedOrMade(sessionOf(instanceId), id));
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }

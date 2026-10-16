@@ -3177,6 +3177,7 @@ const make = async (path: string): Promise<DbShape> => {
     ["limit_events", "instance_id"],
     ["turn_usage", "instance_id"],
     ["artifacts", "instance_id"],
+    ["artifacts", "made_by"],
     ["completed_turns", "instance_id", "once"],
     ["session_plans", "instance_id", "once"],
     ["project_offers", "instance_id", "once"],

@@ -3223,6 +3223,15 @@ export const artifacts = sqliteTable(
     instanceId: text("instance_id")
       .notNull()
       .references(() => instances.id, { onDelete: "cascade" }),
+    /**
+     * The session whose `artifact_create` last made it: the owner itself, or
+     * a delegate that put it in its parent's panel (`to: "parent"`), which
+     * may go on updating, reading and showing it. Null on one made before it
+     * was kept.
+     */
+    madeBy: text("made_by").references(() => instances.id, {
+      onDelete: "set null",
+    }),
     /** The session's project when it made it; a page there is also written to `decisions/<name>/`. */
     projectId: text("project_id"),
     kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),

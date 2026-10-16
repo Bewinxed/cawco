@@ -121,6 +121,7 @@ import {
   agentProblem,
   archiveRefusal,
   artifactCommentsNotice,
+  artifactHandedNotice,
   artifactResponsesNotice,
   attachedFileLine,
   attachedFileName,
@@ -360,6 +361,7 @@ import {
   createArtifacts,
   type MarksDelivery,
   type MarksOutcome,
+  type StageAt,
 } from "./artifacts/service";
 import {
   artifactPicture,
@@ -9477,6 +9479,43 @@ export const createServer = (
       })
     );
   };
+  /**
+   * A delegate put an artifact in its parent's panel (artifacts/service.ts
+   * `handUp`): the parent hears it once, on the channel the person's picks
+   * take, which wakes it as their words do. One the parent didn't take is
+   * kept in its transcript as not sent, with why.
+   */
+  const handArtifactUp: ArtifactServiceDeps["handedUp"] = async (
+    parent,
+    maker,
+    artifact
+  ) => {
+    const text = artifactHandedNotice({
+      from: sessionName(maker),
+      id: artifact.id,
+      kind: artifact.kind,
+      name: artifact.name,
+    });
+    await artifactInOrder(`${artifact.id}:handed`, () => {
+      try {
+        const record = sendArtifactEvent(parent, text, [], undefined);
+        if (record?.state === "failed") {
+          console.warn(
+            `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate put it in its panel: ${record.reason ?? "the send failed"}`
+          );
+        }
+      } catch (error) {
+        // A refusal the send path throws (a conversation gone) keeps no record of its own.
+        recordUndelivered(
+          parent,
+          text,
+          [],
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+      return Promise.resolve();
+    });
+  };
   const signalResponses: ArtifactServiceDeps["signal"] = (
     instance,
     artifact,
@@ -9646,24 +9685,36 @@ export const createServer = (
     },
   });
   /**
-   * A stage method (core stage.ts) on session `instance`'s own workspace's
-   * machine, with the workspace and `arg`: its answer, or a refusal saying
-   * why the stage can't be reached or said no.
+   * A stage method (core stage.ts) on a workspace's machine (a session's
+   * own, or the one a sheet was made in), with the workspace and `arg`: its
+   * answer, or a refusal saying why the stage can't be reached or said no.
    */
   const onStage = async (
-    instance: InstanceRow,
+    at: StageAt,
     method: string,
     arg: unknown
   ): Promise<{ machineId: string; result: unknown; workspace: string }> => {
-    const workspace = workItems.workspaceOf(instance);
+    const workspace =
+      "session" in at
+        ? workItems.workspaceOf(at.session)
+        : workItems.workspaceRef(at.workspace);
     if (!workspace) {
       throw new ArtifactRefusal(
         409,
-        "A sheet runs on your workspace's stage, and this session runs in no workspace."
+        "session" in at
+          ? "A sheet runs on your workspace's stage, and this session runs in no workspace."
+          : `The sheet's workspace ${at.workspace.slice(0, 8)} is gone, so its stage can't run.`
       );
     }
+    const held = db.workspacesNamed(workspace.id)[0]?.machineId;
     const machineId =
-      db.workspacesNamed(workspace.id)[0]?.machineId ?? instance.machineId;
+      held ?? ("session" in at ? at.session.machineId : undefined);
+    if (machineId === undefined) {
+      throw new ArtifactRefusal(
+        409,
+        `The sheet's workspace ${workspace.id.slice(0, 8)} is on no machine the hub knows, so its stage can't run.`
+      );
+    }
     const answer = await callAgent(
       machineId,
       method,
@@ -9709,6 +9760,9 @@ export const createServer = (
     // Your pins, replies, resolves and ink go by themselves once quiet.
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
+    // A delegate's artifact in its parent's panel: the parent hears it once.
+    handedUp: (parent, maker, artifact) =>
+      handArtifactUp(parent, maker, artifact),
     instance: (id) => db.getInstancesByIds([id])[0],
     ended: (instance) =>
       !!inputRefusal(instance.id, { kind: "system", name: ARTIFACT_ORIGIN }),
@@ -9779,19 +9833,20 @@ export const createServer = (
         ),
     ownWorkspace: (instance) => workItems.workspaceOf(instance)?.id,
     workspaces: (needle) => db.workspacesNamed(needle),
-    // A sheet runs on the session's own workspace's stage, on that workspace's machine.
-    stage: async (instance, file) => {
+    // A sheet runs on its workspace's stage, on that workspace's machine.
+    stage: async (at, file) => {
       const { machineId, workspace, result } = await onStage(
-        instance,
+        at,
         STAGE_ENSURE,
         file
       );
       return { machineId, workspace, opened: result as StageOpened };
     },
-    stageWrite: async (instance, write) =>
-      (await onStage(instance, STAGE_WRITE, write)).result as SheetWritten,
+    stageWrite: async (at, write) =>
+      (await onStage(at, STAGE_WRITE, write)).result as SheetWritten,
     stageComponents: async (instance, dir) =>
-      (await onStage(instance, STAGE_COMPONENTS, dir ?? null)).result as {
+      (await onStage({ session: instance }, STAGE_COMPONENTS, dir ?? null))
+        .result as {
         components: Found[];
         dir: string;
       },

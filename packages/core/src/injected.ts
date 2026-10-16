@@ -280,6 +280,44 @@ export const artifactSavesNotice = (
 ): string =>
   `[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file in your workspace. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
 
+/**
+ * A delegate put an artifact in its parent's panel (hub artifacts/service.ts
+ * `create` with `to: "parent"`): the parent owns it now, and the person's
+ * picks and pins on it come to the parent. Told once, when it first arrives
+ * from that delegate; the delegate's updates after are not told. Sent under
+ * the system origin {@link import("./harness").ARTIFACT_ORIGIN}; a transcript
+ * draws it as one quiet note.
+ */
+export interface ArtifactHanded extends ArtifactComments {
+  /** The delegate's name, as the rail shows it. */
+  from: string;
+}
+
+export const artifactHandedNotice = ({
+  from,
+  id,
+  kind,
+  name,
+}: ArtifactHanded): string =>
+  `[CawCo] ${from} put the ${kind} "${name}" in your panel (artifact ${id}). The person's picks and pins on it come to you; artifact_read reads it.`;
+
+const ARTIFACT_HANDED_LINE =
+  /^\[CawCo\] (.+) put the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" in your panel \(artifact ([0-9a-f-]{36})\)\./;
+
+/** A handed-up artifact's notice read back into who handed what. */
+export function parseArtifactHanded(text: string): ArtifactHanded | null {
+  const line = ARTIFACT_HANDED_LINE.exec(text);
+  if (!line) {
+    return null;
+  }
+  return {
+    from: line[1],
+    kind: line[2] as ArtifactKind,
+    name: line[3],
+    id: line[4],
+  };
+}
+
 const ARTIFACT_COMMENTS_LINE =
   /^\[CawCo\] The person commented on the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\)\.[^\n]*\n\n/;
 

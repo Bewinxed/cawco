@@ -716,6 +716,11 @@ export interface HandoffDeps {
    */
   readonly formerIds: () => Record<string, string>;
   readonly harness?: "claude" | "opencode" | "pi";
+  /**
+   * Whether this session has a parent (it was started by another session):
+   * artifact_create then offers `to: "parent"`.
+   */
+  readonly hasParent?: boolean;
   /** Exact-id lookup includes ended/archived rows outside the live roster. */
   readonly instanceById: (id: string) => InstanceRow | undefined;
   /** The session doing the handing over. */
