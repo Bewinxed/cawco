@@ -517,12 +517,13 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
             stage: "applied",
             outcome,
           }),
-        (error: unknown) =>
-          fail(
-            socket,
-            commandId,
-            error instanceof Error ? error.message : String(error)
-          )
+        (error: unknown) => {
+          const reason = error instanceof Error ? error.message : String(error);
+          console.error(
+            `[hub] dashboard command send.withdraw ${commandId} for ${sessionId} failed: ${reason}`
+          );
+          fail(socket, commandId, reason);
+        }
       );
       return;
     }

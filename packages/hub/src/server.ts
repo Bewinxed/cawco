@@ -11,6 +11,7 @@ import type {
   BuildInfo,
   CarrySessionOutcome,
   CarrySessionRequest,
+  CommandAck,
   CommandResult,
   ContinuationJob,
   ContinueStep,
@@ -11131,17 +11132,65 @@ export const createServer = (
         try {
           handle(ws, message);
         } catch (error) {
-          if (isEnvelope(message)) {
-            sendFrame(
-              ws,
-              failure(
-                message,
-                error instanceof Error ? error.message : String(error)
-              )
-            );
-          }
+          dashboardThrew(ws, message, error);
         }
       });
+  /**
+   * NO DASHBOARD MESSAGE THAT THROWS VANISHES. A message off a dashboard (or
+   * the app) whose handling threw, synchronously or later, is answered so its
+   * sender's surface says it failed and why, and logged once, by its kind:
+   *
+   * - a Ledger `command` (`send`, `send.withdraw`, `permission.answer`,
+   *   `interrupt`, `set-model`, `set-permission-mode`, `set-effort`): a
+   *   `failed` ack under its own `commandId`, which the web (stream.ts
+   *   `noteCommandAck`, `noteFailure`) and the app (Ledger.swift) draw on the
+   *   command's row: a send's row reads unreached, with why;
+   * - an envelope (`spawn`, `stop`, `control`, `fs`): its error frame, keyed
+   *   to its request id (`failure`);
+   * - any other stream message (`heartbeat`, `stream.subscribe`,
+   *   `stream.unsubscribe`, `plan.follow`, `plan.resync`): a refusal naming
+   *   its type, as a malformed one gets.
+   *
+   * A stream command used to be dropped silently here: only an envelope was
+   * answered, so a send whose relay threw got no ack and no log line.
+   */
+  const dashboardThrew = (
+    ws: HubSocket,
+    message: unknown,
+    error: unknown
+  ): void => {
+    const reason = error instanceof Error ? error.message : String(error);
+    const raw =
+      typeof message === "object" && message !== null
+        ? (message as Record<string, unknown>)
+        : undefined;
+    if (
+      raw?.type === "command" &&
+      typeof raw.commandId === "string" &&
+      raw.commandId.length > 0
+    ) {
+      console.error(
+        `[hub] dashboard command ${String(raw.kind)} ${raw.commandId}${typeof raw.sessionId === "string" ? ` for ${raw.sessionId}` : ""} failed: ${reason}`
+      );
+      sendFrame(ws, {
+        type: "command.ack",
+        commandId: raw.commandId,
+        stage: "failed",
+        reason,
+      } satisfies CommandAck);
+      return;
+    }
+    if (isEnvelope(message)) {
+      console.error(
+        `[hub] dashboard ${message.verb}${message.instanceId ? ` for ${message.instanceId}` : ""} failed: ${reason}`
+      );
+      sendFrame(ws, failure(message, reason));
+      return;
+    }
+    const kind = typeof raw?.type === "string" ? raw.type : "message";
+    console.error(`[hub] dashboard ${kind} failed: ${reason}`);
+    sendFrame(ws, refusalFrame(message, `${kind} failed: ${reason}`));
+  };
   const guardedAgentMessage =
     <
       S extends HubSocket & {
@@ -15400,13 +15449,18 @@ export const createServer = (
     ).then(
       () =>
         reply({ kind: "control_result", requestId: correlationId, ok: true }),
-      (error: unknown) =>
+      (error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[hub] dashboard permission.answer ${answer?.requestId ?? "(no request)"} failed: ${reason}`
+        );
         reply({
           kind: "control_result",
           requestId: correlationId,
           ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        })
+          error: reason,
+        });
+      }
     );
     const correlationId = message.requestId ?? message.payload.requestId;
     const reply = (frame: ControlResult): void => {
@@ -15921,10 +15975,18 @@ export const createServer = (
       return false;
     }
     const requestId = message.requestId ?? payload.requestId;
-    // The receipt is sent when the move is decided.
-    detach(
-      crossModel(instanceId, asked).then((crossed) => {
-        const frame: ControlResult =
+    const receipt = (frame: ControlResult): void => {
+      if (remember) {
+        sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
+      } else {
+        streams.settleCommand(requestId, frame);
+      }
+    };
+    // The receipt is sent when the move is decided, or when deciding it
+    // threw: a move that failed says so on the command that asked for it.
+    const move = crossModel(instanceId, asked).then(
+      (crossed) => {
+        receipt(
           crossed && crossed !== "crossed"
             ? {
                 kind: "control_result",
@@ -15932,16 +15994,24 @@ export const createServer = (
                 ok: false,
                 error: crossed.refusal,
               }
-            : { kind: "control_result", requestId, ok: true };
-        if (remember) {
-          sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
-        } else {
-          streams.settleCommand(requestId, frame);
-        }
+            : { kind: "control_result", requestId, ok: true }
+        );
         publishInstances(row.machineId);
-      }),
-      "model move"
+      },
+      (error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[hub] dashboard set-model for ${instanceId} failed: ${reason}`
+        );
+        receipt({
+          kind: "control_result",
+          requestId,
+          ok: false,
+          error: reason,
+        });
+      }
     );
+    detach(move, "model move");
     return true;
   };
 
@@ -27072,13 +27142,7 @@ export const createServer = (
                 piDefaultFor(message.machineId, spawning)
                   .then((asked) => startFromDashboard(ws, message, asked))
                   .catch((error: unknown) =>
-                    sendFrame(
-                      ws,
-                      failure(
-                        message,
-                        error instanceof Error ? error.message : String(error)
-                      )
-                    )
+                    dashboardThrew(ws, message, error)
                   );
               } else {
                 startFromDashboard(ws, message, spawning);
