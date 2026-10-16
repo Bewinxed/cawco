@@ -1,7 +1,6 @@
 /**
  * The machine's gate for heavy work: a dashboard build, a dev or preview
- * server, a scratch fleet and its browser, a typecheck, a host check, an
- * Apple build. A heavy run starts only while one of the machine's slots is
+ * server, a scratch fleet and its browser, a typecheck, an Apple build. A heavy run starts only while one of the machine's slots is
  * free and the machine has room for it right now, measured on the machine
  * itself ({@link measureRoom}), so everything else holding it counts: the
  * person's apps, a GPU job's memory, other sessions. Once started, it holds
@@ -56,7 +55,7 @@ import { workspaceCacheDir } from "./paths";
 export const HEAVY_RUNS_ENV = "CAWCO_HEAVY_RUNS";
 /**
  * Set in a holder's environment: its descendants take no slot of their own,
- * so a probe kit run's scratch fleet, or a host check's typecheck, counts once.
+ * so a probe kit run's scratch fleet, or a typecheck under `cawco heavy-run`, counts once.
  */
 export const HEAVY_RUN_HELD_ENV = "CAWCO_HEAVY_RUN_HELD";
 

@@ -634,7 +634,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     {id:"board",band:"hub",grp:"Work",kind:"store",t:"Board index",s:"tasks are files, rebuilt",d:"An index rebuilt from the task files, for the frontier and board order. Never the truth.",talks:["folder","disp","lead","api","mcp"],jev:"Is this the same work as an open task? (yes/no, fan-out)",fb:"The session filing it compares candidates; else exact match on files and checks."},
     {id:"dtypes",band:"hub",grp:"Work",kind:"store",t:"Delegate types",s:"fleet + project files",d:"Harness, model, effort, skills, MCP, role, budget. Project files shadow fleet types.",talks:["disp","proj","mcp"]},
     {id:"disp",band:"hub",grp:"Work",kind:"code",t:"Dispatcher",s:"frontier, caps, routing",d:"Starts ready tasks under caps and budgets, on a machine that can run the type.",talks:["board","dtypes","daemon","land","brief","wf","api"],jev:"Ready for an agent? Which type fits? Clarity, size, risk? (score, choice)",fb:"Caw scores and picks a type when it plans; else a check must exist, the task names its type, board order."},
-    {id:"land",band:"hub",grp:"Work",kind:"code",t:"Checks + landing",s:"run, rebase, push or PR",d:"Runs acceptance checks, then lands through a per-repo queue.",talks:["ws","board","lead","gh","disp"],jev:"Does this report meet each acceptance criterion? (yes/no each)",fb:"Caw reviews, never the delegate that did the work; else shell checks, then you."},
+    {id:"land",band:"hub",grp:"Work",kind:"code",t:"Landing gate + landing",s:"rebase, gate, push or PR",d:"Runs the landing gate (install, lint, typecheck, the iOS build), then lands through a per-repo queue.",talks:["ws","board","lead","gh","disp"],jev:"Does this report meet each acceptance criterion? (yes/no each)",fb:"Caw reviews, never the delegate that did the work; else shell checks, then you."},
     {id:"stages",band:"hub",grp:"Work",kind:"store",t:"Stages and views",s:"per project, six fixed kinds",d:"The project's stages file: names, kinds, hooks, who may move a card, and its views. Board, calendar and pipeline all read it.",talks:["folder","board","disp","rout","act"]},
     {id:"act",band:"hub",grp:"Work",kind:"code",t:"Approved actions",s:"exact call, once, on time",d:"You approve one exact tool call; code runs it once at its time. Never a model.",talks:["cred","x","gh","ios"]},
     {id:"rout",band:"hub",grp:"Time and events",kind:"code",t:"Routines",s:"Effect Cron, run per slot",d:"Each slot fires once; a fresh session or a message to the lead.",talks:["wf","sess","lead","ingress"]},
@@ -859,7 +859,7 @@ The tray chip overflows at 320px wide…</pre>
       <ul class="a" style="margin:0;padding-left:18px">
         <li>The brief asks the session to start its plan from the task's open to-dos, keeping their ids (<code>[td-3] Persist the choice</code>).</li>
         <li>When a plan item carrying a to-do's id completes, the hub ticks that to-do. CawCo already watches the list.</li>
-        <li><code>finish_item</code> lists any unticked to-dos, and the session ticks or explains each one, like an acceptance check.</li>
+        <li><code>finish_item</code> lists any unticked to-dos, and the session ticks or explains each one in its report.</li>
         <li>Plan items still open at the end become proposed to-dos.</li>
       </ul>
       <p class="q">I already disable Claude's subagents in favour of delegates, so onboarding should let the user decide the same for to-dos; each harness can turn its own off.</p>
@@ -1635,7 +1635,7 @@ views
         <tr><td>Point at an element</td><td>The preview picker: file:line and notes go to the session</td><td><span class="st2 has">exists</span></td></tr>
         <tr><td>Results side by side</td><td>A project canvas on Svelte Flow, which already draws the workflow canvas</td><td><span class="st2 gap">build · small</span></td></tr>
         <tr><td>Pick a variant</td><td>Variants are attempts (D3); a pick keeps one and archives the rest</td><td><span class="st2 gap">build · small</span></td></tr>
-        <tr><td>Contrast, tokens, diff</td><td>Acceptance checks the hub already runs: axe-core, a lint against literal colours, Playwright screenshot compare</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Contrast, tokens, diff</td><td>Commands the attempt runs and quotes in its report: axe-core, a lint against literal colours, Playwright screenshot compare</td><td><span class="st2 plan">borrow</span></td></tr>
         <tr><td>On brand?</td><td>Jev scores each variant against <code>DESIGN.md</code>; with Jev off, you look at all of them</td><td><span class="st2 plan">planned · P4</span></td></tr>
         <tr><td>Components</td><td>The project's own code, shown from its Storybook build with <code>show_preview</code>. Storybook's MCP is React-only for now.</td><td><span class="st2 has">exists</span></td></tr>
       </tbody></table></div>

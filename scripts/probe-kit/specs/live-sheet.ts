@@ -261,7 +261,7 @@ const standUp = async (kit: Kit) => {
   // The repository as this checkout's HEAD has it: the dashboard and the sheet.
   // Its origin is one of its own whose HEAD is `main`: a workspace is cut
   // from the branch origin names (agent clone.ts `remoteDefault`), and this
-  // checkout may stand on a detached HEAD (a host check's) that names none.
+  // checkout may stand on a detached HEAD (a gate workspace's) that names none.
   const src = join(fleet.sandbox, "src");
   // Not the sandbox's `origin.git`: that is the fleet's own repo's remote (scratch-fleet.ts).
   const origin = join(fleet.sandbox, "src-origin.git");
@@ -303,7 +303,6 @@ const standUp = async (kit: Kit) => {
     harness: "claude",
     model: "claude-haiku-4-5",
     cwd: src,
-    checks: [{ name: "Probe check", command: "true" }],
   });
   const installed = await until(
     "the delegate's install",

@@ -533,7 +533,7 @@ export const workspaceBundle = async (
 };
 
 /**
- * {@link CONTROL_WORKSPACE_AT}: a check workspace at another workspace's
+ * {@link CONTROL_WORKSPACE_AT}: a gate workspace at another workspace's
  * commit. The bundle is written into its scratch dir as a new file (never
  * through one already there), then inside its boundary git fetches its base
  * and the bundle and checks the commit out, detached, with every untracked
@@ -570,7 +570,7 @@ export const workspaceAt = async (
     await rm(path, { force: true });
   }
   console.info(
-    `[workspace] ${workspace.id}: at ${head.slice(0, 9)}, the commit of workspace ${String(source)}, for the checks it names this machine for`
+    `[workspace] ${workspace.id}: at ${head.slice(0, 9)}, the commit of workspace ${String(source)}, for its landing gate's step on this machine`
   );
 };
 

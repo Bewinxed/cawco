@@ -1836,9 +1836,9 @@ export const CONTROL_WORKSPACE_DISCARD = "workspaceDiscard";
  * - `keep`: any keeps the clone, and the answer names it
  *   ({@link WorkspaceArchived} `held`); nothing is removed. What every
  *   archive is unless one of the others is named.
- * - `check`: a check workspace, detached at its source workspace's commit;
+ * - `check`: a gate workspace, detached at its source workspace's commit;
  *   the commits it has are its source's, which keeps them, and what its
- *   checks wrote is theirs. Not read.
+ *   build wrote is the build's. Not read.
  * - `unmade`: a create that never finished, whose clone nobody worked in.
  *   Not read; `path` may be absent, and the machine's create record names it.
  * Letting it go is {@link CONTROL_WORKSPACE_DISCARD}.
@@ -1946,35 +1946,14 @@ export interface WorkspaceCommit {
 }
 
 /**
- * A check workspace at another machine's commit: inside its boundary, it
+ * A gate workspace (the landing gate's iOS build on a Mac) at another
+ * machine's commit: inside its boundary, it
  * fetches `origin/<base>`, then the bundle, and checks out `head` detached,
  * its tracked files as the commit has them and every untracked file gone
  * (ignored ones, a dependency install or a build, stay). Args
  * `[WorkspaceRef, base, WorkspaceCommit, sourceWorkspaceId]`. Machine-scoped.
  */
 export const CONTROL_WORKSPACE_AT = "workspaceAt";
-
-/**
- * A host check's checkout (a check its parent marked `host`, hub
- * work-items.ts `runChecks`): a fresh clone of `source`, a clone on this
- * machine that holds `head` (the item's workspace, or its check workspace
- * here), at `~/.cawco/host-checks/<run>`, outside every boundary, with
- * `head` checked out detached. Refused before anything is written when the
- * disk it is on has less free than a heavy run needs
- * ({@link HOST_CHECK_MIN_FREE_ENV}, {@link HOST_CHECK_MIN_FREE_GB} unless
- * set). Args `[source: WorkspaceRef, head, run]`; answers the checkout's
- * path. Machine-scoped.
- */
-export const CONTROL_HOST_CHECKOUT = "hostCheckout";
-
-/** A host check's checkout removed with all it holds. Args `[run]`. Machine-scoped. */
-export const CONTROL_HOST_CHECKOUT_REMOVE = "hostCheckoutRemove";
-
-/** The variable naming the free space, in GB, a heavy run needs to start (scripts/lib/disk-room.sh). */
-export const HOST_CHECK_MIN_FREE_ENV = "CAWCO_MIN_FREE_GB";
-
-/** {@link HOST_CHECK_MIN_FREE_ENV} when it is not set, as disk-room.sh has it. */
-export const HOST_CHECK_MIN_FREE_GB = 10;
 
 /**
  * A delegate's inputs read on its parent's machine: each an absolute path
@@ -2001,8 +1980,8 @@ export const INPUTS_DIR = "inputs";
  * transcript, the largest input the fleet hands on, runs to tens of MB
  * (wire.ts); this holds one with room. Each input crosses the wire twice as
  * base64 (4/3 its size, ~86 MiB here), far inside the wire's 512 MiB and the
- * 256 MiB a workspace's commits may bundle. Past it, data goes in git or
- * a check with `machine`, not a brief. Our call.
+ * 256 MiB a workspace's commits may bundle. Past it, data goes in git, not
+ * a brief. Our call.
  */
 export const INPUTS_LIMIT_BYTES = 64 * 1024 * 1024;
 
@@ -2041,7 +2020,7 @@ export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
  * a {@link CommandQueueFrame} under the run's id. A command that writes more than 8 MiB across
  * stdout and stderr is killed with its process group and the call fails with
  * an error naming the limit. The hub's one way to run something on a machine:
- * a workflow's `w.exec`, and a work item's acceptance checks. A
+ * a workflow's `w.exec`, and a work item's landing gate. A
  * {@link WorkspaceRef} runs the command inside that workspace's boundary,
  * exactly as its sessions' shell commands run; a machine that cannot start the
  * boundary fails the call with its reason.

@@ -24,7 +24,7 @@ export const delegationHubUrl = () =>
  */
 export const harnessMcpUrl = (path: string): string =>
   `http://127.0.0.1:${mcpGatewayPort()}${path}`;
-/** How long any call to the hub's tools may run: finish_item's checks set it. */
+/** How long any call to the hub's tools may run: finish_item's landing gate sets it. */
 const DELEGATION_CALL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 export const delegationMcp = (instanceId: string, credential?: string) => ({
@@ -41,7 +41,7 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
   // ran work inline 79 times for each delegation, so delegate is one of the
   // marked few.
   // A hard wall clock on every call to this server, and the floor of its idle
-  // limit: finish_item runs a work item's checks, up to an hour each, and
+  // limit: finish_item runs a work item's landing gate, up to an hour (an iOS build), and
   // image generation runs minutes. Claude's own default would cut both.
   timeout: DELEGATION_CALL_TIMEOUT_MS,
 });

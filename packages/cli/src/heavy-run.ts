@@ -4,15 +4,12 @@
  * is free and the machine has room, measured now, and holds the slot until
  * the command has ended; the command and everything it starts take none of
  * their own (`CAWCO_HEAVY_RUN_HELD`). While it waits it says what holds it
- * on stderr, in the queue marker's words, so a host check's status shows it
- * and its clock stands.
+ * on stderr, in the queue marker's words, so a caller that reads that marker
+ * shows it and stands its clock.
  *
- * The agent runs every command in a host check's checkout through it (agent
- * workflow-command.ts): those run outside every boundary, build and test
- * whatever the item's tree holds, and before this held no slot. Stopped the
- * runner's way (TERM to its process group, then KILL), it ends at once while
- * it waits; once the command runs, it stays until the command has ended, so
- * the slot is held as long as any of the run is.
+ * Stopped the runner's way (TERM to its process group, then KILL), it ends
+ * at once while it waits; once the command runs, it stays until the command
+ * has ended, so the slot is held as long as any of the run is.
  */
 import { spawn } from "node:child_process";
 import { constants } from "node:os";

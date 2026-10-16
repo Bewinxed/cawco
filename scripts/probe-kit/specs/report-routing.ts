@@ -151,7 +151,6 @@ const cawF = (request: Seen): Reply => {
       title: "The helper",
       prompt: `${CHILD_F}: wait until you are released, then finish your item.`,
       cwd: repo,
-      checks: [{ name: "Nothing to check", command: "true" }],
       lands: "none",
     });
     if (reply.tool?.name === DELEGATE) {
@@ -201,7 +200,6 @@ const orchestrator = (request: Seen): Reply => {
     title: "Check the paths",
     prompt: `${CHILD}: finish your item.`,
     cwd: repo,
-    checks: [{ name: "Nothing to check", command: "true" }],
     lands: "none",
   });
   if (reply.tool?.name === DELEGATE) {

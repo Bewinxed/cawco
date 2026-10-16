@@ -196,7 +196,6 @@ const caw = (request: Seen): Reply => {
       {
         title: "Probe delegate restart",
         prompt: "PROBE-DELEGATE-RESTART: finish.",
-        checks: [{ name: "Probe check passes", command: "true" }],
         lands: "none",
       },
       8000
@@ -207,7 +206,6 @@ const caw = (request: Seen): Reply => {
     return once(request, `delegate ${delegate}`, DELEGATE, {
       title: `Probe delegate ${delegate.toLowerCase()}`,
       prompt: `PROBE-DELEGATE-${delegate}: wait, then finish.`,
-      checks: [{ name: "Probe check passes", command: "true" }],
       lands: "none",
     });
   }

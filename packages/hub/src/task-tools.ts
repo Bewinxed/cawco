@@ -420,7 +420,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional()
           .describe("The task whose work turned this one up."),
         checks: lines(
-          "Shell commands that must pass, like bun test; `host: <command>` runs one unsandboxed."
+          "Shell commands that prove the work, like bun run lint: the attempt runs each and quotes its output; `host: <command>` marks one that needs the host."
         ),
         outputs: lines("Files it produces that are not commits."),
         context: lines("knowledge/ files for its brief."),

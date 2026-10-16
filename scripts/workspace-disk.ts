@@ -9,10 +9,7 @@
  * - state dirs, `~/.cawco/workspaces/<id>`;
  * - scratch dirs, `~/.cawco/tmp/<id8>`;
  * - door dirs, `$XDG_RUNTIME_DIR/cawco-ws/<id8>`;
- * - Apple build roots, `~/.cawco/workspace-cache/xdg/cawco-apple/<clone>`;
- * - host-check checkouts, `~/.cawco/host-checks/<run>`, one per check run in
- *   progress: each is listed with its age, since the hub keeps no record of
- *   a run's checkout to read.
+ * - Apple build roots, `~/.cawco/workspace-cache/xdg/cawco-apple/<clone>`.
  * Then the live workspaces, by state, with their clone's size and how much
  * of its `node_modules` is files of its own (link count 1) and how much is
  * shared with the workspaces' bun cache.
@@ -27,7 +24,6 @@ import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import {
-  hostChecksDir,
   hubDbPath,
   workspaceCacheDir,
   workspaceScratchRoot,
@@ -117,10 +113,8 @@ interface Found {
 
 const ID8 = /^[0-9a-f]{8}$/;
 const CLONE = /-([0-9a-f]{8})$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const orphans: Found[] = [];
-const inFlight: Found[] = [];
 
 const note = async (
   into: Found[],
@@ -205,17 +199,6 @@ for (const name of await list(apple)) {
     // biome-ignore lint/performance/noAwaitInLoops: one folder at a time
     await note(orphans, "apple-build", join(apple, name), why);
   }
-}
-
-for (const run of await list(hostChecksDir())) {
-  const path = join(hostChecksDir(), run);
-  // biome-ignore lint/performance/noAwaitInLoops: one folder at a time
-  await note(
-    UUID.test(run) ? inFlight : orphans,
-    "host-check",
-    path,
-    UUID.test(run) ? "a check run's checkout" : "named by no check run"
-  );
 }
 
 /** A live clone's size, and its `node_modules` split into files of its own and files shared by a link. */
@@ -306,7 +289,7 @@ const sum = (found: { bytes: number }[]): number =>
   found.reduce((total, one) => total + one.bytes, 0);
 
 if (json) {
-  console.log(JSON.stringify({ orphans, inFlight, clones }, null, 2));
+  console.log(JSON.stringify({ orphans, clones }, null, 2));
 } else {
   const classes = [...new Set(orphans.map((one) => one.class))];
   console.log(
@@ -320,12 +303,6 @@ if (json) {
         `    ${basename(one.path)}  ${gb(one.bytes)}  ${one.ageHours.toFixed(1)}h old  ${one.why}`
       );
     }
-  }
-  console.log(`HOST CHECKOUTS ${inFlight.length} (${gb(sum(inFlight))})`);
-  for (const one of inFlight) {
-    console.log(
-      `    ${basename(one.path)}  ${gb(one.bytes)}  ${one.ageHours.toFixed(1)}h old`
-    );
   }
   for (const state of ["active", "held"]) {
     const of = clones.filter((clone) => clone.state === state);

@@ -815,7 +815,6 @@ const cloneCase = async (
     call("mcp__cawco__delegate", {
       title: "Look at the repository",
       prompt: "PROBE-CLONE-CHILD: say ok.",
-      checks: [{ name: "Nothing to check", command: "true" }],
       lands: "none",
     })
   );

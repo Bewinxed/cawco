@@ -1352,7 +1352,6 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
         parentInstanceId: id,
         title: "Probe delegate",
         prompt: `Say ok. ${DELEGATE_MARK}`,
-        checks: [{ name: "Nothing to check here", command: "true" }],
       }),
     });
     const madeText = await made.text();

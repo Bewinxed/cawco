@@ -311,7 +311,6 @@ const spec: Spec = {
             harness: "opencode",
             model,
             cwd: fleet.repo,
-            checks: [{ name: "Probe check", command: "true" }],
           }),
           signal: AbortSignal.timeout(120_000),
         });

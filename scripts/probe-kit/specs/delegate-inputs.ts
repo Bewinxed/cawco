@@ -1,44 +1,34 @@
 /**
- * A check its parent marks `host` runs outside every boundary (hub
- * work-items.ts `runChecks`, agent host-check.ts), and a delegate's inputs
- * reach its `$TMPDIR/inputs/` before its first turn (agent inputs.ts). On a
- * scratch fleet (real hub, agent and sessiond; Claude Code against the mock
- * model). This spec delegates, so its fleet cuts workspaces: it runs only as
- * a `host` check itself, or by hand on the host.
+ * A delegate's inputs reach its `$TMPDIR/inputs/` before its first turn
+ * (agent inputs.ts), and a handoff's before the message that names them. On
+ * a scratch fleet (real hub, agent and sessiond; Claude Code against the
+ * mock model). This spec delegates, so its fleet cuts workspaces: it runs on
+ * the host, outside every boundary.
  *
  * - An input under the fleet's `~/.ssh` is refused at delegate time, naming
  *   the credential store, and no workspace is cut.
- * - A parent delegates a leaf with an input file and two checks, each
- *   `unshare -Ur true`: one marked host, one not.
- * - The leaf's brief names the input, and its Bash reads it from
- *   `$TMPDIR/inputs/`.
- * - The leaf calls finish_item with checks of its own, both marked host. The
- *   hub runs its parent's, as filed: finish_item's input schema has no
- *   `checks` (delegation-tools.ts, a plain `z.object`, which strips a key it
- *   does not name) and `finishable` reads the item's row. The host check
- *   passes, its line saying `on the host`; the other fails with the
- *   namespace error; the host checkout is gone once the run ends.
- * - A handoff from the parent adds an input: it lands in the leaf's
- *   `$TMPDIR/inputs/`, and the handoff names it.
+ * - A parent delegates a leaf with an input file. The leaf's brief names the
+ *   input, and its Bash reads it from `$TMPDIR/inputs/`.
+ * - A handoff from the parent adds an input while the leaf works: it lands in
+ *   the leaf's `$TMPDIR/inputs/`, and the handoff names it.
+ * - The leaf then calls finish_item; its item, which lands none, is done.
  *
- *   bun scripts/probe-kit/run.ts host-checks
+ *   bun scripts/probe-kit/run.ts delegate-inputs
  */
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-const TAG = "PROBE-HOST-CHECKS";
+const TAG = "PROBE-DELEGATE-INPUTS";
 const FINISH = "mcp__cawco__finish_item";
 const INPUT = "probe-input.txt";
 const HANDED = "probe-handoff.txt";
 /** What the input holds: only a read of the file can put it in a request. */
-const TOKEN = `host-checks-input-${crypto.randomUUID()}`;
-const HANDED_TOKEN = `host-checks-handoff-${crypto.randomUUID()}`;
-const ON_HOST = "Namespace on the host";
-const IN_BOUNDARY = "Namespace in the boundary";
-/** What finish_item answers when a check failed (work-items.ts `failedRun`). */
-const FAILED = "checks failed";
+const TOKEN = `delegate-inputs-${crypto.randomUUID()}`;
+const HANDED_TOKEN = `delegate-inputs-handoff-${crypto.randomUUID()}`;
+/** How the handoff names its input to the leaf (core `withInputsLine`). */
+const HANDED_LINE = `Your parent's inputs are in $TMPDIR/inputs/: ${HANDED}`;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -63,8 +53,8 @@ const leaf: { finished: boolean; read: boolean } = {
 };
 
 /**
- * The leaf: read its input, then finish with checks of its own that mark
- * both host; the parent and every later turn answer "ok".
+ * The leaf: read its input, work (short sleeps) until the handoff's input is
+ * named, then finish; the parent and every later turn answer "ok".
  */
 const respond = (request: Seen): Reply => {
   if (!(request.tools && request.all.includes(TAG)) || leaf.finished) {
@@ -77,17 +67,13 @@ const respond = (request: Seen): Reply => {
       description: "Read the input",
     });
   }
-  if (!request.all.includes(TOKEN)) {
-    return text("ok");
+  if (!request.all.includes(HANDED_LINE)) {
+    return useTool("Bash", { command: "sleep 2", description: "Work" });
   }
-  const headline = "Read the input; finishing with checks of my own.";
+  const headline = "Read both inputs.";
   const reply = found(request, FINISH, {
     headline,
-    summary: headline,
-    checks: [
-      { name: ON_HOST, command: "unshare -Ur true", host: true },
-      { name: IN_BOUNDARY, command: "unshare -Ur true", host: true },
-    ],
+    summary: `${headline}\n\n\`cat "$TMPDIR/inputs/${INPUT}"\` printed the input's token.`,
   });
   if (reply.tool?.name === FINISH) {
     leaf.finished = true;
@@ -124,12 +110,12 @@ const setUp = async (
     join(home, ".gitconfig"),
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
-  await Bun.$`sh -c ${"git init -q -b main && echo host > README.md && git add -A && git commit -qm 'First commit'"}`
+  await Bun.$`sh -c ${"git init -q -b main && echo inputs > README.md && git add -A && git commit -qm 'First commit'"}`
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
   const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Host checks",
+    name: "Delegate inputs",
     machineId: MACHINE,
     cwd: src,
   });
@@ -167,29 +153,6 @@ const refusesKeys = async (
     workspaceCount(fleet) === before,
     `${before} before, ${workspaceCount(fleet)} after`
   );
-};
-
-/** The finish_item answer the leaf read: the request after its call. */
-const finishAnswer = (fleet: Fleet): Promise<string> =>
-  until(
-    "the leaf's finish_item answered",
-    () =>
-      fleet.seen.find(
-        (one) =>
-          one.afterTool && one.all.includes(TAG) && one.all.includes(FAILED)
-      )?.all,
-    Boolean,
-    600_000
-  );
-
-/** One check's line in the answer, with what follows it up to the next. */
-const lineOf = (answer: string, name: string): string => {
-  const at = answer.indexOf(`- ${name}:`);
-  if (at < 0) {
-    return "";
-  }
-  const next = answer.indexOf("\n- ", at + 1);
-  return answer.slice(at, next < 0 ? undefined : next);
 };
 
 /** The parent's own credential, as its tools call the hub with it. */
@@ -240,12 +203,7 @@ const handsOn = async (
   );
   const named = await until(
     "the handoff reached the leaf",
-    () =>
-      fleet.seen.find((one) =>
-        one.all.includes(
-          `Your parent's inputs are in $TMPDIR/inputs/: ${HANDED}`
-        )
-      ),
+    () => fleet.seen.find((one) => one.all.includes(HANDED_LINE)),
     Boolean,
     120_000
   ).catch(() => undefined);
@@ -253,24 +211,20 @@ const handsOn = async (
 };
 
 const spec: Spec = {
-  name: "host-checks",
+  name: "delegate-inputs",
   run: async (kit: Kit) => {
     const { check } = kit;
     const { fleet, home, parent, src } = await setUp(kit);
     const delegate = (inputs: string[]) =>
       fleet.api<Started>("/api/work-items", {
         parentInstanceId: parent,
-        title: "Host checks probe",
+        title: "Delegate inputs probe",
         prompt: `${TAG}: read your input, then finish.`,
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: src,
         lands: "none",
         inputs,
-        checks: [
-          { name: ON_HOST, command: "unshare -Ur true", host: true },
-          { name: IN_BOUNDARY, command: "unshare -Ur true" },
-        ],
       });
     await refusesKeys(kit, fleet, home, delegate);
 
@@ -302,57 +256,24 @@ const spec: Spec = {
     ).catch(() => undefined);
     check("the leaf reads the input from $TMPDIR/inputs/", read !== undefined);
 
-    const answer = await finishAnswer(fleet);
-    const host = lineOf(answer, ON_HOST);
-    const bounded = lineOf(answer, IN_BOUNDARY);
-    check(
-      "unshare -Ur true marked host passes, on the host",
-      host.includes(": pass (exit 0") && host.includes("on the host, "),
-      host.slice(0, 300) || answer.slice(-1500)
-    );
-    check(
-      "the same command not marked host fails in the boundary with the namespace error",
-      bounded.includes(": fail (exit ") &&
-        !bounded.includes("on the host") &&
-        bounded.includes("unshare"),
-      bounded.slice(0, 600) || answer.slice(-1500)
-    );
-    const [row] = fleet.query<{ checks: string }>(
-      "SELECT checks FROM work_items WHERE id = ?",
-      started.workItemId
-    );
-    const filed = JSON.parse(row?.checks ?? "[]") as {
-      name: string;
-      host?: boolean;
-    }[];
-    check(
-      "finish_item's own checks are ignored: the item keeps its parent's, the boundary one not host",
-      filed.length === 2 &&
-        filed.find((one) => one.name === ON_HOST)?.host === true &&
-        filed.find((one) => one.name === IN_BOUNDARY)?.host === undefined,
-      row?.checks
-    );
-    const left = await readdir(join(home, ".cawco", "host-checks")).catch(
-      () => [] as string[]
-    );
-    check(
-      "the host checkout is gone once the run ends",
-      left.length === 0,
-      left.join(", ")
-    );
-    const agentLog = await fleet.logs("agent");
-    check(
-      "the agent logged the checkout it made outside every boundary",
-      agentLog.includes("[host-check]") &&
-        agentLog.includes("outside every boundary"),
-      agentLog
-        .split("\n")
-        .filter((line) => line.includes("[host-check]"))
-        .join(" | ")
-        .slice(0, 400)
-    );
-
     await handsOn(kit, fleet, parent, started, outside);
+
+    const ended = await until(
+      "the leaf's item ended",
+      () =>
+        fleet.query<{ state: string; result: string | null }>(
+          "SELECT state, result FROM work_items WHERE id = ?",
+          started.workItemId
+        )[0],
+      (row) => ["done", "failed", "cancelled"].includes(row.state),
+      300_000
+    ).catch(() => undefined);
+    check(
+      "the leaf finishes, and its item, which lands none, is done",
+      ended?.state === "done" &&
+        (ended.result ?? "").includes("Read both inputs."),
+      `${ended?.state}: ${(ended?.result ?? "").slice(0, 400)}`
+    );
   },
 };
 

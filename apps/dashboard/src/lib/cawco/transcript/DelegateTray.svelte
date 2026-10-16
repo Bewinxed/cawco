@@ -539,7 +539,7 @@
       ? `queued: ${item.queued.paused}`
       : `queued: owns ${item.queued.owns.join(", ")}`;
   };
-  /** A check waiting for a shared machine slot, as its chip says it, with how long. */
+  /** What its landing waits for (a shared machine slot, its turn to land), as its chip says it, with how long. */
   const checkQueueWords = (item: WorkItemSummary): string =>
     item.checkQueue
       ? `${item.checkQueue.words}, ${span(item.checkQueue.since, minute)}`

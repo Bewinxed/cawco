@@ -347,10 +347,7 @@ const parentTurn = (request: Seen, tag: string): Reply => {
     prompt: `PROBE-CONN-${tag}: call the echo connection tools you have.`,
     title: `Echo ${tag.toLowerCase()}`,
     type: tag === "USER" ? "conn-user" : "conn-none",
-    ...(startSession
-      ? { cwd: fleet.repo }
-      : // A work item needs one acceptance check; this one always passes.
-        { checks: [{ name: "Always passes", command: "true" }] }),
+    ...(startSession ? { cwd: fleet.repo } : {}),
   });
   if (reply.tool?.name === DELEGATE) {
     delegated.add(tag);

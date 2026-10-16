@@ -334,7 +334,7 @@ const NO_HUB = "http://127.0.0.1:9";
  */
 export class Run {
   failures = 0;
-  /** Each failed assertion's line, said again over the run's last line (a host check reports its tail). */
+  /** Each failed assertion's line, said again over the run's last line (a report that quotes the run's tail keeps them). */
   readonly failed: string[] = [];
   notes = 0;
   /** Every capture this run that differs from its baseline, in run order. */

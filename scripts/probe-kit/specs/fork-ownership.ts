@@ -200,7 +200,6 @@ const parent = (request: Seen, which: Case): Reply => {
     title: `Wait ${which}`,
     prompt: `${PARENTS[which].child}: wait, then finish your item when released.`,
     cwd: repo,
-    checks: [{ name: "Nothing to check", command: "true" }],
     lands: "none",
   });
   if (reply.tool?.name === DELEGATE) {

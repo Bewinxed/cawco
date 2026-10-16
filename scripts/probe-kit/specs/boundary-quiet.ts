@@ -437,7 +437,6 @@ const standUp = async (kit: Kit) => {
       harness: "claude",
       model: "claude-haiku-4-5",
       cwd: src,
-      checks: [{ name: "Probe check", command: "true" }],
     });
     // An idle one stays, its work over: the parent's preview artifact of it
     // holds it at the hub (work-items.ts `settle`) while no server of it is

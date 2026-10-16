@@ -1,19 +1,22 @@
 /**
- * Hub-owned landing: once a work item's checks pass, the hub, not the
- * delegate, puts the workspace's commits on the base branch. Before this, a
- * line in the brief asked the delegate to fetch, rebase and push, so "done"
- * meant the checks passed, never that the work was on the base branch
+ * Hub-owned landing: once a work item finishes, the hub, not the delegate,
+ * puts the workspace's commits on the base branch. Before this, a line in
+ * the brief asked the delegate to fetch, rebase and push, so "done" never
+ * meant the work was on the base branch
  * (`.design-foundations/plans/2026-10-06-projects.md`, P0).
  *
- * The checks ran on the working tree, so it must equal HEAD before anything
- * is pushed: uncommitted changes, new files included (ignored ones are not),
- * go back to the delegate rather than leaving the branch without them.
+ * The landing gate runs on HEAD's tree, so the working tree must equal HEAD
+ * before anything is pushed: uncommitted changes, new files included
+ * (ignored ones are not), go back to the delegate rather than leaving the
+ * branch without them.
  *
  * An item gates before it takes a turn: fetch, rebase onto the branch as it
  * is now (a conflict is undone and goes back to the delegate), and run the
- * item's checks and the repository's land gate ({@link LAND_GATE_SCRIPTS})
- * on that tree, outside the queue, each waiting there for whatever machine
- * slot or pause it needs. Only a gated item joins the queue.
+ * landing gate on that tree (the repository's {@link LAND_GATE_SCRIPTS}, and
+ * the iOS build when the item changes what the Swift build reads:
+ * work-items.ts `gateSteps`), outside the queue, each step waiting there for
+ * whatever machine slot or pause it needs. No session writes it. Only a
+ * gated item joins the queue.
  *
  * One landing at a time per repository and branch, and a turn never waits:
  * fetch, rebase onto the branch again, run again only the commands whose
@@ -22,21 +25,21 @@
  * would wait for a machine slot or a pause, or run on another machine (the
  * Apple build), does not: the item steps out of the turn (`busy`), gates
  * again on the newer branch, and queues again, so the next ready item lands
- * (2026-10-16: an item that had passed its checks sat 13 minutes behind one
- * waiting for the Mac's one build slot). Nothing ahead of the branch counts
- * as landed, so running this again after a hub restart is safe.
+ * (2026-10-16: an item that had passed sat 13 minutes behind one waiting for
+ * the Mac's one build slot). Nothing ahead of the branch counts as landed,
+ * so running this again after a hub restart is safe.
  *
- * Every tree pushed is checked on top of the branch it lands on: the turn's
- * own rebase is the last, and the checks the turn asks for (`check(true)`)
+ * Every tree pushed is gated on top of the branch it lands on: the turn's
+ * own rebase is the last, and the steps the turn asks for (`check(true)`)
  * pass on that tree or on the inputs each reads there. The gate is asked on
- * every landing, rebased or not: an item's own checks need not lint or
- * typecheck anything, and a clean rebase can still break either (23da40303
- * sorted boundary.ts's imports, and ded95f4d2 formatted SessionHover's, after
- * rebases had landed them unlinted on main). One command runs at most once on
+ * every landing, rebased or not: a clean rebase can still break lint or
+ * typecheck (23da40303 sorted boundary.ts's imports, and ded95f4d2 formatted
+ * SessionHover's, after rebases had landed them unlinted on main), and a wire
+ * change can break the iOS app (312b43065). One command runs at most once on
  * one set of inputs: the caller skips a command that already passed, or one
  * {@link GATE_COVERS} names did, on the tree about to be pushed, or, for a
  * command that declares the paths it reads, on the same trees of those paths
- * (work-items.ts `checkOnce`), and runs every other.
+ * (work-items.ts `gateOnce`), and runs every other.
  *
  * A work item that lands `branch` or `pr` goes to a branch of its own
  * instead ({@link pushBranch}): HEAD as it is, replacing only what the hub
@@ -63,7 +66,7 @@ export interface Refusal {
   tries?: number;
 }
 
-/** What a landing came to. `F` is how the caller describes failing checks. */
+/** What a landing came to. `F` is how the caller describes a failed gate. */
 export type LandingOutcome<F> =
   | { kind: "landed"; sha: string; rebased: boolean }
   | { kind: "nothing" }
@@ -73,9 +76,11 @@ export type LandingOutcome<F> =
   | Failed<F>
   | Refusal;
 
-/** Checks that failed on the rebased tree: the item's own, or the land gate's. */
-export type Failed<F> =
-  { kind: "recheck-failed"; failing: F } | { kind: "gate-failed"; failing: F };
+/** The landing gate, failed on the rebased tree. */
+export interface Failed<F> {
+  failing: F;
+  kind: "gate-failed";
+}
 
 /**
  * A turn the item stepped out of: a command due there would have waited
@@ -88,8 +93,8 @@ interface Busy {
 
 export interface LandingDeps<F> {
   /**
-   * The item's checks, then the repository's land gate, on the tree the
-   * workspace holds now (rebased onto the branch), each command skipped that
+   * The landing gate on the tree the workspace holds now (rebased onto the
+   * branch), each step skipped that
    * passed, or one covering it did, on its inputs as they are there:
    * undefined when all pass. `inTurn` false is the gate before the queue,
    * where a command waits for what it needs; true is the landing turn, where
@@ -158,7 +163,7 @@ export const turnWords = (branch: string, ahead: LandingTurn[]): string =>
  * One chain of landings per key; a failed landing never blocks the next. A
  * landing that waits its turn says so, naming the one running and how many
  * more are ahead (`turn.onWait`), each time that changes (2026-10-15: items
- * sat "checking" for half an hour with nothing to say what held them). A
+ * sat for half an hour with nothing to say what held them). A
  * turn waits for nothing ({@link land}): it is a fetch, a rebase, the
  * commands whose inputs that rebase changed, and a push.
  */
@@ -241,8 +246,8 @@ const NOT_AUTHORISED =
 const CONFLICT_MARK = "cawco-conflict";
 /**
  * Tries when someone else pushes between our fetch and our push. Each try
- * after the first rebases onto the newer branch and runs the checks again,
- * so the window is the checks' length: a busy branch can win it twice.
+ * after the first rebases onto the newer branch and runs the steps whose
+ * inputs moved again, so the window is theirs: a busy branch can win it twice.
  */
 const ATTEMPTS = 3;
 
@@ -275,10 +280,10 @@ export const statusCommand = (skip: string[] = []): string =>
     : `git status --porcelain -- . ${skip.map((path) => quote(`:(exclude,literal)${path}`)).join(" ")}`;
 
 /**
- * The land gate: these scripts of the repository's root package.json, each
- * run as `bun run <name>` in the workspace, inside its boundary, on the
+ * The landing gate's scripts: these of the repository's root package.json,
+ * each run as `bun run <name>` in the workspace, inside its boundary, on the
  * commit about to be pushed. The repository says what they check; a
- * repository whose package.json defines neither has no gate. The cockpit's
+ * repository whose package.json defines neither runs none. The cockpit's
  * pre-push hook (scripts/git-hooks/pre-push) runs the same two for a push
  * to main by hand.
  */
@@ -305,24 +310,33 @@ export const landGateProbe = `if [ -f package.json ]; then bun -e ${quote(
   `const scripts = JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).scripts ?? {}; for (const name of ${JSON.stringify(LAND_GATE_SCRIPTS)}) { if (typeof scripts[name] === "string") { console.log(name); } }`
 )}; fi`;
 
-/** One gate script as a check: its name is its command. */
-export interface GateCheck {
+/**
+ * One step of the landing gate, which the hub alone writes: a shell command
+ * run in the item's workspace (or, with `machine`, in its gate workspace on
+ * that machine, at its last commit), passing when it exits 0.
+ */
+export interface GateStep {
   command: string;
+  /** The machine it runs on, by machineId, when not the workspace's own: the iOS build's Mac. */
+  machine?: string;
+  /** What the report calls it: the command, or "iOS build compiles". */
   name: string;
+  /** Seconds before the command is killed; 600 when not given. */
+  timeoutSec?: number;
 }
 
 /**
- * The gate's checks for the workspace `run` reaches, in {@link
+ * The gate's script steps for the workspace `run` reaches, in {@link
  * LAND_GATE_SCRIPTS}' order. Throws with the probe's words when the
  * package.json could not be read.
  */
-export async function landGateChecks(
+export async function landGateSteps(
   run: LandingDeps<unknown>["run"]
-): Promise<GateCheck[]> {
+): Promise<GateStep[]> {
   const probe = await run(landGateProbe, LOCAL_MS);
   if (probe.exitCode !== 0) {
     throw new Error(
-      `the land gate's scripts could not be read from package.json:\n${detailOf(probe)}`
+      `the landing gate's scripts could not be read from package.json:\n${detailOf(probe)}`
     );
   }
   const defined = new Set(probe.stdout.split("\n").map((line) => line.trim()));

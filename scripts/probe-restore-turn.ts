@@ -232,7 +232,6 @@ async function phaseC(): Promise<void> {
       harness: "claude",
       model: MODEL.claude,
       cwd: fleet.repo,
-      checks: [{ name: "Probe check", command: "true" }],
     });
     await until(`${name} streaming`, () => streaming(name), Boolean, 180_000);
     const [item] = query<{ workspace_id: string }>(

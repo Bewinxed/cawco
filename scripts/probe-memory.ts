@@ -241,7 +241,6 @@ const caw = (request: Seen): Reply => {
       title: "Note the routine fact",
       prompt:
         "PROBE-MEMORY-RCHILD: take a while, then note what the routine taught.",
-      checks: [{ name: "Nothing to check", command: "true" }],
       lands: "none",
     });
   }

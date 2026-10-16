@@ -419,7 +419,6 @@ const compactedDelegate = async (kit: Kit, fleet: Fleet, parent: string) => {
     harness: "opencode",
     model: MODEL.opencode,
     cwd: fleet.repo,
-    checks: [{ name: "Nothing to check", command: "true" }],
     lands: "none",
   });
   const high = delegated.instanceId;

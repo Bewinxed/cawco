@@ -28,20 +28,27 @@
  *     when; nothing reaches the delegate.
  * p3. A new delegate for B waits in the tray with the reason; a delegate on
  *     A runs meanwhile.
- * p4. An acceptance check with `machine: probe-b` waits, its item's status
- *     naming the pause and its end.
+ * B reports itself a Mac (`darwin-arm64`, as the apple-gate spec has it)
+ * and the project's Apple build gate is on, so an item on A that commits
+ * under apps/apple has a landing gate step on B: the iOS build, a stub
+ * `apps/apple/scripts/build-both.sh` here. That step is the hub's one
+ * command on another machine.
+ * p4. The iOS build step of an item on A waits, its item's status naming
+ *     the pause and its end.
  * p5. The hub restarted mid-pause, with a minute of it left, keeps the
- *     pause, and the waiting check, resumed, still says why it waits.
+ *     pause, and the landing gate waits on B again, still saying why. (B's
+ *     register reports Linux, so the probe marks it a Mac again, and the
+ *     delegate calls finish_item again if its resumed landing found no Mac.)
  * p1–p4 are read while the pause lasts; p6 once it has ended.
  * p6. At the end everything proceeds: the interrupted delegate carries on
- *     and reads the handoff, the queued delegate starts on B, the check runs
- *     and the item lands; B is no longer paused.
- * p7. A check already running on B as a second pause begins (`sleep 600`
- *     there): within 10 s its process is gone from the process table and the
- *     check says it waits for the pause; the item is not failed, its check
- *     run is the same one, and its delegate is told nothing; B's row says it
- *     stopped 1 running check. After the pause the check runs again and the
- *     item lands.
+ *     and reads the handoff, the queued delegate starts on B, the iOS build
+ *     runs and the item lands; B is no longer paused.
+ * p7. An iOS build already running on B as a second pause begins (`sleep
+ *     600` there): within 10 s its process is gone from the process table
+ *     and the step says it waits for the pause; the item is not failed, its
+ *     landing is the same one, and its delegate is told nothing; B's row
+ *     says it stopped 1 running landing gate step. After the pause the build
+ *     runs again and the item lands.
  * p8. A workflow's `w.exec` already running on B as a third pause begins:
  *     its process goes within 10 s, the run stays running and says its
  *     command waits for the pause, the answer says it stopped 1 running
@@ -50,7 +57,7 @@
  *
  *   bun scripts/probe-kit/run.ts machine-pause
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -68,12 +75,31 @@ const SLEEP = /PROBE-SLEEP-([A-Z])/;
 const HELLO = "PROBE-HELLO-Q";
 const FINISH_C = "PROBE-FINISH-C";
 const FINISH_D = "PROBE-FINISH-D";
+/** The landing gate's iOS build step, as its lines name it (hub apple-gate.ts). */
+const GATE = "iOS build compiles";
+/** The file each delegate commits: under apps/apple, so its gate builds on B. */
+const FILES = { C: "apps/apple/Checker.swift", D: "apps/apple/Long.swift" };
 /**
- * p7's check on B, run in its check workspace's clone: its first run marks
- * the clone and sleeps; the run after the pause finds the mark and ends.
+ * The stub iOS build, run on B in the item's gate workspace's clone. For
+ * p7's item (its tree holds Long.swift) the first run marks the clone and
+ * sleeps; the run after the pause finds the mark and ends.
  */
-const LONG_CHECK =
-  "if [ -e .p7-ran ]; then echo ran-p7; else touch .p7-ran; sleep 600; fi";
+const STUB = `#!/usr/bin/env bash
+if [ -e ${FILES.D} ] && [ ! -e .p7-ran ]; then touch .p7-ran; sleep 600; fi
+echo ran-on-b
+`;
+/** finish_item's refusal while no Mac is online (hub apple-gate.ts `appleGateRefusal`). */
+const NO_MAC = "no apple-capable machine is online";
+
+/** The delegate's commit of `file`, before it finishes. */
+const commitCommand = (tag: string, file: string) =>
+  [
+    `mkdir -p "$(dirname ${file})"`,
+    `echo '// made by ${tag}' > ${file}`,
+    `git add ${file}`,
+    `git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit ${tag}'`,
+    `echo DONE-COMMIT-${tag}`,
+  ].join(" && ");
 const P7_PAUSE_MS = 60_000;
 const CMD = /PROBE-CMD (\d+) (interrupt|handoff) (\S+)(?: (.*))?/g;
 
@@ -89,10 +115,12 @@ const heard = new Map<string, Seen[]>();
 const slept = new Set<string>();
 /** The parent's commands: how far each has gone. */
 const commands = new Map<string, "searched" | "called" | "done">();
-/** Set once B is paused: C then finishes its item, whose check runs on B. */
+/** Set once B is paused: C then finishes its item, whose iOS build runs on B. */
 let paused = false;
 let finishSearched = false;
 let finishCalled = false;
+/** finish_item refusals C has called again after: one per refusal it read. */
+let cRetried = 0;
 let dSearched = false;
 let dCalled = false;
 
@@ -148,39 +176,66 @@ const delegateReply = (tag: string, request: Seen): Reply => {
   return reply;
 };
 
+/** finish_item, as the mock calls it. */
+const finishCall = (): Reply =>
+  useTool(FINISH, { headline: "Checked.", summary: "Checked." });
+const finishSearch = (): Reply =>
+  useTool("ToolSearch", { query: `select:${FINISH}`, max_results: 1 });
+
+/** D: commits, then finishes at once: its iOS build on B is what p7 pauses. */
+const answerD = (request: Seen): Reply => {
+  if (!request.all.includes("DONE-COMMIT-D")) {
+    return useTool("Bash", {
+      command: commitCommand("D", FILES.D),
+      description: "Commit",
+    });
+  }
+  if (!dCalled && request.toolNames.includes(FINISH)) {
+    dCalled = true;
+    return finishCall();
+  }
+  if (!(dCalled || dSearched)) {
+    dSearched = true;
+    return finishSearch();
+  }
+  return text("done D");
+};
+
+/** C: commits, then spins on short sleeps, a delegate at work on A, until B is paused; then finishes. */
+const answerC = (request: Seen): Reply => {
+  if (!request.all.includes("DONE-COMMIT-C")) {
+    return useTool("Bash", {
+      command: commitCommand("C", FILES.C),
+      description: "Commit",
+    });
+  }
+  if (!paused) {
+    return useTool("Bash", { command: "sleep 2", description: "Work" });
+  }
+  if (!finishCalled && request.toolNames.includes(FINISH)) {
+    finishCalled = true;
+    return finishCall();
+  }
+  // A landing resumed after p5's restart before B was a Mac again: as the
+  // refusal says, call finish_item again.
+  const refusals = request.all.split(NO_MAC).length - 1;
+  if (finishCalled && refusals > cRetried) {
+    cRetried = refusals;
+    return finishCall();
+  }
+  if (!(finishCalled || finishSearched)) {
+    finishSearched = true;
+    return finishSearch();
+  }
+  return text("done C");
+};
+
 const delegateAnswer = (tag: string, request: Seen): Reply => {
   if (tag === "D") {
-    // Finishes at once: its check on B is what p7 pauses.
-    if (!dCalled && request.toolNames.includes(FINISH)) {
-      dCalled = true;
-      return useTool(FINISH, { headline: "Checked.", summary: "Checked." });
-    }
-    if (!(dCalled || dSearched)) {
-      dSearched = true;
-      return useTool("ToolSearch", {
-        query: `select:${FINISH}`,
-        max_results: 1,
-      });
-    }
-    return text("done D");
+    return answerD(request);
   }
   if (tag === "C") {
-    // Spins on short sleeps, a delegate at work on A, until B is paused.
-    if (!paused) {
-      return useTool("Bash", { command: "sleep 2", description: "Work" });
-    }
-    if (!finishCalled && request.toolNames.includes(FINISH)) {
-      finishCalled = true;
-      return useTool(FINISH, { headline: "Checked.", summary: "Checked." });
-    }
-    if (!(finishCalled || finishSearched)) {
-      finishSearched = true;
-      return useTool("ToolSearch", {
-        query: `select:${FINISH}`,
-        max_results: 1,
-      });
-    }
-    return text("done C");
+    return answerC(request);
   }
   if (tag === "Q" || slept.has(tag)) {
     return text(`ok ${tag}`);
@@ -208,6 +263,11 @@ const respond = (request: Seen): Reply => {
   return tag ? delegateReply(tag, request) : text("ok");
 };
 
+/** B as a Mac's agent reports itself at register (daemon.ts `${platform()}-${arch()}`): its own register says Linux. */
+const markMac = (fleet: KitFleet): void => {
+  fleet.write("UPDATE agents SET os = 'darwin-arm64' WHERE machine_id = ?", B);
+};
+
 interface Started {
   instanceId: string | null;
   queued: string | null;
@@ -228,6 +288,7 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   await fleet.launchMachine(B);
+  markMac(fleet);
 
   const home = fleet.env.HOME as string;
   await writeFile(
@@ -235,7 +296,11 @@ const run = async (kit: Kit) => {
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
   const repo = join(fleet.sandbox, "code");
-  await mkdir(repo, { recursive: true });
+  const scripts = join(repo, "apps", "apple", "scripts");
+  await mkdir(scripts, { recursive: true });
+  await writeFile(join(scripts, "build-both.sh"), STUB);
+  await chmod(join(scripts, "build-both.sh"), 0o755);
+  await writeFile(join(repo, ".gitignore"), ".p7-ran\n");
   await Bun.$`git init -q -b main && echo code > README.md && git add -A && git commit -qm 'First commit'`
     .cwd(repo)
     .env({ ...process.env, HOME: home })
@@ -249,6 +314,16 @@ const run = async (kit: Kit) => {
     machineId: B,
     path: repo,
   });
+  const gated = await fetch(`${fleet.base}/api/projects/${project.id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ appleGate: true }),
+  });
+  if (gated.status !== 200) {
+    throw new Error(
+      `the project's Apple build gate could not be turned on: ${gated.status} ${await gated.text()}`
+    );
+  }
   const parent = await fleet.spawn("claude", "Parent", repo, {
     projectId: project.id,
   });
@@ -279,7 +354,6 @@ const run = async (kit: Kit) => {
       harness: "claude",
       model: "claude-haiku-4-5",
       cwd: repo,
-      checks: [{ name: "Probe check", command: "true" }],
       ...extra,
     });
   const turnOpen = (id: string) =>
@@ -428,9 +502,7 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
   );
   const bId = b.instanceId as string;
   await probe.sleeping("B", bId);
-  const c = await probe.delegate("Checker", `${FINISH_C}: finish once told.`, {
-    checks: [{ name: "On B", command: "echo ran-on-b", machine: B }],
-  });
+  const c = await probe.delegate("Checker", `${FINISH_C}: finish once told.`);
   // C at work on A before B is paused: its turn under way, spinning.
   await until(
     "C at work on A",
@@ -516,9 +588,9 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     fleet.api<{ id: string; checkQueue: { words: string } | null }[]>(
       `/api/work-items?parent=${probe.parent}`
     );
-  const checkWait = () =>
+  const gateWait = () =>
     until(
-      "C's check waiting on B",
+      "C's iOS build waiting on B",
       async () =>
         (await tray()).find((item) => item.id === c.workItemId)?.checkQueue
           ?.words,
@@ -528,13 +600,13 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
   const cItem = () =>
     JSON.stringify(
       fleet.query(
-        "SELECT state, checking_since, error FROM work_items WHERE id = ?",
+        "SELECT state, landing_since, error FROM work_items WHERE id = ?",
         c.workItemId as string
       )[0]
     );
-  const waiting = await checkWait();
+  const waiting = await gateWait();
   const cWaited = check(
-    "p4: a check with machine: probe-b waits, its item's status naming the pause and its end",
+    "p4: the iOS build step of an item on A waits on B, its item's status naming the pause and its end",
     waiting?.includes(words) === true,
     `${waiting ?? "no wait said"}; C's item: ${cItem()}; all of C's:\n  ${story("C", pausedAt)}`
   );
@@ -568,10 +640,22 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     kept === until_ && Date.now() < until_,
     `pausedUntil ${kept}, ${Math.round((until_ - Date.now()) / 1000)}s left`
   );
-  // The check its finish_item started waits again under the new hub (its
-  // checks resumed as A registers), still saying why.
+  // B's register under the new hub said Linux: a Mac again once it is back.
+  await until(
+    "B registered with the new hub",
+    () =>
+      fleet.query<{ status: string }>(
+        "SELECT status FROM agents WHERE machine_id = ?",
+        B
+      )[0]?.status,
+    (status) => status === "online",
+    before(until_ - 10_000)
+  ).catch(() => undefined);
+  markMac(fleet);
+  // The landing its finish_item started waits again under the new hub
+  // (resumed as A registers, or C's finish_item again), still saying why.
   const resumed = await until(
-    "C's check waiting again after the restart",
+    "C's iOS build waiting again after the restart",
     async () =>
       (await tray()).find((item) => item.id === c.workItemId)?.checkQueue
         ?.words,
@@ -579,7 +663,7 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     before(until_ - 5000)
   ).catch(() => undefined);
   check(
-    "p5: after the restart the check still waits, saying so",
+    "p5: after the restart the landing gate still waits on B, saying so",
     resumed?.includes(words) === true,
     `${resumed ?? "no wait said"}; C's item: ${cItem()}`
   );
@@ -634,18 +718,19 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
     300_000
   ).catch(() => probe.itemOf(c.workItemId as string));
   check(
-    "p6: the check on B runs and the item lands",
-    cDone?.state === "done" && (cDone.result ?? "").includes("- On B: pass ("),
+    "p6: the iOS build on B runs and the item lands",
+    cDone?.state === "done" &&
+      (cDone.result ?? "").includes(`- ${GATE}: pass (`),
     `${cDone?.state}: ${(cDone?.result ?? "").slice(0, 600)}`
   );
   const after = await pausedUntil(fleet);
   check("p6: B is no longer paused", after === null, String(after));
 
-  await runningCheck(kit, fleet, probe, tray);
+  await runningBuild(kit, fleet, probe, tray);
   await runningExec(kit, fleet, probe.repo);
 };
 
-/** p8's workflow: one `w.exec` in B's checkout, marked like p7's check; its output is the run's result. */
+/** p8's workflow: one `w.exec` in B's checkout, marked like p7's build; its output is the run's result. */
 const LONG_EXEC_PROGRAM = `import { z } from "zod";
 
 export const inputs = z.object({});
@@ -760,8 +845,8 @@ const longSleeps = async (): Promise<Set<string>> =>
       .filter(Boolean)
   );
 
-/** p7: a check already running on B as a pause begins. */
-const runningCheck = async (
+/** p7: an iOS build already running on B as a pause begins. */
+const runningBuild = async (
   kit: Kit,
   fleet: KitFleet,
   probe: Probe,
@@ -769,29 +854,20 @@ const runningCheck = async (
 ) => {
   const { check } = kit;
   const before = await longSleeps();
-  const d = await probe.delegate("Long check", `${FINISH_D}: finish now.`, {
-    checks: [
-      {
-        name: "Long on B",
-        command: LONG_CHECK,
-        machine: B,
-        timeoutSec: 900,
-      },
-    ],
-  });
+  const d = await probe.delegate("Long build", `${FINISH_D}: finish now.`);
   const dItem = d.workItemId as string;
   const ours = await until(
-    "D's check sleeping on B",
+    "D's iOS build sleeping on B",
     async () => [...(await longSleeps())].filter((pid) => !before.has(pid)),
     (pids) => pids.length > 0,
     300_000
   );
   const row = () =>
-    fleet.query<{ state: string; checking_since: number | null }>(
-      "SELECT state, checking_since FROM work_items WHERE id = ?",
+    fleet.query<{ state: string; landing_since: number | null }>(
+      "SELECT state, landing_since FROM work_items WHERE id = ?",
       dItem
     )[0];
-  const checking = row();
+  const landing = row();
   const pausedAt = Date.now();
   const until_ = pausedAt + P7_PAUSE_MS;
   const answer = await fetch(`${fleet.base}/api/machines/${B}/pause`, {
@@ -812,36 +888,36 @@ const runningCheck = async (
     10_000
   ).catch(() => false);
   check(
-    "p7: within 10 s of the pause the running check's process is gone from B's process table",
+    "p7: within 10 s of the pause the running iOS build's process is gone from B's process table",
     gone === true && Date.now() - pausedAt <= 12_000,
     `pids ${ours.join(" ")}; still there: ${[...(await longSleeps())].filter((pid) => ours.includes(pid)).join(" ") || "none"}`
   );
   const words = `paused until ${clock(until_)}`;
   const waiting = await until(
-    "D's check waiting on the pause",
+    "D's iOS build waiting on the pause",
     async () =>
       (await tray()).find((item) => item.id === dItem)?.checkQueue?.words,
     (status) => status.includes("paused"),
     10_000
   ).catch(() => undefined);
   check(
-    "p7: the stopped check reads waiting: … paused until",
+    "p7: the stopped build reads waiting: … paused until",
     waiting?.startsWith("waiting:") === true && waiting.includes(words),
     waiting ?? "no wait said"
   );
   const during = row();
   const toldD = (heard.get("D") ?? []).filter((seen) => seen.at > pausedAt);
   check(
-    "p7: the item is not failed, its check run is the same one, and its delegate is told nothing",
+    "p7: the item is not failed, its landing is the same one, and its delegate is told nothing",
     during?.state === "running" &&
-      during.checking_since !== null &&
-      during.checking_since === checking?.checking_since &&
+      during.landing_since !== null &&
+      during.landing_since === landing?.landing_since &&
       toldD.length === 0,
-    `before ${JSON.stringify(checking)}, during ${JSON.stringify(during)}; D's requests since the pause:\n  ${story("D", pausedAt)}`
+    `before ${JSON.stringify(landing)}, during ${JSON.stringify(during)}; D's requests since the pause:\n  ${story("D", pausedAt)}`
   );
   check(
-    "p7: the pause's answer says it stopped 1 running check",
-    view.pauseStopped === "stopped 1 running check",
+    "p7: the pause's answer says it stopped 1 running landing gate step",
+    view.pauseStopped === "stopped 1 running landing gate step",
     `${answer.status} ${JSON.stringify(view)}`
   );
   const done = await until(
@@ -851,9 +927,9 @@ const runningCheck = async (
     P7_PAUSE_MS + 300_000
   ).catch(() => probe.itemOf(dItem));
   check(
-    "p7: after the pause the check runs again and the item lands",
+    "p7: after the pause the iOS build runs again and the item lands",
     done?.state === "done" &&
-      (done.result ?? "").includes("- Long on B: pass (") &&
+      (done.result ?? "").includes(`- ${GATE}: pass (`) &&
       Date.now() > until_,
     `${done?.state}: ${(done?.result ?? "").slice(0, 600)}`
   );

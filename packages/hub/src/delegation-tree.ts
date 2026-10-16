@@ -20,10 +20,10 @@ const ENDED_LIVE_MS = 3_600_000;
 
 export interface DelegateNode {
   cacheWarm: boolean;
-  /** While one of its checks waits for a shared machine slot: "queued for the Mac's build slot behind …", since when. */
-  checkQueue?: { words: string; since: string };
   children: DelegateNode[];
   instanceId: string;
+  /** While its landing waits (the Mac's build slot, its turn to land): "queued for the Mac's build slot behind …", since when. */
+  landingWait?: { words: string; since: string };
   lastActivityAt: string;
   machine: string;
   /** The session's directory name, as `list_sessions` shows it. */
@@ -47,8 +47,6 @@ export interface DelegationTreeDeps {
     lastActivityAt: Date;
     cacheWarm: boolean;
   };
-  /** While one of the item's checks waits for a shared machine slot (work-items `checkQueueOf`). */
-  checkQueue: (itemId: string) => { words: string; since: number } | null;
   db: Pick<
     DbShape,
     | "getInstancesByIds"
@@ -57,6 +55,8 @@ export interface DelegationTreeDeps {
     | "sendsIn"
     | "workItemsOfParents"
   >;
+  /** While the item's landing waits (work-items `landingWaitOf`). */
+  landingWait: (itemId: string) => { words: string; since: number } | null;
   /** A machine's name as the fleet shows it. */
   machineName: (machineId: string) => string;
   /** A paused machine's pause in words (machine-pause.ts); undefined when it is not paused. */
@@ -124,11 +124,11 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     children: DelegateNode[]
   ): Promise<DelegateNode> => {
     const waiting = item.waitUntil && item.waitReason;
-    // A finished item's headline is its report at a glance; an item without
-    // checks never calls finish_item, so its last turn's first line stands.
+    // A finished item's headline is its report at a glance; else its
+    // report's first line, or why it failed.
     const report =
       item.headline ?? firstLine(item.result) ?? firstLine(item.error);
-    const checkQueue = deps.checkQueue(item.id);
+    const landingWait = deps.landingWait(item.id);
     const plan = await deps.plan(item.instanceId).catch(() => undefined);
     const activity = row
       ? deps.activity(row)
@@ -151,11 +151,11 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
             },
           }
         : {}),
-      ...(checkQueue
+      ...(landingWait
         ? {
-            checkQueue: {
-              words: checkQueue.words,
-              since: new Date(checkQueue.since).toISOString(),
+            landingWait: {
+              words: landingWait.words,
+              since: new Date(landingWait.since).toISOString(),
             },
           }
         : {}),

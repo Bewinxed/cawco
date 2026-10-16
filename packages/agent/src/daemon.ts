@@ -1,5 +1,5 @@
 import { existsSync, watch } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { arch, homedir, hostname, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type {
@@ -31,8 +31,6 @@ import {
   CONTROL_CANCEL_COMMAND,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
-  CONTROL_HOST_CHECKOUT,
-  CONTROL_HOST_CHECKOUT_REMOVE,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
@@ -129,11 +127,6 @@ import { harness, harnesses } from "./harnesses";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
-import {
-  abandonHostCheckouts,
-  hostCheckout,
-  removeHostCheckout,
-} from "./host-check";
 import { serveHubCredential } from "./hub-git";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import { readInputs, writeInputs } from "./inputs";
@@ -2592,20 +2585,11 @@ const attach = (
     // where it is unambiguous and costs nothing to learn.
 
     // A command the hub ran over this connection answers nobody once it ends,
-    // and the hub runs its checks again from the first when it is back: the
-    // commands go with the connection, and the host checks' checkouts they
-    // ran in. Sessions are not commands and stay.
+    // and the hub runs its landing gate again from the first when it is
+    // back: the commands go with the connection. Sessions are not commands
+    // and stay.
     return yield* closed(socket, url).pipe(
-      Effect.tapError(() =>
-        Effect.sync(() => {
-          abandonCommands();
-          abandonHostCheckouts().catch((error: unknown) =>
-            console.warn(
-              `[host-check] checkouts of the ended connection's runs were not removed: ${String(error)}`
-            )
-          );
-        })
-      )
+      Effect.tapError(() => Effect.sync(abandonCommands))
     );
   });
 
@@ -2901,20 +2885,17 @@ export const startDaemon = (rediscover = false) =>
           ? Promise.reject(new Error(AGENT_RESTARTING))
           : workspaceAt(ref, base, at, from)
     );
-    // A check its parent marked host: a fresh checkout outside every
-    // boundary, for one check run. Those of runs no hub follows any more (a
-    // stopped agent's) go now; a lost connection takes its runs' with it.
-    yield* Effect.promise(abandonHostCheckouts);
-    supervisor.registerDaemonFunction(
-      CONTROL_HOST_CHECKOUT,
-      (source, head, run) =>
-        fenced()
-          ? Promise.reject(new Error(AGENT_RESTARTING))
-          : hostCheckout(source, head, run)
-    );
-    supervisor.registerDaemonFunction(
-      CONTROL_HOST_CHECKOUT_REMOVE,
-      removeHostCheckout
+    // Host checks are gone (2026-10-16): the checkouts a crashed run of one
+    // left under ~/.cawco/host-checks go, as the agent's start once cleared them.
+    yield* Effect.promise(() =>
+      rm(join(homedir(), ".cawco", "host-checks"), {
+        recursive: true,
+        force: true,
+      }).catch((error: unknown) =>
+        console.warn(
+          `[agent] ~/.cawco/host-checks was not removed: ${String(error)}`
+        )
+      )
     );
     // A delegate's inputs: read here for a parent here, written here into a workspace here.
     supervisor.registerDaemonFunction(CONTROL_INPUTS_READ, readInputs);

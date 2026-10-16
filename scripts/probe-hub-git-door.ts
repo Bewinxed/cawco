@@ -198,7 +198,6 @@ try {
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd,
-        checks: [{ name: "Probe check", command: "true" }],
       })
       .then(
         () => "started",

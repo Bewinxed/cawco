@@ -154,7 +154,7 @@
   };
   const ERRORS = [
     "bun run typecheck exited 2: 3 errors in apps/dashboard",
-    "The machine went away while the checks ran.",
+    "The machine went away while the landing gate ran.",
     "Budget reached: 40 turns.",
     "finish_item: the probe spec failed 2 of 9 assertions",
     "Rebase onto main conflicted in DelegateTray.svelte",
@@ -204,7 +204,7 @@
       queued: work.owns ? { owns: work.owns, paused: null } : null,
       checkQueue: work.slot
         ? {
-            words: "queued for a heavy-run slot behind 2 checks",
+            words: "queued for the Mac's build slot behind 2 builds",
             since: now - 4 * 60_000,
           }
         : null,

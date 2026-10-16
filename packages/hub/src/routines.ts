@@ -77,7 +77,6 @@ import { HUB_DEBUG } from "./config";
 import type { DbShape, ProjectRow, SentMessageRow, WorkItemRow } from "./db";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { RoutineOutcome, RoutineTarget, WorkBudget } from "./db/schema";
-import { defaultCheck } from "./dispatch";
 import { eventData } from "./ingress";
 import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
@@ -886,7 +885,6 @@ export const createRoutines = ({
         prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. Its prompt:\n\n${routine.prompt}${as ? `\n\n${as.input}` : inputOf(run)}\n\n${CONTRACT}`,
         ...(type ? { type } : {}),
         ...(as ? { role: as.role } : {}),
-        checks: [defaultCheck(routine.lands, [])],
         lands: routine.lands,
         ...(routine.budget ? { budget: routine.budget } : {}),
         cwd: place.cwd,

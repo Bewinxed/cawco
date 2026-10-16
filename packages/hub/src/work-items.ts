@@ -12,11 +12,14 @@
  * a newer item owned.
  *
  * The hub is the one authority: `delegate` is a request to {@link start}, and
- * the frames that move a session move its item. An item carries acceptance
- * checks; it is `done` only when its session calls `finish_item` and the hub
- * has run every check in the item's worktree and seen it pass. The parent's
- * report is built by the hub from those results, never from the session's
- * prose.
+ * the frames that move a session move its item. It is `done` only when its
+ * session calls `finish_item` and its work passes the hub's landing gate
+ * ({@link gateSteps}: the dependency install, the repository's lint and
+ * typecheck on the tree about to land, and the iOS build when the item
+ * changes what the Swift build reads) and lands. No session declares what
+ * the hub runs: the session's report, quoting the output of every command
+ * that proves its work, is the proof, and the parent's report is that
+ * report with the gate's lines, the landing and the commits under it.
  *
  * Slice 7b of Projects P1 adds four rules. A **group** (`group`) under one
  * parent reports once, combined, when every item of it has ended; a failure
@@ -63,8 +66,6 @@ import type {
 } from "@cawco/core";
 import {
   byPerson,
-  CONTROL_HOST_CHECKOUT,
-  CONTROL_HOST_CHECKOUT_REMOVE,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -79,8 +80,6 @@ import {
   handoffMarker,
   holdingWords,
   machineCalled,
-  machineLabel,
-  namesAmong,
   sizeWords,
   type WorkspaceLanding,
   withInputsLine,
@@ -94,9 +93,9 @@ import {
 } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import {
-  APPLE_GATE_CHECK,
   APPLE_GATE_COMMAND,
   APPLE_GATE_INPUTS,
+  APPLE_GATE_STEP,
   APPLE_GATE_TIMEOUT_SEC,
   appleGateDiff,
   appleGateRefusal,
@@ -114,7 +113,6 @@ import type {
 import type {
   Origin,
   WorkBudget,
-  WorkItemCheck,
   WorkItemSubmission,
   WorkOrigin,
 } from "./db/schema";
@@ -123,9 +121,10 @@ import {
   type BranchOutcome,
   type Failed,
   GATE_COVERS,
+  type GateStep,
   type LandingTurn,
   land,
-  landGateChecks,
+  landGateSteps,
   landingQueue,
   openPullRequest,
   pushBranch,
@@ -584,8 +583,6 @@ export interface WorkItemRequest {
    */
   byPerson?: boolean;
   canDelegate?: boolean;
-  /** Its acceptance checks: at least one. */
-  checks: WorkItemCheck[];
   /** The repository a new workspace is cut from; the parent's directory by default. */
   cwd?: string;
   /**
@@ -603,7 +600,7 @@ export interface WorkItemRequest {
    * (agent inputs.ts): what its boundary cannot read where it lies.
    */
   inputs?: string[];
-  /** Where its commits go once its checks pass; `main` when left out. */
+  /** Where its commits go once it passes the landing gate; `main` when left out. */
   lands?: LandsMode;
   /** The machine a new workspace is cut on; the parent's by default. */
   machineId?: string;
@@ -732,9 +729,9 @@ export interface WorkItemDeps {
   readonly designHeld: (itemId: string) => boolean;
   /**
    * The design check (design-verify.ts) of a `finish_item`, before its
-   * checks run: the words the call answers while a verifier session judges
-   * the result against its project's design system, or nothing when the
-   * item goes on (not design work, no system to judge against, or passed
+   * landing gate runs: the words the call answers while a verifier session
+   * judges the result against its project's design system, or nothing when
+   * the item goes on (not design work, no system to judge against, or passed
    * at its commit).
    */
   readonly designHold: (
@@ -914,6 +911,14 @@ const SLEEP_WAKES = 2;
 
 /** What the sweep's wake tells a session asleep on open work. */
 const STILL_OPEN = "Your work item is still open: continue it.";
+
+/** When a parent hears from its delegate, as `delegate` and a continue answer it. */
+const REPORT_ARRIVES =
+  "Its report arrives once it calls finish_item and its work clears the hub's landing gate; the report quotes the commands it ran.";
+
+/** How an open item ends, as the hub's reminders say it. */
+const FINISH_LINE =
+  "Finish the work and call finish_item with a report that quotes the output of every command that proves it, or call it with `blocked` and the exact command and error.";
 
 /** Whose word the sweep's wake is: the hub's about an item, as the quiet-turn word is. */
 const WAKE_ORIGIN: NeutralOrigin = { kind: "system", name: "work-item" };
@@ -1097,9 +1102,8 @@ const firstLine = (text: string | null): string =>
     .map((line) => line.trim())
     .find(Boolean) ?? "";
 
-/** How long a check runs when it names no limit, and the most it may name. */
-const CHECK_TIMEOUT_SEC = 600;
-const CHECK_TIMEOUT_MAX_SEC = 3600;
+/** How long a gate step runs when it names no limit of its own. */
+const GATE_TIMEOUT_SEC = 600;
 
 /** How long the report's git reads may take. */
 const GIT_TIMEOUT_MS = 60_000;
@@ -1138,39 +1142,9 @@ const waitClock = (at: Date): string =>
 export const WAIT_ITEM_LIMIT =
   "Wait not set. Use whole minutes from 1 to 120 and a non-empty reason for waiting on a command you started.";
 
-const WORD = /\s+/;
-
-/** Why a `delegate` call's checks cannot stand, or nothing when they can. */
-export const checksProblem = (checks: WorkItemCheck[]): string | undefined => {
-  if (checks.length === 0) {
-    return "checks is empty: give at least one acceptance check.";
-  }
-  for (const check of checks) {
-    const words = check.name.trim().split(WORD).filter(Boolean).length;
-    if (words < 2 || words > 6) {
-      return `check "${check.name}": name it in 2 to 6 plain words.`;
-    }
-    if (!check.command.trim()) {
-      return `check "${check.name}": command is blank.`;
-    }
-    if (check.machine !== undefined && !check.machine.trim()) {
-      return `check "${check.name}": machine is blank; name one, or leave it out to run the check on the workspace's own machine.`;
-    }
-    const limit = check.timeoutSec;
-    if (
-      limit !== undefined &&
-      !(Number.isInteger(limit) && limit >= 1 && limit <= CHECK_TIMEOUT_MAX_SEC)
-    ) {
-      return `check "${check.name}": timeoutSec must be a whole number from 1 to ${CHECK_TIMEOUT_MAX_SEC}.`;
-    }
-  }
-  return undefined;
-};
-
-/** Why a request's title, checks, owned files, budget or group cannot stand; nothing when they can. */
+/** Why a request's title, owned files, budget or group cannot stand; nothing when they can. */
 const requestProblem = (request: WorkItemRequest): string | undefined =>
   titleProblem(request.title) ??
-  checksProblem(request.checks) ??
   (request.owns ? ownsProblem(request.owns) : undefined) ??
   (request.budget ? budgetProblem(request.budget) : undefined) ??
   (request.group !== undefined && !request.group.trim()
@@ -1295,64 +1269,63 @@ const outputsSaid = (stdout: string): string[] => {
 const failedWith = (result: CommandResult): string =>
   (result.stderr || result.stdout).trim() || `exit ${result.exitCode}`;
 
-/** How much of each stream a check keeps: `expect` and the report read this. */
-const CHECK_TAIL = 4000;
+/** How much of each stream a gate step keeps: the report and the delegate read this. */
+const GATE_TAIL = 4000;
 
-/** A check's command result, each stream cut to its last {@link CHECK_TAIL} characters. */
-const checkTails = (result: CommandResult): CommandResult => ({
+/** A step's command result, each stream cut to its last {@link GATE_TAIL} characters. */
+const gateTails = (result: CommandResult): CommandResult => ({
   exitCode: result.exitCode,
-  stdout: result.stdout.slice(-CHECK_TAIL),
-  stderr: result.stderr.slice(-CHECK_TAIL),
+  stdout: result.stdout.slice(-GATE_TAIL),
+  stderr: result.stderr.slice(-GATE_TAIL),
 });
 
-/** One check, as the hub ran it: `result` holds the stream tails. */
-interface CheckOutcome {
-  check: WorkItemCheck;
+/** One landing gate step, as the hub ran it: `result` holds the stream tails. */
+interface StepOutcome {
   durationMs: number;
   exitCode: number;
   passed: boolean;
   result: CommandResult;
   /**
-   * Why a check did not run, its pass carried over ({@link checkOnce}):
+   * Why a step did not run, its pass carried over ({@link gateOnce}):
    * `passed on this tree at finish_item`.
    */
   skipped?: string;
-  /** Where a check that names another machine ran: `on Omars-MacBook-Pro at 1a2b3c4d5`. */
+  step: GateStep;
+  /** Where a step on another machine ran: `on Omars-MacBook-Pro at 1a2b3c4d5`. */
   where?: string;
 }
 
 /**
- * A check command that passed on a tree, with the `expect` it passed with
- * and the stage it ran in (`at finish_item`, `while gating on top of main`,
- * `in its turn to land on main`), for the line of a check its pass lets skip.
+ * A gate command that passed on a tree, with the stage it ran in (`at
+ * finish_item`, `while gating on top of main`, `in its turn to land on
+ * main`), for the line of a step its pass lets skip.
  */
 interface Passed {
   command: string;
-  expect: string | undefined;
   stage: string;
 }
 
 /**
- * The paths a check's command reads, for the commands that declare them: its
+ * The paths a step's command reads, for the commands that declare them: its
  * pass is kept and matched by those paths' trees rather than the whole
  * tree's, so it holds after a rebase that left them as they were (the Apple
- * gate's compile, apple-gate.ts {@link APPLE_GATE_INPUTS}). Every other check
+ * gate's compile, apple-gate.ts {@link APPLE_GATE_INPUTS}). Every other step
  * is kept and matched by the whole tree.
  */
-const CHECK_INPUTS: Readonly<Record<string, readonly string[]>> = {
+const STEP_INPUTS: Readonly<Record<string, readonly string[]>> = {
   [APPLE_GATE_COMMAND]: APPLE_GATE_INPUTS,
 };
-/** Every path a check declares, read once per look at the workspace. */
-const INPUT_PATHS = [...new Set(Object.values(CHECK_INPUTS).flat())];
+/** Every path a step declares, read once per look at the workspace. */
+const INPUT_PATHS = [...new Set(Object.values(STEP_INPUTS).flat())];
 
 /**
- * A clean workspace as {@link checkOnce} keys passes by it: `tree`, HEAD's
+ * A clean workspace as {@link gateOnce} keys passes by it: `tree`, HEAD's
  * tree with the item's outputs' contents beside it; `inputs`, the tree of
  * each declared input path at HEAD (`absent` where HEAD has none); `outputs`,
  * each output's content hash; `stamp`, all of it, to tell whether the
  * workspace moved during a run.
  */
-interface Checked {
+interface TreeState {
   inputs: ReadonlyMap<string, string>;
   outputs: ReadonlyMap<string, string>;
   stamp: string;
@@ -1360,15 +1333,15 @@ interface Checked {
 }
 
 /**
- * Where `check`'s pass is kept in `state`, and how its skip says where it
- * passed: the whole tree, or, for a check that declares inputs, those paths'
+ * Where `step`'s pass is kept in `state`, and how its skip says where it
+ * passed: the whole tree, or, for a step that declares inputs, those paths'
  * trees (and the contents of any output under them).
  */
 const passKey = (
-  check: WorkItemCheck,
-  state: Checked
+  step: GateStep,
+  state: TreeState
 ): { key: string; said: (stage: string) => string } => {
-  const inputs = CHECK_INPUTS[check.command.trim()];
+  const inputs = STEP_INPUTS[step.command.trim()];
   if (!inputs) {
     return {
       key: state.tree,
@@ -1388,90 +1361,76 @@ const passKey = (
 };
 
 /**
- * Why `check` need not run where `passed` passed (all kept under its
- * {@link passKey}, which `said` names): the same command passed there (with
- * the same `expect`, when it has one), or one that covers it did (landing.ts
- * {@link GATE_COVERS}). Undefined when it must run.
+ * Why `step` need not run where `passed` passed (all kept under its
+ * {@link passKey}, which `said` names): the same command passed there, or
+ * one that covers it did (landing.ts {@link GATE_COVERS}). Undefined when it
+ * must run.
  */
 const priorPass = (
-  check: WorkItemCheck,
+  step: GateStep,
   passed: Passed[],
   said: (stage: string) => string
 ): string | undefined => {
-  const command = check.command.trim();
-  const same = passed.find(
-    (each) =>
-      each.command === command &&
-      (check.expect === undefined || each.expect === check.expect)
-  );
+  const command = step.command.trim();
+  const same = passed.find((each) => each.command === command);
   if (same) {
     return said(same.stage);
   }
   const covers = GATE_COVERS[command] ?? [];
-  const cover =
-    check.expect === undefined
-      ? passed.find((each) => covers.includes(each.command))
-      : undefined;
+  const cover = passed.find((each) => covers.includes(each.command));
   return cover
     ? `${cover.command}, which covers it, ${said(cover.stage)}`
     : undefined;
 };
 
-/**
- * An install {@link depsScript} ran ahead of the checks: not one of the
- * item's checks, and never counted with them.
- */
+/** An install {@link depsScript} ran ahead of the gate's steps: the gate's first line. */
 interface InstallOutcome {
   durationMs: number;
   passed: boolean;
   result: CommandResult;
   /** What it said it ran: `bun install (bun.lock changed …)`. */
   said: string;
-  /** Where it ran, when on another machine's check workspace. */
+  /** Where it ran, when on another machine's gate workspace. */
   where?: string;
 }
 
 /**
- * A check run: the installs it made first, and the checks' own outcomes,
- * none of them when the workspace's own install failed.
+ * A run of the landing gate: the installs it made first, and the steps' own
+ * outcomes, none of them when the workspace's own install failed.
  */
-interface CheckRun {
+interface GateRun {
   installs: InstallOutcome[];
-  outcomes: CheckOutcome[];
+  outcomes: StepOutcome[];
 }
 
 /**
- * How a check run waits. At finish_item and while an item gates (`inTurn`
- * false) its checks wait out their machine's pause and the shared slots they
- * need, `say` hearing each wait with the name of the check that waits (null
- * once none does). In the landing turn (`inTurn` true) nothing waits: a
- * check due there that runs on another machine or on the host, or one (or its
- * dependency install) that would wait for a pause or a slot, throws
+ * How a gate run waits. At finish_item and while an item gates on top of
+ * its branch (`inTurn` false) its steps wait out their machine's pause and
+ * the shared slots they need, `say` hearing each wait with the name of the
+ * step that waits (null once none does). In the landing turn (`inTurn` true)
+ * nothing waits: a step due there that runs on another machine, or one (or
+ * its dependency install) that would wait for a pause or a slot, throws
  * {@link WouldWait}, and the item steps out of its turn (landing.ts).
  */
-interface CheckHow {
+interface GateHow {
   inTurn: boolean;
-  say: (words: string | null, check?: string) => void;
+  say: (words: string | null, step?: string) => void;
 }
 
 /**
- * The turn runs only what runs in the workspace itself: a due check that
- * runs on another machine (the Apple gate's build on a Mac) or on the host is
- * the gate's, outside the queue. Throws {@link WouldWait} naming the first
- * such check, before any of them runs; nothing when there is none.
+ * The turn runs only what runs in the workspace itself: a due step on
+ * another machine (the iOS build on a Mac) is the gate's, outside the queue.
+ * Throws {@link WouldWait} naming the first such step, before any of them
+ * runs; nothing when there is none.
  */
 const refuseAway = (
-  checks: WorkItemCheck[],
+  steps: GateStep[],
   machineId: string,
   named: (machineId: string) => string
 ): void => {
-  const away = checks.find(
-    (check) => check.host || (check.machine && check.machine !== machineId)
-  );
-  if (away) {
-    throw new WouldWait(
-      `${away.name} runs on ${named(away.machine ?? machineId)}${away.host ? ", outside its workspace" : ""}`
-    );
+  const away = steps.find((step) => step.machine && step.machine !== machineId);
+  if (away?.machine) {
+    throw new WouldWait(`${away.name} runs on ${named(away.machine)}`);
   }
 };
 
@@ -1488,21 +1447,21 @@ function waitedIn(error: unknown, what: string): never {
   throw error;
 }
 
-/** One check that ran to its end, and where, when on another machine. */
+/** One step that ran to its end, and where, when on another machine. */
 interface Ran {
   complete: CommandResult;
   where: string | undefined;
 }
 
-/** A check's install a machine's pause cancelled: it runs again with its check. */
+/** A step's install a machine's pause cancelled: it runs again with its step. */
 class PausedRun extends Error {
   constructor() {
     super("cancelled by its machine's pause");
   }
 }
 
-/** Whether a run fails: an install that failed, or a check. */
-const runFailed = (run: CheckRun): boolean =>
+/** Whether a run fails: an install that failed, or a step. */
+const runFailed = (run: GateRun): boolean =>
   run.installs.some((install) => !install.passed) ||
   run.outcomes.some((outcome) => !outcome.passed);
 
@@ -1511,8 +1470,8 @@ const fenced = (text: string): string =>
   `\n\`\`\`\`\n${text.trimEnd()}\n\`\`\`\``;
 
 /**
- * An install's line above the checks: what it ran, and on a failure the
- * installer's output (and its stderr, for the delegate).
+ * An install's line above the gate's steps: what it ran, and on a failure
+ * the installer's output (and its stderr, for the delegate).
  */
 const installLine = (
   { said, passed, result, durationMs, where }: InstallOutcome,
@@ -1529,101 +1488,96 @@ const installLine = (
     : out;
 };
 
-/** A run's install lines, each on its own line ahead of the checks; empty without one. */
-const installLines = (run: CheckRun, withStderr = false): string =>
+/** A run's install lines, each on its own line ahead of the steps; empty without one. */
+const installLines = (run: GateRun, withStderr = false): string =>
   run.installs.map((each) => `${installLine(each, withStderr)}\n`).join("");
 
 /**
- * A failed run as the delegate reads it: `head`, when the workspace's
- * install failed, that no check ran, else how many of the item's checks
- * failed; `lines`, the install lines and then the checks', failures first.
+ * A failed gate run as the delegate reads it: `head`, when the workspace's
+ * install failed, that no step ran, else which steps failed; `lines`, the
+ * install lines and then the steps', failures first, each failure with its
+ * output.
  */
-const failedRun = (run: CheckRun): { head: string; lines: string } => {
+const failedRun = (run: GateRun): { head: string; lines: string } => {
   const failing = run.outcomes.filter((outcome) => !outcome.passed);
   const passing = run.outcomes.filter((outcome) => outcome.passed);
   return {
     head:
       run.outcomes.length === 0
-        ? "Dependencies didn't install, so no checks ran."
-        : `${failing.length} of ${run.outcomes.length} checks failed.`,
+        ? "the dependency install failed, so no other step ran"
+        : `${failing.map((each) => each.step.name).join(" and ")} failed`,
     lines:
-      `${installLines(run, true)}${[...failing, ...passing].map(checkResultLine).join("\n")}`.trimEnd(),
+      `${installLines(run, true)}${[...failing, ...passing].map(stepResultLine).join("\n")}`.trimEnd(),
   };
 };
 
 /**
- * A check's line: its name, pass or fail, exit code and duration. A failure
+ * A step's line: its name, pass or fail, exit code and duration. A failure
  * carries its stdout tail under it; a pass is the line alone.
  */
-const checkLine = ({
-  check,
+const stepLine = ({
+  step,
   passed,
   exitCode,
   durationMs,
   result,
   skipped,
   where,
-}: CheckOutcome): string => {
+}: StepOutcome): string => {
   if (skipped) {
-    return `- ${check.name}: pass (not run again: ${skipped})`;
+    return `- ${step.name}: pass (not run again: ${skipped})`;
   }
-  const missing =
-    exitCode === 0 && !passed && check.expect !== undefined
-      ? `, stdout does not contain ${JSON.stringify(check.expect)}`
-      : "";
-  const line = `- ${check.name}: ${passed ? "pass" : "fail"} (exit ${exitCode}, ${(durationMs / 1000).toFixed(1)}s${missing}${where ? `, ${where}` : ""})`;
+  const line = `- ${step.name}: ${passed ? "pass" : "fail"} (exit ${exitCode}, ${(durationMs / 1000).toFixed(1)}s${where ? `, ${where}` : ""})`;
   // A pass is its line: its output is the report's length, not its news.
   return !passed && result.stdout.trim()
     ? `${line}${fenced(result.stdout)}`
     : line;
 };
 
-/** A run's passed installs, as the landing line says them; empty without one. */
-const installedSaid = (run: CheckRun): string =>
-  run.installs
-    .filter((each) => each.passed)
-    .map((each) => `, installing dependencies first: ${each.said}`)
-    .join("");
+/** A gate run as the report lists it: its installs, then each step; empty when it ran nothing. */
+const gateLines = (run: GateRun): string =>
+  `${installLines(run)}${run.outcomes.map(stepLine).join("\n")}`.trimEnd();
 
-/** A gate's or a turn's run as the landing line says it: each check, run or not and why. */
-const ranSaid = (run: CheckRun | undefined): string =>
-  run && run.outcomes.length > 0
-    ? `: ${run.outcomes
-        .map((each) =>
-          each.skipped
-            ? `${each.check.name} not run again (${each.skipped})`
-            : `${each.check.name} ran and passed`
-        )
-        .join(", ")}${installedSaid(run)}`
-    : "";
+/** A step as the delegate reads it: a failure carries its stderr too. */
+const stepResultLine = (outcome: StepOutcome): string =>
+  !outcome.passed && outcome.result.stderr.trim()
+    ? `${stepLine(outcome)}\nstderr:${fenced(outcome.result.stderr)}`
+    : stepLine(outcome);
+
+/** A gate run with nothing in it: an item whose landing has no gate. */
+const NO_GATE: GateRun = { installs: [], outcomes: [] };
 
 /**
- * The landing line of an item that landed: where, what its last gate on top
- * of the branch ran, and what its turn ran again after the turn's rebase
- * (nothing when the branch had not moved since), and each time it stepped
- * out of its turn.
+ * The landing line of an item that landed on its base: where, what its turn
+ * ran again after the turn's rebase (nothing when the branch had not moved
+ * since it gated), and each time it stepped out of its turn. What its last
+ * gate on top of the branch ran is the report's landing gate section.
  */
 const landedLine = (
   base: string,
   landed: { rebased: boolean; sha: string },
-  runs: { gate?: CheckRun; turn?: CheckRun },
+  turn: GateRun | undefined,
   steps: string[]
 ): string => {
-  const turn = landed.rebased
-    ? `${base} had moved by its turn, so it rebased again${ranSaid(runs.turn) || ", with no checks to run"}`
+  const ran = turn?.outcomes
+    .map((each) =>
+      each.skipped
+        ? `${each.step.name} not run again (${each.skipped})`
+        : `${each.step.name} ${each.passed ? "passed" : "failed"}`
+    )
+    .join(", ");
+  const installed = (turn?.installs ?? [])
+    .map((each) => `, installing dependencies first: ${each.said}`)
+    .join("");
+  const after = landed.rebased
+    ? `${base} had moved by its turn, so it rebased again${ran ? `: ${ran}${installed}` : ", with no gate steps to run"}`
     : `${base} had not moved by its turn, so nothing ran again`;
   const stepped =
     steps.length > 0
       ? `; it stepped out of its turn ${steps.length === 1 ? "once" : `${steps.length} times`} to gate again, the last time because ${steps.at(-1)}`
       : "";
-  return `Landed on ${base} at ${landed.sha.slice(0, 9)}; gated on top of ${base}${ranSaid(runs.gate)}; ${turn}${stepped}.`;
+  return `Landed on ${base} at ${landed.sha.slice(0, 9)}, gated on top of ${base}; ${after}${stepped}.`;
 };
-
-/** A check as the delegate reads it: a failure carries its stderr too. */
-const checkResultLine = (outcome: CheckOutcome): string =>
-  !outcome.passed && outcome.result.stderr.trim()
-    ? `${checkLine(outcome)}\nstderr:${fenced(outcome.result.stderr)}`
-    : checkLine(outcome);
 
 /** The findings, numbered; nothing when there are none. */
 const findingsBlock = (findings: WorkItemSubmission["findings"]): string =>
@@ -1632,17 +1586,30 @@ const findingsBlock = (findings: WorkItemSubmission["findings"]): string =>
     : "";
 
 /**
- * What landing a checked item came to: done (with the pull request it opened
- * or found, landing `pr`), back to its session, or refused.
+ * What landing a finished item came to: done (with the pull request it
+ * opened or found, landing `pr`), back to its session, or refused. `gate` is
+ * the landing gate's run, for the report.
  */
 type Landed =
-  | { kind: "done"; line: string; prUrl?: string; cut?: WorkspaceCut }
-  | { kind: "refused"; line: string; prUrl?: string }
+  | {
+      kind: "done";
+      line: string;
+      gate: GateRun;
+      prUrl?: string;
+      cut?: WorkspaceCut;
+    }
+  | { kind: "refused"; line: string; gate: GateRun; prUrl?: string }
   | { kind: "retry"; text: string };
 
 /** The text that hands uncommitted work back to the session, for a landing that takes only commits. */
 const dirtyText = (files: string, where: string): string =>
-  `The checks passed, but the workspace has changes that are not committed, new files included. The checks ran on them and the hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or add them to .gitignore, then call finish_item again.${fenced(files)}`;
+  `Not landed: the workspace has changes that are not committed, new files included. The hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or add them to .gitignore, then call finish_item again.${fenced(files)}`;
+
+/** The text that hands a failed landing gate back to the session. */
+const gateFailedText = (run: GateRun, where: string): string => {
+  const { head, lines } = failedRun(run);
+  return `Not landed: the landing gate ran on ${where}, and ${head}. Fix it, commit, and call finish_item again.\n\n${lines}`;
+};
 
 /**
  * A refused landing's line, its first sentence what failed: the step git was
@@ -1675,7 +1642,7 @@ const refusedLine = (
 };
 
 /**
- * Why a checked item that passed its checks fails, when it does: the
+ * Why a finished item that passed its landing gate fails, when it does: the
  * landing's line (its first sentence the step that failed), or, once it
  * landed, the line on the outputs that did not arrive.
  */
@@ -1690,18 +1657,28 @@ const failureOf = (
 };
 
 /**
- * A checked item's report to its parent: what it said it did, its checks,
- * how it landed and its outputs, then `tail` (commits, diffstat, findings).
- * A failure leads it, so the parent reads why before what.
+ * The landing gate's section of a report: its lines under their heading;
+ * nothing for a landing with no gate.
  */
-const checkedReport = (
-  said: { lines: string; summary: string },
+const gateSection = (run: GateRun): string => {
+  const lines = gateLines(run);
+  return lines ? `\n\nLanding gate, run by the hub:\n${lines}` : "";
+};
+
+/**
+ * A finished item's report to its parent: what it said it did (its own
+ * report, quoting what it ran), the landing gate's lines, how it landed and
+ * its outputs, then `tail` (commits, diffstat, findings). A failure leads
+ * it, so the parent reads why before what.
+ */
+const finishedReport = (
+  summary: string,
   landing: Exclude<Landed, { kind: "retry" }>,
   collected: { ok: boolean; line: string },
   tail: string
 ): string => {
   const failure = failureOf(landing, collected);
-  const head = `${said.summary}\n\nChecks:\n${said.lines}`;
+  const head = `${summary}${gateSection(landing.gate)}`;
   if (!failure) {
     return `${head}\n\n${landing.line}${collected.line}${tail}`;
   }
@@ -1715,7 +1692,8 @@ const unpushed = (
   workspace: WorkspaceRow,
   branch: string,
   lands: LandsMode,
-  machine: string
+  machine: string,
+  gate: GateRun
 ): Landed => {
   switch (pushed.kind) {
     case "dirty":
@@ -1723,16 +1701,19 @@ const unpushed = (
     case "nothing":
       return {
         kind: "done",
+        gate,
         line: `Nothing to push: ${workspace.base} already holds every commit in this workspace${lands === "pr" ? ", so no pull request was opened" : ""}.`,
       };
     case "no-remote":
       return {
         kind: "done",
+        gate,
         line: "Not pushed: this workspace's repository has no remote.",
       };
     default:
       return {
         kind: "refused",
+        gate,
         line: refusedLine(
           pushed,
           { head: "Not pushed", target: `branch ${branch}` },
@@ -1812,39 +1793,39 @@ export const createWorkItems = ({
       );
     }
   };
-  /** Items whose checks this hub process is running now: a resume leaves them to that run. */
+  /** Items whose landing this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
   /**
-   * Items whose checks wait for something now: what its status says, and
-   * since when. In memory: a hub that starts runs the checks again from the
+   * Items whose landing waits for something now: what its status says, and
+   * since when. In memory: a hub that starts runs the landing again from the
    * first.
    */
-  const checkQueues = new Map<string, { words: string; since: number }>();
+  const landingWaits = new Map<string, { words: string; since: number }>();
   /**
-   * The check commands that passed for each live item, by what they passed
-   * on ({@link passKey}: the whole tree, or the trees of the paths a check
+   * The gate commands that passed for each live item, by what they passed
+   * on ({@link passKey}: the whole tree, or the trees of the paths a step
    * declares): one command runs at most once on one such key
-   * ({@link checkOnce}). In memory: a hub that starts runs them again.
+   * ({@link gateOnce}). In memory: a hub that starts runs them again.
    */
   const passes = new Map<string, Map<string, Passed[]>>();
   /**
-   * What an item's checks wait for, as its status says it (WorkItemSummary
+   * What an item's landing waits for, as its status says it (WorkItemSummary
    * `checkQueue`): a shared slot ("queued for …"), its machine's pause
    * ("waiting: Omars-MacBook-Pro is paused until 00:57"), another command in
    * its folder, its gate on top of the branch ("gating on top of main: iOS
    * build compiles queued for the Mac's build slot behind …"), or its turn
-   * to land ("queued to land on main behind …"); null
-   * once it waits no more. Every wait between `finish_item` and the item's
-   * outcome comes here: before 2026-10-16 only a check's own slot and pause
-   * waits did, and items queued to land sat "checking" with nothing said.
+   * to land ("queued to land on main behind …"); null once it waits no more.
+   * Every wait between `finish_item` and the item's
+   * outcome comes here: before 2026-10-16 only a step's own slot and pause
+   * waits did, and items queued to land sat with nothing said.
    */
-  const checkWait = (itemId: string, words: string | null): void => {
+  const landingWait = (itemId: string, words: string | null): void => {
     if (words) {
-      checkQueues.set(itemId, {
+      landingWaits.set(itemId, {
         words,
-        since: checkQueues.get(itemId)?.since ?? Date.now(),
+        since: landingWaits.get(itemId)?.since ?? Date.now(),
       });
-    } else if (!checkQueues.delete(itemId)) {
+    } else if (!landingWaits.delete(itemId)) {
       return;
     }
     published(db.workItem(itemId));
@@ -1942,25 +1923,6 @@ export const createWorkItems = ({
     return workspace ? refOf(workspace) : leadPlace(row);
   };
 
-  /**
-   * Refuses host checks declared by a session that runs inside a boundary:
-   * its delegate's commits would run outside the boundary it is kept in, as
-   * though it had run them there itself. Only a session outside every
-   * boundary (one the person started) declares one; a routine's runs never
-   * do. Nothing when `checks` has none, or `declaredBy` may.
-   */
-  const hostDeclared = (checks: WorkItemCheck[], declaredBy: string): void => {
-    const host = checks.find((check) => check.host);
-    const [row] = host ? db.getInstancesByIds([declaredBy]) : [];
-    const bound = row ? boundOf(row) : undefined;
-    if (host && bound) {
-      throw new WorkItemRefusal(
-        403,
-        `check "${host.name}" is marked host, and only a session outside every boundary declares one: you run inside ${row?.role === "lead" ? "your place's" : `workspace ${bound.id}'s`} boundary, and a host check would run your delegate's commits outside it. Leave host out, or ask the session that started you to declare it.`
-      );
-    }
-  };
-
   /** The pause of the machine a workspace is on, in words; undefined when it is not paused. */
   const pausedWorkspace = (workspaceId: string): string | undefined => {
     const [workspace] = db.workspacesNamed(workspaceId);
@@ -1992,7 +1954,7 @@ export const createWorkItems = ({
     replacedBy: item.replacedBy,
     waitUntil: item.waitUntil?.getTime() ?? null,
     waitReason: item.waitReason,
-    checkQueue: checkQueues.get(item.id) ?? null,
+    checkQueue: landingWaits.get(item.id) ?? null,
     firstLines: {
       brief: firstLine(item.brief),
       result: item.headline ?? firstLine(item.result),
@@ -2213,11 +2175,11 @@ export const createWorkItems = ({
   /**
    * Stops a live item that has reached its budget ({@link overBudget}): it
    * fails with the sentence that names the budget, its parent (and lead) are
-   * told, and its session is ended. An item whose checks are running is left
-   * to them.
+   * told, and its session is ended. An item whose landing is running is left
+   * to it.
    */
   const enforceBudget = (item: WorkItemRow): void => {
-    if (!(item.budget && LIVE.has(item.state)) || item.checkingSince) {
+    if (!(item.budget && LIVE.has(item.state)) || item.landingSince) {
       return;
     }
     const reason = overBudget(item.budget, usedBy(item));
@@ -2284,9 +2246,9 @@ export const createWorkItems = ({
    * live item. It reads the row, never the path that wrote it, so no writer
    * of `error` has an item to remember. An end (a stop, a discard) is filed
    * with its item's cancel in one step (server.ts `sessionEnding`), before a
-   * discard can take the row. An item whose checks this hub runs now is left
-   * to that run; one whose session still has a row and whose checks a
-   * stopped hub left running is its checks' to settle ({@link resumeChecks}).
+   * discard can take the row. An item whose landing this hub runs now is left
+   * to that run; one whose session still has a row and whose landing a
+   * stopped hub left running is its landing's to settle ({@link resumeLandings}).
    * `only` limits the read to those sessions: the ones whose rows just moved
    * (server.ts, off the database's change log of `instances`); without it,
    * every live item (the sweep, which reads what a hub before this one wrote).
@@ -2308,7 +2270,7 @@ export const createWorkItems = ({
     );
     for (const item of live) {
       const row = rows.get(item.instanceId);
-      if (row && (row.workItemId !== item.id || item.checkingSince)) {
+      if (row && (row.workItemId !== item.id || item.landingSince)) {
         continue;
       }
       if (row) {
@@ -2321,7 +2283,7 @@ export const createWorkItems = ({
       const failed = finish(item, {
         state: "failed",
         error: SESSION_GONE,
-        checkingSince: null,
+        landingSince: null,
         submission: null,
       });
       console.log(`[work-items] ${item.id}: ${SESSION_GONE}`);
@@ -2337,7 +2299,7 @@ export const createWorkItems = ({
    * Whether the sweep leaves a live item's session as it is: it has a
    * process, or something holds the item on purpose or will move it anyway.
    * An interrupt's hold (`heldAt`, until its parent or the reader writes); a
-   * paused machine under its workspace; a declared wait; checks in flight
+   * paused machine under its workspace; a declared wait; a landing in flight
    * (here, or left by a hub before this one); a session that has moved on to
    * another item; a machine that is not connected (it settles its sessions
    * when it registers); a send on its way to the session, which is its next
@@ -2348,7 +2310,7 @@ export const createWorkItems = ({
     item.heldAt !== null ||
     pausedWorkspace(item.workspaceId) !== undefined ||
     !!(item.waitUntil || item.waitResumeBy) ||
-    !!item.checkingSince ||
+    !!item.landingSince ||
     finishing.has(item.id) ||
     row.workItemId !== item.id ||
     !online(row.machineId) ||
@@ -2425,9 +2387,7 @@ export const createWorkItems = ({
           uuid: crypto.randomUUID(),
           message: {
             role: "user",
-            content: item.checks
-              ? `${STILL_OPEN} Its checks: ${checkNames(item.checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error.`
-              : STILL_OPEN,
+            content: `${STILL_OPEN} ${FINISH_LINE}`,
           },
           parent_tool_use_id: null,
           origin: WAKE_ORIGIN,
@@ -2682,7 +2642,7 @@ export const createWorkItems = ({
       .map((todo) => `- [${todo.id ?? todo.path}] ${todo.text}`)
       .join(
         "\n"
-      )}\n\nTick each one you finished with todo_write, and say in your summary why each other one stays open. Then call finish_item again: the next call runs the checks whatever is ticked.`;
+      )}\n\nTick each one you finished with todo_write, and say in your summary why each other one stays open. Then call finish_item again: the next call runs the landing gate whatever is ticked.`;
   };
 
   /** What follows an item's end, off the step that ended it. */
@@ -2962,7 +2922,7 @@ export const createWorkItems = ({
    * (its session asleep or ended, the artifact gone), or the sweep's next
    * look (workspace-retire.ts). Its sessions are not ended: each is asleep or
    * gone already, and a handoff to one goes on in a clone cut again
-   * ({@link recut}). A check workspace goes with its source.
+   * ({@link recut}). A gate workspace goes with its source.
    */
   const settle = async (id: string): Promise<Settled> => {
     const [workspace] = db.workspacesNamed(id);
@@ -3046,7 +3006,7 @@ export const createWorkItems = ({
 
   /**
    * Whether a workspace is retired and may be cut again: archived, not a
-   * check workspace, and its work not discarded (a discard's carry holds
+   * gate workspace, and its work not discarded (a discard's carry holds
    * it, and nothing on its remote does).
    */
   const recuttable = (workspace: WorkspaceRow): boolean =>
@@ -3198,7 +3158,7 @@ export const createWorkItems = ({
     if (workspace.checksFor) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${workspace.id} runs the checks of workspace ${workspace.checksFor} on its machine and takes no work item. Delegate with workspace ${workspace.checksFor}, or without workspace to start a new one.`
+        `Workspace ${workspace.id} runs the landing gate's iOS build for workspace ${workspace.checksFor} on its machine and takes no work item. Delegate with workspace ${workspace.checksFor}, or without workspace to start a new one.`
       );
     }
     const items = db.workItemsIn(workspace.id);
@@ -3259,7 +3219,7 @@ export const createWorkItems = ({
    * is a plain folder ({@link WorkItemDeps.beforeCut}), then its machine cuts
    * the clone and starts its boundary, and the hub files it. A place that
    * cannot be made one refuses the workspace in the machine's words, before
-   * anything is cut. `checksFor` makes it the check workspace of that one;
+   * anything is cut. `checksFor` makes it the gate workspace of that one;
    * `account` is the Claude account its first session launches on
    * ({@link ItemPlacement}), whose user layer the boundary reads from its
    * first start.
@@ -3447,7 +3407,6 @@ export const createWorkItems = ({
       model: previous.model,
       effort: previous.effort,
       state: "running",
-      checks: request.checks,
       // The session has history: what it spent before is not this item's.
       spendBaseUsd: session.sessionId
         ? db.sessionCostUsd(session.sessionId)
@@ -3484,7 +3443,7 @@ export const createWorkItems = ({
       text:
         `Continued ${label} as work item ${item.id} in workspace ${workspace.id} (${placeOf(workspace)}): ` +
         "the brief is its next message, in the same session and its cached transcript. " +
-        "Its report arrives when the hub has run its acceptance checks. Guide it, or continue it after it " +
+        `${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${session.id}", ...).${extrasLine(item)}${inputsSaid(inputs)}`,
     };
   };
@@ -3685,8 +3644,6 @@ export const createWorkItems = ({
     if (problem) {
       throw new WorkItemRefusal(400, problem);
     }
-    request.checks = machinesOf(request.checks);
-    hostDeclared(request.checks, parent.id);
     // An attempt spends the project's money: none starts past its cap.
     const capped = request.task ? pauses(request.task.projectId) : undefined;
     if (capped) {
@@ -4005,7 +3962,6 @@ export const createWorkItems = ({
       model: settings.model,
       effort: settings.type?.effort,
       state: "starting",
-      checks: request.checks,
     });
     published(item);
     spawnedUnder?.(instanceId, parent.id);
@@ -4060,7 +4016,7 @@ export const createWorkItems = ({
         (settings.forkOf
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${label}. It starts with every turn of yours so far.`
           : `a fresh ${harness} session, ${label}.`) +
-        " Its report arrives when the hub has run its acceptance checks. Guide it, or continue it after it " +
+        ` ${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${instanceId}", ...): the message lands in the same session and its cached transcript.` +
         (canDelegate
           ? " It may spawn delegates of its own."
@@ -4114,33 +4070,6 @@ export const createWorkItems = ({
     ended.state === "done" && ended.group !== null && !ended.groupReportedAt;
 
   /**
-   * A turn of an item filed before checks existed: unless the session is
-   * busy, it ends the item with the turn's text, and the report carries it;
-   * a done item of a group says nothing now ({@link heldForGroup}).
-   */
-  const uncheckedTurn = (
-    item: WorkItemRow,
-    turn: { text: string; error?: string },
-    busy: boolean
-  ): { body: string; failed: boolean } | undefined => {
-    const failed = turn.error !== undefined;
-    const ended = busy
-      ? item
-      : finish(
-          item,
-          failed
-            ? { state: "failed", error: turn.error, result: turn.text }
-            : { state: "done", result: turn.text }
-        );
-    if (failed && !busy) {
-      console.log(`[work-items] ${item.id}: its turn failed: ${turn.error}`);
-    }
-    return heldForGroup(ended)
-      ? undefined
-      : { body: `${turn.text}${reportLine(ended)}`, failed };
-  };
-
-  /**
    * A live item's turn that failed with `error`: the item fails with it,
    * unless its session is busy again, and its parent hears it either way.
    */
@@ -4165,8 +4094,7 @@ export const createWorkItems = ({
    */
   const quietTurn = (
     row: InstanceRow,
-    item: WorkItemRow,
-    checks: WorkItemCheck[]
+    item: WorkItemRow
   ): { body: string; failed: boolean } | undefined => {
     const turns = (quiet.get(item.id) ?? 0) + 1;
     if (turns >= QUIET_TURNS) {
@@ -4178,7 +4106,7 @@ export const createWorkItems = ({
     quiet.set(item.id, turns);
     tell(
       row,
-      `Your work item is still open. Its checks: ${checkNames(checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error. Use wait_item for a bounded wait on a command you started.`
+      `Your work item is still open. ${FINISH_LINE} Use wait_item for a bounded wait on a command you started.`
     );
     return undefined;
   };
@@ -4278,55 +4206,17 @@ export const createWorkItems = ({
     return true;
   };
 
-  /** The names of an item's checks, as its session is told them. */
-  const checkNames = (checks: WorkItemCheck[]): string =>
-    checks.map((check) => check.name).join(", ");
-
-  /**
-   * `checks`, each machine one names kept as its machineId: named by that id,
-   * its hostname, or the hostname as the fleet shows it, case aside. Refused
-   * when a name is no machine of the fleet's, or several. The machine need
-   * not be online now, only when the checks run.
-   */
-  const machinesOf = (checks: WorkItemCheck[]): WorkItemCheck[] => {
-    const agents = db.listAgents();
-    return checks.map((check) => {
-      if (check.machine === undefined) {
-        return check;
-      }
-      const needle = check.machine.trim().toLowerCase();
-      const matches = agents.filter(
-        (agent) =>
-          agent.machineId.toLowerCase() === needle ||
-          agent.hostname.toLowerCase() === needle ||
-          machineLabel(agent.hostname).toLowerCase() === needle
-      );
-      const [found] = matches;
-      if (matches.length === 1 && found) {
-        return { ...check, machine: found.machineId };
-      }
-      throw new WorkItemRefusal(
-        400,
-        matches.length > 1
-          ? `check "${check.name}": "${check.machine}" names ${matches.length} machines: ${matches.map((agent) => `${machineLabel(agent.hostname)} (${agent.machineId})`).join(", ")}. Name one by its machineId.`
-          : `check "${check.name}": no machine of the fleet is named "${check.machine}". The fleet: ${namesAmong(agents, agents)}.`
-      );
-    });
-  };
-
-  /** A machine as a check's line names it: its hostname as the fleet shows it. */
+  /** A machine as a gate step's line names it: its hostname as the fleet shows it. */
   const machineName = (machineId: string): string =>
     machineCalled(machineId, db.listAgents());
 
   /**
-   * The session's live, checked item that `finish_item` may finish; the done
-   * result, when it is done already; or the refusal.
+   * The session's live item that `finish_item` may finish; the done result,
+   * when it is done already; or the refusal.
    */
   const finishable = (
     instanceId: string
-  ):
-    | { row: InstanceRow; item: WorkItemRow; checks: WorkItemCheck[] }
-    | string => {
+  ): { row: InstanceRow; item: WorkItemRow } | string => {
     const [row] = db.getInstancesByIds([instanceId]);
     const item = row ? itemOf(row) : undefined;
     if (!(row && item)) {
@@ -4341,23 +4231,17 @@ export const createWorkItems = ({
         `${item.title} (${item.id}) is ${item.state}; finish_item finishes live work only.`
       );
     }
-    if (!item.checks?.length) {
+    if (item.landingSince) {
       throw new WorkItemRefusal(
         409,
-        "This item has no acceptance checks yet; your parent sets them with set_item_checks."
+        "the landing gate is already running for this item; its outcome comes to you when it settles"
       );
     }
-    if (item.checkingSince) {
-      throw new WorkItemRefusal(
-        409,
-        "checks are already running for this item"
-      );
-    }
-    return { row, item, checks: item.checks };
+    return { row, item };
   };
 
   /**
-   * The project's repository on a machine, which a check workspace there is
+   * The project's repository on a machine, which a gate workspace there is
    * cut from: its checkout place there (the primary first), or the folder
    * the last workspace of the project cut there was cut from
    * ({@link recordRepository}), which outlives that workspace. Nothing when
@@ -4378,12 +4262,12 @@ export const createWorkItems = ({
   };
 
   /**
-   * The workspace that runs `workspace`'s checks on `machineId`: the one cut
-   * there before, or a new one cut from the project's repository on that
-   * machine. It stays between runs, so a build there is incremental; it is
-   * archived with `workspace`.
+   * The workspace that runs `workspace`'s landing gate steps on `machineId`
+   * (the iOS build on a Mac): the one cut there before, or a new one cut from
+   * the project's repository on that machine. It stays between runs, so a
+   * build there is incremental; it is archived with `workspace`.
    */
-  const checkWorkspace = async (
+  const gateWorkspace = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
     machineId: string
@@ -4417,64 +4301,39 @@ export const createWorkItems = ({
     return opened;
   };
 
-  /** The workspace's last commit, read inside its boundary. */
-  const headOf = async (
-    workspace: WorkspaceRow,
-    item: WorkItemRow
-  ): Promise<string> => {
-    const read = await runIn(workspace, item)(
-      "git rev-parse --verify 'HEAD^{commit}'",
-      GIT_TIMEOUT_MS
-    );
-    if (read.exitCode !== 0) {
-      throw new Error(
-        `the workspace's last commit could not be read: ${failedWith(read)}`
-      );
-    }
-    return read.stdout.trim();
-  };
-
   /**
-   * Runs `checks` in order. A check runs in the workspace's worktree, on its
-   * machine, inside its boundary: it reads what its delegate wrote, at the
-   * path the delegate wrote it (`$TMPDIR` is the workspace's own scratch dir there). A check
-   * that names another machine runs there, in the workspace's check workspace
-   * ({@link checkWorkspace}), inside that one's boundary, at the workspace's
+   * Runs the landing gate's `steps` in order. A step runs in the workspace's
+   * worktree, on its machine, inside its boundary. A step on another machine
+   * (the iOS build on a Mac) runs there, in the workspace's gate workspace
+   * ({@link gateWorkspace}), inside that one's boundary, at the workspace's
    * last commit: the commits past its base go over as a git bundle, once per
-   * run and machine. Uncommitted work stays where it is.
-   *
-   * A check its parent marked `host` runs outside every boundary, as the
-   * agent's user, on the workspace's machine or the one it names: in a fresh
-   * checkout of the workspace's last commit (agent host-check.ts), cloned
-   * from the clone that holds it there (the workspace, or its check
-   * workspace), its dependencies installed, once per run and machine. What
-   * no sandbox may do runs there: user namespaces, podman, a probe whose
-   * scratch fleet cuts workspaces. Each such checkout goes when the run ends.
+   * run and machine. Uncommitted work stays where it is. `how` says whether
+   * its steps may wait ({@link GateHow}).
    */
-  const runChecks = async (
+  const runGate = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    checks: WorkItemCheck[],
-    how: CheckHow
-  ): Promise<CheckRun> => {
+    steps: GateStep[],
+    how: GateHow
+  ): Promise<GateRun> => {
     let commit: Promise<WorkspaceCommit> | undefined;
-    /** The check running now, for the words of its waits. */
-    let current: WorkItemCheck | undefined;
-    /** What a check waits for, as the item's status says it ({@link CheckHow}). */
+    /** The step running now, for the words of its waits. */
+    let current: GateStep | undefined;
+    /** What a step waits for, as the item's status says it ({@link GateHow}). */
     const queued = (words: string | null): void =>
       how.say(words, current?.name);
     /**
-     * How a check's commands run: a pause that cancels one hands it back
+     * How a step's commands run: a pause that cancels one hands it back
      * here; in the turn, one that would wait throws {@link WouldWait}.
      */
-    const asCheck = {
+    const asStep = {
       onWait: queued,
-      what: "check",
+      what: "landing gate",
       movable: true,
       noWait: how.inTurn,
     } as const;
     /**
-     * Waits out a pause of the machine a check runs on, the item's status
+     * Waits out a pause of the machine a step runs on, the item's status
      * saying it; at once when it is not paused. In the turn it throws
      * {@link WouldWait} instead.
      */
@@ -4490,20 +4349,20 @@ export const createWorkItems = ({
       await machineFree(machineId);
       queued(null);
     };
-    /** The installs this run made, each a line of the check log ahead of the checks. */
+    /** The installs this run made, each a line of the gate's log ahead of its steps. */
     const installs: InstallOutcome[] = [];
     /**
      * Installs the dependencies of the checkout at `path` on `machineId`,
-     * inside `bound`'s boundary (none for a host check's checkout), when its
-     * lockfile moved since they were installed ({@link depsScript}).
-     * Answers whether the checkout can be checked: false once its install
-     * failed. An install that ran is logged in {@link installs}, with `where`.
-     * One a pause cancels throws {@link PausedRun}: it runs again with its check.
+     * inside `bound`'s boundary, when its lockfile moved since they were
+     * installed ({@link depsScript}). Answers whether the gate can run
+     * there: false once its install failed. An install that ran is logged in
+     * {@link installs}, with `where`. One a pause cancels throws
+     * {@link PausedRun}: it runs again with its step.
      */
     const install = async (
       machineId: string,
       path: string,
-      bound: WorkspaceRef | undefined,
+      bound: WorkspaceRef,
       where?: string
     ): Promise<boolean> => {
       const started = Date.now();
@@ -4511,9 +4370,9 @@ export const createWorkItems = ({
         machineId,
         path,
         `${SAFE_GIT_SHELL}${depsScript()}`,
-        CHECK_TIMEOUT_SEC * 1000,
+        GATE_TIMEOUT_SEC * 1000,
         bound,
-        asCheck
+        asStep
       );
       if (complete.cancelled) {
         throw new PausedRun();
@@ -4529,7 +4388,7 @@ export const createWorkItems = ({
         : "the dependency install";
       installs.push({
         said,
-        result: checkTails(complete),
+        result: gateTails(complete),
         where,
         durationMs: Date.now() - started,
         passed: complete.exitCode === 0,
@@ -4554,12 +4413,12 @@ export const createWorkItems = ({
       string,
       Promise<{ at: WorkspaceRow; head: string }>
     >();
-    /** The check workspace on `machineId`, at the workspace's commit; its dependencies not yet installed. */
+    /** The gate workspace on `machineId`, at the workspace's commit; its dependencies not yet installed. */
     const atCommit = (
       machineId: string
     ): Promise<{ at: WorkspaceRow; head: string }> =>
       once(placed, machineId, async () => {
-        const at = await checkWorkspace(workspace, item, machineId);
+        const at = await gateWorkspace(workspace, item, machineId);
         commit ??= call(workspace.machineId, CONTROL_WORKSPACE_BUNDLE, [
           refOf(workspace),
           workspace.base,
@@ -4573,14 +4432,14 @@ export const createWorkItems = ({
         ]);
         return { at, head: made.head };
       });
-    /** The failure a checkout whose install failed throws, for its check's line. */
+    /** The failure a checkout whose install failed throws, for its step's line. */
     const INSTALL_FAILED =
-      "its dependency install failed there; the dependencies line above the checks has the installer's output";
+      "its dependency install failed there; the dependencies line above the steps has the installer's output";
     const installed = new Map<
       string,
       Promise<{ at: WorkspaceRow; head: string }>
     >();
-    /** The check workspace on `machineId`, at the workspace's commit, its dependencies installed. */
+    /** The gate workspace on `machineId`, at the workspace's commit, its dependencies installed. */
     const elsewhere = (
       machineId: string
     ): Promise<{ at: WorkspaceRow; head: string }> =>
@@ -4594,94 +4453,13 @@ export const createWorkItems = ({
         }
         return ready;
       });
-    /** The host checkouts this run made, each removed when the run ends. */
-    const checkouts: { machineId: string; run: string }[] = [];
-    const cloned = new Map<string, Promise<{ path: string; where: string }>>();
     /**
-     * The host checkout on `machineId`, at the workspace's last commit,
-     * outside every boundary: cloned from the workspace's own clone on its
-     * machine, else from its check workspace there, put at the commit first
-     * ({@link atCommit}).
-     */
-    const hostCheckout = (
-      machineId: string
-    ): Promise<{ path: string; where: string }> =>
-      once(cloned, machineId, async () => {
-        const { source, head } =
-          machineId === workspace.machineId
-            ? { source: refOf(workspace), head: await headOf(workspace, item) }
-            : await atCommit(machineId).then((ready) => ({
-                source: refOf(ready.at),
-                head: ready.head,
-              }));
-        const run = crypto.randomUUID();
-        checkouts.push({ machineId, run });
-        const path = (await call(machineId, CONTROL_HOST_CHECKOUT, [
-          source,
-          head,
-          run,
-        ])) as string;
-        return {
-          path,
-          where: `on the host, ${machineName(machineId)} at ${head.slice(0, 9)}`,
-        };
-      });
-    const hosted = new Map<string, Promise<{ path: string; where: string }>>();
-    /** {@link hostCheckout}, its dependencies installed outside every boundary. */
-    const onHost = (
-      machineId: string
-    ): Promise<{ path: string; where: string }> =>
-      once(hosted, machineId, async () => {
-        const ready = await hostCheckout(machineId);
-        if (!(await install(machineId, ready.path, undefined, ready.where))) {
-          throw new Error(INSTALL_FAILED);
-        }
-        return ready;
-      });
-    /**
-     * One check on the host; a machine that cannot run it fails the check in
-     * its words. Undefined when a pause cancelled it, to run again.
-     */
-    const runOnHost = async (
-      machineId: string,
-      check: WorkItemCheck,
-      limit: number
-    ): Promise<Ran | undefined> => {
-      const on = `on the host, ${machineName(machineId)}`;
-      try {
-        const { path, where } = await onHost(machineId);
-        const complete = await command(
-          machineId,
-          path,
-          check.command,
-          limit,
-          undefined,
-          asCheck
-        );
-        return complete.cancelled ? undefined : { where, complete };
-      } catch (error) {
-        if (error instanceof PausedRun) {
-          // Its install was cut: the next run there installs again, in the same checkout.
-          hosted.delete(machineId);
-          return;
-        }
-        return {
-          where: on,
-          complete: {
-            exitCode: 1,
-            stdout: "",
-            stderr: `The hub could not run this check ${on}: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        };
-      }
-    };
-    /**
-     * One check on another machine; a machine that cannot run it fails the
-     * check in its words. Undefined when a pause cancelled it, to run again.
+     * One step on another machine; a machine that cannot run it fails the
+     * step in its words. Undefined when a pause cancelled it, to run again.
      */
     const runElsewhere = async (
       machineId: string,
-      check: WorkItemCheck,
+      step: GateStep,
       limit: number
     ): Promise<Ran | undefined> => {
       const on = `on ${machineName(machineId)}`;
@@ -4690,10 +4468,10 @@ export const createWorkItems = ({
         const complete = await command(
           machineId,
           at.path,
-          check.command,
+          step.command,
           limit,
           refOf(at),
-          asCheck
+          asStep
         );
         return complete.cancelled
           ? undefined
@@ -4709,7 +4487,7 @@ export const createWorkItems = ({
           complete: {
             exitCode: 1,
             stdout: "",
-            stderr: `The hub could not run this check ${on}: ${error instanceof Error ? error.message : String(error)}`,
+            stderr: `The hub could not run this step ${on}: ${error instanceof Error ? error.message : String(error)}`,
           },
         };
       }
@@ -4733,126 +4511,101 @@ export const createWorkItems = ({
       }
     };
     /**
-     * Where a check runs: the machine it names, else the workspace's. The
+     * Where a step runs: the machine it names, else the workspace's. The
      * Apple build gate whose Mac is paused moves to a Mac that is not, when
      * one is online ({@link gateMac}).
      */
-    const machineFor = (check: WorkItemCheck): string => {
-      const named = check.machine ?? workspace.machineId;
-      return check.name === APPLE_GATE_CHECK &&
+    const machineFor = (step: GateStep): string => {
+      const named = step.machine ?? workspace.machineId;
+      return step.name === APPLE_GATE_STEP &&
         item.projectId &&
         machinePaused(named)
         ? (gateMac(workspace, item.projectId)?.machineId ?? named)
         : named;
     };
     /**
-     * One run of a check where `machineId` is: on the host there when it is
-     * marked so, else in the workspace or its check workspace there.
-     * Undefined when a pause cancelled it.
+     * One run of a step where `machineId` is: in the workspace, or its gate
+     * workspace there. Undefined when a pause cancelled it.
      */
-    const runCheck = async (
+    const runStep = async (
       machineId: string,
-      check: WorkItemCheck,
+      step: GateStep,
       limit: number
     ): Promise<Ran | undefined> => {
-      if (check.host) {
-        return await runOnHost(machineId, check, limit);
-      }
       if (machineId !== workspace.machineId) {
-        return await runElsewhere(machineId, check, limit);
+        return await runElsewhere(machineId, step, limit);
       }
       const complete = await command(
         workspace.machineId,
         workspace.path,
-        check.command,
+        step.command,
         limit,
         refOf(workspace),
-        asCheck
+        asStep
       );
       return complete.cancelled ? undefined : { complete, where: undefined };
     };
-    const local = checks.some(
-      (check) =>
-        !(
-          check.host ||
-          (check.machine && check.machine !== workspace.machineId)
-        )
+    const local = steps.some(
+      (step) => !step.machine || step.machine === workspace.machineId
     );
     if (how.inTurn) {
-      refuseAway(checks, workspace.machineId, machineName);
+      refuseAway(steps, workspace.machineId, machineName);
     }
     try {
-      // A failed install is the run's one line: no check can pass without it.
+      // A failed install is the run's one line: no step can pass without it.
       if (local && !(await installHere())) {
         return { installs, outcomes: [] };
       }
-      const outcomes: CheckOutcome[] = [];
-      for (const check of checks) {
-        current = check;
-        const limit = (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000;
+      const outcomes: StepOutcome[] = [];
+      for (const step of steps) {
+        current = step;
+        const limit = (step.timeoutSec ?? GATE_TIMEOUT_SEC) * 1000;
         let started = 0;
-        // A check a pause cancels is no outcome and no attempt: it waits the
+        // A step a pause cancels is no outcome and no attempt: it waits the
         // pause out (or moves, the Apple gate), then runs again from the start.
         let ran: Ran | undefined;
         while (!ran) {
-          const machineId = machineFor(check);
-          // biome-ignore lint/performance/noAwaitInLoops: checks run in order, each once its machine runs work
+          const machineId = machineFor(step);
+          // biome-ignore lint/performance/noAwaitInLoops: steps run in order, each once its machine runs work
           await unpaused(machineId);
           started = Date.now();
-          // A check that ends while waiting (killed, past the most a wait may
+          // A step that ends while waiting (killed, past the most a wait may
           // last, or a machine that could not run it) leaves no wait behind it.
-          ran = await runCheck(machineId, check, limit).finally(() =>
+          ran = await runStep(machineId, step, limit).finally(() =>
             queued(null)
           );
         }
         const { complete, where } = ran;
-        const result = checkTails(complete);
+        const result = gateTails(complete);
         outcomes.push({
-          check,
+          step,
           result,
           where,
           exitCode: result.exitCode,
           durationMs: Date.now() - started,
-          passed:
-            result.exitCode === 0 &&
-            (check.expect === undefined ||
-              result.stdout.includes(check.expect)),
+          passed: result.exitCode === 0,
         });
       }
       return { installs, outcomes };
     } catch (error) {
       waitedIn(error, current?.name ?? "the dependency install");
-    } finally {
-      // Every host checkout goes with its run, whatever its checks came to;
-      // one its machine could not remove goes with that machine's next
-      // connection or start (agent host-check.ts `abandonHostCheckouts`).
-      await Promise.all(
-        checkouts.map(({ machineId, run }) =>
-          call(machineId, CONTROL_HOST_CHECKOUT_REMOVE, [run]).catch(
-            (error: unknown) =>
-              console.warn(
-                `[work-items] ${item.id}: host checkout ${run} on ${machineName(machineId)} was not removed: ${error instanceof Error ? error.message : String(error)}`
-              )
-          )
-        )
-      );
     }
   };
 
   /**
-   * What a check run in the workspace checks ({@link Checked}): HEAD's tree
-   * (`git rev-parse HEAD^{tree}`), with the item's outputs' contents beside
-   * it when it has outputs, and the tree of each path a check declares as
-   * its inputs (`git rev-parse HEAD:<path>`), while nothing else is
+   * What a gate run in the workspace runs on ({@link TreeState}): HEAD's
+   * tree (`git rev-parse HEAD^{tree}`), with the item's outputs' contents
+   * beside it when it has outputs, and the tree of each path a step declares
+   * as its inputs (`git rev-parse HEAD:<path>`), while nothing else is
    * uncommitted; landing.ts lands only such a tree. Undefined while
-   * something else is uncommitted: those checks read files no tree names, so
+   * something else is uncommitted: those steps read files no tree names, so
    * their passes are neither kept nor matched. `noWait` in a landing turn.
    */
-  const checkedState = async (
+  const treeState = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
     noWait: boolean
-  ): Promise<Checked | undefined> => {
+  ): Promise<TreeState | undefined> => {
     const outputs = item.outputs ?? [];
     const hashed =
       outputs.length > 0
@@ -4890,58 +4643,52 @@ export const createWorkItems = ({
   };
 
   /**
-   * {@link runChecks}, each check run at most once on one tree: a check that
+   * {@link runGate}, each step run at most once on one tree: a step that
    * passed on the tree the workspace holds now, or whose command one that
    * covers it did (landing.ts GATE_COVERS), is not run again; its outcome
-   * says where it passed. A check that declares its inputs
-   * ({@link CHECK_INPUTS}) is matched by those paths' trees instead, so a
-   * rebase that left them alone does not run it again: the Apple gate's iOS
-   * compile once per apps/apple tree, where it ran twice (at finish_item and
-   * after the rebase) on every landing behind another. `stage` names this run
-   * for the lines of the checks it lets skip later; `how`, whether its checks
-   * may wait ({@link CheckHow}). A pass is kept only when the workspace held
+   * says where it passed. A step that declares its inputs
+   * ({@link STEP_INPUTS}) is matched by those paths' trees instead, so a
+   * rebase that left them alone does not run it again: the iOS compile runs
+   * once per apps/apple tree, at finish_item, and not again on the rebased
+   * tree when the rebase left apps/apple as it was. `stage` names this run
+   * for the lines of the steps it lets skip later; `how`, whether its steps
+   * may wait ({@link GateHow}). A pass is kept only when the workspace held
    * the same trees before and after the run.
    */
-  const checkOnce = async (
+  const gateOnce = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    checks: WorkItemCheck[],
+    steps: GateStep[],
     stage: string,
-    how: CheckHow
-  ): Promise<CheckRun> => {
-    const state = await checkedState(workspace, item, how.inTurn);
+    how: GateHow
+  ): Promise<GateRun> => {
+    const state = await treeState(workspace, item, how.inTurn);
     const kept = passes.get(item.id);
-    const prior = checks.map((check): string | undefined => {
+    const prior = steps.map((step): string | undefined => {
       if (!state) {
         return undefined;
       }
-      const { key, said } = passKey(check, state);
-      return priorPass(check, kept?.get(key) ?? [], said);
+      const { key, said } = passKey(step, state);
+      return priorPass(step, kept?.get(key) ?? [], said);
     });
-    const due = checks.filter((_, at) => prior[at] === undefined);
+    const due = steps.filter((_, at) => prior[at] === undefined);
     const run =
-      due.length > 0
-        ? await runChecks(workspace, item, due, how)
-        : { installs: [], outcomes: [] };
+      due.length > 0 ? await runGate(workspace, item, due, how) : NO_GATE;
     if (due.length > 0 && run.outcomes.length === 0) {
-      // The workspace's install failed: no check ran.
+      // The workspace's install failed: no step ran.
       return run;
     }
     if (
       state &&
       due.length > 0 &&
-      (await checkedState(workspace, item, how.inTurn))?.stamp === state.stamp
+      (await treeState(workspace, item, how.inTurn))?.stamp === state.stamp
     ) {
       const byKey = kept ?? new Map<string, Passed[]>();
       for (const each of run.outcomes.filter((outcome) => outcome.passed)) {
-        const { key } = passKey(each.check, state);
+        const { key } = passKey(each.step, state);
         byKey.set(key, [
           ...(byKey.get(key) ?? []),
-          {
-            command: each.check.command.trim(),
-            expect: each.check.expect,
-            stage,
-          },
+          { command: each.step.command.trim(), stage },
         ]);
       }
       passes.set(item.id, byKey);
@@ -4949,12 +4696,12 @@ export const createWorkItems = ({
     const ran = [...run.outcomes];
     return {
       installs: run.installs,
-      outcomes: checks.map((check, at) => {
+      outcomes: steps.map((step, at) => {
         const skipped = prior[at];
         return skipped === undefined
-          ? (ran.shift() as CheckOutcome)
+          ? (ran.shift() as StepOutcome)
           : {
-              check,
+              step,
               skipped,
               passed: true,
               exitCode: 0,
@@ -5003,7 +4750,7 @@ export const createWorkItems = ({
    * `git` in it run as `safe-git.ts` says: no hook or config the workspace
    * wrote runs for the hub. Each wait it makes (its machine's pause, another
    * command in the folder, a boundary starting) is the item's status
-   * ({@link checkWait}); `noWait`, in a landing turn, it makes none and
+   * ({@link landingWait}); `noWait`, in a landing turn, it makes none and
    * throws {@link WouldWait} instead.
    */
   const runIn =
@@ -5015,33 +4762,33 @@ export const createWorkItems = ({
         `${SAFE_GIT_SHELL}${cmd}`,
         timeoutMs,
         refOf(workspace),
-        { onWait: (words) => checkWait(item.id, words), noWait }
+        { onWait: (words) => landingWait(item.id, words), noWait }
       );
 
   /**
-   * How an item's checks run in its landing on `base` (landing.ts): in its
-   * turn they never wait; while it gates on top of the branch, its status
-   * says so (and why, when it stepped out of its turn: `stepped`), with what
-   * each check waits for there.
+   * How an item's landing gate runs in its landing on `base` (landing.ts):
+   * in its turn it never waits; while it gates on top of the branch, its
+   * status says so (and why, when it stepped out of its turn: `stepped`),
+   * with what each step waits for there.
    */
   const landingHow = (
     itemId: string,
     base: string,
     turning: boolean,
     stepped: string | undefined
-  ): CheckHow => {
+  ): GateHow => {
     if (turning) {
-      return { inTurn: true, say: (words) => checkWait(itemId, words) };
+      return { inTurn: true, say: (words) => landingWait(itemId, words) };
     }
     const gating = stepped
       ? `stepped out of its turn to land (${stepped}), so gating again on top of ${base}`
       : `gating on top of ${base}`;
     return {
       inTurn: false,
-      say: (words, check) =>
-        checkWait(
+      say: (words, step) =>
+        landingWait(
           itemId,
-          words ? `${gating}: ${check ? `${check} ` : ""}${words}` : gating
+          words ? `${gating}: ${step ? `${step} ` : ""}${words}` : gating
         ),
     };
   };
@@ -5049,91 +4796,90 @@ export const createWorkItems = ({
   /** The item in the landing queue: named as `“title” (id)`, its wait its status. */
   const turnOf = (item: WorkItemRow): LandingTurn => ({
     who: `“${item.title}” (${item.id.slice(0, 8)})`,
-    onWait: (words) => checkWait(item.id, words),
+    onWait: (words) => landingWait(item.id, words),
   });
 
   /**
-   * Lands a checked item's commits on its workspace's base branch
-   * (landing.ts): it gates on top of the branch outside the queue, its
-   * status saying so and what each check waits for there, then takes its
-   * turn. Answers the line the report and the delegate read when the item can
-   * be done; the text that hands it back to its delegate (`retry`:
-   * uncommitted work, a conflict, checks that fail on the rebased tree); or
-   * the line that says why it could not land (`refused`).
+   * Lands a finished item's commits on its workspace's base branch
+   * (landing.ts): it gates on top of the branch outside the queue, the
+   * landing gate's `steps` run on the rebased tree, its status saying so and
+   * what each step waits for there; then it takes its turn, where only the
+   * steps whose inputs the turn's rebase moved run again, and none waits.
+   * Answers the line the report and the delegate read when the item can be
+   * done; the text that hands it back to its delegate (`retry`: uncommitted
+   * work, a conflict, a gate that failed); or the line that says why it
+   * could not land (`refused`).
    */
   const landOnBase = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    checks: WorkItemCheck[]
+    steps: GateStep[]
   ): Promise<Landed> => {
     const { base } = workspace;
-    /** The last gate's run and the turn's, for the landing line. */
-    const runs: { gate?: CheckRun; turn?: CheckRun } = {};
+    /** The last gate's run on top of the branch and the turn's, for the report. */
+    const runs: { gate: GateRun; turn?: GateRun } = { gate: NO_GATE };
     /** The times it stepped out of its turn, and why the last time. */
-    const steps: string[] = [];
+    const stepped: string[] = [];
     /**
-     * The item's checks, then the repository's lint and typecheck
-     * (landing.ts LAND_GATE_SCRIPTS), on the tree the workspace holds: run
-     * as checks are, so a lockfile the rebase moved is installed first.
+     * The landing gate on the tree the workspace holds: run as every step
+     * is, so a lockfile the rebase moved is installed first.
      */
-    const onBaseChecks = async (
+    const onBaseGate = async (
       turning: boolean
-    ): Promise<Failed<CheckRun> | undefined> => {
-      const how = landingHow(item.id, base, turning, steps.at(-1));
-      const stage = turning
-        ? `in its turn to land on ${base}`
-        : `while gating on top of ${base}`;
+    ): Promise<Failed<GateRun> | undefined> => {
+      const how = landingHow(item.id, base, turning, stepped.at(-1));
       how.say(null);
-      const recheck = await checkOnce(workspace, item, checks, stage, how);
-      if (runFailed(recheck)) {
-        return { kind: "recheck-failed", failing: recheck };
-      }
-      const gate = await checkOnce(
+      const run = await gateOnce(
         workspace,
         item,
-        await landGateChecks((cmd, timeoutMs) =>
-          runIn(workspace, item)(cmd, timeoutMs, turning)
-        ),
-        stage,
+        steps,
+        turning
+          ? `in its turn to land on ${base}`
+          : `while gating on top of ${base}`,
         how
       );
-      if (runFailed(gate)) {
-        return { kind: "gate-failed", failing: gate };
+      if (runFailed(run)) {
+        return { kind: "gate-failed", failing: run };
       }
-      runs[turning ? "turn" : "gate"] = {
-        installs: [...recheck.installs, ...gate.installs],
-        outcomes: [...recheck.outcomes, ...gate.outcomes],
-      };
+      if (turning) {
+        runs.turn = run;
+      } else {
+        runs.gate = run;
+      }
       // Gated, it says next that it waits its turn, or nothing when it takes
-      // it at once. A failure's or an error's words go as settleChecks ends.
-      checkWait(item.id, null);
+      // it at once. A failure's or an error's words go as settleLanding ends.
+      landingWait(item.id, null);
     };
-    const outcome = await land<CheckRun>(base, {
+    const outcome = await land<GateRun>(base, {
       run: runIn(workspace, item),
       turn: turnOf(item),
-      check: onBaseChecks,
+      check: onBaseGate,
       onStepOut: (words) => {
-        steps.push(words);
+        stepped.push(words);
       },
       queue: landings,
       skip: item.outputs ?? [],
       ...(item.projectId ? { repo: item.projectId } : {}),
     });
+    const { gate } = runs;
     switch (outcome.kind) {
       case "landed":
         return {
           kind: "done",
-          line: landedLine(base, outcome, runs, steps),
+          gate,
+          line: landedLine(base, outcome, runs.turn, stepped),
           cut: { branch: base, commit: outcome.sha },
         };
       case "nothing":
         return {
           kind: "done",
+          gate,
           line: `Nothing to land: ${base} already holds every commit in this workspace.`,
         };
       case "no-remote":
         return {
           kind: "done",
+          gate,
           line: "Not landed: this workspace's repository has no remote.",
         };
       case "dirty":
@@ -5141,28 +4887,20 @@ export const createWorkItems = ({
       case "conflict":
         return {
           kind: "retry",
-          text: `The checks passed, but your commits conflict with origin/${base} in:${fenced(outcome.files)}\nThe hub undid its rebase. Rebase onto origin/${base} yourself, resolve the conflicts, commit, and call finish_item again.`,
+          text: `Not landed: your commits conflict with origin/${base} in:${fenced(outcome.files)}\nThe hub undid its rebase. Rebase onto origin/${base} yourself, resolve the conflicts, commit, and call finish_item again.`,
         };
-      case "recheck-failed": {
-        const { head, lines } = failedRun(outcome.failing);
+      case "gate-failed":
         return {
           kind: "retry",
-          text: `The hub rebased your commits onto origin/${base} and ran the checks again there. ${head} Your branch is now on top of origin/${base}. Fix the cause and call finish_item again.\n\n${lines}`,
+          text: gateFailedText(
+            outcome.failing,
+            `your commits rebased onto origin/${base}, which your branch is now on top of`
+          ),
         };
-      }
-      case "gate-failed": {
-        const { lines } = failedRun(outcome.failing);
-        const failing = outcome.failing.outcomes
-          .filter((each) => !each.passed)
-          .map((each) => each.check.name);
-        return {
-          kind: "retry",
-          text: `The checks passed, but the work did not land: before pushing to ${base}, the hub runs the repository's lint and typecheck on your commits as they stand on top of origin/${base}, and ${failing.length > 0 ? failing.join(" and ") : "the dependency install"} failed. Your branch is now on top of origin/${base}. Fix it, commit, and call finish_item again.\n\n${lines}`,
-        };
-      }
       default:
         return {
           kind: "refused",
+          gate,
           line: refusedLine(
             outcome,
             { head: "Not landed", target: base },
@@ -5174,7 +4912,7 @@ export const createWorkItems = ({
   };
 
   /**
-   * The report of an item that just ended through its checks, to its parent;
+   * The report of an item that just ended through `finish_item`, to its parent;
    * or, for a done item of a group, held for the group's one report
    * ({@link settleGroup}) — a failure reports at once. Answers what the
    * delegate is told of a hold.
@@ -5198,18 +4936,20 @@ export const createWorkItems = ({
     return "";
   };
 
-  /** A pull request's body: what the delegate said it did, its checks, and where its report is. */
+  /** A pull request's body: what the delegate said it did, the landing gate's lines, and where its report is. */
   const pullRequestBody = (
     item: WorkItemRow,
-    said: { lines: string; summary: string }
+    summary: string,
+    gate: GateRun
   ): string => {
     const link = sessionUrl?.(item.instanceId);
     const what = item.taskId
       ? `an attempt at ${item.taskId}`
       : `work item ${item.id}`;
+    const lines = gateLines(gate);
     return [
-      said.summary.trim(),
-      `Checks, run by the CawCo hub:\n${said.lines}`,
+      summary.trim(),
+      ...(lines ? [`Landing gate, run by the CawCo hub:\n${lines}`] : []),
       link
         ? `This is ${what}; its report and transcript: ${link}`
         : `This is ${what} (work item ${item.id}).`,
@@ -5220,12 +4960,14 @@ export const createWorkItems = ({
    * Lands an item that lands `branch` or `pr`: its commits pushed as they are
    * to `cawco/<task or item>`, and for `pr`, a pull request against the base
    * branch opened, or the open one found. gh turning the pull request down
-   * refuses the landing in gh's words.
+   * refuses the landing in gh's words. `gate` is the landing gate's run at
+   * finish_item, on the tree pushed.
    */
   const landOnBranch = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    said: { lines: string; summary: string }
+    summary: string,
+    gate: GateRun
   ): Promise<Landed> => {
     const { base } = workspace;
     const branch = landingBranch(item);
@@ -5242,7 +4984,8 @@ export const createWorkItems = ({
         workspace,
         branch,
         item.lands,
-        machineName(workspace.machineId)
+        machineName(workspace.machineId),
+        gate
       );
     }
     const at = `${branch} at ${pushed.sha.slice(0, 9)}`;
@@ -5250,11 +4993,12 @@ export const createWorkItems = ({
     if (item.lands !== "pr") {
       return {
         kind: "done",
+        gate,
         line: `Pushed to branch ${at} on origin; ${base} is untouched.`,
         cut,
       };
     }
-    const opened = await pullRequestFor(workspace, item, said, at);
+    const opened = await pullRequestFor(workspace, item, summary, gate, at);
     return opened.kind === "done" ? { ...opened, cut } : opened;
   };
 
@@ -5262,7 +5006,8 @@ export const createWorkItems = ({
   const pullRequestFor = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    said: { lines: string; summary: string },
+    summary: string,
+    gate: GateRun,
     at: string
   ): Promise<Landed> => {
     const { base } = workspace;
@@ -5272,7 +5017,7 @@ export const createWorkItems = ({
         ? taskTitle?.(item.projectId, item.taskId)
         : undefined) ?? item.title;
     const pr = await openPullRequest(
-      { base, branch, title, body: pullRequestBody(item, said) },
+      { base, branch, title, body: pullRequestBody(item, summary, gate) },
       runIn(workspace, item)
     );
     if (pr.kind === "refused") {
@@ -5282,11 +5027,13 @@ export const createWorkItems = ({
           : "the pull request was not opened";
       return {
         kind: "refused",
+        gate,
         line: `Pushed to branch ${at}, but ${why}. gh said:${fenced(pr.detail)}\nOpen it by hand from ${branch} into ${base}, or start the task again once gh can.`,
       };
     }
     return {
       kind: "done",
+      gate,
       prUrl: pr.url,
       line:
         pr.kind === "opened"
@@ -5295,26 +5042,33 @@ export const createWorkItems = ({
     };
   };
 
-  /** Lands a checked item the way it lands: on its base, on a branch, through a pull request, or not at all. */
-  const landChecked = (
+  /**
+   * Lands a finished item the way it lands: on its base (the gate's `steps`
+   * run on top of it, {@link landOnBase}), on a branch, through a pull
+   * request, or not at all. `earlier` is the gate's run at finish_item: every
+   * step for a branch or a pull request, none for an item landing on its base.
+   */
+  const landFinished = (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    checks: WorkItemCheck[],
-    said: { lines: string; summary: string }
+    steps: GateStep[],
+    earlier: GateRun,
+    summary: string
   ): Promise<Landed> => {
     switch (item.lands) {
       case "none":
         return Promise.resolve({
           kind: "done",
+          gate: earlier,
           line: item.outputs?.length
             ? "Nothing pushed: this item lands none, and its outputs are what it hands in."
             : "Nothing pushed: this item lands none.",
         });
       case "branch":
       case "pr":
-        return landOnBranch(workspace, item, said);
+        return landOnBranch(workspace, item, summary, earlier);
       default:
-        return landOnBase(workspace, item, checks);
+        return landOnBase(workspace, item, steps);
     }
   };
 
@@ -5339,7 +5093,7 @@ export const createWorkItems = ({
     }
     const problems = outputsSaid(result.stdout);
     return problems.length > 0
-      ? `The checks passed, but the item's outputs are not ready. ${problems.join(" ")} Then call finish_item again.`
+      ? `Not landed: the item's outputs are not ready. ${problems.join(" ")} Then call finish_item again.`
       : undefined;
   };
 
@@ -5408,22 +5162,22 @@ export const createWorkItems = ({
   };
 
   /**
-   * A checked item, its checks all passed, to its end: its outputs must be
-   * in its workspace (else it is back to running, told which are not); then
-   * it lands as its row says and its outputs are collected, and it is done
-   * (or failed, when it could not land or its outputs did not arrive) with
-   * the report the hub builds sent to its parent.
+   * A finished item whose gate passed at finish_item, to its end: its
+   * outputs must be in its workspace (else it is back to running, told which
+   * are not); then it lands as its row says (on its base, the rest of the
+   * gate's `steps` run on the rebased tree) and its outputs are collected,
+   * and it is done (or failed, when it could not land or its outputs did not
+   * arrive) with the report the hub builds sent to its parent.
    */
   const landAndReport = async (
     item: WorkItemRow,
     row: InstanceRow,
     workspace: WorkspaceRow,
-    checks: WorkItemCheck[],
+    steps: GateStep[],
     submission: WorkItemSubmission,
-    passed: { count: number; lines: string }
+    earlier: GateRun
   ): Promise<{ done: boolean; text: string }> => {
-    const settled = { checkingSince: null, submission: null };
-    const { count, lines } = passed;
+    const settled = { landingSince: null, submission: null };
     const unready = item.outputs?.length
       ? await outputsProblem(workspace, item, item.outputs)
       : undefined;
@@ -5431,10 +5185,13 @@ export const createWorkItems = ({
       update(item.id, settled);
       return { done: false, text: unready };
     }
-    const landing = await landChecked(workspace, item, checks, {
-      summary: submission.summary,
-      lines,
-    });
+    const landing = await landFinished(
+      workspace,
+      item,
+      steps,
+      earlier,
+      submission.summary
+    );
     if (landing.kind === "retry") {
       update(item.id, settled);
       return { done: false, text: landing.text };
@@ -5445,12 +5202,14 @@ export const createWorkItems = ({
         ? await collectOutputs(workspace, item)
         : { ok: true, line: "" };
     const failure = failureOf(landing, collected);
-    const body = checkedReport(
-      { summary: submission.summary, lines },
+    const body = finishedReport(
+      submission.summary,
       landing,
       collected,
       `${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`
     );
+    const lines = gateLines(landing.gate);
+    const gateSaid = lines ? `\n\nLanding gate:\n${lines}` : "";
     const ended = finish(db.workItem(item.id) ?? item, {
       ...(failure ? { state: "failed", error: failure } : { state: "done" }),
       result: body,
@@ -5466,17 +5225,17 @@ export const createWorkItems = ({
     if (landing.kind !== "done") {
       return {
         done: false,
-        text: `All ${count} checks passed, but the work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
+        text: `The work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
       };
     }
     return collected.ok
       ? {
           done: true,
-          text: `All ${count} checks passed. ${landing.line}${collected.line}\n\n${lines}\n\nThe item is done${held}. End your turn.`,
+          text: `${landing.line}${collected.line}${gateSaid}\n\nThe item is done${held}. End your turn.`,
         }
       : {
           done: false,
-          text: `All ${count} checks passed. ${landing.line} But the outputs did not arrive.${collected.line}\n\nThe item has failed and your parent has the details. End your turn.`,
+          text: `${landing.line} But the outputs did not arrive.${collected.line}\n\nThe item has failed and your parent has the details. End your turn.`,
         };
   };
 
@@ -5498,10 +5257,10 @@ export const createWorkItems = ({
   };
 
   /**
-   * The online Mac the gate runs on: one holding the workspace's check
+   * The online Mac the iOS build runs on: one holding the workspace's gate
    * workspace already, else one with the project's repository, else any;
    * among the Macs not paused first. With every Mac paused, a paused one: its
-   * check waits for the pause's end, its item's status saying so.
+   * build waits for the pause's end, its item's status saying so.
    */
   const gateMac = (workspace: WorkspaceRow, projectId: string) => {
     const macs = appleMachines(db.listAgents(), online);
@@ -5518,41 +5277,34 @@ export const createWorkItems = ({
   };
 
   /**
-   * The item's checks with the Apple build gate's added (apple-gate.ts): when
-   * its project has the gate on, it lands somewhere, and its diff against
-   * its target touches what the Swift build reads, one more check compiles
-   * the iOS app on an online Mac, at its last commit, as any check that
-   * names a machine runs ({@link runChecks}). A Mac that holds the item's
-   * check workspace already is picked first (its build is incremental), then
-   * one with a checkout of the project. With no Mac online the item does not
-   * land: `refusal` says why, in one sentence.
+   * The Apple build gate's step (apple-gate.ts), when the item's project has
+   * the gate on and its diff against its target touches what the Swift build
+   * reads: it compiles the iOS app on an online Mac, at the item's last
+   * commit, in the workspace's gate workspace there ({@link runGate}). A Mac
+   * that holds that workspace already is picked first (its build is
+   * incremental), then one with a checkout of the project. With no Mac
+   * online the item does not land: `refusal` says why, in one sentence.
    */
-  const appleGate = async (
+  const appleStep = async (
     workspace: WorkspaceRow,
-    item: WorkItemRow,
-    checks: WorkItemCheck[]
-  ): Promise<{ checks: WorkItemCheck[] } | { refusal: string }> => {
-    const gated =
-      item.lands !== "none" &&
-      item.projectId !== null &&
-      db.project(item.projectId)?.appleGate === true &&
-      !checks.some((check) => check.name === APPLE_GATE_CHECK);
-    if (!(gated && item.projectId)) {
-      return { checks };
+    item: WorkItemRow
+  ): Promise<{ steps: GateStep[] } | { refusal: string }> => {
+    const { projectId } = item;
+    if (!(projectId && db.project(projectId)?.appleGate === true)) {
+      return { steps: [] };
     }
     const touched = await appTouched(workspace, item);
     if (touched.length === 0) {
-      return { checks };
+      return { steps: [] };
     }
-    const mac = gateMac(workspace, item.projectId);
+    const mac = gateMac(workspace, projectId);
     if (!mac) {
       return { refusal: appleGateRefusal(touched, lastMac(db.listAgents())) };
     }
     return {
-      checks: [
-        ...checks,
+      steps: [
         {
-          name: APPLE_GATE_CHECK,
+          name: APPLE_GATE_STEP,
           command: APPLE_GATE_COMMAND,
           machine: mac.machineId,
           timeoutSec: APPLE_GATE_TIMEOUT_SEC,
@@ -5562,76 +5314,100 @@ export const createWorkItems = ({
   };
 
   /**
-   * THE run of a `finish_item`: the item's checks, in order, against the
-   * submission stored on its row, to an outcome. The live call and a hub
-   * start-up resume both come here. All passing, the item's outputs must be
-   * in its workspace (else it is back to running, told which are not); then
-   * it lands as its row says and its outputs are collected, and it is done
-   * and the parent gets the report the hub builds; any check failing, it is
-   * back to running and the answer names the failures. Either way the row
-   * stops checking — also when a check cannot run at all, which throws.
-   * Answers the text the delegate reads, and whether the item is done.
+   * THE landing gate of an item: what stands between its finished work and
+   * where it lands, and what no session writes. The repository's lint and
+   * typecheck scripts (landing.ts LAND_GATE_SCRIPTS), its dependencies
+   * installed first, and the iOS build when the item changes what the Swift
+   * build reads ({@link appleStep}). An item that lands none has no gate: it
+   * puts nothing anywhere. `refusal` when the iOS build has no Mac to run on.
    */
-  const settleChecks = async (
+  const gateSteps = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<{ steps: GateStep[] } | { refusal: string }> => {
+    if (item.lands === "none") {
+      return { steps: [] };
+    }
+    const apple = await appleStep(workspace, item);
+    if ("refusal" in apple) {
+      return apple;
+    }
+    return {
+      steps: [...(await landGateSteps(runIn(workspace, item))), ...apple.steps],
+    };
+  };
+
+  /**
+   * THE run of a `finish_item`, against the submission stored on its row, to
+   * an outcome. The live call and a hub start-up resume both come here. The
+   * landing gate ({@link gateSteps}) runs on the tree that lands: for an
+   * item that lands on its base, on top of that base, inside the landing
+   * ({@link landOnBase}); for a branch or a pull request, here, on the tree
+   * it pushes. A gate that fails hands the item back to its
+   * session with the failing output; one that passes lands it and reports.
+   * Either way the row stops landing — also when a step cannot run at all,
+   * which throws. Answers the text the delegate reads, and whether the item
+   * is done.
+   */
+  const settleLanding = async (
     item: WorkItemRow,
-    asked: WorkItemCheck[],
     submission: WorkItemSubmission
   ): Promise<{ done: boolean; text: string }> => {
     const [row] = db.getInstancesByIds([item.instanceId]);
     const [workspace] = db.workspacesNamed(item.workspaceId);
-    const settled = { checkingSince: null, submission: null };
+    const settled = { landingSince: null, submission: null };
     finishing.add(item.id);
     try {
-      const gate = await appleGate(workspace, item, asked);
+      const gate = await gateSteps(workspace, item);
       if ("refusal" in gate) {
         update(item.id, settled);
         return { done: false, text: gate.refusal };
       }
-      const { checks } = gate;
-      const run = await checkOnce(workspace, item, checks, "at finish_item", {
-        inTurn: false,
-        say: (words) => checkWait(item.id, words),
-      });
+      const { steps } = gate;
+      const run = await gateOnce(
+        workspace,
+        item,
+        item.lands === "main" ? [] : steps,
+        "at finish_item",
+        { inTurn: false, say: (words) => landingWait(item.id, words) }
+      );
       if (runFailed(run)) {
         update(item.id, settled);
-        const { head, lines } = failedRun(run);
-        return {
-          done: false,
-          text: `${head} The item is still running: fix the cause and call finish_item again.\n\n${lines}`,
-        };
+        return { done: false, text: gateFailedText(run, "your commits") };
       }
-      const { outcomes } = run;
-      // The install, when one ran, is its own line above the checks.
-      const lines = `${installLines(run)}${outcomes.map(checkLine).join("\n")}`;
-      // The checks took their time: the item may have been stopped since.
+      // The gate took its time: the item may have been stopped since.
       const stopped = db.workItem(item.id) ?? item;
       if (!LIVE.has(stopped.state)) {
         update(item.id, settled);
         return {
           done: false,
-          text: `The checks passed, but ${stopped.title} is ${stopped.state} now; nothing was landed or reported.`,
+          text: `${stopped.title} is ${stopped.state} now; nothing was landed or reported.`,
         };
       }
-      return await landAndReport(stopped, row, workspace, checks, submission, {
-        count: outcomes.length,
-        lines,
-      });
+      return await landAndReport(
+        stopped,
+        row,
+        workspace,
+        steps,
+        submission,
+        run
+      );
     } catch (error) {
       update(item.id, settled);
       throw error;
     } finally {
       finishing.delete(item.id);
       // A wait an error cut short leaves no words behind it.
-      checkWait(item.id, null);
+      landingWait(item.id, null);
     }
   };
 
   return {
     start: (asked: WorkItemRequest) => start(asked),
 
-    /** While one of the item's checks waits for a shared machine slot: what its status says, and since when. */
-    checkQueueOf: (itemId: string): { words: string; since: number } | null =>
-      checkQueues.get(itemId) ?? null,
+    /** While the item's landing waits (a shared machine slot, a pause, its turn to land): what its status says, and since when. */
+    landingWaitOf: (itemId: string): { words: string; since: number } | null =>
+      landingWaits.get(itemId) ?? null,
 
     /**
      * The hub's own work: a routine's run (routines.ts, {@link routineParent})
@@ -5662,11 +5438,11 @@ export const createWorkItems = ({
 
     /**
      * What an item's chip says while the hub holds it for something other
-     * than its checks (a design check's verifier, design-verify.ts); null
+     * than its landing (a design check's verifier, design-verify.ts); null
      * clears it.
      */
     holdWords: (itemId: string, words: string | null): void =>
-      checkWait(itemId, words),
+      landingWait(itemId, words),
 
     /**
      * The hub's own item stopped by the hub, `why` kept as who stopped it: a
@@ -5686,7 +5462,7 @@ export const createWorkItems = ({
       finish(item, {
         state: "cancelled",
         stoppedBy: { kind: "hub", why },
-        checkingSince: null,
+        landingSince: null,
         submission: null,
       });
       end(item.instanceId).catch((error: unknown) =>
@@ -5915,10 +5691,10 @@ export const createWorkItems = ({
           "No work item is open on this session. Start a delegate before calling wait_item."
         );
       }
-      if (!LIVE.has(item.state) || item.checkingSince) {
+      if (!LIVE.has(item.state) || item.landingSince) {
         throw new WorkItemRefusal(
           409,
-          `${item.title} (${item.id}) cannot wait while ${item.checkingSince ? "its checks run" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
+          `${item.title} (${item.id}) cannot wait while ${item.landingSince ? "its landing gate runs" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
         );
       }
       clearWait(item);
@@ -6143,19 +5919,15 @@ export const createWorkItems = ({
     /**
      * A turn of a delegated session ended at `endedAt`, not by an interrupt,
      * and no standing instruction answered it. `turn.error` is the harness's
-     * error when the turn failed; `turn.text` is what a report from a session
-     * without checks carries. Answers what the parent is sent, or nothing.
+     * error when the turn failed. Answers what the parent is sent, or nothing.
      *
-     * An item with checks ends only through {@link finishItem}, or here when
-     * its turn failed. A turn that ends it quietly, with nothing queued for
-     * the session, nothing handed to it since, and none of its own delegated
-     * work live, gets the "still open" message; the third in a row fails it
-     * and reports that failure to the parent. A declared wait stays
-     * on the tray and is summarized only with the next actionable message.
-     *
-     * An item filed before checks existed ends as it always did: on a turn
-     * nothing answers, with that turn's text as the report. A session that
-     * runs no item reports nothing.
+     * An item ends only through {@link finishItem}, or here when its turn
+     * failed. A turn that ends it quietly, with nothing queued for the
+     * session, nothing handed to it since, and none of its own delegated work
+     * live, gets the "still open" message; the third in a row fails it and
+     * reports that failure to the parent. A declared wait stays on the tray
+     * and is summarized only with the next actionable message. A session
+     * that runs no item reports nothing.
      */
     turnEnded(
       row: InstanceRow,
@@ -6187,18 +5959,15 @@ export const createWorkItems = ({
         return undefined;
       }
       const busy = busyAfter(row, endedAt);
-      if (!item.checks) {
-        return uncheckedTurn(item, turn, busy);
-      }
-      // A finished item has reported; one whose checks are running reports
-      // when they settle (its session's own call may have died with the hub).
-      if (!LIVE.has(item.state) || item.checkingSince) {
+      // A finished item has reported; one whose landing is running reports
+      // when it settles (its session's own call may have died with the hub).
+      if (!LIVE.has(item.state) || item.landingSince) {
         return undefined;
       }
       if (turn.error !== undefined) {
         return failedTurn(item, turn.error, busy);
       }
-      return busy ? undefined : quietTurn(row, item, item.checks);
+      return busy ? undefined : quietTurn(row, item);
     },
 
     /**
@@ -6216,10 +5985,10 @@ export const createWorkItems = ({
     /**
      * `finish_item` from the session `instanceId`: with `blocked`, the item
      * fails with that command and error. Otherwise the submission is stored
-     * and the item marked checking before the first check starts, so a hub
-     * that dies mid-run resumes it ({@link resumeChecks}); then
-     * {@link settleChecks} runs it to its outcome. An item done already
-     * answers its done result; one checking already is refused. Answers what
+     * and the item marked landing before the gate's first step starts, so a
+     * hub that dies mid-run resumes it ({@link resumeLandings}); then
+     * {@link settleLanding} runs it to its outcome. An item done already
+     * answers its done result; one landing already is refused. Answers what
      * the tool returns.
      */
     async finishItem(
@@ -6230,7 +5999,7 @@ export const createWorkItems = ({
       if (typeof open === "string") {
         return open;
       }
-      const { row, item, checks } = open;
+      const { row, item } = open;
       clearWait(item);
 
       if (request.blocked) {
@@ -6251,7 +6020,7 @@ export const createWorkItems = ({
       }
 
       // The task's to-dos first: unticked ones are listed once, to tick or
-      // explain; the next call runs the checks.
+      // explain; the next call runs the landing gate.
       const unticked = await untickedText(item);
       if (unticked) {
         return unticked;
@@ -6262,31 +6031,28 @@ export const createWorkItems = ({
       if (held) {
         return held;
       }
-      update(item.id, { submission: request, checkingSince: new Date() });
-      return (await settleChecks(item, checks, request)).text;
+      update(item.id, { submission: request, landingSince: new Date() });
+      return (await settleLanding(item, request)).text;
     },
 
     /**
-     * An agent has registered: every item on its machine left checking by a
-     * hub that stopped mid-run has its checks run again from the first, on
-     * the stored submission, through {@link settleChecks}. A pass needs no
-     * word to the session — its parent has the report; a failure, or checks
-     * that cannot run, is sent to the session as the tool would have
+     * An agent has registered: every item on its machine left landing by a
+     * hub that stopped mid-run has its landing run again from the first, on
+     * the stored submission, through {@link settleLanding}. A landing needs
+     * no word to the session — its parent has the report; a failure, or a
+     * gate that cannot run, is sent to the session as the tool would have
      * answered. An item this hub is running now is left to that run.
      */
-    resumeChecks(machineId: string): void {
+    resumeLandings(machineId: string): void {
       for (const workspace of db.activeWorkspacesOn(machineId)) {
         for (const item of db.workItemsIn(workspace.id)) {
-          const { checks, submission } = item;
-          if (
-            !(item.checkingSince && checks && submission) ||
-            finishing.has(item.id)
-          ) {
+          const { submission } = item;
+          if (!(item.landingSince && submission) || finishing.has(item.id)) {
             continue;
           }
-          console.log(`resumed checks for item ${item.id}`);
+          console.log(`resumed the landing of item ${item.id}`);
           const [row] = db.getInstancesByIds([item.instanceId]);
-          settleChecks(item, checks, submission)
+          settleLanding(item, submission)
             .then(({ done, text }) => {
               if (!done) {
                 tell(row, text);
@@ -6298,59 +6064,11 @@ export const createWorkItems = ({
               console.error(`[work-items] ${item.id}: ${reason}`);
               tell(
                 row,
-                `Your work item's checks could not run: ${reason}. Call finish_item again.`
+                `Your work item's landing gate could not run: ${reason}. Call finish_item again.`
               );
             });
         }
       }
-    },
-
-    /**
-     * The parent replaces the whole list of a running item's checks — one
-     * written for a design that changed since. Refused to anyone else, while
-     * the checks run, and on finished work. The session is told the new list,
-     * and the still-open reminder and `finish_item` read it from then on.
-     * Answers what the tool returns.
-     */
-    setChecks(
-      instanceId: string,
-      from: string,
-      checks: WorkItemCheck[]
-    ): string {
-      const [row] = db.getInstancesByIds([instanceId]);
-      const item = row ? itemOf(row) : undefined;
-      if (!(row && item)) {
-        throw new WorkItemRefusal(404, `${instanceId} runs no work item.`);
-      }
-      if (item.parentInstanceId !== from) {
-        throw new WorkItemRefusal(
-          403,
-          "Only the session that delegated an item can replace its checks."
-        );
-      }
-      if (item.checkingSince) {
-        throw new WorkItemRefusal(
-          409,
-          "checks are running; wait for the outcome"
-        );
-      }
-      if (!LIVE.has(item.state)) {
-        throw new WorkItemRefusal(
-          409,
-          `${item.title} (${item.id}) is ${item.state}; only a running item's checks can be replaced.`
-        );
-      }
-      const unchecked = checksProblem(checks);
-      if (unchecked) {
-        throw new WorkItemRefusal(400, unchecked);
-      }
-      hostDeclared(checks, from);
-      update(item.id, { checks: machinesOf(checks) });
-      tell(
-        row,
-        `Your work item's checks were replaced by your parent. Its checks: ${checkNames(checks)}.`
-      );
-      return `Replaced the checks of ${item.title} (${item.id}): ${checkNames(checks)}. Its session was told.`;
     },
 
     /**
@@ -6418,7 +6136,7 @@ export const createWorkItems = ({
         finish(item, {
           state: "cancelled",
           stoppedBy: by,
-          checkingSince: null,
+          landingSince: null,
           submission: null,
         });
       }
@@ -6588,7 +6306,7 @@ export const createWorkItems = ({
       if (closed.held) {
         throw new WorkspaceHoldsWork(closed.held);
       }
-      // Its check workspaces on other machines go with it: none outlives it.
+      // Its gate workspaces on other machines go with it: none outlives it.
       await Promise.all(
         db
           .checkWorkspacesOf(workspace.id)
@@ -6648,8 +6366,8 @@ export const createWorkItems = ({
      * their words, or the later item of the same parent that took over its
      * work (`replacedBy`), which must exist and have been made after it. A
      * dismissed item that is still live is over: cancelled, and its session
-     * ended if it still has a process. One whose checks this hub runs now
-     * ends with them. Throws with the sentence when the replacement is not
+     * ended if it still has a process. One whose landing this hub runs now
+     * ends with it. Throws with the sentence when the replacement is not
      * one.
      */
     dismiss(
@@ -6675,7 +6393,7 @@ export const createWorkItems = ({
         stoppedBy: { kind: "person" },
         dismissedAt,
         ...said,
-        checkingSince: null,
+        landingSince: null,
         submission: null,
       });
       console.log(`[work-items] ${item.id}: dismissed while live; cancelled`);

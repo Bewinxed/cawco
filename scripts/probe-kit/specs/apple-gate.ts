@@ -1,5 +1,5 @@
 /**
- * The Apple build gate (hub apple-gate.ts, work-items.ts `appleGate`): a
+ * The Apple build gate (hub apple-gate.ts, work-items.ts `appleStep`): a
  * project with it on lands an item whose diff touches the iOS app's
  * sources only once the iOS build compiles on an online Mac, at the item's
  * last commit. On a scratch fleet (real hub, agents and sessiond; Claude
@@ -14,14 +14,13 @@
  *
  * (a) A new project's gate is off; PATCH /api/projects/:id turns it on and
  *     answers it on.
- * (b) A delegate that commits apps/apple/Probe.swift, its brief's one check
- *     `true`: the item is done and landed, its report lists the gate's
- *     check `iOS build compiles` passing beside its own, and the stub ran on
- *     probe-mac, in the item's check workspace there, with
+ * (b) A delegate that commits apps/apple/Probe.swift: the item is done and
+ *     landed, its report's landing gate lists `iOS build compiles` passing,
+ *     and the stub ran on probe-mac, in the item's gate workspace there, with
  *     `ios --compile-only`.
  * (c) A delegate that commits only apps/dashboard/probe.ts: done and landed,
- *     its report lists its own check alone, and no check workspace was cut
- *     for it on any machine.
+ *     no iOS build in its report, and no gate workspace was cut for it on
+ *     any machine.
  * (d) probe-mac offline, a delegate that commits apps/apple/Other.swift:
  *     finish_item answers the one sentence (it changes that file, so it
  *     lands only once the iOS build compiles on a Mac, and no apple-capable
@@ -222,7 +221,6 @@ const run = async (kit: Kit) => {
       harness: "claude",
       model: "claude-haiku-4-5",
       cwd: repo,
-      checks: [{ name: "Probe check", command: "true" }],
     });
   const ended = (tag: Tag, id: string) =>
     until(
@@ -256,15 +254,15 @@ const run = async (kit: Kit) => {
   const aMark = aSpaces[0] ? join(aSpaces[0].path, MARK) : "";
   const aRan = aMark && existsSync(aMark) ? await Bun.file(aMark).text() : "";
   check(
-    "b: an item touching apps/apple is done and landed, its report listing the gate's check passing beside its own",
+    "b: an item touching apps/apple is done and landed, its report's landing gate listing the iOS build passing",
     aRow.state === "done" &&
+      (aRow.result ?? "").includes("Landing gate, run by the hub:") &&
       (aRow.result ?? "").includes(`- ${GATE}: pass (`) &&
-      (aRow.result ?? "").includes("- Probe check: pass (") &&
       (aRow.result ?? "").includes("Landed on main at"),
     `${aRow.state} ${aRow.error ?? ""}\n${(aRow.result ?? "").slice(0, 1500)}`
   );
   check(
-    "b: the stub ran on probe-mac, in the item's check workspace there, with ios --compile-only",
+    "b: the stub ran on probe-mac, in the item's gate workspace there, with ios --compile-only",
     aSpaces.length === 1 &&
       aSpaces[0]?.machine_id === MAC &&
       aRan.trim() === "ios --compile-only",
@@ -275,15 +273,14 @@ const run = async (kit: Kit) => {
   const d = await delegate("D");
   const dRow = await ended("D", d.workItemId);
   check(
-    "c: an item touching only apps/dashboard is done and landed with its own check alone",
+    "c: an item touching only apps/dashboard is done and landed with no iOS build in its gate",
     dRow.state === "done" &&
       !(dRow.result ?? "").includes(GATE) &&
-      (dRow.result ?? "").includes("- Probe check: pass (") &&
       (dRow.result ?? "").includes("Landed on main at"),
     `${dRow.state} ${dRow.error ?? ""}\n${(dRow.result ?? "").slice(0, 1500)}`
   );
   check(
-    "c: no check workspace was cut for it on any machine",
+    "c: no gate workspace was cut for it on any machine",
     checkSpaces(d.workspaceId).length === 0,
     JSON.stringify(checkSpaces(d.workspaceId))
   );

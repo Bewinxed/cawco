@@ -512,7 +512,6 @@ const spec: Spec = {
         model: "claude-haiku-4-5",
         cwd: src,
         lands: "none",
-        checks: [{ name: "Probe check", command: "true" }],
       });
     const probe: Probe = {
       check: kit.check,

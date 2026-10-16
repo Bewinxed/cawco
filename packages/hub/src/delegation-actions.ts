@@ -35,11 +35,7 @@ import {
   withInputsLine,
 } from "@cawco/core";
 import type { MachinePath } from "@cawco/core/machine-path";
-import type {
-  WorkBudget,
-  WorkItemCheck,
-  WorkItemSubmission,
-} from "./db/schema";
+import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
@@ -161,7 +157,7 @@ export interface Machine {
   machineId: string;
   /** Paused by the owner until this time, epoch ms (machine-pause.ts); null or absent when not. */
   pausedUntil?: number | null;
-  /** What its pause stopped as it began: "stopped 1 running check"; null or absent when nothing. */
+  /** What its pause stopped as it began: "stopped 1 running landing gate step"; null or absent when nothing. */
   pauseStopped?: string | null;
   /** `online` while its daemon holds a socket to the hub. */
   status: string;
@@ -590,7 +586,6 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   "stop_delegate",
   "interrupt_delegate",
   "answer_delegate",
-  "set_item_checks",
   // It stops every turn on a machine: an orchestrator's, never a leaf's.
   "machine_pause",
 ]);
@@ -774,7 +769,7 @@ export interface HandoffDeps {
   readonly threads?: HandoffThreads;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
-  /** Delegate role: finish_item is available even before an item has checks. */
+  /** Delegate role: the session runs a work item, so finish_item and wait_item are offered. */
   readonly workItem?: boolean;
 }
 
@@ -872,11 +867,9 @@ export interface HandoffActions {
       workspace?: string;
       /** The item's session forks this conversation, in a new workspace. */
       fork?: boolean;
-      /** The item's acceptance checks, run by the hub at finish_item. */
-      checks: WorkItemCheck[];
       /** Files on this session's machine copied into its `$TMPDIR/inputs/` before its brief. */
       inputs?: string[];
-      /** Where its commits go once its checks pass; `main` by default. */
+      /** Where its commits go once it passes the landing gate; `main` by default. */
       lands?: LandsMode;
       /** Files in its workspace the hub copies into the project's folder. */
       outputs?: string[];
@@ -899,8 +892,8 @@ export interface HandoffActions {
     queued: QueuedDelegate[];
   }>;
   /**
-   * Finishes this session's work item: the hub runs its checks, or fails it
-   * as blocked. Answers what the hub says of the results.
+   * Finishes this session's work item: the hub runs its landing gate and
+   * lands it, or fails it as blocked. Answers what the hub says of it.
    */
   readonly finishItem: (request: WorkItemSubmission) => Promise<string>;
   readonly generateImage: (
@@ -947,14 +940,6 @@ export interface HandoffActions {
   /** Pushes a note to the owner's Telegram — no peer, no ask, fire-and-forget. */
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   sendToUser(message: string, attachments?: string[]): Promise<string>;
-  /**
-   * Replaces the whole list of acceptance checks on one of this session's
-   * delegates' running work items. Answers what the hub says it did.
-   */
-  readonly setItemChecks: (
-    target: string,
-    checks: WorkItemCheck[]
-  ) => Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
   readonly setTitle: (title: string) => Promise<string>;
   /** `show_image`: what the transcript says it shows; throws when the session may not show it (shown-files.ts). */
@@ -1906,7 +1891,7 @@ export const handoffActions = ({
         ...(authorization ? { Authorization: authorization } : {}),
       },
       body: JSON.stringify({ ...request, instanceId }),
-      // The checks may run for hours between them; Bun's fetch would drop a
+      // The landing gate may run for an hour (an iOS build behind others); Bun's fetch would drop a
       // response silent for five minutes.
       timeout: false,
     });
@@ -1924,34 +1909,6 @@ export const handoffActions = ({
         ...(authorization ? { Authorization: authorization } : {}),
       },
       body: JSON.stringify({ instanceId, minutes, reason }),
-    });
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return ((await response.json()) as { text: string }).text;
-  },
-
-  async setItemChecks(target, checks) {
-    const { peers } = roster(fleet, instanceId);
-    const followed = formerOf(formerIds(), target);
-    const peer = resolveDelegate(
-      peers,
-      followed?.now ?? target,
-      instanceId,
-      ledBy,
-      forkOrigins()
-    );
-    const response = await fetch(`${hubHttpUrl()}/api/work-items/checks`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(authorization ? { Authorization: authorization } : {}),
-      },
-      body: JSON.stringify({
-        from: instanceId,
-        instanceId: peer.row.id,
-        checks,
-      }),
     });
     if (!response.ok) {
       throw new Error(await response.text());
@@ -2048,7 +2005,7 @@ export const handoffActions = ({
     });
     return (
       `Interrupted your delegate ${peer.label}${continuesWords(followed)}. Its current turn stopped; it keeps all state, ` +
-      `and stays idle: no reminder, wait or check wakes it. Resume or redirect it with handoff("${peer.row.id}", ...).`
+      `and stays idle: no reminder, wait or landing gate outcome wakes it. Resume or redirect it with handoff("${peer.row.id}", ...).`
     );
   },
 

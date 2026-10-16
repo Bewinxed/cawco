@@ -150,8 +150,6 @@ import {
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
-  CONTROL_HOST_CHECKOUT,
-  CONTROL_HOST_CHECKOUT_REMOVE,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_INTERRUPT,
@@ -1038,8 +1036,6 @@ const strategyChoice = t.Object({
 const UNROUTED_REPLY_LIMIT = 4096;
 /** Machine controls only the hub sends: a dashboard's control naming one is refused at the relay. */
 const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
-  CONTROL_HOST_CHECKOUT,
-  CONTROL_HOST_CHECKOUT_REMOVE,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -1163,18 +1159,6 @@ const harnessSchema = t.Union([
   t.Literal("opencode"),
   t.Literal("pi"),
 ]);
-/** A work item's acceptance checks: `delegate`'s and `set_item_checks`'s. */
-const checksSchema = t.Array(
-  t.Object({
-    name: t.String(),
-    command: t.String(),
-    expect: t.Optional(t.String()),
-    host: t.Optional(t.Boolean()),
-    machine: t.Optional(t.String()),
-    timeoutSec: t.Optional(t.Number()),
-  }),
-  { minItems: 1 }
-);
 /** Continue in new session: every field of the summariser and target is the caller's to name. */
 const permissionModeSchema = t.Union([
   t.Literal("default"),
@@ -17179,7 +17163,7 @@ export const createServer = (
    * THE way the hub runs a command on a machine: in `cwd`, killed after
    * `timeoutMs` (the machine's default when not given), answering its
    * complete stdout and stderr (past 8 MiB it fails). A workflow's `w.exec` and a work item's
-   * acceptance checks both go through it; a check names its workspace, so it
+   * landing gate both go through it; a gate step names its workspace, so it
    * runs inside that workspace's boundary, as its delegate's commands do.
    * The machine's clock stands while the command waits for a shared slot,
    * up to QUEUE_WAIT_MAX_MS, so the hub waits that much longer; each change
@@ -17651,8 +17635,6 @@ export const createServer = (
       method === CONTROL_WORKSPACE_DISCARD ||
       method === CONTROL_WORKSPACE_BUNDLE ||
       method === CONTROL_WORKSPACE_AT ||
-      method === CONTROL_HOST_CHECKOUT ||
-      method === CONTROL_HOST_CHECKOUT_REMOVE ||
       method === CONTROL_INPUTS_READ ||
       method === CONTROL_INPUTS_WRITE ||
       method === CONTROL_PLACE_REPO ||
@@ -18812,7 +18794,7 @@ export const createServer = (
   // `delegate_list`: a session's own delegation tree (§5.2).
   const delegationTree = createDelegationTree({
     db,
-    checkQueue: (itemId) => workItems.checkQueueOf(itemId),
+    landingWait: (itemId) => workItems.landingWaitOf(itemId),
     machineName,
     machinePaused: (machineId) => machinePause.words(machineId),
     activity: (row) => {
@@ -24182,7 +24164,6 @@ export const createServer = (
             machineId: t.Optional(t.String()),
             workspace: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
-            checks: checksSchema,
             inputs: t.Optional(t.Array(t.String())),
             lands: t.Optional(LANDS),
             outputs: t.Optional(t.Array(t.String())),
@@ -24323,9 +24304,9 @@ export const createServer = (
           }
         }
       )
-      // `finish_item`: the hub runs the item's checks and answers what the
-      // tool returns. The checks may run for an hour each, so the HTTP idle
-      // timer does not apply.
+      // `finish_item`: the hub runs the item's landing gate, lands it, and
+      // answers what the tool returns. The gate may run for an hour (an iOS
+      // build), so the HTTP idle timer does not apply.
       .post(
         "/api/work-items/finish",
         {
@@ -24360,48 +24341,6 @@ export const createServer = (
           const { instanceId, ...finished } = body;
           try {
             return { text: await workItems.finishItem(instanceId, finished) };
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return status(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              message
-            );
-          }
-        }
-      )
-      // `set_item_checks`: the parent replaces a running item's checks.
-      .post(
-        "/api/work-items/checks",
-        {
-          ...hidden,
-          body: t.Object({
-            from: t.String({ minLength: 1 }),
-            instanceId: t.String({ minLength: 1 }),
-            checks: checksSchema,
-          }),
-        },
-        ({ body, request, status }) => {
-          // A session's own credential, or none: the gate let through only
-          // a session, the person, or the hub acting for a session's tool.
-          const authorization = bearerOf(request);
-          const identity = identities.resolve(authorization);
-          if (authorization !== null && !identity) {
-            return status(401, "Invalid session credential");
-          }
-          if (identity && identity.instanceId !== body.from) {
-            return status(
-              403,
-              "Session credential does not belong to the checks' requester"
-            );
-          }
-          try {
-            const text = workItems.setChecks(
-              body.instanceId,
-              body.from,
-              body.checks
-            );
-            return { text };
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
@@ -25385,10 +25324,10 @@ export const createServer = (
                 repairThread();
               });
               workItems.discardUnfiled(message.machineId);
-              // Checks a stopped hub left running on this machine run again
+              // Landings a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the
               // register asks of the agent.
-              workItems.resumeChecks(message.machineId);
+              workItems.resumeLandings(message.machineId);
               // A checkout coming online can be where a ready task's
               // workspace is cut.
               dispatcher.machineOnline(message.machineId);

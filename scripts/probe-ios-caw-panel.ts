@@ -1607,7 +1607,6 @@ try {
       parentInstanceId: rowSession,
       title: TRAY_TITLE,
       prompt: "Say ok.",
-      checks: [{ name: "Nothing to check here", command: "true" }],
     }),
   });
   check(

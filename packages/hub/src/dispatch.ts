@@ -87,7 +87,7 @@ import {
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
-import type { Origin, WorkBudget, WorkItemCheck } from "./db/schema";
+import type { Origin, WorkBudget } from "./db/schema";
 import { needsDesignSystem } from "./design-offers";
 import type { JevAccess } from "./jev";
 import {
@@ -103,7 +103,6 @@ import {
   TRIAGE_FIELD,
   tailOf,
 } from "./jev-placement";
-import { quote, statusCommand } from "./landing";
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
@@ -292,31 +291,6 @@ const NO_LEAD =
 const SAFETY_MS = 5 * 60_000;
 const MAX_ATTEMPTS_LIMIT = 20;
 const REVIEW_LIMIT_LIMIT = 100;
-const WORD = /\s+/;
-
-/**
- * What an attempt at a task without checks is checked by: its work is
- * committed, which landing needs (its outputs aside, which need not be); for
- * one that lands none, that its outputs are written.
- */
-export const defaultCheck = (
-  lands: LandsMode,
-  outputs: string[]
-): WorkItemCheck => {
-  if (lands !== "none") {
-    return {
-      name: "Work is committed",
-      command: `test -z "$(${statusCommand(outputs)})"`,
-    };
-  }
-  return outputs.length > 0
-    ? {
-        name: "Outputs are written",
-        command: outputs.map((path) => `test -s ${quote(path)}`).join(" && "),
-      }
-    : { name: "Nothing to check", command: "true" };
-};
-
 const refuse = (code: FolderRefusalStatus, message: string): never => {
   throw new FolderRefusal(code, message);
 };
@@ -353,38 +327,44 @@ export const parentProblem = (
   }
 };
 
-/** A check's name from its command: two to six words, as work items take them. */
-const checkName = (command: string): string => {
-  const words = command.trim().split(WORD).filter(Boolean).slice(0, 6);
-  return words.length < 2 ? `Run ${words[0] ?? "check"}` : words.join(" ");
-};
-
 /**
- * A task check that runs on the host (work-items.ts `runChecks`): its
- * command opens with `host:`, as `host: bun scripts/probe-kit/run.ts x`.
+ * A task check written to run outside every boundary: its command opens with
+ * `host:`, as `host: bun scripts/probe-kit/run.ts x`. No attempt can run it
+ * inside its workspace.
  */
 const HOST_CHECK = /^host:\s*/;
 
 /**
- * The task's checks as a work item's, or the default check when it names
- * none. The task file is its writers' (the person, its project's lead), never
- * an attempt's, so a `host:` check there is its parent's declaration.
+ * A unit-test runner: the owner forbids unit tests, so an attempt never runs
+ * one a task lists (`bun test`, `vitest`, `jest`, `pytest`, `go test`, …).
  */
-const checksOf = (
-  commands: string[],
-  lands: LandsMode,
-  outputs: string[]
-): WorkItemCheck[] =>
-  commands.length === 0
-    ? [defaultCheck(lands, outputs)]
-    : commands.map((written) => {
-        const command = written.replace(HOST_CHECK, "");
-        return {
-          name: checkName(command),
-          command,
-          ...(command === written ? {} : { host: true }),
-        };
-      });
+const UNIT_TEST =
+  /\b(bun test|bun run test|npm (run )?test|yarn test|pnpm test|vitest|jest|mocha|pytest|go test|cargo test|swift test|xcodebuild test)\b/;
+
+/**
+ * The brief's line for one task check: the command to run and quote, a
+ * `host:` one as what the attempt lists under "Not run", a unit-test runner
+ * as what it does not run.
+ */
+const checkLine = (written: string): string => {
+  const command = written.replace(HOST_CHECK, "");
+  if (UNIT_TEST.test(command)) {
+    return `- \`${command}\`: a unit-test runner. The owner forbids unit tests, so do not run it; say so in your summary.`;
+  }
+  return command === written
+    ? `- \`${command}\``
+    : `- \`${command}\`: marked host, so it cannot run inside your boundary; list it under "Not run:" for whoever runs it on the host.`;
+};
+
+/**
+ * The brief's checks section: the task's checks are commands the attempt
+ * runs itself and quotes in its report (finish_item's `summary`), never
+ * something the hub runs; the hub runs only its landing gate.
+ */
+const checksSection = (task: TaskView): string =>
+  task.checks.length > 0
+    ? `## Checks\n\nThe task lists these commands. Run each one and quote its real output in your finish_item summary, cut to the lines that show the result; list any you could not run inside your boundary under "Not run:", with why.\n\n${task.checks.map(checkLine).join("\n")}`
+    : "## Checks\n\nThe task lists no commands. Prove the work with the commands that show it (build, lint, typecheck, the specs it touches), and quote their real output in your finish_item summary.";
 
 /** What of a task an attempt's work item carries as it is: outputs, group, owned files, budget. */
 const taskLimits = (
@@ -396,23 +376,13 @@ const taskLimits = (
   ...(task.budget ? { budget: task.budget } : {}),
 });
 
-/** What the brief says happens once the checks pass. */
-const AFTER_CHECKS: Record<LandsMode, string> = {
-  main: "When the work is committed, call finish_item: the hub runs these in your workspace and lands your commits on the default branch once they pass.",
+/** What the brief says happens at finish_item, by where the attempt lands. */
+const AT_FINISH: Record<LandsMode, string> = {
+  main: "When the work is committed, call finish_item: the hub rebases your commits onto the default branch, runs its landing gate (the dependency install, the repository's lint and typecheck, the iOS build when you changed the app) and lands them.",
   branch:
-    "When the work is committed, call finish_item: the hub runs these in your workspace and pushes your branch once they pass.",
-  pr: "When the work is committed, call finish_item: the hub runs these in your workspace, then pushes your branch and opens a pull request once they pass.",
-  none: "When the work is ready, call finish_item: the hub runs these in your workspace once it is; nothing is pushed.",
-};
-
-/** What the brief says of a task that names no checks: what the default check is. */
-const uncheckedLine = (lands: LandsMode, task: TaskView): string => {
-  if (lands !== "none") {
-    return "The task names no checks, so the hub checks only that your work is committed.";
-  }
-  return task.outputs.length > 0
-    ? "The task names no checks, so the hub checks only that your outputs are written."
-    : "The task names no checks, and lands none, so the hub checks nothing.";
+    "When the work is committed, call finish_item: the hub runs its landing gate on your commits and pushes your branch.",
+  pr: "When the work is committed, call finish_item: the hub runs its landing gate on your commits, then pushes your branch and opens a pull request.",
+  none: "When the work is ready, call finish_item: nothing is pushed, and the hub collects your outputs.",
 };
 
 /** What a retry's brief adds: how the last attempt ended, and the to-dos done so far. */
@@ -438,16 +408,16 @@ const titleOf = (task: TaskView): string => {
 
 /**
  * The brief: the task file as it stands, the open to-dos to start the plan
- * from (with their ids), the checks finish_item runs, where the task sits
- * among its edges, the project's context (memory.ts `contextFor`), and its
- * design system when the task needs it (`design`, read from the attempt's
- * clone: design-system.ts `designSection`).
+ * from (with their ids), the task's checks for the attempt to run and quote,
+ * what finish_item does, where the task sits among its edges, the project's
+ * context (memory.ts `contextFor`), and its design system when the task
+ * needs it (`design`, read from the attempt's clone: design-system.ts
+ * `designSection`).
  */
 const briefOf = (
   project: ProjectRow,
   task: TaskView,
   all: TaskSummary[],
-  checks: WorkItemCheck[],
   lands: LandsMode,
   comments: TaskComment[],
   context: string,
@@ -501,11 +471,7 @@ const briefOf = (
       ? [`## Acceptance criteria\n\n${task.acceptance}`]
       : []),
     `## To-dos\n\n${todos}`,
-    `## Checks\n\n${AFTER_CHECKS[lands]}\n\n${checks
-      .map((check) => `- ${check.name}: \`${check.command}\``)
-      .join("\n")}${
-      task.checks.length === 0 ? `\n\n${uncheckedLine(lands, task)}` : ""
-    }`,
+    `${checksSection(task)}\n\n${AT_FINISH[lands]}`,
     `## Where it sits\n\n${sits.length > 0 ? sits.join("\n") : "Nothing waits on it, and it waits for nothing."}`,
     `## Handing it in\n\n${RESULT_LINE}`,
     ...(context ? [context] : []),
@@ -1052,7 +1018,6 @@ export const createDispatcher = ({
     const type =
       active?.hooks.runs ?? task.type ?? (await chosenType(project, task));
     const lands = landsOf(project, task, type);
-    const checks = checksOf(task.checks, lands, task.outputs);
     const { tasks: all } = await tasks.list(project.id);
     const retry = previous
       ? {
@@ -1073,17 +1038,7 @@ export const createDispatcher = ({
     try {
       const known = await context(project.id, task);
       const brief = (design: string): string =>
-        briefOf(
-          project,
-          task,
-          all,
-          checks,
-          lands,
-          comments,
-          known,
-          design,
-          retry
-        );
+        briefOf(project, task, all, lands, comments, known, design, retry);
       const started = await start({
         parentInstanceId: parent.id,
         prompt: brief(""),
@@ -1097,7 +1052,6 @@ export const createDispatcher = ({
           : {}),
         title: titleOf(task),
         type,
-        checks,
         lands,
         ...taskLimits(task),
         ...placed,

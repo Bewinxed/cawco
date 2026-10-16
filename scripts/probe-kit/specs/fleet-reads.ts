@@ -341,7 +341,6 @@ const delegate = async (
         harness: leg.harness,
         model: MODEL[leg.harness],
         cwd: src,
-        checks: [{ name: "Probe check", command: "true" }],
       }
     );
     const [row] = fleet.query<{ path: string }>(

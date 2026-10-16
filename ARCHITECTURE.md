@@ -244,6 +244,8 @@ which is only ever allowed to render one someone else asserted.
 | History — what happened, when, in what order | The hub's database (append/update on lifecycle events only, never on a mere read) | UI (renders a timeline/log), daemon (never reads history to decide present-tense behavior) |
 | Fleet policy — rules, tool grants, deploy target | The hub | Daemon (executes what it's told), UI (edits policy through the hub's API, never locally) |
 | What the operator wants right now — approve, deny, spawn, stop | The UI, expressed as an action against the hub's ledger | Daemon (executes once the hub relays it), hub (records the action as history) |
+| That a delegate's work is proven | The delegate's own `finish_item` report, quoting the output of each command it ran, with a "Not run:" list for what its boundary could not run | Parent (reads the report), hub (files it; no session declares commands for the hub to run) |
+| That finished work may land | The hub's landing gate (`packages/hub/src/work-items.ts` `gateSteps`): the dependency install, the repository's `lint:changed` and `typecheck` on the tree about to be pushed, and the iOS build on a Mac when the item changes what the Swift build reads | Delegate (reads the gate's failing output and fixes it), parent (reads the gate's lines under the report) |
 
 The pattern repeats: whoever can observe a fact first-hand is its sole authority, and every
 other component is a renderer of that authority's most recent report — never a second opinion

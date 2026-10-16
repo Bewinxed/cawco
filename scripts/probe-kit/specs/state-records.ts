@@ -107,7 +107,6 @@ const delegate = async (
     prompt: `PROBE-${tag}: say ok.`,
     harness: "claude",
     cwd,
-    checks: [{ name: "Nothing to check", command: "true" }],
   });
   // Its item fails on its third quiet turn, in seconds; the parent's preview
   // of its server holds the workspace (hub work-items.ts `settle`), so it

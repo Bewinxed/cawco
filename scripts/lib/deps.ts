@@ -1,6 +1,6 @@
 /**
  * The checkout's dependencies, installed before anything that needs them
- * loads: by the rule a work item's checks use (move.ts `depsScript`: the
+ * loads: by the rule a work item's landing gate uses (move.ts `depsScript`: the
  * root lockfile's install, run only when the lockfile changed since the
  * dependencies were installed).
  *

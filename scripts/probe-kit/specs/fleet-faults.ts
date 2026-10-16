@@ -352,7 +352,6 @@ const spec: Spec = {
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: src,
-        checks: [{ name: "Probe check", command: "true" }],
       });
       const workspace = fleet.query<{ path: string }>(
         "SELECT path FROM workspaces WHERE id = ?",

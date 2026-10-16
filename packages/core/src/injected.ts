@@ -41,7 +41,7 @@ const landLine = (base: string): string =>
   `The repository's default branch is ${base}. Land with \`git fetch origin && git rebase origin/${base} && git push origin HEAD:${base}\`. Compare against ${base} with \`git show origin/${base}:<path>\`.`;
 
 /**
- * Where a work item's work goes once its checks pass (hub/src/landing.ts):
+ * Where a work item's work goes once it finishes (hub/src/landing.ts):
  * `main` onto the repository's default branch, `branch` to a branch of its
  * own on origin, `pr` to that branch with a pull request, `none` nowhere (the
  * work is not commits; its outputs are the deliverable).
@@ -66,31 +66,36 @@ export interface WorkspaceLanding {
 /** What a session is told of its outputs, when it has any. */
 const outputsLine = (outputs: string[] | undefined): string =>
   outputs?.length
-    ? ` The hub then copies your outputs (${outputs.join(", ")}) into the project's folder; a missing one comes back to you like a failing check.`
+    ? ` The hub then copies your outputs (${outputs.join(", ")}) into the project's folder; a missing one comes back to you.`
     : "";
 
+/** The landing gate, as a delegate is told of it. */
+const GATE =
+  "its landing gate (the dependency install, the repository's `lint:changed` and `typecheck` scripts where its package.json defines them, and the iOS build when you changed the app)";
+
 /**
- * How a work item's workspace lands: the hub does it after `finish_item`'s
- * checks pass (hub/src/landing.ts), so the session commits and never pushes.
+ * How a work item's workspace lands: the hub does it after `finish_item`,
+ * through its landing gate (hub/src/landing.ts), so the session commits and
+ * never pushes. The session's report, quoting what it ran, is the proof.
  */
 const hubLandLine = (
   base: string,
   { lands, outputs }: WorkspaceLanding
 ): string => {
   const outputsSaid = outputsLine(outputs);
-  const compare = ` The hub runs finish_item's checks itself, so call finish_item as soon as the work is done rather than running them first. Compare against ${base} with \`git show origin/${base}:<path>\`.`;
+  const compare = ` Your finish_item summary is the proof of the work: quote the real output of each command that proves it. Compare against ${base} with \`git show origin/${base}:<path>\`.`;
   const opening = `The repository's default branch is ${base}.`;
   switch (lands) {
     case "branch":
-      return `${opening} Commit your work and do not push: when finish_item's checks pass, the hub pushes your branch to origin; nothing goes onto ${base}.${outputsSaid}${compare}`;
+      return `${opening} Commit your work and do not push: after finish_item, the hub runs ${GATE} on your commits and pushes your branch to origin; nothing goes onto ${base}.${outputsSaid}${compare}`;
     case "pr":
-      return `${opening} Commit your work and do not push: when finish_item's checks pass, the hub pushes your branch to origin and opens a pull request against ${base}.${outputsSaid}${compare}`;
+      return `${opening} Commit your work and do not push: after finish_item, the hub runs ${GATE} on your commits, pushes your branch to origin and opens a pull request against ${base}.${outputsSaid}${compare}`;
     case "none":
       return outputs?.length
-        ? `${opening} Nothing is pushed: when finish_item's checks pass, your outputs (${outputs.join(", ")}) are collected into the project's folder, and a missing one comes back to you like a failing check. They need not be committed.${compare}`
-        : `${opening} Nothing is pushed and nothing is collected: the hub runs finish_item's checks and reports.${compare}`;
+        ? `${opening} Nothing is pushed: after finish_item, your outputs (${outputs.join(", ")}) are collected into the project's folder, and a missing one comes back to you. They need not be committed.${compare}`
+        : `${opening} Nothing is pushed and nothing is collected: finish_item hands your report to your parent.${compare}`;
     default:
-      return `${opening} Commit your work and do not push: when finish_item's checks pass, the hub rebases your commits onto origin/${base}, runs the checks again when the rebase changed your tree, runs the repository's \`lint:changed\` and \`typecheck\` scripts (those its package.json defines) on the result unless they passed on that exact tree already, and pushes to ${base}.${outputsSaid}${compare}`;
+      return `${opening} Commit your work and do not push: after finish_item, the hub rebases your commits onto origin/${base}, runs ${GATE} on the result, and pushes to ${base}; a failing gate comes back to you with its output.${outputsSaid}${compare}`;
   }
 };
 

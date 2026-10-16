@@ -6,7 +6,7 @@
  *
  * Each case drives a real session through the hub's own HTTP API and its
  * dashboard socket into one state (model streaming, a long shell command, an
- * open permission ask, a CawCo tool call, a work item's checks, a message
+ * open permission ask, a CawCo tool call, a work item's landing gate, a message
  * queued behind a running turn, an image generation), then restarts one
  * service through the service manager: the agent cleanly, the agent's main
  * process with SIGKILL, or the hub. It then records whether the turn
@@ -283,7 +283,7 @@ const CASES: readonly Case[] = [
   },
   {
     id: "finish-item",
-    what: "a work item's checks running after finish_item",
+    what: "a work item's landing gate running after finish_item",
     harnesses: HARNESSES,
     mode: "bypassPermissions",
     cwd: (options) => options.repo,
@@ -627,7 +627,13 @@ function readTranscript(blocks: TranscriptBlock[]) {
   };
 }
 
-/** The finish-item case: a work item whose delegate finishes at once, restarted while the hub runs its slow check. */
+/**
+ * The finish-item case: a work item whose delegate finishes at once,
+ * restarted while the hub runs its landing gate. It lands `branch`, so the
+ * gate (the repository's own `lint:changed` and `typecheck`, as `--repo`'s
+ * package.json defines them) runs at finish_item on the workspace's tree and
+ * nothing reaches the repository's default branch.
+ */
 async function finishItem(
   hub: Hub,
   machine: string,
@@ -653,21 +659,16 @@ async function finishItem(
       harness,
       model,
       cwd: repo,
-      checks: [
-        {
-          name: "Slow probe check",
-          command: "sleep 45; echo probe-checked",
-          expect: "probe-checked",
-          timeoutSec: 300,
-        },
-      ],
+      lands: "branch",
     }
   );
   const item = () =>
-    hub.api<{ checkingSince?: string | null; state: string }>(
+    hub.api<{ landingSince?: string | null; state: string }>(
       `/api/work-items/${encodeURIComponent(started.workItemId)}`
     );
-  await until("the checks running", item, (row) => Boolean(row.checkingSince));
+  await until("the landing gate running", item, (row) =>
+    Boolean(row.landingSince)
+  );
   const reachedAt = Date.now();
   await restart();
   const ended = await until(
@@ -681,7 +682,7 @@ async function finishItem(
     reached: true,
     completed: ended?.state === "done",
     turnEnd: ended?.state ?? "still running",
-    note: `checks were ${Math.round((Date.now() - reachedAt) / 1000)}s from running to settled`,
+    note: `the landing gate was ${Math.round((Date.now() - reachedAt) / 1000)}s from running to settled`,
   };
 }
 

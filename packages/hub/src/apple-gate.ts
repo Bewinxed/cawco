@@ -1,8 +1,9 @@
 /**
- * The Apple build gate: a project's setting (`projects.apple_gate`) that
- * keeps a work item from landing until the iOS app compiles at its last
- * commit. No Linux check compiles Swift, so a commit that breaks the app
- * passes every check a workspace there can run: 312b43065 changed a wire type
+ * The Apple build gate: a project's setting (`projects.apple_gate`) that adds
+ * a step to a work item's landing gate, keeping it from landing until the iOS
+ * app compiles at its last commit. Nothing on Linux compiles Swift, so a
+ * commit that breaks the app passes every command a workspace there can
+ * run: 312b43065 changed a wire type
  * the TypeScript gates accepted, 2a4808be8 declared a Swift class twice, and
  * both landed with iOS compile errors.
  *
@@ -24,11 +25,11 @@
 import { namedAmong } from "@cawco/core";
 import { capabilitiesOf } from "./runs-on";
 
-/** The gate's check, as an item's check list and its report name it. */
-export const APPLE_GATE_CHECK = "iOS build compiles";
+/** The gate's step, as the landing gate's lines name it. */
+export const APPLE_GATE_STEP = "iOS build compiles";
 
 /**
- * What it runs on the Mac, in the item's check workspace there at its last
+ * What it runs on the Mac, in the item's gate workspace there at its last
  * commit: the iOS Simulator compile, in the one build root every item's gate
  * shares (build-both.sh `--gate`), so Xcode compiles only what the item's
  * tree changed against the last one the gate compiled.
@@ -43,7 +44,7 @@ export const APPLE_GATE_COMMAND =
  * version its committed `apps/apple/Package.resolved` names, resolution off
  * (build-both.sh `PINNED`). So one apps/apple tree is one compile: a pass
  * the gate made on it holds wherever that tree is again, a rebase that left
- * it alone included (work-items.ts `checkOnce`); with it, the one script
+ * it alone included (work-items.ts `gateOnce`); with it, the one script
  * outside apps/apple that build-both.sh sources ({@link BUILD_SCRIPTS}). The
  * Mac's Xcode toolchain is not in it, as it is not in a whole-tree pass
  * either.

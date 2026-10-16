@@ -89,7 +89,7 @@ import type { Tasks } from "./tasks";
  * required `reason` on every `admin_*_write` (the owner approved writes he
  * could not explain), about 300 more for the worker (worker 24,575,
  * delegate 6,573, lead 15,799 measured). Raised deliberately.
- * 2026-10-16: a check's `host` (work-items.ts `runChecks`) and the
+ * 2026-10-16: a check's `host` (since removed with every check) and the
  * `inputs` of delegate and handoff, so a probe whose scratch fleet delegates
  * runs outside the sandbox and a delegate gets the files its boundary cannot
  * read. They fit the same budgets: delegate's own words and its `cwd`,
@@ -148,6 +148,15 @@ import type { Tasks } from "./tasks";
  * design check's verifier alone (delegation-mcp.ts), so no role's typical
  * session carries it. Within the same budgets (worker 24,991, delegate
  * 7,300 measured).
+ * 2026-10-16: acceptance checks removed (the owner: "Remove the tool"):
+ * delegate declares none and no tool replaces them; the hub's landing gate alone
+ * stands between finished work and main, and the delegate's report is the
+ * proof. finish_item's description asks the report to quote the output of
+ * each command that proves the work, with a "Not run:" list, its other words
+ * cut to pay for it, and task_create's `checks` says the attempt runs them
+ * (worker 24,991 → 24,278, delegate 7,291 → 7,239, lead 16,199 → 15,487,
+ * web-facing 2,837 → 2,784, curator 1,121 → 1,069 measured). The same
+ * budgets.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 25_000,

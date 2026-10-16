@@ -653,7 +653,7 @@ export interface DbShape {
   /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
   /** Dollars the project's Caw turns have cost since `since` (ms epoch). */
   readonly cawSpentSince: (projectId: string, since: number) => number;
-  /** The check workspaces, still with their checkout, that run a workspace's checks on other machines. */
+  /** The gate workspaces, still with their checkout, that run a workspace's landing gate steps (the iOS build) on other machines. */
   readonly checkWorkspacesOf: (workspaceId: string) => WorkspaceRow[];
   /**
    * The effort the operator chose for the session: what its every launch asks
@@ -2269,8 +2269,7 @@ export interface DbShape {
         | "dismissedAt"
         | "dismissReason"
         | "replacedBy"
-        | "checks"
-        | "checkingSince"
+        | "landingSince"
         | "submission"
         | "waitUntil"
         | "waitReason"
@@ -3282,49 +3281,6 @@ const make = async (path: string): Promise<DbShape> => {
     tx.delete(agentTools).where(eq(agentTools.machineId, from)).run();
     tx.delete(agentHarnesses).where(eq(agentHarnesses.machineId, from)).run();
     tx.delete(agents).where(eq(agents.machineId, from)).run();
-  };
-  /** A check that ran on `from` by its id runs on `to`; null when none did. */
-  const checksOn = <T extends { machine?: string }>(
-    checks: readonly T[],
-    from: string,
-    to: string
-  ): T[] | null =>
-    checks.some((check) => check.machine?.trim() === from)
-      ? checks.map((check) =>
-          check.machine?.trim() === from ? { ...check, machine: to } : check
-        )
-      : null;
-  /** Every work item's checks, filed or queued, that ran on `from` by its id, on `to`. */
-  const moveChecks = (tx: Tx, from: string, to: string, note: Moved) => {
-    for (const item of tx
-      .select({ id: workItems.id, checks: workItems.checks })
-      .from(workItems)
-      .where(like(workItems.checks, `%${from}%`))
-      .all()) {
-      const checks = checksOn(item.checks ?? [], from, to);
-      if (checks) {
-        tx.update(workItems)
-          .set({ checks })
-          .where(eq(workItems.id, item.id))
-          .run();
-        note("work_items.checks", 1);
-      }
-    }
-    for (const queued of tx
-      .select({ id: queuedWorkItems.id, request: queuedWorkItems.request })
-      .from(queuedWorkItems)
-      .where(like(queuedWorkItems.request, `%${from}%`))
-      .all()) {
-      const request = queued.request as { checks?: { machine?: string }[] };
-      const checks = checksOn(request.checks ?? [], from, to);
-      if (checks) {
-        tx.update(queuedWorkItems)
-          .set({ request: { ...request, checks } })
-          .where(eq(queuedWorkItems.id, queued.id))
-          .run();
-        note("queued_work_items.checks", 1);
-      }
-    }
   };
   const idList = (ids: readonly string[]) =>
     sql.join(
@@ -8050,7 +8006,6 @@ const make = async (path: string): Promise<DbShape> => {
           sql`UPDATE OR IGNORE usage_buckets SET machine_id = ${to} WHERE machine_id = ${from}`
         );
         tx.run(sql`DELETE FROM usage_buckets WHERE machine_id = ${from}`);
-        moveChecks(tx, from, to, note);
         return moved;
       }),
     removedMachines: () => db.select().from(removedMachines).all(),

@@ -1,21 +1,21 @@
 /**
- * Probe: a checked item's landing on its base when the base keeps moving, on
- * a scratch fleet (real hub, agent and sessiond on loopback, mock model,
+ * Probe: an item's landing on its base when the base keeps moving, on a
+ * scratch fleet (real hub, agent and sessiond on loopback, mock model,
  * workspace boundary included). The landing's push through the workspace's
  * git door is the first host-side git-lfs run in a clone with no LFS: it
  * must not stop the boundary under the push (boundary-host.ts `markLfs`).
  *
- * One project whose origin is the hub's own remote, branch `main`. Each item's
- * delegate (the mock drives its tools) commits a file and calls finish_item.
- * On each of its first `n` runs its one check has the probe, outside the
- * boundary, push someone else's commit to the hub's repository's `main`, and
- * waits for it: the checks run once before the landing and again after each
- * rebase, so `main` moves between the hub's rebase and its push on every try
- * that `n` covers. On a failure it prints what the services logged of
- * workspaces, boundaries and items.
+ * One project whose origin is the hub's own remote, branch `main`, whose
+ * package.json's `typecheck` the landing gate runs after each rebase. Each
+ * item's delegate (the mock drives its tools) commits a file and calls
+ * finish_item. On each of its first `n` gate runs that typecheck has the
+ * probe, outside the boundary, push someone else's commit to the hub's
+ * repository's `main`, and waits for it, so `main` moves between the hub's
+ * rebase and its push on every try that `n` covers. On a failure it prints
+ * what the services logged of workspaces, boundaries and items.
  *
- * a. n = 3: the first two pushes lose, the third lands. The item is done, its
- *    commit on `main` over all three of the others'.
+ * a. n = 2: the first two pushes lose, the third lands. The item is done, its
+ *    commit on `main` over both of the others'.
  * b. n = ∞: every push loses. The item fails, its error's first line says
  *    `main` moved before each of the hub's 3 pushes; the parent's tray
  *    panel, hovered in the built dashboard, shows that line.
@@ -38,30 +38,39 @@ const root = resolve(import.meta.dir, "..");
 const DELEGATE_TAG = /PROBE-DELEGATE-(\w+)/;
 const FINISH = "mcp__cawco__finish_item";
 
-/** What the delegate of `tag` runs in its workspace, inside its boundary. */
+/** How many of each item's gate runs move main: a's first two, every one of b's. */
+const MOVES: Record<string, number> = { a: 2, b: 1000 };
+
+/**
+ * What the delegate of `tag` runs in its workspace, inside its boundary: its
+ * commit carries `race-n`, how many of its gate runs move main.
+ */
 const delegateCommand = (tag: string) =>
   [
     `echo 'made by the delegate ${tag}' > delegate-${tag}.txt`,
-    `git add delegate-${tag}.txt`,
+    `echo ${MOVES[tag] ?? 0} > race-n`,
+    `git add delegate-${tag}.txt race-n`,
     `git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit ${tag}'`,
     'echo "status: [$(git status --porcelain | tr "\\n" " ")]"',
     `echo DONE-COMMIT-${tag}`,
   ].join(" && ");
 
 /**
- * The check: on each of its first `n` runs it asks for main to move (a
- * `probe-want-<run>` file in its git dir) and waits for the probe, outside
- * the boundary, to push someone else's commit to the hub's repository and
- * answer with `probe-moved-<run>`. Then the run's number.
+ * The repository's `typecheck`, which the landing gate runs on the rebased
+ * tree, between the hub's rebase and its push: on each of its first
+ * `race-n` runs it asks for main to move (a `probe-want-<run>` file in its
+ * git dir) and waits for the probe, outside the boundary, to push someone
+ * else's commit to the hub's repository and answer with
+ * `probe-moved-<run>`. Then the run's number.
  */
-const racingCheck = (n: number) =>
-  [
-    'g="$(git rev-parse --absolute-git-dir)"',
-    'run=$(( $(cat "$g/probe-runs" 2>/dev/null || echo 0) + 1 ))',
-    'echo "$run" > "$g/probe-runs"',
-    `if [ "$run" -le ${n} ]; then touch "$g/probe-want-$run"; i=0; until [ -e "$g/probe-moved-$run" ]; do i=$((i + 1)); if [ "$i" -gt 600 ]; then echo "main was not moved for run $run"; exit 1; fi; sleep 0.1; done; fi`,
-    'echo "check run $run"',
-  ].join("; ");
+const RACE_SCRIPT = [
+  'g="$(git rev-parse --absolute-git-dir)"',
+  "n=$(cat race-n 2>/dev/null || echo 0)",
+  'run=$(( $(cat "$g/probe-runs" 2>/dev/null || echo 0) + 1 ))',
+  'echo "$run" > "$g/probe-runs"',
+  'if [ "$run" -le "$n" ]; then touch "$g/probe-want-$run"; i=0; until [ -e "$g/probe-moved-$run" ]; do i=$((i + 1)); if [ "$i" -gt 600 ]; then echo "main was not moved for run $run"; exit 1; fi; sleep 0.1; done; fi',
+  'echo "gate run $run"',
+].join("\n");
 
 const results: Record<string, string> = {};
 const steps: Record<string, { finish?: boolean; searched?: boolean }> = {};
@@ -161,9 +170,9 @@ const firstLine = (text: string | null) =>
 const LOGGED = /boundary|workspace|work-items|landing|cut off|\[git\]/i;
 
 /**
- * Someone else, outside the boundary: each run item `id`'s check asked to
+ * Someone else, outside the boundary: each run item `id`'s gate asked to
  * move main for (and `moved` has not seen) gets a commit pushed to the hub's
- * repository, then the answer the check waits for.
+ * repository, then the answer the gate's typecheck waits for.
  */
 const moveAsked = async (
   id: string,
@@ -194,17 +203,12 @@ const moveAsked = async (
       `[ -d other ] || git clone -q ${bare} other; cd other && git pull -q --ff-only origin main && git commit -q --allow-empty -m "Someone else's push ${run}" && git push -q origin HEAD:main`
     );
     await writeFile(join(gitDir, `probe-moved-${run}`), "");
-    console.log(`  moved main for ${tag}'s check run ${run}`);
+    console.log(`  moved main for ${tag}'s gate run ${run}`);
   }
 };
 
-/** The parent delegates `tag` with a check that moves main on its first `n` runs; the item once ended, and its parent. */
-const delegate = async (
-  cwd: string,
-  projectId: string,
-  tag: string,
-  n: number
-) => {
+/** The parent delegates `tag`, whose gate moves main on its first `MOVES[tag]` runs; the item once ended, and its parent. */
+const delegate = async (cwd: string, projectId: string, tag: string) => {
   const parent = await fleet.spawn("claude", `Parent ${tag}`, cwd, {
     projectId,
   });
@@ -217,7 +221,6 @@ const delegate = async (
       harness: "claude",
       model: "claude-haiku-4-5",
       cwd,
-      checks: [{ name: "Main moves meanwhile", command: racingCheck(n) }],
     }
   );
   console.log(
@@ -263,6 +266,11 @@ try {
     join(home, ".gitconfig"),
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
+  await writeFile(join(src, "race.sh"), `${RACE_SCRIPT}\n`);
+  await writeFile(
+    join(src, "package.json"),
+    `${JSON.stringify({ name: "race", private: true, scripts: { typecheck: "sh race.sh" } }, null, 2)}\n`
+  );
   await sh(
     src,
     "git init -q -b main && echo race > README.md && git add -A && git commit -qm 'First commit'"
@@ -274,8 +282,8 @@ try {
   });
   bare = join(fleet.sandbox, "hub", "git", `${project.id}.git`);
 
-  // ── a: main moves on the first three runs ───────────────────────────────
-  const a = await delegate(src, project.id, "a", 3);
+  // ── a: main moves on the gate's first two runs ──────────────────────────
+  const a = await delegate(src, project.id, "a");
   const mainA = await sh(bare, "git log --format=%s main");
   check(
     "a: item done",
@@ -283,23 +291,22 @@ try {
     `${a.item.state} ${a.item.error ?? ""}`
   );
   check(
-    "a: landed over all three of the others' pushes",
+    "a: landed over both of the others' pushes",
     mainA.split("\n")[0] === "Delegate commit a" &&
-      [1, 2, 3].every((run) => mainA.includes(`Someone else's push ${run}`)),
+      [1, 2].every((run) => mainA.includes(`Someone else's push ${run}`)),
     mainA.replaceAll("\n", " | ")
   );
   check(
-    "a: report says it rebased and ran the checks again",
-    (a.item.result ?? "").includes(
-      "rebased onto the newer main with the checks run again on the rebased tree"
-    ),
+    "a: report says it rebased, and its landing gate ran typecheck",
+    (a.item.result ?? "").includes(", rebased onto the newer main.") &&
+      (a.item.result ?? "").includes("- bun run typecheck: pass ("),
     (a.item.result ?? "")
       .split("\n")
       .find((line) => line.startsWith("Landed")) ?? "(no Landed line)"
   );
 
   // ── b: main moves on every run ──────────────────────────────────────────
-  const b = await delegate(src, project.id, "b", 1000);
+  const b = await delegate(src, project.id, "b");
   const why = firstLine(b.item.error);
   check("b: item failed", b.item.state === "failed", b.item.state);
   check(

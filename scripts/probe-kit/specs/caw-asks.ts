@@ -116,7 +116,6 @@ const caw = (request: Seen): Reply => {
     return useTool("mcp__cawco__delegate", {
       title: "Check the commits",
       prompt: `${CHILD}: finish your item.`,
-      checks: [{ name: "Nothing to check", command: "true" }],
       lands: "none",
     });
   }

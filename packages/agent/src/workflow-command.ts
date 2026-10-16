@@ -11,11 +11,9 @@ import {
   queueWords,
   type WorkspaceRef,
 } from "@cawco/core";
-import { hostChecksDir } from "@cawco/core/paths";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { ensureBoundary } from "./boundary";
-import { cawcoCommand } from "./git-credential";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -233,28 +231,17 @@ const boundaryExec = async (
 };
 
 /**
- * What runs `cmd`: inside `workspace`'s boundary, through its executor; in a
- * host check's checkout (`~/.cawco/host-checks/<run>`, host-check.ts), as one
- * of the machine's heavy runs through `cawco heavy-run` (cli heavy-run.ts),
- * which starts it once a slot is free and the machine has room and says
- * what it waits on in the queue marker's words; anywhere else, `/bin/sh -c`.
+ * What runs `cmd`: inside `workspace`'s boundary, through its executor;
+ * anywhere else, `/bin/sh -c`.
  */
 const commandLine = async (
-  cwd: string,
   cmd: string,
   workspace: unknown,
   run: CommandRun | undefined
-): Promise<[string, string[]]> => {
-  if (isWorkspaceRef(workspace)) {
-    return [await boundaryExec(workspace, run), [cmd]];
-  }
-  const checkouts = hostChecksDir();
-  if (cwd === checkouts || cwd.startsWith(`${checkouts}/`)) {
-    const [file, ...args] = cawcoCommand("heavy-run");
-    return [file as string, [...args, cmd]];
-  }
-  return ["/bin/sh", ["-c", cmd]];
-};
+): Promise<[string, string[]]> =>
+  isWorkspaceRef(workspace)
+    ? [await boundaryExec(workspace, run), [cmd]]
+    : ["/bin/sh", ["-c", cmd]];
 
 /**
  * The command's clock: its limit counts only the time no slot wait is open.
@@ -392,7 +379,7 @@ export async function runWorkflowCommand(
   if ((workspace ?? undefined) !== undefined && !isWorkspaceRef(workspace)) {
     throw new Error("runCommand's workspace must be { id, path }.");
   }
-  const [file, args] = await commandLine(cwd, cmd, workspace, named);
+  const [file, args] = await commandLine(cmd, workspace, named);
   // Cancelled while it waited its turn or its boundary: it never starts.
   if (named && cancelledEarly.delete(named.id)) {
     return { cancelled: true, exitCode: 143, stdout: "", stderr: "" };

@@ -1313,7 +1313,6 @@ const run = async (kit: Kit) => {
       harness: "claude",
       model: "claude-haiku-4-5",
       cwd: fleet.repo,
-      checks: [{ name: "Probe check", command: "true" }],
     });
     const made = await until(
       "the workspace preview's artifact_create answer",

@@ -492,14 +492,6 @@ export const workspaceCacheDir = (): string =>
   join(homedir(), ".cawco", "workspace-cache");
 
 /**
- * Where a host check's checkouts are (harness.ts `CONTROL_HOST_CHECKOUT`),
- * one folder per check run, each outside every boundary and gone once its
- * run ends: on real disk, never a tmpfs, as a dependency install fills it.
- */
-export const hostChecksDir = (): string =>
-  join(homedir(), ".cawco", "host-checks");
-
-/**
  * Where a workspace's unlanded work is saved when a person archives it
  * anyway (core `WorkspaceUnlanded` `carry`), one folder per archive: outside
  * every workspace's reach, so no workspace writes or deletes one.

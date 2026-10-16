@@ -12,12 +12,12 @@
  *   (`deliverToSession`): kept at the hub as owed, and handed over in the
  *   order taken once the pause ends (`releaseOwed`, `flushOwedStarts`);
  * - a keep-alive's ping: not sent;
- * - a command the hub runs there, an acceptance check or the Apple build
- *   gate among them (`runOnMachine`): it waits for the pause's end, its
- *   item's status naming the pause and the time. One already running as the
- *   pause begins is cancelled on the machine (core `CONTROL_CANCEL_COMMAND`)
- *   and waits the same way, then runs again from the start: never a failed
- *   check or an attempt. The machine's row says how many were stopped;
+ * - a command the hub runs there, a landing gate step (the iOS build among
+ *   them) or a workflow's `w.exec` (`runOnMachine`): it waits for the
+ *   pause's end, its item's status naming the pause and the time. One
+ *   already running as the pause begins is cancelled on the machine (core
+ *   `CONTROL_CANCEL_COMMAND`) and waits the same way, then runs again from
+ *   the start: never a failed step or an attempt. The machine's row says how many were stopped;
  * - a new delegate for the machine (work-items.ts `MachinePaused`): queued
  *   in its parent's tray, and started once the pause ends;
  * - a preview's listener: not started, the pane saying why.
@@ -52,7 +52,7 @@ export interface CommandOptions {
    * The run never waits: on a paused machine it does not start, and one that
    * begins to wait for a shared slot (any but its boundary's start), or that
    * a pause cancels, is cancelled there; each throws {@link WouldWait}. A
-   * landing turn's checks run so (landing.ts): an item there steps out to
+   * landing turn's gate steps run so (landing.ts): an item there steps out to
    * gate again rather than hold the queue.
    */
   readonly noWait?: boolean;

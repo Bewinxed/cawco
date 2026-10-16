@@ -199,7 +199,6 @@ const startChild = (parent: Parent, workdir: string, repo: string): Reply => {
         title,
         prompt,
         cwd: repo,
-        checks: [{ name: "Nothing to check", command: "true" }],
         lands: "none",
       });
 };

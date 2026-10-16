@@ -415,7 +415,6 @@ const startDelegate = async (parent: string, prompt: string, slow: string) => {
       harness: "claude",
       model: "claude-haiku-4-5",
       cwd: fleet.repo,
-      checks: [{ name: "Probe check", command: "true" }],
     }
   );
   await until(

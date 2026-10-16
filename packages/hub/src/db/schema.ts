@@ -862,8 +862,9 @@ export const projectPlaces = sqliteTable(
 
 /**
  * A project's repository on a machine: the folder the hub last cut a
- * workspace of the project from there. A check that names the machine cuts
- * its check workspace from it (work-items.ts `checkWorkspace`). It outlives
+ * workspace of the project from there. A landing gate step on the machine
+ * (the iOS build) cuts its gate workspace from it (work-items.ts
+ * `gateWorkspace`). It outlives
  * every workspace cut from it, and is no place: nothing else reads it.
  */
 export const projectRepositories = sqliteTable(
@@ -1266,9 +1267,10 @@ export const workspaces = sqliteTable("workspaces", {
   tmp: text("tmp"),
   createdByInstanceId: text("created_by_instance_id").notNull(),
   /**
-   * The workspace whose checks this one runs, on a machine other than that
-   * one's: a check workspace, cut there the first time one of its items'
-   * checks names the machine, and archived with it. Null for a delegate's.
+   * The workspace whose landing gate step this one runs on a machine other
+   * than that one's (the iOS build on a Mac): a gate workspace, cut there the
+   * first time one of its items' gates needs the machine, and archived with
+   * it. Null for a delegate's.
    */
   checksFor: text("checks_for"),
   /**
@@ -1313,41 +1315,13 @@ export type WorkOrigin = Origin | "kept";
 export type WorkItemState =
   "starting" | "running" | "done" | "failed" | "cancelled";
 
-/**
- * One acceptance check of a work item: a shell command the hub runs in the
- * item's worktree when its session calls `finish_item`. It passes when it
- * exits 0 and, where `expect` is given, its stdout contains it.
- */
-export interface WorkItemCheck {
-  command: string;
-  expect?: string;
-  /**
-   * Run outside every boundary, as the agent's user, in a fresh checkout of
-   * the item's last commit with its dependencies installed, on its
-   * workspace's machine or `machine` (work-items.ts `runChecks`): what no
-   * sandbox may do, a scratch fleet's own boundaries, podman. Only the
-   * item's parent declares one; its session never sets checks.
-   */
-  host?: boolean;
-  /**
-   * The machine it runs on, by machineId, when not the workspace's own: the
-   * hub runs it in that workspace's check workspace there, at the item's
-   * last commit (work-items.ts `runChecks`).
-   */
-  machine?: string;
-  /** Two to six plain words. */
-  name: string;
-  /** Seconds before the command is killed; 600 when not given. */
-  timeoutSec?: number;
-}
-
 /** What a delegate hands in with `finish_item`. */
 export interface WorkItemSubmission {
   blocked?: { command: string; error: string };
   findings?: { title: string; detail: string }[];
   /** The outcome in one or two sentences, shown whole wherever a report is glanced at. */
   headline: string;
-  /** The full report. */
+  /** The full report: what was done, and the real output of every command that proves it. */
   summary: string;
 }
 
@@ -1355,7 +1329,8 @@ export interface WorkItemSubmission {
  * One piece of delegated work: a brief, run by one session in one workspace,
  * ending in a report. A follow-up is a new item in the same workspace, run by
  * the same session; the reader or the parent can also reopen finished work.
- * It is `done` only when the hub has run its checks and every one passed.
+ * It is `done` only when its session called `finish_item` and its work
+ * passed the hub's landing gate (work-items.ts `gateSteps`) and landed.
  */
 export const workItems = sqliteTable(
   "work_items",
@@ -1411,7 +1386,7 @@ export const workItems = sqliteTable(
      */
     stoppedBy: text("stopped_by", { mode: "json" }).$type<EndedBy>(),
     /**
-     * Where its commits go once its checks pass (landing.ts): onto the
+     * Where its commits go once it passes the landing gate (landing.ts): onto the
      * workspace's base branch, to `cawco/<task or item>` on origin, to that
      * branch with a pull request, or nowhere.
      */
@@ -1438,17 +1413,12 @@ export const workItems = sqliteTable(
     effort: text("effort"),
     state: text("state").$type<WorkItemState>().notNull().default("starting"),
     /**
-     * Its acceptance checks, run by the hub when its session calls
-     * `finish_item`. Null on an item filed before checks existed: that item
-     * still ends on a turn nothing answers.
+     * When the hub began landing it for a `finish_item` (its landing gate,
+     * then the push), while that runs. Set, the item is landing: a hub that
+     * starts finds it here and runs the landing again from the first, on
+     * {@link submission}.
      */
-    checks: text("checks", { mode: "json" }).$type<WorkItemCheck[]>(),
-    /**
-     * When the hub began running its checks for a `finish_item`, while they
-     * run. Set, the item is checking: a hub that starts finds it here and runs
-     * the checks again from the first, on {@link submission}.
-     */
-    checkingSince: timestamp("checking_since"),
+    landingSince: timestamp("landing_since"),
     /** A declared wait on work the delegate started; the hub wakes it at this time. */
     waitUntil: timestamp("wait_until"),
     waitReason: text("wait_reason"),
@@ -1456,8 +1426,8 @@ export const workItems = sqliteTable(
     waitResumeBy: timestamp("wait_resume_by"),
     /**
      * When an interrupt stopped its turn, while that holds it: nothing the
-     * hub sends on its own (a quiet turn's reminder, a wait's end, a check's
-     * outcome, a rule's reply, another session's report) wakes it until its
+     * hub sends on its own (a quiet turn's reminder, a wait's end, a landing
+     * gate's outcome, a rule's reply, another session's report) wakes it until its
      * parent, its project's lead or the reader sends it something.
      */
     heldAt: timestamp("held_at"),
@@ -1467,19 +1437,18 @@ export const workItems = sqliteTable(
       until: number;
       reason: string;
     }>(),
-    /** The `finish_item` the running checks answer, kept while they run. */
+    /** The `finish_item` the running landing answers, kept while it runs. */
     submission: text("submission", {
       mode: "json",
     }).$type<WorkItemSubmission>(),
     /**
-     * The final report: the summary, check results, commits and findings the
-     * hub built when the checks passed (an item without checks: its session's
-     * last turn, in its own words).
+     * The final report: the session's summary, the landing gate's lines, the
+     * landing, commits and findings, as the hub built them when it landed.
      */
     result: text("result"),
     /**
      * Its session's own words for what it did: the `summary` of the
-     * `finish_item` whose checks passed, its full report. Null until then.
+     * `finish_item` that landed, its full report. Null until then.
      */
     summary: text("summary"),
     /**

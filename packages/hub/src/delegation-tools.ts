@@ -49,44 +49,6 @@ const accountParameter = () =>
       "The account the session runs on, by its label or id. Name one only when the user asks for that account; omitted, the hub places it by the fleet's routing."
     );
 
-/** A work item's acceptance checks: `delegate` files them, `set_item_checks` replaces them. */
-const checksParameter = () =>
-  z
-    .array(
-      z.object({
-        name: z.string().describe("2 to 6 plain words."),
-        command: z
-          .string()
-          .describe("A shell command, run at the repository's root."),
-        expect: z
-          .string()
-          .optional()
-          .describe(
-            "A literal string the last 4,000 characters of stdout must contain."
-          ),
-        machine: z
-          .string()
-          .optional()
-          .describe(
-            "Run it on this machine (hostname or machineId) at the item's last commit, like an Xcode build on the Mac."
-          ),
-        host: z
-          .boolean()
-          .optional()
-          .describe(
-            "Run it unsandboxed on a fresh checkout of the last commit: a probe whose scratch fleet delegates, podman. Only you set it."
-          ),
-        timeoutSec: z
-          .number()
-          .int()
-          .min(1)
-          .max(3600)
-          .optional()
-          .describe("Seconds before the command is killed. Default 600."),
-      })
-    )
-    .min(1);
-
 function tool<T extends z.ZodRawShape>(
   name: string,
   description: string,
@@ -116,24 +78,30 @@ function tool<T extends z.ZodRawShape>(
 }
 
 /**
- * What `finish_item` says happens once the checks pass: the session's own
- * work item's landing (`lands`), so a delegate is never told the hub pushes
- * to the base branch when it does not.
+ * What `finish_item` says: the report is the proof, and what the hub does
+ * with the work: the session's own work item's landing (`lands`), so a
+ * delegate is never told the hub pushes to the base branch when it does not.
  */
 const finishItemDescription = (lands: LandsMode = "main"): string => {
+  const proof =
+    ' Your `summary` is the proof: quote the real output of each command that proves the work, then a "Not run:" list of what your boundary could not run.';
+  const gate =
+    "the hub's landing gate (install, lint, typecheck, the iOS build when the app changed)";
+  const back =
+    " A failing gate, a conflict or uncommitted work comes back with its output: fix, commit, call again.";
   const outputs =
-    " When the item names outputs, each must be a file at its path in your workspace: the hub copies them into the project's folder, and a missing one comes back to you like a failing check.";
+    " The item's outputs must be files in your workspace; the hub copies them into the project's folder.";
   const close =
-    " Call it once done: the hub runs the checks itself. Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work. When your item is an attempt at a task, the first call lists the task's open to-dos once, before any check runs: tick each one you finished with todo_write, say in your summary why each other one stays open, and call again.";
+    " Pass `blocked` with the exact command and error only when something outside your control stops the work. What you noticed outside your brief goes in `findings`. For a task attempt, the first call lists its open to-dos once: tick the finished ones with todo_write, explain the rest in your summary, and call again.";
   switch (lands) {
     case "branch":
-      return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub pushes your branch to origin (nothing goes onto the base branch); the item is then done and your parent receives the results. When a check fails or work is left uncommitted, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
+      return `Finish your work item. Commit and do not push.${proof} Then ${gate} runs on your commits and the hub pushes your branch to origin, not the base branch.${back}${outputs}${close}`;
     case "pr":
-      return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub pushes your branch to origin and opens a pull request against the base branch (or updates the one already open for it); the item is then done and your parent receives the results with the pull request's link. When a check fails or work is left uncommitted, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
+      return `Finish your work item. Commit and do not push.${proof} Then ${gate} runs on your commits, the hub pushes your branch and opens a pull request against the base branch (or updates the open one).${back}${outputs}${close}`;
     case "none":
-      return `Finish your work item. Nothing is pushed: the hub runs the item's acceptance checks in your worktree and returns each result, and when all pass, your outputs are collected into the project's folder; the item is then done and your parent receives the results. Each output must be a file at its path in your workspace; a missing one comes back to you like a failing check, as does a failing check: fix the cause and call finish_item again.${close}`;
+      return `Finish your work item. Nothing is pushed.${proof} The hub collects your outputs into the project's folder; a missing one comes back to you.${close}`;
     default:
-      return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub rebases your commits onto the base branch (running the checks again if that changed your tree) and pushes to it; the item is then done and your parent receives the results. When a check fails or your commits conflict with the base branch, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
+      return `Finish your work item. Commit and do not push.${proof} Then the hub rebases your commits onto the base branch, runs ${gate} on the result and pushes.${back}${outputs}${close}`;
   }
 };
 
@@ -589,13 +557,13 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate",
-      "Run a task as a SUB-AGENT: a new temporary fleet session with its own fresh context (or, with `fork`, a copy of this one), which reports back when the hub has run its acceptance checks and they pass.\n\n" +
+      "Run a task as a SUB-AGENT: a new temporary fleet session with its own fresh context (or, with `fork`, a copy of this one), which reports back once its work clears the hub's landing gate: its report quotes the output of the commands that prove the work.\n\n" +
         "Use this for SUBSTANTIAL bounded work that must report back: multi-file implementation, a sweep that would take dozens of reads across a codebase, builds or deploys with verification loops, browser audits, evidence you must interpret across many files or logs. A delegate answers those in its own fresh context and hands back conclusions.\n\n" +
         "Run menial work yourself: git status/log/diff, ls/grep/find, reading a file or a handful of files, port and process checks, tailing a log, a dev-server restart, and the reads needed to write a brief. Ten read-only commands in a row is normal prep; a delegate for that costs more than the task and its report costs more to read than the output.\n\n" +
         "Do NOT delegate: a single command or file read whose exact output you need; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
-        "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
+        "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, the commands whose output proves the work, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
-        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, every shell command of the delegate inside its boundary. It writes only its clone, its scratch folder and the workspaces' own cache (host caches are read-only), reads no credential store, SSH key or key agent, has no service manager, and reaches another machine only by a check's `machine` or a delegate there; it signals only its own processes, and on Linux sees only them. The workspace is cut on this session's machine unless `machine` names another. Without `workspace` the item gets a new one; with it, the item is the follow-up there: under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
+        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, every shell command of the delegate inside its boundary. It writes only its clone, its scratch folder and the workspaces' own cache (host caches are read-only), reads no credential store, SSH key or key agent, has no service manager, and reaches another machine only through a delegate there; it signals only its own processes, and on Linux sees only them. The workspace is cut on this session's machine unless `machine` names another. Without `workspace` the item gets a new one; with it, the item is the follow-up there: under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
         "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold workspace session is refused once with the cost considerations, and a repeat of the call is delivered.\n\n" +
         "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own.",
       {
@@ -672,9 +640,6 @@ export function handoffTools(deps: HandoffDeps) {
             "Let the delegate spawn delegates and sessions of its own. Default false, a leaf that does the work itself and reports here, " +
               'unless its type is marked "may delegate by default"; a value here wins. Set true only for an orchestrator that must fan out.'
           ),
-        checks: checksParameter().describe(
-          "The item's acceptance checks. When the delegate calls finish_item, the hub runs each in the item's worktree, inside its boundary as the delegate's own commands run (same $TMPDIR), but a `host` one; the item is done only when every command exits 0 and its stdout contains `expect` where given. Write what a reviewer would run: build, lint, type-check, a grep proving a removal, one script for a live assertion; a probe that delegates is a `host` check."
-        ),
         inputs: z
           .array(z.string())
           .optional()
@@ -685,7 +650,7 @@ export function handoffTools(deps: HandoffDeps) {
           .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
           .optional()
           .describe(
-            "Where the work goes once the checks pass. 'main' (default): the hub rebases the delegate's commits onto the repository's default branch and pushes. " +
+            "Where the work goes once the delegate finishes. 'main' (default): the hub rebases the delegate's commits onto the repository's default branch, runs its landing gate (install, lint, typecheck, the iOS build when the app changed) and pushes. " +
               "'branch': the hub pushes them, as they are, to cawco/<task or item> on origin. " +
               "'pr': that, then a pull request against the default branch (or the one already open for that branch); the report carries its link. " +
               "'none': nothing is pushed, for work that is not commits (a report, a draft); name its files in `outputs`."
@@ -695,8 +660,8 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe(
             "Deliverable files that are not commits, as paths from the repository's root, e.g. ['report.md']. " +
-              "Once the checks pass, the hub copies each into the project's folder under assets/<task or item>/ and the report lists them; " +
-              "a missing one fails like a check. Needs this session to be in a project."
+              "When the delegate finishes, the hub copies each into the project's folder under assets/<task or item>/ and the report lists them; " +
+              "a missing one goes back to the delegate. Needs this session to be in a project."
           ),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),
@@ -714,7 +679,6 @@ export function handoffTools(deps: HandoffDeps) {
         workspace,
         fork,
         can_delegate,
-        checks,
         inputs,
         machine,
         lands,
@@ -734,7 +698,6 @@ export function handoffTools(deps: HandoffDeps) {
           fork,
           type,
           canDelegate: can_delegate,
-          checks,
           inputs,
           machine,
           lands,
@@ -823,7 +786,9 @@ export function handoffTools(deps: HandoffDeps) {
           ),
         summary: z
           .string()
-          .describe("The full report: what was done and how it was proven."),
+          .describe(
+            'The full report: what was done, the real output of every command that proves it, and a "Not run:" list of what could not run inside your boundary.'
+          ),
         findings: z
           .array(z.object({ title: z.string(), detail: z.string() }))
           .optional()
@@ -896,28 +861,6 @@ export function handoffTools(deps: HandoffDeps) {
           },
         };
       }
-    ),
-    tool(
-      "set_item_checks",
-      "Replace the whole list of acceptance checks on one of YOUR delegates' running work items; the delegate is told, and finish_item runs the new list. Use it when a check was written for a design that then changed, instead of stopping the delegate.",
-      {
-        target: z
-          .string()
-          .describe(
-            'The delegate whose item it is: its directory name, e.g. "keeboard", or its id.'
-          ),
-        checks: checksParameter().describe(
-          "The item's new acceptance checks, replacing every one it had."
-        ),
-      },
-      async ({ target, checks }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.setItemChecks(target, checks),
-          },
-        ],
-      })
     ),
     tool(
       "stop_delegate",
@@ -1410,7 +1353,7 @@ export function handoffInstructions(
   // made 387 shell and about 50 browser calls in one day (killing dev
   // servers, probing sockets, reading journals) where a brief belonged.
   return [
-    "This session orchestrates: it plans, briefs, reads reports and decides. Run reads yourself: git status, log or diff, a grep, a file, a log tail, a port check, a curl for a status. Hand substantial execution to a delegate with acceptance checks: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. The brief keeps intent, decisions and acceptance here and asks for evidence and conclusions, not file dumps. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
+    "This session orchestrates: it plans, briefs, reads reports and decides. Run reads yourself: git status, log or diff, a grep, a file, a log tail, a port check, a curl for a status. Hand substantial execution to a delegate: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. The brief keeps intent, decisions and acceptance here, names the commands whose output proves the work, and asks for evidence and conclusions, not file dumps. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
     `${naming}${loading}${images}`,
     "Call list_delegate_types for the live catalog of delegate types (model, effort and harness each routes to) rather than guessing a model. Claude names these tools mcp__cawco__list_delegate_types and mcp__cawco__delegate; OpenCode names them cawco_list_delegate_types and cawco_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.",
     "Prefer the configured type and omit model/harness overrides unless the user requested them. Give each delegate a concrete deliverable and bounded file ownership. Keep independent parent work moving; reports arrive automatically. Each delegate runs one work item in a workspace; use mcp__cawco__handoff to guide it while that item runs, and handoff again to follow up after it reports — that continues its own session on its cached transcript. Use start_session only for a separate persistent session.",

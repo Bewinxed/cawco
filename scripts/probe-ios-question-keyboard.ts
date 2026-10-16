@@ -968,7 +968,6 @@ try {
       parentInstanceId: id,
       title: TRAY_TITLE,
       prompt: "Say ok.",
-      checks: [{ name: "Nothing to check here", command: "true" }],
     }),
   });
   setup.check(

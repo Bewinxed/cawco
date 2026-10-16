@@ -302,7 +302,6 @@ const delegateFrom = async (cwd: string, projectId: string, tag: string) => {
       harness: "claude",
       model: "claude-haiku-4-5",
       cwd,
-      checks: [{ name: "Probe check", command: "true" }],
     }
   );
   console.log(

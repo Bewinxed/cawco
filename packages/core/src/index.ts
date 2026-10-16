@@ -850,13 +850,13 @@ export function pauseClock(at: number, now = Date.now()): string {
 
 /**
  * What a command the hub runs on a machine is, as a pause that stops it
- * counts it: an item's acceptance check (the Apple build gate among them), a
+ * counts it: a step of an item's landing gate (the iOS build among them), a
  * workflow's `w.exec`, or any other.
  */
-export type RunKind = "check" | "workflow command" | "command";
+export type RunKind = "landing gate" | "workflow command" | "command";
 
 const COMMAND_NOUNS: Record<RunKind, [string, string]> = {
-  check: ["check", "checks"],
+  "landing gate": ["landing gate step", "landing gate steps"],
   "workflow command": ["workflow command", "workflow commands"],
   command: ["command", "commands"],
 };
@@ -865,8 +865,8 @@ const COMMAND_NOUNS: Record<RunKind, [string, string]> = {
 export type StoppedCommands = Partial<Record<RunKind, number>>;
 
 /**
- * "stopped 1 running check", "stopped 2 running checks and 1 running
- * command"; undefined when the pause stopped nothing.
+ * "stopped 1 running landing gate step", "stopped 2 running landing gate
+ * steps and 1 running command"; undefined when the pause stopped nothing.
  */
 export function stoppedWords(stopped: StoppedCommands): string | undefined {
   const parts = (Object.keys(COMMAND_NOUNS) as RunKind[]).flatMap((kind) => {
@@ -1290,8 +1290,11 @@ export interface KeepAlive {
  */
 export interface WorkItemSummary {
   /**
-   * While one of its checks waits for a shared machine slot: "queued for the
-   * Mac's build slot behind …", and since when (epoch ms); null otherwise.
+   * While its landing waits between `finish_item` and its outcome (the
+   * landing gate's shared machine slot, a machine's pause, its turn to land):
+   * "queued for the Mac's build slot behind …", and since when (epoch ms);
+   * null otherwise. Named for the checks it once was: shipped iOS builds
+   * decode it under this key.
    */
   checkQueue: { words: string; since: number } | null;
   createdAt: number;

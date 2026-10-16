@@ -483,7 +483,7 @@ export const DEPS_INSTALLING = "installing: ";
  * matches the one they were installed from ({@link DEPS_STAMP}), by
  * {@link installFor}'s pick for that lockfile; then stamps it. No lockfile,
  * or a matching stamp: nothing runs and nothing is printed. Run in the
- * checkout's root: before a work item's checks (the hub's `runChecks`) and
+ * checkout's root: before a work item's landing gate (the hub's `runGate`) and
  * before a probe's scratch fleet starts from the checkout.
  */
 export const depsScript = (): string => {

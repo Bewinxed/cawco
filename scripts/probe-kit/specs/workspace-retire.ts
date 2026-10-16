@@ -648,7 +648,6 @@ const unstartablePhase = async (kit: Kit, scene: Scene): Promise<void> => {
       title: "Go on in B",
       prompt: "PROBE-RETIRE-B: go on.",
       workspace: wb.id,
-      checks: [{ name: "Probe check", command: "true" }],
     }),
     signal: AbortSignal.timeout(120_000),
   });
@@ -994,7 +993,6 @@ const spec: Spec = {
           harness: "claude",
           model: "claude-haiku-4-5",
           cwd: src,
-          checks: [{ name: "Probe check", command: "true" }],
         });
         await onStart?.(workspaceOf(started.workspaceId));
         const item = await until(

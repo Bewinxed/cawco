@@ -72,7 +72,7 @@ export interface BinaryUpdateLanding {
  * - `starting`: a session start the agent is in the middle of.
  * - `image`: an image generation the agent is running.
  * - `workspace`: a delegate's workspace the agent is cutting or archiving.
- * - `command`: a command the hub asked the agent to run (a check, a step).
+ * - `command`: a command the hub asked the agent to run (a landing gate step, a workflow step).
  * - `tool-call`: a tool call the agent relays to its hub.
  * - `hub-tool-call`: a CawCo tool call the hub is answering, from any machine.
  * - `write`: a message or an answer the agent is handing to a harness.
@@ -109,8 +109,8 @@ export interface RestartReadiness {
 /**
  * The CawCo tools a restart can cut without losing work: the hub stores the
  * call before it runs and finishes it after a restart. `finish_item` stores
- * its submission and `checkingSince` before the first check, the hub reruns
- * the checks when the machine's agent registers again, and the session is
+ * its submission and `landingSince` before the landing gate's first step,
+ * the hub reruns the landing when the machine's agent registers again, and the session is
  * told an outcome the cut call could no longer carry. `handoff` stores its
  * send in the same step that takes it and answers at once: the hub's send
  * queue carries the message from there, through any restart, so a peer's
@@ -144,7 +144,7 @@ export const UPDATE_DRAIN_MS = 45_000;
  * one-time wake-ups no resume brings back (hub server.ts `waitForLater`).
  * Ours: past the long work a restart would cut (an image generation is given
  * 10 minutes, a delegate's workspace and a continuation's summary take
- * minutes, a check 10 minutes by default, a build or a probe chain run in
+ * minutes, a landing gate step 10 minutes by default, a build or a probe chain run in
  * the background as long), and short enough that a fix still reaches a
  * machine, and a session at its limit another account, when the work never
  * ends.

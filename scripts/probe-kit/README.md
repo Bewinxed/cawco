@@ -85,7 +85,7 @@ surface, "Approved look" or "New look" on the same cropped pictures
 `--approve` command each "New look" pick runs; the manifest carries it too.
 Open the folder with `artifact_create(kind: "preview", dir)`.
 
-## A spec that delegates is a `host` check
+## A spec that delegates runs on the host
 
 A scratch fleet whose spec delegates cuts workspaces, and every workspace runs
 inside a boundary made of user namespaces. Inside a delegate's own workspace
@@ -93,26 +93,14 @@ no namespace can be made (`bwrap: No permissions to create a new namespace`,
 `podman info`: `cannot clone: Operation not permitted`), so such a spec fails
 there however it is written.
 
-Declare it as a `host` check when you delegate the work:
-
-```json
-{ "name": "Host checks probe", "command": "bun scripts/probe-kit/run.ts host-checks", "host": true }
-```
-
-In a task file, write the check as `host: bun scripts/probe-kit/run.ts host-checks`.
-
-The hub runs a `host` check outside every boundary, as the agent's user, in a
-fresh checkout of the item's last commit with its dependencies installed, on
-the workspace's machine (or the check's `machine`), and removes the checkout
-when the run ends. Its report says `on the host`. It runs the delegate's
-committed code unsandboxed, so only a session outside every boundary declares
-one; the delegate cannot add or change it. A host refused for want of disk
-space (`CAWCO_MIN_FREE_GB`, 10 GB unless set) fails the check with that
-sentence.
+Such a spec runs outside every boundary: from the shell of a session the
+person started, on a checkout of the delegate's commit. A delegate that
+writes one lists it under "Not run:" in its finish_item report, with the
+exact command, for that session to run.
 
 Every other spec (a web spec on the built dashboard, a fleet spec that
-spawns sessions without delegating) runs inside a workspace as an ordinary
-check.
+spawns sessions without delegating) runs inside a workspace, and its
+delegate quotes the run's output in its report.
 
 ## Files a delegate cannot read
 
