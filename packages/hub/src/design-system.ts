@@ -77,6 +77,7 @@ import {
   writeFolderFiles,
   YOU,
 } from "./project-folder";
+import { isLive } from "./work-items";
 
 export const DESIGN_DIR = "design";
 /** The most files one `design_write` takes. */
@@ -933,12 +934,16 @@ export const createDesignSystem = (deps: {
       return `The builder's workspace is on ${machineCalled(workspace.machineId, deps.db.listAgents())}, which is offline, so CawCo can't read whether its design/ is committed. Approve once that machine is back.`;
     }
     // A live clone is read inside its boundary (core safe-git.ts).
+    // A live attempt's clone is read inside its boundary; a finished one's,
+    // whose boundary is closing with it, on the host (core safe-git.ts).
     const read = await deps.run(
       workspace.machineId,
       workspace.path,
       `${SAFE_GIT_SHELL}${UNCOMMITTED}`,
       COMMAND_MS,
-      { id: workspace.id, path: workspace.path }
+      isLive(attempt?.state ?? "done")
+        ? { id: workspace.id, path: workspace.path }
+        : undefined
     );
     if (read.exitCode !== 0) {
       return `CawCo couldn't read the builder's workspace (${(read.stderr || read.stdout).trim().split("\n").at(-1)}), so whether its design/ is committed is unknown. Try Approve again.`;
@@ -963,7 +968,8 @@ export const createDesignSystem = (deps: {
     // A work item's session works in its workspace's clone, read inside its
     // boundary; the project's system there is what its base branch holds on
     // origin, never its own commits.
-    const workspace = workspaceOfSession(actor.id);
+    const own = workspaceOfSession(actor.id);
+    const workspace = own && !own.ended ? own.workspace : undefined;
     const top = await deps.run(
       actor.machineId,
       actor.cwd,
@@ -990,12 +996,19 @@ export const createDesignSystem = (deps: {
     };
   };
 
-  /** The workspace a session's work item runs in (archived or not); none for a session that runs no item. */
+  /**
+   * The workspace a session's work item runs in, while that item is live:
+   * its boundary stands, and every command in its clone runs inside it.
+   * `ended` when the item has finished (its boundary closing with it); none
+   * for a session that runs no item.
+   */
   const workspaceOfSession = (instanceId: string) => {
     const [row] = deps.db.getInstancesByIds([instanceId]);
     const item = row?.workItemId ? deps.db.workItem(row.workItemId) : undefined;
     const [workspace] = item ? deps.db.workspacesNamed(item.workspaceId) : [];
-    return workspace;
+    return workspace && item
+      ? { workspace, ended: !isLive(item.state) }
+      : undefined;
   };
 
   /**
@@ -1106,7 +1119,8 @@ export const createDesignSystem = (deps: {
    * Where an approved proposal is written: its repository, inside its
    * proposing session's workspace's boundary when that clone is the
    * repository, or the project's folder. Refused, saying so, when that
-   * workspace was retired or its machine is offline.
+   * session's work item has ended (nothing would land a commit in its clone
+   * any more) or its machine is offline.
    */
   const placeOfProposal = (row: DesignProposalRow): ProposalPlace => {
     if (!(row.machineId && row.root)) {
@@ -1117,13 +1131,14 @@ export const createDesignSystem = (deps: {
         `The proposal's repository is on ${machineCalled(row.machineId, deps.db.listAgents())}, which is offline. Approve once it is back.`
       );
     }
-    const workspace = workspaceOfSession(row.instanceId);
-    if (workspace?.path !== row.root) {
+    const own = workspaceOfSession(row.instanceId);
+    if (own?.workspace.path !== row.root) {
       return { repo: { machineId: row.machineId, root: row.root } };
     }
-    if (workspace.state === "archived") {
+    const { workspace } = own;
+    if (own.ended) {
       throw new Error(
-        `${row.root}, where this was proposed, is gone (its workspace was retired), so there is nowhere to commit it. Deny it; the change can be proposed again.`
+        `The work item that proposed this has ended, so nothing would land a commit in ${row.root} any more. Deny it; the change can be proposed again.`
       );
     }
     return {

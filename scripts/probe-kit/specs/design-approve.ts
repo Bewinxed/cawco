@@ -296,6 +296,53 @@ const t3Turns: Record<"start" | "approved" | "findings", Call[]> = {
   ],
 };
 let t3Phase: keyof typeof t3Turns | "idle" = "idle";
+/** Scripts woken by words read mid-turn, run in order once the script in hand is done. */
+const t3Woken: (keyof typeof t3Turns)[] = [];
+/** The mid-turn words already taken, so one is queued once. */
+const t3Heard = new Set<string>();
+
+/** A script's queue, made the first time its phase runs. */
+const t3Queue = (phase: keyof typeof t3Turns): string => {
+  const key = `${T3}:${phase}`;
+  if (!attempts.has(key)) {
+    attempts.set(key, t3Turns[phase]);
+  }
+  return key;
+};
+
+/**
+ * T3's builder's next reply. A new turn takes the script of what woke it.
+ * Words read mid-turn (a proposal's answer while it still works) are heard
+ * and wait their turn: their script runs once the one in hand is done, in
+ * the same turn, as a model reading them would.
+ */
+const t3Next = (request: Seen): Reply => {
+  if (request.lastMidTurn) {
+    const woke = t3PhaseOf(request.last);
+    if (woke !== "idle" && !t3Heard.has(request.last)) {
+      t3Heard.add(request.last);
+      t3Woken.push(woke);
+    }
+  } else if (!request.afterTool) {
+    t3Phase = t3PhaseOf(request.last);
+  }
+  for (;;) {
+    if (
+      t3Phase !== "idle" &&
+      (attempts.get(t3Queue(t3Phase))?.length ?? 0) > 0
+    ) {
+      return next(request, `${T3}:${t3Phase}`);
+    }
+    const woken = t3Woken.shift();
+    if (!woken) {
+      // The script in hand is done (its last tool answered): the turn ends.
+      return t3Phase === "idle"
+        ? text("ok")
+        : next(request, `${T3}:${t3Phase}`);
+    }
+    t3Phase = woken;
+  }
+};
 
 /** What woke T3's builder for a new turn. */
 const t3PhaseOf = (last: string): typeof t3Phase => {
@@ -443,14 +490,7 @@ const respond = (request: Seen): Reply => {
     if (own !== T3) {
       return next(request, own);
     }
-    // T3's builder: a new turn takes the script of what woke it.
-    if (!request.afterTool) {
-      t3Phase = t3PhaseOf(request.last);
-      if (t3Phase !== "idle" && !attempts.has(`${T3}:${t3Phase}`)) {
-        attempts.set(`${T3}:${t3Phase}`, t3Turns[t3Phase]);
-      }
-    }
-    return t3Phase === "idle" ? text("ok") : next(request, `${T3}:${t3Phase}`);
+    return t3Next(request);
   }
   return next(request, [...request.all.matchAll(TURN)].at(-1)?.[0]);
 };
