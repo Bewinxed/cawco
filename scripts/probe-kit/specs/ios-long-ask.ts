@@ -1144,8 +1144,9 @@ async function onSimulator(
         const all = await labels();
         return {
           all,
-          frame: all.find((node) => test(node.label) && onScreen(node.frame, all))
-            ?.frame,
+          frame: all.find(
+            (node) => test(node.label) && onScreen(node.frame, all)
+          )?.frame,
         };
       };
       let { all, frame } = await find();
@@ -1224,7 +1225,10 @@ async function onSimulator(
           const at = await sh(
             `${AXE} describe-ui --point ${middle},${y} --udid ${udid}`
           );
-          if (at.includes(INPUT.description) || at.includes("Probe: long ask")) {
+          if (
+            at.includes(INPUT.description) ||
+            at.includes("Probe: long ask")
+          ) {
             await sh(`${AXE} tap -x ${middle} -y ${y} --udid ${udid}`);
             return true;
           }
@@ -1324,7 +1328,9 @@ async function onSimulator(
     report(
       "the probe's card from its notification",
       banner,
-      refused ? { ...fromBanner, frames: `simctl push refused: ${refused}` } : fromBanner
+      refused
+        ? { ...fromBanner, frames: `simctl push refused: ${refused}` }
+        : fromBanner
     );
     // Needs you, the list that draws the ask's command on a line; then the probe's own row.
     id = (await launch()) ?? id;
