@@ -149,6 +149,7 @@ import {
   type PriorConversation,
   parkedAsks,
   plugins,
+  projectAccounts,
   projectOffers,
   projectPlaces,
   projectRepositories,
@@ -272,7 +273,14 @@ export type PlaceRow = typeof projectPlaces.$inferSelect;
  * A project as every client reads it: its row, whose `machineId` and `cwd`
  * are its primary place, and every place it has, the primary first.
  */
-export type ProjectRow = typeof projects.$inferSelect & { places: PlaceRow[] };
+export type ProjectRow = Omit<
+  typeof projects.$inferSelect,
+  "accountsLimited"
+> & {
+  /** The accounts its sessions may run on (`project_accounts`); null: every account. */
+  accounts: string[] | null;
+  places: PlaceRow[];
+};
 /** One task file as a project's task index holds it (tasks.ts). */
 export type TaskIndexRow = typeof projectTasks.$inferSelect;
 /** A device the iOS app registered for pushes, by its Cawrier pairing. */
@@ -2353,10 +2361,14 @@ export const checkoutOf = (project: ProjectRow): PlaceRow | undefined =>
 export const hubPlacePath = (projectId: string): HubFolder =>
   `projects/${projectId}`;
 
-/** Each project with its places: the primary first, then oldest first. */
+/**
+ * Each project with its places, the primary first, then oldest first, and
+ * the accounts it allows: null for one not limited to some.
+ */
 const withPlaces = (
   rows: (typeof projects.$inferSelect)[],
-  places: PlaceRow[]
+  places: PlaceRow[],
+  allowed: { accountId: string; projectId: string }[]
 ): ProjectRow[] => {
   const byProject = new Map<string, PlaceRow[]>();
   for (const place of places) {
@@ -2367,8 +2379,16 @@ const withPlaces = (
       byProject.set(place.projectId, [place]);
     }
   }
-  return rows.map((project) => ({
+  const accountsOf = new Map<string, string[]>();
+  for (const { projectId, accountId } of allowed) {
+    accountsOf.set(projectId, [
+      ...(accountsOf.get(projectId) ?? []),
+      accountId,
+    ]);
+  }
+  return rows.map(({ accountsLimited, ...project }) => ({
     ...project,
+    accounts: accountsLimited ? (accountsOf.get(project.id) ?? []) : null,
     places: (byProject.get(project.id) ?? []).sort(
       (a, b) =>
         placeRank(a) - placeRank(b) ||
@@ -2624,6 +2644,12 @@ const make = async (path: string): Promise<DbShape> => {
             .select()
             .from(projectPlaces)
             .where(eq(projectPlaces.projectId, id))
+            .all(),
+          from
+            .select()
+            .from(projectAccounts)
+            .where(eq(projectAccounts.projectId, id))
+            .orderBy(sql`rowid`)
             .all()
         )[0]
       : undefined;
@@ -6149,7 +6175,12 @@ const make = async (path: string): Promise<DbShape> => {
     listProjects: () =>
       withPlaces(
         db.select().from(projects).all(),
-        db.select().from(projectPlaces).all()
+        db.select().from(projectPlaces).all(),
+        db
+          .select()
+          .from(projectAccounts)
+          .orderBy(sql`rowid`)
+          .all()
       ),
     project: (id) => projectOf(db, id),
     projectRepository: (projectId, machineId) =>
@@ -6292,10 +6323,21 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(projects).set({ tracker }).where(eq(projects.id, id)).run();
     },
     setProjectAccounts: (id, list) => {
-      db.update(projects)
-        .set({ accounts: list })
-        .where(eq(projects.id, id))
-        .run();
+      db.transaction((tx) => {
+        tx.update(projects)
+          .set({ accountsLimited: list !== null })
+          .where(eq(projects.id, id))
+          .run();
+        tx.delete(projectAccounts)
+          .where(eq(projectAccounts.projectId, id))
+          .run();
+        const distinct = [...new Set(list ?? [])];
+        if (distinct.length > 0) {
+          tx.insert(projectAccounts)
+            .values(distinct.map((accountId) => ({ projectId: id, accountId })))
+            .run();
+        }
+      });
     },
     setProjectDispatch: (id, change) => {
       if (Object.keys(change).length > 0) {

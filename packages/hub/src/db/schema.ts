@@ -428,8 +428,14 @@ export const projects = sqliteTable("projects", {
    * (`spend_settings`).
    */
   onCap: text("on_cap").$type<OnCap>(),
-  /** The accounts its sessions may run on; null: every account. */
-  accounts: text("accounts", { mode: "json" }).$type<string[]>(),
+  /**
+   * Its sessions run only on the accounts `project_accounts` lists, none
+   * when it lists none (its last allowed account was removed); false: every
+   * account.
+   */
+  accountsLimited: integer("accounts_limited", { mode: "boolean" })
+    .notNull()
+    .default(false),
   /**
    * When the person answered a move's ask "Don't move" (moves.ts): a folder
    * that still needs that ask can't move, and the New session modal says so
@@ -611,6 +617,20 @@ export type HubFolder = `projects/${string}`;
  * @TJS-type string
  */
 export type PlacePath = MachinePath | HubFolder;
+
+/** The accounts a project limited to some (`projects.accounts_limited`) lets its sessions run on. */
+export const projectAccounts = sqliteTable(
+  "project_accounts",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.accountId] })]
+);
 
 /** Where a project's files are, one row per machine and folder. */
 export const projectPlaces = sqliteTable(

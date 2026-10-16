@@ -26253,12 +26253,6 @@
             "onCap": {
               "$ref": "#/components/schemas/OnCap"
             },
-            "accounts": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
             "moveDeclinedAt": {
               "type": "string",
               "format": "date-time"
@@ -26281,6 +26275,13 @@
             "createdAt": {
               "type": "string",
               "format": "date-time"
+            },
+            "accounts": {
+              "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [
@@ -26498,12 +26499,6 @@
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
           },
-          "accounts": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "moveDeclinedAt": {
             "type": "string",
             "format": "date-time"
@@ -26526,6 +26521,13 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -26730,12 +26732,6 @@
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
           },
-          "accounts": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "moveDeclinedAt": {
             "type": "string",
             "format": "date-time"
@@ -26758,6 +26754,13 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -26982,12 +26985,6 @@
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
           },
-          "accounts": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "moveDeclinedAt": {
             "type": "string",
             "format": "date-time"
@@ -27010,6 +27007,13 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -27186,12 +27190,6 @@
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
           },
-          "accounts": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "moveDeclinedAt": {
             "type": "string",
             "format": "date-time"
@@ -27214,6 +27212,13 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "accounts": {
+            "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
