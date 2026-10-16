@@ -738,10 +738,9 @@ private final class ModelRow: UIControl {
         name.text = entry.name
         name.lineBreakMode = .byTruncatingTail
         name.alpha = reason == nil ? 1 : 0.5
-        let meta = UILabel()
-        meta.lineBreakMode = .byTruncatingTail
+        let meta = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
         if let reason {
-            meta.attributedText = NSAttributedString(string: reason, attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted))
+            meta.text = reason
         } else {
             let text = NSMutableAttributedString(string: entry.id, attributes: TypeScale.typeMeta.with(family: FontFamily.fontMono).attributes(color: Palette.inkSubtle))
             let vendor = ModelCatalog.vendor(entry.id)

@@ -144,13 +144,24 @@ public enum KitButton {
     }
 
     public static func setTitle(_ title: String, of button: UIButton, variant: Variant, height: Height) {
-        button.configuration?.attributedTitle = AttributedString(title, attributes: height.role.container(color: ink(variant), tracking: -0.01))
+        button.configuration?.attributedTitle = Self.title(title, variant: variant, height: height)
+    }
+
+    /// The web button never shrinks and never cuts its label (`shrink-0
+    /// whitespace-nowrap`, no ellipsis): what does not fit is clipped. The
+    /// string's own paragraph decides how its label cuts it, so the clip goes there.
+    private static func title(_ title: String, variant: Variant, height: Height) -> AttributedString {
+        var attributes = height.role.container(color: ink(variant), tracking: -0.01)
+        let paragraph = attributes.uiKit.paragraphStyle!.mutableCopy() as! NSMutableParagraphStyle
+        paragraph.lineBreakMode = .byClipping
+        attributes.uiKit.paragraphStyle = paragraph
+        return AttributedString(title, attributes: attributes)
     }
 
     static func configuration(_ title: String, glyph: Glyph?, glyphTint: UIColor?, variant: Variant, height: Height) -> UIButton.Configuration {
         var config = UIButton.Configuration.plain()
-        config.attributedTitle = AttributedString(title, attributes: height.role.container(color: ink(variant), tracking: -0.01))
-        config.titleLineBreakMode = .byTruncatingTail
+        config.attributedTitle = Self.title(title, variant: variant, height: height)
+        config.titleLineBreakMode = .byClipping
         if let glyph {
             // `--btn-icon`: 12 on the xs button, 16 on the rest.
             config.image = glyph.image.resized(to: height == .xs ? Size.iconSm : Size.iconMd)

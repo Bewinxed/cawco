@@ -93,5 +93,14 @@ public final class KitSelect: UIButton {
         configuration?.attributedTitle = AttributedString(text, attributes: TypeScale.typeBody.container(color: Palette.inkStrong))
         configuration?.titleLineBreakMode = .byTruncatingTail
         accessibilityValue = text
+        setNeedsLayout()
+    }
+
+    /// The value is one clamped line on the web (`line-clamp-1`): cut where WebKit cuts it.
+    private var cut = TitleCut()
+
+    override public func layoutSubviews() {
+        cut.fit(self)
+        super.layoutSubviews()
     }
 }

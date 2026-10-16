@@ -756,7 +756,9 @@ final class SidebarViewController: ObservedViewController {
         guard !lists.isEmpty else {
             // `text-meta text-muted-foreground`; the command's name in the
             // mono face at label size, in the foreground ink.
-            let note = UILabel()
+            let note = KitLabel(TypeScale.typeMeta, ink: Palette.mutedForeground, lines: 0)
+            // A `<p>`: running text avoids a one-word last line (app.css).
+            note.wrap = .pretty
             let said = hub.fleet.machines.isEmpty
                 ? "Run cawco on a machine, then group its checkouts here."
                 : "No projects yet — name a checkout to group its sessions."
@@ -767,7 +769,6 @@ final class SidebarViewController: ObservedViewController {
                                      .foregroundColor: Palette.foreground], range: command)
             }
             note.attributedText = words
-            note.numberOfLines = 0
             note.lineBreakMode = .byWordWrapping
             let box = UIStackView(arrangedSubviews: [note])
             box.isLayoutMarginsRelativeArrangement = true

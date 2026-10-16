@@ -663,7 +663,9 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
             let choices = JumpAuthor.allCases.filter { $0.rawValue.hasPrefix(fragment) }
             sections.append((key: "group:authors", heading: "Search messages from", items: choices.map { author in
                 (id: "author:\(author.rawValue)", make: { [weak self] in
-                    self?.item(glyph: author.glyph, name: NSAttributedString(string: author.label), trail: NSAttributedString(string: "@\(author.rawValue) · \(author.detail)")) ?? UIView()
+                    self?.item(glyph: author.glyph,
+                               name: Self.marked(author.label, [], role: TypeScale.typeLabel, ink: Palette.inkStrong),
+                               trail: Self.marked("@\(author.rawValue) · \(author.detail)", [], role: TypeScale.typeMeta, ink: Palette.inkMuted, tracking: TypeScale.trackCaps)) ?? UIView()
                 }, action: { [weak self] in
                     guard let self else { return }
                     field.text = JumpAuthor.stripFragment(query)
@@ -892,7 +894,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
     /// session's status, a machine's offer, a line's role) is said whole if
     /// the rest of the room holds it, else cut at its tail.
     private func item(glyph: Glyph, name: NSAttributedString, trail: NSAttributedString) -> UIView {
-        let nameLabel = UILabel()
+        let nameLabel = KitLabel(TypeScale.typeLabel)
         nameLabel.attributedText = name
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -901,7 +903,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
         let split = (trail.string as NSString).range(of: " · ", options: .backwards)
         let headText = split.location == NSNotFound ? trail : trail.attributedSubstring(from: NSRange(location: 0, length: split.location))
         let tailText = split.location == NSNotFound ? nil : trail.attributedSubstring(from: NSRange(location: split.location, length: trail.length - split.location))
-        let headLabel = UILabel()
+        let headLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, tracking: TypeScale.trackCaps)
         headLabel.attributedText = headText
         headLabel.lineBreakMode = .byTruncatingMiddle
         headLabel.setContentCompressionResistancePriority(.defaultLow + 1, for: .horizontal)
@@ -910,7 +912,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
         let floor = headLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: min(headLabel.intrinsicContentSize.width, 48))
         floor.priority = .required - 1
         floor.isActive = true
-        let tailLabel = UILabel()
+        let tailLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, tracking: TypeScale.trackCaps)
         tailLabel.attributedText = tailText
         tailLabel.isHidden = tailText == nil
         tailLabel.lineBreakMode = .byTruncatingTail
@@ -931,7 +933,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
         let host = hub.fleet.machineName(hit.machineId)
         let head = item(glyph: .document, name: NSAttributedString(string: title, attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted)),
                         trail: NSAttributedString(string: "\(host) · \(hit.role)", attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted, tracking: TypeScale.trackCaps)))
-        let snippet = UILabel()
+        let snippet = KitLabel(TypeScale.typeBody)
         snippet.lineBreakMode = .byTruncatingTail
         let line = NSMutableAttributedString()
         for (i, part) in hit.snippet.split(separator: /「|」/, omittingEmptySubsequences: false).enumerated() {
