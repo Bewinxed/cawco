@@ -192,7 +192,15 @@ export function watch(): void {
       if (kit.sampling) {
         kit.tops.push(scroller.scrollTop);
       }
-      if (container) {
+      // Only a list the reader can see has a blank stretch: the transcript
+      // holds its list hidden (`visibility: hidden`) until its first layout
+      // lands, and a frame of that layout is no frame anyone sees.
+      if (
+        container?.checkVisibility({
+          visibilityProperty: true,
+          opacityProperty: true,
+        })
+      ) {
         const { widest, where } = blank(container, view);
         const now = performance.now();
         if (widest > 4 && kit.gaps.length < 40) {
