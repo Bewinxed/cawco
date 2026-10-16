@@ -756,25 +756,47 @@ const run = async (kit: Kit) => {
     id: string,
     said: Record<string, string[]>
   ): Promise<Error> => {
+    // What says why first: the builder's tool answers, its item's wait and
+    // end, the hub's lines; the task as it stands last (the error is cut).
+    const items = fleet.query<{
+      error: string | null;
+      id: string;
+      parent_instance_id: string;
+      state: string;
+      wait_reason: string | null;
+      wait_until: number | null;
+    }>(
+      "SELECT id, state, parent_instance_id, error, wait_until, wait_reason FROM work_items WHERE project_id = ? AND (task_id = ? OR parent_instance_id LIKE 'verifier:%') ORDER BY created_at",
+      project.id,
+      id
+    );
     const report = {
-      task: await read(id).catch(() => undefined),
-      checks: checksOf(id),
-      items: fleet.query(
-        "SELECT id, state, parent_instance_id, error FROM work_items WHERE project_id = ? ORDER BY created_at",
-        project.id
+      said: Object.fromEntries(
+        Object.entries(said).map(([key, each]) => [
+          key,
+          each.map((one) => one.slice(0, 240)),
+        ])
       ),
-      said,
+      items,
+      heard: builderHeard.slice(-6).map((one) => one.slice(0, 200)),
+      hub: (await fleet.logs("hub"))
+        .split("\n")
+        .filter(
+          (line) =>
+            line.includes("[design") ||
+            line.includes(id) ||
+            items.some((item) => line.includes(item.id.slice(0, 8)))
+        )
+        .slice(-16),
+      checks: checksOf(id),
       verifiers: Object.fromEntries(
         verifierKeys.map((key) => [key, answers.get(key) ?? []])
       ),
-      hub: (await fleet.logs("hub"))
-        .split("\n")
-        .filter((line) => line.includes("[design") || line.includes(id))
-        .slice(-12),
+      task: await read(id).catch(() => undefined),
     };
     await writeFile(join(kit.out, "T3-stalled.json"), json(report));
     return new Error(
-      `${error instanceof Error ? error.message : String(error)}; ${JSON.stringify(report).slice(0, 2400)}`
+      `${error instanceof Error ? error.message : String(error)}; ${JSON.stringify(report).slice(0, 4000)}`
     );
   };
 
@@ -891,6 +913,22 @@ const run = async (kit: Kit) => {
     proposalsOpen,
     (waiting) => waiting.length === 2,
     400_000
+  ).catch(async (error: unknown) => {
+    throw await t3Stalled(error, t3, t3Answers());
+  });
+  // The person answers once the builder has handed its proposals over and
+  // declared it waits for them, each answer a turn of its own: an answer
+  // read mid-script is a race this check is not about.
+  await until(
+    "T3's builder waiting on its proposals",
+    () =>
+      fleet.query<{ wait_until: number | null }>(
+        "SELECT wait_until FROM work_items WHERE project_id = ? AND task_id = ? ORDER BY created_at DESC",
+        project.id,
+        t3
+      )[0]?.wait_until ?? null,
+    (waitUntil) => waitUntil !== null,
+    120_000
   ).catch(async (error: unknown) => {
     throw await t3Stalled(error, t3, t3Answers());
   });
