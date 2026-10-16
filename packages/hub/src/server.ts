@@ -25390,18 +25390,17 @@ export const createServer = (
                     account?.identity &&
                     !sameIdentity(account.identity, read.identity)
                   ) {
-                    // The account's own dir answers as someone else: not
-                    // this account's reading or catalog, and not this
-                    // account signed in there.
+                    // A process signed in as someone else: its reading and
+                    // catalog are not this account's. Whether the account
+                    // is signed in there is its dir's reading to say
+                    // (`reconcileAccounts`, read again every minute), not one
+                    // process's: a process launched before a move answers
+                    // for the dir it started in, and marking the account
+                    // from it held it "mismatch" with its own login intact,
+                    // since an unchanged reading is never squared again.
                     console.warn(
-                      `[hub] ${message.instanceId} runs on ${accountName(account)} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}`
+                      `[hub] ${message.instanceId} runs on ${accountName(account)} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}; its reading is dropped, and the account's sign-in there is its dir's reading`
                     );
-                    db.accounts.putSignin({
-                      accountId,
-                      machineId: message.machineId,
-                      state: "mismatch",
-                    });
-                    publishUsage(message.machineId);
                     break;
                   }
                   const info = frame.message.rate_limit_info;
