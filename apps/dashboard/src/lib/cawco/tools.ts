@@ -4,6 +4,7 @@
  * knows a tool by name — the catalog is data the hub hands over.
  */
 import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core";
+import type { Bounded } from "@cawco/core/bounded";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { machineControl } from "./client.svelte";
 
@@ -59,7 +60,7 @@ export const installTool = (
   machineId: string,
   id: string,
   pinnedVersion?: string | null
-): Promise<ToolStatus> =>
+): Promise<Bounded<ToolStatus>> =>
   machineControl<ToolStatus>(
     machineId,
     "installTool",

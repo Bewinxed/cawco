@@ -107,6 +107,7 @@ import {
   runDoing,
   WIRE_PROTOCOL,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
@@ -4873,32 +4874,43 @@ if (typeof window !== "undefined" && !globalThis.__cawcoWakeBound) {
   document.addEventListener("visibilitychange", wake);
 }
 
-/** Resolves once the app socket is OPEN, connecting it if needed. */
-function waitForOpen(timeoutMs = 5000): Promise<void> {
+/**
+ * Resolves once the app socket is OPEN, connecting it if needed. A socket
+ * that does not open in time throws saying the hub could not be reached:
+ * the machine was never asked.
+ */
+async function waitForOpen(timeoutMs = 5000): Promise<void> {
   ensureConnected();
-  const socket = globalThis.__cawcoSocket;
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    return Promise.resolve();
+  const isOpen = () => globalThis.__cawcoSocket?.readyState === WebSocket.OPEN;
+  if (isOpen()) {
+    return;
   }
-
-  return new Promise((resolve, reject) => {
-    const deadline = Date.now() + timeoutMs;
-    const poll = () => {
-      const current = globalThis.__cawcoSocket;
-      if (current && current.readyState === WebSocket.OPEN) {
-        return resolve();
-      }
-      if (Date.now() > deadline) {
-        return reject(
-          new Error(
-            "Could not reach the hub. Check that it is running, then try again."
-          )
-        );
-      }
-      setTimeout(poll, 100);
-    };
-    poll();
-  });
+  const opened = await readWithin(
+    timeoutMs,
+    (signal) =>
+      new Promise<void>((resolve) => {
+        const poll = () => {
+          if (isOpen()) {
+            resolve();
+          } else if (!signal.aborted) {
+            setTimeout(poll, 100);
+          }
+        };
+        poll();
+      })
+  );
+  switch (opened.kind) {
+    case "answered":
+      return;
+    case "unanswered":
+      throw new Error(
+        `Could not reach the hub within ${Math.round(opened.after / 1000)} s. Check that it is running, then try again.`
+      );
+    default: {
+      const unhandled: never = opened;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }
 
 function userMessage(text: string, uuid: string): SendPayload["message"] {
@@ -4946,6 +4958,8 @@ function explicit(machineId: string, payload: SpawnPayload): SpawnPayload {
  * Sends a spawn and returns the view it streams into once the hub has taken
  * it: its row is open. A spawn the hub refuses throws the hub's reason, and
  * nothing of it is kept here: no view, and no id for a caller to navigate to.
+ * A spawn the hub did not answer in time is `unanswered`: whether it started
+ * is not known, and nothing of it is kept here either.
  * Every session this dashboard starts, resumes or forks goes through here.
  */
 async function start({
@@ -4953,22 +4967,28 @@ async function start({
   ...spawn
 }: Omit<SpawnPayload, "instanceId"> & {
   machineId: string;
-}): Promise<SessionState> {
+}): Promise<Bounded<SessionState>> {
   const instanceId = newId();
   const requestId = newId();
   const payload = explicit(machineId, { instanceId, ...spawn });
+  let taken: Bounded<void>;
   try {
-    await ask<void>(
-      requestId,
-      "Starting the session",
-      CONTROL_TIMEOUT_MS,
-      () => {
-        opening.set(instanceId, requestId);
-        send({ verb: "spawn", machineId, instanceId, requestId, payload });
-      }
-    );
+    taken = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () => {
+      opening.set(instanceId, requestId);
+      send({ verb: "spawn", machineId, instanceId, requestId, payload });
+    });
   } finally {
     opening.delete(instanceId);
+  }
+  switch (taken.kind) {
+    case "unanswered":
+      return taken;
+    case "answered":
+      break;
+    default: {
+      const unhandled: never = taken;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
   const created = session(instanceId);
   created.machineId = machineId;
@@ -4979,7 +4999,7 @@ async function start({
   // init — which then corrects it to whatever the harness resolved it to.
   created.model = payload.model ?? null;
   created.scratch = Boolean(payload.scratch);
-  return created;
+  return { kind: "answered", value: created };
 }
 
 /**
@@ -5015,8 +5035,8 @@ export async function spawnSession({
   projectId?: string;
   /** The account picked for this session; absent: the hub places it. */
   account?: string;
-}): Promise<string> {
-  const created = await start({
+}): Promise<Bounded<string>> {
+  const started = await start({
     machineId,
     cwd,
     harness,
@@ -5028,6 +5048,18 @@ export async function spawnSession({
     projectId,
     ...(account ? { account } : {}),
   });
+  switch (started.kind) {
+    case "unanswered":
+      // Whether it started is not known: no first prompt goes to a session nobody confirmed.
+      return started;
+    case "answered":
+      break;
+    default: {
+      const unhandled: never = started;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  const created = started.value;
   const first = prompt?.trim() ?? "";
   if (first || extras.images?.length || extras.attachments?.length) {
     // Followed before its first message goes, on the socket that carries it:
@@ -5041,7 +5073,7 @@ export async function spawnSession({
   }
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
-  return created.instanceId;
+  return { kind: "answered", value: created.instanceId };
 }
 
 /**
@@ -5062,14 +5094,14 @@ export async function forkSession({
   sessionId: string;
   harness?: HarnessKind;
   at?: string;
-}): Promise<string> {
+}): Promise<Bounded<string>> {
   // The branch runs on what its source runs on, never on the machine's
   // defaults: the hub's row for the conversation says what that is.
   const source = instanceForSession(instanceIndex, sessionId, {
     machineId,
     cwd,
   });
-  const created = await start({
+  const started = await start({
     machineId,
     cwd,
     harness,
@@ -5090,9 +5122,18 @@ export async function forkSession({
       : {}),
     ...(source?.chosenEffort ? { effort: source.chosenEffort } : {}),
   });
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
-  void refresh();
-  return created.instanceId;
+  switch (started.kind) {
+    case "unanswered":
+      return started;
+    case "answered":
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
+      void refresh();
+      return { kind: "answered", value: started.value.instanceId };
+    default: {
+      const unhandled: never = started;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }
 
 /** What a turn carries besides its typed text — pastes turned into chips, images. */
@@ -5167,10 +5208,11 @@ function resumeKeyFor(instanceId: string): string | null {
   return state.sessions[instanceId]?.sessionId ?? null;
 }
 
+/** Revives `instanceId` when its process is dead; `unanswered` when the revive got no answer in time. */
 export async function ensureAlive(
   instanceId: string,
   machineId: string
-): Promise<void> {
+): Promise<Bounded<void>> {
   const target = session(instanceId);
   const row = instanceIndex.byId.get(instanceId);
   const dead =
@@ -5215,34 +5257,57 @@ export async function ensureAlive(
       requestId,
     });
     target.relaunching = true;
+    let revived: Bounded<void>;
     try {
-      await ask<void>(requestId, "revive", CONTROL_TIMEOUT_MS, () =>
+      revived = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
         send({ verb: "spawn", machineId, instanceId, requestId, payload })
       );
     } finally {
       target.relaunching = false;
     }
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the revive already landed, this just resyncs the fleet list
-    void refresh();
+    switch (revived.kind) {
+      case "unanswered":
+        return revived;
+      case "answered":
+        // biome-ignore lint/complexity/noVoid: fire-and-forget — the revive already landed, this just resyncs the fleet list
+        void refresh();
+        return revived;
+      default: {
+        const unhandled: never = revived;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   }
+  return { kind: "answered", value: undefined };
 }
 
 /**
  * Stops a running session. Nothing about it changes here until its machine
  * answers: then it is stopped (its turn, tool and parked asks settle), and a
- * refusal is thrown in the machine's words for the row that asked to say.
+ * refusal is thrown in the machine's words for the row that asked to say. A
+ * stop nobody answered in time is `unanswered`: the session is left as it is.
  */
 export async function stopSession(
   instanceId: string,
   machineId: string
-): Promise<void> {
+): Promise<Bounded<void>> {
   const requestId = newId();
   const payload: StopPayload = { instanceId, requestId };
   try {
-    await ask<void>(requestId, "stop", CONTROL_TIMEOUT_MS, () =>
+    const stopped = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "stop", machineId, instanceId, requestId, payload })
     );
-    settleStopped(instanceId);
+    switch (stopped.kind) {
+      case "answered":
+        settleStopped(instanceId);
+        return stopped;
+      case "unanswered":
+        return stopped;
+      default: {
+        const unhandled: never = stopped;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } finally {
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the fleet list re-reads on its own
     void refresh();
@@ -5257,17 +5322,27 @@ export async function stopSession(
 export async function discardSession(
   instanceId: string,
   machineId: string
-): Promise<void> {
+): Promise<Bounded<void>> {
   const requestId = newId();
   const payload: StopPayload = { instanceId, discard: true, requestId };
   try {
-    await ask<void>(requestId, "discard", DISCARD_TIMEOUT_MS, () =>
+    const discarded = await ask<void>(requestId, DISCARD_TIMEOUT_MS, () =>
       send({ verb: "stop", machineId, instanceId, requestId, payload })
     );
-    // Gone on the machine's word, not before: a refused discard leaves the
-    // session as it was.
-    settleStopped(instanceId);
-    delete state.sessions[instanceId];
+    switch (discarded.kind) {
+      case "answered":
+        // Gone on the machine's word, not before: a refused discard, or one
+        // nobody answered, leaves the session as it was.
+        settleStopped(instanceId);
+        delete state.sessions[instanceId];
+        return discarded;
+      case "unanswered":
+        return discarded;
+      default: {
+        const unhandled: never = discarded;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } finally {
     await refresh();
   }
@@ -5431,9 +5506,10 @@ export async function removeProjectPlace(
 /**
  * Promotes a spin-off to mainline work: the UI stops setting it apart, and
  * the tag that kept its transcript out of the machine's catalog comes off, so
- * the session joins the history it was being hidden from.
+ * the session joins the history it was being hidden from. `unanswered` when
+ * the hub kept it and its machine did not answer for the tag in time.
  */
-export async function keepSession(instanceId: string): Promise<void> {
+export async function keepSession(instanceId: string): Promise<Bounded<void>> {
   const target = session(instanceId);
   const response = await fetch(`/api/instances/${instanceId}`, {
     method: "PATCH",
@@ -5451,7 +5527,7 @@ export async function keepSession(instanceId: string): Promise<void> {
   if (target.sessionId && target.machineId) {
     // `null` is how the harness clears a tag; the catalog is re-read for the
     // entry that has just stopped being hidden.
-    await machineControl(
+    const untagged = await machineControl<void>(
       target.machineId,
       "tagSession",
       [target.sessionId, null, { dir: target.cwd || undefined }],
@@ -5459,7 +5535,9 @@ export async function keepSession(instanceId: string): Promise<void> {
       target.harness
     );
     await loadCatalog(target.machineId);
+    return untagged;
   }
+  return { kind: "answered", value: undefined };
 }
 
 /** The view state a session leaves behind once it is no longer running. */
@@ -5523,7 +5601,7 @@ export async function machineControl<T>(
   args: unknown[] = [],
   replyTimeoutMs = CONTROL_TIMEOUT_MS,
   harness?: HarnessKind
-): Promise<T> {
+): Promise<Bounded<T>> {
   await waitForOpen();
   const requestId = newId();
   const payload: ControlPayload = {
@@ -5532,7 +5610,7 @@ export async function machineControl<T>(
     args,
     ...(harness && { harness }),
   };
-  return ask<T>(requestId, method, replyTimeoutMs, () =>
+  return ask<T>(requestId, replyTimeoutMs, () =>
     send({ verb: "control", machineId, requestId, payload })
   );
 }
@@ -5548,7 +5626,7 @@ export async function machineFs<T>(
   content?: string,
   /** `path` is relative to this root, as the machine places it (`FsPayload.root`). */
   root?: FsPayload["root"]
-): Promise<T> {
+): Promise<Bounded<T>> {
   await waitForOpen();
   const requestId = newId();
   const payload: FsPayload = {
@@ -5558,7 +5636,7 @@ export async function machineFs<T>(
     content,
     ...(root ? { root } : {}),
   };
-  return ask<T>(requestId, `fs ${op} ${path}`, CONTROL_TIMEOUT_MS, () =>
+  return ask<T>(requestId, CONTROL_TIMEOUT_MS, () =>
     send({ verb: "fs", machineId, requestId, payload })
   );
 }
@@ -6215,8 +6293,8 @@ export async function deleteTranscript(
   sessionId: string,
   dir: string | undefined,
   harness: HarnessKind | undefined
-): Promise<void> {
-  await machineControl(
+): Promise<Bounded<void>> {
+  const deleted = await machineControl<void>(
     machineId,
     "deleteSession",
     [sessionId, { dir }],
@@ -6224,6 +6302,7 @@ export async function deleteTranscript(
     harness
   );
   await loadCatalog(machineId);
+  return deleted;
 }
 
 /**
@@ -6301,41 +6380,74 @@ export async function removeSession(instanceId: string): Promise<void> {
   await refresh();
 }
 
-/** Sends something the agent answers by `requestId`, and waits for that answer. */
+/**
+ * Sends something the agent answers by `requestId`, and waits `timeoutMs` for
+ * that answer. A refusal rejects in the machine's words; no answer in time is
+ * its own outcome, `unanswered`, which every caller says as such
+ * ({@link didntAnswer}).
+ */
 function ask<T>(
   requestId: string,
-  label: string,
   timeoutMs: number,
   dispatch: () => void
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      if (inflight.delete(requestId)) {
-        reject(
-          new Error(
-            `${label} got no answer in time. The machine may be offline.`
-          )
-        );
-      }
-    }, timeoutMs);
-    inflight.set(requestId, {
-      resolve: (result) => {
-        clearTimeout(timer);
-        resolve(result as T);
-      },
-      reject: (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    });
-    try {
-      dispatch();
-    } catch (error) {
-      clearTimeout(timer);
-      inflight.delete(requestId);
-      reject(error instanceof Error ? error : new Error(String(error)));
+): Promise<Bounded<T>> {
+  return readWithin(
+    timeoutMs,
+    (signal) =>
+      new Promise<T>((resolve, reject) => {
+        inflight.set(requestId, {
+          resolve: (result) => resolve(result as T),
+          reject,
+        });
+        signal.addEventListener("abort", () => inflight.delete(requestId), {
+          once: true,
+        });
+        try {
+          dispatch();
+        } catch (error) {
+          inflight.delete(requestId);
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      })
+  );
+}
+
+/** A read no answer came back to in time. */
+export type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
+
+/**
+ * What the person reads when `machineId` didn't answer in time, in the
+ * existing copy's voice (WORDS.md: "nixbox stopped answering (timeout)").
+ * `outcome` says what is now not known, when something is.
+ */
+export function didntAnswer(
+  machineId: string,
+  missed: Unanswered,
+  outcome?: string
+): string {
+  return `${machineName(machineId)} didn't answer within ${Math.round(missed.after / 1000)} s${outcome ? `, so ${outcome}` : ""}. It may be offline.`;
+}
+
+/**
+ * A read as an action the person started takes it, for the actions whose
+ * one way to say something is the sentence they throw (a menu item, a
+ * confirm dialog): the answer, or {@link didntAnswer}'s sentence thrown.
+ */
+export function answeredOr<T>(
+  machineId: string,
+  read: Bounded<T>,
+  outcome?: string
+): T {
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(didntAnswer(machineId, read, outcome));
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
-  });
+  }
 }
 
 /** The machine's stored sessions, newest first. */
@@ -6346,7 +6458,21 @@ export async function loadCatalog(machineId: string): Promise<void> {
       "listSessions",
       [SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {}]
     );
-    catalog = { ...catalog, [machineId]: listed };
+    switch (listed.kind) {
+      case "unanswered":
+        // The catalog it last listed stands.
+        console.warn(
+          `[cawco] listSessions on ${machineId}: ${didntAnswer(machineId, listed)}`
+        );
+        break;
+      case "answered":
+        catalog = { ...catalog, [machineId]: listed.value };
+        break;
+      default: {
+        const unhandled: never = listed;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } catch (error) {
     console.error(`[cawco] listSessions on ${machineId} failed:`, error);
   } finally {
@@ -7052,16 +7178,28 @@ export function interrupt(instanceId: string, machineId: string): void {
 /**
  * Changes how a live session answers permissions, from now on. Unlike the other
  * instance controls this one is awaited: the view already shows the mode that
- * was asked for, so a machine that refuses has to be able to put it back.
+ * was asked for, so a machine that refuses has to be able to put it back. One
+ * that did not answer in time is `unanswered`: the view goes back to the last
+ * mode the machine confirmed, and the mode is never recorded as switched.
  */
 export async function setPermissionMode(
   instanceId: string,
   machineId: string,
   mode: PermissionMode
-): Promise<void> {
+): Promise<Bounded<void>> {
   // Switching a setting on a session whose process died must not fail:
   // revive it first, then apply.
-  await ensureAlive(instanceId, machineId);
+  const alive = await ensureAlive(instanceId, machineId);
+  switch (alive.kind) {
+    case "unanswered":
+      return alive;
+    case "answered":
+      break;
+    default: {
+      const unhandled: never = alive;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   const target = session(instanceId);
   const previous = target.permissionMode;
   target.permissionMode = mode;
@@ -7073,17 +7211,29 @@ export async function setPermissionMode(
     method: "setPermissionMode",
     args: [mode],
   };
+  let switched: Bounded<void>;
   try {
-    await ask<void>(requestId, "setPermissionMode", CONTROL_TIMEOUT_MS, () =>
+    switched = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "control", machineId, instanceId, requestId, payload })
     );
   } catch (error) {
     target.permissionMode = previous;
     throw error;
   }
-  // Only once the daemon has taken it: a refused switch never reaches the row.
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
-  void persistSettings(instanceId, { permissionMode: mode });
+  switch (switched.kind) {
+    case "unanswered":
+      target.permissionMode = previous;
+      return switched;
+    case "answered":
+      // Only once the daemon has taken it: a refused switch never reaches the row.
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
+      void persistSettings(instanceId, { permissionMode: mode });
+      return switched;
+    default: {
+      const unhandled: never = switched;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }
 
 /**
@@ -7113,14 +7263,27 @@ export async function refreshContext(
     args: [],
   };
   try {
-    const usage = await ask<{
+    const read = await ask<{
       totalTokens: number;
       maxTokens: number;
       percentage: number;
       categories: { name: string; tokens: number; color: string }[];
-    }>(requestId, "getContextUsage", CONTROL_TIMEOUT_MS, () =>
+    }>(requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "control", machineId, instanceId, requestId, payload })
     );
+    switch (read.kind) {
+      case "unanswered":
+        // The last reading stands; the details say why it is not newer.
+        target.contextError = didntAnswer(machineId, read);
+        return;
+      case "answered":
+        break;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const usage = read.value;
     target.context = {
       totalTokens: usage.totalTokens,
       maxTokens: usage.maxTokens,
@@ -7150,7 +7313,7 @@ export async function refreshContext(
 export async function loadModels(
   instanceId: string,
   machineId: string
-): Promise<ModelInfo[]> {
+): Promise<Bounded<ModelInfo[]>> {
   const requestId = newId();
   const payload: ControlPayload = {
     instanceId,
@@ -7158,11 +7321,8 @@ export async function loadModels(
     method: "supportedModels",
     args: [],
   };
-  return ask<ModelInfo[]>(
-    requestId,
-    "supportedModels",
-    CONTROL_TIMEOUT_MS,
-    () => send({ verb: "control", machineId, instanceId, requestId, payload })
+  return ask<ModelInfo[]>(requestId, CONTROL_TIMEOUT_MS, () =>
+    send({ verb: "control", machineId, instanceId, requestId, payload })
   );
 }
 
@@ -7212,7 +7372,7 @@ export async function refreshCommands(
   }
   target.commandsPending = true;
 
-  const request = <T>(method: string): Promise<T> => {
+  const request = <T>(method: string): Promise<Bounded<T>> => {
     const requestId = newId();
     const payload: ControlPayload = {
       instanceId,
@@ -7220,14 +7380,27 @@ export async function refreshCommands(
       method,
       args: [],
     };
-    return ask<T>(requestId, method, CONTROL_TIMEOUT_MS, () =>
+    return ask<T>(requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "control", machineId, instanceId, requestId, payload })
     );
   };
   try {
-    const commands = await request<SupportedCommands>(
-      CONTROL_SUPPORTED_COMMANDS
-    );
+    const read = await request<SupportedCommands>(CONTROL_SUPPORTED_COMMANDS);
+    switch (read.kind) {
+      case "unanswered":
+        // The menu keeps what it last heard; the next open asks again.
+        console.warn(
+          `[cawco] supportedCommands on ${instanceId}: ${didntAnswer(machineId, read)}`
+        );
+        return;
+      case "answered":
+        break;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const commands = read.value;
     target.commands.names = commands.map((command) => command.name);
     target.commands.detailed = detailsOf(commands);
     if (commands.some((command) => command.kind)) {
@@ -7252,7 +7425,7 @@ export async function refreshCommands(
 function askMcp(
   instanceId: string,
   machineId: string
-): Promise<McpServerStatus[]> {
+): Promise<Bounded<McpServerStatus[]>> {
   const requestId = newId();
   const payload: ControlPayload = {
     instanceId,
@@ -7260,20 +7433,18 @@ function askMcp(
     method: "mcpServerStatus",
     args: [],
   };
-  return ask<McpServerStatus[]>(
-    requestId,
-    "mcpServerStatus",
-    CONTROL_TIMEOUT_MS,
-    () => send({ verb: "control", machineId, instanceId, requestId, payload })
+  return ask<McpServerStatus[]>(requestId, CONTROL_TIMEOUT_MS, () =>
+    send({ verb: "control", machineId, instanceId, requestId, payload })
   );
 }
 
 /**
  * Which MCP servers this session runs, so a tool card can name the server a
  * call went to (transcript/ToolGroup). `mcpServerStatus` is a Query method, so
- * only a live session answers. A failed ask stores `[]`
- * rather than staying null: null is what re-triggers the asking effect, and a
- * machine that cannot answer must not be asked in a loop.
+ * only a live session answers. A refused ask stores `[]` rather than staying
+ * null: null is what re-triggers the asking effect, and a machine that
+ * refuses must not be asked in a loop. One nobody answered in time stays
+ * null, not known: the next time the session goes live it is asked again.
  */
 export async function loadMcpServers(
   instanceId: string,
@@ -7289,7 +7460,21 @@ export async function loadMcpServers(
   target.mcpPending = true;
 
   try {
-    target.mcp = await askMcp(instanceId, machineId);
+    const read = await askMcp(instanceId, machineId);
+    switch (read.kind) {
+      case "unanswered":
+        console.warn(
+          `[cawco] mcpServerStatus on ${instanceId}: ${didntAnswer(machineId, read)}`
+        );
+        break;
+      case "answered":
+        target.mcp = read.value;
+        break;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } catch (error) {
     if (!isCustodyRefusal(error)) {
       console.error(`[cawco] mcpServerStatus on ${instanceId} failed:`, error);
@@ -7303,16 +7488,27 @@ export async function loadMcpServers(
 /**
  * Points the session at another model from the next turn on. Awaited like the
  * permission mode and for the same reason: the header already shows the choice,
- * so a machine that refuses has to be able to put it back.
+ * so a machine that refuses has to be able to put it back, and one that did
+ * not answer in time (`unanswered`) is put back the same way.
  */
 export async function setModel(
   instanceId: string,
   machineId: string,
   model: string
-): Promise<void> {
+): Promise<Bounded<void>> {
   // Switching a setting on a session whose process died must not fail:
   // revive it first, then apply.
-  await ensureAlive(instanceId, machineId);
+  const alive = await ensureAlive(instanceId, machineId);
+  switch (alive.kind) {
+    case "unanswered":
+      return alive;
+    case "answered":
+      break;
+    default: {
+      const unhandled: never = alive;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   const target = session(instanceId);
   const previous = target.model;
   target.model = model;
@@ -7324,17 +7520,29 @@ export async function setModel(
     method: "setModel",
     args: [model],
   };
+  let switched: Bounded<void>;
   try {
-    await ask<void>(requestId, "setModel", CONTROL_TIMEOUT_MS, () =>
+    switched = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "control", machineId, instanceId, requestId, payload })
     );
   } catch (error) {
     target.model = previous;
     throw error;
   }
-  // Only once the daemon has taken it: a refused switch never reaches the row.
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
-  void persistSettings(instanceId, { model });
+  switch (switched.kind) {
+    case "unanswered":
+      target.model = previous;
+      return switched;
+    case "answered":
+      // Only once the daemon has taken it: a refused switch never reaches the row.
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
+      void persistSettings(instanceId, { model });
+      return switched;
+    default: {
+      const unhandled: never = switched;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }
 
 /**
@@ -7349,7 +7557,7 @@ export async function relaunchSession(
   instanceId: string,
   machineId: string,
   permissionMode: PermissionMode
-): Promise<void> {
+): Promise<Bounded<void>> {
   const target = session(instanceId);
   // The one rule for starting a session again (core `relaunchOf`): on its
   // conversation when it has one, fresh under its id when its harness never
@@ -7394,13 +7602,25 @@ export async function relaunchSession(
   // Whatever was in flight belongs to the process being replaced.
   settleStopped(instanceId);
   try {
-    await ask<void>(requestId, "relaunch", CONTROL_TIMEOUT_MS, () =>
+    const relaunched = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "spawn", machineId, instanceId, requestId, payload })
     );
-    if (hadWork) {
-      submitCommand(instanceId, machineId, "send", {
-        text: `The permission mode is now "${permissionMode}". Continue the interrupted work.`,
-      });
+    switch (relaunched.kind) {
+      case "unanswered":
+        // Not known to run on the new mode: the view shows the last confirmed one.
+        target.permissionMode = previous;
+        return relaunched;
+      case "answered":
+        if (hadWork) {
+          submitCommand(instanceId, machineId, "send", {
+            text: `The permission mode is now "${permissionMode}". Continue the interrupted work.`,
+          });
+        }
+        return relaunched;
+      default: {
+        const unhandled: never = relaunched;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
   } catch (error) {
     target.permissionMode = previous;
@@ -7504,7 +7724,7 @@ export function rewindableTurns(target: SessionState): Set<string> {
 export async function forkFrom(
   instanceId: string,
   id: string
-): Promise<string> {
+): Promise<Bounded<string>> {
   const target = session(instanceId);
   const sessionKey = resumeKeyFor(instanceId);
   if (!(target.machineId && sessionKey)) {
@@ -7538,7 +7758,7 @@ export async function editAndResend(
   instanceId: string,
   id: string,
   content: string
-): Promise<void> {
+): Promise<Bounded<void>> {
   const target = session(instanceId);
   const { machineId } = target;
   if (!machineId) {
@@ -7583,10 +7803,21 @@ export async function editAndResend(
   settleStopped(instanceId);
   target.relaunching = true;
   try {
-    await ask<void>(requestId, "rewind", CONTROL_TIMEOUT_MS, () =>
+    const rewound = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "spawn", machineId, instanceId, requestId, payload })
     );
-    submitCommand(instanceId, machineId, "send", { text: content });
+    switch (rewound.kind) {
+      case "unanswered":
+        // Not known to have restarted at the rewind point: the new wording is not sent.
+        return rewound;
+      case "answered":
+        submitCommand(instanceId, machineId, "send", { text: content });
+        return rewound;
+      default: {
+        const unhandled: never = rewound;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } finally {
     target.relaunching = false;
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the relaunch already landed, this just resyncs the fleet list

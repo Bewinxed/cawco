@@ -22,6 +22,7 @@
   import { hueVar, nameOf } from "../accounts/model.svelte";
   import { moveTo, movingTo } from "../accounts/switch.svelte";
   import {
+    answeredOr,
     cawco,
     commandRecord,
     editAndResend,
@@ -223,7 +224,13 @@
     editPending = true;
     editError = "";
     try {
-      await editAndResend(message.instanceId, message.id, editContent.trim());
+      const machineId =
+        cawco.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
+      answeredOr(
+        machineId,
+        await editAndResend(message.instanceId, message.id, editContent.trim()),
+        "whether the session went back to that turn is not known"
+      );
       editing = false;
     } catch (error) {
       editError = failureWords(error);
@@ -240,7 +247,13 @@
     forkPending = true;
     editError = "";
     try {
-      const forked = await forkFrom(message.instanceId, message.id);
+      const machineId =
+        cawco.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
+      const forked = answeredOr(
+        machineId,
+        await forkFrom(message.instanceId, message.id),
+        "whether the branch started is not known"
+      );
       await goto(conversationHref(forked, cawco.instanceIndex));
     } catch (error) {
       editError = failureWords(error);

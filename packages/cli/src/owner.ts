@@ -12,6 +12,7 @@
  */
 import type { PairingPoll, PairingStart } from "@cawco/core";
 import { OWNER_SCHEME } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 
 /** This run's approval, once the person gave it. */
 let token: string | undefined;
@@ -28,20 +29,45 @@ const withToken = (init: RequestInit): RequestInit => {
   return { ...init, headers };
 };
 
+/** How long one request of an approval is given to answer. */
+const PAIR_ANSWER_MS = 15_000;
+
 /** Asks the person to approve this run of `command`, and waits for the answer. */
 const approve = async (origin: string, command: string): Promise<string> => {
-  const started = await fetch(`${origin}/api/pair`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kind: "cli", name: command }),
-    signal: AbortSignal.timeout(15_000),
+  const started = await readWithin(PAIR_ANSWER_MS, async (signal) => {
+    const response = await fetch(`${origin}/api/pair`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "cli", name: command }),
+      signal,
+    });
+    return response.ok
+      ? { ok: true as const, pairing: (await response.json()) as PairingStart }
+      : {
+          ok: false as const,
+          status: response.status,
+          said: (await response.text()).slice(0, 300),
+        };
   });
-  if (!started.ok) {
-    throw new OwnerApprovalError(
-      `${origin} did not start an approval (${started.status}): ${(await started.text()).slice(0, 300)}`
-    );
+  let pairing: PairingStart;
+  switch (started.kind) {
+    case "unanswered":
+      throw new OwnerApprovalError(
+        `${origin} did not answer within ${Math.round(started.after / 1000)}s when asked to start an approval; nothing was sent.`
+      );
+    case "answered":
+      if (!started.value.ok) {
+        throw new OwnerApprovalError(
+          `${origin} did not start an approval (${started.value.status}): ${started.value.said}`
+        );
+      }
+      ({ pairing } = started.value);
+      break;
+    default: {
+      const unhandled: never = started;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  const pairing = (await started.json()) as PairingStart;
   console.error(
     `This hub requires paired devices. Approve code ${pairing.userCode} on a paired device (Needs you) or in Telegram to run ${command}. Waiting…`
   );
@@ -50,14 +76,28 @@ const approve = async (origin: string, command: string): Promise<string> => {
   while (Date.now() < deadline) {
     // biome-ignore lint/performance/noAwaitInLoops: RFC 8628 §3.5: each poll waits its interval after the one before
     await Bun.sleep(interval);
-    const answer = (await fetch(`${origin}/api/pair/poll`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deviceCode: pairing.deviceCode }),
-      signal: AbortSignal.timeout(15_000),
-    }).then((response) => response.json())) as PairingPoll & {
-      token?: string;
-    };
+    const polled = await readWithin(PAIR_ANSWER_MS, async (signal) => {
+      const response = await fetch(`${origin}/api/pair/poll`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deviceCode: pairing.deviceCode }),
+        signal,
+      });
+      return (await response.json()) as PairingPoll & { token?: string };
+    });
+    let answer: PairingPoll & { token?: string };
+    switch (polled.kind) {
+      case "unanswered":
+        // The approval is still the person's to give: the next poll asks again.
+        continue;
+      case "answered":
+        answer = polled.value;
+        break;
+      default: {
+        const unhandled: never = polled;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     if (answer.status === "approved" && answer.token) {
       return answer.token;
     }
@@ -78,23 +118,51 @@ const approve = async (origin: string, command: string): Promise<string> => {
   );
 };
 
+/** What an owner request's answer said: its status and its body as text. */
+export interface OwnerAnswer {
+  ok: boolean;
+  /** The hub said it requires paired devices. */
+  pairing: boolean;
+  said: string;
+  status: number;
+}
+
 /**
  * `fetch` as the person: as it is first, and once more with this run's
- * approval when the hub says it requires paired devices. `init.body` must
- * be one the second try can send again (a string).
+ * approval when the hub says it requires paired devices. Each request, its
+ * body read with it, is given `ms` to answer; the person's approval in
+ * between is not. `init.body` must be one the second try can send again (a
+ * string).
  */
 export const ownerFetch = async (
   url: string,
   init: RequestInit,
-  command: string
-): Promise<Response> => {
-  const first = await fetch(url, withToken(init));
-  if (!(
-    first.status === 401 && first.headers.get("x-cawco-pairing") === "required"
-  )) {
-    return first;
+  command: string,
+  ms: number
+): Promise<Bounded<OwnerAnswer>> => {
+  const send = () =>
+    readWithin(ms, async (signal): Promise<OwnerAnswer> => {
+      const response = await fetch(url, { ...withToken(init), signal });
+      return {
+        ok: response.ok,
+        status: response.status,
+        pairing: response.headers.get("x-cawco-pairing") === "required",
+        said: await response.text(),
+      };
+    });
+  const first = await send();
+  switch (first.kind) {
+    case "unanswered":
+      return first;
+    case "answered":
+      if (!(first.value.status === 401 && first.value.pairing)) {
+        return first;
+      }
+      token = await approve(new URL(url).origin, command);
+      return send();
+    default: {
+      const unhandled: never = first;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  await first.body?.cancel();
-  token = await approve(new URL(url).origin, command);
-  return fetch(url, withToken(init));
 };

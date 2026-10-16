@@ -6,7 +6,7 @@
   } from "@cawco/core";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { cawco, didntAnswer } from "#lib/cawco/client.svelte.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
@@ -70,8 +70,22 @@
       reading[machine.machineId] = true;
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the effect re-runs per machine, not per promise
       void discoverAgents(machine.machineId)
-        .then((rows) => {
-          found[machine.machineId] = rows;
+        .then((read) => {
+          switch (read.kind) {
+            case "answered":
+              found[machine.machineId] = read.value;
+              break;
+            case "unanswered":
+              // Not known yet: the machine is asked again when this effect next runs.
+              console.warn(
+                `[cawco] subagents on ${machine.machineId}: ${didntAnswer(machine.machineId, read)}`
+              );
+              break;
+            default: {
+              const unhandled: never = read;
+              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+            }
+          }
         })
         .finally(() => delete reading[machine.machineId]);
     }

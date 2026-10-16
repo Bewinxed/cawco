@@ -16,6 +16,7 @@
     moveSize as sizeWords,
     TARGET_HEADROOM_TOKENS,
   } from "@cawco/core";
+  import type { Bounded } from "@cawco/core/bounded";
   import { Dialog as DialogPrimitive } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -61,7 +62,9 @@
   import Files from "~icons/solar/folder-with-files-bold-duotone";
   import Stars from "~icons/solar/stars-bold-duotone";
   import {
+    answeredOr,
     cawco,
+    didntAnswer,
     machineFs,
     placementFor,
     projectAtFolder,
@@ -250,6 +253,8 @@
   let busy = $state(false);
   let error = $state("");
   let unreadable = $state(false);
+  /** A machine that did not answer the folder check in time, in its sentence; "" when none. */
+  let unanswered = $state("");
   let missingMachines = $state<string[]>([]);
   let verifiedLocation = $state("");
   /**
@@ -749,6 +754,9 @@
     if (unreadable) {
       return `That directory can't be read on ${machine?.hostname ?? machineId}. Check the path and try again.`;
     }
+    if (unanswered) {
+      return unanswered;
+    }
     if (!locationUnverified && missingMachines.length) {
       const names = missingMachines.map(
         (id) =>
@@ -805,7 +813,13 @@
     moveTo
       ? !(error || moveAnswer?.error || moveEstimated?.refused)
       : Boolean(
-          !(error || locationUnverified || unreadable || offlineMachine) &&
+          !(
+            error ||
+            locationUnverified ||
+            unreadable ||
+            unanswered ||
+            offlineMachine
+          ) &&
           missingMachines.length &&
           cawco.hub === "connected"
         )
@@ -1125,6 +1139,7 @@
     }
     verifiedLocation = "";
     unreadable = false;
+    unanswered = "";
     missingMachines = [];
     // A project moving there goes where the hub's estimate says, which
     // reads that folder itself: this one is the project's on its source.
@@ -1138,11 +1153,23 @@
     let stale = false;
     const timer = setTimeout(() => {
       Promise.all(ids.map((id) => inspectLocation(id, path)))
-        .then((missing) => {
-          if (!stale) {
-            missingMachines = ids.filter((_, index) => missing[index]);
-            verifiedLocation = key;
+        .then((reads) => {
+          if (stale) {
+            return;
           }
+          const quiet = ids
+            .map((id, index) => quietOn(id, reads[index] as Bounded<boolean>))
+            .find(Boolean);
+          if (quiet) {
+            // Not verified: a press waits on nothing, and says this.
+            unanswered = quiet;
+            return;
+          }
+          missingMachines = ids.filter((_, index) => {
+            const read = reads[index] as Bounded<boolean>;
+            return read.kind === "answered" && read.value;
+          });
+          verifiedLocation = key;
         })
         .catch(() => {
           if (!stale) {
@@ -1182,7 +1209,7 @@
       pressedFor = null;
       return;
     }
-    if (locationUnverified && !unreadable && !offlineMachine) {
+    if (locationUnverified && !unreadable && !unanswered && !offlineMachine) {
       return;
     }
     pressedFor = null;
@@ -1317,14 +1344,29 @@
       })),
     ];
   }
-  async function inspectLocation(id: string, path: string): Promise<boolean> {
+  /** Whether the folder is missing on `id`; `unanswered` when its machine did not say in time. */
+  async function inspectLocation(
+    id: string,
+    path: string
+  ): Promise<Bounded<boolean>> {
     const [, missing] = await Promise.all([
       inspectMachine(id, path),
       machineFs(id, "list", path).then(
-        () => false,
-        (cause: unknown) => {
+        (read): Bounded<boolean> => {
+          switch (read.kind) {
+            case "answered":
+              return { kind: "answered", value: false };
+            case "unanswered":
+              return read;
+            default: {
+              const unhandled: never = read;
+              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+            }
+          }
+        },
+        (cause: unknown): Bounded<boolean> => {
           if (cause instanceof Error && cause.message.startsWith("ENOENT:")) {
-            return true;
+            return { kind: "answered", value: true };
           }
           throw cause;
         }
@@ -1332,13 +1374,35 @@
     ]);
     return missing;
   }
+  /** The sentence for a folder check `id` did not answer, or "" when it answered. */
+  function quietOn(id: string, read: Bounded<boolean>): string {
+    switch (read.kind) {
+      case "answered":
+        return "";
+      case "unanswered":
+        return didntAnswer(
+          id,
+          read,
+          "whether the folder is there is not known"
+        );
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
   async function verifyBeforeSpawn(
     id: string,
     path: string,
     current: () => boolean
   ) {
     try {
-      await inspectLocation(id, path);
+      const quiet = quietOn(id, await inspectLocation(id, path));
+      if (quiet && current()) {
+        unanswered = quiet;
+        busy = false;
+        return false;
+      }
       return current();
     } catch {
       if (!current()) {
@@ -1369,9 +1433,13 @@
     const attached = id ? cawco.project(id) : null;
     return attached && placedOn(attached, target) ? attached.id : undefined;
   }
-  function spawnOne(target: string, draft: SessionDraft): Promise<string> {
+  /** Starts one session on `target`; a hub that did not answer throws saying so, for the dialog to show. */
+  async function spawnOne(
+    target: string,
+    draft: SessionDraft
+  ): Promise<string> {
     const toAttach = attachable(draft.projectId, target);
-    return spawnSession({
+    const started = await spawnSession({
       machineId: target,
       cwd: draft.cwd,
       prompt: draft.prompt,
@@ -1388,6 +1456,11 @@
       projectId: toAttach,
       ...(draft.account ? { account: draft.account } : {}),
     });
+    return answeredOr(
+      target,
+      started,
+      "whether the session started is not known"
+    );
   }
   /**
    * What holds Start before anything is sent, saying why: a file still on

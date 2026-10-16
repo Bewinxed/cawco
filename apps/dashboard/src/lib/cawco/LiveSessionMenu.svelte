@@ -42,9 +42,11 @@
   import AccountSubmenu from "./accounts/AccountSubmenu.svelte";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import {
+    answeredOr,
     archiveWorkspace,
     cawco,
     deleteTranscript,
+    didntAnswer,
     discardSession,
     forkSession,
     type InstanceRow,
@@ -140,7 +142,16 @@
         instance.harness ??
         "claude") as HarnessKind,
     });
-    await goto(conversationHref(forked, cawco.instanceIndex));
+    await goto(
+      conversationHref(
+        answeredOr(
+          machine.machineId,
+          forked,
+          "whether the fork started is not known"
+        ),
+        cawco.instanceIndex
+      )
+    );
   }
 
   /**
@@ -175,12 +186,16 @@
       confirmLabel: "Delete transcript",
       destructive: true,
       pendingLabel: "Deleting…",
-      run: () =>
-        deleteTranscript(
+      run: async () =>
+        answeredOr(
           instance.machineId,
-          sessionId,
-          instance.cwd || undefined,
-          (instance.harness ?? undefined) as HarnessKind | undefined
+          await deleteTranscript(
+            instance.machineId,
+            sessionId,
+            instance.cwd || undefined,
+            (instance.harness ?? undefined) as HarnessKind | undefined
+          ),
+          "whether the transcript was deleted is not known"
         ),
     });
   }
@@ -250,26 +265,57 @@
    * the spawn made, whichever it was; the machine saves a carry either way.
    */
   async function askDiscard() {
-    const held = await machineControl<SpinOffHeld | null>(
+    const read = await machineControl<SpinOffHeld | null>(
       instance.machineId,
       CONTROL_SPIN_OFF_HELD,
       [instance.id]
     ).catch(() => null);
     const where = machine ? machineLabel(machine.hostname) : "its machine";
+    let body: string | string[];
+    switch (read?.kind) {
+      case undefined:
+        body =
+          "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.";
+        break;
+      case "unanswered":
+        body = [
+          didntAnswer(
+            instance.machineId,
+            read,
+            "what its worktree holds is not known"
+          ),
+          `A discard stops the session and the worktree and transcript go. Any work in it is saved first, as a carry on ${where} (in ~/.cawco/carries).`,
+        ];
+        break;
+      case "answered": {
+        const held = read.value;
+        body =
+          held && (held.ahead > 0 || held.dirty > 0)
+            ? [
+                `Its worktree ${held.path} holds work that is nowhere else: ${held.holds}.`,
+                `The session stops and the worktree and transcript go. That work is saved first, as a carry on ${where} (in ~/.cawco/carries).`,
+              ]
+            : "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.";
+        break;
+      }
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     await asker.ask({
       at: instance.id,
       title: "Discard this spin-off?",
-      body:
-        held && (held.ahead > 0 || held.dirty > 0)
-          ? [
-              `Its worktree ${held.path} holds work that is nowhere else: ${held.holds}.`,
-              `The session stops and the worktree and transcript go. That work is saved first, as a carry on ${where} (in ~/.cawco/carries).`,
-            ]
-          : "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
+      body,
       confirmLabel: "Discard spin-off",
       destructive: true,
       pendingLabel: "Discarding…",
-      run: () => discardSession(instance.id, instance.machineId),
+      run: async () =>
+        answeredOr(
+          instance.machineId,
+          await discardSession(instance.id, instance.machineId),
+          "whether the spin-off was discarded is not known"
+        ),
     });
   }
 </script>
@@ -378,7 +424,12 @@
         icon={IconCheck}
         label="Keep"
         pendingLabel="Keeping…"
-        run={() => keepSession(instance.id)}
+        run={async () =>
+          answeredOr(
+            instance.machineId,
+            await keepSession(instance.id),
+            "it is kept, and its transcript may still be hidden from the catalog"
+          )}
       />
       <ContextMenu.Item onSelect={askDiscard} variant="destructive">
         <IconTrash />

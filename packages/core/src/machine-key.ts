@@ -82,6 +82,11 @@ export const httpProof = (
  * person admitted it, to the hub whose `/health` the target's origin
  * answers. What the CLI's health and install checks read with, outside the
  * agent (which knows its hub from its socket, agent hub-proof.ts).
+ *
+ * Its deadline is the caller's: `init.signal` (readWithin's, in every caller)
+ * bounds the `/health` read and the request both, so a hub that does not
+ * answer `/health` in time is the caller's unanswered read, never a request
+ * sent without its proof.
  */
 export const machineFetch = async (
   url: string,
@@ -91,10 +96,10 @@ export const machineFetch = async (
     return fetch(url, init);
   }
   const { origin } = new URL(url);
-  const hubId = await fetch(`${origin}/health`, {
-    signal: AbortSignal.timeout(5000),
-  })
-    .then((response) => response.json() as Promise<{ hubId?: unknown }>)
+  const health = await fetch(`${origin}/health`, {
+    ...(init.signal ? { signal: init.signal } : {}),
+  });
+  const hubId = await (health.json() as Promise<{ hubId?: unknown }>)
     .then((body) => (typeof body.hubId === "string" ? body.hubId : undefined))
     .catch(() => undefined);
   const headers = new Headers(init.headers);

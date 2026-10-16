@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { BinaryUpdatePolicy } from "./binary-updates";
+import { readWithin } from "./bounded";
 import { type ReleaseManifest, verifyManifest } from "./release-manifest";
 import { writeStateFile } from "./state-file";
 
@@ -38,19 +39,55 @@ function nightlyTagCount(tag: string): number | undefined {
   return count === undefined ? undefined : Number(count);
 }
 
-/** A GitHub API answer, or undefined where it says 404. */
-async function githubJson<T>(url: string): Promise<T | undefined> {
-  const response = await fetch(url, {
-    headers: { accept: "application/vnd.github+json" },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (response.status === 404) {
-    return undefined;
+/** How long one read of the release host is given, its body with it. */
+const RELEASE_HOST_MS = 15_000;
+/** How long an archive download is given, its body with it. */
+const ARCHIVE_MS = 600_000;
+
+/**
+ * One read of the release host within `ms`. A host that did not answer in
+ * time throws saying so: never read as a host with no release.
+ */
+async function fromReleaseHost<T>(
+  ms: number,
+  what: string,
+  read: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const got = await readWithin(ms, read);
+  switch (got.kind) {
+    case "answered":
+      return got.value;
+    case "unanswered":
+      throw new Error(
+        `The release host did not answer ${what} within ${Math.round(got.after / 1000)}s`
+      );
+    default: {
+      const unhandled: never = got;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  if (!response.ok) {
-    throw new Error(`The release host answered ${response.status}`);
-  }
-  return (await response.json()) as T;
+}
+
+/** A GitHub API answer, or undefined where it answered 404. */
+function githubJson<T>(url: string): Promise<T | undefined> {
+  return fromReleaseHost(
+    RELEASE_HOST_MS,
+    url,
+    async (signal): Promise<T | undefined> => {
+      const response = await fetch(url, {
+        headers: { accept: "application/vnd.github+json" },
+        signal,
+      });
+      if (response.status === 404) {
+        await response.body?.cancel();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`The release host answered ${response.status}`);
+      }
+      return (await response.json()) as T;
+    }
+  );
 }
 
 /**
@@ -140,18 +177,28 @@ export async function discoverRelease(
     manifestUrl = manifest.browser_download_url;
     signatureUrl = signature.browser_download_url;
   }
-  const [manifestResponse, signatureResponse] = await Promise.all([
-    fetch(manifestUrl, { signal: AbortSignal.timeout(15_000) }),
-    fetch(signatureUrl, { signal: AbortSignal.timeout(15_000) }),
-  ]);
-  if (host && manifestResponse.status === 404) {
-    throw new NoReleaseError(`No published ${channel} release`);
-  }
-  if (!(manifestResponse.ok && signatureResponse.ok)) {
-    throw new Error("The release manifest or its signature could not be read");
-  }
-  const manifest = (await manifestResponse.json()) as ReleaseManifest;
-  const signature = (await signatureResponse.text()).trim();
+  const { manifest, signature } = await fromReleaseHost(
+    RELEASE_HOST_MS,
+    `${manifestUrl} and its signature`,
+    async (signal) => {
+      const [manifestResponse, signatureResponse] = await Promise.all([
+        fetch(manifestUrl, { signal }),
+        fetch(signatureUrl, { signal }),
+      ]);
+      if (host && manifestResponse.status === 404) {
+        throw new NoReleaseError(`No published ${channel} release`);
+      }
+      if (!(manifestResponse.ok && signatureResponse.ok)) {
+        throw new Error(
+          "The release manifest or its signature could not be read"
+        );
+      }
+      return {
+        manifest: (await manifestResponse.json()) as ReleaseManifest,
+        signature: (await signatureResponse.text()).trim(),
+      };
+    }
+  );
   verifyManifest(manifest, signature);
   if (manifest.channel !== channel) {
     throw new Error(`The signed release belongs to ${manifest.channel}`);
@@ -238,16 +285,18 @@ export async function fetchArchive(
   ) {
     return path;
   }
-  const response = await fetch(
-    new URL(artifact.archive, release.assetBaseUrl),
-    {
-      signal: AbortSignal.timeout(600_000),
+  const source = new URL(artifact.archive, release.assetBaseUrl);
+  const bytes = await fromReleaseHost(
+    ARCHIVE_MS,
+    `the download of ${source.href}`,
+    async (signal) => {
+      const response = await fetch(source, { signal });
+      if (!response.ok) {
+        throw new Error(`The archive download answered ${response.status}`);
+      }
+      return readAtMost(response, artifact.size);
     }
   );
-  if (!response.ok) {
-    throw new Error(`The archive download answered ${response.status}`);
-  }
-  const bytes = await readAtMost(response, artifact.size);
   if (!archiveMatches(release.manifest, target, bytes)) {
     throw new Error(
       "The downloaded archive does not match the signed manifest"

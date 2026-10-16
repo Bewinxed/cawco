@@ -13,6 +13,7 @@ import { untrack } from "svelte";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import {
   cawco,
+  didntAnswer,
   harnessCan,
   isCustodyRefusal,
   loadModels,
@@ -132,7 +133,21 @@ async function askHarness(
     // biome-ignore lint/performance/noAwaitInLoops: each batch is asked only because the one before it produced no answer — that is the point of the walk
     const lists = await Promise.all(
       batch.map((row) =>
-        loadModels(row.id, row.machineId).catch(
+        loadModels(row.id, row.machineId).then(
+          (read): ModelInfo[] | undefined => {
+            switch (read.kind) {
+              case "answered":
+                return read.value;
+              case "unanswered":
+                // The walk asks the next session; what this one did is said if none answers.
+                refused ??= new Error(didntAnswer(row.machineId, read));
+                return undefined;
+              default: {
+                const unhandled: never = read;
+                throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+              }
+            }
+          },
           (error: unknown): ModelInfo[] | undefined => {
             if (isCustodyRefusal(error)) {
               custody = true;

@@ -17,7 +17,7 @@
   import FolderOpen from "~icons/solar/folder-open-bold-duotone";
   import Search from "~icons/solar/magnifer-bold-duotone";
   import Refresh from "~icons/solar/refresh-bold-duotone";
-  import { machineFs } from "../client.svelte";
+  import { didntAnswer, machineFs } from "../client.svelte";
   import Segmented from "./Segmented.svelte";
 
   let {
@@ -91,9 +91,23 @@
     listing = true;
     listError = "";
     try {
-      const rows = await machineFs<FsEntry[]>(machineId, "list", next);
+      const read = await machineFs<FsEntry[]>(machineId, "list", next);
       if (id !== request) {
         return;
+      }
+      let rows: FsEntry[];
+      switch (read.kind) {
+        case "answered":
+          rows = read.value;
+          break;
+        case "unanswered":
+          // The listing on screen stands; this says why it did not move.
+          listError = didntAnswer(machineId, read);
+          return;
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
       path = next;
       folders = rows

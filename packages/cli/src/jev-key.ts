@@ -33,10 +33,11 @@ const callHub = async (
   init: RequestInit,
   refused: string
 ): Promise<JevView> => {
-  const response = await ownerFetch(
+  const answer = await ownerFetch(
     `${hub}/api/jev/typesafe-key`,
-    { ...init, signal: AbortSignal.timeout(30_000) },
-    "cawco jev"
+    init,
+    "cawco jev",
+    30_000
   ).catch((error: unknown) => {
     if (error instanceof OwnerApprovalError) {
       throw new ConnectionKeyError(error.message);
@@ -45,10 +46,22 @@ const callHub = async (
       `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
     );
   });
-  const said = await response.text();
-  if (!response.ok) {
+  switch (answer.kind) {
+    case "unanswered":
+      throw new ConnectionKeyError(
+        `${hub} did not answer within ${Math.round(answer.after / 1000)}s, so what it did with the TypeSafe key is not known`
+      );
+    case "answered":
+      break;
+    default: {
+      const unhandled: never = answer;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  const { said } = answer.value;
+  if (!answer.value.ok) {
     throw new ConnectionKeyError(
-      `${hub} ${refused} (${response.status}): ${said.slice(0, 300)}`
+      `${hub} ${refused} (${answer.value.status}): ${said.slice(0, 300)}`
     );
   }
   return JSON.parse(said) as JevView;

@@ -10,6 +10,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
+import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
 import { hubDbPath } from "@cawco/core/paths";
 import { processStart } from "@cawco/core/process-identity";
@@ -341,35 +342,111 @@ const PROBE_TIMEOUT_MS = 2000;
 const hubOrigin = (): string =>
   `http://127.0.0.1:${readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT}`;
 
-/** A probe answers or it does not; nothing it finds is worth throwing over. */
-const probeJson = async <T>(url: string): Promise<T | undefined> => {
-  // As this machine (core machine-key.ts): a hub that requires paired
-  // devices answers what machines read to an admitted machine.
+/** What a probe's answer came to: its body, or what it said instead. */
+type Said<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly status: number; readonly said: string };
+
+type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * One probe read, given {@link PROBE_TIMEOUT_MS} to answer. A request nothing
+ * is listening for ended before it answered (`Gone`, reason "dead"); `read`
+ * takes the response, the body within the same time.
+ */
+const probe = <T>(
+  url: string,
+  read: (response: Response) => Promise<T>,
+  init: RequestInit = {},
+  via: Fetcher = (target, options) => fetch(target, options)
+): Promise<Bounded<T>> =>
+  readWithin(PROBE_TIMEOUT_MS, async (signal) => {
+    const response = await via(url, { ...init, signal }).catch(
+      (error: unknown) => {
+        throw signal.aborted
+          ? error
+          : new Gone(
+              `${url}: ${error instanceof Error ? error.message : String(error)}`
+            );
+      }
+    );
+    return read(response);
+  });
+
+/** A 2xx answer's JSON body, or the status that refused it. */
+const jsonBody =
+  <T>() =>
+  async (response: Response): Promise<Said<T>> => {
+    if (!response.ok) {
+      await response.body?.cancel();
+      return {
+        ok: false,
+        status: response.status,
+        said: `HTTP ${response.status}`,
+      };
+    }
+    try {
+      return { ok: true, value: (await response.json()) as T };
+    } catch {
+      return {
+        ok: false,
+        status: response.status,
+        said: `HTTP ${response.status} with a body that is not JSON`,
+      };
+    }
+  };
+
+/** What a probe that got no answer says about `url`. */
+const noAnswer = (
+  url: string,
+  missed: Extract<Bounded<unknown>, { kind: "unanswered" }>
+): string =>
+  missed.reason === "timeout"
+    ? `no answer from ${url} within ${(missed.after / 1000).toFixed(1)}s`
+    : `nothing answers at ${url}`;
+
+/** As this machine (core machine-key.ts): a hub that requires paired devices answers what machines read to an admitted machine. */
+const asMachine: Fetcher = async (url, init) => {
   const { machineFetch } = await import("@cawco/core/machine-key");
-  const answer = await machineFetch(url, {
-    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-  }).catch(() => undefined);
-  if (!answer?.ok) {
-    return undefined;
-  }
-  return (await answer.json().catch(() => undefined)) as T | undefined;
+  return machineFetch(url, init);
 };
 
+const probeJson = <T>(url: string): Promise<Bounded<Said<T>>> =>
+  probe(url, jsonBody<T>(), {}, asMachine);
+
 const probeHub = async (): Promise<string> => {
-  const health = await probeJson<{ version: string }>(`${hubOrigin()}/health`);
-  return health
-    ? `${hubOrigin()} answers /health (hub ${health.version})`
-    : `no answer from ${hubOrigin()}/health`;
+  const url = `${hubOrigin()}/health`;
+  const health = await probeJson<{ version: string }>(url);
+  switch (health.kind) {
+    case "unanswered":
+      return noAnswer(url, health);
+    case "answered":
+      return health.value.ok
+        ? `${hubOrigin()} answers /health (hub ${health.value.value.version})`
+        : `${url} answered ${health.value.said}`;
+    default: {
+      const unhandled: never = health;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 const probeDashboard = async (): Promise<string> => {
   const url = `http://${DASHBOARD_HOST}:${DASHBOARD_PORT}/`;
-  const answer = await fetch(url, {
-    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-  }).catch(() => undefined);
-  return answer
-    ? `${url} answers (HTTP ${answer.status})`
-    : `no answer from ${url}`;
+  const answer = await probe(url, async (response) => {
+    await response.body?.cancel();
+    return response.status;
+  });
+  switch (answer.kind) {
+    case "unanswered":
+      return noAnswer(url, answer);
+    case "answered":
+      return `${url} answers (HTTP ${answer.value})`;
+    default: {
+      const unhandled: never = answer;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 /**
@@ -387,38 +464,47 @@ const joinedHub = async (): Promise<string | undefined> => {
 
 /**
  * This machine's own row at its hub, as this machine (core machine-key.ts):
- * the row, `null` when the hub knows no such machine (404), undefined when
- * the hub did not say. The fleet's list is the person's (hub hub-auth.ts).
+ * the row, `null` when the hub answered it knows no such machine (404). The
+ * fleet's list is the person's (hub hub-auth.ts).
  */
-const ownRow = async (hub: string): Promise<AgentRow | null | undefined> => {
-  const [{ machineFetch }, { machineId }] = await Promise.all([
-    import("@cawco/core/machine-key"),
-    import("@cawco/core/machine-id"),
-  ]);
-  const answer = await machineFetch(
+const ownRow = async (hub: string): Promise<Bounded<Said<AgentRow | null>>> => {
+  const { machineId } = await import("@cawco/core/machine-id");
+  const row = jsonBody<AgentRow>();
+  return probe(
     `${hub}/api/agents/${encodeURIComponent(await machineId())}`,
-    { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) }
-  ).catch(() => undefined);
-  if (answer?.status === 404) {
-    await answer.body?.cancel();
-    return null;
-  }
-  if (!answer?.ok) {
-    await answer?.body?.cancel();
-    return undefined;
-  }
-  return (await answer.json().catch(() => undefined)) as AgentRow | undefined;
+    async (response): Promise<Said<AgentRow | null>> => {
+      if (response.status === 404) {
+        await response.body?.cancel();
+        return { ok: true, value: null };
+      }
+      return row(response);
+    },
+    {},
+    asMachine
+  );
 };
 
 const probeAgent = async (): Promise<string | undefined> => {
   const hub = await joinedHub();
-  const self = hub ? await ownRow(hub) : undefined;
-  if (!hub || self === undefined) {
+  if (!hub) {
     return undefined;
   }
-  return self
-    ? `registered with ${hub} as ${self.hostname} (${self.status})`
-    : `not registered with ${hub}`;
+  const self = await ownRow(hub);
+  switch (self.kind) {
+    case "unanswered":
+      return noAnswer(hub, self);
+    case "answered":
+      if (!self.value.ok) {
+        return `${hub} answered ${self.value.said} for this machine's row`;
+      }
+      return self.value.value
+        ? `registered with ${hub} as ${self.value.value.hostname} (${self.value.value.status})`
+        : `not registered with ${hub}`;
+    default: {
+      const unhandled: never = self;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 /**
@@ -466,26 +552,81 @@ export const awaitFirstMachineReady = async (
   hub: string,
   note: (line: string) => void
 ): Promise<void> => {
-  const checks: readonly [ServiceId, () => Promise<boolean>][] = [
+  // Each check: undefined once the service is ready, else what it last said.
+  // A probe with no answer is waited on like one not ready yet.
+  const checks: readonly [ServiceId, () => Promise<string | undefined>][] = [
     [
       "hub",
-      async () =>
-        (await probeJson<{ ok: boolean }>(`${hub}/health`))?.ok === true,
+      async () => {
+        const url = `${hub}/health`;
+        const health = await probeJson<{ ok: boolean }>(url);
+        switch (health.kind) {
+          case "unanswered":
+            return noAnswer(url, health);
+          case "answered":
+            if (!health.value.ok) {
+              return `${url} answered ${health.value.said}`;
+            }
+            return health.value.value.ok === true
+              ? undefined
+              : `${url} answered not ok`;
+          default: {
+            const unhandled: never = health;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
+      },
     ],
     [
       "sessiond",
-      async () =>
-        (await probeSessiond())?.endsWith("accepts connections") === true,
+      async () => {
+        const said = await probeSessiond();
+        return said?.endsWith("accepts connections")
+          ? undefined
+          : (said ?? "not asked on this platform");
+      },
     ],
-    ["agent", async () => (await ownRow(hub))?.status === "online"],
+    [
+      "agent",
+      async () => {
+        const self = await ownRow(hub);
+        switch (self.kind) {
+          case "unanswered":
+            return noAnswer(hub, self);
+          case "answered":
+            if (!self.value.ok) {
+              return `${hub} answered ${self.value.said} for this machine's row`;
+            }
+            return self.value.value?.status === "online"
+              ? undefined
+              : `this machine's row is ${self.value.value?.status ?? "not there yet"}`;
+          default: {
+            const unhandled: never = self;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
+      },
+    ],
     [
       "dashboard",
       async () => {
-        const response = await fetch(dashboardUrl(), {
-          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-        }).catch(() => undefined);
-        await response?.body?.cancel();
-        return response?.ok === true;
+        const url = dashboardUrl();
+        const answer = await probe(url, async (response) => {
+          await response.body?.cancel();
+          return response.status;
+        });
+        switch (answer.kind) {
+          case "unanswered":
+            return noAnswer(url, answer);
+          case "answered":
+            return answer.value >= 200 && answer.value < 300
+              ? undefined
+              : `${url} answered HTTP ${answer.value}`;
+          default: {
+            const unhandled: never = answer;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
       },
     ],
   ];
@@ -493,20 +634,21 @@ export const awaitFirstMachineReady = async (
   const deadline = Date.now() + READY_TIMEOUT_MS;
   for (;;) {
     // biome-ignore lint/performance/noAwaitInLoops: a fresh snapshot of all four services on each readiness poll
-    const ready = await Promise.all(checks.map(([, check]) => check()));
-    const failed = checks.find((_, index) => !ready[index]);
-    if (!failed) {
+    const standing = await Promise.all(checks.map(([, check]) => check()));
+    const index = standing.findIndex((said) => said !== undefined);
+    if (index === -1) {
       return;
     }
     if (Date.now() >= deadline) {
-      const [serviceId] = failed;
+      const [serviceId] = checks[index] as (typeof checks)[number];
+      const last = standing[index];
       // A build's keeper is `sessiond-<version>`: the pattern names it too.
       const logs =
         platform() === "darwin"
           ? `tail -n 50 "${join(dirname(launchAgentLog(serviceId)), `cawco-${serviceId}`)}"*.log`
           : `journalctl --user -u 'cawco-${serviceId}*' -n 50`;
       throw new ServiceError(
-        `${serviceId} did not become ready within ${READY_TIMEOUT_MS / 1000}s. Read why with: ${logs}`
+        `${serviceId} did not become ready within ${READY_TIMEOUT_MS / 1000}s (${last}). Read why with: ${logs}`
       );
     }
     await Bun.sleep(1000);
@@ -1465,27 +1607,40 @@ interface BusyReport {
 }
 
 /**
- * How many of this machine's sessions are mid-turn, in words, or `unknown`
- * when the hub could not be asked at all — it is down, or it is old enough not
- * to have the route. A hub that cannot answer is never read as an idle one.
- * What a restart of the session keeper waits on: it kills the turns.
+ * How many of this machine's sessions are mid-turn, in words, or why that is
+ * unknown: the hub did not answer, or answered without saying (it is old
+ * enough not to have the route). A hub that cannot answer is never read as an
+ * idle one. What a restart of the session keeper waits on: it kills the turns.
  */
-const sessionsMidTurn = async (): Promise<string[] | "unknown"> => {
+const sessionsMidTurn = async (): Promise<Cut> => {
   const hub = await joinedHub();
   if (!hub) {
-    return "unknown";
+    return { unknown: "this machine has joined no hub to ask" };
   }
   // Imported here rather than at the top so no other verb pays for the agent SDK.
   const { machineId } = await import("@cawco/core/machine-id");
-  const report = await probeJson<BusyReport>(
-    `${hub}/api/agents/${await machineId()}/busy`
-  );
-  if (!(report?.ready === true && typeof report.busy === "number")) {
-    return "unknown";
+  const url = `${hub}/api/agents/${await machineId()}/busy`;
+  const answer = await probeJson<BusyReport>(url);
+  switch (answer.kind) {
+    case "unanswered":
+      return { unknown: noAnswer(url, answer) };
+    case "answered": {
+      if (!answer.value.ok) {
+        return { unknown: `the hub answered ${answer.value.said} at ${url}` };
+      }
+      const report = answer.value.value;
+      if (!(report.ready === true && typeof report.busy === "number")) {
+        return { unknown: "the hub does not know yet" };
+      }
+      return report.busy > 0
+        ? [`${report.busy} session${report.busy === 1 ? "" : "s"} mid-turn`]
+        : [];
+    }
+    default: {
+      const unhandled: never = answer;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return report.busy > 0
-    ? [`${report.busy} session${report.busy === 1 ? "" : "s"} mid-turn`]
-    : [];
 };
 
 /**
@@ -1496,42 +1651,51 @@ const sessionsMidTurn = async (): Promise<string[] | "unknown"> => {
 const agentGateway = (): string => `http://127.0.0.1:${mcpGatewayPort()}`;
 
 /**
- * What restarting the agent would cut now, in words, or `unknown` when it
- * did not answer. With `fenceMs` the agent first raises its fence for that
- * long (0 lowers it), so the answer holds until the restart: nothing new that
- * a restart would cut starts behind it.
+ * What restarting the agent would cut now, in words, or why that is unknown:
+ * the agent did not answer, or answered without saying. With `fenceMs` the
+ * agent first raises its fence for that long (0 lowers it), so the answer
+ * holds until the restart: nothing new that a restart would cut starts behind
+ * it.
  */
-const agentCut = async (fenceMs?: number): Promise<string[] | "unknown"> => {
-  const answer = await fetch(
-    `${agentGateway()}${fenceMs === undefined ? "/restart" : "/restart/fence"}`,
-    {
-      ...(fenceMs === undefined
-        ? {}
-        : {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ ms: fenceMs }),
-          }),
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+const agentCut = async (fenceMs?: number): Promise<Cut> => {
+  const url = `${agentGateway()}${fenceMs === undefined ? "/restart" : "/restart/fence"}`;
+  const answer = await probe(
+    url,
+    jsonBody<RestartReadiness>(),
+    fenceMs === undefined
+      ? {}
+      : {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ms: fenceMs }),
+        }
+  );
+  switch (answer.kind) {
+    case "unanswered":
+      return { unknown: noAnswer(url, answer) };
+    case "answered":
+      if (!answer.value.ok) {
+        return { unknown: `${url} answered ${answer.value.said}` };
+      }
+      return Array.isArray(answer.value.value.holds)
+        ? holdPhrases(answer.value.value.holds)
+        : { unknown: `${url} answered without saying what it holds` };
+    default: {
+      const unhandled: never = answer;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
-  ).catch(() => undefined);
-  if (!answer?.ok) {
-    return "unknown";
   }
-  const readiness = (await answer.json().catch(() => undefined)) as
-    RestartReadiness | undefined;
-  return Array.isArray(readiness?.holds)
-    ? holdPhrases(readiness.holds)
-    : "unknown";
 };
 
+/**
+ * What a restart would cut now, in words: empty when nothing, `unknown` with
+ * why when nobody could say. For the agent, the work it carries itself; for
+ * sessiond, the sessions mid-turn.
+ */
+export type Cut = readonly string[] | { readonly unknown: string };
+
 export interface RestartRequest {
-  /**
-   * What a restart would cut now, in words: empty when nothing, `unknown`
-   * when nobody could say. For the agent, the work it carries itself; for
-   * sessiond, the sessions mid-turn.
-   */
-  readonly cut: readonly string[] | "unknown";
+  readonly cut: Cut;
   readonly force: boolean;
   /** Which session-hosting service is being restarted: what that costs differs. */
   readonly id: "agent" | "sessiond";
@@ -1572,13 +1736,13 @@ export const restartDecision = ({
   if (force) {
     return { kind: "go" };
   }
-  if (cut === "unknown") {
+  if ("unknown" in cut) {
     return {
       kind: "refuse",
       reason:
         id === "agent"
-          ? `this machine's agent did not say what a restart would cut (nothing answered at ${agentGateway()}/restart), so it was left alone. Restart anyway with --force.`
-          : `could not ask the hub whether this machine's sessions are mid-turn, and ${RESTART_COST.sessiond}. Restart anyway with --force.`,
+          ? `this machine's agent did not say what a restart would cut (${cut.unknown}), so it was left alone. Restart anyway with --force.`
+          : `could not ask the hub whether this machine's sessions are mid-turn (${cut.unknown}), and ${RESTART_COST.sessiond}. Restart anyway with --force.`,
     };
   }
   if (cut.length === 0) {
@@ -1631,7 +1795,7 @@ const HOSTS_SESSIONS: readonly ServiceId[] = ["sessiond", "agent"];
  */
 const fencedLook = async (whenIdle: boolean): Promise<boolean> => {
   const behind = await agentCut(RESTART_FENCE_MS);
-  if (behind !== "unknown" && behind.length === 0) {
+  if (!("unknown" in behind) && behind.length === 0) {
     return true;
   }
   await agentCut(0);

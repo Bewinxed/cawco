@@ -43,6 +43,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import {
+    answeredOr,
     cawco,
     editProject,
     spawnSession,
@@ -308,17 +309,21 @@
       way === "empty" ? undefined : spawnPrompt.trim() || undefined;
     let instanceId: string;
     try {
-      instanceId = await spawnSession({
-        machineId: primary.machineId,
-        cwd: primary.path,
-        projectId: project.id,
-        permissionMode: perm,
-        harness: spawnPrefs.harness,
-        model: mod,
-        effort: level ?? undefined,
-        prompt,
-        scratch: scratch ? {} : undefined,
-      });
+      instanceId = answeredOr(
+        primary.machineId,
+        await spawnSession({
+          machineId: primary.machineId,
+          cwd: primary.path,
+          projectId: project.id,
+          permissionMode: perm,
+          harness: spawnPrefs.harness,
+          model: mod,
+          effort: level ?? undefined,
+          prompt,
+          scratch: scratch ? {} : undefined,
+        }),
+        "whether the session started is not known"
+      );
     } catch (error) {
       if (scratch) {
         spinFault = message(error);

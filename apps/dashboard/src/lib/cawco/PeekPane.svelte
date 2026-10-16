@@ -53,6 +53,7 @@
   } from "./activity";
   import ContextMeter from "./ContextMeter.svelte";
   import {
+    answeredOr,
     cawco,
     forkSession,
     isFailed,
@@ -178,13 +179,19 @@
       return;
     }
     // The item stays "Forking…" until the hub has made the fork, then the
-    // page leaves for it; a refusal stays in the item, in the hub's words.
-    const instanceId = await forkSession({
+    // page leaves for it; a refusal stays in the item, in the hub's words,
+    // and so does no answer, in the machine's.
+    const forked = await forkSession({
       machineId: machine.machineId,
       cwd,
       sessionId: forkable,
       harness: session?.harness ?? "claude",
     });
+    const instanceId = answeredOr(
+      machine.machineId,
+      forked,
+      "whether the fork started is not known"
+    );
     await goto(conversationHref(instanceId, cawco.instanceIndex));
   }
 

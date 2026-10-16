@@ -163,6 +163,9 @@ Start one with \`cawco hub\`, or point this machine at an existing one with
 \`cawco up --hub http://host:${CAWCO_HUB_PORT}\`. Run again with --verbose to
 see what each step tried.`;
 
+/** How long `cawco status` gives the hub to list the fleet. */
+const STATUS_ANSWER_MS = 15_000;
+
 interface Args {
   /** The verb after the command, for the one command that takes one: `service`. */
   action?: string;
@@ -395,26 +398,42 @@ const status = async (args: Args): Promise<number> => {
 
   // The fleet's list is the person's (hub hub-auth.ts): a hub that requires
   // paired devices asks the person to approve this run (owner.ts).
-  const agents = await ownerFetch(
+  const asked = await ownerFetch(
     `${hub.httpUrl}/api/agents`,
     {},
-    "cawco status"
-  )
-    .then((response) =>
-      response.ok ? (response.json() as Promise<AgentRow[]>) : undefined
-    )
-    .catch((error: unknown) => {
-      // The person's no is said as it is; a hub that did not answer, below.
-      if (error instanceof OwnerApprovalError) {
-        throw error;
-      }
-    });
-  if (!agents) {
-    console.error(`\ncawco: ${hub.httpUrl} did not answer /api/agents`);
+    "cawco status",
+    STATUS_ANSWER_MS
+  ).catch((error: unknown) => {
+    // The person's no is said as it is; a hub that could not be reached, below.
+    if (error instanceof OwnerApprovalError) {
+      throw error;
+    }
+    return error instanceof Error ? error.message : String(error);
+  });
+  if (typeof asked === "string") {
+    console.error(`\ncawco: ${hub.httpUrl} could not be reached: ${asked}`);
     return 1;
   }
-  printFleet(agents);
-  return 0;
+  switch (asked.kind) {
+    case "unanswered":
+      console.error(
+        `\ncawco: ${hub.httpUrl} did not answer /api/agents within ${Math.round(asked.after / 1000)}s`
+      );
+      return 1;
+    case "answered":
+      if (!asked.value.ok) {
+        console.error(
+          `\ncawco: ${hub.httpUrl} answered /api/agents with HTTP ${asked.value.status}`
+        );
+        return 1;
+      }
+      printFleet(JSON.parse(asked.value.said) as AgentRow[]);
+      return 0;
+    default: {
+      const unhandled: never = asked;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 /**

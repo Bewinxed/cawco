@@ -17,6 +17,7 @@
   import { nameOf } from "../accounts/model.svelte";
   import { movingTo } from "../accounts/switch.svelte";
   import {
+    answeredOr,
     cawco,
     latestCommandFor,
     refreshContext,
@@ -503,7 +504,11 @@
     relaunching = true;
     const id = sessionId;
     try {
-      await relaunchSession(id, machineId, next);
+      answeredOr(
+        machineId,
+        await relaunchSession(id, machineId, next),
+        "whether it runs on the new mode is not known"
+      );
     } catch (error) {
       if (id === sessionId) {
         relaunchFailure =

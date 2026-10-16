@@ -1,13 +1,19 @@
 <script lang="ts" module>
   import type { FsEntry } from "@cawco/core";
+  import type { Bounded } from "@cawco/core/bounded";
   import { failureWords } from "#lib/cawco/hub-read.js";
 
   /** Where the picker reads a machine's folders: the fleet's socket, or an artifact tab's own. */
   export interface FolderReader {
-    /** A folder's entries, over the `fs` verb. */
-    list: (machineId: string, path: string) => Promise<FsEntry[]>;
+    /** A folder's entries, over the `fs` verb; `unanswered` when the machine did not answer in time. */
+    list: (machineId: string, path: string) => Promise<Bounded<FsEntry[]>>;
     /** Where the machine was working last: the folder the picker opens on. */
     recent: (machineId: string) => string | null;
+    /** The sentence for a listing `machineId` did not answer in time. */
+    unanswered: (
+      machineId: string,
+      missed: Extract<Bounded<FsEntry[]>, { kind: "unanswered" }>
+    ) => string;
   }
 </script>
 
@@ -109,13 +115,28 @@
     }
     loading = true;
     try {
-      const listed = await folders.list(machineId, next);
-      cache.set(next, listed);
+      const read = await folders.list(machineId, next);
       // A faster click already moved on; that listing wins.
-      if (path !== next) {
-        return;
+      switch (read.kind) {
+        case "answered":
+          cache.set(next, read.value);
+          if (path !== next) {
+            return;
+          }
+          entries = read.value;
+          break;
+        case "unanswered":
+          if (path !== next) {
+            return;
+          }
+          entries = [];
+          errorMessage = folders.unanswered(machineId, read);
+          break;
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
-      entries = listed;
     } catch (err) {
       if (path !== next) {
         return;

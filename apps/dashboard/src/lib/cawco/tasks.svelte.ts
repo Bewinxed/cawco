@@ -132,16 +132,26 @@ async function fetchLedger(
     return;
   }
   try {
-    publish(
-      viewId,
-      await machineControl<SessionTask[]>(
-        machineId,
-        "getTodos",
-        [sessionId, where.cwd || undefined, where.accountId],
-        undefined,
-        harness
-      )
+    const ledger = await machineControl<SessionTask[]>(
+      machineId,
+      "getTodos",
+      [sessionId, where.cwd || undefined, where.accountId],
+      undefined,
+      harness
     );
+    switch (ledger.kind) {
+      case "answered":
+        publish(viewId, ledger.value);
+        break;
+      case "unanswered":
+        // The last plan read stands, marked as not known now.
+        publish(viewId, snapshots[viewId]?.tasks ?? [], true);
+        break;
+      default: {
+        const unhandled: never = ledger;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } catch {
     // Nothing was answered, so nothing is known — which is not the same as
     // knowing there are no tasks, and the surface stays away either way.

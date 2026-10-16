@@ -21,7 +21,7 @@
     IconServer,
     IconTerminal,
   } from "#lib/icons.js";
-  import type { Machine } from "./client.svelte";
+  import { didntAnswer, type Machine } from "./client.svelte";
   import { addMachine } from "./join/join.svelte";
   import { machineOs } from "./machine";
   import OsMark from "./OsMark.svelte";
@@ -60,11 +60,27 @@
     asked[key] = true;
     delete refused[key];
     try {
-      await installTool(
+      const read = await installTool(
         machine.machineId,
         spec.id,
         policyOf(spec).pinnedVersion
       );
+      switch (read.kind) {
+        case "answered":
+          break;
+        case "unanswered":
+          // The cell follows the hub's publish; this says the machine went quiet.
+          refused[key] = didntAnswer(
+            machine.machineId,
+            read,
+            "whether the install finished is not known"
+          );
+          break;
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     } catch (err) {
       refused[key] = message(err);
     } finally {

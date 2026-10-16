@@ -79,7 +79,13 @@
     FAILED_LABEL,
     UNKNOWN_LABEL,
   } from "../activity";
-  import { cawco, isFailed, isStale, spawnSession } from "../client.svelte";
+  import {
+    answeredOr,
+    cawco,
+    isFailed,
+    isStale,
+    spawnSession,
+  } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import CawFace from "../home/CawFace.svelte";
   import { failureWords, type HubRead } from "../hub-read";
@@ -742,14 +748,18 @@
     starting = true;
     let instanceId: string;
     try {
-      instanceId = await spawnSession({
-        machineId: ctx.machine,
-        cwd: ctx.cwd,
-        harness,
-        ...(same ? { model: spawnPrefs.model } : {}),
-        ...(same && spawnPrefs.effort ? { effort: spawnPrefs.effort } : {}),
-        ...(projectId ? { projectId } : {}),
-      });
+      instanceId = answeredOr(
+        ctx.machine,
+        await spawnSession({
+          machineId: ctx.machine,
+          cwd: ctx.cwd,
+          harness,
+          ...(same ? { model: spawnPrefs.model } : {}),
+          ...(same && spawnPrefs.effort ? { effort: spawnPrefs.effort } : {}),
+          ...(projectId ? { projectId } : {}),
+        }),
+        "whether the session started is not known"
+      );
     } catch (error) {
       refused = failureWords(error);
       newTip = true;

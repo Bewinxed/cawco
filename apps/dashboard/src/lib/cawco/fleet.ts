@@ -29,6 +29,7 @@ import {
   type MemoryScope,
   parseAgentFrontMatter,
 } from "@cawco/core";
+import type { Bounded } from "@cawco/core/bounded";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
@@ -848,7 +849,8 @@ const userLayerFs = <T>(
   machineId: string,
   op: "list" | "read",
   path: string
-): Promise<T> => machineFs<T>(machineId, op, path, undefined, "claude-home");
+): Promise<Bounded<T>> =>
+  machineFs<T>(machineId, op, path, undefined, "claude-home");
 
 /**
  * The subagent files a machine really has under its user layer's `agents`.
@@ -857,44 +859,82 @@ const userLayerFs = <T>(
  * that keeps the page waiting.
  *
  * A machine which has no such directory answers with nothing at all —
- * absence over placeholder.
+ * absence over placeholder. A listing or read it did not answer in time
+ * makes the walk `unanswered`: a partial list is never shown as the whole.
  */
 export async function discoverAgents(
   machineId: string
-): Promise<DiscoveredAgent[]> {
+): Promise<Bounded<DiscoveredAgent[]>> {
   const root = "agents";
-  let entries: FsEntry[];
+  let listed: Bounded<FsEntry[]>;
   try {
-    entries = await userLayerFs<FsEntry[]>(machineId, "list", root);
+    listed = await userLayerFs<FsEntry[]>(machineId, "list", root);
   } catch {
-    return [];
+    return { kind: "answered", value: [] };
   }
+  switch (listed.kind) {
+    case "unanswered":
+      return listed;
+    case "answered":
+      break;
+    default: {
+      const unhandled: never = listed;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  const entries = listed.value;
 
   const paths = entries
     .filter(markdown)
     .map((entry) => `${root}/${entry.name}`);
   for (const dir of entries.filter((entry) => entry.kind === "dir")) {
+    let nested: Bounded<FsEntry[]>;
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one control call in flight per machine socket at a time
-      const nested = await userLayerFs<FsEntry[]>(
+      nested = await userLayerFs<FsEntry[]>(
         machineId,
         "list",
         `${root}/${dir.name}`
       );
-      paths.push(
-        ...nested
-          .filter(markdown)
-          .map((entry) => `${root}/${dir.name}/${entry.name}`)
-      );
     } catch {
       // One unreadable subdirectory is not a reason to lose the rest of them.
+      continue;
+    }
+    switch (nested.kind) {
+      case "unanswered":
+        return nested;
+      case "answered":
+        paths.push(
+          ...nested.value
+            .filter(markdown)
+            .map((entry) => `${root}/${dir.name}/${entry.name}`)
+        );
+        break;
+      default: {
+        const unhandled: never = nested;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
   }
 
+  let missed: Bounded<never> | undefined;
   const read = await Promise.all(
     paths.map(async (path) => {
       try {
-        const content = await userLayerFs<string>(machineId, "read", path);
+        const got = await userLayerFs<string>(machineId, "read", path);
+        let content: string;
+        switch (got.kind) {
+          case "unanswered":
+            missed ??= got;
+            return null;
+          case "answered":
+            content = got.value;
+            break;
+          default: {
+            const unhandled: never = got;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
         const front = parseAgentFrontMatter(content);
         // A markdown file with no `name` is not a subagent — it is a note
         // somebody left in the directory, and Claude Code ignores it too.
@@ -912,7 +952,13 @@ export async function discoverAgents(
       }
     })
   );
-  return read.filter((row): row is DiscoveredAgent => row !== null);
+  if (missed) {
+    return missed;
+  }
+  return {
+    kind: "answered",
+    value: read.filter((row): row is DiscoveredAgent => row !== null),
+  };
 }
 
 /** One superseded version of the memory, as the history list reads it. */

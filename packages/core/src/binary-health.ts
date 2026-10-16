@@ -9,6 +9,7 @@
  * back, so the sentence a rollback is filed under says why on its own.
  */
 import type { BinaryInstallation } from "./binary-installation";
+import { type Bounded, readWithin } from "./bounded";
 import { machineFetch } from "./machine-key";
 
 /** How long one request of a probe is waited on. */
@@ -30,48 +31,64 @@ interface AgentRow {
   status: string;
 }
 
-/** One request of a probe: what came back, and the line that says so. */
-interface Asked<T> {
-  /** `GET <url>: <what came back> after <ms>ms`. */
-  said: string;
-  value?: T;
-}
+/**
+ * One request of a probe: whether it was answered in time, and the line that
+ * says what came back (`GET <url>: <what came back> after <ms>ms`). An
+ * answered request has `value` when it was a 2xx whose body read; a failed
+ * one never reached an answer (the connection was refused).
+ */
+type Asked<T> =
+  | { kind: "answered"; said: string; value?: T }
+  | { kind: "unanswered"; said: string }
+  | { kind: "failed"; said: string };
 
-/** GETs `url` once; `read` takes the body of a 2xx answer. */
+/** GETs `url` once; `read` takes the body of a 2xx answer, within the same time. */
 async function ask<T>(
   url: string,
   read: (response: Response) => Promise<T>
 ): Promise<Asked<T>> {
   const started = performance.now();
   const after = () => `after ${Math.round(performance.now() - started)}ms`;
-  let response: Response;
+  let got: Bounded<{ status: number; value?: T; unread?: true }>;
   try {
-    // As this machine: a hub that requires paired devices answers an
-    // admitted machine its own row (machine-key.ts).
-    response = await machineFetch(url, {
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    got = await readWithin(PROBE_TIMEOUT_MS, async (signal) => {
+      // As this machine: a hub that requires paired devices answers an
+      // admitted machine its own row (machine-key.ts).
+      const response = await machineFetch(url, { signal });
+      if (!response.ok) {
+        await response.body?.cancel();
+        return { status: response.status };
+      }
+      try {
+        return { status: response.status, value: await read(response) };
+      } catch {
+        return { status: response.status, unread: true as const };
+      }
     });
   } catch (error) {
-    const timedOut =
-      error instanceof Error &&
-      (error.name === "TimeoutError" || error.name === "AbortError");
     return {
-      said: timedOut
-        ? `GET ${url}: no answer in ${PROBE_TIMEOUT_MS}ms`
-        : `GET ${url}: ${error instanceof Error ? error.message : String(error)} ${after()}`,
+      kind: "failed",
+      said: `GET ${url}: ${error instanceof Error ? error.message : String(error)} ${after()}`,
     };
   }
-  if (!response.ok) {
-    await response.body?.cancel();
-    return { said: `GET ${url}: HTTP ${response.status} ${after()}` };
-  }
-  try {
-    const value = await read(response);
-    return { said: `GET ${url}: HTTP ${response.status} ${after()}`, value };
-  } catch {
-    return {
-      said: `GET ${url}: HTTP ${response.status} with a body that is not JSON ${after()}`,
-    };
+  switch (got.kind) {
+    case "unanswered":
+      return {
+        kind: "unanswered",
+        said: `GET ${url}: no answer within ${got.after}ms`,
+      };
+    case "answered": {
+      const { status, value, unread } = got.value;
+      return {
+        kind: "answered",
+        said: `GET ${url}: HTTP ${status}${unread ? " with a body that is not JSON" : ""} ${after()}`,
+        ...(value === undefined ? {} : { value }),
+      };
+    }
+    default: {
+      const unhandled: never = got;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
@@ -108,9 +125,22 @@ async function probeHubMachine(
   version: string,
   sinceMs: number
 ): Promise<string | undefined> {
+  // A probe with no answer is a problem that stands for now: the trial's
+  // verification asks again until its deadline (cli binary-apply.ts `verify`).
   const health = await ask(`${installation.hubUrl}/health`, json<HealthBody>);
+  switch (health.kind) {
+    case "unanswered":
+    case "failed":
+      return `the hub does not answer (${health.said})`;
+    case "answered":
+      break;
+    default: {
+      const unhandled: never = health;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   if (health.value?.ok !== true) {
-    return `the hub does not answer (${health.said})`;
+    return `the hub does not answer ok (${health.said})`;
   }
   const { build } = health.value;
   if (build?.version !== version || (build.startedAt ?? 0) <= sinceMs) {
@@ -123,9 +153,19 @@ async function probeHubMachine(
     await response.body?.cancel();
     return true;
   });
-  return dashboard.value === true
-    ? undefined
-    : `the dashboard does not answer (${dashboard.said})`;
+  switch (dashboard.kind) {
+    case "unanswered":
+    case "failed":
+      return `the dashboard does not answer (${dashboard.said})`;
+    case "answered":
+      return dashboard.value === true
+        ? undefined
+        : `the dashboard does not answer ok (${dashboard.said})`;
+    default: {
+      const unhandled: never = dashboard;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }
 
 /** This machine's agent, online on `version`, started after `agentSince`, and (when asked) holding its keeper. */
@@ -142,6 +182,17 @@ async function probeAgentRow(options: {
     `${installation.hubUrl}/api/agents/${encodeURIComponent(machineId)}`,
     json<AgentRow>
   );
+  switch (asked.kind) {
+    case "unanswered":
+    case "failed":
+      return `this machine's agent is not registered with the hub on the new build (the hub did not answer for its row; ${asked.said})`;
+    case "answered":
+      break;
+    default: {
+      const unhandled: never = asked;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   const row = asked.value;
   if (
     row?.status !== "online" ||
@@ -159,10 +210,24 @@ async function probeAgentRow(options: {
   return undefined;
 }
 
-/** The hub's wire protocol range, for a machine deciding whether a build can talk to it. */
+/**
+ * The hub's wire protocol range, for a machine deciding whether a build can
+ * talk to it; undefined when the hub answered without one. A hub that did
+ * not answer is never read as one without a range: that throws, saying so.
+ */
 export async function hubProtocol(
   hubUrl: string
 ): Promise<{ max: number; min: number } | undefined> {
-  return (await ask(`${hubUrl}/health`, json<HealthBody>)).value?.build
-    ?.protocol;
+  const health = await ask(`${hubUrl}/health`, json<HealthBody>);
+  switch (health.kind) {
+    case "unanswered":
+    case "failed":
+      throw new Error(`The hub did not say its wire protocol (${health.said})`);
+    case "answered":
+      return health.value?.build?.protocol;
+    default: {
+      const unhandled: never = health;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }

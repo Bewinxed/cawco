@@ -21,7 +21,7 @@
    * the store, and not written anywhere on the way.
    */
   import { IconKey } from "#lib/icons.js";
-  import { type Machine, machineControl } from "./client.svelte";
+  import { didntAnswer, type Machine, machineControl } from "./client.svelte";
   import MachineAuthStatus from "./MachineAuthStatus.svelte";
   import { crossIn, crossOut } from "./motion/curves.svelte";
   import { unfold } from "./motion/fold.svelte";
@@ -99,13 +99,31 @@
     // Cleared the moment it has been sent, whatever the answer will be.
     password = "";
     try {
-      const state = await machineControl<AuthState>(
+      const read = await machineControl<AuthState>(
         machine.machineId,
         "unlockKeychain",
         [sent]
       );
       if (mine === attempt) {
-        phase = { kind: "done", state };
+        switch (read.kind) {
+          case "answered":
+            phase = { kind: "done", state: read.value };
+            break;
+          case "unanswered":
+            phase = {
+              kind: "error",
+              message: didntAnswer(
+                machine.machineId,
+                read,
+                "whether the keychain unlocked is not known"
+              ),
+            };
+            break;
+          default: {
+            const unhandled: never = read;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
       }
     } catch (error) {
       if (mine === attempt) {

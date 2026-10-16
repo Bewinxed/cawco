@@ -5,6 +5,7 @@
  * reaches them without loading the fleet.
  */
 import type { ArtifactSummary, ShownFailure } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { SheetRead, StoryOp } from "@cawco/core/stage";
 import { currentClientId } from "./client-id";
 
@@ -93,31 +94,26 @@ export interface CanvasExport {
   png: string | null;
 }
 
+const exportUrl = (id: string): string =>
+  `/api/artifacts/${encodeURIComponent(id)}/export`;
+
+/** A canvas's export, waited on for as long as the hub takes. */
+export async function exportCanvas(id: string): Promise<CanvasExport> {
+  return (await ok(await fetch(exportUrl(id)))).json();
+}
+
 /**
- * A canvas's export. `withinMs` bounds the wait for the hub's answer, body
- * and all: past it the read is called off and says so, as the app's does
+ * A canvas's export within `withinMs`, body and all: `unanswered` when the
+ * hub did not answer in time, for the caller to say so, as the app's does
  * (ComposerView `readForSend`).
  */
-export async function exportCanvas(
+export function exportCanvasWithin(
   id: string,
-  withinMs?: number
-): Promise<CanvasExport> {
-  const url = `/api/artifacts/${encodeURIComponent(id)}/export`;
-  if (withinMs === undefined) {
-    return (await ok(await fetch(url))).json();
-  }
-  try {
-    const signal = AbortSignal.timeout(withinMs);
-    return await (await ok(await fetch(url, { signal }))).json();
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "TimeoutError") {
-      throw new Error(
-        `the hub didn't answer for it within ${Math.ceil(withinMs / 1000)} s`,
-        { cause: error }
-      );
-    }
-    throw error;
-  }
+  withinMs: number
+): Promise<Bounded<CanvasExport>> {
+  return readWithin(withinMs, async (signal): Promise<CanvasExport> =>
+    (await ok(await fetch(exportUrl(id), { signal }))).json()
+  );
 }
 
 /** A sheet's write from its inspector, as its Save and story buttons make it (core `SheetWrite` less its file). */

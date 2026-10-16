@@ -40,6 +40,7 @@ import {
   canvasSent,
   createDraftCanvas,
   exportCanvas,
+  exportCanvasWithin,
   showArtifact,
 } from "../artifact-api";
 import {
@@ -1313,10 +1314,24 @@ export class CanvasRoom {
     await stage.picture();
     for (;;) {
       // biome-ignore lint/performance/noAwaitInLoops: the hub's export read again until it counts what the page does
-      const out = await exportCanvas(
+      const read = await exportCanvasWithin(
         canvas.id,
         Math.max(EXPORT_AT_LEAST_MS, deadline - performance.now())
       );
+      let out: CanvasExport;
+      switch (read.kind) {
+        case "answered":
+          out = read.value;
+          break;
+        case "unanswered":
+          throw new Error(
+            `the hub didn't answer for it within ${Math.ceil(read.after / 1000)} s`
+          );
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
       const drawn = out.file.elements.filter((el) => !el.isDeleted).length;
       if (stage.link === "synced" && drawn === stage.drawn) {
         return { out, count: drawn };

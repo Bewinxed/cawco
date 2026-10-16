@@ -65,6 +65,7 @@ import {
   type BinaryUpdateState,
   UPDATE_TRIAL_MS,
 } from "@cawco/core/binary-updates";
+import { readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
 import { timerMs } from "@cawco/core/clock";
 import {
@@ -159,24 +160,16 @@ async function takeLock(version: string): Promise<boolean> {
   return false;
 }
 
-function withTimeout<T>(
-  work: Promise<T>,
-  ms: number,
-  what: string
-): Promise<T> {
-  return Promise.race([
-    work,
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`${what} did not finish in ${ms / 1000}s`)),
-        ms
-      ).unref()
-    ),
-  ]);
-}
+/** What a service-manager call that did not answer says, from how long it was given. */
+const unansweredService = (what: string, after: number): string =>
+  `${what}: the service manager did not answer within ${Math.round(after / 1000)}s`;
 
-const svc = (action: "install" | "restart", ids: readonly ServiceId[]) =>
-  withTimeout(
+/** A restart or install through the service manager; one it did not answer in time throws saying so. */
+const svc = async (
+  action: "install" | "restart",
+  ids: readonly ServiceId[]
+): Promise<void> => {
+  const done = await readWithin(SERVICE_TIMEOUT_MS, () =>
     service(action, {
       ids,
       mode: "prod",
@@ -187,10 +180,21 @@ const svc = (action: "install" | "restart", ids: readonly ServiceId[]) =>
       note: (line) => console.log(`update: ${line}`),
       // The hub's, the dashboard's and the agent's units: no keeper's is touched through here.
       binaryLayout: binaryLayout(runtimeVersion),
-    }),
-    SERVICE_TIMEOUT_MS,
-    `${action} ${ids.join(", ")}`
+    })
   );
+  switch (done.kind) {
+    case "answered":
+      return;
+    case "unanswered":
+      throw new Error(
+        unansweredService(`${action} ${ids.join(", ")}`, done.after)
+      );
+    default: {
+      const unhandled: never = done;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 /** Put a stopped service back: macOS reloads it, systemd restarts it. */
 const startAgain = (ids: readonly ServiceId[]) =>
@@ -930,8 +934,21 @@ async function restoreDatabase(
   backup: string,
   version: string
 ): Promise<void> {
-  await withTimeout(stopService("hub"), SERVICE_TIMEOUT_MS, "stopping the hub")
-    .then(() => say(`roll back ${version}: hub stopped for the database`))
+  await readWithin(SERVICE_TIMEOUT_MS, () => stopService("hub"))
+    .then((stopped) => {
+      switch (stopped.kind) {
+        case "answered":
+          return say(`roll back ${version}: hub stopped for the database`);
+        case "unanswered":
+          return say(
+            `roll back ${version}: ${unansweredService("stopping the hub", stopped.after)}`
+          );
+        default: {
+          const unhandled: never = stopped;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    })
     .catch((error) =>
       say(`roll back ${version}: stopping the hub: ${message(error)}`)
     );

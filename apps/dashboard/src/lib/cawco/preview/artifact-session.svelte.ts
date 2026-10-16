@@ -15,6 +15,7 @@ import {
   type FsEntry,
   type FsPayload,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { deletePreview } from "../artifact-api";
@@ -37,7 +38,6 @@ const RETRY_MS = [500, 1000, 2000, 5000, 10_000] as const;
 interface Waiter {
   reject: (error: Error) => void;
   resolve: (result: unknown) => void;
-  timer: ReturnType<typeof setTimeout>;
 }
 
 /** What the hub sends on this socket: the frame, a beat's answer, and an `fs` ask's reply or refusal. */
@@ -94,7 +94,6 @@ export class ArtifactSession implements PaneFleet {
     this.#socket?.close();
     this.#socket = null;
     for (const [id, waiter] of this.#asks) {
-      clearTimeout(waiter.timer);
       waiter.reject(
         new Error("The artifact's tab closed before its machine answered.")
       );
@@ -128,6 +127,7 @@ export class ArtifactSession implements PaneFleet {
 
   readonly folders: FolderReader = {
     list: (machineId, path) => this.#fs<FsEntry[]>(machineId, "list", path),
+    unanswered: (machineId, missed) => this.#didntAnswer(machineId, missed),
     // The tab knows one session: on its machine, the picker opens on its folder.
     recent: (machineId) =>
       this.#heard?.session?.machineId === machineId
@@ -184,7 +184,6 @@ export class ArtifactSession implements PaneFleet {
       return;
     }
     this.#asks.delete(heard.requestId);
-    clearTimeout(waiter.timer);
     const { payload } = heard;
     if (payload.kind === "error") {
       waiter.reject(new Error(payload.message));
@@ -220,8 +219,15 @@ export class ArtifactSession implements PaneFleet {
     this.#preview = { ...(sameRevision ? previous : {}), ...frame };
   }
 
-  /** One `fs` ask of a machine, over this socket, answered by its `requestId`. */
-  #fs<T>(machineId: string, op: FsPayload["op"], path: string): Promise<T> {
+  /**
+   * One `fs` ask of a machine, over this socket, answered by its `requestId`
+   * within {@link CONTROL_TIMEOUT_MS}; `unanswered` when no answer came.
+   */
+  #fs<T>(
+    machineId: string,
+    op: FsPayload["op"],
+    path: string
+  ): Promise<Bounded<T>> {
     const socket = this.#socket;
     if (socket?.readyState !== WebSocket.OPEN) {
       return Promise.reject(
@@ -232,24 +238,29 @@ export class ArtifactSession implements PaneFleet {
     }
     const requestId = newId();
     const payload: FsPayload = { requestId, op, path };
-    return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (this.#asks.delete(requestId)) {
-          reject(
-            new Error(
-              `fs ${op} ${path} got no answer in time. The machine may be offline.`
-            )
+    return readWithin(
+      CONTROL_TIMEOUT_MS,
+      (signal) =>
+        new Promise<T>((resolve, reject) => {
+          this.#asks.set(requestId, {
+            resolve: (result) => resolve(result as T),
+            reject,
+          });
+          signal.addEventListener("abort", () => this.#asks.delete(requestId), {
+            once: true,
+          });
+          socket.send(
+            JSON.stringify({ verb: "fs", machineId, requestId, payload })
           );
-        }
-      }, CONTROL_TIMEOUT_MS);
-      this.#asks.set(requestId, {
-        resolve: (result) => resolve(result as T),
-        reject,
-        timer,
-      });
-      socket.send(
-        JSON.stringify({ verb: "fs", machineId, requestId, payload })
-      );
-    });
+        })
+    );
+  }
+
+  /** What the tab says when `machineId` didn't answer in time, in the fleet store's words (client.svelte.ts `didntAnswer`). */
+  #didntAnswer(machineId: string, missed: { after: number }): string {
+    const name =
+      this.#heard?.machines.find((machine) => machine.machineId === machineId)
+        ?.hostname || machineId;
+    return `${name} didn't answer within ${Math.round(missed.after / 1000)} s. It may be offline.`;
   }
 }

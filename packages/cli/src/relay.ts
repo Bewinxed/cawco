@@ -57,7 +57,7 @@ const call = async (
   if (!hub) {
     throw new RelayError("no hub found");
   }
-  const response = await ownerFetch(
+  const answer = await ownerFetch(
     `${hub}${path}`,
     {
       method,
@@ -67,10 +67,10 @@ const call = async (
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           }),
-      // Opening a relay waits on Tailscale and on GitHub's ping.
-      signal: AbortSignal.timeout(180_000),
     },
-    "cawco relay"
+    "cawco relay",
+    // Opening a relay waits on Tailscale and on GitHub's ping.
+    180_000
   ).catch((error: unknown) => {
     if (error instanceof OwnerApprovalError) {
       throw new RelayError(error.message);
@@ -79,9 +79,21 @@ const call = async (
       `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
     );
   });
-  const said = await response.text();
-  if (!response.ok) {
-    throw new RelayError(`${response.status}: ${said.slice(0, 500)}`);
+  switch (answer.kind) {
+    case "unanswered":
+      throw new RelayError(
+        `${hub} did not answer ${method} ${path} within ${Math.round(answer.after / 1000)}s, so what it did is not known`
+      );
+    case "answered":
+      break;
+    default: {
+      const unhandled: never = answer;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  const { said } = answer.value;
+  if (!answer.value.ok) {
+    throw new RelayError(`${answer.value.status}: ${said.slice(0, 500)}`);
   }
   return said ? (JSON.parse(said) as unknown) : undefined;
 };

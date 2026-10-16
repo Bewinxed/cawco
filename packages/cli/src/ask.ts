@@ -7,11 +7,14 @@
  * nothing is asked.
  */
 import { createInterface, type Interface } from "node:readline";
+import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 
 const ANSWER_TIMEOUT_MS = 60_000;
 
 let ended = false;
 let reader: { rl: Interface; lines: AsyncIterator<string> } | undefined;
+/** A line asked for by a question nobody answered in time: the next question takes it. */
+let waiting: Promise<IteratorResult<string>> | undefined;
 
 const open = () => {
   reader ??= (() => {
@@ -24,48 +27,82 @@ const open = () => {
   return reader;
 };
 
-/** One line typed at the terminal; null when there is no terminal, input has ended, or nobody answered in time. */
+/**
+ * What asking came to: the line typed, the person not answering in time (or
+ * standard input ending, reason "dead"), or nothing asked where there is no
+ * terminal or its input already ended.
+ */
+export type Asked<T> = Bounded<T> | { kind: "not asked" };
+
+/** One line typed at the terminal. */
 export async function ask(
   text: string,
   timeoutMs = ANSWER_TIMEOUT_MS
-): Promise<string | null> {
+): Promise<Asked<string>> {
   if (!process.stdin.isTTY) {
-    return null;
+    return { kind: "not asked" };
   }
   if (ended) {
     process.stdout.write(`${text}\n`);
-    return null;
+    return { kind: "not asked" };
   }
   const { rl, lines } = open();
   rl.setPrompt(text);
   rl.prompt();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const silence = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), timeoutMs);
+  const answer = await readWithin(timeoutMs, async (signal) => {
+    waiting ??= lines.next();
+    const next = await waiting;
+    if (signal.aborted) {
+      // This question was let go: the line stays for the next one.
+      return "";
+    }
+    waiting = undefined;
+    if (next.done) {
+      ended = true;
+      throw new Gone("standard input ended");
+    }
+    return next.value;
   });
-  const next = await Promise.race([lines.next(), silence]);
-  clearTimeout(timer);
   // Paused between questions, so a command run in between has the terminal to itself.
-  if (next?.done) {
-    ended = true;
-  } else {
+  if (!ended) {
     rl.pause();
   }
-  if (next === null || next.done) {
-    process.stdout.write("\n");
-    return null;
+  switch (answer.kind) {
+    case "answered":
+      return answer;
+    case "unanswered":
+      process.stdout.write("\n");
+      return answer;
+    default: {
+      const unhandled: never = answer;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return next.value;
 }
 
 /** Releases standard input so the process can exit. */
 export function closeAsking(): void {
   reader?.rl.close();
   reader = undefined;
+  waiting = undefined;
   ended = false;
 }
 
 /** A yes/no question: only an answer beginning with y or Y is a yes. */
-export async function askYes(text: string): Promise<boolean> {
-  return (await ask(text))?.trim().toLowerCase().startsWith("y") ?? false;
+export async function askYes(text: string): Promise<Asked<boolean>> {
+  const answer = await ask(text);
+  switch (answer.kind) {
+    case "answered":
+      return {
+        kind: "answered",
+        value: answer.value.trim().toLowerCase().startsWith("y"),
+      };
+    case "unanswered":
+    case "not asked":
+      return answer;
+    default: {
+      const unhandled: never = answer;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }

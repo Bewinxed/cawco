@@ -23,7 +23,12 @@
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
-  import { cawco, deleteTranscript, forkSession } from "./client.svelte";
+  import {
+    answeredOr,
+    cawco,
+    deleteTranscript,
+    forkSession,
+  } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
   import {
@@ -91,24 +96,33 @@
       confirmLabel: "Delete transcript",
       destructive: true,
       pendingLabel: "Deleting…",
-      run: () =>
-        deleteTranscript(
+      run: async () =>
+        answeredOr(
           machineId,
-          info.sessionId,
-          info.cwd || undefined,
-          info.harness
+          await deleteTranscript(
+            machineId,
+            info.sessionId,
+            info.cwd || undefined,
+            info.harness
+          ),
+          "whether the transcript was deleted is not known"
         ),
     });
   }
 
-  /** The page leaves for the fork once the hub has made it; a refusal stays in the item. */
+  /** The page leaves for the fork once the hub has made it; a refusal, or no answer, stays in the item. */
   async function fork() {
-    const instanceId = await forkSession({
+    const forked = await forkSession({
       machineId,
       cwd: info.cwd ?? "",
       sessionId: info.sessionId,
       harness: info.harness,
     });
+    const instanceId = answeredOr(
+      machineId,
+      forked,
+      "whether the fork started is not known"
+    );
     await goto(conversationHref(instanceId, cawco.instanceIndex));
   }
 </script>

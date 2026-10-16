@@ -1,3 +1,4 @@
+import { readWithin } from "../bounded";
 import type { LimitWindow } from "./types";
 
 /**
@@ -113,33 +114,53 @@ export const readChatgptUsage = async (
   chatgptAccountId: string
 ): Promise<ChatgptUsageRead> => {
   try {
-    const response = await fetch(`${chatgptBaseUrl()}/wham/usage`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "ChatGPT-Account-Id": chatgptAccountId,
-        accept: "application/json",
-      },
-      redirect: "error",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!response.ok) {
-      return {
-        ok: false,
-        status: response.status,
-        error: `ChatGPT's usage endpoint answered HTTP ${response.status}`,
-      };
+    const read = await readWithin(
+      TIMEOUT_MS,
+      async (signal): Promise<ChatgptUsageRead> => {
+        const response = await fetch(`${chatgptBaseUrl()}/wham/usage`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "ChatGPT-Account-Id": chatgptAccountId,
+            accept: "application/json",
+          },
+          redirect: "error",
+          signal,
+        });
+        if (!response.ok) {
+          await response.body?.cancel();
+          return {
+            ok: false,
+            status: response.status,
+            error: `ChatGPT's usage endpoint answered HTTP ${response.status}`,
+          };
+        }
+        const body = (await response.json()) as UsageRaw;
+        return {
+          ok: true,
+          plan: body.plan_type ?? null,
+          windows: chatgptWindows(body),
+        };
+      }
+    );
+    switch (read.kind) {
+      case "answered":
+        return read.value;
+      case "unanswered": {
+        // No reading: the caller keeps the last one it holds.
+        const error = `ChatGPT's usage endpoint did not answer within ${Math.round(read.after / 1000)}s`;
+        console.warn(`[usage] ${error}; the last reading stands`);
+        return { ok: false, status: null, error };
+      }
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    const body = (await response.json()) as UsageRaw;
-    return {
-      ok: true,
-      plan: body.plan_type ?? null,
-      windows: chatgptWindows(body),
-    };
   } catch (error) {
     return {
       ok: false,
       status: null,
-      error: `ChatGPT's usage endpoint did not answer: ${error instanceof Error ? error.message : String(error)}`,
+      error: `ChatGPT's usage endpoint could not be read: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 };

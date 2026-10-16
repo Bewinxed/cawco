@@ -29,6 +29,7 @@ import type {
   BinaryUpdateState,
 } from "@cawco/core/binary-updates";
 import { writeWrapper } from "@cawco/core/binary-wrapper";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { machineId } from "@cawco/core/machine-id";
 import { machineFetch } from "@cawco/core/machine-key";
 import { runtimeVersion } from "@cawco/core/runtime";
@@ -66,31 +67,60 @@ export const binaryLayout = (keeper: string) => ({
   keeper: { version: keeper, executable: versionExecutable(keeper) },
 });
 
+/**
+ * This machine's own row, as this machine (core machine-key.ts): a hub that
+ * requires paired devices answers it to the admitted machine, and tells one
+ * it has not admitted yet that it must pair. Within 5 s, body and all.
+ */
+const readOwnRow = (
+  hubUrl: string,
+  id: string
+): Promise<Bounded<{ pairing: string | null; row?: AgentRow }>> =>
+  readWithin(5000, async (signal) => {
+    const response = await machineFetch(
+      `${hubUrl}/api/agents/${encodeURIComponent(id)}`,
+      { signal }
+    );
+    const pairing = response.headers.get("x-cawco-pairing");
+    if (!response.ok) {
+      await response.body?.cancel();
+      return { pairing };
+    }
+    try {
+      return { pairing, row: (await response.json()) as AgentRow };
+    } catch {
+      return { pairing };
+    }
+  });
+
 async function awaitJoined(hubUrl: string): Promise<void> {
   const id = await machineId();
   let deadline = Date.now() + JOIN_TIMEOUT_MS;
   let waiting = false;
   while (Date.now() < deadline) {
-    // This machine's own row, as this machine (core machine-key.ts): a hub
-    // that requires paired devices answers it to the admitted machine, and
-    // tells one it has not admitted yet that it must pair.
     // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the hub after the previous one
-    const answer = await machineFetch(
-      `${hubUrl}/api/agents/${encodeURIComponent(id)}`,
-      { signal: AbortSignal.timeout(5000) }
-    ).catch(() => undefined);
-    if (answer?.headers.get("x-cawco-pairing") === "required" && !waiting) {
-      waiting = true;
-      deadline = Date.now() + ADMISSION_TIMEOUT_MS;
-      console.log(
-        `${INSTALL_STEP_PREFIX}waiting to be admitted: this hub requires paired devices. Admit ${hostname()} on the dashboard's Machines list.`
-      );
-    }
-    const row = answer?.ok
-      ? ((await answer.json().catch(() => undefined)) as AgentRow | undefined)
-      : undefined;
-    if (row?.status === "online") {
-      return;
+    const answer = await readOwnRow(hubUrl, id).catch(() => undefined);
+    // Neither an unanswered read nor a refused one ends the wait: the poll asks again.
+    switch (answer?.kind) {
+      case undefined:
+      case "unanswered":
+        break;
+      case "answered":
+        if (answer.value.pairing === "required" && !waiting) {
+          waiting = true;
+          deadline = Date.now() + ADMISSION_TIMEOUT_MS;
+          console.log(
+            `${INSTALL_STEP_PREFIX}waiting to be admitted: this hub requires paired devices. Admit ${hostname()} on the dashboard's Machines list.`
+          );
+        }
+        if (answer.value.row?.status === "online") {
+          return;
+        }
+        break;
+      default: {
+        const unhandled: never = answer;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
     await Bun.sleep(1000);
   }
@@ -106,6 +136,33 @@ async function awaitJoined(hubUrl: string): Promise<void> {
         ? " macOS does not let a background service reach local-network addresses (10.x, 172.16-31.x, 192.168.x). Join with the hub's Tailscale address instead."
         : "")
   );
+}
+
+/** Asks whether to run `id`'s install command: a yes runs it; a no, no answer, or no terminal says it was skipped. */
+async function runAllowed(id: string): Promise<boolean> {
+  const yes = await askYes("Run that command now? [y/N] ");
+  switch (yes.kind) {
+    case "answered":
+      if (yes.value) {
+        return true;
+      }
+      console.log(`${id}: skipped. CawCo works without it.`);
+      return false;
+    case "unanswered":
+      console.log(
+        yes.reason === "timeout"
+          ? `${id}: skipped, nobody answered within ${Math.round(yes.after / 1000)}s. CawCo works without it.`
+          : `${id}: skipped, the terminal's input ended. CawCo works without it.`
+      );
+      return false;
+    case "not asked":
+      console.log(`${id}: skipped. CawCo works without it.`);
+      return false;
+    default: {
+      const unhandled: never = yes;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }
 
 /** Says what is missing and offers each fix; a no, or no terminal, installs nothing. */
@@ -132,8 +189,7 @@ async function offerTools(ask: boolean): Promise<boolean> {
         continue;
       }
       // biome-ignore lint/performance/noAwaitInLoops: one prompt at a time, each reading its own line
-      if (!(await askYes("Run that command now? [y/N] "))) {
-        console.log(`${item.id}: skipped. CawCo works without it.`);
+      if (!(await runAllowed(item.id))) {
         continue;
       }
       const child = Bun.spawn(["/bin/sh", "-c", command], {

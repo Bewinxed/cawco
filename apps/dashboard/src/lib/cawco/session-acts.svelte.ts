@@ -16,6 +16,7 @@
 import type { NeutralSessionInfo } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import {
+  answeredOr,
   cawco,
   loadCatalog,
   machineControl,
@@ -108,14 +109,18 @@ export async function onRow(
  */
 export function stopOnRow(instanceId: string, machineId: string): void {
   put(instanceId, { fault: undefined, note: undefined });
-  stopSession(instanceId, machineId).catch((error: unknown) => {
-    put(instanceId, {
-      fault: {
-        reason: messageOf(error),
-        again: () => stopOnRow(instanceId, machineId),
-      },
+  stopSession(instanceId, machineId)
+    .then((read) =>
+      answeredOr(machineId, read, "whether it stopped is not known")
+    )
+    .catch((error: unknown) => {
+      put(instanceId, {
+        fault: {
+          reason: messageOf(error),
+          again: () => stopOnRow(instanceId, machineId),
+        },
+      });
     });
-  });
 }
 
 /** Which session a row renames: one the hub keeps, or a transcript only its machine has. */
@@ -144,7 +149,7 @@ export async function renameSession(
     await renameInstance(row.id, title);
     return;
   }
-  await machineControl(
+  const renamed = await machineControl<void>(
     machineId,
     "renameSession",
     [info.sessionId, title, { dir: info.cwd || undefined }],
@@ -152,4 +157,5 @@ export async function renameSession(
     info.harness
   );
   await loadCatalog(machineId);
+  answeredOr(machineId, renamed, "whether it was renamed is not known");
 }

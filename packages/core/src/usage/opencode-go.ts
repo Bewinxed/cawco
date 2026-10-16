@@ -1,3 +1,4 @@
+import { readWithin } from "../bounded";
 import type { LimitWindow, OpenCodeGoLimits } from "./types";
 
 /**
@@ -104,23 +105,48 @@ export async function fetchOpenCodeGoLimits(
 
   let error: string;
   try {
-    const res = await fetch(USAGE_URL, {
-      headers: { Authorization: `Bearer ${key}` },
-      redirect: "error",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (res.ok) {
-      const value: OpenCodeGoLimits = {
-        error: null,
-        fetchedAt: Date.now(),
+    const read = await readWithin(TIMEOUT_MS, async (signal) => {
+      const res = await fetch(USAGE_URL, {
+        headers: { Authorization: `Bearer ${key}` },
+        redirect: "error",
+        signal,
+      });
+      if (!res.ok) {
+        await res.body?.cancel();
+        return { ok: false as const, status: res.status };
+      }
+      return {
+        ok: true as const,
         windows: windowsOf((await res.json()) as GoUsageResponse),
       };
-      state.cached = { at: value.fetchedAt, value };
-      state.lastGood = value;
-      state.failed = null;
-      return value;
+    });
+    switch (read.kind) {
+      case "answered":
+        if (read.value.ok) {
+          const value: OpenCodeGoLimits = {
+            error: null,
+            fetchedAt: Date.now(),
+            windows: read.value.windows,
+          };
+          state.cached = { at: value.fetchedAt, value };
+          state.lastGood = value;
+          state.failed = null;
+          return value;
+        }
+        error = `HTTP ${read.value.status}`;
+        break;
+      case "unanswered":
+        // No reading: the last good windows stand, marked stale below.
+        error = `no answer within ${Math.round(read.after / 1000)}s`;
+        console.warn(
+          `[usage] OpenCode Go's usage endpoint: ${error}; the last reading stands`
+        );
+        break;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    error = `HTTP ${res.status}`;
   } catch (cause) {
     error = cause instanceof Error ? cause.message : String(cause);
   }

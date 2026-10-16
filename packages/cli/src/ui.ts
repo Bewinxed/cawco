@@ -1,3 +1,4 @@
+import { readWithin } from "@cawco/core/bounded";
 import {
   clientTransport,
   Outbox,
@@ -90,20 +91,35 @@ export async function serveUi({
   // races it and returns a connection error the user reads as "it is broken".
   const deadline = Date.now() + 15_000;
   for (;;) {
+    let missed: string | undefined;
     try {
       // biome-ignore lint/performance/noAwaitInLoops: a retry poll — each attempt must see whether the previous one succeeded before deciding to try again.
-      await fetch(`http://127.0.0.1:${renderPort}/health`, {
-        signal: AbortSignal.timeout(1000),
-      });
-      break;
-    } catch (error) {
-      if (Date.now() > deadline) {
-        throw new Error("the dashboard renderer did not start", {
-          cause: error,
-        });
+      const health = await readWithin(1000, (signal) =>
+        fetch(`http://127.0.0.1:${renderPort}/health`, { signal })
+      );
+      switch (health.kind) {
+        case "answered":
+          await health.value.body?.cancel();
+          break;
+        case "unanswered":
+          // Still starting: the poll asks again.
+          missed = `no answer within ${health.after}ms`;
+          break;
+        default: {
+          const unhandled: never = health;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
-      await Bun.sleep(200);
+    } catch (error) {
+      missed = error instanceof Error ? error.message : String(error);
     }
+    if (missed === undefined) {
+      break;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`the dashboard renderer did not start (${missed})`);
+    }
+    await Bun.sleep(200);
   }
 
   const server = Bun.serve<Relay>({
