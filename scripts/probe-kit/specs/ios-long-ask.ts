@@ -232,6 +232,8 @@ const AXE = "/opt/homebrew/bin/axe";
 const taps27 = process.env.PROBE_TAPS === "1";
 /** Whether axe can tap this run's simulator. */
 const taps = process.env.PROBE_IOS !== "27" || taps27;
+/** `ioreg -n Root -d1 -a`'s word that the console is locked. */
+const CONSOLE_LOCKED = /<key>IOConsoleLocked<\/key>\s*<true\/>/;
 const THREAD_HEAD = /^\s{4}\d+ Thread_/;
 const LOG_HEAD = /^.*\] /;
 const SPACES = /\s+/;
@@ -335,6 +337,24 @@ async function run(kit: Kit): Promise<void> {
   const { path: app, problem } = freshApp(ROOT);
   if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
     return;
+  }
+  // iOS 27's taps go through the simulator's remote automation, which can't
+  // attach while the Mac's console is locked ("Timed out creating the
+  // simulator remote automation session"); iOS 18.5's taps don't need it.
+  // Refused before anything is raised on a hub.
+  if (taps27) {
+    const locked = (await sh("ioreg -n Root -d1 -a")).match(CONSOLE_LOCKED);
+    if (
+      !kit.check(
+        "iOS 27's taps (PROBE_TAPS=1): the Mac's console is unlocked",
+        !locked,
+        locked
+          ? "IOConsoleLocked is true: unlock the Mac's console, then run again"
+          : "IOConsoleLocked is false"
+      )
+    ) {
+      return;
+    }
   }
   const liveAsk = process.env.PROBE_LIVE_ASK?.split("|");
   if (liveAsk && liveAsk.length >= 4) {
