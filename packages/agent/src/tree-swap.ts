@@ -39,7 +39,7 @@ import {
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { SkillFile } from "@cawco/core";
 import { hashFiles } from "@cawco/core/file-hash";
-import { TREE_STORE_DIR } from "@cawco/core/paths";
+import { treeStoreOf } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /**
@@ -48,10 +48,6 @@ import { writeStateFile } from "@cawco/core/state-file";
  * may take.
  */
 export const CARRIED = ".cawco-carried.json";
-
-/** The store of the trees the entries of `dir` link to. */
-export const treeStoreOf = (dir: string): string =>
-  join(dirname(dir), TREE_STORE_DIR, basename(dir));
 
 /** A tree of `name` in its store: the name and eight hex digits. */
 const treeName = (name: string): string =>

@@ -16,6 +16,7 @@ import type {
   SessionMessage,
 } from "@cawco/core";
 import { CONTROL_MODEL_CATALOG, CONTROL_PI_DEFAULT_MODEL } from "@cawco/core";
+import { piAgentDir, piMemoryFile, piSkillsDir } from "@cawco/core/paths";
 import type {
   ImageContent,
   Model,
@@ -43,10 +44,9 @@ import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiProxyCredential, type PiCredentialState } from "./pi-auth";
 import { piOpenTurns } from "./pi-sessiond";
 
-const PI_DIR = join(homedir(), ".pi", "agent");
-const PI_SKILLS = join(PI_DIR, "skills");
-const PI_MEMORY = join(PI_DIR, "AGENTS.md");
-const PI_SIDECAR = join(PI_DIR, "cawco-fleet.json");
+const PI_SKILLS = piSkillsDir();
+const PI_MEMORY = piMemoryFile();
+const PI_SIDECAR = join(piAgentDir(), "cawco-fleet.json");
 
 /**
  * The id a compaction's boundary goes by, live and read back alike: pi stores

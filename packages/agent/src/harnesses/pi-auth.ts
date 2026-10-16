@@ -3,8 +3,8 @@
  * and "unavailable": unavailable, also used for cooldowns, with no dedicated
  * permanent-refresh marker. Source: https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.13/internal/api/handlers/management/auth_files.go
  */
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { piAgentDir } from "@cawco/core/paths";
 
 export const PI_AUTH_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 export interface PiCredentialState {
@@ -66,9 +66,7 @@ export async function checkPiProxyCredential(model: {
   provider: string;
   baseUrl?: string;
 }): Promise<PiCredentialState | undefined> {
-  const file = Bun.file(
-    join(homedir(), ".pi", "agent", "pi-cliproxyapi", "config.json")
-  );
+  const file = Bun.file(join(piAgentDir(), "pi-cliproxyapi", "config.json"));
   if (!(await file.exists())) {
     return undefined;
   }

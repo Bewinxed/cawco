@@ -51,7 +51,9 @@ import { hashFiles } from "@cawco/core/file-hash";
 import {
   accountIds,
   claudeHomeJson,
+  claudeSkillsDir,
   projectClaudeDir,
+  treeStoreOf,
   userLayerPath,
   VENDOR_MARKETPLACES_DIR,
 } from "@cawco/core/paths";
@@ -75,7 +77,6 @@ import {
   heldHash,
   placeTree,
   removeTree,
-  treeStoreOf,
 } from "./tree-swap";
 import {
   guardWorkflowSkillRemoval,
@@ -94,7 +95,7 @@ const CLAUDE_JSON = claudeHomeJson();
 const SIDECAR = userLayerPath("cawco-fleet.json");
 
 /** Where a plain skill's files land — one directory per skill, all of it cawco's. */
-const SKILLS_DIR = userLayerPath("skills");
+const SKILLS_DIR = claudeSkillsDir();
 
 /**
  * The fleet's OWN marketplaces, written from the bytes the hub resolved: one

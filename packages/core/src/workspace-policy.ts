@@ -18,7 +18,8 @@
  *   Claude Code (CLAUDE.md, memories, skills, plugins, agents, commands,
  *   rules, output styles, workflows, themes, plans), also by its names in
  *   the config dir of each account the workspace's sessions run on
- *   (`accountLayers`). On the hub's machine, its project's folder there
+ *   (`accountLayers`), and what the fleet sync writes for every harness
+ *   (`fleetSyncedPaths`). On the hub's machine, its project's folder there
  *   (`projectFolder`). A Claude session also
  *   reads its own `projects/<slug>/` dir, which the judge adds from the
  *   transcript the CLI names.
@@ -49,15 +50,14 @@ import {
   credentialStores,
   darwinDeveloperBundle,
   darwinUserDirs,
+  fleetSyncedPaths,
   hostToolCaches,
   hubProjectsDir,
   isSecretFileName,
   projectClaudeDir,
-  TREE_STORE_DIR,
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
   userGitConfigDir,
-  VENDOR_MARKETPLACES_DIR,
   workspaceAccountsFile,
   workspaceCaches,
   workspaceDoorDir,
@@ -803,14 +803,13 @@ export const workspacePolicy = async (
       ...[...USER_LAYER_DIRS, ...USER_LAYER_FILES].map((name) =>
         join(claudeHome(), name)
       ),
-      // The fleet's plugins as CawCo carried them, which Claude Code runs
-      // from (core paths.ts `VENDOR_MARKETPLACES_DIR`): without it every hook
-      // of such a plugin failed in a workspace, `python3: can't open file
-      // '…/cawco-marketplaces/axiom-marketplace/plugins/axiom/hooks/…'`.
-      join(claudeHome(), VENDOR_MARKETPLACES_DIR),
-      // The trees the fleet's skills link to (core paths.ts `TREE_STORE_DIR`):
-      // every `~/.claude/skills/<name>` CawCo wrote lands in it.
-      join(claudeHome(), TREE_STORE_DIR),
+      // What the fleet sync writes that a harness loads, read only: every
+      // skills dir with the tree store its links land in, the vendored
+      // marketplaces Claude Code runs the fleet's plugins from (without them
+      // every hook of such a plugin failed, `python3: can't open file
+      // '…/cawco-marketplaces/axiom-marketplace/plugins/axiom/hooks/…'`),
+      // pi's memory (core paths.ts `fleetSyncedPaths`).
+      ...fleetSyncedPaths(),
       ...(mac
         ? ["Developer", "Preferences", "Keychains"].map((name) =>
             join(home, "Library", name)

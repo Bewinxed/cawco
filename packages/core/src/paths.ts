@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { CLAUDE_DIR_NAME, CLAUDE_JSON_NAME } from "./claude-dirs";
 import { sessiondEndpoint } from "./sessiond";
 
@@ -92,6 +92,21 @@ export const projectClaudeDir = (cwd: string, ...parts: string[]): string =>
   join(cwd, CLAUDE_DIR_NAME, ...parts);
 
 /**
+ * Where the trees behind a dir of CawCo-written trees live: beside that dir,
+ * `<parent>/.cawco-trees/<dir name>/` ({@link treeStoreOf}). Each entry of
+ * the dir (a fleet skill, a vendored plugin) is a relative link into it,
+ * swapped with one rename (agent tree-swap.ts), so a session never reads a
+ * missing or half-written tree. Kept outside the dir itself because OpenCode
+ * finds skills with `**\/SKILL.md` and follows dot dirs. In
+ * {@link claudeHome} it holds the fleet's skills, which every session reads.
+ */
+export const TREE_STORE_DIR = ".cawco-trees";
+
+/** The store of the trees the entries of `dir` link to ({@link TREE_STORE_DIR}). */
+export const treeStoreOf = (dir: string): string =>
+  join(dirname(dir), TREE_STORE_DIR, basename(dir));
+
+/**
  * The dirs of a config dir that are the user's, not an account's: one copy
  * in {@link claudeHome}, each linked into every account dir. Each is a
  * global-scope entry of https://code.claude.com/docs/en/claude-directory
@@ -99,12 +114,19 @@ export const projectClaudeDir = (cwd: string, ...parts: string[]): string =>
  * your projects"), or CawCo's own (`memories`, the documents CLAUDE.md
  * links). `plans` too: plan mode writes there by default, by a random name a
  * transcript then names by its full path, so one copy keeps that path good
- * on every account.
+ * on every account. And {@link TREE_STORE_DIR}, where each fleet skill in
+ * `skills` links to by a relative link (`../.cawco-trees/skills/<tree>`):
+ * a workspace's boundary on Linux binds `skills` at the account dir's own
+ * name, so the link resolves beside that name, and an account dir without
+ * the store there read every fleet skill as missing (`ls
+ * $CLAUDE_CONFIG_DIR/skills/interface-craft/`: "No such file or directory",
+ * 2026-10-16).
  */
 export const USER_LAYER_DIRS = [
   "memories",
   "rules",
   "skills",
+  TREE_STORE_DIR,
   "commands",
   "agents",
   "output-styles",
@@ -121,19 +143,42 @@ export const USER_LAYER_DIRS = [
  * `directory` marketplace (agent fleet.ts `VENDOR_ROOT`). Claude Code runs a
  * directory marketplace's plugins from there: their hooks' `${CLAUDE_PLUGIN_ROOT}`
  * is a path inside it, so a session that may not read it runs none of them.
+ * Each marketplace keeps its plugins' tree store inside it
+ * (`<marketplace>/.cawco-trees/plugins`).
  */
 export const VENDOR_MARKETPLACES_DIR = "cawco-marketplaces";
 
+/** The fleet's skills for Claude Code, which OpenCode reads too (agent session.ts `#fleetHoldings`). */
+export const claudeSkillsDir = (): string => userLayerPath("skills");
+
+/** pi's agent dir, `~/.pi/agent`: its login, its settings, and what the fleet writes for it. */
+export const piAgentDir = (): string => join(homedir(), ".pi", "agent");
+
+/** The fleet's skills for pi. */
+export const piSkillsDir = (): string => join(piAgentDir(), "skills");
+
+/** The fleet's memory document for pi. */
+export const piMemoryFile = (): string => join(piAgentDir(), "AGENTS.md");
+
 /**
- * Where the trees behind a dir of CawCo-written trees live: beside that dir,
- * `<parent>/.cawco-trees/<dir name>/`. Each entry of the dir (a fleet skill,
- * a vendored plugin) is a link into it, swapped with one rename (agent
- * tree-swap.ts), so a session never reads a missing or half-written tree.
- * Kept outside the dir itself because OpenCode finds skills with
- * `**\/SKILL.md` and follows dot dirs. In {@link claudeHome} it holds the
- * fleet's skills, which every session reads.
+ * What the fleet sync writes on this machine that a harness loads: each
+ * skills dir ({@link claudeSkillsDir}, {@link piSkillsDir}) with the tree
+ * store its links land in ({@link treeStoreOf}), the vendored marketplaces
+ * with their plugins' stores ({@link VENDOR_MARKETPLACES_DIR}), and pi's
+ * memory document (Claude Code's, `CLAUDE.md`, is the user layer's). Every
+ * workspace reads each and writes none (core workspace-policy.ts): a harness
+ * hands its model a skill's path, and the model reads the skill's other
+ * files from there with its own tools, through the boundary. pi's lie in
+ * its agent dir, a credential store, so only these open there.
  */
-export const TREE_STORE_DIR = ".cawco-trees";
+export const fleetSyncedPaths = (): string[] => [
+  ...[claudeSkillsDir(), piSkillsDir()].flatMap((dir) => [
+    dir,
+    treeStoreOf(dir),
+  ]),
+  userLayerPath(VENDOR_MARKETPLACES_DIR),
+  piMemoryFile(),
+];
 
 /** The user layer's files ({@link USER_LAYER_DIRS} has why each is the user's). */
 export const USER_LAYER_FILES = [
@@ -1023,7 +1068,7 @@ export const credentialStores = (): string[] => {
     join(xdgDataHome(), "opencode"),
     join(xdgConfigHome(), "opencode"),
     // pi: `auth.json`, the CLIProxyAPI key; CLIProxyAPI's own logins.
-    join(home, ".pi", "agent"),
+    piAgentDir(),
     join(home, ".cli-proxy-api"),
     // Other agents' logins: Codex, Gemini, GitHub Copilot.
     join(home, ".codex"),
