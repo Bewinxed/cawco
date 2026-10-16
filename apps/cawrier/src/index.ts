@@ -11,6 +11,8 @@
  * GET  /v1/health  one APNs probe: proves outbound HTTP/2 to Apple and the key
  * POST /v1/apple/notifications  { signedPayload }: App Store Server Notifications V2
  */
+
+import { readWithin } from "../../../packages/core/src/bounded";
 import {
   type ApnsAnswer,
   type ApnsEnvironment,
@@ -373,14 +375,30 @@ const FORWARD_TIMEOUT_MS = 10_000;
 /** Passes a verified notification's exact body on to Yield; logs its answer, never throws. */
 const forward = async (env: Env, raw: string, uuid: string): Promise<void> => {
   try {
-    const response = await fetch(env.ASSN_FORWARD_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: raw,
-      signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
+    const sent = await readWithin(FORWARD_TIMEOUT_MS, async (signal) => {
+      const response = await fetch(env.ASSN_FORWARD_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: raw,
+        signal,
+      });
+      await response.body?.cancel();
+      return response.status;
     });
-    await response.body?.cancel();
-    console.log(`forward ${uuid}: Yield answered ${response.status}`);
+    switch (sent.kind) {
+      case "answered":
+        console.log(`forward ${uuid}: Yield answered ${sent.value}`);
+        break;
+      case "unanswered":
+        console.log(
+          `forward ${uuid}: Yield did not answer within ${sent.after} ms (${sent.reason})`
+        );
+        break;
+      default: {
+        const unhandled: never = sent;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } catch (error) {
     console.log(
       `forward ${uuid}: Yield not reached (${error instanceof Error ? error.message : String(error)})`

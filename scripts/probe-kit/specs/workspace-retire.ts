@@ -68,8 +68,37 @@
 import { existsSync } from "node:fs";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
+
+/** One request given `ms` to answer: its status and text; one not answered in time throws saying so. */
+const requestWithin = async (
+  ms: number,
+  url: string,
+  init: RequestInit
+): Promise<{ ok: boolean; status: number; text: string }> => {
+  const read = await readWithin(ms, async (signal) => {
+    const response = await fetch(url, { ...init, signal });
+    return {
+      ok: response.ok,
+      status: response.status,
+      text: await response.text(),
+    };
+  });
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `${init.method ?? "GET"} ${url} did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 const TAG = /PROBE-RETIRE-([LKMPBHGS])/;
 /** A size in words (core `sizeWords`), alone and as the 409 places it before the clone's path. */
@@ -640,18 +669,21 @@ const unstartablePhase = async (kit: Kit, scene: Scene): Promise<void> => {
     (procs) => procs.length === 0,
     30_000
   ).catch(() => ["still running"]);
-  const followUp = await fetch(`${fleet.base}/api/work-items`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      parentInstanceId: scene.parentId,
-      title: "Go on in B",
-      prompt: "PROBE-RETIRE-B: go on.",
-      workspace: wb.id,
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
-  const refusedText = await followUp.text();
+  const followUp = await requestWithin(
+    120_000,
+    `${fleet.base}/api/work-items`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        parentInstanceId: scene.parentId,
+        title: "Go on in B",
+        prompt: "PROBE-RETIRE-B: go on.",
+        workspace: wb.id,
+      }),
+    }
+  );
+  const refusedText = followUp.text;
   check(
     "(u) B's boundary is down and cannot start: a follow-up there is refused naming its damaged accounts record",
     down.length === 0 &&
@@ -1034,13 +1066,15 @@ const spec: Spec = {
       },
       closePreview: async (id) =>
         (
-          await fetch(`${fleet.base}/api/instances/${parent}/artifacts/${id}`, {
-            method: "DELETE",
-            signal: AbortSignal.timeout(60_000),
-          })
+          await requestWithin(
+            60_000,
+            `${fleet.base}/api/instances/${parent}/artifacts/${id}`,
+            { method: "DELETE" }
+          )
         ).status,
       archiveOver: async (id, body) => {
-        const response = await fetch(
+        const archived = await requestWithin(
+          120_000,
           `${fleet.base}/api/workspaces/${id}/archive`,
           {
             method: "POST",
@@ -1048,13 +1082,13 @@ const spec: Spec = {
               headers: { "content-type": "application/json" },
               body: JSON.stringify(body),
             }),
-            signal: AbortSignal.timeout(120_000),
           }
         );
-        return { status: response.status, text: await response.text() };
+        return { status: archived.status, text: archived.text };
       },
       callAsParent: async (name, args) => {
-        const response = await fetch(
+        const called = await requestWithin(
+          300_000,
           `${fleet.base}/api/delegation/call/${parent}`,
           {
             method: "POST",
@@ -1063,10 +1097,9 @@ const spec: Spec = {
               Authorization: `Bearer ${credential}`,
             },
             body: JSON.stringify({ name, arguments: args }),
-            signal: AbortSignal.timeout(300_000),
           }
         );
-        return { status: response.status, text: await response.text() };
+        return { status: called.status, text: called.text };
       },
     };
 

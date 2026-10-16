@@ -8,6 +8,8 @@
  * Exits 0 once the hub accepts it, 1 with the hub's words when it fails it or
  * says nothing within 15 s.
  */
+import { readWithin } from "../../packages/core/src/bounded";
+
 const [, , hub, machineId, instanceId, text] = Bun.argv;
 const commandId = crypto.randomUUID();
 const socket = new WebSocket(`${hub.replace("http", "ws")}/ws/dashboard`);
@@ -55,17 +57,24 @@ socket.send(
     },
   })
 );
-const timer = setTimeout(
-  () => settled.resolve("no answer from the hub within 15 s"),
-  15_000
-);
-const refused = await settled.promise;
-clearTimeout(timer);
+const ack = await readWithin(15_000, () => settled.promise);
 socket.close();
-if (refused) {
-  console.error(`the hub did not take the send: ${refused}`);
-  process.exit(1);
+switch (ack.kind) {
+  case "answered":
+    if (ack.value) {
+      console.error(`the hub did not take the send: ${ack.value}`);
+      process.exit(1);
+    }
+    console.log(`sent ${instanceId} on ${machineId}: ${text}`);
+    break;
+  case "unanswered":
+    console.error(
+      `the hub did not take the send: no answer from the hub within ${ack.after} ms`
+    );
+    process.exit(1);
+    break;
+  default: {
+    const unhandled: never = ack;
+    throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+  }
 }
-console.log(`sent ${instanceId} on ${machineId}: ${text}`);
-
-export {};

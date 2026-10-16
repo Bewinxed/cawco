@@ -16,6 +16,7 @@
  * those engine-size pairs.
  */
 import { chromium, webkit } from "playwright-core";
+import { Gone, readWithin } from "../../packages/core/src/bounded.ts";
 
 const [after, before, session] = process.argv.slice(2);
 const ROUNDS = Number(process.env.ROUNDS ?? 6);
@@ -115,18 +116,24 @@ async function measure(engine, v) {
       // A round the engine hangs on (no frame for 15s) or a page it brings
       // down is counted, and the build gets a fresh browser.
       // biome-ignore lint/performance/noAwaitInLoops: the builds take their rounds in turn
-      const done = await Promise.race([
-        round(pages[build]).catch(() => null),
-        new Promise((settle) => setTimeout(() => settle(null), 15_000)),
-      ]);
-      if (done) {
-        runs[build].open.push(...done.open);
-        runs[build].close.push(...done.close);
-      } else {
-        runs[build].stuck += 1;
-        await browsers[build].close().catch(() => undefined);
-        browsers[build] = await ENGINES[engine].launch();
-        pages[build] = await load(browsers[build], v, bases[build]);
+      const done = await readWithin(15_000, () =>
+        round(pages[build]).catch((error) => {
+          throw new Gone(`the ${build} page went down: ${error}`);
+        })
+      );
+      switch (done.kind) {
+        case "answered":
+          runs[build].open.push(...done.value.open);
+          runs[build].close.push(...done.value.close);
+          break;
+        case "unanswered":
+          runs[build].stuck += 1;
+          await browsers[build].close().catch(() => undefined);
+          browsers[build] = await ENGINES[engine].launch();
+          pages[build] = await load(browsers[build], v, bases[build]);
+          break;
+        default:
+          throw new Error(`unhandled read: ${JSON.stringify(done)}`);
       }
     }
   }
@@ -154,10 +161,17 @@ for (const engine of Object.keys(ENGINES)) {
     console.error(`measuring ${key}`);
     // A page the engine hangs on is reported as hung after ten minutes.
     // biome-ignore lint/performance/noAwaitInLoops: one browser at a time keeps the timings honest
-    report[key] = await Promise.race([
-      measure(engine, v),
-      new Promise((done) => setTimeout(() => done({ hung: true }), 600_000)),
-    ]);
+    const measured = await readWithin(600_000, () => measure(engine, v));
+    switch (measured.kind) {
+      case "answered":
+        report[key] = measured.value;
+        break;
+      case "unanswered":
+        report[key] = { hung: true, afterMs: measured.after };
+        break;
+      default:
+        throw new Error(`unhandled read: ${JSON.stringify(measured)}`);
+    }
   }
 }
 console.log(JSON.stringify(report, null, 1));

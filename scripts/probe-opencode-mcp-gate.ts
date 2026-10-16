@@ -29,6 +29,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../packages/core/src/bounded";
 import { ensureDeps } from "./lib/deps";
 
 // The dependencies first (lib/deps.ts): the fleet loads after them.
@@ -218,14 +219,30 @@ const reported = async (name: string) =>
     name
   ];
 const put = async (name: string, config: object) => {
-  const response = await fetch(`${fleet.base}/api/fleet/mcp/${name}`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ config, enabled: true }),
-    signal: AbortSignal.timeout(60_000),
+  const read = await readWithin(60_000, async (signal) => {
+    const response = await fetch(`${fleet.base}/api/fleet/mcp/${name}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ config, enabled: true }),
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(
+        `PUT ${name}: ${response.status} ${await response.text()}`
+      );
+    }
   });
-  if (!response.ok) {
-    throw new Error(`PUT ${name}: ${response.status} ${await response.text()}`);
+  switch (read.kind) {
+    case "answered":
+      return;
+    case "unanswered":
+      throw new Error(
+        `PUT ${name}: the hub did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 };
 interface Block {

@@ -46,6 +46,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../packages/core/src/bounded";
 import { ensureDeps } from "./lib/deps";
 import type { Reply, Seen } from "./scratch-fleet";
 
@@ -448,22 +449,36 @@ interface View {
   tools?: string[];
 }
 const send = async <T>(method: string, path: string, body?: unknown) => {
-  const response = await fetch(`${fleet.base}${path}`, {
-    method,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-    redirect: "manual",
-    signal: AbortSignal.timeout(60_000),
+  const read = await readWithin(60_000, async (signal) => {
+    const response = await fetch(`${fleet.base}${path}`, {
+      method,
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+      redirect: "manual",
+      signal,
+    });
+    const said = await response.text();
+    if (!response.ok) {
+      throw new Error(`${method} ${path}: ${response.status} ${said}`);
+    }
+    return JSON.parse(said) as T;
   });
-  const said = await response.text();
-  if (!response.ok) {
-    throw new Error(`${method} ${path}: ${response.status} ${said}`);
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `${method} ${path}: the hub did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return JSON.parse(said) as T;
 };
 const views = async () =>
   (await send<{ connections: View[] }>("GET", "/api/connections")).connections;
@@ -580,24 +595,40 @@ const readWhileHeld = async (
 };
 
 /** A tool call through the hub's REST door, as the session the credential is. */
-const door = (
+const door = async (
   instanceId: string,
   credential: string,
   name: string,
   args: object
-) =>
-  fetch(`${fleet.base}/api/delegation/call/${instanceId}`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${credential}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ name, arguments: args }),
-    signal: AbortSignal.timeout(120_000),
-  }).then(async (response) => ({
-    status: response.status,
-    text: await response.text(),
-  }));
+) => {
+  const read = await readWithin(120_000, async (signal) => {
+    const response = await fetch(
+      `${fleet.base}/api/delegation/call/${instanceId}`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${credential}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ name, arguments: args }),
+        signal,
+      }
+    );
+    return { status: response.status, text: await response.text() };
+  });
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `${name} through the hub's door did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 const listedTo = async (instanceId: string) =>
   (
     await send<{ tools: { name: string }[] }>(

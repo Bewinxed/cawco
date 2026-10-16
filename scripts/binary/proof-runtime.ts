@@ -3,6 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
+import { readWithin } from "../../packages/core/src/bounded";
 import {
   type ReleaseManifest,
   signManifest,
@@ -85,10 +86,22 @@ if (verb === "proof-stack") {
     }
   }
   try {
-    await fetch("http://192.168.3.100:3456/health", {
-      signal: AbortSignal.timeout(1000),
-    });
-    throw new Error("Live hub reachable");
+    const live = await readWithin(1000, (signal) =>
+      fetch("http://192.168.3.100:3456/health", { signal })
+    );
+    switch (live.kind) {
+      case "answered":
+        throw new Error("Live hub reachable");
+      case "unanswered":
+        console.log(
+          `live hub unreachable: did not answer within ${live.after} ms (${live.reason})`
+        );
+        break;
+      default: {
+        const unhandled: never = live;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } catch (error) {
     if (String(error).includes("Live hub reachable")) {
       throw error;
@@ -151,44 +164,60 @@ if (verb === "proof-stack") {
   if (inputs.length !== 1) {
     throw new Error("Workflow input worker failed");
   }
-  await new Promise<void>((resolve, reject) => {
-    const worker = new Worker(WORKER_URL);
-    const timer = setTimeout(() => {
-      worker.terminate();
-      reject(new Error("Workflow timed out"));
-    }, 10_000);
-    worker.onmessage = (event) => {
-      const m = event.data;
-      if (m.type === "effect") {
-        worker.postMessage({ type: "effect-result", id: m.id, result: null });
-      }
-      if (m.type === "failed") {
-        clearTimeout(timer);
-        worker.terminate();
-        reject(new Error(m.failure.message));
-      }
-      if (m.type === "done") {
-        clearTimeout(timer);
-        worker.terminate();
-        if (m.result.name === "standalone") {
-          resolve();
-        } else {
-          reject(new Error("Wrong workflow result"));
-        }
-      }
-    };
-    worker.onerror = (event) => {
-      clearTimeout(timer);
-      worker.terminate();
-      reject(new Error(event.message));
-    };
-    worker.postMessage({
-      mode: "run",
-      path: writeProgram(program),
-      runId: "binary-proof",
-      inputs: { name: "standalone" },
-    });
-  });
+  const ran = await readWithin(
+    10_000,
+    (signal) =>
+      new Promise<void>((resolve, reject) => {
+        const worker = new Worker(WORKER_URL);
+        signal.addEventListener("abort", () => worker.terminate(), {
+          once: true,
+        });
+        worker.onmessage = (event) => {
+          const m = event.data;
+          if (m.type === "effect") {
+            worker.postMessage({
+              type: "effect-result",
+              id: m.id,
+              result: null,
+            });
+          }
+          if (m.type === "failed") {
+            worker.terminate();
+            reject(new Error(m.failure.message));
+          }
+          if (m.type === "done") {
+            worker.terminate();
+            if (m.result.name === "standalone") {
+              resolve();
+            } else {
+              reject(new Error("Wrong workflow result"));
+            }
+          }
+        };
+        worker.onerror = (event) => {
+          worker.terminate();
+          reject(new Error(event.message));
+        };
+        worker.postMessage({
+          mode: "run",
+          path: writeProgram(program),
+          runId: "binary-proof",
+          inputs: { name: "standalone" },
+        });
+      })
+  );
+  switch (ran.kind) {
+    case "answered":
+      break;
+    case "unanswered":
+      throw new Error(
+        `Workflow did not answer within ${ran.after} ms (${ran.reason})`
+      );
+    default: {
+      const unhandled: never = ran;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   console.log("workflow typecheck, input worker, effect and result passed");
 } else if (verb === "proof-child") {
   process.stdin.resume();

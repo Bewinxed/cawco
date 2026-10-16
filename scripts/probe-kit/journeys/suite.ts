@@ -26,6 +26,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ConsoleMessage, Locator, Page } from "playwright-core";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import {
   type Engine,
@@ -445,22 +446,21 @@ async function runLeg(
   const started = performance.now();
   const since = Date.now();
   let failure: string | null = null;
-  let timer: Timer | undefined;
   try {
-    await Promise.race([
-      journey.leg(leg),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(new Unmet(`the leg ran past ${LEG_MS / 60_000} minutes`)),
-          LEG_MS
-        );
-      }),
-    ]);
+    const ran = await readWithin(LEG_MS, () => journey.leg(leg));
+    switch (ran.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        throw new Unmet(`the leg ran past ${LEG_MS / 60_000} minutes`);
+      default: {
+        const unhandled: never = ran;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } catch (error) {
     failure = `${current}: ${measuredBy(error)}`;
   } finally {
-    clearTimeout(timer);
     await page
       .context()
       .close()

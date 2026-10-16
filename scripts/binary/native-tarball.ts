@@ -12,6 +12,7 @@
 import { mkdir, open, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { readWithin } from "../../packages/core/src/bounded";
 
 const REGISTRY = "https://registry.npmjs.org";
 const ATTEMPTS = 5;
@@ -81,13 +82,27 @@ async function metadataFor(
   let last: unknown;
   for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetch(url, {
-        signal: AbortSignal.timeout(60_000),
+      const read = await readWithin(60_000, async (signal) => {
+        const response = await fetch(url, { signal });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return (await response.json()) as { dist: NativeMetadata };
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      let dist: NativeMetadata;
+      switch (read.kind) {
+        case "answered":
+          ({ dist } = read.value);
+          break;
+        case "unanswered":
+          throw new Error(
+            `npm did not answer within ${read.after} ms (${read.reason})`
+          );
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
-      const { dist } = (await response.json()) as { dist: NativeMetadata };
       const metadata = { tarball: dist.tarball, integrity: dist.integrity };
       await mkdir(nativeCacheDir(), { recursive: true });
       await writeAtomic(path, JSON.stringify(metadata));

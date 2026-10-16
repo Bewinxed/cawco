@@ -31,6 +31,7 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
 import type {
   MarketplaceLink,
@@ -87,21 +88,35 @@ const check = (label: string, ok: boolean, detail = "") => {
 };
 
 const send = async (method: string, path: string, body?: unknown) => {
-  const response = await fetch(`${fleet.base}${path}`, {
-    method,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-    signal: AbortSignal.timeout(180_000),
+  const read = await readWithin(180_000, async (signal) => {
+    const response = await fetch(`${fleet.base}${path}`, {
+      method,
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+      signal,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`${method} ${path}: ${response.status} ${text}`);
+    }
+    return JSON.parse(text) as unknown;
   });
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`${method} ${path}: ${response.status} ${text}`);
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `${method} ${path}: the hub did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return JSON.parse(text) as unknown;
 };
 
 /** The `claude` CLI on the scratch agent's own HOME, as the agent runs it. */

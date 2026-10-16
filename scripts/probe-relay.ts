@@ -52,6 +52,7 @@ import {
 } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
+import { type Bounded, Gone, readWithin } from "../packages/core/src/bounded";
 import { ensureDeps } from "./lib/deps";
 import type { Reply } from "./scratch-fleet";
 
@@ -357,21 +358,35 @@ const send = async <T>(
   path: string,
   body?: unknown
 ): Promise<T> => {
-  const response = await fetch(`${fleet.base}${path}`, {
-    method,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-    signal: AbortSignal.timeout(120_000),
+  const read = await readWithin(120_000, async (signal) => {
+    const response = await fetch(`${fleet.base}${path}`, {
+      method,
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+      signal,
+    });
+    const said = await response.text();
+    if (!response.ok) {
+      throw new Error(`${method} ${path}: ${response.status} ${said}`);
+    }
+    return (said ? JSON.parse(said) : undefined) as T;
   });
-  const said = await response.text();
-  if (!response.ok) {
-    throw new Error(`${method} ${path}: ${response.status} ${said}`);
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `${method} ${path}: the hub did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return (said ? JSON.parse(said) : undefined) as T;
 };
 const deliver = async (
   path: string,
@@ -408,65 +423,83 @@ const make = (body: object) =>
 const setSecret = (id: string, secret: string) =>
   send<RelayView>("PUT", `/api/relays/${id}/secret`, { secret });
 
-/** A chunked POST whose body passes the cap and never ends: the status line, or what happened. */
-const unendingChunked = (path: string) =>
-  new Promise<string>((resolve) => {
-    const socket = connect(relayPort, "127.0.0.1");
-    let got = "";
-    const done = (said: string) => {
-      resolve(said);
-      socket.destroy();
-    };
-    const timer = setTimeout(
-      () => done(`no answer in 15 s (${got.length} bytes)`),
-      15_000
-    );
-    socket.on("error", () => undefined);
-    socket.on("data", (data) => {
-      got += data.toString("latin1");
-      if (got.includes("\r\n")) {
-        clearTimeout(timer);
-        done(got.split("\r\n")[0] ?? "");
-      }
-    });
-    socket.on("close", () => {
-      clearTimeout(timer);
-      done(got.split("\r\n")[0] || "closed with no answer");
-    });
-    socket.write(
-      `POST ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n`
-    );
-    const chunk = Buffer.alloc(64 * 1024, 97);
-    for (let sent = 0; sent <= RELAY_BODY_MAX; sent += chunk.length) {
-      socket.write(`${chunk.length.toString(16)}\r\n`);
-      socket.write(chunk);
-      socket.write("\r\n");
+/**
+ * A raw request to the receiver, as `head` then `body`: the status line it
+ * answers with. A socket the receiver closes with no answer is unanswered "dead".
+ */
+const rawRequest = (ms: number, head: string, body?: () => Buffer[]) =>
+  readWithin(
+    ms,
+    (signal) =>
+      new Promise<string>((resolve, reject) => {
+        const socket = connect(relayPort, "127.0.0.1");
+        signal.addEventListener("abort", () => socket.destroy(), {
+          once: true,
+        });
+        let got = "";
+        socket.on("error", () => undefined);
+        socket.on("data", (data) => {
+          got += data.toString("latin1");
+          if (got.includes("\r\n")) {
+            resolve(got.split("\r\n")[0] ?? "");
+            socket.destroy();
+          }
+        });
+        socket.on("close", () => {
+          const [line] = got.split("\r\n");
+          if (line) {
+            resolve(line);
+          } else {
+            reject(new Gone("closed with no answer"));
+          }
+        });
+        socket.write(head);
+        for (const part of body?.() ?? []) {
+          socket.write(part);
+        }
+      })
+  );
+
+/** The status line a raw request was answered with, or that it was not answered. */
+const statusLine = (read: Bounded<string>) => {
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      return `no answer within ${read.after} ms (${read.reason})`;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
-    // No terminating 0-length chunk: the body is never whole.
-  });
+  }
+};
+
+/** A chunked POST whose body passes the cap and never ends: the status line. */
+const unendingChunked = (path: string) =>
+  rawRequest(
+    15_000,
+    `POST ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n`,
+    () => {
+      const chunk = Buffer.alloc(64 * 1024, 97);
+      const parts: Buffer[] = [];
+      for (let sent = 0; sent <= RELAY_BODY_MAX; sent += chunk.length) {
+        parts.push(
+          Buffer.from(`${chunk.length.toString(16)}\r\n`),
+          chunk,
+          Buffer.from("\r\n")
+        );
+      }
+      // No terminating 0-length chunk: the body is never whole.
+      return parts;
+    }
+  );
 
 /** A request with a declared length over the cap, and no body sent. */
 const declaredOver = (path: string) =>
-  new Promise<string>((resolve) => {
-    const socket = connect(relayPort, "127.0.0.1");
-    let got = "";
-    const timer = setTimeout(() => {
-      resolve("no answer in 10 s");
-      socket.destroy();
-    }, 10_000);
-    socket.on("error", () => undefined);
-    socket.on("data", (data) => {
-      got += data.toString("latin1");
-      if (got.includes("\r\n")) {
-        clearTimeout(timer);
-        resolve(got.split("\r\n")[0] ?? "");
-        socket.destroy();
-      }
-    });
-    socket.write(
-      `POST ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: ${RELAY_BODY_MAX + 1}\r\n\r\n`
-    );
-  });
+  rawRequest(
+    10_000,
+    `POST ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: ${RELAY_BODY_MAX + 1}\r\n\r\n`
+  );
 
 // ── The run ──────────────────────────────────────────────────────────────────
 let stripe = "";
@@ -779,8 +812,8 @@ try {
 
   // ── 3: the listener's edges ───────────────────────────────────────────────
   await section("3: the receiver answers one path", async () => {
-    const unending = await unendingChunked(path(generic));
-    const declared = await declaredOver(path(generic));
+    const unending = statusLine(await unendingChunked(path(generic)));
+    const declared = statusLine(await declaredOver(path(generic)));
     check(
       "3: 1 MiB + 1 is 413 while the body is still coming (chunked, never ended), and a declared 1 MiB + 1 is 413 before any byte",
       unending.includes(" 413") && declared.includes(" 413"),
@@ -831,19 +864,35 @@ try {
       projectId,
     });
     const credential = await credentialOf(session);
-    const door = (args: object) =>
-      fetch(`${fleet.base}/api/delegation/call/${session}`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${credential}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ name: "relay_create", arguments: args }),
-        signal: AbortSignal.timeout(180_000),
-      }).then(async (response) => ({
-        status: response.status,
-        text: await response.text(),
-      }));
+    const door = async (args: object) => {
+      const read = await readWithin(180_000, async (signal) => {
+        const response = await fetch(
+          `${fleet.base}/api/delegation/call/${session}`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${credential}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ name: "relay_create", arguments: args }),
+            signal,
+          }
+        );
+        return { status: response.status, text: await response.text() };
+      });
+      switch (read.kind) {
+        case "answered":
+          return read.value;
+        case "unanswered":
+          throw new Error(
+            `relay_create through the hub's door did not answer within ${read.after} ms (${read.reason})`
+          );
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    };
     const asked = door({
       provider: "generic",
       signature_header: "X-Asked-Signature",

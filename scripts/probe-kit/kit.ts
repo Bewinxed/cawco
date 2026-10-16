@@ -22,6 +22,7 @@ import {
   type Page,
   webkit,
 } from "playwright-core";
+import { readWithin } from "../../packages/core/src/bounded";
 import { type HeavySlot, heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
@@ -618,47 +619,58 @@ export async function open(
 export async function settle(page: Page, ms = 150): Promise<void> {
   // A finite run still going after 10s will not land (a timeline held
   // still): named, as a failure, never waited on for ever.
-  const stuck = await page.evaluate(() => {
-    const running = window
-      .kitRuns()
-      .filter(
-        (run) =>
-          run.playState === "running" &&
-          Number.isFinite(Number(run.effect?.getComputedTiming().endTime ?? 0))
+  const landed = await readWithin(10_000, () =>
+    page.evaluate(async () => {
+      await Promise.all(
+        window
+          .kitRuns()
+          .filter(
+            (run) =>
+              run.playState === "running" &&
+              Number.isFinite(
+                Number(run.effect?.getComputedTiming().endTime ?? 0)
+              )
+          )
+          .map((run) => run.finished.catch(() => undefined))
       );
-    return Promise.race([
-      Promise.all(
-        running.map((run) => run.finished.catch(() => undefined))
-      ).then(() => [] as string[]),
-      new Promise<string[]>((done) =>
-        setTimeout(
-          () =>
-            done(
-              running
-                .filter((run) => run.playState === "running")
-                .map((run) => {
-                  const target = (run.effect as KeyframeEffect | null)?.target;
-                  const what =
-                    run instanceof CSSTransition
-                      ? `transition ${run.transitionProperty}`
-                      : `${run.constructor.name} ${run.id}`;
-                  // The element by its hook, when it has one; its first class otherwise.
-                  const slot = target?.getAttribute("data-slot");
-                  const name = slot
-                    ? `[data-slot="${slot}"]`
-                    : `.${String(target?.className).split(" ")[0]}`;
-                  return `${what} on ${target?.tagName.toLowerCase()}${name}`;
-                })
-            ),
-          10_000
-        )
-      ),
-    ]);
-  });
-  if (stuck.length > 0) {
-    throw new Error(
-      `animations never landed within 10s: ${stuck.slice(0, 6).join("; ")}`
-    );
+    })
+  );
+  switch (landed.kind) {
+    case "answered":
+      break;
+    case "unanswered": {
+      const stuck = await page.evaluate(() =>
+        window
+          .kitRuns()
+          .filter(
+            (run) =>
+              run.playState === "running" &&
+              Number.isFinite(
+                Number(run.effect?.getComputedTiming().endTime ?? 0)
+              )
+          )
+          .map((run) => {
+            const target = (run.effect as KeyframeEffect | null)?.target;
+            const what =
+              run instanceof CSSTransition
+                ? `transition ${run.transitionProperty}`
+                : `${run.constructor.name} ${run.id}`;
+            // The element by its hook, when it has one; its first class otherwise.
+            const slot = target?.getAttribute("data-slot");
+            const name = slot
+              ? `[data-slot="${slot}"]`
+              : `.${String(target?.className).split(" ")[0]}`;
+            return `${what} on ${target?.tagName.toLowerCase()}${name}`;
+          })
+      );
+      throw new Error(
+        `animations never landed within ${landed.after} ms: ${stuck.slice(0, 6).join("; ")}`
+      );
+    }
+    default: {
+      const unhandled: never = landed;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
   await page.waitForTimeout(ms);
 }

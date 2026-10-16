@@ -39,6 +39,7 @@
  */
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../packages/core/src/bounded";
 import { ensureDeps } from "./lib/deps";
 import type { Reply, Seen } from "./scratch-fleet";
 
@@ -310,24 +311,39 @@ const home = fleet.env.HOME as string;
 
 /** A request to the hub, answered with its status and body. */
 const hub = async (method: string, path: string, body?: unknown) => {
-  const response = await fetch(`${fleet.base}${path}`, {
-    method,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-    signal: AbortSignal.timeout(300_000),
+  const read = await readWithin(300_000, async (signal) => {
+    const response = await fetch(`${fleet.base}${path}`, {
+      method,
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+      signal,
+    });
+    return { status: response.status, raw: await response.text() };
   });
-  const raw = await response.text();
-  let json: unknown = raw;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    // a sentence
+  switch (read.kind) {
+    case "answered": {
+      const { status, raw } = read.value;
+      let json: unknown = raw;
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        // a sentence
+      }
+      return { status, body: json, raw };
+    }
+    case "unanswered":
+      throw new Error(
+        `${method} ${path}: the hub did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return { status: response.status, body: json, raw };
 };
 const turn = (projectId: string, on: boolean, initiated?: "finish" | "stop") =>
   hub("PATCH", `/api/projects/${projectId}/caw`, {

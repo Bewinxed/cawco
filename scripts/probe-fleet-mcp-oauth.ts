@@ -32,6 +32,7 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
 import { ensureDeps } from "./lib/deps";
 
@@ -235,22 +236,36 @@ const fleet = await scratchFleet({
 });
 
 const send = async (method: string, path: string, body?: unknown) => {
-  const response = await fetch(`${fleet.base}${path}`, {
-    method,
-    redirect: "manual",
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-    signal: AbortSignal.timeout(60_000),
+  const read = await readWithin(60_000, async (signal) => {
+    const response = await fetch(`${fleet.base}${path}`, {
+      method,
+      redirect: "manual",
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+      signal,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`${method} ${path}: ${response.status} ${text}`);
+    }
+    return JSON.parse(text) as unknown;
   });
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`${method} ${path}: ${response.status} ${text}`);
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `${method} ${path}: the hub did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return JSON.parse(text) as unknown;
 };
 
 interface McpRow {
