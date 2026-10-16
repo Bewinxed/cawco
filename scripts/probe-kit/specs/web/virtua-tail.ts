@@ -279,11 +279,20 @@ const spec: Spec = {
       misses.length === 0,
       `${measured} wheels measured${misses.length ? `; off: ${misses.slice(0, 8).join("; ")}` : ""}`
     );
-    const up = (await watched(page)).gap;
+    const { gap: up, gaps } = await watched(page);
     kit.check(
       "no blank stretch in view while paging up",
       up.px <= 4,
-      `widest ${up.px.toFixed(1)}px${up.where ? `, ${up.where}` : ""}`
+      `widest ${up.px.toFixed(1)}px${up.where ? `, ${up.where}` : ""}${
+        gaps.length
+          ? `; each frame with one (ms, px, scrollTop, where): ${gaps
+              .map(
+                ([at, px, top, where]) =>
+                  `${at.toFixed(0)} ${px.toFixed(0)} ${top.toFixed(0)} ${where}`
+              )
+              .join(" | ")}`
+          : ""
+      }`
     );
 
     // Jump to latest.

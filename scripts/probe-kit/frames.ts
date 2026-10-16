@@ -137,12 +137,22 @@ export function watch(): void {
       kit.tasks.push([entry.startTime, entry.duration]);
     }
   }).observe({ type: "longtask", buffered: true });
-  /** The widest stretch of the view the list's drawn items leave blank, and where. */
+  /**
+   * The widest stretch of the view the list's drawn items leave blank, and
+   * where. An item under `visibility: hidden` (one virtua has yet to
+   * measure) draws nothing there, so it leaves its stretch blank. A list
+   * not yet painted (the transcript's reveal holds its box unpainted until
+   * every row in view is measured) shows no stretch of itself at all.
+   */
   const blank = (container: HTMLElement, view: DOMRect) => {
+    if (getComputedStyle(container).visibility === "hidden") {
+      return { widest: 0, where: "" };
+    }
     const list = container.getBoundingClientRect();
     const from = Math.max(view.top, list.top);
     const to = Math.min(view.bottom, list.bottom);
     const spans = [...container.children]
+      .filter((item) => getComputedStyle(item).visibility !== "hidden")
       .map((item) => ({
         rect: item.getBoundingClientRect(),
         row: item.querySelector<HTMLElement>("[data-row]")?.dataset.row ?? "?",

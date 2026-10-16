@@ -826,6 +826,70 @@ function noteInputToShown(
   }
 }
 
+/**
+ * A stream's script by self time, and the layouts script forced after its
+ * frame's own layout, in the
+ * observers' step (a ResizeObserver's call, where virtua writes the list's
+ * new height and the transcript's pin reads it), by the script that forced
+ * them, with how many of their frames the frame laid out again after them.
+ * None again, and each was the layout the frame owed the writes made in
+ * that step, paid where it was read; the frames that laid out twice with
+ * no script forcing it are counted beside them, for what that step's
+ * writes cost the frame when nothing reads them.
+ */
+function noteStream(
+  kit: Kit,
+  where: string,
+  main: MainThread,
+  own: MainTask[]
+): void {
+  const [start] = main.marks;
+  const spent = main
+    .selfTime(start?.at ?? 0, Number.POSITIVE_INFINITY)
+    .slice(0, 16)
+    .map(([fn, ms]) => `${fn} ${ms.toFixed(0)}ms`)
+    .join("; ");
+  kit.note(`${where}: the script it ran, by self time: ${spent}`);
+  const by = new Map<string, { again: number; ms: number; n: number }>();
+  let twice = 0;
+  let twiceMs = 0;
+  for (const task of own) {
+    const layouts = task.passes.filter((pass) => pass.name === "Layout");
+    const framed = layouts.findIndex((pass) => pass.at === "the frame");
+    if (framed < 0) {
+      continue;
+    }
+    const after = layouts.slice(framed + 1);
+    after.forEach((pass, i) => {
+      if (pass.at === "the frame") {
+        return;
+      }
+      const who = pass.at.split(" ← ")[0] ?? pass.at;
+      const one = by.get(who) ?? { again: 0, ms: 0, n: 0 };
+      one.n += 1;
+      one.ms += pass.ms;
+      if (after.slice(i + 1).some((later) => later.at === "the frame")) {
+        one.again += 1;
+      }
+      by.set(who, one);
+    });
+    if (after.every((pass) => pass.at === "the frame") && after.length > 0) {
+      twice += 1;
+      twiceMs += after.reduce((sum, pass) => sum + pass.ms, 0);
+    }
+  }
+  const said = [...by]
+    .sort((a, b) => b[1].ms - a[1].ms)
+    .slice(0, 6)
+    .map(
+      ([who, { again, ms, n }]) =>
+        `${who}: ${n} layouts, ${ms.toFixed(0)}ms, ${again} of their frames laid out again after them`
+    );
+  kit.note(
+    `${where}: layouts forced after the frame's own (the observers' step): ${said.join("; ") || "none"}; frames laid out twice with no script forcing it: ${twice}, ${twiceMs.toFixed(0)}ms`
+  );
+}
+
 /** The slow `setAttribute` calls of the switches `press` makes, one tab at a time. */
 async function slowSetsIn(
   page: Page,
@@ -946,17 +1010,6 @@ async function measure(
       // Streaming is sampled for where its script goes, in either layout alike.
       { profile: name === "stream", restyles: true }
     );
-    if (name === "stream") {
-      const [start] = main.marks;
-      const spent = main
-        .selfTime(start?.at ?? 0, Number.POSITIVE_INFINITY)
-        .slice(0, 16)
-        .map(([fn, ms]) => `${fn} ${ms.toFixed(0)}ms`)
-        .join("; ");
-      kit.note(
-        `${mode} pane(s), stream: the script it ran, by self time: ${spent}`
-      );
-    }
     const longestOf = (tasks: MainTask[]) =>
       tasks.reduce<MainTask | null>(
         (most, task) => (most && most.cpu >= task.cpu ? most : task),
@@ -991,6 +1044,9 @@ async function measure(
       madeOf.set(task, made);
     }
     noteInputToShown(kit, `${mode} pane(s), ${name}`, own, markAt);
+    if (name === "stream") {
+      noteStream(kit, `${mode} pane(s), stream`, main, own);
+    }
     const longestSwitch = longestOf(switches);
     const whichTask = whichOf(longestSwitch, madeOf);
     const longest = longestSwitch ?? longestOf(own);
@@ -1129,8 +1185,21 @@ async function measure(
         await mouse("mousePressed", pointedAt);
         await mouse("mouseReleased", pointedAt);
       },
+      // The tab brought into its strip's view first, as a locator's click
+      // did: a tab the strip clips would take the press on whatever stands
+      // over its centre, and its pane would never show.
       reach: async (tab) => {
+        await tab.scrollIntoViewIfNeeded();
         pointedAt = await centreOf(tab);
+        const onIt = await tab.evaluate(
+          (el, at) => el.contains(document.elementFromPoint(at.x, at.y)),
+          pointedAt
+        );
+        if (!onIt) {
+          throw new Error(
+            "two-pane-perf: something stands over the centre of the tab to press"
+          );
+        }
         await mouse("mouseMoved", pointedAt);
       },
     },
