@@ -135,9 +135,32 @@ const lastMessage = (body: string): string => messageBack(body);
  */
 const SUMMARIZING = [
   "Your task is to create a detailed summary of the conversation so far",
-  "You MUST summarize the conversation above into a structured summary",
+  "Summarize only what the user and the assistant said and did",
   "You are a context summarization assistant",
 ];
+
+const HEADING = /^##\s.+$/gm;
+
+/**
+ * The `##` section headings a summarizing request's template names, each
+ * once: OpenCode takes a summary only when it fills its template ("The
+ * previous response did not fill in the required summary template … using
+ * the exact section headings from the template", its binary).
+ */
+const templateHeadings = (body: string): string[] => {
+  const texts: string[] = [];
+  const walk = (value: unknown): void => {
+    if (typeof value === "string") {
+      texts.push(value);
+    } else if (Array.isArray(value)) {
+      value.forEach(walk);
+    } else if (value && typeof value === "object") {
+      Object.values(value).forEach(walk);
+    }
+  };
+  walk(JSON.parse(body));
+  return [...new Set(texts.flatMap((text) => text.match(HEADING) ?? []))];
+};
 
 /**
  * What the hub tells a work item's session whose turn ended without
@@ -257,7 +280,15 @@ const spec: Spec = {
         if (now?.summary) {
           now.done = true;
         }
-        return say(now?.summary ?? "DOCSCOPE-SUMMARY-unasked");
+        const summary = now?.summary ?? "DOCSCOPE-SUMMARY-unasked";
+        return say(
+          [
+            ...templateHeadings(request.body).map(
+              (heading) => `${heading}\n\n${summary}`
+            ),
+            summary,
+          ].join("\n\n")
+        );
       }
       if (!request.tools) {
         return say("Probe title");
