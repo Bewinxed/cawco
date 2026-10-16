@@ -678,9 +678,11 @@ export const createIngress = ({
       .sort((a, b) => a.at - b.at)
       .map((event) => ingest(event, "poll", projectId))
       .filter(Boolean).length;
+    // The cursors this poll moved, each over its own; another repository's
+    // are dropped as `repo` changes.
     store.updateGitHubPoller(projectId, {
       repo,
-      cursors: { ...cursors, ...polled.cursors },
+      cursors: polled.cursors,
       reason: polled.problem,
       resumeAt: polled.resumeAt === null ? null : new Date(polled.resumeAt),
       polledAt: new Date(now),

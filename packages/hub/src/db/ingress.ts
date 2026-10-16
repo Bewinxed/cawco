@@ -16,6 +16,9 @@ import {
   connectorPolls,
   eventRouteKinds,
   eventRoutes,
+  type GitHubCursor,
+  type GitHubResource,
+  githubPollCursors,
   githubPollers,
   inboundEvents,
 } from "./schema";
@@ -25,7 +28,10 @@ export type InboundEventRow = typeof inboundEvents.$inferSelect;
 export type EventRouteRow = typeof eventRoutes.$inferSelect & {
   kinds: string[];
 };
-export type GitHubPollerRow = typeof githubPollers.$inferSelect;
+/** A project's GitHub poller with its resources' cursors (`github_poll_cursors`). */
+export type GitHubPollerRow = typeof githubPollers.$inferSelect & {
+  cursors: Partial<Record<GitHubResource, GitHubCursor>>;
+};
 export type ConnectorPollRow = typeof connectorPolls.$inferSelect;
 
 /** When a route last delivered an event. */
@@ -82,6 +88,11 @@ export interface IngressDb {
     id: string,
     patch: Partial<Omit<ConnectorPollRow, "id" | "createdAt">>
   ) => ConnectorPollRow | undefined;
+  /**
+   * Keeps a poll's outcome: the row's fields named, and each cursor in
+   * `cursors` over the one it had, in one transaction. A repository other
+   * than the one kept starts its cursors afresh.
+   */
   readonly updateGitHubPoller: (
     projectId: string,
     patch: Partial<Omit<GitHubPollerRow, "projectId" | "connection">>
@@ -114,6 +125,33 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
       }
     }
     return rows.map((row) => ({ ...row, kinds: kinds.get(row.id) ?? [] }));
+  };
+  /** Each poller with its resources' cursors. */
+  const withCursors = (
+    rows: (typeof githubPollers.$inferSelect)[]
+  ): GitHubPollerRow[] => {
+    const cursors = new Map<string, GitHubPollerRow["cursors"]>();
+    if (rows.length > 0) {
+      for (const { projectId, resource, ...cursor } of db
+        .select()
+        .from(githubPollCursors)
+        .where(
+          inArray(
+            githubPollCursors.projectId,
+            rows.map((row) => row.projectId)
+          )
+        )
+        .all()) {
+        cursors.set(projectId, {
+          ...cursors.get(projectId),
+          [resource]: cursor,
+        });
+      }
+    }
+    return rows.map((row) => ({
+      ...row,
+      cursors: cursors.get(row.projectId) ?? {},
+    }));
   };
   /** A route's kinds replaced by `kinds`, in the transaction `tx`. */
   const putKinds = (
@@ -247,12 +285,14 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
       db.delete(eventRoutes).where(eq(eventRoutes.id, id)).returning().all()
         .length > 0,
     githubPoller: (projectId) =>
-      db
-        .select()
-        .from(githubPollers)
-        .where(eq(githubPollers.projectId, projectId))
-        .get(),
-    githubPollers: () => db.select().from(githubPollers).all(),
+      withCursors(
+        db
+          .select()
+          .from(githubPollers)
+          .where(eq(githubPollers.projectId, projectId))
+          .all()
+      )[0],
+    githubPollers: () => withCursors(db.select().from(githubPollers).all()),
     setGitHubConnection: (projectId, connection) => {
       if (connection === null) {
         db.delete(githubPollers)
@@ -261,18 +301,54 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         return;
       }
       db.insert(githubPollers)
-        .values({ projectId, connection, repo: null, cursors: {} })
+        .values({ projectId, connection, repo: null })
         .onConflictDoUpdate({
           target: githubPollers.projectId,
           set: { connection, reason: null, resumeAt: null },
         })
         .run();
     },
-    updateGitHubPoller: (projectId, patch) => {
-      db.update(githubPollers)
-        .set(patch)
-        .where(eq(githubPollers.projectId, projectId))
-        .run();
+    updateGitHubPoller: (projectId, { cursors, ...patch }) => {
+      db.transaction((tx) => {
+        const stored = tx
+          .select({ repo: githubPollers.repo })
+          .from(githubPollers)
+          .where(eq(githubPollers.projectId, projectId))
+          .get();
+        if (!stored) {
+          return;
+        }
+        // Another repository starts its cursors afresh.
+        if (patch.repo !== undefined && patch.repo !== stored.repo) {
+          tx.delete(githubPollCursors)
+            .where(eq(githubPollCursors.projectId, projectId))
+            .run();
+        }
+        if (Object.keys(patch).length > 0) {
+          tx.update(githubPollers)
+            .set(patch)
+            .where(eq(githubPollers.projectId, projectId))
+            .run();
+        }
+        for (const [resource, cursor] of Object.entries(cursors ?? {})) {
+          if (cursor) {
+            tx.insert(githubPollCursors)
+              .values({
+                projectId,
+                resource: resource as GitHubResource,
+                ...cursor,
+              })
+              .onConflictDoUpdate({
+                target: [
+                  githubPollCursors.projectId,
+                  githubPollCursors.resource,
+                ],
+                set: cursor,
+              })
+              .run();
+          }
+        }
+      });
     },
     connectorPolls: (projectId) => {
       const query = db.select().from(connectorPolls);

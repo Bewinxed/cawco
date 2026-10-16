@@ -3358,7 +3358,8 @@ export type GitHubResource = "pulls" | "issues" | "comments" | "issueEvents";
 /**
  * A project's GitHub poller (ingress.ts, github.ts): the connection whose
  * token it polls with, the repository it last polled, and each resource's
- * cursor, so a hub restart neither re-delivers nor misses.
+ * cursor (`github_poll_cursors`), so a hub restart neither re-delivers nor
+ * misses.
  */
 export const githubPollers = sqliteTable("github_pollers", {
   projectId: text("project_id")
@@ -3368,15 +3369,29 @@ export const githubPollers = sqliteTable("github_pollers", {
   connection: text("connection").notNull(),
   /** `owner/repo` the cursors are for; another repository starts them afresh. */
   repo: text("repo"),
-  cursors: text("cursors", { mode: "json" })
-    .$type<Partial<Record<GitHubResource, GitHubCursor>>>()
-    .notNull(),
   /** Why its last poll failed, or null. */
   reason: text("reason"),
   /** GitHub's rate limit holds polls back until then. */
   resumeAt: timestamp("resume_at"),
   polledAt: timestamp("polled_at"),
 });
+
+/** One resource's cursor in a project's GitHub poller ({@link GitHubCursor}). */
+export const githubPollCursors = sqliteTable(
+  "github_poll_cursors",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => githubPollers.projectId, { onDelete: "cascade" }),
+    resource: text("resource").$type<GitHubResource>().notNull(),
+    etag: text("etag"),
+    /** The newest `updated_at` taken in, ms. */
+    since: integer("since").notNull(),
+    polls: integer("polls").notNull(),
+    notModified: integer("not_modified").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.resource] })]
+);
 
 /**
  * A connector poll (ingress.ts): one connection's read tool called on an
