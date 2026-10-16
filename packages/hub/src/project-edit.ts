@@ -1,11 +1,14 @@
 /**
  * A project's name, its Review before done, its Apple build gate
- * (apple-gate.ts) and its upstream choice (upstream.ts), changed by the
- * person (`PATCH /api/projects/:id`) or, but for the upstream choice, by its
- * Caw (`project_settings` `rename`, `set_review`, `set_apple_gate`): one
- * check and one write for all four. The upstream choice is the person's
- * alone: it is what keeps sessions, Caw among them, off other people's
- * repositories. The change reaches every
+ * (apple-gate.ts), where its work lands and its upstream choice
+ * (upstream.ts), changed by the person (`PATCH /api/projects/:id`, the
+ * project head's details tray) or, but for the upstream choice, by its Caw
+ * (`project_settings` `rename`, `set_review`, `set_apple_gate`,
+ * `set_lands`): one check and one write for all five. Where work lands is
+ * a dispatch setting, written by the dispatcher's own `configure`
+ * (`lands`), so the dispatcher looks at the project again as it changes.
+ * The upstream choice is the person's alone: it is what keeps sessions, Caw
+ * among them, off other people's repositories. The change reaches every
  * dashboard and the app at once: `projects.changed` makes each read the
  * projects again, and a review change is a change to the stages the hub
  * applies, so the project's boards read its tasks and stages again too.
@@ -13,6 +16,7 @@
  * Names are not unique: a project is known by its id, and the hub makes two
  * projects of one name as readily (`POST /api/projects`).
  */
+import { LANDS_MODES, type LandsMode } from "@cawco/core";
 import type { DbShape, ProjectRow } from "./db";
 
 /** As long as a name `POST /api/projects` takes. */
@@ -22,6 +26,8 @@ const CONTROL = /[\u0000-\u001f\u007f]/;
 
 export interface ProjectEdit {
   appleGate?: boolean;
+  /** Where its attempts land when their task says nothing. */
+  lands?: LandsMode;
   name?: string;
   review?: boolean;
   /** Its sessions may post to other repositories; null: the fleet's answer. */
@@ -57,6 +63,8 @@ export const projectName = (raw: string): string => {
 
 export interface ProjectEditsDeps {
   readonly db: Pick<DbShape, "project" | "setProjectDetails">;
+  /** Where its work lands, through the dispatch settings' own path (dispatch.ts `configure`). */
+  readonly lands: (projectId: string, lands: LandsMode) => Promise<unknown>;
   /** Every dashboard and the app read the projects again. */
   readonly projectsChanged: () => void;
   /** The project's boards read its tasks and stages again (tasks.ts `touched`). */
@@ -84,19 +92,32 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
   ) {
     change.upstreamPosts = asked.upstreamPosts;
   }
+  if (asked.lands !== undefined) {
+    if (!LANDS_MODES.includes(asked.lands)) {
+      throw new ProjectEditRefusal(
+        400,
+        `Work lands on ${LANDS_MODES.join(", ")}; ${String(asked.lands)} is none of them.`
+      );
+    }
+    if (asked.lands !== project.lands) {
+      change.lands = asked.lands;
+    }
+  }
   return change;
 };
 
 export const createProjectEdits = ({
   db,
+  lands,
   projectsChanged,
   stagesChanged,
 }: ProjectEditsDeps) => ({
   /**
-   * Checks and applies a change to a project's name, Review before done, Apple build gate and upstream choice;
-   * answers the project as it is now. Nothing asked is refused.
+   * Checks and applies a change to a project's name, Review before done,
+   * Apple build gate, landing and upstream choice; answers the project as it
+   * is now. Nothing asked is refused.
    */
-  edit(projectId: string, asked: ProjectEdit): ProjectRow {
+  async edit(projectId: string, asked: ProjectEdit): Promise<ProjectRow> {
     const project = db.project(projectId);
     if (!project) {
       throw new ProjectEditRefusal(
@@ -108,20 +129,26 @@ export const createProjectEdits = ({
       asked.name === undefined &&
       asked.review === undefined &&
       asked.appleGate === undefined &&
+      asked.lands === undefined &&
       asked.upstreamPosts === undefined
     ) {
       throw new ProjectEditRefusal(
         400,
-        "Name what changes: the project's name, whether it reviews before done, whether its work waits for the iOS build, or whether its agents may post to other repositories."
+        "Name what changes: the project's name, whether it reviews before done, whether its work waits for the iOS build, where its work lands, or whether its agents may post to other repositories."
       );
     }
-    const change = changeOf(project, asked);
-    if (Object.keys(change).length === 0) {
+    const { lands: landsTo, ...details } = changeOf(project, asked);
+    if (Object.keys(details).length === 0 && landsTo === undefined) {
       return project;
     }
-    db.setProjectDetails(projectId, change);
+    if (Object.keys(details).length > 0) {
+      db.setProjectDetails(projectId, details);
+    }
+    if (landsTo !== undefined) {
+      await lands(projectId, landsTo);
+    }
     projectsChanged();
-    if (change.review !== undefined) {
+    if (details.review !== undefined) {
       stagesChanged(projectId);
     }
     return db.project(projectId) ?? project;

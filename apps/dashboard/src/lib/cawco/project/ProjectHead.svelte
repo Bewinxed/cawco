@@ -1,17 +1,32 @@
+<script lang="ts" module>
+  import { SvelteMap } from "svelte/reactivity";
+
+  /**
+   * Each project's details tray while it stands, and how many times `· N
+   * places` asked for its places. Kept past the head: on a phone a task
+   * opens as its own page, and Back finds the tray where it was (The Open
+   * Page Rule: the surface waits).
+   */
+  const standing = new SvelteMap<string, { placesAsked: number }>();
+</script>
+
 <script lang="ts">
   /**
    * The project's head (design §2 Fit, fable-lead-switch.md §3): Caw at
    * 48px on the leading edge, the project's name, and one line under it.
    * The line is where the project lives — its machine and folder, `· N
-   * places` when it has more, which lists them — and Caw's words take its
-   * place only while he has something to say: what his session is doing,
-   * his question as a link to its thread, a task that landed. Then New
+   * places` when it has more — and Caw's words take its place only while he
+   * has something to say: what his session is doing, his question as a
+   * link to its thread, a task that landed. The name is renamed where it
+   * stands; the line opens the project's details under the head
+   * (ProjectDetails), `· N places` opens them at its places. Then New
    * session, Spin off, and `⋯` holding Pick stages (while the code
-   * stages stand in), Caw's settings (CawPanel, off `⋯`: a popover on a
-   * desk, the bottom sheet on touch), Spend, Other people's repositories
-   * (the upstream choice: the fleet's answer until the project picks its
-   * own) and Forget (and, under 640px, Spin off, New task, Filter tasks…
-   * and Ask Caw for a view), each with its glyph.
+   * stages stand in), Project details…, Caw's settings (CawPanel, off `⋯`:
+   * a popover on a desk, the bottom sheet on touch), Spend, Other people's
+   * repositories (the upstream choice: the fleet's answer until the project
+   * picks its own) and Forget (and, under 640px, Spin off, New task, Filter
+   * tasks… and Ask Caw for a view), each with its glyph. One tray stands
+   * under the head at a time: the details or a forget.
    *
    * Under 640px the head carries no button but `⋯`: New session is the
    * coral "+" of the page's views bar (ViewBar), which opens its popover
@@ -24,16 +39,10 @@
    * instead (picks.md), and his slot here closes.
    */
   import { machineLabel } from "@cawco/core";
+  import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
-  import type {
-    HeldPlace,
-    Machine,
-    ProjectRow,
-  } from "#lib/cawco/client.svelte.js";
+  import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import {
-    archiveWorkspace,
     cawco,
     editProject,
     spawnSession,
@@ -65,6 +74,7 @@
     IconColumns,
     IconFilter,
     IconFork,
+    IconInfo,
     IconMore,
     IconPlus,
     IconSettings,
@@ -76,6 +86,7 @@
   import CawPanel from "./CawPanel.svelte";
   import CawSeat from "./CawSeat.svelte";
   import type { CawLead } from "./caw-lead.svelte";
+  import ProjectDetails from "./ProjectDetails.svelte";
 
   let {
     project,
@@ -136,22 +147,37 @@
   const words = $derived(lead.words);
 
   /**
-   * A held workspace's Discard asks in the places list, beside its row (The
-   * Open Page Rule); Continue opens the session its work ran in, whose next
-   * message from you carries the work on there.
+   * The project's details, under the head (ProjectDetails): open, and
+   * whether they were opened at its places (`· N places`). One tray stands
+   * under the head at a time, so a forget asked here gives way to them and
+   * they give way to a forget.
    */
-  const placeAsker = new Asker<AskHereRequest>();
-  async function askDiscard(placeId: string, held: HeldPlace, where: string) {
-    await placeAsker.ask({
-      at: placeId,
-      title: "Discard this held workspace?",
-      body: `Its clone holds ${held.holds}. Discard writes that to a carry on ${where} (in ~/.cawco/carries), then deletes the clone, its boundary and its records.`,
-      confirmLabel: "Discard",
-      destructive: true,
-      pendingLabel: "Discarding…",
-      run: () => archiveWorkspace(held.workspaceId, { discard: true }),
-    });
+  const details = $derived(standing.get(project.id) ?? null);
+  /** The line that opens them: Escape and Done hand the focus back to it. */
+  let placeLine = $state<HTMLButtonElement | null>(null);
+
+  function openDetails(atPlaces: boolean): void {
+    if (forgetHost.at === forgetAt) {
+      forgetHost.close();
+    }
+    const asked = details?.placesAsked ?? 0;
+    standing.set(project.id, { placesAsked: atPlaces ? asked + 1 : asked });
   }
+
+  function closeDetails(): void {
+    const hadFocus = document.activeElement?.closest("[data-project-details]");
+    standing.delete(project.id);
+    if (hadFocus) {
+      placeLine?.focus();
+    }
+  }
+
+  // A forget asked here: the details give way to it.
+  $effect.pre(() => {
+    if (forgetHost.at === forgetAt) {
+      untrack(() => standing.delete(project.id));
+    }
+  });
 
   /**
    * His slot opens and closes over --dur-panel on --ease-in-out as he comes
@@ -383,70 +409,36 @@
         {:else if words}
           <span class="said"><MorphText text={words.text} /></span>
         {:else}
-          {#if machine}
-            <OsMark class="os" os={machine.os} />
-          {/if}
-          <span class="place" title={place}><MorphText text={place} /></span>
+          <!-- The place is a press, as the name is: the project's details
+               unfold under the head. -->
+          <button
+            aria-expanded={details !== null}
+            class="place-press mark-line"
+            data-box
+            data-place-line
+            onclick={() => {
+              if (details) {
+                closeDetails();
+              } else {
+                openDetails(false);
+              }
+            }}
+            title="Project details"
+            type="button"
+            bind:this={placeLine}
+          >
+            {#if machine}
+              <OsMark class="os" os={machine.os} />
+            {/if}
+            <span class="place"><MorphText text={place} /></span>
+          </button>
           {#if checkouts > 1}
-            <Popover.Root>
-              <Popover.Trigger class="places press-tint"
-                >· {checkouts} places</Popover.Trigger
-              >
-              <Popover.Content align="start" class="w-80">
-                <ul class="place-list">
-                  {#each project.places as each (each.id)}
-                    {@const host = cawco.machines.find(
-                      (row) => row.machineId === each.machineId
-                    )}
-                    <li>
-                      <span class="host"
-                        >{#if each.kind === "hub"}
-                          The hub
-                        {:else if host}
-                          {machineLabel(host.hostname)}
-                        {:else}
-                          A machine not joined
-                        {/if}</span
-                      >
-                      <span class="path" title={each.path}
-                        ><bdi>{each.path}</bdi></span
-                      >
-                      {#if each.held}
-                        {@const held = each.held}
-                        <span class="holds"
-                          >Held: {held.holds} · {held.size}</span
-                        >
-                        <span class="held-acts">
-                          {#if held.instanceId}
-                            <Button
-                              href={conversationHref(
-                                held.instanceId,
-                                cawco.instanceIndex
-                              )}
-                              size="xs"
-                              variant="secondary">Continue</Button
-                            >
-                          {/if}
-                          <Button
-                            onclick={() =>
-                              askDiscard(
-                                each.id,
-                                held,
-                                host
-                                  ? machineLabel(host.hostname)
-                                  : "its machine"
-                              )}
-                            size="xs"
-                            variant="destructive">Discard</Button
-                          >
-                        </span>
-                        <AskHere asker={placeAsker} at={each.id} />
-                      {/if}
-                    </li>
-                  {/each}
-                </ul>
-              </Popover.Content>
-            </Popover.Root>
+            <button
+              class="places"
+              data-places-line
+              onclick={() => openDetails(true)}
+              type="button">· {checkouts} places</button
+            >
           {/if}
         {/if}
       </p>
@@ -617,6 +609,10 @@
             <span>Pick stages…</span>
           </DropdownMenu.Item>
         {/if}
+        <DropdownMenu.Item onSelect={() => openDetails(false)}>
+          <IconInfo />
+          <span>Project details…</span>
+        </DropdownMenu.Item>
         <DropdownMenu.Item
           onSelect={() => {
             cawOpen = true;
@@ -677,12 +673,24 @@
     </Popover.Content>
   </Popover.Root>
 {/if}
+<!-- The project's details, under the head, from where its title starts. -->
+{#if details}
+  <ProjectDetails
+    placesAsked={details.placesAsked}
+    {lead}
+    {machine}
+    onclose={closeDetails}
+    {place}
+    {project}
+  />
+{/if}
 <!-- A forget asked from `⋯`, under the head, from where its title starts. -->
 <ForgetProjectTray at={forgetAt} class="head-forget max-w-lg" />
 
 <style>
   /* The head's own leading padding, so the tray starts where its words do;
      as wide as the dialog it replaces (`max-w-lg`, set where it is drawn). */
+  /* css-scope: the forget tray is drawn by ForgetProjectTray, outside this head's markup; only this head names the class */
   :global(.head-forget) {
     --ask-indent: var(--space-7);
     --fault-indent: var(--space-7);
@@ -803,50 +811,41 @@
   .more {
     color: var(--ink-muted);
   }
-  .line :global(.places) {
+  /* The place is pressed as the name is: the same inset pulled back by its
+     margin, so its words stand where the line's do, and the hover wash. */
+  .place-press {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-inline-size: 0;
+    margin-inline: calc(var(--space-1) * -1);
+    padding-inline: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: start;
+    cursor: pointer;
+    transition: background-color var(--dur-control) var(--ease-out);
+  }
+  .places {
     flex: none;
     border: 0;
+    border-radius: var(--radius-xs);
     background: none;
     padding: 0;
     font: inherit;
     color: var(--ink-muted);
     cursor: pointer;
+    transition: background-color var(--dur-control) var(--ease-out);
   }
-  .place-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .place-list li {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-inline-size: 0;
-  }
-  .host {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .path {
-    overflow: hidden;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    direction: rtl;
-    text-align: start;
-  }
-  .holds {
-    font: var(--type-meta);
-    color: var(--ink-strong);
-  }
-  .held-acts {
-    display: flex;
-    gap: var(--space-2);
-    padding-block-start: var(--space-1);
+  @media (hover: hover) {
+    .place-press:hover,
+    .place-press[aria-expanded="true"],
+    .places:hover {
+      background: var(--surface-hover);
+    }
   }
   .acts {
     display: flex;

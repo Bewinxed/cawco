@@ -18,7 +18,8 @@
  *   No file in any place of the project changes; a project with a
  *   repository already, or one another project has, is refused.
  * - `set_lands`: where the project's attempts land when their task says
- *   nothing, as the dispatch settings set it (dispatch.ts `configure`).
+ *   nothing, through the person's own edit (project-edit.ts), which writes
+ *   it with the dispatch settings (dispatch.ts `configure`).
  * - `set_runs_on`: where the project's attempts run when their task says
  *   nothing (runs-on.ts): a machine or a capability like `apple`, or null
  *   for any machine; through the same dispatch settings.
@@ -160,10 +161,11 @@ export interface ProjectSettingsDeps {
     DbShape,
     "listAgents" | "project" | "projectByRemote" | "setProjectRemote"
   >;
-  /** The project's name and Review before done, through the person's own edit (project-edit.ts). */
-  readonly edit: (projectId: string, change: ProjectEdit) => ProjectRow;
-  /** The project's default landing, through the dispatch settings' own path. */
-  readonly lands: (projectId: string, lands: ProjectLands) => Promise<unknown>;
+  /**
+   * The project's name, Review before done, Apple build gate and default
+   * landing, through the person's own edit (project-edit.ts).
+   */
+  readonly edit: (projectId: string, change: ProjectEdit) => Promise<unknown>;
   /** Notes what happened in the thread Caw's turn answers (caw.ts `askThread`, `notice`). */
   readonly note: (actor: InstanceRow, note: ThreadNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
@@ -180,7 +182,6 @@ export const createProjectSettings = ({
   connections,
   db,
   edit,
-  lands,
   note,
   publish,
   runsOn,
@@ -330,13 +331,13 @@ export const createProjectSettings = ({
         db.setProjectRemote(project.id, `github.com/${change.github}`);
         break;
       case "rename":
-        edit(project.id, { name: change.name });
+        await edit(project.id, { name: change.name });
         break;
       case "set_review":
-        edit(project.id, { review: change.review });
+        await edit(project.id, { review: change.review });
         break;
       case "set_apple_gate":
-        edit(project.id, { appleGate: change.appleGate });
+        await edit(project.id, { appleGate: change.appleGate });
         break;
       case "create_repo": {
         // A publish links what it made.
@@ -352,7 +353,7 @@ export const createProjectSettings = ({
         await runsOn(project.id, change.runsOn);
         break;
       default:
-        await lands(project.id, change.lands);
+        await edit(project.id, { lands: change.lands });
     }
     return [projectSettingWords(change)];
   };

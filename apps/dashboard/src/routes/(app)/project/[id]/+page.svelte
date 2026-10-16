@@ -1010,6 +1010,22 @@
     });
   });
 
+  // Another hand flipped Caw (another dashboard, the app): the project row the
+  // hub's `projects.changed` brings says where he stands, and his view is
+  // read again, so every switch on him says the same.
+  let cawSeen: boolean | undefined;
+  $effect(() => {
+    const on = project?.caw;
+    if (cawSeen !== undefined && on !== undefined && on !== cawSeen) {
+      untrack(() => {
+        if (lead.view && lead.view.on !== on && !lead.moving) {
+          lead.read();
+        }
+      });
+    }
+    cawSeen = on;
+  });
+
   // Another hand changed the tasks (Caw filed one, an attempt moved one): the
   // hub says so, and the list is read again.
   let changesSeen = -1;

@@ -17033,6 +17033,7 @@ export const createServer = (
     },
     fleetChoicesSet: () => Boolean(db.getSupervisorConfig()?.choicesSetAt),
     upstreamAnswered: () => db.upstreamPosts() !== null,
+    projectsChanged,
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
@@ -17735,10 +17736,12 @@ export const createServer = (
   });
   // The stage engine's one door for a `by: action` move (tasks.ts).
   actionMoves = actions.actionMove;
-  // A project's name and Review before done: the person's PATCH and Caw's
-  // project_settings both change them here (project-edit.ts).
+  // A project's name, Review before done, Apple build gate and where its work
+  // lands: the person's PATCH and Caw's project_settings both change them
+  // here (project-edit.ts), its landing through the dispatcher's own write.
   const projectEdits = createProjectEdits({
     db,
+    lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
     projectsChanged,
     stagesChanged: (projectId) => tasks.touched(projectId),
   });
@@ -17750,7 +17753,6 @@ export const createServer = (
     connections,
     db,
     edit: (projectId, change) => projectEdits.edit(projectId, change),
-    lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
     runsOn: (projectId, runsOn) => dispatcher.configure(projectId, { runsOn }),
     publish: createRepoPublish({
       bare: (projectId) => bareRepoPath(GIT_ROOT, projectId),
@@ -22752,9 +22754,9 @@ export const createServer = (
         }
       )
       // The person's own edit of a project: its name, whether it reviews
-      // before done, its Apple build gate and its upstream choice
-      // (project-edit.ts). Every dashboard and the app hear it at
-      // once (`projects.changed`; a review change, `tasks.changed` too).
+      // before done, its Apple build gate, where its work lands and its
+      // upstream choice (project-edit.ts). Every dashboard and the app hear
+      // it at once (`projects.changed`; a review change, `tasks.changed` too).
       .patch(
         "/api/projects/:id",
         {
@@ -22762,13 +22764,14 @@ export const createServer = (
             name: t.Optional(t.String({ maxLength: 2000 })),
             review: t.Optional(t.Boolean()),
             appleGate: t.Optional(t.Boolean()),
+            lands: t.Optional(LANDS),
             // Null: the fleet's answer (upstream.ts).
             upstreamPosts: t.Optional(t.Union([t.Boolean(), t.Null()])),
           }),
         },
-        ({ params, body, status }) => {
+        async ({ params, body, status }) => {
           try {
-            const project = projectEdits.edit(params.id, body);
+            const project = await projectEdits.edit(params.id, body);
             return { ...projectOut(project), cap: caps.capOf(project) };
           } catch (error) {
             if (error instanceof ProjectEditRefusal) {

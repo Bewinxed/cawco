@@ -211,6 +211,7 @@ export const measureRoles = (): RoleSize[] => {
         leadHome: () => Promise.resolve(undefined),
         makeNote: () => Promise.reject(new Error("measuring")),
         online: () => false,
+        projectsChanged: () => undefined,
         publish: () => undefined,
         send: () => false,
         stops: { running: () => [], stop: () => undefined },
@@ -288,10 +289,7 @@ export const measureRoles = (): RoleSize[] => {
       ask: () => Promise.reject(new Error("measuring")),
       connections: {} as never,
       db: {} as never,
-      edit: () => {
-        throw new Error("measuring");
-      },
-      lands: () => Promise.reject(new Error("measuring")),
+      edit: () => Promise.reject(new Error("measuring")),
       note: () => undefined,
       publish: {} as never,
       runsOn: () => Promise.reject(new Error("measuring")),

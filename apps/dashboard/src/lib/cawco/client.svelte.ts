@@ -36,6 +36,7 @@ import type {
   HarnessCapabilities,
   HarnessKind,
   InstanceRow,
+  LandsMode,
   McpServerStatus,
   ModelInfo,
   MoveJob,
@@ -286,6 +287,8 @@ export interface ProjectRow {
   caw: boolean;
   createdAt: string;
   id: string;
+  /** Where its attempts land when their task says nothing. */
+  lands: LandsMode;
   name: string;
   places: ProjectPlace[];
   /** Its primary checkout's id; null while it has none (a New project before its place is picked). */
@@ -5263,8 +5266,8 @@ export async function renameInstance(
 
 /**
  * The person's own edit of a project: its name, its Review before done, its
- * Apple build gate, or its upstream choice, null for the fleet's
- * (`PATCH /api/projects/:id`). The answer lands in the
+ * Apple build gate, where its work lands, or its upstream choice, null for
+ * the fleet's (`PATCH /api/projects/:id`). The answer lands in the
  * projects at once; the hub's `projects.changed` brings it to every other
  * dashboard and the app. Throws the refusal, in the hub's words.
  */
@@ -5272,6 +5275,7 @@ export async function editProject(
   projectId: string,
   change: {
     appleGate?: boolean;
+    lands?: LandsMode;
     name?: string;
     review?: boolean;
     upstreamPosts?: boolean | null;
@@ -5289,12 +5293,68 @@ export async function editProject(
     );
   }
   const row = (await response.json()) as ProjectRow;
+  keepProject(row);
+  return row;
+}
+
+/** A project as the hub just answered it, in the projects at once. */
+function keepProject(row: ProjectRow): void {
   state.projects = reconcileRows(
     state.projects,
     state.projects.map((each) => (each.id === row.id ? row : each)),
     (each) => each.id
   );
+}
+
+/**
+ * Another checkout of the project's repository, named by hand: a machine
+ * and an absolute folder on it (`POST /api/projects/:id/places`). Throws
+ * the refusal in the hub's words; the project as it stands lands at once.
+ */
+export async function addProjectPlace(
+  projectId: string,
+  machineId: string,
+  path: string
+): Promise<ProjectRow> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/places`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ machineId, path }),
+    }
+  );
+  if (!response.ok) {
+    throw await refusalOf(
+      response,
+      `Not added: the hub answered ${response.status}.`
+    );
+  }
+  const row = (await response.json()) as ProjectRow;
+  keepProject(row);
   return row;
+}
+
+/**
+ * A place the project no longer counts (`DELETE /api/projects/:id/places/:placeId`).
+ * Its folder stays on disk. The hub refuses the primary checkout and the
+ * project's folder on the hub (409), in its words, thrown here.
+ */
+export async function removeProjectPlace(
+  projectId: string,
+  placeId: string
+): Promise<void> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/places/${encodeURIComponent(placeId)}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    throw await refusalOf(
+      response,
+      `Not removed: the hub answered ${response.status}.`
+    );
+  }
+  await readProjects();
 }
 
 /**

@@ -111,7 +111,6 @@ import type { TaskComment } from "./task-file";
 import {
   BUDGET,
   hubActor,
-  LANDS,
   onFrontier,
   type TaskActor,
   type TaskEvent,
@@ -2008,13 +2007,14 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
         return answer(error);
       }
     })
+    // Where a project's work lands is changed with its other details
+    // (`PATCH /api/projects/:id`, project-edit.ts), which every dashboard hears.
     .patch(
       "/api/projects/:id/dispatch",
       {
         body: t.Object({
           budget: t.Optional(t.Nullable(BUDGET)),
           dispatch: t.Optional(t.Boolean()),
-          lands: t.Optional(LANDS),
           maxAttempts: t.Optional(t.Integer()),
           reviewLimit: t.Optional(t.Integer()),
           runsOn: t.Optional(t.Nullable(t.String())),

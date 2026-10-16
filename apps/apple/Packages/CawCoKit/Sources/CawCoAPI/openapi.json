@@ -7270,15 +7270,6 @@
                   "dispatch": {
                     "type": "boolean"
                   },
-                  "lands": {
-                    "type": "string",
-                    "enum": [
-                      "main",
-                      "branch",
-                      "pr",
-                      "none"
-                    ]
-                  },
                   "maxAttempts": {
                     "type": "integer"
                   },
@@ -20841,6 +20832,15 @@
                   },
                   "appleGate": {
                     "type": "boolean"
+                  },
+                  "lands": {
+                    "type": "string",
+                    "enum": [
+                      "main",
+                      "branch",
+                      "pr",
+                      "none"
+                    ]
                   },
                   "upstreamPosts": {
                     "type": [

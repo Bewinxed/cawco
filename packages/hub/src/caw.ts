@@ -573,6 +573,8 @@ export interface CawDeps {
   ) => Promise<{ sha: string }>;
   /** Whether a machine is connected now; without one, whether any is. */
   readonly online: (machineId?: string) => boolean;
+  /** Every dashboard and the app read the projects again: his switch, harness or model moved. */
+  readonly projectsChanged: () => void;
   /**
    * Tells every open dashboard a thread changed, or (`project.stop`) that his
    * turn an event started stopped as he was turned off (the ledger's
@@ -640,6 +642,7 @@ export const createCaw = ({
   leadHome,
   makeNote,
   online,
+  projectsChanged,
   publish,
   refreshPlace,
   send,
@@ -2172,6 +2175,11 @@ export const createCaw = ({
         cawModel: model,
         ...(harness ? { cawHarness: harness } : {}),
       });
+      // Every dashboard's switch says where he stands now, not only the one
+      // that flipped it.
+      if (on !== project.caw || moved || rehomed) {
+        projectsChanged();
+      }
       return view(projectId);
     },
 
