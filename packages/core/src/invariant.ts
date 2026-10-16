@@ -48,6 +48,34 @@ export const LAWS = {
    */
   "register-spawned-nothing":
     "An agent's first register is sent before any harness probe has started.",
+  /**
+   * At the agent, on boundary.ts's beat (`judgesAnswer`): a workspace a
+   * session's process runs in has a judge its hook names, of this build,
+   * answering, whatever became of that session's attach (dad89261b).
+   *
+   * Born red: boundary.ts `judgesAnswer` records its line.
+   */
+  "live-workspace-judge-answers":
+    "Every workspace a session's process runs in has a judge of this build answering its hook.",
+  /**
+   * At the hub, where a Caw ask is sent to the dashboards: the ask is in the
+   * hub's store (`pending`) before any frame about it goes, so an answer, a
+   * reload or a second screen always finds what it shows.
+   *
+   * Born red: server.ts records its line at the `permission_request` broadcast.
+   */
+  "caw-ask-stored-before-sent":
+    "A Caw ask is in the hub's store before any frame about it is sent.",
+  /**
+   * At the hub, where a send is kept for its machine and where a machine's
+   * window ends (`failOwedAway`): what waits for its machine waits only
+   * while that machine reads reconnecting (its window's deadline ahead) or
+   * paused, never while it reads offline with no deadline (dad89261b).
+   *
+   * Born red: server.ts `owedForMachine` records its line.
+   */
+  "owed-send-machine-has-deadline":
+    "A send kept for its machine waits only while that machine reads reconnecting or paused, never offline with no deadline.",
 } as const;
 
 export type Law = keyof typeof LAWS;

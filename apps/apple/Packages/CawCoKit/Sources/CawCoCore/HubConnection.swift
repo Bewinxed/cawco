@@ -1330,6 +1330,8 @@ public final class HubConnection {
             for listener in projectStopListeners.values { listener(frame) }
         case let .watchNotices(notices):
             fleet.watchNotices = notices
+        case let .lawsBroken(broken):
+            fleet.lawsBroken = broken
         case .ignored:
             break
         }

@@ -3175,6 +3175,9 @@ public enum OpenEnums {
 
     /// `#/components/schemas/Law`.
     public enum Law: OpenEnum {
+        case cawAskStoredBeforeSent
+        case liveWorkspaceJudgeAnswers
+        case owedSendMachineHasDeadline
         case registerSpawnedNothing
         case runningSessionMachineConnected
         /// A value this app does not know: a newer hub's.
@@ -3182,6 +3185,9 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "caw-ask-stored-before-sent": self = .cawAskStoredBeforeSent
+            case "live-workspace-judge-answers": self = .liveWorkspaceJudgeAnswers
+            case "owed-send-machine-has-deadline": self = .owedSendMachineHasDeadline
             case "register-spawned-nothing": self = .registerSpawnedNothing
             case "running-session-machine-connected": self = .runningSessionMachineConnected
             default: self = .unrecognized(rawValue)
@@ -3190,6 +3196,9 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .cawAskStoredBeforeSent: "caw-ask-stored-before-sent"
+            case .liveWorkspaceJudgeAnswers: "live-workspace-judge-answers"
+            case .owedSendMachineHasDeadline: "owed-send-machine-has-deadline"
             case .registerSpawnedNothing: "register-spawned-nothing"
             case .runningSessionMachineConnected: "running-session-machine-connected"
             case let .unrecognized(rawValue): rawValue
@@ -3200,7 +3209,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.registerSpawnedNothing, .runningSessionMachineConnected]
+        public static let allCases: [Self] = [.cawAskStoredBeforeSent, .liveWorkspaceJudgeAnswers, .owedSendMachineHasDeadline, .registerSpawnedNothing, .runningSessionMachineConnected]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -12,6 +12,7 @@
  */
 import {
   type InvariantBroken,
+  invariant,
   isInvariantBroken,
   LAWS,
   type Law,
@@ -56,6 +57,26 @@ export function createLaws(options: {
         }
         caught(error);
         return undefined;
+      }
+    },
+    /**
+     * Whether law `law` holds (`cond`), for a frame about to go or a timer's
+     * work: broken, it is logged and raised, and the caller sends nothing.
+     */
+    holds: (
+      cond: unknown,
+      law: Law,
+      words: string | (() => string)
+    ): boolean => {
+      try {
+        invariant(cond, law, words);
+        return true;
+      } catch (error) {
+        if (!isInvariantBroken(error)) {
+          throw error;
+        }
+        caught(error);
+        return false;
       }
     },
     /**

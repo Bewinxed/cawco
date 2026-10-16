@@ -294,6 +294,10 @@ public final class FleetStore {
     /// holds them now: read on connect, then whole on each
     /// `fleet_watch.notices` frame (client.svelte.ts `watchNotices`).
     public internal(set) var watchNotices: [Components.Schemas.FleetWatchNotice] = []
+    /// Every system law the hub caught broken since it started (core
+    /// invariant.ts), whole on each `laws.broken` frame; none until one
+    /// breaks (client.svelte.ts `lawsBroken`).
+    public internal(set) var lawsBroken: [Components.Schemas.LawBroken] = []
 
     /// Takes the hub's record, keeping what this device acknowledged that the hub has not echoed yet.
     func adopt(noticesSeen ids: [String]) {

@@ -79,10 +79,11 @@ import {
   stat,
   symlink,
 } from "node:fs/promises";
+import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
-import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
+import { invariant, WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
 import { isGitDir } from "@cawco/core/git-dir";
@@ -519,8 +520,60 @@ const writeScript = async (
   return path;
 };
 
+/** The judge's two scripts as this build runs them: the judge beside it, and the server. */
+const judgeScripts = (): Promise<[string, string]> =>
+  Promise.all([
+    scriptText(
+      "boundary/workspace-judge.ts",
+      join(import.meta.dir, "..", "..", "core", "src", JUDGE_SCRIPT)
+    ),
+    scriptText("boundary/judge.ts", join(import.meta.dir, JUDGE_SERVER)),
+  ]);
+
+/**
+ * The build a judge runs, as it says it ({@link JUDGE_BUILD_QUESTION}): its
+ * two scripts, hashed. Handed to each judge as it starts.
+ */
+const judgeBuildOf = ([judgeText, serverText]: [string, string]): string =>
+  createHash("sha256")
+    .update([serverText, judgeText].join("\0"))
+    .digest("hex")
+    .slice(0, JUDGE_FORM_LENGTH);
+
+/**
+ * The line a judge answers with the build it runs, `0` and the build
+ * (`boundary-judge.ts`); a call's JSON is never this. A judge of a build
+ * before this question refuses it, as it refuses any line it cannot read.
+ */
+const JUDGE_BUILD_QUESTION = "cawco-judge-build";
+
 /** The judges starting now, by their sessiond id: one start each, however many ask. */
 const judging = new Map<string, Promise<void>>();
+
+/**
+ * How many arms of each workspace's hook are under way ({@link armHook}),
+ * from a judge's exit to its start again too ({@link watchJudge}): its hook
+ * may name a judge that is going while it is.
+ */
+const arming = new Map<string, number>();
+
+/** Runs `arm` with workspace `id` counted as {@link arming}. */
+const whileArming = async <T>(
+  id: string,
+  arm: () => Promise<T>
+): Promise<T> => {
+  arming.set(id, (arming.get(id) ?? 0) + 1);
+  try {
+    return await arm();
+  } finally {
+    const left = (arming.get(id) ?? 1) - 1;
+    if (left > 0) {
+      arming.set(id, left);
+    } else {
+      arming.delete(id);
+    }
+  }
+};
 /** The judges whose exit this agent watches, by their sessiond id, each with the connection it watches on. */
 const watchedJudges = new Map<string, SessiondClient>();
 
@@ -546,13 +599,8 @@ const judgeFor = async (
   policy: string
 ): Promise<JudgeAt> => {
   const runtime = await bunRuntime(id);
-  const [judgeText, serverText] = await Promise.all([
-    scriptText(
-      "boundary/workspace-judge.ts",
-      join(import.meta.dir, "..", "..", "core", "src", JUDGE_SCRIPT)
-    ),
-    scriptText("boundary/judge.ts", join(import.meta.dir, JUDGE_SERVER)),
-  ]);
+  const scripts = await judgeScripts();
+  const [judgeText, serverText] = scripts;
   const server = join(stateDir(id), JUDGE_SERVER);
   const handed = [
     hook,
@@ -598,7 +646,8 @@ const judgeFor = async (
       }
       await client.spawnProc(procId, {
         command: runtime,
-        args: [server, socket, ...handed],
+        // Its build last: what it answers when asked which it runs.
+        args: [server, socket, ...handed, judgeBuildOf(scripts)],
         // Bun reads bunfig.toml and .env from where it starts: the state dir,
         // which nothing inside the boundary writes.
         cwd: stateDir(id),
@@ -639,21 +688,20 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
     exit: (code, signal) => {
       watchedJudges.delete(procId);
       client.unsubscribe(procId);
-      readHeld(id)
-        .then(async (held) => {
-          if (!held) {
-            return;
-          }
-          console.warn(
-            `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
-          );
-          await armHook(id, held);
-        })
-        .catch((error: unknown) => {
-          console.warn(
-            `[workspace] ${id}: its judge could not be started again: ${error instanceof Error ? error.message : String(error)}`
-          );
-        });
+      whileArming(id, async () => {
+        const held = await readHeld(id);
+        if (!held) {
+          return;
+        }
+        console.warn(
+          `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
+        );
+        await armHook(id, held);
+      }).catch((error: unknown) => {
+        console.warn(
+          `[workspace] ${id}: its judge could not be started again: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
     },
   });
 };
@@ -1075,7 +1123,13 @@ const writeWhole = (
  * (`workspacePolicy`): every harness reads it at each file tool call, so a
  * store, toolchain or account added since is in it from the next call on.
  */
-const armHook = async (
+const armHook = (
+  id: string,
+  held: Omit<Held, "hook" | "policy">
+): Promise<Held> => whileArming(id, () => armHookNow(id, held));
+
+/** {@link armHook}'s writes and starts, counted as {@link arming}. */
+const armHookNow = async (
   id: string,
   held: Omit<Held, "hook" | "policy">
 ): Promise<Held> => {
@@ -3538,11 +3592,122 @@ const sweepQuiet = async (): Promise<void> => {
   }
 };
 
+/** The judge socket a workspace's hook names ({@link hookScript}'s `$judge`). */
+const HOOK_JUDGE = /^\$judge = '((?:[^'\\]|\\.)*)';$/m;
+
+/**
+ * What the judge at `socket` answers to {@link JUDGE_BUILD_QUESTION}, word
+ * for word, or why it answered nothing: given as long as a hook gives it
+ * ({@link HOOK_LIMIT_S}).
+ */
+const judgeSays = (socket: string): Promise<string> =>
+  new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    const connection = createConnection(socket);
+    const timer = setTimeout(() => {
+      connection.destroy();
+      resolve(`nothing within ${HOOK_LIMIT_S} s`);
+    }, HOOK_LIMIT_S * 1000);
+    connection.on("connect", () => {
+      connection.write(`${JUDGE_BUILD_QUESTION}\n`);
+    });
+    connection.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
+    connection.on("end", () => {
+      clearTimeout(timer);
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    connection.on("error", (error) => {
+      clearTimeout(timer);
+      resolve(`nothing (${error.message})`);
+    });
+  });
+
+/**
+ * Whether workspace `id` is between states its hook and judge move through:
+ * its boundary starting or closing, its hook being armed, its judge starting.
+ */
+const settling = (id: string): boolean =>
+  starting.has(id) ||
+  closing.has(id) ||
+  arming.has(id) ||
+  [...judging.keys()].some((procId) => isJudgeOf(procId, id));
+
+/**
+ * Law `live-workspace-judge-answers` (core invariant.ts), on boundary.ts's
+ * beat ({@link watchQuietBoundaries}): every workspace a session's process
+ * runs in or a command is on its way into ({@link inUse}) has its hook name a
+ * judge that answers as this build's ({@link judgeBuildOf}). Its hook is
+ * read on every call that process makes, and a judge that is gone, or of
+ * another build, refuses or misjudges each one. A workspace between states
+ * ({@link settling}) is looked at on the next beat; the start's arming is
+ * waited out first.
+ *
+ * Born red, once: dad89261b^ (the start before it revived a workspace a CLI
+ * runs in with no boundary), with this check laid on, a keeper holding a
+ * process in workspace red-c-ws's clone, no boundary, and a hook naming a
+ * judge that is gone. The start left it "with none are armed when a session
+ * there starts", and the beat exited 70: "[law] Law broken:
+ * live-workspace-judge-answers. Every workspace a session's process runs in
+ * has a judge of this build answering its hook. Workspace red-c-ws has a
+ * session's process or a command in it, and its hook's judge at
+ * …/red2/c/run/gone.sock answered "nothing (connect ENOENT …)", not this
+ * build's judge (0fc17cf98658ab74)." A judge of this build, asked, answered
+ * "0\n0fc17cf98658ab74".
+ */
+const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
+  await rearmListed;
+  await Promise.all(rearming.values());
+  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  if (ids.length === 0) {
+    return;
+  }
+  const commands = await commandsNow();
+  const build = judgeBuildOf(await judgeScripts());
+  await Promise.all(
+    ids.map(async (id) => {
+      if (settling(id)) {
+        return;
+      }
+      const path =
+        (await readHeld(id).catch(() => undefined))?.path ??
+        (
+          await readRecord<{ path?: string }>(
+            join(stateDir(id), "create.json")
+          ).catch(() => undefined)
+        )?.path;
+      if (!(path && inUse(id, path, procs, commands))) {
+        return;
+      }
+      const hook = await readFile(join(stateDir(id), "hook"), "utf8").catch(
+        () => ""
+      );
+      const socket = HOOK_JUDGE.exec(hook)?.[1];
+      const said = socket ? await judgeSays(socket) : undefined;
+      if (settling(id)) {
+        return;
+      }
+      invariant(
+        said === `0\n${build}`,
+        "live-workspace-judge-answers",
+        () =>
+          `Workspace ${id} has a session's process or a command in it, and ${
+            socket
+              ? `its hook's judge at ${socket} answered ${JSON.stringify(said)}`
+              : "its hook names no judge"
+          }, not this build's judge (${build}).`
+      );
+    })
+  );
+};
+
 let quietTimer: ReturnType<typeof setInterval> | undefined;
 
 /**
  * Starts looking for quiet boundaries every {@link QUIET_SWEEP_MS}
- * ({@link sweepQuiet}), with what the daemon knows holds a workspace. Once per
+ * ({@link sweepQuiet}), with what the daemon knows holds a workspace, and
+ * then at every live workspace's judge ({@link judgesAnswer}). Once per
  * agent.
  */
 export const watchQuietBoundaries = (given: BoundaryHolders): void => {
@@ -3557,6 +3722,9 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
     }
     looking = true;
     sweepQuiet()
+      .then(async () =>
+        judgesAnswer((await keepers.held()).filter((proc) => proc.alive))
+      )
       .catch((error: unknown) => {
         console.warn(
           `[workspace] the quiet boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`

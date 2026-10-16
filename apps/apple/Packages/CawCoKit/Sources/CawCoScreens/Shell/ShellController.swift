@@ -407,6 +407,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // lands where it fell.
         view.addSubview(glassCard)
         glassCard.dismissal(in: view)
+        // Over everything else, while the hub has caught any law broken.
+        LawsBrokenShelf(hub: hub).stand(in: view)
         railEdge.maximumNumberOfTouches = 1
         // Only where the conversations' pages reach the screen's left edge,
         // with nothing over them: a phone's, and an iPad's with the rail's

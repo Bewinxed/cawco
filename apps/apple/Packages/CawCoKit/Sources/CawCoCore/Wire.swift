@@ -254,6 +254,8 @@ enum Frame {
     case projectStop(Components.Schemas.ProjectStopFrame)
     /// Every open fleet-watch notice, whole, on each change: a session fleet watch tells you about.
     case watchNotices([Components.Schemas.FleetWatchNotice])
+    /// Every system law the hub caught broken since it started, whole, on each break (core invariant.ts).
+    case lawsBroken([Components.Schemas.LawBroken])
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -301,6 +303,8 @@ enum Frame {
             self = .projectStop(frame)
         case .fleetWatch_notices(let frame):
             self = .watchNotices(frame.notices)
+        case .laws_broken(let frame):
+            self = .lawsBroken(frame.broken)
         default:
             self = .ignored
         }

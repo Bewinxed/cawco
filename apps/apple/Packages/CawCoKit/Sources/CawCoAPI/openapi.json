@@ -50247,6 +50247,9 @@
       "Law": {
         "type": "string",
         "enum": [
+          "caw-ask-stored-before-sent",
+          "live-workspace-judge-answers",
+          "owed-send-machine-has-deadline",
           "register-spawned-nothing",
           "running-session-machine-connected"
         ]

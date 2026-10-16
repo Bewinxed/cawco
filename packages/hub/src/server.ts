@@ -7073,6 +7073,10 @@ export const createServer = (
     if (agent && !owed) {
       sendFrame(agent, envelope);
     }
+    // Kept for its machine alone, not for its session or an interrupt's hold.
+    if (owed && !agent && !(kept || held)) {
+      owedForMachine(machineId, message.uuid);
+    }
     // Built after the send has gone: the machine is handed the image bytes,
     // the record a reference to them.
     const mode = sendMode(envelope.payload);
@@ -7449,16 +7453,7 @@ export const createServer = (
       return;
     }
     for (const send of db.owedSends({ machineId })) {
-      const [row] = db.getInstancesByIds([send.instanceId]);
-      // A send kept for a session at rest never waited on its machine, nor
-      // did one kept at its account's limit: it goes once the limit is over
-      // or the session has moved, its machine back by then.
-      const origin = (send.body as SentMessage | null)?.origin;
-      if (
-        db.owesSpawn(send.instanceId) ||
-        (row && keptAsleep(row)) ||
-        (origin && heldAtLimit(send.instanceId, origin))
-      ) {
+      if (!waitsOnMachine(send)) {
         continue;
       }
       if (db.takeOwedSend(send.uuid) !== undefined) {
@@ -7468,7 +7463,59 @@ export const createServer = (
         });
       }
     }
+    // Law `owed-send-machine-has-deadline`, at the window's end: the machine
+    // reads offline with no deadline now, so nothing kept for it waits on it.
+    const left = db.owedSends({ machineId }).filter(waitsOnMachine);
+    laws.holds(
+      left.length === 0,
+      "owed-send-machine-has-deadline",
+      () =>
+        `Machine ${machineId} reads offline with no deadline, and ${left.length} send(s) kept for it still wait on it: ${left.map((send) => send.uuid).join(", ")}.`
+    );
   };
+
+  /**
+   * Whether an owed send waits on its machine: not one kept for a session at
+   * rest, nor at its account's limit (it goes once the limit is over or the
+   * session has moved, its machine back by then), nor one whose start an
+   * update still holds.
+   */
+  const waitsOnMachine = (send: SentMessageRow): boolean => {
+    const [row] = db.getInstancesByIds([send.instanceId]);
+    const origin = (send.body as SentMessage | null)?.origin;
+    return !(
+      db.owesSpawn(send.instanceId) ||
+      (row && keptAsleep(row)) ||
+      (origin && heldAtLimit(send.instanceId, origin))
+    );
+  };
+
+  /**
+   * Law `owed-send-machine-has-deadline` (core invariant.ts), where a send is
+   * kept for its machine ({@link deliverToSession}): that machine reads
+   * paused, or reconnecting with its window's deadline ahead
+   * ({@link reconnectingFor}), never offline with no deadline, which nothing
+   * would ever end. Broken, the send fails as a request: it is not kept.
+   *
+   * Born red, once: dad89261b^ with this check laid on, a hub just started
+   * (its grace for every machine) and a machine last heard an hour ago; a
+   * person's send to its session: "[law] Law broken:
+   * owed-send-machine-has-deadline. … Send red-send was about to be kept for
+   * machine red-machine, which reads offline with no deadline: no socket, no
+   * reconnecting window ahead, no pause." The grace kept it while
+   * `reconnectingFor` read the machine's last word. This tree, the same
+   * run: "send red-send to red-e queued: hub", no law.
+   */
+  const owedForMachine = (machineId: string, uuid: string): void =>
+    laws.raise(() =>
+      invariant(
+        machinePause.until(machineId) !== undefined ||
+          reconnectingFor(machineId) > 0,
+        "owed-send-machine-has-deadline",
+        () =>
+          `Send ${uuid} was about to be kept for machine ${machineId}, which reads offline with no deadline: no socket, no reconnecting window ahead, no pause.`
+      )
+    );
   // A hub that just started has heard no machine yet: each gets the window a
   // machine that is updating gets, since a hub's start is most often its own
   // machine's update, which restarts that machine's agent too, so a send to
@@ -26594,7 +26641,31 @@ export const createServer = (
                   message.instanceId,
                   message.payload as TranscriptPayload
                 );
-              } else {
+              } else if (
+                // Law `caw-ask-stored-before-sent` (core invariant.ts): an ask
+                // in Caw's thread goes out only once the hub's store holds it
+                // (`pending.remember` above), so an answer, a reload and a
+                // second screen find what it shows. Broken, nothing goes.
+                // Born red, once: this tree with the ask taken out of the
+                // store just before this broadcast (no commit before ever
+                // sent one first, as 1e17e70c found), a stand-in machine's
+                // AskUserQuestion in thread red-thread: "[law] Law broken:
+                // caw-ask-stored-before-sent. … Caw's ask red-ask in thread
+                // red-thread was about to go to the dashboards, and the
+                // hub's store does not hold it."; the dashboard got
+                // laws.broken and no ask. Store kept: the ask went, no law.
+                laws.holds(
+                  !(
+                    kind === "permission_request" &&
+                    (message.payload as PermissionRequestFrame).threadId
+                  ) ||
+                    (message.requestId !== undefined &&
+                      pending.get(message.requestId) !== undefined),
+                  "caw-ask-stored-before-sent",
+                  () =>
+                    `Caw's ask ${message.requestId ?? "(with no request id)"} in thread ${(message.payload as PermissionRequestFrame).threadId} was about to go to the dashboards, and the hub's store does not hold it.`
+                )
+              ) {
                 // A parked ask goes out with its secrets hidden; the ledger
                 // keeps the call as it was asked.
                 registry.broadcast(clientCopy(message));

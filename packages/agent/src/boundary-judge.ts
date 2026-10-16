@@ -45,12 +45,20 @@ import { join } from "node:path";
 /** The judge's module; only its type is imported here, which Bun erases. */
 type Judge = typeof import("@cawco/core/workspace-judge");
 
-const [socket, hook, graceS, exec, scratch, policyFile] = process.argv.slice(2);
-if (!(socket && hook && graceS && exec && scratch && policyFile)) {
+const [socket, hook, graceS, exec, scratch, policyFile, build] =
+  process.argv.slice(2);
+if (!(socket && hook && graceS && exec && scratch && policyFile && build)) {
   throw new Error(
-    "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC SCRATCH POLICY"
+    "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC SCRATCH POLICY BUILD"
   );
 }
+
+/**
+ * The line the agent asks which build this judge runs (boundary.ts
+ * `JUDGE_BUILD_QUESTION`), answered `0` and BUILD: the agent's beat checks
+ * that every live workspace's judge is its own build's.
+ */
+const BUILD_QUESTION = "cawco-judge-build";
 
 /** The copy the agent wrote beside this script (`JUDGE_SCRIPT`). */
 const { judgeCall, readPolicy } = (await import(
@@ -66,6 +74,9 @@ const refuse = (reason: string): string => `2\n${reason}`;
 
 /** The answer to one call, as the hook's JSON input names it. */
 const answer = (text: string): string => {
+  if (text === BUILD_QUESTION) {
+    return `0\n${build}`;
+  }
   try {
     // The workspace's executor is gone when the workspace was archived.
     accessSync(exec, constants.X_OK);
