@@ -92,6 +92,7 @@ import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
+import type { MoveState } from "../moves";
 import type { StagesTemplate } from "../stages";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
@@ -349,7 +350,11 @@ export type ThreadMessageRow = typeof threadMessages.$inferSelect & {
 /** A thread as its project's list shows it: with its newest message. */
 export type ThreadListRow = ThreadRow & { last: string };
 export type ContinuationRow = typeof continuations.$inferSelect;
-export type MoveRow = typeof moves.$inferSelect;
+/** A project move as moves.ts reads it: its state whole, the machines it names put back in it. */
+export type MoveRow = Omit<
+  typeof moves.$inferSelect,
+  "state" | "sourceMachineId" | "targetMachineId" | "stopOn"
+> & { state: MoveState };
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
 /** A step's held stop (`workflow_held_stops`): when its attempt was due, why it ended, and what was decided. */
@@ -1187,6 +1192,8 @@ export interface DbShape {
   readonly moveRow: (id: string) => MoveRow | undefined;
   /** Every project move, oldest first. */
   readonly moveRows: () => MoveRow[];
+  /** The project moves that name a machine: a Cancel it has not heard, or a step on it or reading from it. */
+  readonly moveRowsOn: (machineId: string) => MoveRow[];
   /**
    * Gives the session its name. The owner's always lands; the session's own
    * (`set_title`) is refused once the owner has named it, and the answer
@@ -2341,9 +2348,9 @@ export class Db extends Context.Service<Db, DbShape>()("Db") {}
 
 /**
  * A delegate_events row as everything reads it: its date as JSON writes one,
- * and its payload paired with its kind, which the two columns cannot say.
+ * its payload paired with its kind, which the two columns cannot say, and a
+ * report's turn identity (its own columns) back in its payload.
  */
-/** A stored delegate event as the wire carries it: a report's turn identity in its payload. */
 const delegateEventOf = ({
   resultId,
   completedAt,
@@ -2358,6 +2365,36 @@ const delegateEventOf = ({
     },
     createdAt: row.createdAt.toISOString(),
   }) as DelegateEvent;
+
+/** A move's machines out of its state, as their columns keep them. */
+const moveColumnsOf = ({
+  sourceMachineId,
+  targetMachineId,
+  stopOn,
+  ...state
+}: MoveState) => ({
+  state,
+  sourceMachineId,
+  targetMachineId,
+  stopOn: stopOn ?? null,
+});
+
+/** A stored move with its machines back in its state. */
+const moveOf = ({
+  sourceMachineId,
+  targetMachineId,
+  stopOn,
+  state,
+  ...row
+}: typeof moves.$inferSelect): MoveRow => ({
+  ...row,
+  state: {
+    ...state,
+    sourceMachineId,
+    targetMachineId,
+    ...(stopOn === null ? {} : { stopOn }),
+  },
+});
 
 /** A stored rule row back into the shape the fleet and the dashboard share. */
 const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
@@ -9100,23 +9137,54 @@ const make = async (path: string): Promise<DbShape> => {
       db.select().from(continuations).orderBy(continuations.createdAt).all(),
     continuationRow: (id) =>
       db.select().from(continuations).where(eq(continuations.id, id)).get(),
-    moveRows: () => db.select().from(moves).orderBy(moves.createdAt).all(),
-    moveRow: (id) => db.select().from(moves).where(eq(moves.id, id)).get(),
-    insertMove: (row) => {
-      const now = new Date();
-      return db
-        .insert(moves)
-        .values({ ...row, createdAt: now, updatedAt: now })
-        .returning()
-        .get();
-    },
-    updateMove: (id, patch) =>
+    moveRows: () =>
+      db.select().from(moves).orderBy(moves.createdAt).all().map(moveOf),
+    moveRowsOn: (machineId) =>
       db
+        .select()
+        .from(moves)
+        .where(
+          or(
+            eq(moves.stopOn, machineId),
+            eq(moves.targetMachineId, machineId),
+            eq(moves.sourceMachineId, machineId)
+          )
+        )
+        .orderBy(moves.createdAt)
+        .all()
+        .map(moveOf),
+    moveRow: (id) => {
+      const row = db.select().from(moves).where(eq(moves.id, id)).get();
+      return row && moveOf(row);
+    },
+    insertMove: ({ state, ...row }) => {
+      const now = new Date();
+      return moveOf(
+        db
+          .insert(moves)
+          .values({
+            ...row,
+            ...moveColumnsOf(state),
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning()
+          .get()
+      );
+    },
+    updateMove: (id, { state, ...patch }) => {
+      const row = db
         .update(moves)
-        .set({ ...patch, updatedAt: new Date() })
+        .set({
+          ...patch,
+          ...(state ? moveColumnsOf(state) : {}),
+          updatedAt: new Date(),
+        })
         .where(eq(moves.id, id))
         .returning()
-        .get(),
+        .get();
+      return row && moveOf(row);
+    },
     deleteMove: (id) => {
       db.delete(moves).where(eq(moves.id, id)).run();
     },

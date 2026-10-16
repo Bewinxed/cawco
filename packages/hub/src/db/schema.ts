@@ -2902,19 +2902,39 @@ export const instanceAliases = sqliteTable("instance_aliases", {
  * was away hears how it ended, then deleted; a failed one stays until it is
  * retried or cancelled.
  */
-export const moves = sqliteTable("moves", {
-  id: text("id").primaryKey(),
-  projectId: text("project_id")
-    .notNull()
-    .references(() => projects.id, { onDelete: "cascade" }),
-  stage: text("stage").$type<MoveStage>().notNull(),
-  /** Everything the job has learned and decided, as moves.ts keeps it. */
-  state: text("state", { mode: "json" }).$type<MoveState>().notNull(),
-  /** The request as asked: the target and the spawn New session sent. */
-  request: text("request", { mode: "json" }).$type<MoveRequest>().notNull(),
-  createdAt: timestamp("created_at").notNull(),
-  updatedAt: timestamp("updated_at").notNull(),
-});
+export const moves = sqliteTable(
+  "moves",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    stage: text("stage").$type<MoveStage>().notNull(),
+    /**
+     * Everything the job has learned and decided, as moves.ts keeps it, read
+     * and written whole, but the machines it names, which are its columns.
+     */
+    state: text("state", { mode: "json" })
+      .$type<
+        Omit<MoveState, "sourceMachineId" | "targetMachineId" | "stopOn">
+      >()
+      .notNull(),
+    /** The machine the project moves from (`MoveState.sourceMachineId`). */
+    sourceMachineId: text("source_machine_id").notNull(),
+    /** The machine it moves to (`MoveState.targetMachineId`). */
+    targetMachineId: text("target_machine_id").notNull(),
+    /** A Cancel the machine running its step has not heard yet: told at its register. */
+    stopOn: text("stop_on"),
+    /** The request as asked: the target and the spawn New session sent. */
+    request: text("request", { mode: "json" }).$type<MoveRequest>().notNull(),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [
+    index("moves_machines").on(table.targetMachineId, table.sourceMachineId),
+    index("moves_stop_on").on(table.stopOn),
+  ]
+);
 
 /**
  * Phones (and iPads, Macs) the iOS app registered for pushes (push.ts). Keyed

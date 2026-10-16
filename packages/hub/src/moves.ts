@@ -1488,7 +1488,7 @@ export const createMoves = (deps: MovesDeps) => {
 
   /** A machine registered: the jobs waiting on it go on, and a Cancel it missed reaches it. */
   const machineBack = (machineId: string): void => {
-    for (const row of db.moveRows()) {
+    for (const row of db.moveRowsOn(machineId)) {
       if (row.stage === "cancelled" && row.state.stopOn === machineId) {
         detach(
           deps.call(
