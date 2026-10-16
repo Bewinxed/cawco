@@ -17,7 +17,16 @@
  * module: a colour asset catalog and Tokens.swift (build-tokens-apple.ts).
  *
  *   bun run tokens
+ *   bun scripts/build-tokens.ts --check     (part of `bun run lint`)
+ *
+ * `--check` builds the same in memory and writes nothing: it fails on a
+ * value its type refuses (dtcg-validate.ts, before anything evaluates one)
+ * and on any output unlike the committed file, a source file that would
+ * settle included. Outputs are compared as `bun run tokens` leaves them
+ * formatted: JSON parsed, CSS and Swift with whitespace and numerals'
+ * trailing zeros set aside (`bun fmt` rewrites `0.010` as `0.01`).
  */
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import StyleDictionary from "style-dictionary";
 import type { TransformedToken } from "style-dictionary/types";
@@ -25,8 +34,47 @@ import {
   buildTokens,
   cssLeafName,
 } from "../../../packages/hub/src/design-tokens";
-import { colourSetsAction, swiftFormat } from "./build-tokens-apple";
+import {
+  COLOUR_CATALOG,
+  colourSetFiles,
+  colourSetsAction,
+  swiftFormat,
+} from "./build-tokens-apple";
 import { isProductToken } from "./token-groups";
+
+const CHECK = process.argv.includes("--check");
+/** The outputs unlike the committed files, in check mode. */
+const drift: string[] = [];
+const TRAILING_ZEROS = /(\d\.\d*?)0+(?!\d)/g;
+const BARE_POINT = /(\d)\.(?!\d)/g;
+const WHITESPACE = /\s+/g;
+const HEX_COLOUR = /#[0-9a-f]{3,8}\b/gi;
+/** A text output as its formatter leaves it equal to another: hex in lower case, numerals' trailing zeros and then all whitespace set aside. */
+const canonical = (text: string): string =>
+  text
+    .replace(HEX_COLOUR, (hex) => hex.toLowerCase())
+    .replace(TRAILING_ZEROS, "$1")
+    .replace(BARE_POINT, "$1")
+    .replace(WHITESPACE, "")
+    .replaceAll("'", '"');
+const sameOutput = (path: string, made: string, committed: string): boolean =>
+  path.endsWith(".json")
+    ? JSON.stringify(JSON.parse(made)) === JSON.stringify(JSON.parse(committed))
+    : canonical(made) === canonical(committed);
+
+/** Writes `content` to `path`, or in check mode holds it to the committed file. */
+async function emit(path: string, content: string): Promise<void> {
+  if (!CHECK) {
+    await Bun.write(path, content);
+    return;
+  }
+  const file = Bun.file(path);
+  if (!(await file.exists())) {
+    drift.push(`${path}: not committed`);
+  } else if (!sameOutput(path, content, await file.text())) {
+    drift.push(`${path}: unlike the committed file`);
+  }
+}
 
 const DIR = "../../design/tokens";
 const RESOLVER = "cawco.resolver.json";
@@ -53,17 +101,22 @@ const built = await buildTokens(
 );
 await Promise.all([
   ...[...built.changed].map(([path, json]) =>
-    Bun.write(join(DIR, path), `${JSON.stringify(json, null, 2)}\n`)
+    CHECK
+      ? drift.push(
+          `${join(DIR, path)}: settles to new values (run bun run tokens)`
+        )
+      : Bun.write(join(DIR, path), `${JSON.stringify(json, null, 2)}\n`)
   ),
-  Bun.write(OUT, built.css),
-  Bun.write(TYPES_OUT, built.types),
-  Bun.write(SKILL_OUT, built.css),
+  emit(OUT, built.css),
+  emit(TYPES_OUT, built.types),
+  emit(SKILL_OUT, built.css),
 ]);
 
 const sd = new StyleDictionary({
   tokens: built.system.base,
   usesDtcg: true,
-  log: { verbosity: "verbose", warnings: "error" },
+  // Check mode writes nothing, so it says no file it "built".
+  log: { verbosity: CHECK ? "silent" : "verbose", warnings: "error" },
   hooks: {
     transforms: {
       "name/css-leaf": {
@@ -86,4 +139,30 @@ const sd = new StyleDictionary({
   },
 });
 
+if (CHECK) {
+  // The Apple module's files, made as buildAllPlatforms makes them, held to the committed ones.
+  for (const { output, destination } of await sd.formatPlatform("apple")) {
+    // A destination is under the platform's buildPath already.
+    // biome-ignore lint/performance/noAwaitInLoops: one file at a time
+    await emit(destination ?? "", String(output));
+  }
+  const catalog = join(APPLE_DIR, COLOUR_CATALOG);
+  const sets = colourSetFiles(built.view, await sd.getPlatformTokens("apple"));
+  for (const [path, content] of sets) {
+    // biome-ignore lint/performance/noAwaitInLoops: one file at a time
+    await emit(join(catalog, path), content);
+  }
+  const committed = readdirSync(catalog).filter((f) => f.endsWith(".colorset"));
+  for (const set of committed) {
+    if (!sets.has(join(set, "Contents.json"))) {
+      drift.push(`${join(catalog, set)}: committed, and no token makes it`);
+    }
+  }
+  console.log(
+    drift.length === 0
+      ? `tokens: the token source conforms and every output matches the committed files (${2 + sets.size + 1} files)`
+      : `tokens: ${drift.length} output(s) unlike the committed files (run bun run tokens):\n  ${drift.join("\n  ")}`
+  );
+  process.exit(drift.length === 0 ? 0 : 1);
+}
 await sd.buildAllPlatforms();
