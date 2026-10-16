@@ -11,7 +11,7 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
-import type { Server } from "bun";
+import type { Server, WebSocketHandler } from "bun";
 import {
   closeBridge,
   reachWorkspace,
@@ -50,6 +50,113 @@ const FORWARDING_HEADERS = [
   "x-forwarded-scheme",
   "cf-visitor",
 ];
+
+/**
+ * What a dev server answers by acting on its own machine rather than serving
+ * the app: each opens a file in an editor there, or a debugger. A preview
+ * shows a running app and never lets its viewer make the previewed machine
+ * run a program or open a file, and the dev servers' own same-origin checks
+ * don't hold behind this listener, which tells every request it comes from
+ * the app's own `localhost:<port>` (Host, Origin, Referer below). So this
+ * listener, the one hop every port preview reaches its server through
+ * (from the hub, or straight to its port), refuses them:
+ * - `__open-in-editor`: Vite (`middlewares.use('/__open-in-editor',
+ *   launchEditorMiddleware())`), launch-editor-middleware's own example, and
+ *   what Astro's toolbar and Svelte's and Vue's inspectors fetch;
+ * - `__open-stack-frame-in-editor`: react-dev-utils (Create React App);
+ * - `webpack-dev-server/open-editor`: webpack-dev-server;
+ * - `__nextjs_launch-editor`, and `__nextjs_attach-nodejs-inspector`, which
+ *   opens the dev server's Node inspector: Next.js.
+ *
+ * Each is matched as path segments anywhere in the path, case-folded:
+ * connect and Express match a mount case-insensitively, and a `base` or
+ * `basePath` puts it under a prefix. A last segment matches as itself or
+ * with a `.` after it, as connect lets `/__open-in-editor.x` reach the mount.
+ */
+const MACHINE_ROUTES = [
+  ["__open-in-editor"],
+  ["__open-stack-frame-in-editor"],
+  ["webpack-dev-server", "open-editor"],
+  ["__nextjs_launch-editor"],
+  ["__nextjs_attach-nodejs-inspector"],
+];
+
+/** The machine route `pathname` names, or undefined when it names none. */
+const machineRoute = (pathname: string): string | undefined => {
+  let path = pathname;
+  try {
+    path = decodeURIComponent(pathname);
+  } catch {
+    // Not percent-encoded validly: judged as it came.
+  }
+  const segments = path.toLowerCase().split("/");
+  const named = (segment: string, name: string, last: boolean) =>
+    segment === name || (last && segment.startsWith(`${name}.`));
+  return MACHINE_ROUTES.find((route) =>
+    segments.some(
+      (_, at) =>
+        at + route.length <= segments.length &&
+        route.every((name, i) =>
+          named(segments[at + i] as string, name, i === route.length - 1)
+        )
+    )
+  )?.join("/");
+};
+
+/**
+ * The HMR custom event a dev tool answers by reading the machine's files for
+ * whoever is on the socket: Vue DevTools' server RPC (vite-plugin-vue-devtools,
+ * which Nuxt's DevTools carries too) answers `getTextAssetContent` and
+ * `getImageMeta` for any path, with no token. Vite takes custom events only
+ * on its `vite-hmr` sockets, from each frame's text or bytes alike
+ * (`JSON.parse(String(raw))`), so those sockets' frames are read, and a frame
+ * naming it is dropped; every other frame, HMR's own among them, goes on.
+ */
+const MACHINE_EVENT = "__devtools-kit-vite-messaging-event-key__";
+const HMR_PROTOCOL = "vite-hmr";
+
+/** Whether `message`, sent up a Vite HMR socket, is a custom event naming {@link MACHINE_EVENT}. */
+const machineEvent = (message: string | Buffer): boolean => {
+  try {
+    const sent = JSON.parse(String(message)) as {
+      type?: unknown;
+      event?: unknown;
+    };
+    return sent.type === "custom" && sent.event === MACHINE_EVENT;
+  } catch {
+    // Not JSON, or `null` (whose `.type` throws): no custom event.
+    return false;
+  }
+};
+
+/** The relay's socket handler, with a Vite HMR socket's {@link MACHINE_EVENT} frames dropped. */
+const listenerSocket: WebSocketHandler<PreviewSocket> = {
+  ...previewWebSocket,
+  message(socket, message) {
+    if (socket.data.protocol === HMR_PROTOCOL && machineEvent(message)) {
+      previewFailed(
+        "agent listener",
+        socket.data.instanceId,
+        `refused a ${MACHINE_EVENT} event on its HMR socket: Vue DevTools reads this machine's files for it`
+      );
+      return;
+    }
+    previewWebSocket.message(socket, message);
+  },
+};
+
+/** What a request for a machine route gets: CawCo's refusal, named as such. */
+const refusal = (route: string): Response =>
+  new Response(
+    `CawCo refused /${route}: it would open a file or a program on the machine serving this preview, and a preview only shows its app. Open the file from that machine instead.\n`,
+    {
+      status: 403,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    }
+  );
 
 /**
  * Each preview's starts and stops, one after another: a start stops the
@@ -189,7 +296,7 @@ async function start(
   const listener = Bun.serve<PreviewSocket>({
     hostname: "0.0.0.0",
     port: 0,
-    websocket: previewWebSocket,
+    websocket: listenerSocket,
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
     async fetch(request, server) {
       // `/__cawco/*` (the overlay among it) is the hub listener's own and
@@ -197,6 +304,15 @@ async function start(
       const url = new URL(request.url);
       let response: Response;
       if ("port" in source) {
+        const route = machineRoute(url.pathname);
+        if (route) {
+          previewFailed(
+            "agent listener",
+            instanceId,
+            `refused /${route}: it opens a file or a program on this machine`
+          );
+          return refusal(route);
+        }
         const headers = proxyHeaders(request.headers);
         // A preview always asks for bytes, never a cached representation.
         headers.delete("if-none-match");

@@ -28,9 +28,20 @@
  * 6. Host mode (`http://p-{port}.localhost:<proxy>`), entered with a ticket
  *    through the proxy: the socket echoes, and again once the server
  *    restarts.
+ * 7. A real Vite dev server, its `LAUNCH_EDITOR` a script that leaves a
+ *    mark, and a plugin that marks each Vue DevTools RPC frame it hears.
+ *    Straight to Vite, `/__open-in-editor?file=/etc/hostname` launches the
+ *    editor and the page's RPC frame reaches the plugin. The session's
+ *    preview then shows Vite by its port, and through it: the route answers
+ *    CawCo's 403 and launches nothing, nor do its case and suffix forms;
+ *    the page loads, its HMR socket carries its own custom events, an edit
+ *    updates it in place, `/@fs/` inside `fs.allow` answers; the RPC frame,
+ *    as the page's text and as a socket's bytes, never reaches the plugin.
  *
  *   bun scripts/probe-kit/run.ts preview-socket
  */
+import { chmod, mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { publicOrigin } from "../../../apps/dashboard/public-origin.js";
 import { crossSiteRefusal } from "../../../packages/core/src/browser-gate";
@@ -39,7 +50,7 @@ import {
   previewEnterUrl,
 } from "../../../packages/core/src/frames";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import { type Kit, ROOT, type Spec } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -214,6 +225,97 @@ const cloudflareTo = (target: string) =>
       },
     },
   });
+
+/** Vue DevTools' HMR event (vite-plugin-vue-devtools), whose RPC reads the machine's files. */
+const MACHINE_EVENT = "__devtools-kit-vite-messaging-event-key__";
+/** How long a launched editor has to leave its mark. Our call: launch-editor spawns at once. */
+const LAUNCH_MS = 2000;
+const VITE = join(ROOT, "apps/dashboard/node_modules/vite/bin/vite.js");
+
+/** The Vite app's module at `mark`: it marks the page, keeps its hot channel and every pong, and takes its own updates. */
+const viteModule = (mark: string) =>
+  `document.body.dataset.mark=${JSON.stringify(mark)};window.__hot=import.meta.hot;window.__pongs??=[];import.meta.hot.on("probe:pong",(d)=>window.__pongs.push(d));import.meta.hot.accept();`;
+
+/**
+ * A real Vite dev server on `port`, its app in `dir`: an editor script that
+ * writes each launch to `marks`, and a plugin that answers `probe:ping` with
+ * `probe:pong` and writes each {@link MACHINE_EVENT} it hears to `marks`.
+ */
+const viteOn = async (dir: string, port: number, marks: string) => {
+  await mkdir(dir, { recursive: true });
+  await Bun.write(marks, "");
+  await Bun.write(
+    join(dir, "index.html"),
+    `<!doctype html><html><head><meta charset="utf-8"><title>Vite probe</title><script>window.__navigation=Math.random()</script></head><body><script type="module" src="/main.js"></script></body></html>`
+  );
+  await Bun.write(join(dir, "main.js"), viteModule("v1"));
+  await Bun.write(
+    join(dir, "vite.config.mjs"),
+    `import { appendFileSync } from "node:fs";
+export default { plugins: [{ name: "probe", configureServer(server) {
+  server.ws.on("probe:ping", (data, client) => client.send("probe:pong", data));
+  server.ws.on(${JSON.stringify(MACHINE_EVENT)}, () => appendFileSync(${JSON.stringify(marks)}, "rpc\\n"));
+} }] };\n`
+  );
+  const editor = join(dir, "editor.sh");
+  await Bun.write(editor, `#!/bin/sh\necho "editor $*" >> ${marks}\n`);
+  await chmod(editor, 0o755);
+  const proc = Bun.spawn(
+    [
+      "node",
+      VITE,
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      "--strictPort",
+    ],
+    {
+      cwd: dir,
+      env: { ...process.env, LAUNCH_EDITOR: editor },
+      stdout: "ignore",
+      stderr: "ignore",
+    }
+  );
+  await until(
+    "Vite answering",
+    () =>
+      fetch(`http://127.0.0.1:${port}/`)
+        .then((answer) => answer.ok)
+        .catch(() => false),
+    Boolean,
+    30_000
+  );
+  return proc;
+};
+
+/** What the Vite page shows: its mark, its load, whether its hot channel is up, its pongs. */
+const vitePage = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as {
+      __hot?: object;
+      __navigation?: number;
+      __pongs?: string[];
+    };
+    return {
+      mark: document.body.dataset.mark ?? "",
+      navigation: w.__navigation ?? 0,
+      hot: !!w.__hot,
+      pongs: w.__pongs ?? [],
+    };
+  });
+
+/** The page sends `event` up its HMR socket with `data`. */
+const hotSend = (page: Page, event: string, data: string) =>
+  page.evaluate(
+    ([name, said]) =>
+      (
+        window as unknown as {
+          __hot: { send: (event: string, data: string) => void };
+        }
+      ).__hot.send(name, said),
+    [event, data] as const
+  );
 
 /** What the page's socket has heard, and how often it opened. */
 const heard = (page: Page) =>
@@ -393,6 +495,158 @@ const probe = async (kit: Kit) => {
     `host mode ${put.status}; ${origin} entered ${entered?.status()}; ${six.said}; after the restart ${sixAgain.said}; the app refused ${refused()}`
   );
   await named.context().close();
+
+  // 7. A real Vite dev server: before (straight), then through the preview,
+  // in port mode again: host mode's listener took the range's first port,
+  // so the session's port is read again.
+  await fetch(`${fleet.base}/api/preview-settings`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode: "port" }),
+  });
+  const viteOrigin = `http://127.0.0.1:${(await address()).port ?? 0}`;
+  const free = Bun.serve({ port: 0, fetch: () => new Response() });
+  const vitePort = free.port as number;
+  free.stop(true);
+  const viteDir = join(kit.out, "vite-app");
+  const marks = join(kit.out, "vite-marks.txt");
+  const vite = await viteOn(viteDir, vitePort, marks);
+  const marked = async () => (await Bun.file(marks).text()).trim();
+  const OPEN = "/__open-in-editor?file=/etc/hostname";
+  const pongOf = (page: Page, word: string) =>
+    until(
+      `the pong ${word}`,
+      async () => (await vitePage(page)).pongs.includes(word),
+      Boolean,
+      ECHO_MS
+    ).catch(() => false);
+
+  const directOpen = await fetch(`http://127.0.0.1:${vitePort}${OPEN}`);
+  await Bun.sleep(LAUNCH_MS);
+  const directPage = await kit.page("desk");
+  await directPage.goto(`http://127.0.0.1:${vitePort}/`, {
+    waitUntil: "domcontentloaded",
+  });
+  await until(
+    "the straight page's hot channel",
+    async () => (await vitePage(directPage)).hot,
+    Boolean,
+    ECHO_MS
+  );
+  await hotSend(directPage, MACHINE_EVENT, "{}");
+  await hotSend(directPage, "probe:ping", "straight");
+  const straightPong = await pongOf(directPage, "straight");
+  await directPage.context().close();
+  const straightMarks = await marked();
+  kit.check(
+    "7a: before, straight to Vite: /__open-in-editor?file=/etc/hostname launches the editor on the machine, and the page's Vue DevTools RPC frame reaches the plugin",
+    directOpen.status === 200 &&
+      straightMarks.includes("editor /etc/hostname") &&
+      straightMarks.includes("rpc") &&
+      straightPong,
+    `${OPEN} ${directOpen.status}; marks ${JSON.stringify(straightMarks)}; pong ${straightPong}`
+  );
+  await Bun.write(marks, "");
+
+  asks.set("2", {
+    name: CREATE,
+    input: { kind: "preview", name: "vite", port: vitePort },
+  });
+  await fleet.send(session, "PROBE-CALL:2");
+  await until(
+    "the Vite preview made",
+    () => answered.get("2"),
+    Boolean,
+    180_000
+  );
+  const refusedForms = await Promise.all(
+    [
+      OPEN,
+      "/__OPEN-IN-EDITOR?file=/etc/hostname",
+      "/app/__open-in-editor.x?file=/etc/hostname",
+    ].map(async (path) => {
+      const answer = await fetch(`${viteOrigin}${path}`);
+      return {
+        path,
+        status: answer.status,
+        body: (await answer.text()).trim(),
+      };
+    })
+  );
+  await Bun.sleep(LAUNCH_MS);
+  const journal = (await fleet.logs("agent"))
+    .split("\n")
+    .find((text) => text.includes("refused /__open-in-editor"));
+  const afterOpen = await marked();
+  kit.check(
+    "7b: through the preview: /__open-in-editor (and its case and suffix forms) answers CawCo's 403, launches nothing, and the agent's journal says so",
+    refusedForms.every(
+      (form) => form.status === 403 && form.body.startsWith("CawCo refused")
+    ) &&
+      !afterOpen.includes("editor") &&
+      !!journal,
+    `${refusedForms.map((form) => `${form.path} ${form.status}`).join("; ")}; body ${JSON.stringify(refusedForms[0]?.body)}; marks ${JSON.stringify(afterOpen)}; journal ${journal ?? "none"}`
+  );
+
+  const viewed = await kit.page("desk");
+  await viewed.goto(`${viteOrigin}/`, { waitUntil: "domcontentloaded" });
+  await until(
+    "the preview's hot channel",
+    async () => (await vitePage(viewed)).hot,
+    Boolean,
+    ECHO_MS
+  );
+  const loaded = await vitePage(viewed);
+  await hotSend(viewed, "probe:ping", "preview");
+  const previewPong = await pongOf(viewed, "preview");
+  const fs = await fetch(`${viteOrigin}/@fs${viteDir}/main.js`);
+  await Bun.write(join(viteDir, "main.js"), viteModule("v2"));
+  const updated = await until(
+    "the edit in place",
+    async () => (await vitePage(viewed)).mark === "v2",
+    Boolean,
+    ECHO_MS
+  ).catch(() => false);
+  const afterEdit = await vitePage(viewed);
+  kit.check(
+    "7c: through the preview: the Vite page loads, its HMR socket carries its own custom event (ping → pong), /@fs/ inside fs.allow answers 200, and an edit updates the page in place",
+    loaded.mark === "v1" &&
+      previewPong &&
+      fs.status === 200 &&
+      updated &&
+      afterEdit.navigation === loaded.navigation,
+    `mark ${loaded.mark} → ${afterEdit.mark}, same load ${afterEdit.navigation === loaded.navigation}; pong ${previewPong}; /@fs/…/main.js ${fs.status}`
+  );
+
+  await hotSend(viewed, MACHINE_EVENT, "{}");
+  const bytes = await new Promise<string>((done) => {
+    const ws = new WebSocket(`${viteOrigin.replace("http", "ws")}/`, [
+      "vite-hmr",
+    ]);
+    ws.onopen = () => {
+      ws.send(
+        new TextEncoder().encode(
+          JSON.stringify({ type: "custom", event: MACHINE_EVENT, data: {} })
+        )
+      );
+      setTimeout(() => {
+        ws.close();
+        done("sent");
+      }, 500);
+    };
+    ws.onerror = () => done("didn't open");
+  });
+  await hotSend(viewed, "probe:ping", "after");
+  const afterPong = await pongOf(viewed, "after");
+  await Bun.sleep(LAUNCH_MS);
+  const afterRpc = await marked();
+  kit.check(
+    "7d: through the preview: the Vue DevTools RPC frame, as the page's text and as a socket's bytes, never reaches the plugin, and the socket goes on carrying the page's own events",
+    !afterRpc.includes("rpc") && bytes === "sent" && afterPong,
+    `marks ${JSON.stringify(afterRpc)}; bytes socket ${bytes}; pong after ${afterPong}`
+  );
+  await viewed.context().close();
+  vite.kill();
 
   portFront.stop(true);
   hostFront.stop(true);
