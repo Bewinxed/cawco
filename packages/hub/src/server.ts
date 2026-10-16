@@ -9299,7 +9299,8 @@ export const createServer = (
       state,
       target,
       state === "open" ? previewAddress(instanceId) : null,
-      artifactIds(instanceId)
+      artifactIds(instanceId),
+      artifacts.stageFor(target.artifact.id)
     );
     streams.sequence(instanceId, frame);
     artifactSessions.refresh(instanceId);
@@ -14087,7 +14088,8 @@ export const createServer = (
               "open",
               target,
               previewAddress(instanceId),
-              artifactIds(instanceId)
+              artifactIds(instanceId),
+              artifacts.stageFor(target.artifact.id)
             )
           : null,
         session: row
@@ -14119,7 +14121,14 @@ export const createServer = (
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
     previews: [...previewTargets].map(([id, target]) =>
-      previewFrame(id, "open", target, previewAddress(id), artifactIds(id))
+      previewFrame(
+        id,
+        "open",
+        target,
+        previewAddress(id),
+        artifactIds(id),
+        artifacts.stageFor(target.artifact.id)
+      )
     ),
     handoffs: Object.fromEntries(handoffs),
     // Carried on every publish, so a dashboard follows a continuation it

@@ -1941,8 +1941,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** Keeps the stage's state (and the sheet as it reads, when read) in the sheet's doc. */
-  const writeStage = (row: ArtifactRow, state: StageState, sheet?: SheetRead) =>
+  /**
+   * Keeps the stage's state (and the sheet as it reads, when read) in the
+   * artifact's doc, and the session's preview frame, when it shows the
+   * artifact, published again with it at the same revision: a panel with no
+   * doc of its own (the app's) hears each change there, as the dashboard's
+   * pane hears it in the doc.
+   */
+  const writeStage = (
+    row: ArtifactRow,
+    state: StageState,
+    sheet?: SheetRead
+  ) => {
+    stageWritten(row, state, sheet);
+    if (deps.showing(row.instanceId) === row.id) {
+      deps.relist(row.instanceId);
+    }
+  };
+  const stageWritten = (
+    row: ArtifactRow,
+    state: StageState,
+    sheet?: SheetRead
+  ) =>
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
       const mine = sheetState(row, state);
@@ -2589,10 +2609,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * The artifact's doc as a person's view reads it (the dashboard pane's
-     * `viewOf`, artifact-doc.ts): its picks, when they were last sent, and a
-     * sheet's stage (`meta.stage`). For the app's panel, which holds no doc
-     * of its own. It is no read of the session's: its read cursor stays,
-     * and a sheet's stage is neither woken nor waited on.
+     * `viewOf`, artifact-doc.ts): its picks, and when they were last sent.
+     * For the app's panel, which holds no doc of its own (a sheet's stage
+     * reaches it on the preview frame). It is no read of the session's: its
+     * read cursor stays, and a sheet's stage is neither woken nor waited on.
      */
     viewOf: (
       instanceId: string,
@@ -2600,19 +2620,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): {
       choices: Record<string, ChoiceEntry>;
       sentAt: string | null;
-      stage: StageState | null;
     } => {
       const row = readable(sessionOf(instanceId), id);
       const doc = docs.doc(row.id);
-      const meta = doc.getMap("meta");
       return {
         choices: stateOf(doc),
-        sentAt: (meta.get("sentAt") as string | undefined) ?? null,
-        stage:
-          row.kind === "sheet"
-            ? ((meta.get("stage") as StageState | undefined) ?? null)
-            : null,
+        sentAt:
+          (doc.getMap("meta").get("sentAt") as string | undefined) ?? null,
       };
+    },
+
+    /** A sheet's stage as its doc keeps it, for its preview frame (core `PreviewFrame.stage`); null for any other artifact. */
+    stageFor: (id: string): StageState | null => {
+      const row = db.get(id);
+      return row?.kind === "sheet"
+        ? ((docs.doc(row.id).getMap("meta").get("stage") as
+            StageState | undefined) ?? null)
+        : null;
     },
 
     /**

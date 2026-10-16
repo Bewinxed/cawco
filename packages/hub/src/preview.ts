@@ -33,6 +33,7 @@ import {
   versionAssets,
   versionedFile,
 } from "@cawco/core/preview-proxy";
+import type { StageState } from "@cawco/core/stage";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { serveCanvas } from "./artifacts/canvas";
 import {
@@ -196,7 +197,9 @@ export function previewFrame(
   target: Pick<PreviewTarget, "artifact" | "revision" | "source">,
   address: PreviewAddress | null,
   /** The session's artifacts by id, newest first. */
-  artifacts: string[]
+  artifacts: string[],
+  /** A sheet's stage as its doc keeps it; none for any other kind, or before it was told. */
+  stage: StageState | null = null
 ): PreviewFrame {
   return {
     kind: "preview",
@@ -207,6 +210,7 @@ export function previewFrame(
     ...(address ?? {}),
     source: target.source,
     revision: target.revision,
+    ...(stage ? { stage } : {}),
   };
 }
 

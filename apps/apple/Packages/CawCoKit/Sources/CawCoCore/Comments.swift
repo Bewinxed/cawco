@@ -137,20 +137,14 @@ public typealias StageError = Components.Schemas.StageError
 
 public extension HubConnection {
     /// The artifact's doc as a person's view reads it (artifact-doc.ts
-    /// `viewOf`): its picks, their last send, a sheet's stage. The hub reads
-    /// the doc alone: no read of the session's (its cursor stays) and no
-    /// wake of a sheet's stage.
+    /// `viewOf`): its picks and their last send. The hub reads the doc
+    /// alone: no read of the session's (its cursor stays) and no wake of a
+    /// sheet's stage.
     private func artifactView(_ artifact: String, in instanceId: String) async throws
         -> Components.Schemas.GetApiInstancesByIdArtifactsByArtifactView200 {
         let output = try await api.instances.artifactView(.init(path: .init(id: instanceId, artifact: artifact)))
         guard case let .ok(found) = output else { throw await TaskRefusal.reading(output) }
         return try found.body.json
-    }
-
-    /// A sheet's stage as its doc keeps it (`meta.stage`), as the dashboard's
-    /// pane reads it; nil before it was ever told.
-    func sheetStage(_ artifact: String, in instanceId: String) async throws -> StageState? {
-        try await artifactView(artifact, in: instanceId).stage
     }
 
     /// Every pin on one artifact, open and resolved, and the picks the session
