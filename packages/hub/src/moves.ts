@@ -68,7 +68,7 @@ import type { HubLifetimeShape } from "./lifetime";
 export class MoveAway extends Error {
   readonly machineId: string;
   constructor(machineId: string) {
-    super(`machine ${machineId} is away`);
+    super("a machine this move needs is away");
     this.machineId = machineId;
   }
 }

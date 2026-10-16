@@ -928,6 +928,41 @@ export function namesAmong(
   );
 }
 
+/** A machine's state that keeps a request from it. */
+export type MachineFault = "offline" | "silent" | "unknown";
+
+const MACHINE_FAULT_WORDS: Record<MachineFault, string> = {
+  offline: "isn't connected. Try again once it's back.",
+  silent: "didn't answer in time. Try again in a moment.",
+  unknown: "isn't on this hub any more. Pick another machine.",
+};
+
+/**
+ * Why a machine could not take a request, as the person reads it (WORDS.md's
+ * error formula): the machine by its name, never its id; what to do. `name`
+ * is its {@link namedAmong}, undefined when the hub doesn't know the machine.
+ */
+export function machineFaultWords(
+  name: string | undefined,
+  fault: MachineFault
+): string {
+  return `${name ?? "That machine"} ${MACHINE_FAULT_WORDS[fault]}`;
+}
+
+/**
+ * A machine as a sentence names it when the hub may not know it: its
+ * {@link namedAmong} among `fleet`, else words for a stranger, never its id.
+ */
+export function machineCalled(
+  machineId: string,
+  fleet: readonly NamedMachine[]
+): string {
+  const machine = fleet.find((each) => each.machineId === machineId);
+  return machine
+    ? namedAmong(machine, fleet)
+    : "a machine this hub doesn't know";
+}
+
 /** What a daemon reports about the checkout it was started from. */
 export interface BuildInfo {
   /** Short git SHA, when the checkout is a git one. */

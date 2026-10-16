@@ -78,8 +78,8 @@ import {
   depsScript,
   handoffMarker,
   holdingWords,
+  machineCalled,
   machineLabel,
-  namedAmong,
   namesAmong,
   sizeWords,
   type WorkspaceLanding,
@@ -3241,12 +3241,12 @@ export const createWorkItems = ({
             ? discardError.message
             : String(discardError);
         throw new Error(
-          `Workspace create on machine ${machineId} failed after ${waited}s: ${reason}. Discard of workspace ${id} is pending (${pending}); it will be retried when the machine next registers.`,
+          `Workspace create on ${machineName(machineId)} failed after ${waited}s: ${reason}. Discard of workspace ${id} is pending (${pending}); it will be retried when the machine next registers.`,
           { cause: discardError }
         );
       }
       throw new Error(
-        `Workspace create on machine ${machineId} failed after ${waited}s: ${reason}. Workspace ${id} was discarded; no clone or boundary was left.`,
+        `Workspace create on ${machineName(machineId)} failed after ${waited}s: ${reason}. Workspace ${id} was discarded; no clone or boundary was left.`,
         { cause: error }
       );
     } finally {
@@ -4225,11 +4225,8 @@ export const createWorkItems = ({
   };
 
   /** A machine as a check's line names it: its hostname as the fleet shows it. */
-  const machineName = (machineId: string): string => {
-    const agents = db.listAgents();
-    const agent = agents.find((each) => each.machineId === machineId);
-    return agent ? namedAmong(agent, agents) : machineId;
-  };
+  const machineName = (machineId: string): string =>
+    machineCalled(machineId, db.listAgents());
 
   /**
    * The session's live, checked item that `finish_item` may finish; the done

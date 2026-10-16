@@ -21,7 +21,7 @@
  */
 import {
   CONTROL_PLACE_REPO,
-  namedAmong,
+  machineCalled,
   type PlaceLeftOut,
   type PlaceRepo,
   type ThreadNote,
@@ -91,11 +91,8 @@ export const placeHolding = (
     .sort((a, b) => b.path.length - a.path.length)[0];
 
 export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
-  const machineName = (machineId: string): string => {
-    const agents = db.listAgents();
-    const agent = agents.find((each) => each.machineId === machineId);
-    return agent ? namedAmong(agent, agents) : machineId;
-  };
+  const machineName = (machineId: string): string =>
+    machineCalled(machineId, db.listAgents());
 
   /** The note a made repository leaves in the project's newest conversation. */
   const noteMade = (

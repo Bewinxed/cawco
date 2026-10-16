@@ -222,6 +222,7 @@ import {
   LIMIT_REACHED,
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
+  type MachineFault,
   type MachineProviderLists,
   MCP_PLATFORMS,
   MEMORY_ROLES,
@@ -229,6 +230,8 @@ import {
   MESSAGES_READ,
   MESSAGES_STORED,
   MOVED_HERE,
+  machineCalled,
+  machineFaultWords,
   mcpRunsOn,
   memoryDocProblem,
   type NeutralSystemMessage,
@@ -1089,8 +1092,9 @@ const MACHINE_DISCONNECTED =
  * the continuation waits, and the machine's next register carries it on.
  */
 class MachineAway extends Error {
-  constructor(machineId: string) {
-    super(`machine ${machineId} is not connected`);
+  /** `words`: the hub's `machineFault`, the machine by its name. */
+  constructor(words: string) {
+    super(words);
     this.name = "MachineAway";
   }
 }
@@ -3010,7 +3014,7 @@ export const createServer = (
     if (binaryUpdateStates.get(machineId)?.phase === "installing") {
       return {
         kind: "update",
-        words: `machine ${machineId} is installing an update`,
+        words: `${machineName(machineId)} is installing an update`,
       };
     }
     const range = agentProtocols.get(machineId);
@@ -3021,7 +3025,7 @@ export const createServer = (
     ) {
       return {
         kind: "build",
-        words: `machine ${machineId} runs a CawCo build older than its hub's, which cannot start sessions for this hub until it installs the hub's build`,
+        words: `${machineName(machineId)} runs a CawCo build older than its hub's, which cannot start sessions for this hub until it installs the hub's build`,
       };
     }
     return undefined;
@@ -3157,11 +3161,20 @@ export const createServer = (
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
   };
-  /** A machine as a sentence names it (core `namedAmong`); its id when the hub knows none. */
-  const machineName = (machineId: string): string => {
+  /** A machine as a sentence names it (core `machineCalled`), never by its id. */
+  const machineName = (machineId: string): string =>
+    machineCalled(machineId, db.listAgents());
+  /**
+   * Why a machine could not take a request, as a client reads it (core
+   * `machineFaultWords`): by its name, and a machine not on this hub as
+   * `unknown` whatever the fault.
+   */
+  const machineFault = (machineId: string, fault: MachineFault): string => {
     const agents = db.listAgents();
-    const agent = agents.find((each) => each.machineId === machineId);
-    return agent ? namedAmong(agent, agents) : machineId;
+    const machine = agents.find((each) => each.machineId === machineId);
+    return machine
+      ? machineFaultWords(namedAmong(machine, agents), fault)
+      : machineFaultWords(undefined, "unknown");
   };
   /** A session as a sentence names it. */
   const sessionName = (row: {
@@ -4056,7 +4069,7 @@ export const createServer = (
       return "no such session";
     }
     if (owner.machineId !== ask.machineId) {
-      return `it belongs to ${owner.machineId}`;
+      return `it belongs to ${machineName(owner.machineId)}`;
     }
     if (!["running", "starting", "unknown"].includes(owner.status)) {
       return `the session is ${owner.status}`;
@@ -7957,7 +7970,9 @@ export const createServer = (
       harness
     );
     if (typeof response === "string") {
-      throw new Error(`The plan could not be read: machine ${response}.`);
+      throw new Error(
+        `The plan could not be read: ${machineFault(machineId, response === "offline" ? "offline" : "silent")}`
+      );
     }
     if (response.error) {
       throw new Error(String(response.error));
@@ -8979,7 +8994,7 @@ export const createServer = (
       return Promise.resolve({
         ok: false,
         down: "machine",
-        error: `machine ${target.machineId} is not connected`,
+        error: machineFault(target.machineId, "offline"),
       });
     }
     const reach = (async (): Promise<PreviewReach> => {
@@ -10672,7 +10687,7 @@ export const createServer = (
   ): void => {
     const agent = registry.agent(machineId);
     if (!agent) {
-      throw new Error(`machine ${machineId} is not connected`);
+      throw new Error(machineFault(machineId, "offline"));
     }
     const held = asked.requestId && startHold(machineId);
     if (held) {
@@ -10757,7 +10772,7 @@ export const createServer = (
     if (reply === "timeout") {
       return {
         code: 504,
-        message: `the session on ${machineId} did not start within ${SPAWN_START_TIMEOUT_MS / 1000}s`,
+        message: `the session on ${machineName(machineId)} did not start within ${SPAWN_START_TIMEOUT_MS / 1000} s`,
       };
     }
     if (!reply.ok) {
@@ -10784,7 +10799,7 @@ export const createServer = (
       throw new WorkItemRefusal(409, refusal);
     }
     if (!registry.agent(machineId)) {
-      throw new WorkItemRefusal(404, `machine ${machineId} is not connected`);
+      throw new WorkItemRefusal(404, machineFault(machineId, "offline"));
     }
     const { parentInstanceId } = peekParent(payload);
     const refused = await relaySpawn(
@@ -10821,10 +10836,10 @@ export const createServer = (
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
-      throw new MachineAway(machineId);
+      throw new MachineAway(machineFault(machineId, "offline"));
     }
     if (holdingStarts(machineId)) {
-      throw new MachineAway(machineId);
+      throw new MachineAway(machineFault(machineId, "offline"));
     }
     const named = await piDefaultFor(machineId, asked);
     if ("refusal" in named) {
@@ -10869,12 +10884,12 @@ export const createServer = (
     );
     if (reply === "timeout") {
       throw new Error(
-        `the ${payload.harness} session on ${machineId} did not start within ${SPAWN_START_TIMEOUT_MS / 1000}s`
+        `the ${payload.harness} session on ${machineName(machineId)} did not start within ${SPAWN_START_TIMEOUT_MS / 1000}s`
       );
     }
     if (!reply.ok) {
       throw reply.error === MACHINE_DISCONNECTED
-        ? new MachineAway(machineId)
+        ? new MachineAway(machineFault(machineId, "offline"))
         : new Error(reply.error ?? "the session failed to start");
     }
   };
@@ -11548,11 +11563,11 @@ export const createServer = (
       harness
     );
     if (answer === "offline") {
-      throw new Error(`machine ${machineId} is not connected`);
+      throw new Error(machineFault(machineId, "offline"));
     }
     if (answer === "timeout") {
       throw new Error(
-        `machine ${machineId} did not list its ${harness} models in time`
+        `${machineName(machineId)} didn't list its ${harness} models in time. Try again in a moment.`
       );
     }
     if (!answer.ok) {
@@ -11685,7 +11700,7 @@ export const createServer = (
     );
     if (answer === "offline" || answer === "timeout" || !answer.ok) {
       throw new Error(
-        `machine ${where.machineId} could not say when session ${where.sessionId} started: ${
+        `${machineName(where.machineId)} could not say when session ${where.sessionId} started: ${
           answer === "offline" || answer === "timeout"
             ? answer
             : (answer.error ?? "no answer")
@@ -11714,7 +11729,7 @@ export const createServer = (
     );
     if (answer === "offline" || answer === "timeout" || !answer.ok) {
       throw new Error(
-        `machine ${where.machineId} could not read git in ${where.cwd}: ${
+        `${machineName(where.machineId)} could not read git in ${where.cwd}: ${
           answer === "offline" || answer === "timeout"
             ? answer
             : (answer.error ?? "no answer")
@@ -11740,14 +11755,14 @@ export const createServer = (
       where.harness
     );
     if (answer === "offline") {
-      throw new MachineAway(where.machineId);
+      throw new MachineAway(machineFault(where.machineId, "offline"));
     }
     if (answer === "timeout") {
-      throw new Error(`machine ${where.machineId} did not answer in time`);
+      throw new Error(machineFault(where.machineId, "silent"));
     }
     if (!answer.ok) {
       throw answer.error === MACHINE_DISCONNECTED
-        ? new MachineAway(where.machineId)
+        ? new MachineAway(machineFault(where.machineId, "offline"))
         : new Error(answer.error ?? "the transcript could not be read");
     }
     return (
@@ -12114,7 +12129,7 @@ export const createServer = (
         throw new Error(`${job.prepared.source.title} is no longer recorded`);
       }
       if (!registry.agent(row.machineId)) {
-        throw new MachineAway(row.machineId);
+        throw new MachineAway(machineFault(row.machineId, "offline"));
       }
       if (cancelledContinuation(job.id)) {
         throw new Error(CONTINUATION_CANCELLED);
@@ -12331,7 +12346,7 @@ export const createServer = (
   ): void => {
     const agent = registry.agent(row.machineId);
     if (!agent) {
-      throw new MachineAway(row.machineId);
+      throw new MachineAway(machineFault(row.machineId, "offline"));
     }
     const refused =
       inFlightRefusal(row.id) ??
@@ -14337,14 +14352,14 @@ export const createServer = (
       return {
         ok: false,
         code: 404,
-        said: `machine ${machineId} is not connected`,
+        said: machineFault(machineId, "offline"),
       };
     }
     if (answer === "timeout") {
       return {
         ok: false,
         code: 504,
-        said: `machine ${machineId} did not answer`,
+        said: machineFault(machineId, "silent"),
       };
     }
     if (!answer.ok) {
@@ -14378,14 +14393,14 @@ export const createServer = (
       return {
         ok: false,
         code: 404,
-        said: `machine ${machineId} is not connected`,
+        said: machineFault(machineId, "offline"),
       };
     }
     if (answer === "timeout") {
       return {
         ok: false,
         code: 504,
-        said: `machine ${machineId} did not answer`,
+        said: machineFault(machineId, "silent"),
       };
     }
     if (!answer.ok) {
@@ -15128,7 +15143,7 @@ export const createServer = (
         instanceId
       );
       if (delivered === "offline") {
-        throw new Error(`machine ${parked.machineId} is not connected`);
+        throw new Error(machineFault(parked.machineId, "offline"));
       }
       if (delivered === "timeout") {
         throw new Error("Permission answer timeout.");
@@ -15976,13 +15991,13 @@ export const createServer = (
       return {
         fault: "offline",
         machineId,
-        message: `machine ${machineId} is not connected`,
+        message: machineFault(machineId, "offline"),
       };
     }
     if (answer === "timeout") {
       return {
         fault: "timeout",
-        message: `machine ${machineId} did not answer in time`,
+        message: machineFault(machineId, "silent"),
       };
     }
     if (!answer.ok) {
@@ -16548,7 +16563,9 @@ export const createServer = (
         (timeoutMs ?? 300_000) + run.queueMaxMs + 10_000
       );
       if (typeof response === "string") {
-        throw new Error(`Command refused: machine ${response}.`);
+        throw new Error(
+          `Command refused: ${machineFault(machineId, response === "offline" ? "offline" : "silent")}`
+        );
       }
       if (response.error) {
         throw new Error(String(response.error));
@@ -16621,7 +16638,7 @@ export const createServer = (
     const path = home.stdout.trim();
     if (home.exitCode !== 0 || !path.startsWith("/")) {
       throw new Error(
-        `${machineId} did not say where its home folder is, so Caw has no folder there: ${home.stderr.trim() || `exit ${home.exitCode}`}`
+        `${machineName(machineId)} did not say where its home folder is, so Caw has no folder there: ${home.stderr.trim() || `exit ${home.exitCode}`}`
       );
     }
     return { machineId, cwd: posix.join(path, ".cawco", "caw", projectId) };
@@ -16839,15 +16856,17 @@ export const createServer = (
         : WORKSPACE_TIMEOUT_MS;
     const answer = await callAgent(machineId, method, args, timeout);
     if (answer === "offline") {
-      throw new Error(`machine ${machineId} is not connected`);
+      throw new Error(machineFault(machineId, "offline"));
     }
     if (answer === "timeout") {
       throw new Error(
-        `machine ${machineId} did not answer ${method} within ${timeout / 1000}s`
+        `${machineName(machineId)} didn't answer ${method} within ${timeout / 1000} s. Try again in a moment.`
       );
     }
     if (!answer.ok) {
-      throw new Error(answer.error ?? `${method} failed on ${machineId}`);
+      throw new Error(
+        answer.error ?? `${method} failed on ${machineName(machineId)}`
+      );
     }
     return answer.result;
   };
@@ -17020,7 +17039,7 @@ export const createServer = (
       }
       const agent = registry.agent(envelope.machineId);
       if (!agent) {
-        throw new Error(`Machine ${envelope.machineId} is not connected.`);
+        throw new Error(machineFault(envelope.machineId, "offline"));
       }
       sendFrame(agent, envelope);
     },
@@ -18381,10 +18400,7 @@ export const createServer = (
       }
       const agent = registry.agent(row.machineId);
       if (!agent) {
-        throw new WorkItemRefusal(
-          404,
-          `machine ${row.machineId} is not connected`
-        );
+        throw new WorkItemRefusal(404, machineFault(row.machineId, "offline"));
       }
       sendFrame(agent, {
         ...envelope,
@@ -19829,7 +19845,7 @@ export const createServer = (
     if (!(registry.agent(message.machineId) && message.instanceId)) {
       sendFrame(
         ws,
-        failure(message, `machine ${message.machineId} is not connected`)
+        failure(message, machineFault(message.machineId, "offline"))
       );
       return;
     }
@@ -20041,12 +20057,13 @@ export const createServer = (
                   );
                   if (answer === "offline" || answer === "timeout") {
                     throw new Error(
-                      `Cannot check workflow skill ${name}: machine ${machineId} ${answer}.`
+                      `Cannot check workflow skill ${name}: ${machineFault(machineId, answer === "offline" ? "offline" : "silent")}`
                     );
                   }
                   if (!answer.ok) {
                     throw new Error(
-                      answer.error ?? `Cannot inspect skills on ${machineId}.`
+                      answer.error ??
+                        `Cannot inspect skills on ${machineName(machineId)}.`
                     );
                   }
                   const inspection =
@@ -20064,7 +20081,7 @@ export const createServer = (
                     )
                   ) {
                     throw new Error(
-                      `Workflow slug collides with operator-installed skill ${name} on ${machineId}.`
+                      `Workflow slug collides with operator-installed skill ${name} on ${machineName(machineId)}.`
                     );
                   }
                   const files = await callAgent(
@@ -20075,7 +20092,7 @@ export const createServer = (
                   );
                   if (files === "offline" || files === "timeout" || !files.ok) {
                     throw new Error(
-                      `Cannot verify workflow skill ${name} ownership on ${machineId}.`
+                      `Cannot verify workflow skill ${name} ownership on ${machineName(machineId)}.`
                     );
                   }
                   const markdown = (files.result as SkillFile[]).find(
@@ -20088,7 +20105,7 @@ export const createServer = (
                       .includes(`<!-- cawco-workflow:${workflowId} -->`)
                   )) {
                     throw new Error(
-                      `Workflow slug collides with operator-installed skill ${name} on ${machineId}.`
+                      `Workflow slug collides with operator-installed skill ${name} on ${machineName(machineId)}.`
                     );
                   }
                 })
@@ -20204,7 +20221,7 @@ export const createServer = (
             if (others.length > 0) {
               return status(
                 403,
-                `Machine ${caller.machineId} installs credentials for its own sessions only; not ${others.join(", ")}.`
+                `${machineName(caller.machineId)} installs credentials for its own sessions only; not ${others.join(", ")}.`
               );
             }
           }
@@ -20297,7 +20314,7 @@ export const createServer = (
         hidden,
         ({ params, status }) =>
           machineRow(params.machineId) ??
-          status(404, `No machine ${params.machineId} on this hub.`)
+          status(404, machineFault(params.machineId, "unknown"))
       )
       .post(
         "/api/instances/:id/generate-image",
@@ -20580,10 +20597,10 @@ export const createServer = (
         async ({ params, query, request, status }) => {
           const answer = await readMachineMedia(params.machineId, query.path);
           if (answer === "offline") {
-            return status(503, `machine ${params.machineId} is not connected`);
+            return status(503, machineFault(params.machineId, "offline"));
           }
           if (answer === "timeout") {
-            return status(504, `machine ${params.machineId} did not answer`);
+            return status(504, machineFault(params.machineId, "silent"));
           }
           if ("refused" in answer) {
             return status(404, answer.refused);
@@ -20740,10 +20757,10 @@ export const createServer = (
           BUSY_TIMEOUT_MS
         );
         if (answer === "offline") {
-          return status(404, `machine ${params.machineId} is not connected`);
+          return status(404, machineFault(params.machineId, "offline"));
         }
         if (answer === "timeout") {
-          return status(504, `machine ${params.machineId} did not answer`);
+          return status(504, machineFault(params.machineId, "silent"));
         }
         if (!answer.ok) {
           return status(500, answer.error ?? "the busy probe failed");
@@ -20772,7 +20789,7 @@ export const createServer = (
             UPDATE_TIMEOUT_MS
           );
           if (answer === "offline") {
-            return status(404, `machine ${params.machineId} is not connected`);
+            return status(404, machineFault(params.machineId, "offline"));
           }
           // A machine that restarts the hub as part of its update answers into a
           // socket that no longer exists, so this is not proof that nothing
@@ -20780,7 +20797,7 @@ export const createServer = (
           if (answer === "timeout") {
             return status(
               504,
-              `machine ${params.machineId} did not finish the update in time`
+              `${machineName(params.machineId)} didn't finish the update in time. Check it once it's back.`
             );
           }
           if (!answer.ok) {
@@ -20803,10 +20820,10 @@ export const createServer = (
             READ_TIMEOUT_MS
           );
           if (answer === "offline") {
-            return status(404, `machine ${params.machineId} is not connected`);
+            return status(404, machineFault(params.machineId, "offline"));
           }
           if (answer === "timeout") {
-            return status(504, `machine ${params.machineId} did not answer`);
+            return status(504, machineFault(params.machineId, "silent"));
           }
           if (!answer.ok) {
             return status(
@@ -22030,13 +22047,10 @@ export const createServer = (
               READ_TIMEOUT_MS
             );
             if (answer === "offline") {
-              return status(
-                404,
-                `machine ${body.fromMachine} is not connected`
-              );
+              return status(404, machineFault(body.fromMachine, "offline"));
             }
             if (answer === "timeout") {
-              return status(504, `machine ${body.fromMachine} did not answer`);
+              return status(504, machineFault(body.fromMachine, "silent"));
             }
             if (!answer.ok) {
               return status(
@@ -22129,10 +22143,10 @@ export const createServer = (
             READ_TIMEOUT_MS
           );
           if (answer === "offline") {
-            return status(404, `machine ${machineId} is not connected`);
+            return status(404, machineFault(machineId, "offline"));
           }
           if (answer === "timeout") {
-            return status(504, `machine ${machineId} did not answer`);
+            return status(504, machineFault(machineId, "silent"));
           }
           if (!answer.ok) {
             return status(
@@ -22222,7 +22236,7 @@ export const createServer = (
         async ({ params, body, status }) => {
           const agent = registry.agent(body.machineId);
           if (!agent) {
-            return status(404, `machine ${body.machineId} is not connected`);
+            return status(404, machineFault(body.machineId, "offline"));
           }
           const config = db.fleetConfig();
           const fleetCopy = config.skills?.find(
@@ -22239,10 +22253,10 @@ export const createServer = (
             READ_TIMEOUT_MS
           );
           if (answer === "offline") {
-            return status(404, `machine ${body.machineId} is not connected`);
+            return status(404, machineFault(body.machineId, "offline"));
           }
           if (answer === "timeout") {
-            return status(504, `machine ${body.machineId} did not answer`);
+            return status(504, machineFault(body.machineId, "silent"));
           }
           // No copy on the machine is nothing to keep; any other refusal
           // stops the push, because the copy it would destroy was not read.
@@ -22473,7 +22487,7 @@ export const createServer = (
           if (!read.copy) {
             return status(
               404,
-              `machine ${body.machineId} has no user CLAUDE.md`
+              `${machineName(body.machineId)} has no user CLAUDE.md`
             );
           }
 
@@ -22489,7 +22503,7 @@ export const createServer = (
             if (!theirs) {
               return status(
                 404,
-                `machine ${body.machineId} has no ${body.path}`
+                `${machineName(body.machineId)} has no ${body.path}`
               );
             }
 
@@ -22549,7 +22563,7 @@ export const createServer = (
         async ({ body, status }) => {
           const agent = registry.agent(body.machineId);
           if (!agent) {
-            return status(404, `machine ${body.machineId} is not connected`);
+            return status(404, machineFault(body.machineId, "offline"));
           }
 
           const config = db.fleetConfig();
@@ -22822,7 +22836,7 @@ export const createServer = (
           if (!read.copy) {
             return status(
               404,
-              `machine ${body.machineId} has no script for ${current.name}`
+              `${machineName(body.machineId)} has no script for ${current.name}`
             );
           }
 
@@ -22863,7 +22877,7 @@ export const createServer = (
         async ({ body, status }) => {
           const agent = registry.agent(body.machineId);
           if (!agent) {
-            return status(404, `machine ${body.machineId} is not connected`);
+            return status(404, machineFault(body.machineId, "offline"));
           }
 
           const config = db.fleetConfig();
@@ -22933,7 +22947,7 @@ export const createServer = (
           }
           const agent = registry.agent(body.machineId);
           if (!agent) {
-            return status(404, `machine ${body.machineId} is not connected`);
+            return status(404, machineFault(body.machineId, "offline"));
           }
           sendFleetSync(body.machineId, agent);
           publishInstances(body.machineId);
@@ -26601,7 +26615,9 @@ export const createServer = (
           // continuation waits for the machine's next register instead.
           for (const waiter of turnWaiters.values()) {
             if (waiter.machineId === machineId) {
-              waiter.reject(new MachineAway(machineId));
+              waiter.reject(
+                new MachineAway(machineFault(machineId, "offline"))
+              );
             }
           }
           // A preview outlives its machine's socket: the intent stays, without

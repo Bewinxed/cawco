@@ -32,7 +32,11 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
-import type { CommandResult, InstanceRow } from "@cawco/core";
+import {
+  type CommandResult,
+  type InstanceRow,
+  machineCalled,
+} from "@cawco/core";
 import type { DbShape } from "./db";
 import { type BuiltTokens, buildTokens } from "./design-tokens";
 import { tokensIn } from "./dtcg-resolver";
@@ -581,7 +585,7 @@ export const createDesignSystem = (deps: {
   run: Run;
   ownMachineId: Promise<string>;
   folderChanged: (projectId: string) => void;
-  db: Pick<DbShape, "projectAttempts" | "workspacesNamed">;
+  db: Pick<DbShape, "listAgents" | "projectAttempts" | "workspacesNamed">;
   online: (machineId: string) => boolean;
   /** Whether a task is design work (design-offers.ts `designShaped`, or the build itself). */
   designTask: (projectId: string, taskId: string) => Promise<boolean>;
@@ -629,7 +633,7 @@ export const createDesignSystem = (deps: {
       return;
     }
     if (!deps.online(workspace.machineId)) {
-      return `The builder's workspace is on ${workspace.machineId}, which is offline, so CawCo can't read whether its design/ is committed. Approve once that machine is back.`;
+      return `The builder's workspace is on ${machineCalled(workspace.machineId, deps.db.listAgents())}, which is offline, so CawCo can't read whether its design/ is committed. Approve once that machine is back.`;
     }
     const read = await deps.run(
       workspace.machineId,

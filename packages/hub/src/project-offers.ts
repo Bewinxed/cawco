@@ -20,14 +20,15 @@
  * proposed tasks in the project's first to-do stage.
  */
 
-import type {
-  CommandResult,
-  InstanceRow,
-  PlanStep,
-  ProjectOfferReason,
-  ProjectOfferSummary,
-  ThreadNote,
-  ThreadSummary,
+import {
+  type CommandResult,
+  type InstanceRow,
+  machineCalled,
+  type PlanStep,
+  type ProjectOfferReason,
+  type ProjectOfferSummary,
+  type ThreadNote,
+  type ThreadSummary,
 } from "@cawco/core";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -257,7 +258,9 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
       // biome-ignore lint/performance/noAwaitInLoops: one git read per folder, cached; stops at the first match
       if ((await remoteOf(other.machineId, other.cwd)) === remote) {
         const where =
-          other.machineId === row.machineId ? "" : ` on ${other.machineId}`;
+          other.machineId === row.machineId
+            ? ""
+            : ` on ${machineCalled(other.machineId, db.listAgents())}`;
         return `Another session is working in ${remote}${where}. Make this one a project?`;
       }
     }
