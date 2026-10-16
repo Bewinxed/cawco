@@ -17,6 +17,7 @@
     "./cli-failure": "./src/cli-failure.ts",
     "./binary-wrapper": "./src/binary-wrapper.ts",
     "./process-identity": "./src/process-identity.ts",
+    "./heavy-run": "./src/heavy-run.ts",
     "./live-processes": "./src/live-processes.ts",
     "./detach": "./src/detach.ts",
     "./lines": "./src/lines.ts",

@@ -525,6 +525,11 @@ export interface ServiceSpec {
   readonly check?: () => void;
   readonly command: readonly string[];
   /**
+   * systemd `CPUWeight=`, for a service whose work yields to the person's
+   * own under contention. launchd's counterpart is {@link processType}.
+   */
+  readonly cpuWeight?: number;
+  /**
    * systemd `Delegate=` and `DelegateSubgroup=`: the cgroup controllers the
    * service manages below its own cgroup, and the subgroup its main process
    * starts in. launchd has no cgroups.
@@ -767,6 +772,18 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // necessary to run the main ("supervising") process of a unit that has
       // delegation turned on in a subgroup".
       delegate: { controllers: "pids memory cpu", subgroup: "keeper" },
+      // Every session, and every build, typecheck and scratch fleet a session
+      // runs, is in this unit, so under contention it yields the CPU to the
+      // person's own apps. systemd.resource-control(5), CPUWeight=: "Defaults
+      // to unset, but the kernel default is 100 … The available CPU time is
+      // split up among all units within one slice relative to their CPU time
+      // weight". At 20 each of the person's units in app.slice outweighs the
+      // fleet 5 to 1 (our call); with the CPU idle the fleet still takes all
+      // of it. Inside the unit the keeper's leaf weighs more than the
+      // sessions' group (sessiond cgroup.ts `KEEPER_CPU_WEIGHT`), so the relay
+      // stays ahead of the work it relays. No IOWeight=: the user manager
+      // delegates only cpu, memory and pids, so it would do nothing.
+      cpuWeight: 20,
       // Every session's welcome and every turn's bytes pass through the
       // keeper, so a throttled keeper is a stalled board. Measured on the Mac
       // (load-matched A/B, 2026-10-09, three counted pairs): the worst welcome
@@ -1041,6 +1058,8 @@ ${environment(spec)
   .join("\n")}
 Restart=${spec.restartOnSuccess ? "always" : "on-failure"}
 RestartSec=${spec.restartSec}${spec.oomContinue ? "\nOOMPolicy=continue" : ""}${
+  spec.cpuWeight === undefined ? "" : `\nCPUWeight=${spec.cpuWeight}`
+}${
   spec.delegate
     ? `\nDelegate=${spec.delegate.controllers}\nDelegateSubgroup=${spec.delegate.subgroup}`
     : ""

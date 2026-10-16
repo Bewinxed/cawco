@@ -2030,7 +2030,7 @@ export const CONTROL_CANCEL_COMMAND = "cancelCommand";
 /**
  * The line a command prints, on stdout or stderr, as it starts and stops
  * waiting for a shared machine slot (apps/apple/scripts/mac-slot.sh,
- * build-both.sh and scripts/lib/heavy-run.ts print it):
+ * build-both.sh and the heavy-run gate, core heavy-run.ts, print it):
  *
  *   CAWCO-QUEUE wait <slot>: <who holds it, and for how long>
  *   CAWCO-QUEUE held <slot>

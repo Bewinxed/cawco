@@ -80,6 +80,10 @@ Usage
   cawco git-credential <get|store|erase>  git's credential helper for the hub's git
                                           remote, as this session; set up for every
                                           session, not run by hand
+  cawco heavy-run <command>               run a shell command as one of this machine's
+                                          heavy runs: it starts once a slot is free and
+                                          the machine has room; the agent runs host
+                                          checks through it
 
 Services
   ${SERVICE_IDS.join(", ")} — each its own per-user service, started by systemd or
@@ -698,6 +702,16 @@ const runTool = async (args: Args): Promise<number> => {
   return 0;
 };
 
+/** `cawco heavy-run <command>`: its one argument is a shell command, whatever it starts with. */
+const runHeavy = async (argv: string[]): Promise<number> => {
+  const [command] = argv;
+  if (argv.length !== 1 || !command?.trim()) {
+    throw new UsageError("heavy-run takes one argument: the shell command");
+  }
+  const { heavyRun } = await import("./heavy-run");
+  return heavyRun(command);
+};
+
 const run = async (argv: string[]): Promise<number> => {
   const args = parseArgs(argv);
   if (args.help || !(args.command || args.version)) {
@@ -812,7 +826,11 @@ const run = async (argv: string[]): Promise<number> => {
   }
 };
 
-const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
+const cliArgs = Bun.argv.slice(2);
+// `heavy-run`'s argument is a shell command, never parsed as flags.
+const code = await (
+  cliArgs[0] === "heavy-run" ? runHeavy(cliArgs.slice(1)) : run(cliArgs)
+).catch((error: unknown) => {
   if (error instanceof UsageError) {
     console.error(`cawco: ${error.message}\n\nRun \`cawco --help\`.`);
     return 2;

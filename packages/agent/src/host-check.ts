@@ -8,6 +8,11 @@
  * it by hand would; the owner chose that ("Parent-declared host checks",
  * 2026-10-16), and only a parent's declaration makes a check one.
  *
+ * Every command the hub runs in a checkout (its dependency install, each
+ * check) is one of the machine's heavy runs: the runner starts it through
+ * `cawco heavy-run` (workflow-command.ts `commandLine`), so it waits for a
+ * slot and for the machine's measured room, and holds the slot until it ends.
+ *
  * Each checkout lives for one check run: the hub removes it when the run
  * ends, and every one goes when the hub's connection does (the hub runs its
  * checks again from the first when it is back, workflow-command.ts

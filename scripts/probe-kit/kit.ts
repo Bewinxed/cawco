@@ -21,7 +21,7 @@ import {
   type Page,
   webkit,
 } from "playwright-core";
-import { heavySlot } from "../lib/heavy-run";
+import { type HeavySlot, heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
   type Reply,
@@ -248,19 +248,7 @@ function installRuns(): void {
   };
 }
 
-/**
- * The dashboard built once per run: `vite build`, as the probes' `vite
- * preview` serves it. A heavy run while it builds: it holds one of the
- * machine's slots (heavy-run.ts) until the build ends.
- */
-export async function build(): Promise<void> {
-  const slot = await heavySlot();
-  try {
-    await viteBuild();
-  } finally {
-    slot.release();
-  }
-}
+/** The dashboard built: `vite build`, as the probes' `vite preview` serves it. */
 const viteBuild = async (): Promise<void> => {
   const child = Bun.spawn(["bunx", "vite", "build"], {
     cwd: DASHBOARD,
@@ -284,26 +272,12 @@ const viteBuild = async (): Promise<void> => {
  * The dashboard served against `hub`: the dev server (`vite dev`, where the
  * `/motion/` benches live: a built dashboard 404s them), or the built one
  * (`vite preview`, what the runtime specs time: a dev build's own checks
- * would be in every long task). Its address and process. A heavy run while
- * it boots: it holds one of the machine's slots until it answers, and none
- * while it serves.
+ * would be in every long task). Its address and process.
  */
 async function serve(
   how: "dev" | "preview",
   hub: string,
   env: Record<string, string> = {}
-) {
-  const slot = await heavySlot();
-  try {
-    return await boot(how, hub, env);
-  } finally {
-    slot.release();
-  }
-}
-async function boot(
-  how: "dev" | "preview",
-  hub: string,
-  env: Record<string, string>
 ) {
   const port = await freePort();
   const child = Bun.spawn(
@@ -343,7 +317,15 @@ type Served = Promise<{ base: string; child: Bun.Subprocess }>;
 /** No hub answers here: the benches feed the client's own state. */
 const NO_HUB = "http://127.0.0.1:9";
 
-/** What one run holds across its specs: the browsers, the build and its servers. */
+/**
+ * What one run holds across its specs: the browsers, the build and its
+ * servers, and the machine's heavy-run slot (lib/heavy-run.ts) they run
+ * under. The run takes the slot as it first builds, serves, opens a browser
+ * or stands a fleet up, waiting while none is free or the machine has no
+ * room, and holds it until `close`: a fleet's sessions, its servers and its
+ * Chromium weigh on the machine for as long as they run, not only while
+ * they start. Each `run.ts` process is a run of its own and holds its own.
+ */
 export class Run {
   failures = 0;
   /** Each failed assertion's line, said again over the run's last line (a host check reports its tail). */
@@ -355,14 +337,31 @@ export class Run {
   private builtServer: Served | null = null;
   private built: Promise<void> | null = null;
   private readonly browsers = new Map<string, Promise<Browser>>();
+  private slot: Promise<HeavySlot> | null = null;
+
+  /** The run's heavy-run slot, taken the first time it starts anything heavy. */
+  heavy(): Promise<HeavySlot> {
+    this.slot ??= heavySlot();
+    return this.slot;
+  }
 
   /** The dashboard built once per run, the first time a spec needs it. */
   build(): Promise<void> {
     this.built ??= (async () => {
+      await this.heavy();
       console.log("… building the dashboard");
-      await build();
+      await viteBuild();
     })();
     return this.built;
+  }
+
+  /** The dashboard served (`serve`), under the run's slot. */
+  private async startServer(
+    how: "dev" | "preview",
+    hub: string
+  ): Promise<{ base: string; child: Bun.Subprocess }> {
+    await this.heavy();
+    return serve(how, hub);
   }
 
   browser(engine: "chromium" | "webkit", revision?: string): Promise<Browser> {
@@ -378,7 +377,7 @@ export class Run {
     // `PROBE_WEBKIT` names a WebKit build to run (its `pw_run.sh`) where the
     // one this playwright-core expects is not installed; a page's own
     // `webkit` revision names one in Playwright's browser cache.
-    const launched =
+    const launched = this.heavy().then(() =>
       engine === "webkit"
         ? webkit.launch({
             env,
@@ -390,18 +389,21 @@ export class Run {
             headless: true,
             args: ["--no-sandbox", "--disable-gpu"],
             env,
-          });
+          })
+    );
     this.browsers.set(key, launched);
     return launched;
   }
 
   bench(): Promise<string> {
-    this.devServer ??= serve("dev", NO_HUB);
+    this.devServer ??= this.startServer("dev", NO_HUB);
     return this.devServer.then((s) => s.base);
   }
 
   builtBench(): Promise<string> {
-    this.builtServer ??= this.build().then(() => serve("preview", NO_HUB));
+    this.builtServer ??= this.build().then(() =>
+      this.startServer("preview", NO_HUB)
+    );
     return this.builtServer.then((s) => s.base);
   }
 
@@ -451,17 +453,17 @@ export class Run {
       bench: () => this.bench(),
       built: () => this.builtBench(),
       builtFor: async (hub) => {
-        const served = this.build().then(() => serve("preview", hub));
+        const served = this.build().then(() =>
+          this.startServer("preview", hub)
+        );
         ends.push(async () => {
           (await served).child.kill();
         });
         return (await served).base;
       },
       fleet: async (respond) => {
-        // Heavy while it builds and boots, and only then: the dashboard's
-        // build holds one of the machine's slots while it runs (`build`),
-        // the fleet while it sets up and boots (scratch-fleet.ts), and each
-        // dashboard server until it answers (`serve`).
+        // Under the run's slot, taken by the build: the fleet's own hold
+        // (scratch-fleet.ts) counts once in this process.
         // Built before the fleet starts, never between its start and the
         // dashboard's: the build runs once per run, so a fleet left waiting
         // on it ran its sessions on for the build's length when its spec
@@ -487,11 +489,13 @@ export class Run {
         });
         return Object.assign(fleet, {
           dashboard: () => {
-            served ??= this.build().then(() => serve("preview", fleet.base));
+            served ??= this.build().then(() =>
+              this.startServer("preview", fleet.base)
+            );
             return served.then((s) => s.base);
           },
           devDashboard: () => {
-            servedDev ??= serve("dev", fleet.base);
+            servedDev ??= this.startServer("dev", fleet.base);
             return servedDev.then((s) => s.base);
           },
         });
@@ -568,6 +572,8 @@ export class Run {
     }
     (await this.devServer)?.child.kill();
     (await this.builtServer)?.child.kill();
+    (await this.slot?.catch(() => undefined))?.release();
+    this.slot = null;
   }
 }
 

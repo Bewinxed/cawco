@@ -20,7 +20,9 @@
  *
  * Memory and CPU limits are the operator's to set, on the hub, and off until
  * they are (core `SessionLimits`): with none set, nothing is written for
- * them, and the memory and cpu controllers are not even turned on.
+ * them, and neither controller is turned on below `children`. The cpu
+ * controller is on in the delegated cgroup itself, for the keeper's weight
+ * against the children's ({@link KEEPER_CPU_WEIGHT}).
  *
  * The rules this relies on, from the kernel's cgroup v2 document
  * (https://docs.kernel.org/admin-guide/cgroup-v2.html):
@@ -88,6 +90,18 @@ export const CHILDREN_GROUP = "children";
  * reached. Threads count: the kernel's pids controller counts TIDs.
  */
 export const CHILD_TASKS = 8192;
+/**
+ * The keeper leaf's `cpu.weight`, against the children's group at the
+ * kernel's default 100: the kernel's cgroup v2 document, cpu.weight: "The
+ * weight in the range [1, 10000]. The default is 100", shared among siblings
+ * in proportion. Every session's welcome and every turn's bytes pass through
+ * the keeper, and the unit itself yields to the person's apps
+ * (`CPUWeight=20`, cli service.ts), so under contention the keeper must not
+ * also queue behind the sessions it relays. Ten to one is our call: the
+ * keeper uses little CPU, so it takes what it needs and the rest stays the
+ * sessions'.
+ */
+export const KEEPER_CPU_WEIGHT = 1000;
 /** cpu.max's period, the kernel's own default ("max 100000"), in µs. */
 const CPU_PERIOD_US = 100_000;
 const BLANKS = /\s+/;
@@ -316,6 +330,7 @@ export async function placeChildren(
       max === undefined
         ? "no task limit applies above them"
         : `all of them under pids.max ${max} (${limit}, less ${TASK_RESERVE} kept for the keeper)`;
+    const weighed = await weighKeeper(top, cpu);
     return {
       children: {
         top,
@@ -325,12 +340,33 @@ export async function placeChildren(
         enabled: new Set(),
         ...(max === undefined ? {} : { max }),
       },
-      said: `each child runs in a cgroup of its own under ${group}, under pids.max ${CHILD_TASKS}, ${pool}; ${optionalSaid(memory, cpu)}`,
+      said: `each child runs in a cgroup of its own under ${group}, under pids.max ${CHILD_TASKS}, ${pool}; ${weighed}; ${optionalSaid(memory, cpu)}`,
     };
   } catch (error) {
     return {
       said: `${top} is delegated but its cgroups could not be set up (${error instanceof Error ? error.message : String(error)}): children share the keeper's task limit, and it refuses spawns by headroom alone`,
     };
+  }
+}
+
+/**
+ * Puts the keeper's leaf ahead of the children's group for CPU: the cpu
+ * controller on in the delegated cgroup, and {@link KEEPER_CPU_WEIGHT} on the
+ * leaf. What the start-up line says of it, including why it could not be.
+ */
+async function weighKeeper(top: string, cpu: boolean): Promise<string> {
+  if (!cpu) {
+    return `the keeper weighs as much as the children for CPU: cpu isn't delegated here (the unit needs ${DELEGATE_LINE})`;
+  }
+  try {
+    await writeFile(join(top, "cgroup.subtree_control"), "+cpu");
+    await writeFile(
+      join(top, KEEPER_LEAF, "cpu.weight"),
+      String(KEEPER_CPU_WEIGHT)
+    );
+    return `the keeper's cpu.weight is ${KEEPER_CPU_WEIGHT} against the children's 100`;
+  } catch (error) {
+    return `the keeper weighs as much as the children for CPU: its cpu.weight could not be written (${error instanceof Error ? error.message : String(error)})`;
   }
 }
 

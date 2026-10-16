@@ -14,9 +14,18 @@
  * Run one after another these took 27–66 s, mostly waiting on the dashboard's
  * svelte-check and the openapi check in turn; together they take as long as
  * the longest (tooling-speed.md).
+ *
+ * A heavy run (lib/heavy-run.ts): svelte-check and tsc together take most of
+ * the machine's cores and several GiB, so it starts only while one of the
+ * machine's slots is free and the machine has room, and holds the slot until
+ * every check has ended. Under a run that holds one already (a host check),
+ * it counts once.
  */
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
+import { heavySlot } from "./lib/heavy-run";
+
+await heavySlot();
 
 const ROOT = join(import.meta.dir, "..");
 const BUN = process.execPath;

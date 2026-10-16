@@ -5,7 +5,7 @@
  * someone else, in another workspace or on the host; a file's lock is the
  * same lock wherever it is opened, and the kernel frees it when its holder
  * ends, a SIGKILL included. Users: the heavy-run slots (heavy-run.ts) and a
- * scratch fleet's folders (scratch-fleet.ts `FleetDirs`).
+ * scratch fleet's folders (scripts/scratch-fleet.ts `FleetDirs`).
  */
 import { dlopen, FFIType } from "bun:ffi";
 import { closeSync, constants, openSync } from "node:fs";

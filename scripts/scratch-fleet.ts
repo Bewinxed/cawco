@@ -34,11 +34,11 @@ import { join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
+import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
 import { socketPathProblem } from "../packages/core/src/paths";
 import { ensureDeps } from "./lib/deps";
-import { openLockFile, tryLock, unlock } from "./lib/flock";
-import { type HeavyPhases, heavyPhases } from "./lib/heavy-run";
+import { type HeavySlot, heavySlot } from "./lib/heavy-run";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
 
 /**
@@ -500,7 +500,7 @@ function fleetRoots(): { scratch: string; short: string } {
 }
 
 /**
- * The file in each folder a fleet makes whose lock (lib/flock.ts) the
+ * The file in each folder a fleet makes whose lock (core flock.ts) the
  * fleet's process holds for the folder's whole life: what proves a folder
  * left behind is a dead fleet's, across pid namespaces, a pid in a file
  * proving nothing there ({@link sweepDeadFleets}). It is locked before it
@@ -849,26 +849,24 @@ export interface SendSnapshot {
  * returns what drives it. Nothing runs until the probe launches it. A setup
  * that fails takes what it made and started with it.
  *
- * A fleet is heavy while it builds and boots, and only then: it holds one of
- * the machine's slots (lib/heavy-run.ts `heavyPhases`) from its setup until
- * it first serves (every service it launched has answered its readiness
- * wait: `hubUp`, `agentUp`, `sessiondUp`), and again while a service it
- * launches later boots, and while `launchMachine` adds a machine. A fleet
- * that then serves for hours (a preview waiting on its person) holds none.
+ * A fleet is a heavy run for its whole life: it holds one of the machine's
+ * slots (lib/heavy-run.ts `heavySlot`) from its setup until `close`, since
+ * its hub, agent, keeper and sessions weigh on the machine for as long as
+ * they run. It waits for the slot as any heavy run does, while none is free
+ * or the machine has no room. Under a run that holds one already (the probe
+ * kit's), it counts once.
  */
 export async function scratchFleet(options: {
   name: string;
   respond: (request: Seen) => Reply;
 }) {
-  const heavy = heavyPhases();
-  // The setup's phase: closed once the fleet first serves (`standUp`).
-  await heavy.open();
+  const heavy = await heavySlot();
   const dirs = new FleetDirs();
   try {
     return await standUp(options, dirs, heavy);
   } catch (error) {
     await dirs.remove();
-    heavy.close();
+    heavy.release();
     throw error;
   }
 }
@@ -876,7 +874,7 @@ export async function scratchFleet(options: {
 async function standUp(
   options: { name: string; respond: (request: Seen) => Reply },
   dirs: FleetDirs,
-  heavy: HeavyPhases
+  heavy: HeavySlot
 ) {
   const root = resolve(import.meta.dir, "..");
   const { scratch, short: shortRoot } = fleetRoots();
@@ -1173,55 +1171,14 @@ async function standUp(
   const errs: Partial<Record<Role, string>> = {};
   let launches = 0;
   /**
-   * The roles launched and not yet answered, each with its boot's heavy phase
-   * (`heavy.open`, settled once the slot is held). Its readiness wait closes
-   * it ({@link booted}).
-   */
-  const booting = new Map<Role, Promise<void>>();
-  const bootEnded = (role: Role) => {
-    if (booting.delete(role)) {
-      heavy.close();
-    }
-  };
-  /**
-   * The setup's phase, open from the fleet's start until it first serves: its
-   * agent online with custody ({@link agentUp}), the hub and sessiond under it
-   * answering. From then the fleet holds a slot only while a service it
-   * launches boots.
-   */
-  let setting = true;
-  const setUp = () => {
-    if (setting) {
-      setting = false;
-      heavy.close();
-    }
-  };
-  /**
-   * A role's readiness wait as its boot's end: the boot's slot held (a
-   * restart's waits for one, as any heavy run does, while its service starts),
-   * then the wait, then the phase closed however the wait ended.
-   */
-  const booted = async <T>(role: Role, wait: () => Promise<T>): Promise<T> => {
-    try {
-      await booting.get(role);
-      return await wait();
-    } finally {
-      bootEnded(role);
-    }
-  };
-  /**
    * Starts `role`, under `wrap` when given ({@link serviceSpawn}), with
-   * `overrides` laid over the fleet's environment: a boot, heavy until it
-   * answers.
+   * `overrides` laid over the fleet's environment.
    */
   const launch = (
     role: Role,
     wrap: string[] = [],
     overrides: Record<string, string> = {}
   ) => {
-    if (!booting.has(role)) {
-      booting.set(role, heavy.open());
-    }
     launches += 1;
     const err = join(sandbox, `${role}-${launches}.err`);
     const child = serviceSpawn(
@@ -1249,8 +1206,6 @@ async function standUp(
     role: Role,
     signal: "SIGTERM" | "SIGKILL" = "SIGTERM"
   ) => {
-    // A boot stopped before it answered is over.
-    bootEnded(role);
     const child = procs[role];
     if (!child || child.exitCode !== null) {
       return;
@@ -1348,8 +1303,6 @@ async function standUp(
   };
   /** sessiond and every process under it, as a control-group stop ends them. */
   const killSessiond = async () => {
-    // A boot killed before it answered is over.
-    bootEnded("sessiond");
     const child = procs.sessiond;
     if (!child) {
       return;
@@ -1561,17 +1514,16 @@ async function standUp(
       );
     }
   };
-  const hubUp = () =>
-    booted("hub", async () => {
-      await answering(
-        "hub",
-        "the hub answering",
-        () => fetch(`${base}/health`).then((r) => r.ok),
-        Boolean,
-        90_000
-      );
-      socket = undefined;
-    });
+  const hubUp = async () => {
+    await answering(
+      "hub",
+      "the hub answering",
+      () => fetch(`${base}/health`).then((r) => r.ok),
+      Boolean,
+      90_000
+    );
+    socket = undefined;
+  };
   /**
    * The hub's row for `machineId` says its agent is online, with custody, and
    * the reports that follow its register are in: every harness's, and its
@@ -1600,17 +1552,13 @@ async function standUp(
         )
     );
   const agentUp = async () => {
-    await booted("agent", () =>
-      answering(
-        "agent",
-        "the agent online with custody and its reports",
-        () => online(MACHINE),
-        Boolean,
-        120_000
-      )
+    await answering(
+      "agent",
+      "the agent online with custody and its reports",
+      () => online(MACHINE),
+      Boolean,
+      120_000
     );
-    // The fleet serves.
-    setUp();
   };
   /**
    * The first machine's agent started again under machine id `machineId`,
@@ -1621,14 +1569,12 @@ async function standUp(
   const rejoinAs = async (machineId: string) => {
     await stop("agent");
     launch("agent", [], { CAWCO_MACHINE_ID: machineId });
-    await booted("agent", () =>
-      answering(
-        "agent",
-        `the agent online with custody and its reports as ${machineId}`,
-        () => online(machineId),
-        Boolean,
-        120_000
-      )
+    await answering(
+      "agent",
+      `the agent online with custody and its reports as ${machineId}`,
+      () => online(machineId),
+      Boolean,
+      120_000
     );
   };
 
@@ -1643,18 +1589,9 @@ async function standUp(
    * port, the one listener two agents on one host would otherwise both bind
    * ("MCP gateway port 127.0.0.1:<port> is held by pid …"). Answers once the
    * hub holds it online with custody. Every machine runs on this host, so
-   * the hub names them all by its hostname. Heavy while it boots: it holds a
-   * slot from before its services start until it answers.
+   * the hub names them all by its hostname. It runs under the fleet's slot.
    */
   const launchMachine = async (machineId: string): Promise<Machine> => {
-    await heavy.open();
-    try {
-      return await bootMachine(machineId);
-    } finally {
-      heavy.close();
-    }
-  };
-  const bootMachine = async (machineId: string): Promise<Machine> => {
     const machineHome = await dirs.short(shortRoot);
     const machineRuntime = await dirs.short(shortRoot);
     await furnish(machineHome);
@@ -1727,14 +1664,12 @@ async function standUp(
     };
   };
   const sessiondUp = () =>
-    booted("sessiond", () =>
-      answering(
-        "sessiond",
-        "sessiond listening",
-        () => existsSync(sessiondSocket),
-        Boolean,
-        30_000
-      )
+    answering(
+      "sessiond",
+      "sessiond listening",
+      () => existsSync(sessiondSocket),
+      Boolean,
+      30_000
     );
   /** The probe's Claude account, filed before the agent reports it, then signed in. */
   const fileAccount = () =>
@@ -1880,12 +1815,8 @@ async function standUp(
       payload: { instanceId },
     });
 
-  /** Stops everything this fleet started and its mock; whatever heavy phase is still open ends. */
+  /** Stops everything this fleet started and its mock, then lets its heavy-run slot go. */
   const close = async () => {
-    for (const role of [...booting.keys()]) {
-      bootEnded(role);
-    }
-    setUp();
     socket?.close();
     // The added machines', agents first: a frozen one is thawed to hear it,
     // and a sessiond takes the processes under it along.
@@ -1906,6 +1837,7 @@ async function standUp(
     await stop("hub");
     await killSessiond();
     await mock.stop(true);
+    heavy.release();
   };
   /** Deletes the sandbox, the HOME and the runtime dir beside it (and every added machine's), unless `keep`. */
   const clean = async (keep: boolean) => {
