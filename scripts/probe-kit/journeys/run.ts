@@ -8,31 +8,23 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { sweepDeadFleets } from "../../scratch-fleet";
 import { Run } from "../kit";
-import { type Journey, journeySpec, PLANNED, parse } from "./suite";
+import { type Journey, journeySpec, parse } from "./suite";
 
-const JOURNEY_FILE = /^j\d+-.+\.ts$/;
+const JOURNEY_FILE = /^j(\d+)-.+\.ts$/;
+
+/** A journey file's number: j2 runs before j10. */
+const numberOf = (name: string) => Number(JOURNEY_FILE.exec(`${name}.ts`)?.[1]);
 
 export async function runJourneys(rest: string[]): Promise<number> {
   const { names, narrow } = parse(rest);
   const written = readdirSync(import.meta.dir)
     .filter((file) => JOURNEY_FILE.test(file))
     .map((file) => file.slice(0, -3))
-    .sort();
-  const planned = names.filter((one) =>
-    (PLANNED as readonly string[]).includes(one)
-  );
-  const unknown = names.filter(
-    (one) => !(written.includes(one) || planned.includes(one))
-  );
-  if (unknown.length > 0 || planned.length > 0) {
+    .sort((a, b) => numberOf(a) - numberOf(b));
+  const unknown = names.filter((one) => !written.includes(one));
+  if (unknown.length > 0) {
     console.error(
-      [
-        unknown.length > 0 ? `no such journey: ${unknown.join(", ")}` : "",
-        planned.length > 0 ? `not written yet: ${planned.join(", ")}` : "",
-        `(have ${written.join(", ")}; planned ${PLANNED.join(", ")})`,
-      ]
-        .filter(Boolean)
-        .join("\n")
+      `no such journey: ${unknown.join(", ")} (have ${written.join(", ")})`
     );
     return 2;
   }

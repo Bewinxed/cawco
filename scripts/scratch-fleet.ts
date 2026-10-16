@@ -141,9 +141,27 @@ export interface Reply {
    * limit headers rejected), until `resetsAt` (epoch ms).
    */
   refuse?: { resetsAt: number };
-  tool?: { input: object; name: string };
+  tool?: ToolCall;
+  /**
+   * Several calls in the one message, after its words, as a model calls
+   * tools in parallel (Anthropic messages and chat completions alike): what
+   * makes one turn park two asks at once. With `tool`, `tool` comes first.
+   */
+  tools?: ToolCall[];
   words: string[];
 }
+
+/** One tool call the mock makes: the tool's name and its input. */
+export interface ToolCall {
+  input: object;
+  name: string;
+}
+
+/** Every call a reply makes, in order: its `tool`, then its `tools`. */
+const callsOf = (reply: Reply): ToolCall[] => [
+  ...(reply.tool ? [reply.tool] : []),
+  ...(reply.tools ?? []),
+];
 
 /** Anthropic's refusal of a request past its account's usage limit, until `resetsAt`. */
 /**
@@ -330,7 +348,7 @@ const sseStream = (events: string[], everyMs: number) => {
 
 const anthropicEvents = (
   words: string[],
-  tool?: Reply["tool"],
+  calls: ToolCall[],
   cache?: Reply["cache"]
 ): string[] => {
   const ev = (type: string, data: object) =>
@@ -360,10 +378,11 @@ const anthropicEvents = (
       },
     },
   });
-  if (tool) {
-    // The words first, a text block of their own, then the call after them.
+  if (calls.length > 0) {
+    // The words first, a text block of their own, then each call after
+    // them, a block each.
     const said = words.length > 0;
-    const at = said ? 1 : 0;
+    const first = said ? 1 : 0;
     return [
       start,
       ...(said
@@ -381,23 +400,25 @@ const anthropicEvents = (
             ev("content_block_stop", { index: 0 }),
           ]
         : []),
-      ev("content_block_start", {
-        index: at,
-        content_block: {
-          type: "tool_use",
-          id: `toolu_${crypto.randomUUID().replaceAll("-", "")}`,
-          name: tool.name,
-          input: {},
-        },
-      }),
-      ev("content_block_delta", {
-        index: at,
-        delta: {
-          type: "input_json_delta",
-          partial_json: JSON.stringify(tool.input),
-        },
-      }),
-      ev("content_block_stop", { index: at }),
+      ...calls.flatMap((call, i) => [
+        ev("content_block_start", {
+          index: first + i,
+          content_block: {
+            type: "tool_use",
+            id: `toolu_${crypto.randomUUID().replaceAll("-", "")}`,
+            name: call.name,
+            input: {},
+          },
+        }),
+        ev("content_block_delta", {
+          index: first + i,
+          delta: {
+            type: "input_json_delta",
+            partial_json: JSON.stringify(call.input),
+          },
+        }),
+        ev("content_block_stop", { index: first + i }),
+      ]),
       ev("message_delta", {
         delta: { stop_reason: "tool_use", stop_sequence: null },
         usage: { output_tokens: 5 },
@@ -426,11 +447,11 @@ const anthropicEvents = (
   ];
 };
 
-const chatEvents = (words: string[], tool?: Reply["tool"]): string[] => {
+const chatEvents = (words: string[], calls: ToolCall[]): string[] => {
   const chunk = (delta: object, finish: string | null) =>
     `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
   const usage = `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } })}\n\n`;
-  if (tool) {
+  if (calls.length > 0) {
     return [
       ...(words.length > 0
         ? [
@@ -438,29 +459,31 @@ const chatEvents = (words: string[], tool?: Reply["tool"]): string[] => {
             ...words.map((content) => chunk({ content }, null)),
           ]
         : []),
-      chunk(
-        {
-          role: "assistant",
-          content: null,
-          tool_calls: [
-            {
-              index: 0,
-              id: `call_${crypto.randomUUID().replaceAll("-", "")}`,
-              type: "function",
-              function: { name: tool.name, arguments: "" },
-            },
-          ],
-        },
-        null
-      ),
-      chunk(
-        {
-          tool_calls: [
-            { index: 0, function: { arguments: JSON.stringify(tool.input) } },
-          ],
-        },
-        null
-      ),
+      ...calls.flatMap((call, index) => [
+        chunk(
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                index,
+                id: `call_${crypto.randomUUID().replaceAll("-", "")}`,
+                type: "function",
+                function: { name: call.name, arguments: "" },
+              },
+            ],
+          },
+          null
+        ),
+        chunk(
+          {
+            tool_calls: [
+              { index, function: { arguments: JSON.stringify(call.input) } },
+            ],
+          },
+          null
+        ),
+      ]),
       chunk({}, "tool_calls"),
       usage,
       "data: [DONE]\n\n",
@@ -1011,8 +1034,8 @@ async function standUp(
       }
       return sseStream(
         chat
-          ? chatEvents(reply.words, reply.tool)
-          : anthropicEvents(reply.words, reply.tool, reply.cache),
+          ? chatEvents(reply.words, callsOf(reply))
+          : anthropicEvents(reply.words, callsOf(reply), reply.cache),
         reply.everyMs
       );
     },

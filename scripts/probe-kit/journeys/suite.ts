@@ -50,26 +50,11 @@ const VIEW_OF: Record<Size, View> = {
   desk: "desk",
 };
 
-/** How long one leg may run before it fails as hung. */
-const LEG_MS = 8 * 60_000;
-
 /**
- * The journeys still to be written, by name, so the runner fits them: Caw
- * ask and answer, task review (a task needing a Mac waits, never fails:
- * apple-gate's protection), decisions, previews and comments, routines,
- * Jump, rules, and a plugin update reaching a running machine (plugin-swap's
- * protection).
+ * How long one leg may run before it fails as hung: the longest, J5's, waits
+ * for a Mac, lands through the gate's build and is reviewed twice.
  */
-export const PLANNED = [
-  "caw-ask",
-  "task-review",
-  "decisions",
-  "previews-comments",
-  "routines",
-  "jump",
-  "rules",
-  "plugin-update",
-] as const;
+const LEG_MS = 25 * 60_000;
 
 /** A step's outcome did not hold: what it measured. */
 export class Unmet extends Error {}
@@ -190,8 +175,21 @@ export interface Leg {
 }
 
 export interface Journey {
+  /**
+   * What the journey leaves on the fleet that the next leg must not find
+   * (a rule a failed leg never deleted), put away after every leg, however
+   * it ended.
+   */
+  clean?: (fleet: KitFleet) => Promise<void>;
   /** What the journey proves, from JOURNEY.md. */
   flow: string;
+  /**
+   * The machine id the hub runs under, where it must not be the agent's:
+   * a hub on the agent's own id takes that agent for its own machine and
+   * serves it in place (a marketplace on the hub's disk is linked, never
+   * sent), where every other machine is sent the bytes.
+   */
+  hubMachine?: string;
   /** Runs one leg's steps. */
   leg: (leg: Leg) => Promise<void>;
   name: string;
@@ -238,11 +236,13 @@ async function furnish(fleet: KitFleet, data: Data): Promise<void> {
  * (`PUT /api/fleet/choices`, agents kept off other people's repositories),
  * so what needs them is only what the journey raises.
  */
-export async function bootFleet(fleet: KitFleet): Promise<void> {
+export async function bootFleet(
+  fleet: KitFleet,
+  hubMachine?: string
+): Promise<void> {
   fleet.launch("sessiond");
   await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
+  await hubUp(fleet, hubMachine);
   fleet.fileAccount();
   fleet.launch("agent");
   await fleet.agentUp();
@@ -259,18 +259,34 @@ export async function bootFleet(fleet: KitFleet): Promise<void> {
   }
 }
 
+/** The hub launched, under `hubMachine` when given, and answering. */
+export async function hubUp(
+  fleet: KitFleet,
+  hubMachine?: string
+): Promise<void> {
+  if (hubMachine) {
+    fleet.env.CAWCO_MACHINE_ID = hubMachine;
+  }
+  fleet.launch("hub");
+  fleet.env.CAWCO_MACHINE_ID = MACHINE;
+  await fleet.hubUp();
+}
+
 /**
  * The fleet as the next leg needs it, however this one ended: the hub up
  * with the machine online (a leg that failed with it stopped), and every
  * session the leg started stopped, so nothing it raised waits on the next.
  */
-async function restore(fleet: KitFleet, since: number): Promise<void> {
+async function restore(
+  fleet: KitFleet,
+  since: number,
+  hubMachine?: string
+): Promise<void> {
   const up = await fetch(`${fleet.base}/health`)
     .then((r) => r.ok)
     .catch(() => false);
   if (!up) {
-    fleet.launch("hub");
-    await fleet.hubUp();
+    await hubUp(fleet, hubMachine);
   }
   await eventually(
     "the machine online on the hub",
@@ -322,7 +338,7 @@ export function journeySpec(journey: Journey, narrow: Narrow): Spec {
     name: journey.name,
     run: async (kit) => {
       const fleet = await kit.fleet(journey.respond);
-      await bootFleet(fleet);
+      await bootFleet(fleet, journey.hubMachine);
       const base = await fleet.dashboard();
       for (const data of DATA) {
         // biome-ignore lint/performance/noAwaitInLoops: one data set after the other, on one fleet
@@ -452,7 +468,8 @@ async function runLeg(
   }
   const seconds = ((performance.now() - started) / 1000).toFixed(0);
   kit.check(`${label} [${seconds}s]`, failure === null, failure ?? undefined);
-  await restore(at.fleet, since);
+  await restore(at.fleet, since, journey.hubMachine);
+  await journey.clean?.(at.fleet);
 }
 
 /** The run's arguments: journeys named, `--engine` and `--size` narrowing. */

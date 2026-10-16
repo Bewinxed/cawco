@@ -41,10 +41,18 @@ nightly release, not per change.
 | `j1-check-in` | 1, check-in and wind-down | needs-you reads one and leads to the ask; zero once answered; never a zero while the hub is down |
 | `j2-triage` | 2 and 3, triage | approve runs the command and the turn goes on; deny runs nothing; an answer from another device shows on the open page |
 | `j3-spawn` | 4, spawn | the dialog starts a session in the project, streaming; Full Send from its card relaunches the machine's process in that mode |
+| `j4-caw-asks` | Caw asks | two asks at once: “1 of 2” answered by click, “2 of 2” by its number key; Caw's next turn carries both answers |
+| `j5-task-review` | task review | a task needing a Mac waits, never fails, while none is free (apple-gate's protection), then lands through the gate's build on the Mac; approve; send back, and the next attempt is given your words |
+| `j6-decisions` | decisions | picks kept on the hub; I'm done picking sends the page in place and tells its writer |
+| `j7-comments` | previews and comments | a pin on the session's page reaches the session by itself, with the line it was pinned on |
+| `j8-routines` | routines | run now: one more run, its delegate given the instruction; pause: off on the hub, Paused on its row |
+| `j9-jump` | Jump | a word of what was said finds the moment; it opens the conversation at the machine's own record of that line, in view |
+| `j10-rules` | 5, rules | a template is live on the next session; an edit's words go out next; delete, then undo |
+| `j11-plugin-update` | plugin update | a running session's hook runs the new version after Fetch again; the hook never fails through the swap, and the plugin is written once (plugin-swap's protection) |
 
-Planned, by name (`suite.ts` `PLANNED`): Caw ask and answer, task review
-(a task needing a Mac waits, never fails), decisions, previews and comments,
-routines, Jump, rules, and a plugin update reaching a running machine.
+J4, J5 and J8 start Caw's session or delegates, which run inside workspace
+boundaries: those journeys run only where a boundary can start (the host,
+outside every workspace), as `apple-gate` and `caw-asks` do.
 
 ## A pinned WebKit
 
