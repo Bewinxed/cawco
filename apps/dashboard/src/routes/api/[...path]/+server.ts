@@ -139,7 +139,7 @@ async function proxyToHub(
           "Retry-After": response.headers.get("Retry-After") as string,
         }),
         // A pairing approved, or pairing turned on from this browser: its
-        // device cookie, set by the hub (HttpOnly, SameSite=Strict).
+        // device cookie, set by the hub (HttpOnly, SameSite=Lax).
         ...(response.headers.has("Set-Cookie") && {
           "Set-Cookie": response.headers.get("Set-Cookie") as string,
         }),

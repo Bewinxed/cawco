@@ -61,9 +61,9 @@
   );
 
   // Whether this browser must pair: as the server read it for this request
-  // until the page has read it itself, where its SameSite=Strict cookie
-  // always rides (hub-auth.svelte.ts). The store is the client's alone: a
-  // server render never writes it, so one request never reads another's.
+  // until the page has read it itself (hub-auth.svelte.ts). The store is the
+  // client's alone: a server render never writes it, so one request never
+  // reads another's.
   const pairing = $derived(
     hubAuth.known
       ? mustPair()

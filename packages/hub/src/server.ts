@@ -19866,7 +19866,17 @@ export const createServer = (
         dashboard: dashboardUrl(registry),
         secureDashboard: secureDashboardUrl(registry),
       }))
+      // The fleet's list is the person's. A machine reads its own row alone,
+      // by its own id (hub-auth.ts): what its CLI's health, install and
+      // service checks ask.
       .get("/api/agents", () => withPresence(db.listAgents()))
+      .get(
+        "/api/agents/:machineId",
+        hidden,
+        ({ params, status }) =>
+          machineRow(params.machineId) ??
+          status(404, `No machine ${params.machineId} on this hub.`)
+      )
       .post(
         "/api/instances/:id/generate-image",
         {

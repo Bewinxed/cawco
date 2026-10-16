@@ -19,6 +19,7 @@ import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { ConnectionKeyError } from "./connections";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
+import { OwnerApprovalError, ownerFetch } from "./owner";
 import { PairingError, pairingOff } from "./pairing";
 import { RelayError } from "./relay";
 import {
@@ -388,14 +389,22 @@ const status = async (args: Args): Promise<number> => {
   console.log(`found    ${hub.source}`);
   console.log(`config   ${CONFIG_PATH}`);
 
-  // As this machine (core machine-key.ts): a hub that requires paired
-  // devices lists the fleet to an admitted machine.
-  const { machineFetch } = await import("@cawco/core/machine-key");
-  const agents = await machineFetch(`${hub.httpUrl}/api/agents`)
+  // The fleet's list is the person's (hub hub-auth.ts): a hub that requires
+  // paired devices asks the person to approve this run (owner.ts).
+  const agents = await ownerFetch(
+    `${hub.httpUrl}/api/agents`,
+    {},
+    "cawco status"
+  )
     .then((response) =>
       response.ok ? (response.json() as Promise<AgentRow[]>) : undefined
     )
-    .catch(() => undefined);
+    .catch((error: unknown) => {
+      // The person's no is said as it is; a hub that did not answer, below.
+      if (error instanceof OwnerApprovalError) {
+        throw error;
+      }
+    });
   if (!agents) {
     console.error(`\ncawco: ${hub.httpUrl} did not answer /api/agents`);
     return 1;
@@ -827,7 +836,8 @@ const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
     error instanceof ToolError ||
     error instanceof ConnectionKeyError ||
     error instanceof RelayError ||
-    error instanceof PairingError
+    error instanceof PairingError ||
+    error instanceof OwnerApprovalError
   ) {
     console.error(`cawco: ${error.message}`);
     return 1;

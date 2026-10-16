@@ -71,13 +71,14 @@ async function awaitJoined(hubUrl: string): Promise<void> {
   let deadline = Date.now() + JOIN_TIMEOUT_MS;
   let waiting = false;
   while (Date.now() < deadline) {
-    // As this machine (core machine-key.ts): a hub that requires paired
-    // devices lists the fleet to an admitted machine, and tells one it has
-    // not admitted yet that it must pair.
+    // This machine's own row, as this machine (core machine-key.ts): a hub
+    // that requires paired devices answers it to the admitted machine, and
+    // tells one it has not admitted yet that it must pair.
     // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the hub after the previous one
-    const answer = await machineFetch(`${hubUrl}/api/agents`, {
-      signal: AbortSignal.timeout(5000),
-    }).catch(() => undefined);
+    const answer = await machineFetch(
+      `${hubUrl}/api/agents/${encodeURIComponent(id)}`,
+      { signal: AbortSignal.timeout(5000) }
+    ).catch(() => undefined);
     if (answer?.headers.get("x-cawco-pairing") === "required" && !waiting) {
       waiting = true;
       deadline = Date.now() + ADMISSION_TIMEOUT_MS;
@@ -85,10 +86,10 @@ async function awaitJoined(hubUrl: string): Promise<void> {
         `${INSTALL_STEP_PREFIX}waiting to be admitted: this hub requires paired devices. Admit ${hostname()} on the dashboard's Machines list.`
       );
     }
-    const agents = answer?.ok
-      ? ((await answer.json().catch(() => [])) as AgentRow[])
-      : [];
-    if (agents.some((a) => a.machineId === id && a.status === "online")) {
+    const row = answer?.ok
+      ? ((await answer.json().catch(() => undefined)) as AgentRow | undefined)
+      : undefined;
+    if (row?.status === "online") {
       return;
     }
     await Bun.sleep(1000);

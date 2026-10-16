@@ -111,11 +111,20 @@ export interface HubAuthFrame {
 export const OWNER_SCHEME = "Owner";
 
 /**
- * The browser's copy of it: HttpOnly, SameSite=Strict, Path=/. On an https
+ * The browser's copy of it: HttpOnly, SameSite=Lax, Path=/. On an https
  * origin it carries the `__Host-` prefix and `Secure`; on plain http (a
  * tailnet name on :3000) that prefix cannot be set, so the plain name is
  * used. Both start `cawco-`, which every previewed app's request is
  * stripped of (core frames.ts `DASHBOARD_COOKIE`).
+ *
+ * Lax, not Strict: a link from another site (Telegram's, a push's) opens
+ * the dashboard as this device, where Strict drew the pairing screen first.
+ * OWASP Session Management: "`SameSite=Lax` permits top-level cross-site
+ * navigations that use safe HTTP methods. Treat `SameSite` as defense in
+ * depth against CSRF" (cheatsheetseries.owasp.org, Session Management
+ * Cheat Sheet, SameSite Attribute). A cross-site write is refused before
+ * any cookie is read: by its fetch metadata at the dashboard and the hub
+ * (core browser-gate.ts `crossSiteRefusal`).
  */
 export const OWNER_COOKIE = "cawco-owner";
 export const OWNER_COOKIE_SECURE = `__Host-${OWNER_COOKIE}`;
@@ -159,5 +168,5 @@ export const ownerTokenOf = (
 /** The owner cookie as one `Set-Cookie` value, for a page on `origin`. */
 export const ownerCookie = (token: string, secure: boolean): string =>
   secure
-    ? `${OWNER_COOKIE_SECURE}=${token}; Path=/; HttpOnly; SameSite=Strict; Secure`
-    : `${OWNER_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict`;
+    ? `${OWNER_COOKIE_SECURE}=${token}; Path=/; HttpOnly; SameSite=Lax; Secure`
+    : `${OWNER_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax`;

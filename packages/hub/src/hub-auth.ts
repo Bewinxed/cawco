@@ -102,7 +102,8 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/api\/binary-updates\/artifacts\/[^/]+\/[^/]+$/, "machine"],
   ["POST", /^\/api\/binary-updates\/hub-fence$/, "machine"],
   ["PUT", /^\/api\/binary-updates\/machines\/[^/]+\/state$/, "machine"],
-  ["GET", /^\/api\/agents$/, "machine"],
+  // A machine's own row and busy count; the fleet's list stays the person's.
+  ["GET", /^\/api\/agents\/[^/]+$/, "machine"],
   ["GET", /^\/api\/agents\/[^/]+\/busy$/, "machine"],
   ["POST", /^\/api\/session-identities\/install$/, "machine-proof"],
 ];
@@ -110,6 +111,7 @@ const RULES: readonly [string, RegExp, Access][] = [
 /** Machine routes that name a machine: a machine reaches them for itself alone. */
 const OWN_MACHINE: readonly RegExp[] = [
   /^\/api\/binary-updates\/machines\/([^/]+)\/state$/,
+  /^\/api\/agents\/([^/]+)$/,
   /^\/api\/agents\/([^/]+)\/busy$/,
 ];
 

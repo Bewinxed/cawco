@@ -344,7 +344,7 @@ const hubOrigin = (): string =>
 /** A probe answers or it does not; nothing it finds is worth throwing over. */
 const probeJson = async <T>(url: string): Promise<T | undefined> => {
   // As this machine (core machine-key.ts): a hub that requires paired
-  // devices answers the fleet's rows to an admitted machine.
+  // devices answers what machines read to an admitted machine.
   const { machineFetch } = await import("@cawco/core/machine-key");
   const answer = await machineFetch(url, {
     signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
@@ -385,17 +385,37 @@ const joinedHub = async (): Promise<string | undefined> => {
   return (await readConfig())?.hubUrl || undefined;
 };
 
-const probeAgent = async (): Promise<string | undefined> => {
-  const hub = await joinedHub();
-  const agents = hub
-    ? await probeJson<AgentRow[]>(`${hub}/api/agents`)
-    : undefined;
-  if (!(hub && agents)) {
+/**
+ * This machine's own row at its hub, as this machine (core machine-key.ts):
+ * the row, `null` when the hub knows no such machine (404), undefined when
+ * the hub did not say. The fleet's list is the person's (hub hub-auth.ts).
+ */
+const ownRow = async (hub: string): Promise<AgentRow | null | undefined> => {
+  const [{ machineFetch }, { machineId }] = await Promise.all([
+    import("@cawco/core/machine-key"),
+    import("@cawco/core/machine-id"),
+  ]);
+  const answer = await machineFetch(
+    `${hub}/api/agents/${encodeURIComponent(await machineId())}`,
+    { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) }
+  ).catch(() => undefined);
+  if (answer?.status === 404) {
+    await answer.body?.cancel();
+    return null;
+  }
+  if (!answer?.ok) {
+    await answer?.body?.cancel();
     return undefined;
   }
-  const { machineId } = await import("@cawco/core/machine-id");
-  const id = await machineId();
-  const self = agents.find((agent) => agent.machineId === id);
+  return (await answer.json().catch(() => undefined)) as AgentRow | undefined;
+};
+
+const probeAgent = async (): Promise<string | undefined> => {
+  const hub = await joinedHub();
+  const self = hub ? await ownRow(hub) : undefined;
+  if (!hub || self === undefined) {
+    return undefined;
+  }
   return self
     ? `registered with ${hub} as ${self.hostname} (${self.status})`
     : `not registered with ${hub}`;
@@ -446,8 +466,6 @@ export const awaitFirstMachineReady = async (
   hub: string,
   note: (line: string) => void
 ): Promise<void> => {
-  const { machineId } = await import("@cawco/core/machine-id");
-  const id = await machineId();
   const checks: readonly [ServiceId, () => Promise<boolean>][] = [
     [
       "hub",
@@ -459,17 +477,7 @@ export const awaitFirstMachineReady = async (
       async () =>
         (await probeSessiond())?.endsWith("accepts connections") === true,
     ],
-    [
-      "agent",
-      async () => {
-        const agents = await probeJson<AgentRow[]>(`${hub}/api/agents`);
-        return (
-          agents?.some(
-            (agent) => agent.machineId === id && agent.status === "online"
-          ) === true
-        );
-      },
-    ],
+    ["agent", async () => (await ownRow(hub))?.status === "online"],
     [
       "dashboard",
       async () => {

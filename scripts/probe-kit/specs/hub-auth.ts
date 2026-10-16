@@ -13,7 +13,7 @@
  *
  * Turning "Require paired devices" on from a browser (Configure › Devices):
  * (o1) that browser is the first paired device, its cookie HttpOnly and
- *      SameSite=Strict, and it keeps working: its socket opens again as it;
+ *      SameSite=Lax, and it keeps working: its socket opens again as it;
  * (o2) the machine connected then is admitted: its key is written, and the
  *      agent restarted connects with its key's proof.
  *
@@ -25,10 +25,17 @@
  * (p3) a new machine waits until it is admitted (an Admit click in the
  *      paired browser's Configure › Devices), then connects with its key's
  *      HMAC;
+ * (p3b) that machine is refused the fleet's list (`GET /api/agents`) and
+ *      another machine's row, reads its own row, and the CLI's health check
+ *      run as it finds it healthy;
  * (p4) a session can't approve its own ask: not a pairing it started, not
  *      its install ask; the person's answer settles the ask;
  * (p5) an unpaired browser sees the pairing code; the paired browser
  *      approves it, and the new browser opens the app;
+ * (p5b) a top-level navigation from another site (a Telegram link) renders
+ *      the app on first paint, not the pairing screen;
+ * (p5c) a cross-site POST to an owner route is refused, at the dashboard
+ *      and at the hub, and changes nothing;
  * (p6) `POST /api/session-identities/install` without a machine's proof is
  *      refused (anonymous, the person, a session);
  * (p7) `archive_workspace` archives the caller's own delegate's workspace,
@@ -40,7 +47,9 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: one scenario, read in order, one check after another.
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import { MACHINE_PROOF_HEADER } from "../../../packages/core/src/hub-auth";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/index";
+import { httpProof } from "../../../packages/core/src/machine-key";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec } from "../kit";
 
@@ -48,6 +57,21 @@ const TAG = /PROBE-AUTH-([A-Z])/;
 const FINISH = "mcp__cawco__finish_item";
 /** A pairing code (RFC 8628 §6.1's base-20 alphabet), as the pairing screen shows it. */
 const CODE = /[B-Z]{3}-[B-Z]{3}/;
+
+/** The header proving `machineId` with `key` for one request, as its agent signs one (core machine-key.ts). */
+const proofOf = (
+  machineId: string,
+  key: string,
+  hubId: string,
+  method: string,
+  path: string
+): Record<string, string> => {
+  const at = Date.now();
+  const nonce = crypto.randomUUID();
+  return {
+    [MACHINE_PROOF_HEADER]: `${machineId} ${at} ${nonce} ${httpProof(key, { at, hubId, machineId, method, nonce, path })}`,
+  };
+};
 
 /** A file's permission bits as octal digits ("600"), or none when it is not there. */
 const modeOf = (path: string): Promise<string> =>
@@ -404,11 +428,11 @@ const spec: Spec = {
       (one) => one.name === "cawco-owner"
     );
     check(
-      "(o1) the browser that turned it on is the first paired device, named by its browser; its cookie is HttpOnly and SameSite=Strict",
+      "(o1) the browser that turned it on is the first paired device, named by its browser; its cookie is HttpOnly and SameSite=Lax",
       after.caller === "owner" &&
         after.device?.name === "Chrome on Linux" &&
         cookie?.httpOnly === true &&
-        cookie.sameSite === "Strict",
+        cookie.sameSite === "Lax",
       JSON.stringify({ after, cookie: cookie && { ...cookie, value: "…" } })
     );
     fleet.authorize(cookie?.value ?? null);
@@ -545,6 +569,53 @@ const spec: Spec = {
         .join(" | ")}`
     );
 
+    // (p3b) The admitted machine reads its own row, never the fleet's list.
+    const newMachineKey = (
+      await Bun.file(
+        join(machine.home, ".config", "cawco", "machine-key")
+      ).text()
+    ).trim();
+    const asMachine = (path: string) =>
+      ask(`${fleet.base}${path}`, {
+        headers: proofOf("probe-new", newMachineKey, hubId, "GET", path),
+      });
+    const [fleetList, ownRow, otherRow] = await Promise.all([
+      asMachine("/api/agents"),
+      asMachine("/api/agents/probe-new"),
+      asMachine(`/api/agents/${MACHINE}`),
+    ]);
+    const own = ownRow.status === 200 ? JSON.parse(ownRow.text) : undefined;
+    check(
+      "(p3b) the admitted machine is refused the fleet's list and another machine's row (403), and reads its own row: online",
+      fleetList.status === 403 &&
+        otherRow.status === 403 &&
+        own?.machineId === "probe-new" &&
+        own.status === "online",
+      `list ${fleetList.status}, own ${ownRow.status} ${ownRow.text.slice(0, 120)}, other ${otherRow.status}`
+    );
+    // The CLI's own health check (core binary-health.ts), run as that machine.
+    const healthScript = `
+      import { probeHealth } from ${JSON.stringify(join(ROOT, "packages/core/src/binary-health.ts"))};
+      console.log(JSON.stringify({ wrong: await probeHealth({
+        installation: { hubUrl: ${JSON.stringify(fleet.base)}, role: "agent" },
+        machineId: "probe-new",
+        version: ${JSON.stringify(own?.build?.version ?? "")},
+        sinceMs: 0,
+        requireCustody: true,
+      }) ?? null }));
+    `;
+    const health = await Bun.$`${process.execPath} -e ${healthScript}`
+      .cwd(ROOT)
+      .env({ ...process.env, ...machine.env })
+      .quiet()
+      .nothrow();
+    const healthSaid = health.stdout.toString().trim().split("\n").at(-1) ?? "";
+    check(
+      "(p3b) the CLI's health check, run as the admitted machine, reads its own row and finds it healthy",
+      healthSaid === '{"wrong":null}',
+      `${healthSaid} ${health.stderr.toString().slice(-400)}`
+    );
+
     // (p4) A session can't approve its own ask.
     const started = JSON.parse(
       (
@@ -661,6 +732,82 @@ const spec: Spec = {
       "(p5) the paired browser approves it: the new browser is the person's now and opens the app",
       strangerAuth.caller === "owner"
     );
+
+    // (p5b) A link from another site opens the app as the paired device:
+    // `localhost` is another site than `127.0.0.1`. (p5c) A form on that
+    // site posting to an owner route is refused, at the dashboard and at
+    // the hub, before any cookie is read.
+    const ask2 = JSON.parse(
+      (
+        await ask(
+          `${fleet.base}/api/pair`,
+          json({ kind: "cli", name: "a cross-site test" })
+        )
+      ).text
+    ) as { userCode: string };
+    const elsewhere = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () =>
+        new Response(
+          `<!doctype html><a id="to" href="${dashboard}/session">Open the fleet</a>
+          <form id="via-dashboard" method="POST" action="${dashboard}/api/pair/requests/${ask2.userCode}/approve"><button>go</button></form>
+          <form id="via-hub" method="POST" action="${fleet.base}/api/pair/requests/${ask2.userCode}/approve"><button>go</button></form>`,
+          { headers: { "content-type": "text/html" } }
+        ),
+    });
+    const site = `http://localhost:${elsewhere.port}/`;
+    try {
+      await paired.goto(site, { waitUntil: "domcontentloaded" });
+      const [landed] = await Promise.all([
+        paired.waitForResponse(
+          (response) =>
+            response.url().startsWith(`${dashboard}/session`) &&
+            response.request().resourceType() === "document"
+        ),
+        paired.click("#to"),
+      ]);
+      const sent = await landed.request().allHeaders();
+      const firstPaint = await landed.text();
+      check(
+        "(p5b) a top-level navigation from another site renders the app on first paint, not the pairing screen",
+        sent["sec-fetch-site"] === "cross-site" &&
+          firstPaint.includes('class="shell') &&
+          !firstPaint.includes('class="pairing'),
+        `sec-fetch-site ${sent["sec-fetch-site"]}; shell ${firstPaint.includes('class="shell')}; pairing ${firstPaint.includes('class="pairing')}`
+      );
+      const posted: { status: number; text: string }[] = [];
+      for (const form of ["#via-dashboard", "#via-hub"]) {
+        // biome-ignore lint/performance/noAwaitInLoops: one navigation at a time
+        await paired.goto(site, { waitUntil: "domcontentloaded" });
+        const [answered] = await Promise.all([
+          paired.waitForResponse((response) =>
+            response
+              .url()
+              .endsWith(`/api/pair/requests/${ask2.userCode}/approve`)
+          ),
+          paired.click(`${form} button`),
+        ]);
+        posted.push({
+          status: answered.status(),
+          text: await answered.text(),
+        });
+      }
+      const still =
+        await fleet.api<{ userCode: string }[]>("/api/pair/requests");
+      check(
+        "(p5c) a cross-site POST to an owner route is refused (403 at the dashboard and at the hub) and the pairing still waits",
+        posted[0]?.status === 403 &&
+          posted[0].text.includes("this request came from another page") &&
+          posted[1]?.status === 403 &&
+          posted[1].text.includes("this request came from another page") &&
+          still.some((one) => one.userCode === ask2.userCode),
+        JSON.stringify(posted)
+      );
+    } finally {
+      elsewhere.stop(true);
+      await fleet.api(`/api/pair/requests/${ask2.userCode}/deny`, {});
+    }
 
     // (p6) Installing a session's credential takes a machine's proof.
     const install = (headers: Record<string, string>) =>

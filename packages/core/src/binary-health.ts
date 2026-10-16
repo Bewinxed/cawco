@@ -46,8 +46,8 @@ async function ask<T>(
   const after = () => `after ${Math.round(performance.now() - started)}ms`;
   let response: Response;
   try {
-    // As this machine: a hub that requires paired devices answers the
-    // fleet's rows to an admitted machine (machine-key.ts).
+    // As this machine: a hub that requires paired devices answers an
+    // admitted machine its own row (machine-key.ts).
     response = await machineFetch(url, {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
@@ -137,23 +137,21 @@ async function probeAgentRow(options: {
   version: string;
 }): Promise<string | undefined> {
   const { installation, machineId, version, agentSince } = options;
-  const agents = await ask(
-    `${installation.hubUrl}/api/agents`,
-    json<AgentRow[]>
+  // This machine's own row: the fleet's list is the person's (hub hub-auth.ts).
+  const asked = await ask(
+    `${installation.hubUrl}/api/agents/${encodeURIComponent(machineId)}`,
+    json<AgentRow>
   );
-  const row = agents.value?.find((agent) => agent.machineId === machineId);
+  const row = asked.value;
   if (
     row?.status !== "online" ||
     row.build?.version !== version ||
     (row.build.startedAt ?? 0) <= agentSince
   ) {
-    let seen = "no list came back";
-    if (row) {
-      seen = `its row says ${row.status} on ${row.build?.version ?? "no version"}`;
-    } else if (agents.value) {
-      seen = "it has no row";
-    }
-    return `this machine's agent is not registered with the hub on the new build (${seen}; ${agents.said})`;
+    const seen = row
+      ? `its row says ${row.status} on ${row.build?.version ?? "no version"}`
+      : "no row came back";
+    return `this machine's agent is not registered with the hub on the new build (${seen}; ${asked.said})`;
   }
   if (options.requireCustody && row.custody?.state !== "available") {
     return `this machine's agent does not hold its session keeper connection (custody ${row.custody?.state ?? "unreported"})`;
