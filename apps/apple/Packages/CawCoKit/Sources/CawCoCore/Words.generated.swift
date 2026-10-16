@@ -96,6 +96,7 @@ public enum Words {
             Section(slug: "subagents", group: "Agents", label: "Subagents", purpose: "Agent files written to ~/.claude/agents on every machine", counted: true, badge: "fleet-faults", icon: "branching-paths-down-bold-duotone", hue: "hue-orange-500"),
             Section(slug: "cli-tools", group: "Tools", label: "Command-line tools", purpose: "CLIs each machine must have", counted: true, badge: "fleet-faults", icon: "code-square-bold-duotone", hue: "hue-green-600"),
             Section(slug: "mcp", group: "Tools", label: "MCP servers", purpose: "Servers written to every machine", counted: true, badge: "fleet-faults", icon: "plug-circle-bold-duotone", hue: "hue-cyan-400"),
+            Section(slug: "connections", group: "Tools", label: "Connections", purpose: "Outside services the hub signs in to, one row per account", counted: false, badge: "fleet-faults", icon: "link-bold-duotone", hue: "hue-blue-500"),
             Section(slug: "skills", group: "Tools", label: "Skills & plugins", purpose: "Skills, plugins and marketplaces", counted: true, badge: "fleet-faults", icon: "bolt-bold-duotone", hue: "hue-amber-500"),
             Section(slug: "memory", group: "Memory", label: "Memory files", purpose: "CLAUDE.md and the model documents", counted: true, badge: "fleet-faults", icon: "book-bold-duotone", hue: "hue-blue-600"),
             Section(slug: "accounts", group: "Hub", label: "Accounts", purpose: nil, counted: true, badge: "account-faults", icon: "users-group-rounded-bold-duotone", hue: "hue-cyan-500"),

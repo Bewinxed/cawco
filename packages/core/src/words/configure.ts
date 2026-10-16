@@ -33,6 +33,7 @@ export type ConfigSlug =
   | "subagents"
   | "cli-tools"
   | "mcp"
+  | "connections"
   | "skills"
   | "memory"
   | "accounts"
@@ -135,6 +136,16 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     badge: "fleet-faults",
     icon: "plug-circle-bold-duotone",
     hue: "hue-cyan-400",
+  },
+  {
+    slug: "connections",
+    group: "Tools",
+    label: "Connections",
+    purpose: "Outside services the hub signs in to, one row per account",
+    counted: false,
+    badge: "fleet-faults",
+    icon: "link-bold-duotone",
+    hue: "hue-blue-500",
   },
   {
     slug: "skills",
