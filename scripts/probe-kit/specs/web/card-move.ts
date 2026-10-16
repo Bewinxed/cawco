@@ -4,8 +4,9 @@
  * PaneTabs), and its title's morph, on the folder-tabs bench (no hub), on the
  * desk.
  *
- * The card is opened on the chosen tab with the keyboard (pinned), another
- * tab is clicked, and every run that starts on the card is caught and held:
+ * The card is opened by the pointer resting on the chosen tab, the pointer
+ * moves onto another, and every run that starts on the card is caught and
+ * held:
  *  - each run's kind, name, start on the document timeline (ms, from the
  *    glide's own), length and easing;
  *  - the wrapper's transform, the card's left edge and the morph box's
@@ -24,6 +25,8 @@ const WRAPPER =
 /** Where its runs are caught: any floating box, the card's being the one open. */
 const CATCH = "[data-bits-floating-content-wrapper]";
 const PCTS = [0, 0.5, 1];
+/** The bench's group of session tabs, its working one chosen. */
+const STRIP = '[data-strip="session"]';
 
 async function move(kit: Kit): Promise<void> {
   const page = await kit.page("desk", { theme: "light" });
@@ -34,21 +37,40 @@ async function move(kit: Kit): Promise<void> {
     120_000
   );
   await settle(page, 400);
-  await page.focus(".session-tabs .tab[data-chosen] [data-session-tab]");
-  await page.keyboard.press("ArrowDown");
+  // The pointer resting on the chosen tab opens its card; moving onto
+  // another while it is open moves it there (PaneTabs `hoverTab`). The
+  // bench takes a click on another tab for its own choosing.
+  await page.hover(`${STRIP} .tab[data-chosen] [data-session-tab]`);
   await page.waitForSelector(".kit-pop.session-details-popover", {
     timeout: 10_000,
   });
   await settle(page, 800);
   const clock = await Clock.on(page);
-  const runs = await clock.catchRuns(
-    () =>
-      page
-        .locator(".session-tabs .tab:not([data-chosen]) [data-session-tab]")
-        .first()
-        .click(),
-    CATCH
-  );
+  const runs = await clock
+    .catchRuns(
+      () =>
+        page
+          .locator(
+            `${STRIP} .tab:not([data-chosen]) [data-session-tab]:not([data-session-tab^="run:"])`
+          )
+          .first()
+          .hover(),
+      CATCH
+    )
+    .catch(async (error: unknown) => {
+      // Where the card stands once the click is in: what the catch missed.
+      const card = await page.evaluate((sel) => {
+        const pop = document.querySelector<HTMLElement>(
+          ".session-details-popover"
+        );
+        const wrapper = document.querySelector<HTMLElement>(sel);
+        const style = wrapper ? getComputedStyle(wrapper) : null;
+        return pop
+          ? `card open, data-morph ${pop.hasAttribute("data-morph")}, its parent ${pop.parentElement?.tagName}${[...(pop.parentElement?.attributes ?? [])].map((a) => `[${a.name}]`).join("")}, wrapper transition "${style?.transition}", transform ${style?.transform}`
+          : "no card open";
+      }, WRAPPER);
+      throw new Error(`${String(error).split("\n")[0]}; ${card}`);
+    });
   const glide =
     runs.find((one) => one.name === "transform") ??
     runs.reduce((a, b) => (b.end > a.end ? b : a));
