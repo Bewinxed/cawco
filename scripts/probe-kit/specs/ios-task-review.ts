@@ -629,13 +629,15 @@ async function device(
      * down it to go back, only while it is not at its top (a drag down there
      * would pull the sheet itself down).
      */
-    const scroll = async (down: boolean) => {
+    const scroll = async (down: boolean, slow = false) => {
       const body = part("task-sheet-body");
-      // Back up, never further than the body is scrolled: a drag that runs
-      // past its top hands over to the sheet, which it pulls down.
+      // Back up, half as far as the body is scrolled: the swipe's fling
+      // carries the body about half again its drag, and a fling that meets
+      // the top hands over to the sheet, which it pulls down to its medium
+      // detent (510pt back on a 345pt drag did).
       const reach = down
         ? (body?.h ?? 0)
-        : Math.min((body?.h ?? 0) * 0.55, offset() - 40);
+        : Math.min((body?.h ?? 0) * 0.55, (offset() - 40) / 2);
       if (!body || reach < 40) {
         return;
       }
@@ -645,11 +647,15 @@ async function device(
       const top = Math.round(body.y + body.h * 0.25);
       const bottom = Math.round(down ? body.y + body.h * 0.8 : top + reach);
       await sh(
-        `${AXE} swipe --start-x ${x} --start-y ${down ? bottom : top} --end-x ${x} --end-y ${down ? top : bottom} --duration ${down ? 0.4 : 1.2} --udid ${udid}`
+        `${AXE} swipe --start-x ${x} --start-y ${down ? bottom : top} --end-x ${x} --end-y ${down ? top : bottom} --duration ${down && !slow ? 0.4 : 1.2} --udid ${udid}`
       );
       await pause(1600);
     };
-    /** The body scrolled until `label` is on screen: from its top, a screen at a time. */
+    /**
+     * The body scrolled until `label` is wholly on screen: from its top, down
+     * at the pace it goes up (no fling), so each step is under the body's
+     * height and a control can't be passed over between two of them.
+     */
     const reveal = async (label: string) => {
       for (
         let n = 0;
@@ -658,8 +664,8 @@ async function device(
       ) {
         await scroll(false);
       }
-      for (let n = 0; n < 10 && !(await onScreen(label)); n += 1) {
-        await scroll(true);
+      for (let n = 0; n < 16 && !(await onScreen(label)); n += 1) {
+        await scroll(true, true);
       }
     };
 
