@@ -241,7 +241,13 @@
     run.playState === "running" || run.playState === "paused";
   /**
    * Keeps the folds on the tabs as drawn, each frame, while anything moves
-   * them: a lifted tab, or a slide or settle of a tab's box.
+   * them: a lifted tab, or a slide or settle of a tab's box. A frame with
+   * nothing moving them folds them where the track measured them
+   * (`laidOut`), which is where they are drawn then, and lays nothing out:
+   * every re-measure of the tabs (a streamed reply resizing one) watches,
+   * and read as drawn on each of its frames the boxes had the page laid
+   * out in the frame's callbacks (two-pane-perf's stream, 184–279ms of
+   * `getBoundingClientRect`).
    */
   function watchFolds(track: HTMLElement) {
     boxRuns = [];
@@ -259,8 +265,9 @@
       return boxRuns.some(underWay);
     };
     const step = () => {
-      fold(rects.items, drawnNow);
-      still = moving() ? 0 : still + 1;
+      const moves = moving();
+      fold(rects.items, moves ? drawnNow : laidOut);
+      still = moves ? 0 : still + 1;
       watching = still > STILL_FRAMES ? 0 : requestAnimationFrame(step);
     };
     watching = requestAnimationFrame(step);

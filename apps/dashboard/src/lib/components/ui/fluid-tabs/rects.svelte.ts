@@ -68,7 +68,7 @@ export class TabRects {
   /** Svelte action for the track. */
   container = (node: HTMLElement) => {
     this.#container = node;
-    this.#sizes = new ResizeObserver(() => this.#schedule());
+    this.#sizes = new ResizeObserver(() => this.#measureLaidOut());
     this.#sizes.observe(node);
     for (const el of this.#values.keys()) {
       this.#sizes.observe(el);
@@ -201,6 +201,22 @@ export class TabRects {
       this.#frame = null;
       this.#measure();
     });
+  }
+
+  /**
+   * A tab or the track resized, heard where the frame has just laid them
+   * out (the observer's own call): measured there, on layout already done.
+   * Measured in the next frame's callbacks instead, after a streamed reply
+   * had changed the page again, every resize of a tab laid the page out
+   * there (two-pane-perf's stream, 83–135ms of `offsetParent`). A measure
+   * still due that frame is the same one, taken now.
+   */
+  #measureLaidOut(): void {
+    if (this.#frame !== null) {
+      cancelAnimationFrame(this.#frame);
+      this.#frame = null;
+    }
+    this.#measure();
   }
 
   #measure(): void {
