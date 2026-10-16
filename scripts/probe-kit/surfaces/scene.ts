@@ -12,8 +12,9 @@
  *  - "Approve the deploy push": parked on a Bash permission;
  *  - "Lay out the chip wraps": an artifact page it made;
  *  - "Name the hang card's states": a question it asked, answered;
- *  - the project "cawco": tasks and a routine;
- *  - a workflow and one finished run of it.
+ *  - "Decide the chip's wrap", in the project: a decision page it made;
+ *  - the project "cawco": tasks, a routine and a made view (views/week.oui);
+ *  - a workflow and one finished run of it, and a workflow drawn as a graph.
  * The mock model plays a script per message: the message carries
  * `PROBE-STEP:<name>`, and each request after it takes the plan's next step
  * by the tool results the conversation holds since (artifacts.ts's shape).
@@ -26,6 +27,56 @@ import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet } from "../kit";
 
 const DAY = 24 * 60 * 60 * 1000;
+/** A made view (views spec's good draft): figures, a table, the board by stage and a month, over the view tools. */
+const WEEK_VIEW = `root = Column([title, figures, table, board, month])
+tasks = Query("tasks", {}, {rows: []})
+stages = Query("stages", {}, {stages: [], byKind: {you: 0, done: 0}, total: 0})
+title = Text("Chip week", "title")
+figures = Row([StatTile("All tasks", stages.total), StatTile("Waiting on you", stages.byKind.you, "attn")])
+table = Table(tasks.rows, [{label: "Task", field: "title"}, {label: "Stage", field: "stage"}])
+board = Board(@Each(stages.stages, "s", StageColumn(s, tasks.rows)), "By stage")
+month = Calendar(tasks.rows, "dates.createdAt", "month")
+`;
+/** A workflow drawn as a graph (the editor's canvas): start, one step, end. */
+const GRAPH = {
+  nodes: [
+    {
+      id: "start-1",
+      kind: "start",
+      title: "Start",
+      position: { x: 80, y: 120 },
+      inputs: [],
+    },
+    {
+      id: "step-1",
+      kind: "step",
+      title: "Audit the chip row",
+      position: { x: 320, y: 120 },
+      harness: "claude",
+      model: "claude-haiku-4-5",
+      prompt: "Read the chip row and say what overflows.",
+      outputSchema: { type: "object", properties: {} },
+      retries: 2,
+      timeoutMinutes: 60,
+      failedPorts: ["fail"],
+    },
+    {
+      id: "end-1",
+      kind: "end",
+      title: "End",
+      position: { x: 560, y: 120 },
+      outputs: {},
+    },
+  ],
+  edges: [
+    {
+      id: "e1",
+      from: { node: "start-1", port: "out" },
+      to: { node: "step-1" },
+    },
+    { id: "e2", from: { node: "step-1", port: "out" }, to: { node: "end-1" } },
+  ],
+};
 /** A workflow that sets one slot and returns: its run ends at once. */
 const WORKFLOW = `import { z } from "zod";
 
@@ -213,6 +264,21 @@ const plans = (repo: string): Record<string, Step[]> => ({
     },
     { words: "Pushed." },
   ],
+  decision: [
+    {
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${ARTIFACT_CREATE}`, max_results: 1 },
+      },
+    },
+    {
+      tool: {
+        name: ARTIFACT_CREATE,
+        input: { kind: "page", name: "chip-decision", html: ARTIFACT_PAGE },
+      },
+    },
+    { words: "The decision is on the project's page." },
+  ],
   art: [
     {
       tool: {
@@ -333,6 +399,8 @@ export interface Scene {
   artifact: string;
   ask: string;
   chips: string;
+  decision: string;
+  graph: string;
   permission: string;
   project: string;
   run: string;
@@ -445,6 +513,35 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   );
   await mkdir(join(fleet.repo, "notes"), { recursive: true });
 
+  // A made view, kept, as a hand-written view file is (views.ts: files are the truth).
+  const view = await fetch(
+    `${fleet.base}/api/projects/${project.id}/folder/file`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "views/week.oui", content: WEEK_VIEW }),
+    }
+  );
+  if (!view.ok) {
+    throw new Error(`PUT views/week.oui: ${view.status} ${await view.text()}`);
+  }
+  // A decision: a page a session of the project made (written to its decisions/).
+  const decision = await fleet.spawn(
+    "claude",
+    "Decide the chip's wrap",
+    fleet.repo,
+    { projectId: project.id }
+  );
+  await fleet.send(
+    decision,
+    "Put the chip decision on the project's page. PROBE-STEP:decision"
+  );
+  // A workflow drawn as a graph.
+  const graph = await fleet.api<{ id: string }>("/api/workflows", {
+    name: "Chip triage",
+    graph: GRAPH,
+  });
+
   // A workflow, and one run of it that has finished.
   const workflow = await fleet.api<{ id: string }>("/api/workflows", {
     name: "Chip audit",
@@ -500,6 +597,7 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   for (const [what, id] of [
     ["the chips session's turn done", chips],
     ["the art session's turn done", art],
+    ["the decision session's turn done", decision],
     ["the named session's turn done", answered],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one session at a time
@@ -549,6 +647,8 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
     project: project.id,
     task: tasks[0] as string,
     workflow: workflow.id,
+    graph: graph.id,
+    decision,
     run: runId,
     account: ACCOUNT,
   };

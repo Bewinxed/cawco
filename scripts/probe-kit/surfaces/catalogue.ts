@@ -73,6 +73,19 @@ const TOOL_ROWS = [
 const SORT = /Sort sessions/;
 /** The phone rail's way into Jump. */
 const JUMP_BUTTON = /Jump|Search/;
+/** The skills page's way in for a skill from a source. */
+const FETCH_SKILL = /Fetch|Add skill|New skill/;
+/** The memory page's new-memory control. */
+const NEW_MEMORY = /New memory|New/;
+/** Caw's seat on the project page. */
+const CAW_SEAT = /Caw, lead of/;
+/** A board card's pick box. */
+const PICK_TASK = /Pick tsk-1/;
+/** The chips transcript's Write row, and its change's open control. */
+const WROTE_ROW = /Wrote chip\.css/;
+const OPEN_DIFF = /diff|Open|Expand/i;
+/** A workflow's run control. */
+const RUN_WORKFLOW = /^Run|Launch/;
 const BENCHES: [string, string][] = [
   ["caw", "/motion/caw"],
   ["caw-notices", "/motion/caw-notices?fixture=full"],
@@ -115,7 +128,7 @@ const CONFIG = [
 /** A config section's editors: each opens on `new` (its route's own word for a new one), and an account's own pages. */
 const EDITORS: Record<string, State[]> = {
   ...Object.fromEntries(
-    ["rules", "hooks", "mcp", "subagents", "delegate-types"].map((section) => [
+    ["hooks", "mcp", "subagents", "delegate-types"].map((section) => [
       section,
       [
         {
@@ -126,6 +139,17 @@ const EDITORS: Record<string, State[]> = {
       ],
     ])
   ),
+  skills: [{ name: "fetch", act: press(FETCH_SKILL), root: "body" }],
+  memory: [{ name: "new", act: press(NEW_MEMORY), root: "body" }],
+  rules: [
+    {
+      name: "editor",
+      route: () => "/config/rules/new",
+      root: "body",
+    },
+    // `/config` itself: the section list and its first section.
+    { name: "index", route: () => "/config", root: "body" },
+  ],
   accounts: [
     { name: "new", route: () => "/config/accounts/new", root: "body" },
     {
@@ -186,6 +210,14 @@ export const SURFACES: Surface[] = [
         root: LAYER,
         widths: ["desk"],
       },
+      {
+        // A session row under the pointer: its hover card.
+        name: "row-hover",
+        act: (page) =>
+          page.getByRole("link", { name: IDLE_ROW }).first().hover(),
+        root: "body",
+        widths: ["desk"],
+      },
     ],
   },
   {
@@ -226,6 +258,33 @@ export const SURFACES: Surface[] = [
         name: "attach-menu",
         act: press("Attach or draw"),
         root: LAYER,
+      },
+      {
+        // An @ in the composer: the mention menu.
+        name: "mention",
+        act: async (page) => {
+          await page.locator(COMPOSER_FIELD).first().click();
+          await page.keyboard.type("@");
+        },
+        root: "body",
+      },
+      {
+        // Up in an empty composer: the recall wheel over what was sent.
+        name: "recall",
+        act: async (page) => {
+          await page.locator(COMPOSER_FIELD).first().click();
+          await page.keyboard.press("ArrowUp");
+        },
+        root: MAIN,
+      },
+      {
+        // The Write card's change opened whole.
+        name: "diff",
+        act: async (page) => {
+          await press(WROTE_ROW)(page);
+          await press(OPEN_DIFF)(page);
+        },
+        root: "body",
       },
       {
         name: "session-card",
@@ -272,6 +331,8 @@ export const SURFACES: Surface[] = [
     states: [
       { name: "rest", root: "body" },
       { name: "more-menu", act: press(/More for cawco/), root: LAYER },
+      // Caw's seat: his thread beside the board.
+      { name: "caw", act: press(CAW_SEAT), root: "body" },
       {
         name: "new",
         route: () => "/project/new",
@@ -291,6 +352,18 @@ export const SURFACES: Surface[] = [
         root: LAYER,
         widths: ["desk"],
       },
+      {
+        // A task picked: the bulk bar.
+        name: "bulk",
+        act: (page) =>
+          page
+            .getByRole("checkbox", { name: PICK_TASK })
+            .filter({ visible: true })
+            .first()
+            .click(),
+        root: MAIN,
+        widths: ["desk"],
+      },
     ],
   },
   {
@@ -304,7 +377,8 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: (s) => `/project/${s.project}`,
     // Each view is the project's route with its `view` (the view tabs' own hrefs).
-    states: ["table", "pipeline", "routines", "decisions"].map(
+    // `week` is the scene's made view (views/week.oui).
+    states: ["table", "pipeline", "routines", "decisions", "week"].map(
       (view): State => ({
         name: view,
         route: (s) => `/project/${s.project}?view=${view}`,
@@ -387,6 +461,15 @@ export const SURFACES: Surface[] = [
         route: (s) => `/workflows/${s.workflow}?tab=program`,
         root: "body",
       },
+      {
+        // Run: the launch dialog, opened and not sent.
+        name: "launch",
+        route: (s) => `/workflows/${s.workflow}`,
+        act: press(RUN_WORKFLOW),
+        root: "body",
+      },
+      // A graph workflow: the canvas, its nodes and edges, the inspector.
+      { name: "graph", route: (s) => `/workflows/${s.graph}`, root: "body" },
     ],
   },
   {
