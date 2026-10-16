@@ -105,10 +105,93 @@ async function move(kit: Kit): Promise<void> {
   await page.close();
 }
 
+/** PaneTabs' hover delay: a pointer resting this long on a tab opens its card. */
+const HOVER_OPEN_MS = 350;
+const CARD = ".session-details-popover";
+
+/**
+ * A press on a tab is a choice, not a look (PaneTabs `pressedTab`): pressed
+ * while its card is still to open, no card mounts, however long the
+ * pointer stays; pressed once its hover has opened it, it closes.
+ */
+async function pressCancels(kit: Kit): Promise<void> {
+  const page = await kit.page("desk", { theme: "light" });
+  await open(
+    page,
+    `${await kit.bench()}${TABS_ROUTE}&theme=light`,
+    `${STRIP} .tab[data-chosen]`,
+    120_000
+  );
+  await settle(page, 400);
+  const tabs = page.locator(
+    `${STRIP} .tab:not([data-chosen]) [data-session-tab]:not([data-session-tab^="run:"])`
+  );
+  const centre = async (n: number) => {
+    const box = await tabs.nth(n).boundingBox();
+    return box
+      ? { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      : { x: 0, y: 0 };
+  };
+  // Every card mounted from here on, counted as it goes in.
+  await page.evaluate((sel) => {
+    const w = window as unknown as { __cardsMounted: number };
+    w.__cardsMounted = 0;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (
+            node instanceof Element &&
+            (node.matches(sel) || node.querySelector(sel))
+          ) {
+            w.__cardsMounted += 1;
+          }
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  }, CARD);
+  const mounted = () =>
+    page.evaluate(
+      () => (window as unknown as { __cardsMounted: number }).__cardsMounted
+    );
+  // Pressed inside the delay: the pointer stays on past it, and no card.
+  await page.mouse.move(0, 0);
+  await settle(page, 400);
+  const first = await centre(0);
+  await page.mouse.move(first.x, first.y);
+  await page.waitForTimeout(HOVER_OPEN_MS - 50);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(HOVER_OPEN_MS * 2);
+  const early = await mounted();
+  kit.check(
+    "card-move: a tab pressed while its card is still to open: no card mounts, the pointer resting on past the delay",
+    early === 0,
+    `${early} cards mounted`
+  );
+  // Pressed once its hover has opened it: it closes.
+  await page.mouse.move(0, 0);
+  await settle(page, 600);
+  const second = await centre(0);
+  await page.mouse.move(second.x, second.y);
+  await page.waitForTimeout(HOVER_OPEN_MS + 250);
+  const openedByHover = await page.locator(CARD).count();
+  await page.mouse.down();
+  await page.mouse.up();
+  await settle(page, 600);
+  const left = await page.locator(`${CARD}:not([data-state="closed"])`).count();
+  kit.check(
+    "card-move: a tab pressed once its hover has opened its card: the card closes",
+    openedByHover > 0 && left === 0,
+    `${openedByHover} open after the dwell, ${left} open after the press`
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "card-move",
   run: async (kit) => {
     try {
+      await pressCancels(kit);
       await move(kit);
       kit.check("card-move: reads to its end", true, "");
     } catch (error) {

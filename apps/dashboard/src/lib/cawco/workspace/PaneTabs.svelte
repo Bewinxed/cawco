@@ -591,6 +591,21 @@
       closeDetails();
     }
   }
+  /**
+   * A press on a tab is a choice, not a look (hover intent: a tooltip hides
+   * on pointerdown too). The card a resting pointer was about to open does
+   * not open, and on a tab being chosen a card its hover opened closes: the
+   * 350ms timer opened it just as the switch landed, 58ms of the switch's
+   * frames spent on a card nobody asked for. On the chosen tab an open card
+   * is the click's to pin (`clickTab`), and a pinned card follows the
+   * choice; both stay.
+   */
+  function pressedTab(chosen: boolean) {
+    clearTimeout(timer);
+    if (!chosen && detailsOpen && !pinned) {
+      closeDetails();
+    }
+  }
   function leaveDetails() {
     clearTimeout(timer);
     if (!pinned) {
@@ -1393,6 +1408,7 @@
         data-tone={tab.tone}
         oncontextmenucapture={anchorMenu}
         onpointerdown={(event) => {
+          pressedTab(chosen);
           if (!chosen) {
             warm.reach(leaf.id, tab.id);
           }
