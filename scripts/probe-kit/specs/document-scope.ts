@@ -58,6 +58,11 @@ const MARK = {
 } as const;
 type Doc = keyof typeof MARK;
 const DOCS = Object.keys(MARK) as Doc[];
+/** A long turn's words, about 25,000 tokens at four characters a token, past pi's 20,000-token kept tail. */
+const FILLER =
+  "The probe fills its history so the harness has a turn to compact. ".repeat(
+    1500
+  );
 /** What a held delegate call opens with (hub briefings.ts). */
 const HELD = "Not started yet: the fleet keeps guidance for briefing";
 /** What every delegate's brief carries, so the mock knows a delegate's requests. */
@@ -238,11 +243,26 @@ const spec: Spec = {
       ).catch(() => undefined);
       return first;
     };
-    /** A `/compact`, answered with a summary of its own, and its end: the summary's words. */
+    /**
+     * A `/compact`, answered with a summary of its own, and its end: the
+     * summary's words. Two long turns go first: pi compacts only what lies
+     * before its kept tail ("Nothing to compact (session too small)",
+     * pi-coding-agent 1.0.1 agent-session.js, `keepRecentTokens: 20000`).
+     */
     const compact = async (
       session: string,
       delegate: boolean
     ): Promise<string> => {
+      for (const part of ["A", "B"]) {
+        const token = `DOCSCOPE-FILLER-${part}-${crypto.randomUUID().slice(0, 8)}`;
+        // biome-ignore lint/performance/noAwaitInLoops: one turn after the other
+        await turn(
+          session,
+          `${token} ${FILLER}`,
+          { kind: "say", delegate },
+          token
+        );
+      }
       const summary = `DOCSCOPE-SUMMARY-${crypto.randomUUID().slice(0, 8)}`;
       const next: Step = { kind: "say", delegate, summary };
       step = next;
