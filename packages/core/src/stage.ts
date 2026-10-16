@@ -129,21 +129,38 @@ export interface SheetMeta {
  * A prop's type in Storybook's SBType names (`argTypes[name].type.name`),
  * which decides its control: `enum` the variant control, `boolean`,
  * `string` and `number` their fields, `slot` content that is a pin
- * (`Snippet`, `ReactNode`, a Vue slot), the rest read-only.
+ * (`Snippet`, `ReactNode`, a Vue slot), the rest read-only. A `token-*`
+ * kind is a prop typed with one of the design system's generated token
+ * types ({@link TOKEN_TYPES}): its options are the system's names.
  */
 export type PropKind =
   | "string"
   | "number"
   | "boolean"
   | "enum"
+  | TokenKind
   | "slot"
   | "function"
   | "object"
   | "array"
   | "other";
 
-/** The DTCG token types a prop's role takes (spec §9.2): a colour, a length, a font. */
-export type TokenRole = "color" | "dimension" | "fontFamily";
+/** A prop whose type is a design system's colour, size or font names. */
+export type TokenKind = "token-color" | "token-size" | "token-font";
+
+/**
+ * The type aliases a design system's generated `tokens.ts` exports (the
+ * hub's design-tokens.ts `tokenTypes`), string-literal unions of its token
+ * names by DTCG `$type`, and the kind docgen reads a prop typed with each as
+ * (the owner, 2026-10-16: "a component that wants suggestions types its prop
+ * with one"). Only a prop so typed is offered token names.
+ */
+export const TOKEN_TYPES = {
+  TokenColor: "token-color",
+  TokenSize: "token-size",
+  TokenFont: "token-font",
+} as const satisfies Record<string, TokenKind>;
+export type TokenType = keyof typeof TOKEN_TYPES;
 
 /**
  * One prop of a component as its framework's docgen reads it, in
@@ -157,11 +174,9 @@ export interface PropMeta {
   defaultValue: string | null;
   description: string | null;
   name: string;
-  /** An enum's values, in the order its type lists them. */
+  /** An enum's values, or a token kind's names, in the order its type lists them. */
   options?: (string | number)[];
   required: boolean;
-  /** A string prop whose name says it is a colour, length or font takes that type's token names. */
-  tokens?: TokenRole;
   type: { name: PropKind; raw: string };
 }
 
@@ -218,13 +233,6 @@ export interface SheetWritten {
   sheet: SheetRead;
 }
 
-/**
- * The project's DTCG token names (`**\/*.tokens.json`, spec §9.2) a prop of
- * each role is offered, by `$type`; the sheet's page carries them to the
- * inspector.
- */
-export type TokenNames = Record<TokenRole, string[]>;
-
 /** A component the stage found (§6's discovery): its name, its file, and the story files that show it. */
 export interface Found {
   file: string;
@@ -269,10 +277,8 @@ export interface StageOpened {
 
 /**
  * What the sheet's page tells the pane on each run and each props refresh
- * (`cawco:sheet`, through the overlay): the sheet as the stage read it, and
- * the project's token names for the inspector's offers.
+ * (`cawco:sheet`, through the overlay): the sheet as the stage read it.
  */
 export interface SheetOnPage extends SheetRead {
   file: string;
-  tokens: TokenNames;
 }

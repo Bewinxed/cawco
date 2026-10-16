@@ -15,7 +15,9 @@
  *   tokens.json            the base set, DTCG 2025.10 values, named for the project's own roles
  *   themes/*.tokens.json   each context's overrides (dark, a coarse pointer…)
  *   tokens.css             generated here from the resolver on every write, never by hand
- *   manifest.json          `sources`: where each token's value came from (the builder's);
+ *   tokens.ts              generated with it: `TokenColor`, `TokenSize`, `TokenFont`, the
+ *                          system's names, which a component's props take to be offered them
+ *   manifest.json         `sources`: where each token's value came from (the builder's);
  *                          `files`: the fingerprint of every file CawCo wrote (the hub's)
  *   SKILL.md               routes any harness to the system
  *   specimens/index.html   the Foundations page, on ../tokens.css
@@ -27,7 +29,8 @@
  * whose bytes no longer match the fingerprint CawCo recorded when it wrote
  * it (or that CawCo never wrote) is kept as it is and listed as kept. No
  * preset, no fixed token vocabulary, no scan of values (plan §4): the one
- * deterministic step is generating tokens.css, a build, not a judgment.
+ * deterministic step is generating tokens.css and tokens.ts, a build, not a
+ * judgment.
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -57,6 +60,7 @@ const MANIFEST = "manifest.json";
 const TOKENS = "tokens.json";
 const RESOLVER = "tokens.resolver.json";
 const STYLESHEET = "tokens.css";
+const TYPES = "tokens.ts";
 const THEMES = "themes";
 
 /** The files every finished system holds, relative to `design/`. */
@@ -65,6 +69,7 @@ export const DESIGN_PARTS = [
   RESOLVER,
   TOKENS,
   STYLESHEET,
+  TYPES,
   MANIFEST,
   "SKILL.md",
   "specimens/index.html",
@@ -132,10 +137,9 @@ export const designPath = (
   if (trimmed.startsWith("/") || rel.startsWith("..") || rel === ".") {
     return { problem: `${raw}: name a file inside design/, like DESIGN.md.` };
   }
-  if (rel === STYLESHEET) {
+  if (rel === STYLESHEET || rel === TYPES) {
     return {
-      problem:
-        "tokens.css is generated from tokens.json on every write; write tokens.json instead.",
+      problem: `${rel} is generated from tokens.json on every write; write tokens.json instead.`,
     };
   }
   const [first, ...rest] = rel.split("/");
@@ -373,15 +377,21 @@ export const writeDesign = async (
       writes.set(path, encoder.encode(`${JSON.stringify(json, null, 2)}\n`));
     }
   }
-  const stylesheet = built ? encoder.encode(built.css) : undefined;
-  const unchanged = (bytes: Uint8Array): boolean => {
-    const before = now(STYLESHEET);
-    return before !== null && Buffer.from(before).equals(bytes);
-  };
-  if (stylesheet && theirs(STYLESHEET)) {
-    kept.add(STYLESHEET);
-  } else if (stylesheet && !unchanged(stylesheet)) {
-    writes.set(STYLESHEET, stylesheet);
+  // The generated files: each written when it changed, kept when the person's.
+  const generated: [string, string][] = built
+    ? [
+        [STYLESHEET, built.css],
+        [TYPES, built.types],
+      ]
+    : [];
+  for (const [path, text] of generated) {
+    const bytes = encoder.encode(text);
+    const before = now(path);
+    if (theirs(path)) {
+      kept.add(path);
+    } else if (!(before && Buffer.from(before).equals(bytes))) {
+      writes.set(path, bytes);
+    }
   }
 
   const fingerprints = { ...recorded.files };

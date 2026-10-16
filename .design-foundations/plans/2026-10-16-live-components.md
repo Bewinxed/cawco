@@ -159,7 +159,7 @@ The DTCG Design Tokens Format Module 2025.10 is the first stable version: "This 
 Where it fits, in three places and no more:
 
 1. **Rendering**: nowhere. A sheet renders with the project's real CSS; tokens reach it however the project ships them (CawCo's own: `design/tokens/cawco.tokens.json` → `bun run tokens` → `tokens.css`, per the repo's CLAUDE.md).
-2. **The inspector**: a prop whose type is a colour, length or font role offers the names from the project's `**/*.tokens.json` (DTCG) when one exists, so a person picks `color.accent`, not a hex; the arg is written as the token's name and the component resolves it. Without a tokens file, a plain control.
+2. **The inspector**: the design system's generator writes a typed module beside its `tokens.css` (`design/tokens.ts`; CawCo's own `apps/dashboard/src/lib/tokens/tokens.ts`): `TokenColor`, `TokenSize` and `TokenFont`, string-literal unions of its token names by DTCG `$type` (`color`; `dimension`; `fontFamily` plus a typography role whose family is its own). A prop typed with one is offered those names, so a person picks `color.accent`, not a hex; the arg is written as the token's name and the component resolves it. Every other prop gets its plain control: no name heuristics (owner, 2026-10-16: "The design system generates named types (a colour, a size, a font), and a component that wants suggestions types its prop with one. Exact, never guesses, and the component itself documents which props are tokens.").
 3. **§5.7 design systems**: the agentic design-system build writes its tokens as a DTCG file and generates the CSS from it, instead of CSS alone. One-line change to §5.7's "The artifact" bullet.
 
 ## 10. What this replaces in CawCo today

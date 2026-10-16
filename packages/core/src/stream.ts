@@ -49,12 +49,17 @@ import type { CarrySessionRequest } from "./harness";
  * 9: a starter's outcome (`POST /api/projects/:id/starters/outcome`) names
  *    the place it stood in (`place`: board, routines or decisions), each
  *    place its own set; a page built for 8 sends none, so it reloads first.
+ * 10: a component's prop says no `tokens` role: a prop typed with the design
+ *    system's `TokenColor`, `TokenSize` or `TokenFont` is its own kind
+ *    (`token-color`, `token-size`, `token-font`), its names its `options`,
+ *    and the sheet's page carries no project-wide token names. A page built
+ *    for 9 reloads into the inspector that reads the kinds.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 9;
+export const WIRE_PROTOCOL = 10;
 
 /**
  * What a session's stream carries: the changes each frame made to its

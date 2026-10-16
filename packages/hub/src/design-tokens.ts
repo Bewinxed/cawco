@@ -19,7 +19,12 @@
  * its `$value` computed from it in the base and in every context, and a
  * context whose computed value differs gets that value as an override, so a
  * tool reading any permutation reads a correct value.
+ *
+ * Beside the stylesheet it writes a typed module, {@link tokenTypes}: the
+ * system's names as `TokenColor`, `TokenSize` and `TokenFont`, which a
+ * component's props take to be offered them in the sheet inspector.
  */
+import { TOKEN_TYPES, type TokenType } from "@cawco/core/stage";
 import StyleDictionary from "style-dictionary";
 import type { DesignTokens, TransformedToken } from "style-dictionary/types";
 import { CssEvaluator, type CssToken } from "./design-css";
@@ -395,12 +400,55 @@ export function tokensCss(view: TokenView, options: TokensCssOptions): string {
   ].join("\n");
 }
 
-/** A system built: its files settled and checked against the DTCG schemas, its view, its stylesheet. */
+/** A typography token's family is its own when it is no reference to a fontFamily token (which the font type names already). */
+const ownFamily = (token: ViewToken): boolean => {
+  const family = ((token.original.original as Json).$value as Json | undefined)
+    ?.fontFamily;
+  return !(typeof family === "string" && family.startsWith("{"));
+};
+
+/** Which tokens each generated type names: by `$type`, a font a fontFamily or a typography role with its own family. */
+const TYPE_MEMBERS: Record<TokenType, (token: ViewToken) => boolean> = {
+  TokenColor: (token) => token.type === "color",
+  TokenSize: (token) => token.type === "dimension",
+  TokenFont: (token) =>
+    token.type === "fontFamily" ||
+    (token.type === "typography" && ownFamily(token)),
+};
+
+/**
+ * The typed module beside the stylesheet (`tokens.ts`): one string-literal
+ * union of the system's token names (their dotted DTCG paths) per
+ * {@link TOKEN_TYPES} alias. A component types a prop with one, and the
+ * inspector offers that prop the system's names (the owner, 2026-10-16); no
+ * other prop is offered any. A type with no tokens is `never`.
+ */
+export function tokenTypes(
+  view: TokenView,
+  options: Pick<TokensCssOptions, "header" | "include">
+): string {
+  const tokens = view.tokens.filter((token) =>
+    options.include ? options.include(token.original) : true
+  );
+  const types = (Object.keys(TOKEN_TYPES) as TokenType[]).map((name) => {
+    const members = tokens
+      .filter(TYPE_MEMBERS[name])
+      .map((token) => `  | ${JSON.stringify(token.path)}`);
+    return members.length === 0
+      ? `export type ${name} = never;`
+      : `export type ${name} =\n${members.join("\n")};`;
+  });
+  return [options.header, "", ...types.flatMap((one) => [one, ""])].join("\n");
+}
+
+/** A system built: its files settled and checked against the DTCG schemas, its view, its stylesheet and its typed module. */
 export interface BuiltTokens {
   /** The files settle changed, by path, with their new JSON. */
   changed: Map<string, unknown>;
   css: string;
   system: TokenSystem;
+  /** The typed module ({@link tokenTypes}). */
+  types: string;
   view: TokenView;
 }
 
@@ -421,7 +469,13 @@ export async function buildTokens(
     throw new Error(`not DTCG 2025.10: ${problems.join("; ")}`);
   }
   if (changedFiles.size === 0) {
-    return { changed: new Map(), css: tokensCss(view, options), system, view };
+    return {
+      changed: new Map(),
+      css: tokensCss(view, options),
+      system,
+      types: tokenTypes(view, options),
+      view,
+    };
   }
   // Settling changes values, never CSS; the merged trees are read again so
   // the system handed on carries the settled values.
@@ -436,6 +490,7 @@ export async function buildTokens(
     ),
     css: tokensCss(settledView, options),
     system: settled,
+    types: tokenTypes(settledView, options),
     view: settledView,
   };
 }

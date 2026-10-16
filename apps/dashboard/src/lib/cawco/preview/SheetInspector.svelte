@@ -20,8 +20,8 @@
    * A sheet's inspector (live components spec §5): the chosen story's
    * props as controls, from the stage's docgen. An enum is the variant
    * control (its segments, or its list past four), a boolean its switch, a
-   * string or number its field (a colour, length or font offered the
-   * project's token names), a slot "content is a pin", code read-only. A
+   * string or number its field (a prop typed `TokenColor`, `TokenSize` or
+   * `TokenFont` offered the design system's names), a slot "content is a pin", code read-only. A
    * change mounts the story again at once; Save writes its args into the
    * story file. Under the controls, the story buttons: Add story from the
    * controls as they stand, Duplicate, Move up and down, Remove (asked in
@@ -58,6 +58,7 @@
     controlOf,
     type SheetInspector,
     STORY_NAME,
+    tokenTyped,
   } from "./sheet-inspector.svelte";
 
   let {
@@ -135,10 +136,10 @@
   const up = $derived(inspector.moveBy(-1));
   const down = $derived(inspector.moveBy(1));
 
-  /** A token offer's list id, for a prop whose role takes the project's tokens. */
+  /** A token offer's list id, for a prop typed with the design system's names. */
   const listOf = (prop: PropMeta) =>
-    prop.tokens && (sheet?.tokens[prop.tokens].length ?? 0) > 0
-      ? `${id}-tokens-${prop.tokens}`
+    tokenTyped(prop) && (prop.options?.length ?? 0) > 0
+      ? `${id}-tokens-${prop.name}`
       : undefined;
   const fieldId = (prop: PropMeta) => `${id}-prop-${prop.name}`;
   /**
@@ -384,9 +385,9 @@
                   type={control === "number" ? "number" : "text"}
                   value={shown(value)}
                 />
-                {#if listOf(prop) && prop.tokens}
+                {#if listOf(prop)}
                   <datalist id={listOf(prop)}>
-                    {#each sheet.tokens[prop.tokens] as token (token)}
+                    {#each prop.options ?? [] as token (token)}
                       <option value={token}></option>
                     {/each}
                   </datalist>

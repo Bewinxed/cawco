@@ -25,11 +25,13 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
-import type {
-  ComponentDoc,
-  PropKind,
-  PropMeta,
-  TokenRole,
+import {
+  type ComponentDoc,
+  type PropKind,
+  type PropMeta,
+  TOKEN_TYPES,
+  type TokenKind,
+  type TokenType,
 } from "@cawco/core/stage";
 import type TS from "typescript";
 
@@ -58,25 +60,44 @@ const NO_TS =
   "Types unknown: add TypeScript to the project (or type the props with JSDoc and add TypeScript), and its checker reads them.";
 
 /**
- * A string prop's role by its name, which offers it the project's tokens of
- * that DTCG type (spec §9.2). Our call: a prop's TypeScript type says
- * `string`, never `color`, and these are the names a design system's props
- * go by.
+ * The token kind a declared type is: one of the design system's generated
+ * aliases ({@link TOKEN_TYPES}, `TokenColor`), alone or optional, as each
+ * framework's reader prints the type. A qualified name (`import("…").TokenColor`)
+ * is the same alias. Any other type is none.
  */
-const ROLES: [RegExp, TokenRole][] = [
-  [/(?:colou?r|fill|stroke|tint|background|bg|accent|ink)$/i, "color"],
-  [
-    /(?:size|width|height|gap|padding|margin|radius|inset|offset|space|spacing)$/i,
-    "dimension",
-  ],
-  [/(?:font|family|typeface)$/i, "fontFamily"],
-];
-const roleOf = (name: string, kind: PropKind): TokenRole | undefined =>
-  kind === "string"
-    ? ROLES.find(([pattern]) => pattern.test(name))?.[1]
+function tokenKindOf(text: string): TokenKind | undefined {
+  const members = text
+    .split("|")
+    .map((one) => one.trim())
+    .filter((one) => one !== "undefined" && one !== "null");
+  const name = members.length === 1 ? members[0]?.replace(QUALIFIED, "") : "";
+  return name && Object.hasOwn(TOKEN_TYPES, name)
+    ? TOKEN_TYPES[name as TokenType]
     : undefined;
+}
+const QUALIFIED = /^(?:import\(["'][^"']*["']\)|[A-Za-z_$][\w$]*)\./;
 
-/** One prop, its role read off its name and its kind. */
+/** A prop typed with a token alias, its names its options; an enum otherwise. */
+const enumOf = (
+  declared: string,
+  raw: string,
+  options: (string | number)[]
+): { kind: PropKind; options: (string | number)[]; raw: string } => {
+  const token = tokenKindOf(declared);
+  return token
+    ? {
+        kind: token,
+        raw: declared
+          .split("|")
+          .map((one) => one.trim())
+          .filter((one) => one !== "undefined" && one !== "null")
+          .join(" | "),
+        options,
+      }
+    : { kind: "enum", raw, options };
+};
+
+/** One prop. */
 const prop = (
   name: string,
   kind: PropKind,
@@ -87,18 +108,14 @@ const prop = (
     options?: (string | number)[];
     required: boolean;
   }
-): PropMeta => {
-  const tokens = roleOf(name, kind);
-  return {
-    name,
-    type: { name: kind, raw },
-    required: rest.required,
-    defaultValue: rest.defaultValue ?? null,
-    description: rest.description?.trim() || null,
-    ...(rest.options ? { options: rest.options } : {}),
-    ...(tokens ? { tokens } : {}),
-  };
-};
+): PropMeta => ({
+  name,
+  type: { name: kind, raw },
+  required: rest.required,
+  defaultValue: rest.defaultValue ?? null,
+  description: rest.description?.trim() || null,
+  ...(rest.options ? { options: rest.options } : {}),
+});
 
 /** A literal union's members, as values; null when any member is no string or number literal. */
 const literals = (members: string[]): (string | number)[] | null => {
@@ -251,13 +268,13 @@ function svelteKind(
     return { kind: "boolean", raw: "boolean" };
   }
   if (members.every((one) => one.isStringLiteral() || one.isNumberLiteral())) {
-    return {
-      kind: "enum",
+    // The type as declared (`TokenColor | undefined`): TypeScript keeps an
+    // alias's name in a union it is part of.
+    return enumOf(
+      checker.typeToString(type),
       raw,
-      options: members.map(
-        (one) => (one as TS.LiteralType).value as string | number
-      ),
-    };
+      members.map((one) => (one as TS.LiteralType).value as string | number)
+    );
   }
   if (members.some((one) => one.getCallSignatures().length > 0)) {
     return { kind: "function", raw };
@@ -389,6 +406,23 @@ async function svelteDoc(
 type Checker = ReturnType<typeof import("vue-component-meta").createChecker>;
 const vueCheckers = new Map<string, Checker>();
 
+/** An enum schema's literal members (vue-component-meta's `PropertyMetaSchema`), `undefined` left out; null when it is no enum of literals. */
+function vueEnum(schema: unknown): (string | number)[] | null {
+  const read = schema as { kind?: string; schema?: unknown[] } | undefined;
+  if (!(read && read.kind === "enum" && Array.isArray(read.schema))) {
+    return null;
+  }
+  return literals(
+    read.schema
+      .map((one) =>
+        typeof one === "string"
+          ? one
+          : String((one as { value?: unknown }).value ?? "\0")
+      )
+      .filter((one) => one !== "undefined" && one !== "null")
+  );
+}
+
 /** A Vue prop's schema as one of the kinds: its enum's string and number members, never `undefined`. */
 function vueKind(
   type: string,
@@ -413,10 +447,15 @@ function vueKind(
   if (options) {
     return { kind: "enum", raw, options };
   }
+  const kind = (schema as { kind?: string } | string | undefined) ?? "";
+  // An alias prints as its name; its members are the schema's.
+  const named = vueEnum(schema);
+  if (named && tokenKindOf(raw)) {
+    return enumOf(raw, raw, named);
+  }
   if (members.every((one) => one === "string" || one === "number")) {
     return { kind: members.includes("string") ? "string" : "number", raw };
   }
-  const kind = (schema as { kind?: string } | string | undefined) ?? "";
   if (typeof kind === "object" && kind.kind === "event") {
     return { kind: "function", raw };
   }
@@ -564,7 +603,8 @@ function reactKind(type: DocgenType): {
     )
   );
   if (options) {
-    return { kind: "enum", raw, options };
+    // react-docgen-typescript's `raw` is the type as declared (`TokenColor`).
+    return enumOf(raw, raw, options);
   }
   if (real.every((one) => one.name === "string" || one.name === "number")) {
     return {

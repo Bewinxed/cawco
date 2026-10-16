@@ -12,7 +12,7 @@
     "dev": "vite dev",
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
-    "tokens": "bun scripts/build-tokens.ts && bun ../../scripts/fmt.ts src/lib/tokens/tokens.css ../../packages/hub/skills/decision-page/kit/tokens.css ../apple/Packages/CawCoKit/Sources/CawCoDesign/Resources ../../design/tokens",
+    "tokens": "bun scripts/build-tokens.ts && bun ../../scripts/fmt.ts src/lib/tokens/tokens.css src/lib/tokens/tokens.ts ../../packages/hub/skills/decision-page/kit/tokens.css ../apple/Packages/CawCoKit/Sources/CawCoDesign/Resources ../../design/tokens",
     "typecheck": "svelte-kit sync && bun scripts/svelte-check.ts && tsc -p tsconfig.node.json"
   },
   "overrides": {

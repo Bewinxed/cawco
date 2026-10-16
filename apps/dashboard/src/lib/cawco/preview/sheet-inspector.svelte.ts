@@ -303,7 +303,13 @@ export class SheetInspector {
   }
 }
 
-/** A prop's own control: an enum's segments when few and short, else its list; a boolean's switch; a field; or read-only. */
+/** Whether prop `prop` is typed with the design system's colour, size or font names: its field offers them. */
+export const tokenTyped = (prop: PropMeta): boolean =>
+  prop.type.name === "token-color" ||
+  prop.type.name === "token-size" ||
+  prop.type.name === "token-font";
+
+/** A prop's own control: an enum's segments when few and short, else its list; a boolean's switch; a field (a token-typed one offering the system's names); or read-only. */
 export function controlOf(
   prop: PropMeta
 ): "segments" | "select" | "switch" | "text" | "number" | "slot" | "code" {
@@ -318,6 +324,9 @@ export function controlOf(
     case "boolean":
       return "switch";
     case "string":
+    case "token-color":
+    case "token-size":
+    case "token-font":
       return "text";
     case "number":
       return "number";

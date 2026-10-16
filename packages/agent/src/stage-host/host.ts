@@ -60,7 +60,6 @@ import {
   writeArgs,
   writeStoryOp,
 } from "./story-file";
-import { tokenNames } from "./tokens";
 
 type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
 
@@ -329,8 +328,8 @@ function mountStory(target, s) {
  * `cawco:hmr` on the window, so the overlay reads its pins' anchors again.
  *
  * The inspector's side (spec §5): each run says the sheet on the window
- * (`cawco:sheet`, its stories, args and props, and the project's token
- * names), which the overlay carries to the pane, and again when a
+ * (`cawco:sheet`, its stories, args and props, a token-typed prop's names
+ * among them), which the overlay carries to the pane, and again when a
  * component's props change (the stage's `cawco:props`); the pane's live
  * args (`cawco:story-args`) mount a story again over the file's, with no
  * write until Save; the pane's chosen story (`cawco:story-select`) is
@@ -338,11 +337,7 @@ function mountStory(target, s) {
  */
 async function sheetModule(file: string): Promise<string> {
   const abs = resolve(root, file);
-  const sheet: SheetOnPage = {
-    ...(await sheetRead(file)),
-    file,
-    tokens: tokenNames(root),
-  };
+  const sheet: SheetOnPage = { ...(await sheetRead(file)), file };
   const styles = globalStyles()
     .map((style) => `import ${JSON.stringify(style)};`)
     .join("\n");
@@ -562,6 +557,15 @@ function misfit(
     return meta.options?.includes(value as string | number)
       ? null
       : `${name} takes one of ${meta.options?.map((one) => JSON.stringify(one)).join(", ")}; ${JSON.stringify(value)} is none of them.`;
+  }
+  if (
+    kind === "token-color" ||
+    kind === "token-size" ||
+    kind === "token-font"
+  ) {
+    return meta.options?.includes(value as string)
+      ? null
+      : `${name} takes one of the design system's ${raw} names; ${JSON.stringify(value)} is none of them.`;
   }
   if (kind === "slot") {
     return `${name} is a slot (${raw}): its content is a pin for the agent, not an arg.`;

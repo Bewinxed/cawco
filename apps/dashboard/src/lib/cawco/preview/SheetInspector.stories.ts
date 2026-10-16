@@ -87,7 +87,6 @@ const STAT_TILE: SheetOnPage = {
       ],
     },
   ],
-  tokens: { color: [], dimension: [], fontFamily: [] },
 };
 
 /** An inspector on `sheet`, its story `chosen`, writes answered by `write`. */

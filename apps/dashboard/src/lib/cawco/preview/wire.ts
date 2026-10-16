@@ -16,7 +16,6 @@ import type {
   PropMeta,
   SheetOnPage,
   Story,
-  TokenRole,
 } from "@cawco/core/stage";
 
 const ERROR_MAX = 300;
@@ -111,8 +110,8 @@ export function previewPinAt(
 
 /*
  * A sheet's page says its sheet (`cawco:sheet`): its stories with their
- * args, its meta, each component's props and the project's token names,
- * which the inspector draws its controls from. The page's own code shares
+ * args, its meta and each component's props (a token-typed prop's names
+ * among them), which the inspector draws its controls from. The page's own code shares
  * the overlay's window, so each field is checked and bounded; every write
  * is checked again by the stage against the props it reads itself.
  */
@@ -122,13 +121,15 @@ const KINDS = new Set<PropKind>([
   "number",
   "boolean",
   "enum",
+  "token-color",
+  "token-size",
+  "token-font",
   "slot",
   "function",
   "object",
   "array",
   "other",
 ]);
-const ROLES = new Set<TokenRole>(["color", "dimension", "fontFamily"]);
 const SHEET_BOUNDS = {
   stories: 100,
   components: 20,
@@ -171,20 +172,22 @@ function propOf(value: unknown): PropMeta | null {
   if (!(raw && type && name && KINDS.has(kind))) {
     return null;
   }
-  const options = list(raw.options, SHEET_BOUNDS.options).filter(
+  const token = kind.startsWith("token-");
+  const options = list(
+    raw.options,
+    token ? SHEET_BOUNDS.tokens : SHEET_BOUNDS.options
+  ).filter(
     (one): one is string | number =>
-      typeof one === "number" ||
+      (typeof one === "number" && !token) ||
       (typeof one === "string" && one.length <= SHEET_BOUNDS.name)
   );
-  const role = raw.tokens as TokenRole;
   return {
     name,
     type: { name: kind, raw: text(type.raw, SHEET_BOUNDS.text) ?? "" },
     required: raw.required === true,
     defaultValue: text(raw.defaultValue, SHEET_BOUNDS.text),
     description: text(raw.description, SHEET_BOUNDS.text),
-    ...(kind === "enum" ? { options } : {}),
-    ...(ROLES.has(role) ? { tokens: role } : {}),
+    ...(kind === "enum" || token ? { options } : {}),
   };
 }
 
@@ -237,12 +240,6 @@ function storyOf(value: unknown): Story | null {
   };
 }
 
-const namesOf = (value: unknown): string[] =>
-  list(value, SHEET_BOUNDS.tokens).filter(
-    (one): one is string =>
-      typeof one === "string" && one.length <= SHEET_BOUNDS.name
-  );
-
 /** A sheet as its page says it, checked and bounded; null when it is no sheet. */
 export function previewSheet(value: unknown): SheetOnPage | null {
   const raw = record(value);
@@ -251,7 +248,6 @@ export function previewSheet(value: unknown): SheetOnPage | null {
   if (!(raw && meta && file)) {
     return null;
   }
-  const tokens = record(raw.tokens);
   return {
     file,
     stories: list(raw.stories, SHEET_BOUNDS.stories).flatMap(
@@ -265,11 +261,6 @@ export function previewSheet(value: unknown): SheetOnPage | null {
     components: list(raw.components, SHEET_BOUNDS.components).flatMap(
       (one) => componentOf(one) ?? []
     ),
-    tokens: {
-      color: namesOf(tokens?.color),
-      dimension: namesOf(tokens?.dimension),
-      fontFamily: namesOf(tokens?.fontFamily),
-    },
   };
 }
 

@@ -4304,6 +4304,9 @@ public enum OpenEnums {
         case other
         case slot
         case string
+        case tokenColor
+        case tokenFont
+        case tokenSize
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -4318,6 +4321,9 @@ public enum OpenEnums {
             case "other": self = .other
             case "slot": self = .slot
             case "string": self = .string
+            case "token-color": self = .tokenColor
+            case "token-font": self = .tokenFont
+            case "token-size": self = .tokenSize
             default: self = .unrecognized(rawValue)
             }
         }
@@ -4333,6 +4339,9 @@ public enum OpenEnums {
             case .other: "other"
             case .slot: "slot"
             case .string: "string"
+            case .tokenColor: "token-color"
+            case .tokenFont: "token-font"
+            case .tokenSize: "token-size"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -4341,48 +4350,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.array, .boolean, ._enum, .function, .number, .object, .other, .slot, .string]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/PropMetaTokens`.
-    public enum PropMetaTokens: OpenEnum {
-        case color
-        case dimension
-        case fontFamily
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "color": self = .color
-            case "dimension": self = .dimension
-            case "fontFamily": self = .fontFamily
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .color: "color"
-            case .dimension: "dimension"
-            case .fontFamily: "fontFamily"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.color, .dimension, .fontFamily]
+        public static let allCases: [Self] = [.array, .boolean, ._enum, .function, .number, .object, .other, .slot, .string, .tokenColor, .tokenFont, .tokenSize]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

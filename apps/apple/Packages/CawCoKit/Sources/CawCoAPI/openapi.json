@@ -32189,7 +32189,7 @@
             "type": "string"
           },
           "options": {
-            "description": "An enum's values, in the order its type lists them.",
+            "description": "An enum's values, or a token kind's names, in the order its type lists them.",
             "type": "array",
             "items": {
               "anyOf": [
@@ -32204,10 +32204,6 @@
           },
           "required": {
             "type": "boolean"
-          },
-          "tokens": {
-            "$ref": "#/components/schemas/PropMetaTokens",
-            "description": "A string prop whose name says it is a colour, length or font takes that type's token names."
           },
           "type": {
             "type": "object",
@@ -32234,7 +32230,7 @@
         ]
       },
       "PropKind": {
-        "description": "A prop's type in Storybook's SBType names (`argTypes[name].type.name`),\nwhich decides its control: `enum` the variant control, `boolean`,\n`string` and `number` their fields, `slot` content that is a pin\n(`Snippet`, `ReactNode`, a Vue slot), the rest read-only.",
+        "description": "A prop's type in Storybook's SBType names (`argTypes[name].type.name`),\nwhich decides its control: `enum` the variant control, `boolean`,\n`string` and `number` their fields, `slot` content that is a pin\n(`Snippet`, `ReactNode`, a Vue slot), the rest read-only. A `token-*`\nkind is a prop typed with one of the design system's generated token\ntypes ({@link TOKEN_TYPES}): its options are the system's names.",
         "type": "string",
         "enum": [
           "array",
@@ -32245,7 +32241,10 @@
           "object",
           "other",
           "slot",
-          "string"
+          "string",
+          "token-color",
+          "token-font",
+          "token-size"
         ]
       },
       "SheetMeta": {
@@ -33137,13 +33136,13 @@
               "color": {
                 "type": "string"
               },
-              "fontFamily": {
-                "type": "string"
-              },
               "position": {
                 "type": "string"
               },
               "backgroundColor": {
+                "type": "string"
+              },
+              "fontFamily": {
                 "type": "string"
               },
               "fontSize": {
@@ -51248,14 +51247,6 @@
           "deferred",
           "failed",
           "stopped"
-        ]
-      },
-      "PropMetaTokens": {
-        "type": "string",
-        "enum": [
-          "color",
-          "dimension",
-          "fontFamily"
         ]
       },
       "RebalanceNoticeHow": {

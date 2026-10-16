@@ -3,7 +3,8 @@
  * design/tokens/cawco.resolver.json: a W3C Design Tokens (DTCG 2025.10)
  * resolver over cawco.tokens.json (the base set) and one file per context
  * (cawco.dark, cawco.coarse, cawco.compact). Every visual value the
- * dashboard uses is defined there; app.css only imports the result.
+ * dashboard uses is defined there; app.css only imports the result. Beside
+ * it, tokens.ts types the token names (design-tokens.ts `tokenTypes`).
  *
  * The stylesheet comes from the hub's generator (packages/hub/src/
  * design-tokens.ts), the one every project's design/tokens.css is made
@@ -30,6 +31,8 @@ import { isProductToken } from "./token-groups";
 const DIR = "../../design/tokens";
 const RESOLVER = "cawco.resolver.json";
 const OUT = "src/lib/tokens/tokens.css";
+/** The typed module beside it: `TokenColor`, `TokenSize`, `TokenFont`, which a component's props take to be offered the names in a sheet's inspector. */
+const TYPES_OUT = "src/lib/tokens/tokens.ts";
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */
 const SKILL_OUT = "../../packages/hub/skills/decision-page/kit/tokens.css";
@@ -51,6 +54,7 @@ await Promise.all([
     Bun.write(join(DIR, path), `${JSON.stringify(json, null, 2)}\n`)
   ),
   Bun.write(OUT, built.css),
+  Bun.write(TYPES_OUT, built.types),
   Bun.write(SKILL_OUT, built.css),
 ]);
 

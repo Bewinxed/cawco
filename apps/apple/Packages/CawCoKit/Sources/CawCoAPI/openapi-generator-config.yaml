@@ -108,7 +108,6 @@ typeOverrides:
     ProjectOfferReason: OpenEnums.ProjectOfferReason
     ProjectStopFrameOutcome: OpenEnums.ProjectStopFrameOutcome
     PropKind: OpenEnums.PropKind
-    PropMetaTokens: OpenEnums.PropMetaTokens
     QueueSlot: OpenEnums.QueueSlot
     RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow
     RelayProvider: OpenEnums.RelayProvider

@@ -130,7 +130,7 @@ export const createHubTools =
       ),
       tool(
         "design_write",
-        "Write files of the project's design system (design/, paths inside it); bytes as base64. tokens.css is generated from tokens.json; every token needs a source in manifest.json. A file the person edited is kept, not overwritten.",
+        "Write files of the project's design system (design/, paths inside it); bytes as base64. tokens.css and tokens.ts are generated from tokens.json; every token needs a source in manifest.json. A file the person edited is kept.",
         {
           files: z
             .array(
