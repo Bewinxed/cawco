@@ -8291,15 +8291,7 @@ export const createServer = (
     account: Account,
     identity: AccountIdentity
   ): Account | undefined =>
-    db.accounts
-      .list()
-      .find(
-        (one) =>
-          one.id !== account.id &&
-          one.provider === account.provider &&
-          one.identity !== null &&
-          sameIdentity(one.identity, identity)
-      );
+    db.accounts.byIdentity(account.provider, identity, account.id);
 
   /**
    * One identity is one account. A sign-in on `machineId` into `account`,

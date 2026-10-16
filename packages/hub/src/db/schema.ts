@@ -1,6 +1,5 @@
 import type {
   AccountHue,
-  AccountIdentity,
   AccountKind,
   AccountMove,
   AccountOverage,
@@ -74,6 +73,7 @@ import type {
   OAuthProtectedResourceMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
   customType,
@@ -2041,24 +2041,39 @@ export const usageLimits = sqliteTable("usage_limits", {
  * on. Its credential is never here: it lives in the account's own Claude Code
  * config dir on each machine signed in to it.
  */
-export const accounts = sqliteTable("accounts", {
-  id: text("id").primaryKey(),
-  provider: text("provider").$type<AccountProvider>().notNull(),
-  kind: text("kind").$type<AccountKind>().notNull(),
-  /** A nickname; null: the account goes by its identity's email. */
-  label: text("label"),
-  hue: text("hue").$type<AccountHue>().notNull(),
-  order: integer("order").notNull(),
-  neverBackup: integer("never_backup", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  reservePct: integer("reserve_pct"),
-  /** The email and organization `claude auth status` reported at its first sign-in. */
-  identity: text("identity", { mode: "json" }).$type<AccountIdentity>(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const accounts = sqliteTable(
+  "accounts",
+  {
+    id: text("id").primaryKey(),
+    provider: text("provider").$type<AccountProvider>().notNull(),
+    kind: text("kind").$type<AccountKind>().notNull(),
+    /** A nickname; null: the account goes by its identity's email. */
+    label: text("label"),
+    hue: text("hue").$type<AccountHue>().notNull(),
+    order: integer("order").notNull(),
+    neverBackup: integer("never_backup", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    reservePct: integer("reserve_pct"),
+    /**
+     * The identity (core `AccountIdentity`) its first sign-in reported: the
+     * email, any case, and the organization. Both null until then. One
+     * identity is one account of a provider (core `sameIdentity`).
+     */
+    email: text("email"),
+    organization: text("organization"),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    index("accounts_identity").on(
+      table.provider,
+      sql`lower(${table.email})`,
+      table.organization
+    ),
+  ]
+);
 
 /**
  * Every account this hub removed (or joined away into another), and when.
@@ -2111,9 +2126,9 @@ export const loginMoves = sqliteTable(
     accountId: text("account_id")
       .notNull()
       .references(() => accounts.id, { onDelete: "cascade" }),
-    identity: text("identity", { mode: "json" })
-      .$type<AccountIdentity>()
-      .notNull(),
+    /** The identity the credential is signed in as (core `AccountIdentity`). */
+    email: text("email").notNull(),
+    organization: text("organization").notNull(),
     provider: text("provider").$type<AccountProvider>().notNull(),
     since: timestamp("since").notNull(),
   },

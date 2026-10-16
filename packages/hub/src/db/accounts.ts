@@ -16,7 +16,7 @@ import {
   type ModelInfo,
   type ProviderRouting,
 } from "@cawco/core";
-import { and, asc, eq, gt, gte, inArray, lte, max, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lte, max, ne, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   accountBench,
@@ -58,6 +58,16 @@ export interface LoginMove {
 
 export interface AccountsDb {
   readonly bench: (now?: number) => AccountBench[];
+  /**
+   * The provider's account signed in as `identity` (core `sameIdentity`:
+   * the email in any case, the same organization), but `except`; one
+   * indexed lookup.
+   */
+  readonly byIdentity: (
+    provider: AccountProvider,
+    identity: AccountIdentity,
+    except?: string
+  ) => Account | undefined;
   readonly catalogs: () => AccountCatalog[];
   readonly create: (draft: {
     hue?: AccountHue;
@@ -154,14 +164,25 @@ const toAccount = (row: AccountRow): Account => ({
   provider: row.provider,
   kind: row.kind,
   label: row.label,
-  email: row.identity?.email ?? null,
+  email: row.email,
   hue: row.hue,
   order: row.order,
   neverBackup: row.neverBackup,
   reservePct: row.reservePct,
-  identity: row.identity,
+  identity:
+    row.email === null
+      ? null
+      : { email: row.email, organization: row.organization ?? "" },
   createdAt: row.createdAt.getTime(),
 });
+
+/** One identity as `accounts_identity` keys it: the provider, the email in any case, the organization. */
+const sameIdentityAs = (provider: AccountProvider, identity: AccountIdentity) =>
+  and(
+    eq(accounts.provider, provider),
+    eq(sql`lower(${accounts.email})`, identity.email.toLowerCase()),
+    eq(accounts.organization, identity.organization)
+  );
 
 /** A window's identity in a reading: its kind and the model it is scoped to. */
 const windowKey = (w: LimitWindow): string =>
@@ -216,6 +237,21 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
   return {
     list,
     get,
+    byIdentity: (provider, identity, except) => {
+      const row = db
+        .select()
+        .from(accounts)
+        .where(
+          and(
+            sameIdentityAs(provider, identity),
+            except === undefined ? undefined : ne(accounts.id, except)
+          )
+        )
+        .orderBy(asc(accounts.order), asc(accounts.createdAt))
+        .limit(1)
+        .get();
+      return row ? toAccount(row) : undefined;
+    },
     catalogs,
     putCatalog: (accountId, models, at = Date.now()) => {
       if (!get(accountId)) {
@@ -268,7 +304,8 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
             ACCOUNT_HUES[order % ACCOUNT_HUES.length] ??
             "blue",
           order,
-          identity: identity ?? null,
+          email: identity?.email ?? null,
+          organization: identity?.organization ?? null,
         })
         .returning()
         .get();
@@ -281,7 +318,10 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
       return get(id);
     },
     setIdentity: (id, identity) => {
-      db.update(accounts).set({ identity }).where(eq(accounts.id, id)).run();
+      db.update(accounts)
+        .set({ email: identity.email, organization: identity.organization })
+        .where(eq(accounts.id, id))
+        .run();
     },
     // Its sign-ins, readings, catalog and bench go with it (cascade).
     remove: (id, why) =>
@@ -365,10 +405,19 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .select()
         .from(loginMoves)
         .all()
-        .map((row) => ({ ...row, since: row.since.getTime() })),
-    putMove: (move) => {
+        .map(({ email, organization, ...row }) => ({
+          ...row,
+          identity: { email, organization },
+          since: row.since.getTime(),
+        })),
+    putMove: ({ identity, ...move }) => {
       db.insert(loginMoves)
-        .values({ ...move, since: new Date(move.since) })
+        .values({
+          ...move,
+          email: identity.email,
+          organization: identity.organization,
+          since: new Date(move.since),
+        })
         .onConflictDoNothing()
         .run();
     },

@@ -68,14 +68,8 @@ export const accountOfIdentity = (
   kind: AccountKind,
   provider: AccountProvider
 ): Account =>
-  db.accounts
-    .list()
-    .find(
-      (one) =>
-        one.provider === provider &&
-        one.identity &&
-        sameIdentity(one.identity, identity)
-    ) ?? db.accounts.create({ provider, kind, identity });
+  db.accounts.byIdentity(provider, identity) ??
+  db.accounts.create({ provider, kind, identity });
 
 /**
  * The account's models, read through a probe of its dir on the machine when
@@ -131,18 +125,7 @@ const dirState = (
     // another account's identity is not named after it. The sign-in's own
     // answer joins it into that account (server.ts `joinExisting`); until
     // then it is signed in as nobody of its own.
-    const taken = report.identity;
-    if (
-      db.accounts
-        .list()
-        .some(
-          (one) =>
-            one.id !== account.id &&
-            one.provider === account.provider &&
-            one.identity !== null &&
-            sameIdentity(one.identity, taken)
-        )
-    ) {
+    if (db.accounts.byIdentity(account.provider, report.identity, account.id)) {
       return "signed-out";
     }
     db.accounts.setIdentity(account.id, report.identity);

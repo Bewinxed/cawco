@@ -74,17 +74,10 @@ const fail = (why: string): never => {
 const db = new Database(dbPath);
 db.run(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
 
-const accounts = (
-  db.query("SELECT id, identity FROM accounts").all() as {
-    id: string;
-    identity: string | null;
-  }[]
-).map((row) => ({
-  id: row.id,
-  email: row.identity
-    ? (JSON.parse(row.identity) as { email: string }).email
-    : null,
-}));
+const accounts = db.query("SELECT id, email FROM accounts").all() as {
+  email: string | null;
+  id: string;
+}[];
 const nameOf = (id: string): string => {
   const email = accounts.find((one) => one.id === id)?.email;
   return email ? `${email} (${id})` : id;
