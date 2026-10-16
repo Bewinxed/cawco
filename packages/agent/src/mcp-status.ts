@@ -1,7 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { type McpServerStatus, query } from "@anthropic-ai/claude-agent-sdk";
 import { type FleetSyncReport, mcpFleetState } from "@cawco/core";
-import { claudeExecutableOptions, idle } from "./auth";
+import { idle } from "./auth";
+import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { claudeHomeEnv } from "./tools";
 
 /**
@@ -58,12 +59,24 @@ export const readMcpRuntime = async (
   }
   const env = { ...CLAUDE_MCP_ENV, ...claudeHomeEnv() };
   const connectMs = claudeMcpConnectMs(env);
+  let executable: string;
+  try {
+    executable = await claudeToStart();
+  } catch (error) {
+    if (!(error instanceof ClaudeRefused)) {
+      throw error;
+    }
+    // Refused, it reads no server: each says why, and the rest of the sync goes on.
+    return Object.fromEntries(
+      names.map((name) => [name, { state: "failed", detail: error.message }])
+    );
+  }
   const handle = query({
     prompt: idle,
     options: {
       persistSession: false,
       env,
-      ...claudeExecutableOptions(),
+      pathToClaudeCodeExecutable: executable,
     },
   });
   let statuses: McpServerStatus[] | undefined;

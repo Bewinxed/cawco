@@ -34,13 +34,9 @@ import {
   USER_LAYER_FILES,
   userLayerPath,
 } from "@cawco/core/paths";
-import { claudeExecutableOptions, idle, resolveClaudeExecutable } from "./auth";
+import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
-import {
-  CLAUDE_VERSION_FLOOR,
-  claudeHostVersion,
-  olderThan,
-} from "./claude-version";
+import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { hostGit } from "./clone";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
 import { probeStarted } from "./probe-count";
@@ -88,7 +84,7 @@ const envFor = (account: string): Record<string, string | undefined> => ({
  * token refresh short, which signed accounts out before Claude Code 2.1.301
  * ("Fixed sign-in refresh timeouts and unexpected sign-outs after a short
  * command such as `claude auth status` … exited in the middle of a token
- * refresh"), so it runs on nothing older ({@link CLAUDE_VERSION_FLOOR}).
+ * refresh"), so it runs on nothing older ({@link claudeToStart}).
  */
 const AUTH_STATUS_TIMEOUT_MS = 20_000;
 
@@ -108,6 +104,13 @@ export class AuthStatusUnanswered extends Error {
     this.name = "AuthStatusUnanswered";
     this.dir = dir;
     this.ms = ms;
+  }
+
+  /** Not run at all: the version gate refused it ({@link claudeToStart}), in its own sentence. */
+  static refused(dir: string, refusal: ClaudeRefused): AuthStatusUnanswered {
+    const unanswered = new AuthStatusUnanswered(dir, 0, refusal.message);
+    unanswered.message = `\`claude auth status\` was not run for ${dir}: ${refusal.message} Its sign-in was not read.`;
+    return unanswered;
   }
 }
 
@@ -147,17 +150,14 @@ export const authStatusIn = async (
   identity?: AccountIdentity;
 }> => {
   const started = Date.now();
-  const executable = resolveClaudeExecutable();
-  if (!executable) {
-    throw new AuthStatusUnanswered(dir, 0, "Claude Code is not installed");
-  }
-  const version = await claudeHostVersion();
-  if (!version || olderThan(version, CLAUDE_VERSION_FLOOR)) {
-    throw new AuthStatusUnanswered(
-      dir,
-      0,
-      `it was not run, because CawCo runs no Claude Code older than ${CLAUDE_VERSION_FLOOR} and this machine's ${version ? `is ${version}` : "didn't say its version"}`
-    );
+  let executable: string;
+  try {
+    executable = await claudeToStart();
+  } catch (error) {
+    if (error instanceof ClaudeRefused) {
+      throw AuthStatusUnanswered.refused(dir, error);
+    }
+    throw error;
   }
   const child = Bun.spawn([executable, "auth", "status", "--json"], {
     env,
@@ -437,7 +437,7 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
   const handle = query({
     prompt: idle,
     options: {
-      ...claudeExecutableOptions(),
+      pathToClaudeCodeExecutable: await claudeToStart(),
       env: envFor(account),
       settingSources: [],
       strictMcpConfig: true,

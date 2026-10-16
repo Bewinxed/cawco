@@ -3,7 +3,7 @@ import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
 import { toolVersion } from "./capabilities";
 
 /**
- * The oldest Claude Code CawCo runs a session or a `claude auth status` on.
+ * The oldest Claude Code CawCo runs at all ({@link claudeToStart}).
  * Its reason, Claude Code's CHANGELOG under 2.1.301: "Fixed sign-in refresh
  * timeouts and unexpected sign-outs after a short command such as `claude
  * auth status` or `claude plugin list` exited in the middle of a token
@@ -94,22 +94,50 @@ export const claudeHostVersion = (): Promise<string | undefined> => {
 };
 
 /**
- * Why no Claude session starts on this machine's Claude Code, in one
- * sentence; nothing when it is {@link CLAUDE_VERSION_FLOOR} or newer.
+ * Why CawCo runs nothing of this machine's Claude Code, in one sentence;
+ * nothing when it is {@link CLAUDE_VERSION_FLOOR} or newer. The words
+ * {@link claudeToStart} refuses with, and the machine's report says.
  */
 export const versionRefusal = (
   version: string | undefined
 ): string | undefined => {
   if (!version) {
-    return `Claude Code on this machine didn't say its version, so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it starts a session on.`;
+    return `Claude Code on this machine didn't say its version, so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs.`;
   }
   return olderThan(version, CLAUDE_VERSION_FLOOR)
-    ? `Claude Code ${version} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo starts a session on, because older ones can sign an account out when a sign-in refresh is cut short: run \`claude update\` there.`
+    ? `Claude Code ${version} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo runs, because older ones can sign an account out when a sign-in refresh is cut short: run \`claude update\` there.`
     : undefined;
 };
 
-/** {@link versionRefusal} for the machine's Claude Code as it is now; {@link CLAUDE_NOT_INSTALLED} when there is none. */
-export const claudeVersionRefusal = async (): Promise<string | undefined> =>
-  resolveClaudeExecutable()
-    ? versionRefusal(await claudeHostVersion())
-    : CLAUDE_NOT_INSTALLED;
+/**
+ * What {@link claudeToStart} refuses with: its message is the one sentence,
+ * `reason` which of the two it is.
+ */
+export class ClaudeRefused extends Error {
+  readonly reason: "not-installed" | "version";
+  constructor(reason: ClaudeRefused["reason"], message: string) {
+    super(message);
+    this.name = "ClaudeRefused";
+    this.reason = reason;
+  }
+}
+
+/**
+ * THE GATE every start of this machine's Claude Code goes through: a
+ * session, `claude auth status`, `auth login` and `logout`, an account's
+ * probe, the MCP status read, the plugin commands. The path to run, or
+ * {@link ClaudeRefused} with {@link CLAUDE_NOT_INSTALLED} or
+ * {@link versionRefusal}'s sentence. Asking its version
+ * ({@link claudeHostVersion}) is the one run that does not go through it.
+ */
+export const claudeToStart = async (): Promise<string> => {
+  const path = resolveClaudeExecutable();
+  if (!path) {
+    throw new ClaudeRefused("not-installed", CLAUDE_NOT_INSTALLED);
+  }
+  const refused = versionRefusal(await claudeHostVersion());
+  if (refused) {
+    throw new ClaudeRefused("version", refused);
+  }
+  return path;
+};

@@ -41,6 +41,9 @@ import { ensureDeps } from "./lib/deps";
 // The dependencies first (lib/deps.ts): the fleet loads after them.
 await ensureDeps();
 const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
+const { claudeToStart } = await import("../packages/agent/src/claude-version");
+/** The `claude` the agent runs, through its version gate. */
+const CLAUDE = await claudeToStart();
 
 /** The scratch agent's own user layer, `$HOME/.claude`. */
 const userLayer = (home: string, ...parts: string[]) =>
@@ -106,7 +109,7 @@ const cli = (args: string[]): string => {
   const env = Object.fromEntries(
     Object.entries(fleet.env).filter(([key]) => key !== "CLAUDE_CONFIG_DIR")
   );
-  const ran = Bun.spawnSync(["claude", ...args], {
+  const ran = Bun.spawnSync([CLAUDE, ...args], {
     env,
     stdout: "pipe",
     stderr: "pipe",

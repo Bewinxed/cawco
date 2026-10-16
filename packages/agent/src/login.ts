@@ -26,7 +26,7 @@ import {
   probeAccount,
   removeAccountDir,
 } from "./accounts";
-import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
+import { ClaudeRefused, claudeToStart } from "./claude-version";
 
 /**
  * Signing an account in on a machine from the dashboard, over the tunnel, in
@@ -221,10 +221,7 @@ const beginSignIn = async (
     end(previous);
     inFlight.delete(account);
   }
-  const executable = resolveClaudeExecutable();
-  if (!executable) {
-    throw new Error(CLAUDE_NOT_INSTALLED);
-  }
+  const executable = await claudeToStart();
   const decoder = new TextDecoder();
   let signIn: SignIn | undefined;
   const terminal = new Bun.Terminal({
@@ -339,11 +336,20 @@ export const beginAccountLogin = async (
   return beginSignIn(account, kind);
 };
 
-/** Runs `claude auth logout` in an account's dir: Claude Code signs it out itself. */
+/**
+ * Runs `claude auth logout` in an account's dir: Claude Code signs it out
+ * itself. With no Claude Code here there is nothing to sign out with; one
+ * the version gate refuses is refused ({@link claudeToStart}).
+ */
 const logout = async (account: string): Promise<void> => {
-  const executable = resolveClaudeExecutable();
-  if (!executable) {
-    return;
+  let executable: string;
+  try {
+    executable = await claudeToStart();
+  } catch (error) {
+    if (error instanceof ClaudeRefused && error.reason === "not-installed") {
+      return;
+    }
+    throw error;
   }
   const child = Bun.spawn([executable, "auth", "logout"], {
     env: { ...bareEnv(), ...accountEnv(account) },

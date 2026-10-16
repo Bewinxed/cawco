@@ -62,6 +62,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { resolveClaudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
+import { ClaudeRefused, claudeToStart } from "./claude-version";
 import {
   convergeDeniedTools,
   machineDenyList,
@@ -901,17 +902,20 @@ const syncPlugins = async (
 ): Promise<PluginRecords> => {
   const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
   const hubOnly = config.hubOnlyMarketplaces ?? [];
-  // The Claude Code sessions run: its plugins are the ones they load.
-  const bin = resolveClaudeExecutable();
-  if (!bin) {
+  // The Claude Code sessions run: its plugins are the ones they load, and its
+  // `claude plugin …` commands start it, so through the version gate.
+  let bin: string;
+  try {
+    bin = await claudeToStart();
+  } catch (error) {
+    if (!(error instanceof ClaudeRefused)) {
+      throw error;
+    }
     for (const { name } of config.marketplaces) {
-      report.marketplaces[name] = {
-        state: "failed",
-        detail: "claude CLI not found",
-      };
+      report.marketplaces[name] = { state: "failed", detail: error.message };
     }
     for (const { id } of wantedPlugins) {
-      report.plugins[id] = { state: "failed", detail: "claude CLI not found" };
+      report.plugins[id] = { state: "failed", detail: error.message };
     }
     return {
       marketplaces: managed.marketplaces,

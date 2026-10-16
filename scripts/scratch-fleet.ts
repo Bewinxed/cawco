@@ -1708,9 +1708,17 @@ async function standUp(
       }>(
         "SELECT account_id, machine_id, state, checked_at FROM account_signins"
       );
-      const { resolveClaudeExecutable } =
-        await import("../packages/agent/src/auth");
-      const executable = resolveClaudeExecutable();
+      const { claudeToStart } =
+        await import("../packages/agent/src/claude-version");
+      // Through the agent's version gate; its refusal is what is said.
+      const started = await claudeToStart().then(
+        (path) => ({ path, refused: undefined }),
+        (refused: unknown) => ({
+          path: undefined,
+          refused: refused instanceof Error ? refused.message : String(refused),
+        })
+      );
+      const executable = started.path;
       const status = executable
         ? await Bun.$`${executable} auth status --json`
             .env({ ...env, CLAUDE_CONFIG_DIR: accountDir })
@@ -1725,7 +1733,7 @@ async function standUp(
         [
           `${error instanceof Error ? error.message : String(error)}: waited for account ${ACCOUNT} (its dir ${accountDir}) on machine ${MACHINE}.`,
           `Sign-in rows the hub holds: ${rows.length > 0 ? rows.map((row) => `${row.account_id} on ${row.machine_id}: ${row.state} (checked ${new Date(row.checked_at).toISOString()})`).join("; ") : "none"}.`,
-          `Claude Code (${executable ?? "no executable found"}) says for that dir: exit ${status?.exitCode ?? "-"}, ${status ? status.stdout.toString().trim() || status.stderr.toString().trim() || "(nothing)" : "(not run)"}.`,
+          `Claude Code (${executable ?? started.refused}) says for that dir: exit ${status?.exitCode ?? "-"}, ${status ? status.stdout.toString().trim() || status.stderr.toString().trim() || "(nothing)" : "(not run)"}.`,
           `The agent's account lines:\n${agentLines.join("\n") || "(none)"}`,
         ].join("\n"),
         { cause: error }

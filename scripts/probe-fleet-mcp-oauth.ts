@@ -37,8 +37,8 @@ import { ensureDeps } from "./lib/deps";
 
 // The dependencies first (lib/deps.ts): what needs them loads after.
 await ensureDeps();
-const { claudeExecutableOptions, idle } =
-  await import("../packages/agent/src/auth");
+const { idle } = await import("../packages/agent/src/auth");
+const { claudeToStart } = await import("../packages/agent/src/claude-version");
 const { scratchFleet, until } = await import("./scratch-fleet");
 
 /** The Agent SDK the agent itself runs Claude Code through: its dependency, not the root's. */
@@ -290,7 +290,7 @@ const freshSession = async () => {
     options: {
       persistSession: false,
       env,
-      ...claudeExecutableOptions(),
+      pathToClaudeCodeExecutable: await claudeToStart(),
     },
   });
   try {

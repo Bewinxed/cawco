@@ -1726,9 +1726,15 @@ const attach = (
     });
 
     // Who each account dir is signed in as, read again on a cadence
-    // (`claude auth status`, which reads and refreshes nothing): an account
-    // signed out or switched under a connected machine moves its sign-in at
-    // the hub within a minute, not at the machine's next connect.
+    // (`claude auth status`): an account signed out or switched under a
+    // connected machine moves its sign-in at the hub within a minute, not at
+    // the machine's next connect. `auth status` can refresh the dir's token
+    // as it reads, and one ended mid-refresh signed accounts out until
+    // Claude Code 2.1.301 (CHANGELOG: "Fixed sign-in refresh timeouts and
+    // unexpected sign-outs after a short command such as `claude auth
+    // status` or `claude plugin list` exited in the middle of a token
+    // refresh"), so it runs on nothing older (claude-version.ts
+    // `claudeToStart`).
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(async () => {

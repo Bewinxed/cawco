@@ -24,25 +24,15 @@ export const CLAUDE_NOT_INSTALLED =
  * The Claude Code installed on this machine: the absolute path of the
  * `claude` on the agent's PATH. CawCo carries no Claude Code of its own: the
  * installed one holds the person's login (on macOS its Keychain item is tied
- * to it), carries their plugins and updates itself.
+ * to it), carries their plugins and updates itself. Found, not started:
+ * whatever starts it takes its path from the version gate (claude-version.ts
+ * `claudeToStart`). Every SDK call is handed it absolute as
+ * `pathToClaudeCodeExecutable`, because the SDK rejects a bare name (it
+ * checks the path exists), and without it would reach for its own platform
+ * package instead.
  */
 export const resolveClaudeExecutable = (): string | undefined =>
   Bun.which("claude") ?? undefined;
-
-/**
- * The one way every SDK call finds its CLI. Absolute, because the SDK
- * rejects a bare name (it checks the path exists); without it the SDK would
- * reach for its own platform package instead.
- */
-export const claudeExecutableOptions = (): {
-  pathToClaudeCodeExecutable: string;
-} => {
-  const path = resolveClaudeExecutable();
-  if (!path) {
-    throw new Error(CLAUDE_NOT_INSTALLED);
-  }
-  return { pathToClaudeCodeExecutable: path };
-};
 
 /**
  * `errSecAuthFailed` (-25293), as `security` exits with it: the OSStatus's

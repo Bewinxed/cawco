@@ -130,11 +130,7 @@ import {
   probeAccount,
   projectMemoryRoot,
 } from "../accounts";
-import {
-  CLAUDE_NOT_INSTALLED,
-  claudeExecutableOptions,
-  resolveClaudeExecutable,
-} from "../auth";
+import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "../auth";
 import {
   claudeBoundaryOptions,
   hookFailsOpen,
@@ -152,7 +148,7 @@ import {
 import { carrySessions, readTaskList, transcriptIn } from "../claude-sessions";
 import {
   claudeHostVersion,
-  claudeVersionRefusal,
+  claudeToStart,
   INITIALIZE_SAYS_VERSION_FROM,
   versionRefusal,
 } from "../claude-version";
@@ -1726,10 +1722,10 @@ class ClaudeSession implements HarnessSession {
     effort: EffortLevel | undefined,
     resume: SpawnPayload["resume"],
     persistSession: boolean | undefined,
-    skills?: string[],
-    denyTools?: string[],
+    skills: string[] | undefined,
+    denyTools: string[] | undefined,
     /** What the fleet denies this session, resolved once by `spawn()` via {@link sessionFleetDenials}. */
-    fleetDenyList: readonly string[] = [],
+    fleetDenyList: readonly string[],
     /**
      * How the hub marked the spawn: a project's Caw ({@link SpawnPayload.lead})
      * asks the hub before each shell and edit call; a fenced session
@@ -1746,22 +1742,24 @@ class ClaudeSession implements HarnessSession {
       lead: boolean;
       fence: boolean;
       instructions?: readonly SessionInstruction[];
-    } = {
-      lead: false,
-      fence: false,
     },
     /**
-     * The sessiond connection this session's CLI child lives under. Not
-     * optional in practice — `spawn()` always supplies it, and there is no
-     * in-process fallback (PLAN.md C7: full cutover, rollback is a revert).
+     * The sessiond connection this session's CLI child lives under: `spawn()`
+     * and `adopt()` both supply it, and there is no in-process fallback
+     * (PLAN.md C7: full cutover, rollback is a revert).
      *
      * `attach` names a child that already exists — one that outlived the
      * agent which started it — and the `Query` attaches to that process
      * instead of spawning one (see {@link sessiondBridge}).
+     *
+     * `executable` is the `claude` the SDK is handed: the version gate's
+     * ({@link claudeToStart}) on a spawn; on an attach, which starts
+     * nothing, the one on PATH.
      */
-    sessiond?: {
+    sessiond: {
       client: SessiondClient;
       procId: string;
+      executable: string;
       attach?: BridgeRing["attach"];
     }
   ) {
@@ -1799,7 +1797,7 @@ class ClaudeSession implements HarnessSession {
         forwardSubagentText: true,
         agentProgressSummaries: true,
         ...(options as Record<string, unknown> | undefined),
-        ...claudeExecutableOptions(),
+        pathToClaudeCodeExecutable: sessiond.executable,
         extraArgs,
         mcpServers,
         // A fenced session's servers are these and no others: the CLI's
@@ -1903,20 +1901,9 @@ class ClaudeSession implements HarnessSession {
         // payload may not opt out of it. There is no flag and no in-process
         // fallback (PLAN.md C7). Its MCP servers go in a file, not on argv
         // ({@link launchUnderSessiond}).
-        ...(sessiond
-          ? {
-              spawnClaudeCodeProcess: (
-                spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
-              ) =>
-                launchUnderSessiond(
-                  instanceId,
-                  ctx,
-                  sessiond,
-                  seqs,
-                  spawnOptions
-                ),
-            }
-          : {}),
+        spawnClaudeCodeProcess: (
+          spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
+        ) => launchUnderSessiond(instanceId, ctx, sessiond, seqs, spawnOptions),
         canUseTool: (
           toolName,
           toolInput,
@@ -3767,10 +3754,7 @@ export class ClaudeHarness implements Harness {
   ): Promise<HarnessSession> {
     // THE VERSION FLOOR: no Claude Code below it starts a session here, on
     // a start, a wake or a relaunch alike (all of them come through here).
-    const refused = await claudeVersionRefusal();
-    if (refused) {
-      throw new Error(refused);
-    }
+    const executable = await claudeToStart();
     // The child is spawned under sessiond, unconditionally — no flag, no
     // in-process fallback (PLAN.md C7). `procId` is the instance id: stable
     // across agent restarts, which is what lets the returning agent match a
@@ -3871,7 +3855,7 @@ export class ClaudeHarness implements Harness {
         fence: spec.fence === true,
         instructions: spec.instructions ?? [],
       },
-      { client, procId: procIdFor("claude", ctx.instanceId) }
+      { client, procId: procIdFor("claude", ctx.instanceId), executable }
     );
   }
 
@@ -4057,7 +4041,14 @@ export class ClaudeHarness implements Harness {
       } as unknown as NeutralMessage);
     }
     // The stored mode goes in at construction, ahead of the prelude's asks.
-    // The launch options it also sets are never used: nothing is spawned.
+    // The launch options it also sets are never used: nothing is spawned,
+    // so the SDK is handed the `claude` on PATH, not the version gate's: a
+    // process that runs already is taken back whatever its version, and
+    // retired at rest ({@link ClaudeSession.outdated}).
+    const executable = resolveClaudeExecutable();
+    if (!executable) {
+      throw new Error(CLAUDE_NOT_INSTALLED);
+    }
     const session = new ClaudeSession(
       instanceId,
       ctx,
@@ -4076,6 +4067,7 @@ export class ClaudeHarness implements Harness {
       {
         client,
         procId,
+        executable,
         attach: {
           afterSeq: replayable ? (options.afterSeq ?? start) : start,
           head,
