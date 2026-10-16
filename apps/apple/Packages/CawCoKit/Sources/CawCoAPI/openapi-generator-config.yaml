@@ -46,6 +46,10 @@ typeOverrides:
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
     EffortLevel: OpenEnums.EffortLevel
     Exclude: OpenEnums.Exclude
+    FindConversationOutcome: OpenEnums.FindConversationOutcome
+    FindConversationRole: OpenEnums.FindConversationRole
+    FindField: OpenEnums.FindField
+    FindLiveState: OpenEnums.FindLiveState
     FleetItemStateState: OpenEnums.FleetItemStateState
     FleetMcpServerMode: OpenEnums.FleetMcpServerMode
     FleetMcpServerState: OpenEnums.FleetMcpServerState
@@ -71,6 +75,7 @@ typeOverrides:
     LandsMode: OpenEnums.LandsMode
     MachineCapabilityId: OpenEnums.MachineCapabilityId
     MemoryScopeRole: OpenEnums.MemoryScopeRole
+    MomentAuthor: OpenEnums.MomentAuthor
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage
     MoveStage: OpenEnums.MoveStage
     MoveStep: OpenEnums.MoveStep
@@ -132,6 +137,7 @@ typeOverrides:
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
     Verb: OpenEnums.Verb
     WaitReason: OpenEnums.WaitReason
+    WaitingKind: OpenEnums.WaitingKind
     WorkItemState: OpenEnums.WorkItemState
     WorkflowAskAnsweredBy: OpenEnums.WorkflowAskAnsweredBy
     WorkflowEffectKind: OpenEnums.WorkflowEffectKind

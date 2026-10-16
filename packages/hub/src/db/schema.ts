@@ -2645,13 +2645,6 @@ export const artifacts = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
     shownAt: timestamp("shown_at"),
-    /**
-     * The newest revision a view had on screen while the person looked
-     * (the `shown` ack, artifacts/service.ts): the page's own revision a
-     * pane said it showed, never past `revision`. Null until one has. An
-     * artifact revised past it waits on the person again (find.ts `waiting`).
-     */
-    openedRevision: integer("opened_revision"),
   },
   (table) => [
     index("artifacts_instance").on(table.instanceId, table.createdAt),

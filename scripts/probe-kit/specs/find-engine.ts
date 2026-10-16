@@ -809,38 +809,33 @@ const checkWaiting = async (
     (await fleet.api<WaitingAnswer>("/api/find/waiting")).items.find(
       (item) => item.id === id
     );
-  const shown = (page: number) =>
+  const shown = () =>
     fleet.api(`/api/instances/${sender}/artifacts/${artifactId}/shown`, {
       client: "find-engine-probe",
       revision: "probe-frame",
-      page,
       ok: true,
     });
   const before = await listed(artifactId);
-  await shown(1);
+  await shown();
   const opened = await listed(artifactId);
+  // No view is joined to its doc, so nothing had the new HTML on screen.
   await call(UPDATE, { id: artifactId, html: "<h1>Second</h1>" });
   const revised = await listed(artifactId);
-  // A view still on the first page has not shown the second.
-  await shown(1);
-  const stillOld = await listed(artifactId);
-  await shown(2);
-  const morphed = await listed(artifactId);
+  await shown();
+  const reopened = await listed(artifactId);
   kit.check(
-    "e. unseen, gone once on screen, back at its new revision until the page morphs to it in view",
+    "e. unseen, gone once on screen, back at its new revision until a view shows it",
     before?.why === "unseen" &&
       opened === undefined &&
       revised?.why === "new revision" &&
       revised.revision === 2 &&
-      stillOld?.why === "new revision" &&
-      morphed === undefined,
+      reopened === undefined,
     JSON.stringify([
       before?.why,
       opened?.why,
       revised?.why,
       revised?.revision,
-      stillOld?.why,
-      morphed?.why,
+      reopened?.why,
     ])
   );
   const unread = await listed(report.id);

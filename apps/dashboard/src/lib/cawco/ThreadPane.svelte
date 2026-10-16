@@ -835,7 +835,7 @@
             commands={binding.commands}
             delegatesOf={binding.delegatesOf}
             {draft}
-            mentions={binding.mentions}
+            mentionsFrom={binding.mentionsFrom}
             onfoot={binding.onfoot}
             oninterruptsend={binding.oninterruptsend}
             onmenu={binding.onmenu}

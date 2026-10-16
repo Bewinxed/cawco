@@ -287,16 +287,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       }
     })
     // A view (a dashboard tab, the app) has the artifact on screen at the
-    // open frame's revision, or could not load it: the waiting show answers,
-    // and an ok one keeps the revision the person had in front of them.
+    // open frame's revision, or could not load it: the waiting show answers.
     .post(
       "/api/instances/:id/artifacts/:artifact/shown",
       {
         body: t.Object({
           client: t.String({ minLength: 1, maxLength: 100 }),
           revision: t.String({ minLength: 1, maxLength: 100 }),
-          /** The artifact's own revision on screen: its doc's `meta.revision`. */
-          page: t.Optional(t.Integer({ minimum: 1 })),
           ok: t.Boolean(),
           error: t.Optional(
             t.Union(SHOWN_FAILURES.map((failure) => t.Literal(failure)))

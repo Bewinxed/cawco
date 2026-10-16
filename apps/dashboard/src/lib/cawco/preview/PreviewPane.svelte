@@ -506,9 +506,7 @@
    * a page whose overlay said it was ready, or a canvas whose stage stands in
    * this pane and said so, in a tab the person has in view. Could not be is
    * the proxy's own page naming the hop that failed, or a load no overlay
-   * answered within PAGE_SILENT_MS. Said once per revision, and again with
-   * the artifact's own revision (`page`) each time a page morphs to new HTML
-   * in view: what the person had in front of them, which the hub keeps.
+   * answered within PAGE_SILENT_MS. Said once per revision.
    */
   /** How long a loaded frame has for its overlay to answer the pane's hello. Our call: it answers in milliseconds. */
   const PAGE_SILENT_MS = 3000;
@@ -537,9 +535,7 @@
   $effect(() => {
     const revision = preview?.state === "open" ? preview.revision : undefined;
     const id = artifact?.id;
-    const onScreen = view?.revision ?? undefined;
-    const said = `${revision}:${onScreen ?? ""}`;
-    if (!(revision && id && inView) || saidFor === said) {
+    if (!(revision && id && inView) || saidFor === revision) {
       return;
     }
     const current = loadedKey === frameKey;
@@ -556,12 +552,8 @@
     if (!word) {
       return;
     }
-    saidFor = said;
-    artifactShown(instanceId, id, {
-      revision,
-      ...(onScreen ? { page: onScreen } : {}),
-      ...word,
-    }).catch(() => {
+    saidFor = revision;
+    artifactShown(instanceId, id, { revision, ...word }).catch(() => {
       // Unheard: the next change of state says it again.
       saidFor = null;
     });

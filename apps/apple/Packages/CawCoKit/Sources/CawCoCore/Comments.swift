@@ -54,12 +54,9 @@ public struct ArtifactComments: Sendable, Equatable {
     public let unsentPicks: Int
     /// When the person last sent from it; nil until they have.
     public let sentAt: String?
-    /// The artifact's own revision: moved by each new HTML, the page
-    /// morphing to it in place. Nil until the hub is read.
-    public let revision: Int?
 
     /// An artifact with no pins and nothing unsent, until the hub is read.
-    public static let empty = ArtifactComments(pins: [], unsentPicks: 0, sentAt: nil, revision: nil)
+    public static let empty = ArtifactComments(pins: [], unsentPicks: 0, sentAt: nil)
 
     /// Open pins on the page: the Pins button's badge.
     public var open: Int { pins.count { !$0.moved && !$0.resolved } }
@@ -100,20 +97,17 @@ public extension HubConnection {
             guard let at = (entry as? [String: (any Sendable)?])?["at"] as? String else { return false }
             return held.sentAt.map { at > $0 } ?? true
         }
-        return ArtifactComments(pins: pins.sorted { $0.number < $1.number }, unsentPicks: picks, sentAt: held.sentAt,
-                                revision: Int(held.revision))
+        return ArtifactComments(pins: pins.sorted { $0.number < $1.number }, unsentPicks: picks, sentAt: held.sentAt)
     }
 
     /// This view's word that it has the artifact on screen at `revision`, or
     /// why it could not load it (PreviewPane.svelte's `artifactShown`): the
-    /// agent's `artifact_create` and `artifact_show` answer `opened` from it,
-    /// and the hub keeps `page`, the artifact's own revision on screen, as
-    /// what the person has seen.
-    func artifactShown(_ artifact: String, in instanceId: String, revision: String, page: Int?, failure: ShownFailure?) async throws {
+    /// agent's `artifact_create` and `artifact_show` answer `opened` from it.
+    func artifactShown(_ artifact: String, in instanceId: String, revision: String, failure: ShownFailure?) async throws {
         typealias Body = Operations.PostApiInstancesByIdArtifactsByArtifactShown.Input.Body.JsonPayload
         let output = try await api.instances.artifactShown(.init(
             path: .init(id: instanceId, artifact: artifact),
-            body: .json(Body(client: Presence.shared.clientId, revision: revision, page: page, ok: failure == nil,
+            body: .json(Body(client: Presence.shared.clientId, revision: revision, ok: failure == nil,
                              error: failure.flatMap { Body._ErrorPayload(rawValue: $0.rawValue) }))
         ))
         guard case .ok = output else { throw await TaskRefusal.reading(output) }
