@@ -9,12 +9,26 @@
 #       Contents/MacOS/cawco) and signs it with the team's Developer ID, the
 #       hardened runtime and a secure timestamp; checks it (codesign --verify
 #       --strict, the designated requirement naming the identifier and the team
-#       and no cdhash, the JIT entitlement present); tars it, as signed, into
-#       DIR/ARCHIVE. Then unpacks that archive the way the installer and the
-#       updater do, into a scratch binary root's versions/VERSION, checks the
-#       unpacked bundle again, and runs its executable the ways the product does
-#       when this Mac can: at versions/VERSION/CawCo Agent.app/Contents/MacOS/cawco,
-#       and through a `current -> versions/VERSION` link.
+#       and no cdhash, the JIT entitlement present); has Apple notarize it and
+#       staples the ticket to it, and Gatekeeper must then accept it as
+#       notarized; tars it, as signed and stapled, into DIR/ARCHIVE. Then
+#       unpacks that archive the way the installer and the updater do, into a
+#       scratch binary root's versions/VERSION, checks the unpacked bundle again
+#       (signature, stapled ticket, Gatekeeper), and runs its executable the ways
+#       the product does when this Mac can: at versions/VERSION/CawCo
+#       Agent.app/Contents/MacOS/cawco, and through a `current -> versions/VERSION` link.
+#
+# Notarization (developer.apple.com/documentation/security/customizing-the-notarization-workflow):
+# the notary service takes "a compressed archive containing the app", so the
+# bundle goes up as a ditto zip; `--wait` exits "only after the Notary service
+# finishes processing the submission"; and "you can't staple to [a ZIP]
+# directly", so the ticket is stapled to the bundle itself, which is what the
+# release archive then carries (the ticket is a file in Contents, so tar keeps it).
+# One submission per bundle: a release sends two, and Apple asks to "Limit
+# notarizations to 75 per day". A status other than Accepted prints the
+# submission's log and fails the release: no unnotarized bundle is published.
+# The App Store Connect key is read from ~/.appstoreconnect as
+# apps/mac-helper/scripts/build.sh reads it, and never printed.
 #
 # The entitlements (agent.entitlements, beside this script), under the hardened runtime:
 # - JavaScriptCore's JIT: cs.allow-jit and cs.allow-unsigned-executable-memory
@@ -34,8 +48,9 @@
 # (bsdtar(1): --no-mac-metadata, --no-xattrs; a non-root extract restores
 # neither in any case), so the bundle unpacked on a machine is the one signed here.
 #
-# Prints SIGNED, DESIGNATED REQUIREMENT, ARCHIVED, UNPACKED, then RAN for each way
-# it runs (or NOT RUN with why); exits non-zero at the first failure.
+# Prints SIGNED, DESIGNATED REQUIREMENT, a `[release] Ns notarytool submit --wait`
+# line with the wait, NOTARIZED, STAPLED, GATEKEEPER, ARCHIVED, UNPACKED, then RAN
+# for each way it runs (or NOT RUN with why); exits non-zero at the first failure.
 # Never inside a CawCo workspace: signing keys stay out of agent code.
 set -euo pipefail
 if [[ -n ${CAWCO_WORKSPACE:-} ]]; then
@@ -52,7 +67,12 @@ fail() { echo "FAILED: $*" >&2; exit 1; }
 BUNDLE="CawCo Agent.app"
 EXE_IN="$BUNDLE/Contents/MacOS/cawco"
 APP="$DIR/$BUNDLE"
-rm -rf "$APP" "$DIR/$ARCHIVE" "$DIR/root"
+NOTARY_ZIP="$DIR/notarize-$TARGET.zip"
+NOTARY_OUT="$DIR/notarize-$TARGET.json"
+NOTARY_ERR="$DIR/notarize-$TARGET.err"
+# "98 percent of software within 15 minutes"; past this the release fails.
+NOTARY_TIMEOUT=30m
+rm -rf "$APP" "$DIR/$ARCHIVE" "$DIR/root" "$NOTARY_ZIP" "$NOTARY_OUT" "$NOTARY_ERR"
 mkdir -p "$APP/Contents/MacOS"
 cp "$DIR/Info.plist" "$APP/Contents/Info.plist"
 mv "$DIR/cawco" "$DIR/$EXE_IN"
@@ -75,6 +95,63 @@ echo "DESIGNATED REQUIREMENT: $requirement"
 codesign --display --entitlements - --xml "$APP" 2>/dev/null | grep -q 'com.apple.security.cs.allow-jit' ||
   fail "the signature carries no com.apple.security.cs.allow-jit"
 
+# One field of notarytool's JSON, or nothing.
+json_field() {
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[2])).get(sys.argv[1]) or "")' "$1" "$2" 2>/dev/null || true
+}
+# Gatekeeper's verdict on a bundle: accepted, as notarized, or the release fails.
+assess() {
+  local said
+  said=$(spctl --assess --type execute -vv "$1" 2>&1) || true
+  echo "$said"
+  [[ $said == *": accepted"* && $said == *"source=Notarized Developer ID"* ]] ||
+    fail "Gatekeeper does not accept $1 as a notarized Developer ID app"
+  echo "GATEKEEPER accepted $1"
+}
+
+key_id=
+issuer=
+while IFS= read -r line; do
+  line=${line#export }
+  [[ $line == *=* ]] || continue
+  key=${line%%=*}
+  value=${line#*=}
+  value=${value//\"/}
+  value=${value//\'/}
+  case $key in
+    *KEY_ID) key_id=$value ;;
+    *ISSUER_ID) issuer=$value ;;
+  esac
+done <"$HOME/.appstoreconnect/anbar.env"
+p8=$HOME/.appstoreconnect/private_keys/AuthKey_$key_id.p8
+[[ -n $key_id && -n $issuer && -f $p8 ]] || fail "no App Store Connect key in ~/.appstoreconnect"
+NOTARY=(--key "$p8" --key-id "$key_id" --issuer "$issuer")
+
+ditto -c -k --keepParent "$APP" "$NOTARY_ZIP"
+started=$SECONDS
+# On a failure or a timeout notarytool exits non-zero; the status below decides.
+xcrun notarytool submit "$NOTARY_ZIP" "${NOTARY[@]}" --wait --timeout "$NOTARY_TIMEOUT" \
+  --output-format json >"$NOTARY_OUT" 2>"$NOTARY_ERR" || true
+waited=$((SECONDS - started))
+rm -f "$NOTARY_ZIP"
+id=$(json_field id "$NOTARY_OUT")
+status=$(json_field status "$NOTARY_OUT")
+echo "[release] ${waited}s notarytool submit --wait $TARGET: ${status:-no status}${id:+ $id}"
+if [[ $status != Accepted ]]; then
+  cat "$NOTARY_OUT" "$NOTARY_ERR" >&2 || true
+  if [[ -n $id ]]; then
+    echo "xcrun notarytool log $id:" >&2
+    xcrun notarytool log "$id" "${NOTARY[@]}" >&2 || true
+  fi
+  fail "notarization of $TARGET${id:+ ($id)} ended ${status:-without a status}: the release does not publish"
+fi
+rm -f "$NOTARY_OUT" "$NOTARY_ERR"
+echo "NOTARIZED $TARGET $id"
+xcrun stapler staple "$APP"
+xcrun stapler validate "$APP"
+echo "STAPLED $APP"
+assess "$APP"
+
 COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf "$DIR/$ARCHIVE" -C "$DIR" "$BUNDLE"
 echo "ARCHIVED $ARCHIVE"
 
@@ -84,6 +161,8 @@ mkdir -p "$ROOT/versions/$VERSION"
 tar -xzf "$DIR/$ARCHIVE" -C "$ROOT/versions/$VERSION" "$BUNDLE"
 cmp -s "$ROOT/versions/$VERSION/$EXE_IN" "$DIR/$EXE_IN" || fail "the archive's executable is not the one signed"
 codesign --verify --strict "$ROOT/versions/$VERSION/$BUNDLE" 2>&1 || fail "the unpacked bundle does not pass codesign --verify --strict"
+xcrun stapler validate "$ROOT/versions/$VERSION/$BUNDLE" || fail "the unpacked bundle carries no stapled ticket"
+assess "$ROOT/versions/$VERSION/$BUNDLE"
 ln -s "versions/$VERSION" "$ROOT/current"
 echo "UNPACKED $ROOT/versions/$VERSION/$BUNDLE"
 

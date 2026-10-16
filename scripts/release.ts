@@ -1082,8 +1082,11 @@ const build = async (current: Request): Promise<void> => {
     // A darwin build ships as its own CawCo Agent.app, signed with the team's
     // Developer ID (packages/core/src/agent-bundle.ts,
     // scripts/binary/sign-agent-bundle.sh) on the Mac, in a folder under its
-    // home, with its Info.plist from this commit; the Mac tars the bundle as
-    // signed, and runs what it tarred, before the archive comes back.
+    // home, with its Info.plist from this commit; the Mac has Apple notarize it
+    // and staples the ticket to it (its wait logged on its own `[release] …s
+    // notarytool submit --wait` line), tars the bundle as signed and stapled,
+    // and checks and runs what it tarred, before the archive comes back. A
+    // bundle Apple does not accept fails the release.
     const buildTargets = async (): Promise<void> => {
       const mac = current.macHost;
       const macDir = `build/cawco-agent-sign/${current.commit.slice(0, 12)}`;
