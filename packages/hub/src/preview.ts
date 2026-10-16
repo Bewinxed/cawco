@@ -216,8 +216,12 @@ async function servePage(
     : new Response(body, { headers });
 }
 
-/** What the hub serves for an artifact it holds: a page's files, or a canvas's host page. */
-const HUB_SERVES: Record<ArtifactKind, typeof servePage> = {
+/**
+ * What the hub serves for an artifact it holds: a page's files, or a
+ * canvas's host page. A sheet is its workspace's stage, relayed as a port
+ * preview: its source names no page, and it never comes here.
+ */
+const HUB_SERVES: Record<Exclude<ArtifactKind, "sheet">, typeof servePage> = {
   page: servePage,
   preview: servePage,
   canvas: serveCanvas,
@@ -430,7 +434,7 @@ async function serveSession(
     previewFailed(HOP, instanceId, "its session shows no preview");
     return downResponse("closed", 404);
   }
-  if ("page" in target.source) {
+  if ("page" in target.source && target.artifact.kind !== "sheet") {
     return HUB_SERVES[target.artifact.kind](
       target.artifact.id,
       pathname,

@@ -5,6 +5,7 @@
 import type { PreviewElement } from "@cawco/core";
 import type { ChoiceChange } from "@cawco/core/choices";
 import {
+  type ChainLink,
   COMMENT_LIMITS,
   deletePin,
   findAnchor,
@@ -210,6 +211,12 @@ function framesChanged() {
   });
 }
 watchFrames(framesChanged);
+// A sheet's stage swapped a component in place (its sheet module says so on
+// each Vite HMR update): every pin's anchor is read again, its source and chain with it.
+addEventListener("cawco:hmr", () => {
+  pins.draw();
+  ink.replace();
+});
 addEventListener(
   "scroll",
   (event) => {
@@ -384,15 +391,22 @@ let hostTheme: "light" | "dark" | null = null;
 /**
  * A page artifact (HTML the agent wrote) draws in the host's theme, never the
  * OS's (DESIGN.md: the theme follows ours), on its root's `color-scheme` and
- * `data-theme`; a preview is someone's own app and keeps its own.
+ * `data-theme`; a preview is someone's own app and keeps its own. A sheet's
+ * app page lost its own theme script with its inline scripts (the stage drops
+ * them), so it takes the host's too, and the `dark` class an app's tokens
+ * and Tailwind's dark variant key on.
  */
 function themed() {
-  if (!hostTheme || artifact.kind() !== "page") {
+  const kind = artifact.kind();
+  if (!hostTheme || (kind !== "page" && kind !== "sheet")) {
     return;
   }
   const root = document.documentElement;
   root.style.colorScheme = hostTheme;
   root.dataset.theme = hostTheme;
+  if (kind === "sheet") {
+    root.classList.toggle("dark", hostTheme === "dark");
+  }
 }
 
 function takeTheme(said: unknown) {
@@ -692,10 +706,108 @@ interface Fiber {
   type?: { name?: string };
 }
 
+/** One entry of Svelte's dev stack (`__svelte_meta.parent`): a block or a component's call site, its column 0-based. */
+interface DevStackEntry {
+  column: number;
+  componentTag?: string;
+  file: string;
+  line: number;
+  parent?: DevStackEntry | null;
+  type: string;
+}
+
 type DevElement = Element & {
-  __svelte_meta?: { loc?: { file: string; line: number; column: number } };
+  __svelte_meta?: {
+    loc?: { file: string; line: number; column: number };
+    parent?: DevStackEntry | null;
+  };
   __vueParentComponent?: { type?: { __file?: string } };
 };
+
+/**
+ * Whether a dev source's file is one on disk: a plugin's virtual module (an
+ * `unplugin-icons` icon's `~icons/…`, a `virtual:` or `\0` id, a `/@…` path)
+ * is not, and gives way to the place it is used.
+ */
+const onDisk = (file: string): boolean =>
+  !(
+    file.startsWith("~") ||
+    file.startsWith("virtual:") ||
+    file.startsWith("\0") ||
+    file.startsWith("/@") ||
+    file.includes("?")
+  );
+
+/** The component call sites a Svelte element stands in, innermost first (its dev stack's `component` entries). */
+const svelteCalls = (el: DevElement): DevStackEntry[] => {
+  const calls: DevStackEntry[] = [];
+  for (let at = el.__svelte_meta?.parent; at; at = at.parent) {
+    if (at.type === "component") {
+      calls.push(at);
+    }
+  }
+  return calls;
+};
+
+/** A stamped component root's call site (`data-insp-path="<file>:<line>:<column>:<Tag>"`), its tag capitalised. */
+const STAMPED_CALL = /^(.*):(\d+):(\d+):([A-Z][\w.$]*)$/;
+/** A frame's story place (`data-cawco-source="<file>:<line>:<column>"`). */
+const STORY_PLACE = /^(.*):(\d+):(\d+)$/;
+
+/**
+ * On a sheet (live components): the components `el` stands in, each where
+ * it is used, innermost first, then the story whose frame holds it; and the
+ * sheet's story file with that story. Svelte's own dev stack names the
+ * components; elsewhere, a stamped component root names its call site. Null
+ * outside a sheet's frame.
+ */
+function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
+  const frame = el.closest<HTMLElement>("[data-cawco-story]");
+  const story = frame?.dataset.cawcoStory;
+  const place = frame?.dataset.cawcoSource?.match(STORY_PLACE);
+  if (!(frame && story && place)) {
+    return null;
+  }
+  // The nearest element Svelte's dev compile marked (a tapped icon's <path> may carry none of its own).
+  let marked: DevElement | null = el as DevElement;
+  while (marked && marked !== frame && !marked.__svelte_meta) {
+    marked = marked.parentElement as DevElement | null;
+  }
+  const meta = marked && marked !== frame ? marked : null;
+  const chain: ChainLink[] = (meta ? svelteCalls(meta) : []).map((call) => ({
+    component: call.componentTag ?? "component",
+    file: call.file,
+    line: call.line,
+    column: call.column + 1,
+  }));
+  if (!meta) {
+    for (
+      let at: Element | null = el;
+      at && at !== frame;
+      at = at.parentElement
+    ) {
+      const call = at.getAttribute("data-insp-path")?.match(STAMPED_CALL);
+      if (call) {
+        chain.push({
+          component: call[4],
+          file: call[1],
+          line: Number(call[2]),
+          column: Number(call[3]),
+        });
+      }
+    }
+  }
+  chain.push({
+    component: story,
+    file: place[1],
+    line: Number(place[2]),
+    column: Number(place[3]),
+  });
+  const file =
+    el.ownerDocument.querySelector<HTMLElement>("#cawco-sheet")?.dataset
+      .cawcoChoice ?? place[1];
+  return { chain, sheet: { file, story } };
+}
 
 function reactSource(
   el: Element
@@ -725,8 +837,22 @@ type Source = NonNullable<PreviewElement["source"]>;
 
 function sourceAt(el: DevElement, of: Source["of"]): Source | null {
   const loc = el.__svelte_meta?.loc;
+  if (loc && onDisk(loc.file)) {
+    // Svelte's line is 1-based, its column 0-based.
+    return { ...loc, column: loc.column + 1, framework: "svelte", of };
+  }
   if (loc) {
-    return { ...loc, framework: "svelte", of };
+    // A virtual component's own element (an icon's svg): its call site in a real file.
+    const call = svelteCalls(el).find((one) => onDisk(one.file));
+    return call
+      ? {
+          file: call.file,
+          line: call.line,
+          column: call.column + 1,
+          framework: "svelte",
+          of: `ancestor:${call.componentTag ?? "component"}`,
+        }
+      : null;
   }
   const inspector = el.getAttribute("data-insp-path")?.match(INSPECTOR_PATH);
   if (inspector) {
@@ -841,6 +967,7 @@ function anchorOf(el: Element): PageAnchor {
     ...(frames.length > 0 ? { frames } : {}),
     selector: selectorOf(el),
     source: sourceOf(el),
+    ...(sheetChain(el) ?? {}),
     text: textOf(el),
     box: {
       x: Math.round(x + scrollX),

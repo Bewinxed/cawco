@@ -52,7 +52,7 @@ const OPEN_WITHIN_MS = 10_000;
 /** Attempts in a row that never opened, after which the link is said lost. */
 const STALLS_LOST = 2;
 
-const KINDS = new Set(["page", "canvas", "preview"]);
+const KINDS = new Set(["page", "canvas", "preview", "sheet"]);
 
 /** Where an artifact's doc is synced: the listener's path, under the dashboard's preview prefix in its frame. */
 const SYNC_PATH =
@@ -62,7 +62,7 @@ export const NO_ARTIFACT = "This page has no artifact to keep its state in.";
 
 export interface ArtifactRef {
   id: string;
-  kind: "page" | "canvas" | "preview";
+  kind: "page" | "canvas" | "preview" | "sheet";
   name: string;
 }
 

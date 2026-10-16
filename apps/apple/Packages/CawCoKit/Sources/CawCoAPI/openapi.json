@@ -3974,6 +3974,7 @@
                     "type": "string",
                     "enum": [
                       "page",
+                      "sheet",
                       "preview",
                       "canvas"
                     ]
@@ -4021,6 +4022,12 @@
                   "html": {
                     "minLength": 1,
                     "maxLength": 524288,
+                    "type": "string"
+                  },
+                  "file": {
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "pattern": "\\.stories\\.[cm]?[jt]sx?$",
                     "type": "string"
                   },
                   "dir": {
@@ -26500,6 +26507,9 @@
         "description": "`frames`: everything a session produces, flowing agent→hub→dashboard. The\n`frame` kind is a neutral message; `raw` on it carries the harness's own\nevent verbatim.",
         "oneOf": [
           {
+            "$ref": "#/components/schemas/StageFrame"
+          },
+          {
             "$ref": "#/components/schemas/CacheInvalidatedFrame"
           },
           {
@@ -26617,6 +26627,7 @@
         "discriminator": {
           "propertyName": "kind",
           "mapping": {
+            "stage": "#/components/schemas/StageFrame",
             "cache_invalidated": "#/components/schemas/CacheInvalidatedFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
             "preview": "#/components/schemas/PreviewFrame",
@@ -29159,12 +29170,13 @@
         ]
       },
       "ArtifactKind": {
-        "description": "The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev server or folder shown live.",
+        "description": "The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev\nserver or folder shown live, and a sheet: a story file's stories, each a\nreal component mounted by the project's own toolchain (core `stage.ts`).",
         "type": "string",
         "enum": [
           "canvas",
           "page",
-          "preview"
+          "preview",
+          "sheet"
         ]
       },
       "ArtifactPromotion": {
@@ -29222,6 +29234,17 @@
             "description": "Its live document on the hub's preview listener.",
             "type": "string"
           },
+          "stage": {
+            "$ref": "#/components/schemas/StageState",
+            "description": "A sheet's stage, as it stands once started."
+          },
+          "stories": {
+            "description": "A sheet's stories, each its export's name and 1-based place in the story file.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Story"
+            }
+          },
           "why": {
             "description": "Why it is not on screen, one sentence; only with `opened: false`.",
             "type": "string"
@@ -29240,6 +29263,114 @@
           "name",
           "opened",
           "route"
+        ]
+      },
+      "StageState": {
+        "description": "A stage as the hub keeps it in each of its sheets' docs (`meta.stage`):\nwhere it is, the Vite root it runs (from the clone's root), why it failed\nwhen it did, and the compile errors standing now.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "dir": {
+            "description": "The Vite root, from the clone's root (\".\" for the root itself).",
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageError"
+            }
+          },
+          "message": {
+            "description": "Why it is in `error`, one sentence; none otherwise.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StageStatus"
+          }
+        },
+        "required": [
+          "at",
+          "dir",
+          "errors",
+          "status"
+        ]
+      },
+      "StageError": {
+        "description": "A compile error the stage's Vite sent its pages, as the plugin keeps it\nuntil the module compiles again: the module's file from the Vite root,\n1-based line and column when Vite's payload has them, Vite's message and\ncode frame, and the story files that import the module, which the hub\nfiles it under.",
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "file": {
+            "type": "string"
+          },
+          "frame": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "line": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "sheets": {
+            "description": "The story files (from the Vite root) whose sheet imports the module.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "column",
+          "file",
+          "frame",
+          "line",
+          "message",
+          "sheets"
+        ]
+      },
+      "StageStatus": {
+        "description": "Where a stage is: `starting` its first start, `waking` a start after\nsleep, `live` serving, `error` it could not start or failed its restarts,\n`asleep` stopped for want of a viewer, started again on the next open.",
+        "type": "string",
+        "enum": [
+          "asleep",
+          "error",
+          "live",
+          "starting",
+          "waking"
+        ]
+      },
+      "Story": {
+        "description": "One named export of a story file: a story, by its export's 1-based place.",
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "number"
+          },
+          "line": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "column",
+          "line",
+          "name"
         ]
       },
       "ArtifactStatus": {
@@ -29414,9 +29545,20 @@
             "description": "The cursor for the next read's `since`.",
             "type": "number"
           },
+          "stage": {
+            "$ref": "#/components/schemas/StageState",
+            "description": "A sheet's stage: its status, and the compile errors standing in the modules the sheet imports."
+          },
           "state": {
             "type": "object",
             "description": "Every key, or with `since` only those changed after it."
+          },
+          "stories": {
+            "description": "A sheet's stories, each its export's name and 1-based place in the story file.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Story"
+            }
           },
           "workspace": {
             "description": "A port preview's workspace, whose dev server it is.",
@@ -29679,6 +29821,13 @@
               "y"
             ]
           },
+          "chain": {
+            "description": "On a sheet: the components the element stands in, innermost first, each\nwhere it is used (Svelte's `__svelte_meta.parent` component entries, or\na stamped component root's call site), then the story that mounts them.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChainLink"
+            }
+          },
           "frames": {
             "description": "The frames it stands in, outermost first, each by its selector in its parent's document; none at the top.",
             "type": "array",
@@ -29688,6 +29837,22 @@
           },
           "selector": {
             "type": "string"
+          },
+          "sheet": {
+            "description": "On a sheet: its story file (from the Vite root) and the story whose frame holds the element.",
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "story": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "file",
+              "story"
+            ]
           },
           "source": {
             "type": "object",
@@ -29744,6 +29909,30 @@
         },
         "required": [
           "selector"
+        ]
+      },
+      "ChainLink": {
+        "description": "One link of a sheet's chain: a component, by its name, at the place it is\nused (1-based line and column); the last link is the story, by its\nexport's name, at the export in the story file.",
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "number"
+          },
+          "component": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "column",
+          "component",
+          "file",
+          "line"
         ]
       },
       "CanvasAnchor": {
@@ -38936,7 +39125,7 @@
         "type": "object",
         "properties": {
           "artifactKind": {
-            "$ref": "#/components/schemas/ArtifactKind",
+            "$ref": "#/components/schemas/FindArtifactArtifactKind",
             "description": "Which kind of artifact: a preview, an HTML page, a canvas."
           },
           "conversation": {
@@ -39176,7 +39365,7 @@
         "type": "object",
         "properties": {
           "artifactKind": {
-            "$ref": "#/components/schemas/ArtifactKind",
+            "$ref": "#/components/schemas/FindArtifactArtifactKind",
             "description": "For an artifact or decision: which kind of artifact."
           },
           "conversation": {
@@ -42633,6 +42822,22 @@
                   "path": {
                     "type": "string"
                   },
+                  "stage": {
+                    "description": "A sheet's: the workspace's stage serves the port (core `stage.ts`),\nits Vite root `dir` from the clone's root and the sheet's story file\n`file` from that root. A request for it wakes the stage when it sleeps.",
+                    "type": "object",
+                    "properties": {
+                      "dir": {
+                        "type": "string"
+                      },
+                      "file": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "dir",
+                      "file"
+                    ]
+                  },
                   "workspace": {
                     "description": "The workspace whose dev server it is: it runs in that workspace's own network.",
                     "type": "string"
@@ -44642,6 +44847,29 @@
       },
       "T_1": {
         "type": "object"
+      },
+      "StageFrame": {
+        "description": "The daemon's word on each change of a stage: every sheet of the workspace's that root hears it.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stage"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/StageState"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "state",
+          "workspace"
+        ]
       },
       "CacheInvalidatedFrame": {
         "type": "object",
@@ -47009,6 +47237,14 @@
           "plugin",
           "project",
           "user"
+        ]
+      },
+      "FindArtifactArtifactKind": {
+        "type": "string",
+        "enum": [
+          "canvas",
+          "page",
+          "preview"
         ]
       },
       "FindConversationOutcome": {

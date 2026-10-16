@@ -12,6 +12,7 @@
   import {
     IconArtifactCanvas,
     IconArtifactPage,
+    IconArtifactSheet,
     IconChevronRight,
     IconError,
     IconInfo,
@@ -136,6 +137,7 @@
     page: IconArtifactPage,
     canvas: IconArtifactCanvas,
     preview: IconWindow,
+    sheet: IconArtifactSheet,
   };
   const ResponseGlyph = $derived(RESPONSE_GLYPHS[responses?.kind ?? "page"]);
   const responsesState = $derived.by(() => {

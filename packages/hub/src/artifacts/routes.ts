@@ -8,6 +8,7 @@
 import { ARTIFACT_NAME, PREVIEW_START_PATH, SHOWN_FAILURES } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
+import { STORY_FILE } from "@cawco/core/stage";
 import { Elysia, t } from "elysia";
 import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
@@ -113,6 +114,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         body: t.Object({
           kind: t.Union([
             t.Literal("page"),
+            t.Literal("sheet"),
             t.Literal("preview"),
             t.Literal("canvas"),
           ]),
@@ -120,6 +122,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           mermaid: t.Optional(mermaid),
           name: t.String({ pattern: ARTIFACT_NAME.source }),
           html: t.Optional(t.String({ minLength: 1, maxLength: PAGE_LIMIT })),
+          file: t.Optional(
+            t.String({
+              minLength: 1,
+              maxLength: 1000,
+              pattern: STORY_FILE.source,
+            })
+          ),
           dir: t.Optional(
             t.String({ minLength: 2, maxLength: 4096, pattern: "^/" })
           ),

@@ -138,6 +138,7 @@ import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
 import { rememberCredential } from "./redaction";
 import { fenced } from "./restart";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
+import { stopStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
 import { installTool, probeTools } from "./tools";
 import { folderTurn, runWorkflowCommand } from "./workflow-command";
@@ -2226,6 +2227,8 @@ export class SessionSupervisor {
    */
   detach(): void {
     stopPreviews();
+    // A stage speaks to this daemon alone (its stdout): the next one starts it again on its next open.
+    stopStages();
     for (const instanceId of [...this.#sessions.keys()]) {
       this.#sessions.delete(instanceId);
       this.#forgetPulse(instanceId);

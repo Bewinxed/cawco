@@ -6,6 +6,7 @@ import {
   resolvePin,
   withdrawPin,
 } from "@cawco/core/comments";
+import type { StageState } from "@cawco/core/stage";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
 
@@ -32,6 +33,8 @@ export interface ArtifactView extends ArtifactChoices {
   looseInk: number;
   /** The pins, by number. */
   pins: Pin[];
+  /** A sheet's stage, as the hub keeps it (live components): its status and the errors in the modules the sheet imports. */
+  stage: StageState | null;
 }
 
 export interface ArtifactDoc {
@@ -64,6 +67,7 @@ const viewOf = (doc: Doc): ArtifactView => {
     sentAt: (meta.get("sentAt") as string | undefined) ?? null,
     pins: pins.sort((a, b) => a.number - b.number),
     looseInk,
+    stage: (meta.get("stage") as StageState | undefined) ?? null,
   };
 };
 

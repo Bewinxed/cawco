@@ -35,6 +35,7 @@
     "./ink": "./src/ink.ts",
     "./shapes": "./src/shapes.ts",
     "./comments": "./src/comments.ts",
+    "./stage": "./src/stage.ts",
     "./canvas-host": "./src/canvas-host.ts",
     "./paths": "./src/paths.ts",
     "./state-file": "./src/state-file.ts",

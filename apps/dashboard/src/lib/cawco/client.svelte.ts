@@ -3018,6 +3018,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "account_borrow") {
     return;
   }
+  // A stage's change travels machine → hub only; a sheet's pane reads it in the sheet's doc.
+  if (frame.kind === "stage") {
+    return;
+  }
 
   const target = session(frame.instanceId);
 

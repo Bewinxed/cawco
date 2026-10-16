@@ -1401,6 +1401,8 @@ export type FramePayload =
   | import("./move").MoveProgressFrame
   /** Daemon-originated: a running command's wait for a shared machine slot. */
   | import("./harness").CommandQueueFrame
+  /** Daemon-originated: a workspace's stage changed (live components). */
+  | import("./stage").StageFrame
   /** Daemon-originated: a borrowed sign-in near its expiry, asking for a fresh one. */
   | import("./accounts").AccountBorrowFrame
   /** Hub-originated workflow run transition (§7.2). */
@@ -1425,14 +1427,24 @@ export type PreviewSource =
   | {
       port: number;
       path?: string;
+      /**
+       * A sheet's: the workspace's stage serves the port (core `stage.ts`),
+       * its Vite root `dir` from the clone's root and the sheet's story file
+       * `file` from that root. A request for it wakes the stage when it sleeps.
+       */
+      stage?: { dir: string; file: string };
       /** The workspace whose dev server it is: it runs in that workspace's own network. */
       workspace?: string;
     }
   | { dir: string; path?: string }
   | { page: string };
 
-/** The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev server or folder shown live. */
-export type ArtifactKind = "page" | "canvas" | "preview";
+/**
+ * The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev
+ * server or folder shown live, and a sheet: a story file's stories, each a
+ * real component mounted by the project's own toolchain (core `stage.ts`).
+ */
+export type ArtifactKind = "page" | "canvas" | "preview" | "sheet";
 
 /** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
 export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;

@@ -61,6 +61,7 @@ import {
   CONTROL_WORKSPACE_MIGRATE,
   type TranscriptQuery,
   UPDATE_CAWCO,
+  type WorkspaceRef,
 } from "@cawco/core";
 import { readInstallation } from "@cawco/core/binary-installation";
 import {
@@ -70,6 +71,7 @@ import {
 import { machineEndpoint } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import { userLayerPath } from "@cawco/core/paths";
+import { STAGE_ENSURE } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
@@ -165,6 +167,7 @@ import {
   SessionSupervisor,
 } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
+import { ensureStage, setStageSink, stopStages } from "./stage";
 
 /** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */
 const takeUpstream = (
@@ -1655,7 +1658,8 @@ const attach = (
         frame.kind === "fleet_mcp" ||
         frame.kind === "moves" ||
         frame.kind === "move_progress" ||
-        frame.kind === "command_queue"
+        frame.kind === "command_queue" ||
+        frame.kind === "stage"
       ) {
         return false;
       }
@@ -2528,14 +2532,24 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       CONTROL_WORKSPACE_BOUNDARY,
       workspaceBoundary
     );
-    supervisor.registerDaemonFunction(
-      CONTROL_WORKSPACE_ARCHIVE,
-      archiveWorkspace
-    );
+    // An archive ends the workspace's stage first: nothing of it is left to serve.
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_ARCHIVE, (ref) => {
+      stopStages((ref as { id?: string } | null)?.id);
+      return archiveWorkspace(ref);
+    });
     // An archive whose unlanded work a person let go: a carry first.
-    supervisor.registerDaemonFunction(
-      CONTROL_WORKSPACE_DISCARD,
-      discardWorkspace
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_DISCARD, (ref) => {
+      stopStages((ref as { id?: string } | null)?.id);
+      return discardWorkspace(ref);
+    });
+    // Live components: a workspace's stage, started or woken, and a sheet's stories (stage.ts).
+    setStageSink((frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    supervisor.registerDaemonFunction(STAGE_ENSURE, (ref, file) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : ensureStage(ref as WorkspaceRef, String(file))
     );
     // What a spent workspace holds that is nowhere else, before the hub retires it.
     supervisor.registerDaemonFunction(

@@ -158,9 +158,14 @@ export function startPins(deps: PinsDeps): Pins {
 
   const pinsMap = () => artifact.doc().getMap("pins") as YMap<Pin>;
   const onPage = () => artifact.kind() !== "canvas";
-  /** A pin whose element is gone may be moved aside only on a page the agent wrote, once it has laid out. */
+  /**
+   * A pin whose element is gone may be moved aside, and an anchor that reads
+   * otherwise now is written again, only on a page the agent wrote or a sheet
+   * of its components (re-read after each HMR update), once it has laid out.
+   */
   const settled = () =>
-    artifact.kind() === "page" && document.readyState !== "loading";
+    (artifact.kind() === "page" || artifact.kind() === "sheet") &&
+    document.readyState !== "loading";
 
   /** Each placed pin: where it stands; a disc is drawn for it while its frames show it. */
   const placed = new Map<string, Standing>();

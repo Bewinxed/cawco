@@ -46,6 +46,7 @@ typeOverrides:
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
     EffortLevel: OpenEnums.EffortLevel
     Exclude: OpenEnums.Exclude
+    FindArtifactArtifactKind: OpenEnums.FindArtifactArtifactKind
     FindConversationOutcome: OpenEnums.FindConversationOutcome
     FindConversationRole: OpenEnums.FindConversationRole
     FindField: OpenEnums.FindField
@@ -121,6 +122,7 @@ typeOverrides:
     SshJoinJobState: OpenEnums.SshJoinJobState
     StageHooksBy: OpenEnums.StageHooksBy
     StageKind: OpenEnums.StageKind
+    StageStatus: OpenEnums.StageStatus
     StagesTemplate: OpenEnums.StagesTemplate
     StagesViewSource: OpenEnums.StagesViewSource
     StarterGlyph: OpenEnums.StarterGlyph

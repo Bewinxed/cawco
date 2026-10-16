@@ -70,6 +70,27 @@
       },
     },
     {
+      // A sheet (live components) is named for the component it shows, beside
+      // it: `Who.stories.ts` for `Who.svelte`, Component Story Format's own
+      // convention. The name is checked before `.stories`, as the
+      // component's is.
+      "includes": ["**/*.stories.ts", "**/*.stories.js"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": {
+              "level": "error",
+              "options": {
+                "requireAscii": true,
+                "filenameCases": ["PascalCase", "kebab-case"],
+                "match": "(.+?)[.](stories)[.][jt]s",
+              },
+            },
+          },
+        },
+      },
+    },
+    {
       "includes": ["**/*.svelte"],
       "linter": {
         "rules": {

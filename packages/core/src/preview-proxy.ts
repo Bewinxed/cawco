@@ -257,6 +257,8 @@ export function proxyHeaders(input: Headers): Headers {
 
 export interface PreviewSocket {
   closed: boolean;
+  /** Said once the browser's socket closes: a stage counts its viewers by it (agent `stage.ts`). */
+  ended?: () => void;
   headers: Headers;
   /** The hop relaying it and the preview's session, for its failure's line. */
   hop: string;
@@ -293,7 +295,7 @@ export function upgradePreview(
   server: Server<PreviewSocket>,
   url: string,
   headers: Headers,
-  at: Pick<PreviewSocket, "hop" | "instanceId" | "nothingListens">
+  at: Pick<PreviewSocket, "ended" | "hop" | "instanceId" | "nothingListens">
 ): boolean {
   const protocol =
     request.headers.get("sec-websocket-protocol")?.split(",")[0]?.trim() ?? "";
@@ -383,6 +385,7 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
   },
   close(socket, code, reason) {
     socket.data.closed = true;
+    socket.data.ended?.();
     socket.data.pending.length = 0;
     socket.data.upstream?.close(sendable(code), reason);
   },

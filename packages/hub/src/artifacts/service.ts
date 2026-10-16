@@ -23,6 +23,7 @@ import {
   type ArtifactPromotion,
   type ArtifactSummary,
   artifactCommentsNotice,
+  artifactErrorsNotice,
   type ChoiceEntry,
   choiceEntryProblem,
   type InstanceRow,
@@ -53,6 +54,14 @@ import {
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import { pageHash } from "@cawco/core/preview-proxy";
+import {
+  SHEET_PATH,
+  type StageError,
+  type StageFrame,
+  type StageOpened,
+  type StageState,
+  type Story,
+} from "@cawco/core/stage";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { applyPatch, type Operation } from "rfc6902";
 import { Doc, encodeStateAsUpdate } from "yjs";
@@ -100,6 +109,8 @@ export interface ArtifactInput {
   draft?: boolean | undefined;
   /** A canvas's skeleton elements (Excalidraw's `convertToExcalidrawElements`). */
   elements?: SkeletonElement[] | undefined;
+  /** A sheet's story file, from the session's clone's root or absolute. */
+  file?: string | undefined;
   html?: string | undefined;
   kind: ArtifactKind;
   machine?: string | undefined;
@@ -137,10 +148,12 @@ const KIND_FIELDS = {
     takes: "port or dir",
   },
   canvas: { fields: ["elements", "mermaid"], takes: "elements or mermaid" },
+  sheet: { fields: ["file"], takes: "file" },
 } as const;
 
 const INPUT_FIELDS = [
   "html",
+  "file",
   "dir",
   "port",
   "path",
@@ -206,8 +219,12 @@ export interface ArtifactRead {
   sentText?: string;
   /** The cursor for the next read's `since`. */
   seq: number;
+  /** A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. */
+  stage?: StageState;
   /** Every key, or with `since` only those changed after it. */
   state: Record<string, ReadEntry>;
+  /** A sheet's stories, each its export's name and 1-based place in the story file. */
+  stories?: Story[];
   /** A port preview's workspace, whose dev server it is. */
   workspace?: string;
   /** The element ids an update wrote. */
@@ -263,6 +280,10 @@ export interface Created {
   port?: number;
   /** Its live document on the hub's preview listener. */
   route: string;
+  /** A sheet's stage, as it stands once started. */
+  stage?: StageState;
+  /** A sheet's stories, each its export's name and 1-based place in the story file. */
+  stories?: Story[];
   /** Why it is not on screen, one sentence; only with `opened: false`. */
   why?: string;
   /** The element ids a canvas's create wrote. */
@@ -459,6 +480,35 @@ export const legacyName = (place: string): string =>
     .replaceAll(/^-+|-+$/g, "")
     .slice(0, 63) || "preview";
 
+/** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
+const sheetOf = (
+  row: ArtifactRow
+): { dir: string; file: string; workspace: string } | null =>
+  row.kind === "sheet" &&
+  "port" in row.source &&
+  row.source.stage &&
+  row.source.workspace
+    ? { ...row.source.stage, workspace: row.source.workspace }
+    : null;
+
+/** A compile error as a delivery has heard it: the same error again is not news. */
+const errorKey = (error: StageError): string =>
+  `${error.file}:${error.line}:${error.column}:${error.message}`;
+
+/** One compile error's part of a delivery: where, what Vite said, and its code frame. */
+const errorSection = (error: StageError): string => {
+  const at = `${error.file}${error.line ? `:${error.line}` : ""}${error.column ? `:${error.column}` : ""}`;
+  return [
+    `## Compile error at ${at}`,
+    `- ${error.message.split("\n")[0]}`,
+    ...(error.frame ? ["```", error.frame, "```"] : []),
+  ].join("\n");
+};
+
+/** The sheet's page on its stage, its story file in the query with its slashes kept. */
+const sheetPath = (file: string): string =>
+  `${SHEET_PATH}?file=${encodeURIComponent(file).replaceAll("%2F", "/")}`;
+
 /** What `artifact_delete` and the panel's Remove answer: what the session's panel shows now, or null for nothing. */
 export interface Removed {
   showing: { id: string; kind: ArtifactKind; name: string } | null;
@@ -579,6 +629,16 @@ export interface ArtifactServiceDeps {
     artifact: ArtifactRow,
     responses: { since: number }
   ) => Promise<void>;
+  /**
+   * The stage story file `file` runs on in session `instance`'s workspace
+   * (agent stage.ts `ensureStage`), started or woken there and waited on:
+   * its port, root and state, the sheet's stories, with the workspace and
+   * its machine. Throws an {@link ArtifactRefusal} saying why it can't run.
+   */
+  stage: (
+    instance: InstanceRow,
+    file: string
+  ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
 }
@@ -1177,7 +1237,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const doc = docs.doc(id);
     const { pins, owed, loose, groups } = marksOwed(doc);
-    if (owed.length === 0 && loose.length === 0) {
+    const errors = errorsOwed(row, doc);
+    if (owed.length === 0 && loose.length === 0 && errors.length === 0) {
       return;
     }
     const kept = held.get(id);
@@ -1196,7 +1257,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ]
       .slice(0, COMMENT_LIMITS.pictures)
       .map((data) => ({ mediaType: "image/png", data }));
-    const text = artifactCommentsNotice(row, [
+    const marks = [
       ...owed.map((pin) =>
         pinDelivery(pin, {
           url,
@@ -1204,7 +1265,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         })
       ),
       ...loose.map((group) => inkSection(group, { url, picture: shown })),
-    ]);
+    ];
+    // A sheet's compile errors go on the person's marks' own channel.
+    const text = marksText(row, marks, errors);
     const outcome = await deps.deliverMarks(instance, row, { text, images });
     if (!outcome.ok) {
       console.warn(
@@ -1223,6 +1286,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ],
       url
     );
+    errorsHeard(id, errors);
     keepComposited(row, shown ? page : undefined);
     letGoPictures(id, owed, pins);
   };
@@ -1513,6 +1577,199 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
+  /*
+   * A sheet (live components, core stage.ts): a story file's stories,
+   * mounted by its workspace's stage, shown through the workspace's port
+   * preview of it. The stage's state is kept in the sheet's doc
+   * (`meta.stage`), its compile errors those of the modules the sheet
+   * imports, so the panel and the overlay read it as the person sees it;
+   * the errors the session has not heard go with the person's marks
+   * ({@link deliverMarks}), heard ones kept in `meta.errorsHeard`.
+   */
+
+  /** The stage's state as sheet `row` has it: only the errors in the modules it imports. */
+  const sheetState = (row: ArtifactRow, state: StageState): StageState => {
+    const file = sheetOf(row)?.file;
+    return {
+      ...state,
+      errors: state.errors.filter((error) =>
+        file ? error.sheets.includes(file) : false
+      ),
+    };
+  };
+
+  /** Keeps the stage's state (and the stories, when read) in the sheet's doc. */
+  const writeStage = (row: ArtifactRow, state: StageState, stories?: Story[]) =>
+    docs.transact(row.id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      const mine = sheetState(row, state);
+      meta.set("stage", mine);
+      if (stories) {
+        meta.set("stories", stories);
+      }
+      // Compiles again: an error that comes back later is news again.
+      if (mine.errors.length === 0) {
+        meta.delete("errorsHeard");
+      }
+    });
+
+  /** The sheet's compile errors the session has not heard. */
+  const errorsOwed = (row: ArtifactRow, doc: Doc): StageError[] => {
+    if (row.kind !== "sheet") {
+      return [];
+    }
+    const meta = doc.getMap("meta");
+    const stage = meta.get("stage") as StageState | undefined;
+    const already = new Set(
+      (meta.get("errorsHeard") as string[] | undefined) ?? []
+    );
+    return (stage?.errors ?? []).filter(
+      (error) => !already.has(errorKey(error))
+    );
+  };
+
+  /** A delivery carried these compile errors: the session has heard them. */
+  const errorsHeard = (id: string, errors: StageError[]) => {
+    if (errors.length === 0) {
+      return;
+    }
+    docs.transact(id, "hub", (live) => {
+      const meta = live.getMap("meta");
+      const already = (meta.get("errorsHeard") as string[] | undefined) ?? [];
+      meta.set("errorsHeard", [
+        ...new Set([...already, ...errors.map(errorKey)]),
+      ]);
+    });
+  };
+
+  /** A delivery's words: the person's marks under the comments notice, a sheet's compile errors with them, or alone under their own. */
+  const marksText = (
+    row: ArtifactRow,
+    marks: string[],
+    errors: StageError[]
+  ): string =>
+    marks.length > 0
+      ? artifactCommentsNotice(row, [...marks, ...errors.map(errorSection)])
+      : artifactErrorsNotice(row, errors.map(errorSection));
+
+  /** Makes a sheet (or opens the one of that name) on its workspace's stage, and shows it. */
+  const createSheet = async (
+    instance: InstanceRow,
+    input: ArtifactInput
+  ): Promise<Created> => {
+    if (input.file === undefined) {
+      throw new ArtifactRefusal(
+        400,
+        "A sheet takes file: the story file whose stories it shows, like src/lib/Card.stories.ts."
+      );
+    }
+    const { machineId, opened, workspace } = await deps.stage(
+      instance,
+      input.file
+    );
+    const source: PreviewSource = {
+      port: opened.port,
+      path: sheetPath(opened.file),
+      workspace,
+      stage: { dir: opened.dir, file: opened.file },
+    };
+    const now = new Date();
+    const before = db.byName(instance.id, "sheet", input.name);
+    const row = before
+      ? (db.update(before.id, {
+          source,
+          machineId,
+          revision: before.revision + 1,
+          updatedAt: now,
+        }) as ArtifactRow)
+      : db.create({
+          id: crypto.randomUUID(),
+          instanceId: instance.id,
+          projectId: instance.projectId ?? null,
+          kind: "sheet",
+          name: input.name,
+          machineId,
+          source,
+          revision: 1,
+          seq: 0,
+          changes: {},
+          deliveredSeq: 0,
+          readSeq: 0,
+          openedRevision: null,
+          createdAt: now,
+          updatedAt: now,
+          shownAt: null,
+        });
+    stampMeta(row, null);
+    writeStage(row, opened.state, opened.stories);
+    const shown = await show(row);
+    if (!(shown.started || before)) {
+      discard(row);
+      throw new ArtifactRefusal(503, shown.why);
+    }
+    return {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      route: routeOf(row.id),
+      ...openedOf(shown),
+      stories: opened.stories,
+      stage: sheetState(row, opened.state),
+    };
+  };
+
+  /**
+   * A sheet as the session reads it: its picks, and its stories and stage
+   * read afresh, which is a use that keeps the stage awake (or wakes it). A
+   * stage that can't be reached is read as the doc last had it, its status
+   * `error` with why.
+   */
+  const readSheet = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    since?: number
+  ): Promise<ArtifactRead> => {
+    const sheet = sheetOf(row);
+    let failure: string | null = null;
+    if (sheet) {
+      try {
+        const { opened } = await deps.stage(
+          instance,
+          join(sheet.dir, sheet.file)
+        );
+        writeStage(row, opened.state, opened.stories);
+      } catch (error) {
+        failure = error instanceof Error ? error.message : String(error);
+      }
+    }
+    const meta = docs.doc(row.id).getMap("meta");
+    const stage = meta.get("stage") as StageState | undefined;
+    return {
+      ...read(row, since),
+      stories: (meta.get("stories") as Story[] | undefined) ?? [],
+      ...(stage
+        ? {
+            stage: failure
+              ? { ...stage, status: "error" as const, message: failure }
+              : stage,
+          }
+        : {}),
+    };
+  };
+
+  /** A canvas (or the composer's draft) and a sheet are each made their own way; a page or preview is null here, made by `create` itself. */
+  const madeOwnWay = (
+    instance: InstanceRow,
+    input: ArtifactInput
+  ): Promise<Created> | null => {
+    if (input.kind === "canvas") {
+      return input.draft
+        ? Promise.resolve(createDraft(instance, input))
+        : createCanvas(instance, input);
+    }
+    return input.kind === "sheet" ? createSheet(instance, input) : null;
+  };
+
   /** A decision page's choice ids, as its HTML declares them; empty for any other page. */
   const choicesAsked = (row: ArtifactRow): string[] => {
     if (row.kind !== "page") {
@@ -1644,10 +1901,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (stray) {
         throw new ArtifactRefusal(400, stray);
       }
-      if (input.kind === "canvas") {
-        return input.draft
-          ? createDraft(instance, input)
-          : await createCanvas(instance, input);
+      const ownWay = madeOwnWay(instance, input);
+      if (ownWay !== null) {
+        return await ownWay;
       }
       let source: PreviewSource = { page: input.name };
       let machineId: string | null = null;
@@ -1782,12 +2038,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * changed, with its picture when `png`; with no id, the session's
      * newest artifact.
      */
-    read: (
+    read: async (
       instanceId: string,
       id?: string,
       since?: number,
       png = false
-    ): ArtifactRead => {
+    ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
       const row =
         id === undefined ? db.ofInstance(instance.id)[0] : own(instance, id);
@@ -1797,9 +2053,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           "This session has made no artifact yet."
         );
       }
-      return row.kind === "canvas"
-        ? readCanvas(row, since, png)
+      if (row.kind === "canvas") {
+        return readCanvas(row, since, png);
+      }
+      return row.kind === "sheet"
+        ? await readSheet(instance, row, since)
         : read(row, since);
+    },
+
+    /**
+     * A workspace's stage changed (the daemon's {@link StageFrame}): each
+     * sheet of the workspace that stage serves keeps its state, and one with
+     * a compile error its session has not heard has its delivery scheduled.
+     */
+    staged: (machineId: string, frame: StageFrame): void => {
+      // A port preview naming the workspace; no folder matches "//".
+      const rows = db.previewing({
+        id: frame.workspace,
+        machineId,
+        path: "//",
+      });
+      for (const row of rows) {
+        if (sheetOf(row)?.dir !== frame.state.dir) {
+          continue;
+        }
+        writeStage(row, frame.state);
+        if (errorsOwed(row, docs.doc(row.id)).length > 0) {
+          marked(row.id);
+        }
+      }
     },
 
     /** A canvas's `.excalidraw` file, its outline and its latest picture: what a send carries. */

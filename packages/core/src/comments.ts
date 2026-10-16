@@ -102,13 +102,47 @@ export interface SendBody {
 export interface PageAnchor {
   /** The element's box in the page when it was anchored, px: what the moved tray shows. */
   box?: { h: number; w: number; x: number; y: number };
+  /**
+   * On a sheet: the components the element stands in, innermost first, each
+   * where it is used (Svelte's `__svelte_meta.parent` component entries, or
+   * a stamped component root's call site), then the story that mounts them.
+   */
+  chain?: ChainLink[];
   /** The frames it stands in, outermost first, each by its selector in its parent's document; none at the top. */
   frames?: string[];
   selector: string;
+  /** On a sheet: its story file (from the Vite root) and the story whose frame holds the element. */
+  sheet?: { file: string; story: string };
   source: PreviewElement["source"];
   /** The element's text, at most {@link COMMENT_LIMITS.anchorText} characters. */
   text?: string;
 }
+
+/**
+ * One link of a sheet's chain: a component, by its name, at the place it is
+ * used (1-based line and column); the last link is the story, by its
+ * export's name, at the export in the story file.
+ */
+export interface ChainLink {
+  column: number;
+  component: string;
+  file: string;
+  line: number;
+}
+
+/** A chain as a delivery says it: `IconAgent (Who.svelte:82:11) › story Agent (Who.stories.ts:5:14)`. */
+const chainWords = (anchor: PageAnchor): string | null => {
+  const { chain, sheet } = anchor;
+  if (!chain?.length) {
+    return null;
+  }
+  return chain
+    .map((link, i) => {
+      const story = sheet && i === chain.length - 1 ? "story " : "";
+      return `${story}${link.component} (${link.file}:${link.line}:${link.column})`;
+    })
+    .join(" › ");
+};
 
 /** A canvas's mark stands on one of its elements, by id. */
 export interface CanvasAnchor {
@@ -543,6 +577,7 @@ const standsOn = (pin: Pin, url: string): string[] => {
     pin.kind === "annotation"
       ? (pin.elements as PinnedElement[]).map((el) => el.selector).join(", ")
       : "";
+  const chain = chainWords(anchor);
   return [
     `## ${pin.number}. ${pin.kind} on ${anchor.selector}`,
     ...(anchor.frames?.length
@@ -553,6 +588,7 @@ const standsOn = (pin: Pin, url: string): string[] => {
           `- Source: ${source.file}${source.line ? `:${source.line}` : ""}${source.column ? `:${source.column}` : ""} (${source.framework}, ${source.of})`,
         ]
       : []),
+    ...(chain ? [`- Inside: ${chain}`] : []),
     `- Page: ${url}`,
     ...(anchor.text?.trim()
       ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]
@@ -570,7 +606,9 @@ export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
   was.selector !== now.selector ||
   (was.frames ?? []).join("\u0000") !== (now.frames ?? []).join("\u0000") ||
   (was.text ?? "") !== (now.text ?? "") ||
-  JSON.stringify(was.source) !== JSON.stringify(now.source);
+  JSON.stringify(was.source) !== JSON.stringify(now.source) ||
+  JSON.stringify(was.chain ?? []) !== JSON.stringify(now.chain ?? []) ||
+  JSON.stringify(was.sheet ?? null) !== JSON.stringify(now.sheet ?? null);
 
 /**
  * One pin's part of a delivery: a pin the session already has, where only
@@ -616,6 +654,7 @@ export function inkSection(
                 `- Source: ${anchor.source.file}${anchor.source.line ? `:${anchor.source.line}` : ""}`,
               ]
             : []),
+          ...(chainWords(anchor) ? [`- Inside: ${chainWords(anchor)}`] : []),
           `- Page: ${context.url}`,
           ...(anchor.text?.trim()
             ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]

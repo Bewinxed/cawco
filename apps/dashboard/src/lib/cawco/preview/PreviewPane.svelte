@@ -577,6 +577,40 @@
         (entry) => !view?.sentAt || entry.at > view.sentAt
       )
   );
+  /*
+   * A sheet's stage (live components): the project's own Vite, which the
+   * daemon runs in its workspace. Its state is in the sheet's doc: starting,
+   * waking (from sleep) and the page compiling stand on the loading cover;
+   * compile errors on a card over the last render, dimmed; a stage that
+   * didn't start, where the page would be.
+   */
+  const sheetStage = $derived(
+    artifact?.kind === "sheet" ? (view?.stage ?? null) : null
+  );
+  /** What the cover says while a sheet's page is on its way; null when nothing is. */
+  const stageWaiting = $derived.by(() => {
+    switch (sheetStage?.status) {
+      case "starting":
+        return `Starting vite in ${sheetStage.dir}…`;
+      case "waking":
+      case "asleep":
+        return "Waking…";
+      case "live":
+        return connected ? null : "Compiling…";
+      default:
+        return null;
+    }
+  });
+  const compileErrors = $derived(
+    sheetStage?.status === "live" ? sheetStage.errors : []
+  );
+  /** A compile error's place, `file:line:column` as far as Vite's payload names it. */
+  const errorPlace = (error: {
+    column: number | null;
+    file: string;
+    line: number | null;
+  }) =>
+    `${error.file}${error.line ? `:${error.line}` : ""}${error.column ? `:${error.column}` : ""}`;
   /** The head's Comments count: the panel's Open tab, the pins on the page not resolved (the app's `ArtifactComments.open`). */
   const openCount = $derived(
     pins.filter((pin) => !(pin.resolvedAt || pin.movedAt)).length
@@ -1597,13 +1631,62 @@
       ></iframe>
     {/each}
     <div
-      aria-hidden="true"
+      aria-hidden={stageWaiting ? undefined : "true"}
       class="cover"
-      class:ready={loaded || standing !== null}
+      class:ready={(loaded || standing !== null) && !stageWaiting}
+      role={stageWaiting ? "status" : undefined}
     >
       <span
         class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
       ></span>
+      {#if stageWaiting}
+        <!-- A sheet's stage on its way: the project's own Vite, started or woken by the daemon. -->
+        <p class="cover-state">{stageWaiting}</p>
+      {/if}
+    </div>
+    {#if compileErrors.length > 0}
+      {@const first = compileErrors[0]}
+      <!-- The last good render stays under it, dimmed; the session is told of it on its own. -->
+      <div aria-hidden="true" class="sheet-dim" transition:appear></div>
+      <div class="sheet-error" role="alert" transition:appear>
+        <p class="sheet-error-title">
+          Doesn't compile: <code>{errorPlace(first)}</code>
+        </p>
+        <p class="sheet-error-line">{first.message.split("\n")[0]}</p>
+        {#if first.frame}
+          <pre class="sheet-error-frame">{first.frame}</pre>
+        {/if}
+        <p class="sheet-error-next">
+          {compileErrors.length > 1
+            ? `${compileErrors.length - 1} more besides. `
+            : ""}The session is told; the sheet redraws once it compiles.
+        </p>
+      </div>
+    {/if}
+  {/if}
+  {#if sheetStage?.status === "error"}
+    <!-- The stage didn't start, or failed its restarts: where the page would be. -->
+    <div class="down" role="alert" transition:appear>
+      <EmptyState
+        icon={IconAlert}
+        title={`The stage for ${sheetStage.dir} didn't start`}
+      >
+        {#snippet line()}
+          {sheetStage.message ?? "Vite ended before it served the sheet."} Try again
+          starts it again.
+        {/snippet}
+        {#snippet action()}
+          <Button
+            icon={IconRefresh}
+            label="Try again"
+            onclick={retry}
+            pending={retrying}
+            pendingLabel="Starting…"
+            size="sm"
+            variant="outline"
+          />
+        {/snippet}
+      </EmptyState>
     </div>
   {/if}
   {#if down}
@@ -1827,6 +1910,61 @@
   }
   .cover.ready {
     opacity: 0;
+  }
+  /* What a sheet's stage is doing while its page is on its way, under the cover's line. */
+  .cover-state {
+    margin: var(--space-3) 0 0;
+    color: var(--ink-muted);
+    font: var(--type-meta);
+  }
+  /* A sheet that doesn't compile: its last render dimmed under the scrim,
+     the error's card at the well's foot, as the failure band stands. */
+  .sheet-dim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+    pointer-events: none;
+  }
+  .sheet-error {
+    position: absolute;
+    inset-inline: var(--space-3);
+    bottom: var(--space-3);
+    display: grid;
+    gap: var(--space-2);
+    max-block-size: 60%;
+    overflow: auto;
+    padding: var(--space-3);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+
+    & p {
+      margin: 0;
+    }
+  }
+  .sheet-error-title {
+    color: var(--data-bad);
+    font-size: var(--text-body);
+    font-weight: var(--weight-strong);
+
+    & code {
+      font: var(--type-code);
+    }
+  }
+  .sheet-error-line,
+  .sheet-error-next {
+    color: var(--ink-muted);
+    font: var(--type-meta);
+  }
+  .sheet-error-frame {
+    margin: 0;
+    overflow-x: auto;
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+    background: var(--surface-recess);
+    color: var(--ink-strong);
+    font: var(--type-code);
   }
   /* A cover faded away is not loading: its sweep holds still. */
   .cover.ready :global(*),

@@ -308,6 +308,12 @@ import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
+import {
+  STAGE_ENSURE,
+  STAGE_READY_MS,
+  type StageFrame,
+  type StageOpened,
+} from "@cawco/core/stage";
 import type { UpstreamRules } from "@cawco/core/upstream-guard";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { Elysia, t, ValidationError } from "elysia";
@@ -9514,6 +9520,47 @@ export const createServer = (
         ),
     ownWorkspace: (instance) => workItems.workspaceOf(instance)?.id,
     workspaces: (needle) => db.workspacesNamed(needle),
+    // A sheet runs on the session's own workspace's stage, on that workspace's machine.
+    stage: async (instance, file) => {
+      const workspace = workItems.workspaceOf(instance);
+      if (!workspace) {
+        throw new ArtifactRefusal(
+          409,
+          "A sheet runs on your workspace's stage, and this session runs in no workspace."
+        );
+      }
+      const machineId =
+        db.workspacesNamed(workspace.id)[0]?.machineId ?? instance.machineId;
+      const answer = await callAgent(
+        machineId,
+        STAGE_ENSURE,
+        [workspace, file],
+        STAGE_READY_MS + 15_000
+      );
+      if (answer === "offline") {
+        throw new ArtifactRefusal(
+          503,
+          "The workspace's machine isn't connected to the hub, so its stage can't start."
+        );
+      }
+      if (answer === "timeout") {
+        throw new ArtifactRefusal(
+          504,
+          `The workspace's machine didn't answer within ${(STAGE_READY_MS + 15_000) / 1000}s, so the stage's state is unknown.`
+        );
+      }
+      if (!answer.ok) {
+        throw new ArtifactRefusal(
+          422,
+          answer.error ?? "The stage didn't start."
+        );
+      }
+      return {
+        machineId,
+        workspace: workspace.id,
+        opened: answer.result as StageOpened,
+      };
+    },
   });
   importLegacyCanvases({
     db: db.artifacts,
@@ -23967,6 +24014,14 @@ export const createServer = (
               if (kind === "command_queue") {
                 const { runId, queue } = message.payload as CommandQueueFrame;
                 commandQueues.get(runId)?.(queue);
+                break;
+              }
+              // A workspace's stage changed: each of its sheets keeps the state.
+              if (kind === "stage") {
+                artifacts.staged(
+                  message.machineId,
+                  message.payload as StageFrame
+                );
                 break;
               }
               if (kind === "move_progress") {

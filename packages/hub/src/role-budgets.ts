@@ -95,11 +95,18 @@ import type { Tasks } from "./tasks";
  * `machine`, `workspace` and `fork` were cut to pay for them, and a leaf,
  * with no delegate to hand inputs to, is not listed handoff's `inputs`
  * (worker 24,374, delegate 6,573, lead 15,799 measured).
+ * 2026-10-16: the `sheet` kind (live components, D29): a component's
+ * states as the project's own real component on its workspace's stage, the
+ * agent's one way to show one, in artifact_create (`file`) and
+ * artifact_read (its stories, stage and errors), its words cut to a clause
+ * each; the design-preview clause shortened to pay for part of it. About
+ * 110 tokens for the worker, the delegate and the lead (worker 24,488,
+ * delegate 6,703, lead 15,913 measured). Raised deliberately.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 24_590,
-  delegate: 6590,
-  lead: 15_810,
+  delegate: 6710,
+  lead: 15_915,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

@@ -118,7 +118,11 @@ const hubProxy = (): Plugin => ({
 });
 
 function holdUpgrades(server: ViteDevServer | PreviewServer) {
-  devHub();
+  // A CawCo stage (live components, `CAWCO_STAGE`) serves components and
+  // talks to no hub: it asks for none. Every other server names its own.
+  if (!process.env.CAWCO_STAGE) {
+    devHub();
+  }
 
   server.httpServer?.on("upgrade", (req, socket) => {
     socket.on("error", (error: NodeJS.ErrnoException) => {

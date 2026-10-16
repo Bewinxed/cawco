@@ -220,7 +220,7 @@ export const artifactResponsesNotice = ({
   `[CawCo] The ${kind} "${name}" has new responses since ${since}. Read them with artifact_read({ id: "${id}", since: ${since} }).`;
 
 const ARTIFACT_RESPONSES_LINE =
-  /^\[CawCo\] The (page|canvas|preview) "([a-z0-9][a-z0-9-]{0,62})" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: \d+ \}\)/;
+  /^\[CawCo\] The (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: \d+ \}\)/;
 
 /** An artifact's responses notice read back into what it names. */
 export function parseArtifactResponses(text: string): ArtifactResponses | null {
@@ -257,8 +257,20 @@ export const artifactCommentsNotice = (
 ): string =>
   `[CawCo] The person commented on the ${kind} "${name}" (artifact ${id}). Answer each pin in its thread with comment_reply({ pin, text }), and comment_resolve once a change settles it; comment_read has the history.\n\n${sections.join("\n\n")}`;
 
+/**
+ * A sheet's compile errors from its stage (live components, core
+ * `stage.ts`), delivered on the same quiet-gathered channel as the person's
+ * marks when no mark goes with them; with marks, they are sections of the
+ * comments notice.
+ */
+export const artifactErrorsNotice = (
+  { id, kind, name }: ArtifactComments,
+  sections: string[]
+): string =>
+  `[CawCo] The ${kind} "${name}" (artifact ${id}) does not compile on its stage; the panel shows the last good render under the error. Fix each at its file:line:column; artifact_read lists the errors standing, and none once it compiles.\n\n${sections.join("\n\n")}`;
+
 const ARTIFACT_COMMENTS_LINE =
-  /^\[CawCo\] The person commented on the (page|canvas|preview) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\)\.[^\n]*\n\n/;
+  /^\[CawCo\] The person commented on the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\)\.[^\n]*\n\n/;
 
 /** An artifact's comments notice read back into what it names, and its sections as one text. */
 export function parseArtifactComments(

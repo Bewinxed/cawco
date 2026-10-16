@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
+import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
 import { nativeTarball, stageNativeClaude } from "./binary/native-tarball";
 
@@ -208,6 +209,9 @@ export async function buildBinary(options: {
     }
     await writeFile(join(work, "srt-host.js"), await host.outputs[0].text());
   }
+  // A workspace's stage (live components): run by the project's own node or
+  // bun inside the workspace's boundary, never by cawco (agent stage.ts).
+  await writeFile(join(work, "stage-host.mjs"), await buildStageHost());
   const ripgrep = packageDir("@vscode/ripgrep-universal", requireAgent);
   const assets = [
     ...(linuxTarget
@@ -244,6 +248,7 @@ export async function buildBinary(options: {
     ["workflow/workflow-program.ts", join(work, "workflow-program.ts")],
     ["workflow/workflow.ts", join(work, "workflow.ts")],
     ["preview/overlay.js", join(work, "overlay.js")],
+    ["stage/host.mjs", join(work, "stage-host.mjs")],
     // A canvas's host page, its bundle and Excalidraw's fonts (core canvas-host.ts).
     ...(await canvasHostAssets(join(work, "canvas"), filesUnder)),
     // Run as plain Bun as each workspace's judge, never as cawco (boundary.ts).

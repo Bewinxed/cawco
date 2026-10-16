@@ -19,6 +19,7 @@
   import {
     IconArtifactCanvas,
     IconArtifactPage,
+    IconArtifactSheet,
     IconChevronDown,
     IconTrash,
     IconWindow,
@@ -48,6 +49,7 @@
     page: IconArtifactPage,
     canvas: IconArtifactCanvas,
     preview: IconWindow,
+    sheet: IconArtifactSheet,
   };
 
   let open = $state(false);

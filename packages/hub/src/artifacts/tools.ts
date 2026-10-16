@@ -8,6 +8,7 @@
 import { ARTIFACT_NAME, PREVIEW_START_PATH } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
+import { STORY_FILE } from "@cawco/core/stage";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
 
@@ -63,17 +64,26 @@ export const artifactCreate = {
   description:
     "Make an artifact and open it in your panel. A page is `html`, or `dir` " +
     "holding a decision page's page.html (decision-page skill); in a project, neither builds decisions/<name>/page.html " +
-    "from its folder. A preview is your dev server (`port`) or a folder (`dir`). A design preview (options to pick, " +
-    "a component's states): design-explore skill first. A canvas is `elements` or `mermaid`, " +
+    "from its folder. A sheet is a component's states: `file`, a CSF 3 story file beside the real component " +
+    "(`export default { component, args }`, a named export per state), run on your workspace's Vite. " +
+    "A preview is a whole app: your dev server (`port`) or a folder (`dir`). Options to pick between: " +
+    "design-explore skill first. A canvas is `elements` or `mermaid`, " +
     "or empty for the person. The same kind and name again replaces it, picks kept. " +
     "Answers its id and `opened` (false: `why`).",
   input: {
-    kind: z.enum(["page", "preview", "canvas"]),
+    kind: z.enum(["page", "sheet", "preview", "canvas"]),
     name: z
       .string()
       .regex(ARTIFACT_NAME)
       .describe("Lowercase letters, digits and dashes, like onboarding."),
     html: z.string().min(1).max(PAGE_LIMIT).optional(),
+    file: z
+      .string()
+      .min(1)
+      .max(1000)
+      .regex(STORY_FILE)
+      .optional()
+      .describe("From your clone's root."),
     dir: z
       .string()
       .startsWith("/")
@@ -148,7 +158,8 @@ export const artifactRead = {
     "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. " +
     "When the person sends picks, you are told the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
-    "the person changed since `since` or your last read; `png: true` adds its picture.",
+    "the person changed since `since` or your last read; `png: true` adds its picture. A sheet adds " +
+    "`stories` and its stage's `status` and compile `errors`; its picks are stories.",
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),

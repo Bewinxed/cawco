@@ -202,6 +202,8 @@ export {
 export { default as IconSoundOff } from "~icons/solar/volume-cross-bold-duotone";
 export { default as IconSound } from "~icons/solar/volume-loud-bold-duotone";
 export { default as IconColumns } from "~icons/solar/widget-2-bold-duotone";
+/** A sheet: a component's states, side by side, each a tile. */
+export { default as IconArtifactSheet } from "~icons/solar/widget-4-bold-duotone";
 // Menu rows among duotone glyphs: a new session, and folding the others away.
 export { default as IconSessionAdd } from "~icons/solar/widget-add-bold-duotone";
 export { default as IconWindow } from "~icons/solar/window-frame-bold-duotone";

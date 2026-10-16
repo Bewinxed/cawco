@@ -20,6 +20,7 @@ import {
   WorkspaceDown,
   workspaceGone,
 } from "./preview-bridge";
+import { stageViewer, wakeStage } from "./stage";
 
 /**
  * The listeners this process serves, with the source each was asked for and
@@ -268,6 +269,8 @@ export function startPreview(options: {
   instanceId: string;
   port?: number;
   dir?: string;
+  /** A sheet's: the workspace's stage serves the port (core `PreviewSource`); each request wakes it. */
+  stage?: { dir: string; file: string };
   /** The workspace whose network the port is in; none, the host's. */
   workspace?: string;
   /**
@@ -282,7 +285,7 @@ export function startPreview(options: {
 async function start(
   options: Parameters<typeof startPreview>[0]
 ): Promise<{ port: number }> {
-  const { instanceId, port, dir, workspace, token } = options;
+  const { instanceId, port, dir, workspace, token, stage } = options;
   if ((port === undefined) === (dir === undefined)) {
     throw new Error("Pass exactly one of port or dir.");
   }
@@ -309,12 +312,29 @@ async function start(
   const source: PreviewSource =
     port === undefined
       ? { dir: root as string }
-      : { port, ...(workspace === undefined ? {} : { workspace }) };
+      : {
+          port,
+          ...(workspace === undefined ? {} : { workspace }),
+          ...(stage === undefined ? {} : { stage }),
+        };
   await stopNow(instanceId);
   if ("port" in source) {
     // A workspace no boundary runs refuses the preview in so many words.
     await upstreamOf(instanceId, source);
   }
+  /** A sheet's stage, woken when it sleeps; its refusal is the page the pane draws. */
+  const staged = async (): Promise<Response | null> => {
+    if (!("port" in source && source.stage && source.workspace)) {
+      return null;
+    }
+    try {
+      await wakeStage(source.workspace, source.stage.dir, source.stage.file);
+      return null;
+    } catch (error) {
+      previewFailed("agent listener", instanceId, causeOf(error));
+      return downResponse("reach", 502, causeOf(error));
+    }
+  };
   const listener = Bun.serve<PreviewSocket>({
     hostname: "0.0.0.0",
     port: 0,
@@ -379,6 +399,10 @@ async function start(
           }
         }
         headers.set("accept-encoding", "identity");
+        const asleep = await staged();
+        if (asleep) {
+          return asleep;
+        }
         let upstream: Awaited<ReturnType<typeof upstreamOf>>;
         try {
           upstream = await upstreamOf(instanceId, source);
@@ -404,6 +428,10 @@ async function start(
           return upgradePreview(request, server, ws, headers, {
             hop: "agent listener",
             instanceId,
+            // A page's open socket (its HMR) is a viewer: the stage stays awake for it.
+            ...(source.stage && source.workspace
+              ? { ended: stageViewer(source.workspace, source.stage.dir) }
+              : {}),
           })
             ? undefined
             : new Response("WebSocket upgrade failed", { status: 400 });
