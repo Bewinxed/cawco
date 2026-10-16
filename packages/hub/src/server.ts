@@ -523,6 +523,7 @@ import {
   noAccountRefusal,
   type PlacementInput,
   place as placeAccount,
+  unreportedHarnessRefusal,
 } from "./placement";
 import { createPlans, planRoutes } from "./plans";
 import {
@@ -1598,12 +1599,6 @@ const AUTH_STATES: readonly AgentAuth[] = [
   "unauthenticated",
   "unreadable-credentials",
 ];
-
-/** `register`'s word on whether the machine can reach Claude Code's credentials. */
-const peekAuth = (payload: unknown): AgentAuth => {
-  const claimed = peek(payload, "auth") as AgentAuth | undefined;
-  return claimed && AUTH_STATES.includes(claimed) ? claimed : "unknown";
-};
 
 /** `register`'s list of the sessions the daemon still has running. */
 const peekInstances = (payload: unknown): string[] => {
@@ -10269,6 +10264,15 @@ export const createServer = (
       return {
         status: 404,
         refusal: `The project "${payload.projectId}" was deleted, so the session can't start in it. Pick another.`,
+      };
+    }
+    // A machine's agent registers before it reads its harnesses: until a
+    // harness has reported, nothing says it is installed there or who is
+    // signed in to it, so nothing starts on it.
+    const harness = payload.harness ?? "claude";
+    if (!harnessReportOf(machineId, harness)) {
+      return {
+        refusal: unreportedHarnessRefusal(machineName(machineId), harness),
       };
     }
     // Held, resumed, forked or placed: an account with no sign-in on the
@@ -24121,10 +24125,8 @@ export const createServer = (
                 hostname:
                   peek(message.payload, "hostname") ?? message.machineId,
                 os: peek(message.payload, "os") ?? "unknown",
-                auth: peekAuth(message.payload),
                 build: peekBuild(message.payload),
                 home: peekHome(message.payload),
-                machineCapabilities: peekMachineCapabilities(message.payload),
               });
               // Places filed under `~` before every place was absolute take
               // the home this register reported.
@@ -24654,6 +24656,13 @@ export const createServer = (
               if (tools.length > 0) {
                 db.mergeAgentTools(message.machineId, tools);
                 autoInstall(message.machineId, ws);
+              }
+              // What the machine has installed, on its own beat once its probe
+              // has asked every tool for its version.
+              const capabilities = peekMachineCapabilities(message.payload);
+              if (capabilities) {
+                db.setAgentCapabilities(message.machineId, capabilities);
+                publishInstances(message.machineId);
               }
               // What the machine's own pi and OpenCode stores hold, moved into
               // accounts on each connection and whenever they change under it

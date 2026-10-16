@@ -1909,6 +1909,11 @@ export interface DbShape {
    * row moved.
    */
   readonly setAgentAuth: (machineId: string, auth: AgentAuth) => boolean;
+  /** What the machine has installed, as its latest capabilities beat said. */
+  readonly setAgentCapabilities: (
+    machineId: string,
+    capabilities: import("@cawco/core/capabilities").MachineCapabilities
+  ) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
@@ -2284,17 +2289,22 @@ export interface DbShape {
       >
     >
   ) => WorkspaceRow | undefined;
-  /** A machine registered: its row, and off the removed list if it was on it. */
+  /**
+   * A machine registered: its row, and off the removed list if it was on it.
+   * A register carries no word on Claude and no capabilities (each follows on
+   * a beat of its own: {@link setAgentAuth}, {@link setAgentCapabilities}), so
+   * the row keeps what it had of both; a new row's auth is `unknown`.
+   */
   readonly upsertAgent: (agent: {
     machineId: string;
     hostname: string;
     os: string;
-    auth: AgentAuth;
+    /** Set by a seed, never by a register. */
+    auth?: AgentAuth;
     /** Absent from a register with nothing new to say about it; the row keeps what it had. */
     build?: BuildInfo;
     /** The machine's home folder, absolute; absent from a daemon that does not say it. */
     home?: string;
-    machineCapabilities?: import("@cawco/core/capabilities").MachineCapabilities;
   }) => void;
   /** The fleet's upstream answer (schema `upstreamSettings`): null while nobody has answered. */
   readonly upstreamPosts: () => boolean | null;
@@ -4628,39 +4638,29 @@ const make = async (path: string): Promise<DbShape> => {
             .run();
         }
       }),
-    upsertAgent: ({
-      machineId,
-      hostname,
-      os,
-      auth,
-      build,
-      home,
-      machineCapabilities,
-    }) => {
+    upsertAgent: ({ machineId, hostname, os, auth, build, home }) => {
       const lastSeenAt = new Date();
       db.insert(agents)
         .values({
           machineId,
           hostname,
           os,
-          auth,
+          ...(auth ? { auth } : {}),
           status: "online",
           lastSeenAt,
           build,
           home,
-          machineCapabilities,
         })
         .onConflictDoUpdate({
           target: agents.machineId,
           set: {
             hostname,
             os,
-            auth,
+            ...(auth ? { auth } : {}),
             status: "online",
             lastSeenAt,
             ...(build ? { build } : {}),
             ...(home ? { home } : {}),
-            ...(machineCapabilities ? { machineCapabilities } : {}),
           },
         })
         .run();
@@ -4684,6 +4684,12 @@ const make = async (path: string): Promise<DbShape> => {
         resolveHomeDirs(tx, machineId, resolve);
         return resolveHomePlaces(tx, machineId, resolve);
       });
+    },
+    setAgentCapabilities: (machineId, machineCapabilities) => {
+      db.update(agents)
+        .set({ machineCapabilities })
+        .where(eq(agents.machineId, machineId))
+        .run();
     },
     setAgentAuth: (machineId, auth) =>
       db

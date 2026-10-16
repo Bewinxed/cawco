@@ -426,6 +426,27 @@ const readPart = async <T>(
   }
 };
 
+/** Whether this process has said what its first Claude report found ({@link noteClaudeAuth}). */
+let claudeAuthNoted = false;
+
+/**
+ * The machine's word on Claude, said once per process, from the first Claude
+ * report it reads: nothing while an account is signed in, else the sentence
+ * pointing at Configure → Accounts. It used to be read before the agent
+ * started, which made the start wait on `claude auth status` for every
+ * account.
+ */
+const noteClaudeAuth = (auth: AuthState): void => {
+  if (claudeAuthNoted) {
+    return;
+  }
+  claudeAuthNoted = true;
+  const note = claudeAuthNote(auth);
+  if (note) {
+    Effect.runFork(Effect.logWarning(note));
+  }
+};
+
 /** A harness's report, read on its own ({@link readPart}). */
 const readHarness = (adapter: Harness): Promise<HarnessReport | undefined> =>
   readPart(`the ${adapter.kind} harness's report`, () => adapter.detect());
@@ -529,15 +550,12 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
   );
 };
 
-/** How the hub identifies this machine in its registry. */
+/**
+ * How the hub identifies this machine in its registry. Nothing in it is
+ * probed: the machine's word on Claude rides Claude's harness report, which
+ * follows the register ({@link HeartbeatPayload.harnesses}).
+ */
 interface MachineIdentity {
-  /**
-   * Whether this daemon can reach Claude Code's credentials. It travels with the
-   * identity because it is a fact about the machine, not about a session, and
-   * because a machine that cannot start one should not sit in the fleet looking
-   * ready to.
-   */
-  auth: AuthState;
   /**
    * The daemon's home folder, absolute: the hub resolves a place named under
    * `~` on this machine against it, so every place it stores is absolute.
@@ -556,9 +574,10 @@ interface MachineIdentity {
  * Only what the daemon can say without spawning anything. The register is the
  * moment the hub puts this machine back in its registry — `online` is read
  * from nowhere else — so every millisecond spent before sending it is a
- * millisecond a healthy machine reads offline. Harnesses and tools, whose
- * probes start processes, follow on a beat of their own: see
- * {@link HeartbeatPayload}.
+ * millisecond a healthy machine reads offline. Harnesses, tools and the
+ * machine's capabilities, whose probes start processes (a `claude` that took
+ * 30 s to answer `--version` and `auth status` kept a machine offline for
+ * 31 s), follow on beats of their own: see {@link HeartbeatPayload}.
  */
 export interface RegisterPayload extends MachineIdentity {
   /**
@@ -586,7 +605,6 @@ export interface RegisterPayload extends MachineIdentity {
    */
   formerMachineId?: string;
   instances: string[];
-  machineCapabilities: Awaited<ReturnType<typeof probeCapabilities>>;
   /**
    * The preview listeners this process is serving. A hub that restarted has
    * no targets and takes these as they are; one that only lost the socket
@@ -973,7 +991,7 @@ const closed = (socket: WebSocket, url: string) =>
   Effect.callback<never, ConnectionLost>((resume) => {
     // The state is read before the event is waited for, because between `open`
     // dropping its own close listener and this one going on, `attach` registers:
-    // it probes every harness and every tool, which spawns processes and takes
+    // it reads custody from the keepers and the catalogs from disk, which takes
     // real time. A hub that goes away inside that window fires `close` at nobody
     // — and a listener added afterwards waits for an event that has already
     // been and gone. That wait is silent and permanent: `send` on a dead socket
@@ -1207,7 +1225,7 @@ const attach = (
    * Called once the socket is open and the register has gone out — the moment
    * this connection counts as up. {@link reconnecting} reads it to tell a
    * healthy connection that later died from one that never stood at all; a hub
-   * that vanishes during the register's probes never marks it, and so is
+   * that vanishes while the register is read never marks it, and so is
    * correctly treated as a flap.
    */
   markLive: () => void = () => {
@@ -1232,10 +1250,6 @@ const attach = (
       readCustody(supervisor.stopSequence, supervisor.custodyInstanceIds)
     );
     const build = yield* Effect.promise(() => buildInfo());
-    // Read fresh for each registration this connection makes, never with a
-    // synchronous spawn (capabilities.ts).
-    const capabilities = () => probeCapabilities();
-    let machineCapabilities = yield* Effect.promise(capabilities);
     const machineAgent = yield* Effect.promise(isMachineAgent);
     // The id this machine registered as with this hub last, when it was
     // another: the hub moves what it held for it to this one.
@@ -1254,7 +1268,6 @@ const attach = (
       ...(formerMachineId ? { formerMachineId } : {}),
       ...(machineAgent ? { accountStores: accountStoreIds() } : {}),
       sessionAddresses: supervisor.sessionAddresses,
-      machineCapabilities,
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
       custody: snapshot.custody,
@@ -1300,7 +1313,6 @@ const attach = (
         );
         registrationDeadline = setTimeout(async () => {
           if (awaitingRegisterAck && socket.readyState === WebSocket.OPEN) {
-            machineCapabilities = await capabilities();
             payload = registerPayload(await readSessions());
             if (!awaitingRegisterAck || socket.readyState !== WebSocket.OPEN) {
               return;
@@ -1483,8 +1495,20 @@ const attach = (
             if (report) {
               keepReport(report);
               beat({ harnesses: [report] });
+              if (report.harness === "claude") {
+                noteClaudeAuth(report.auth);
+              }
             }
           }),
+          (async () => {
+            const machineCapabilities = await readPart(
+              "the machine's capabilities",
+              probeCapabilities
+            );
+            if (machineCapabilities) {
+              beat({ machineCapabilities });
+            }
+          })(),
           (async () => {
             const tools = await readPart("tools", probeTools);
             if (tools) {
@@ -2450,16 +2474,14 @@ const attach = (
 
 /**
  * Runs until interrupted: connect, register, heartbeat, reconnect on loss.
- *
- * `auth` is what the caller already found out — `cawco up` probes before it
- * gets here, because it may still be able to fix it. A daemon started any other
- * way asks for itself.
+ * Nothing on the way to the first register starts a harness's CLI: each
+ * harness's report follows it on a beat of its own (`reannounce`).
  *
  * `rediscover` says whether the hub URL was discovered rather than named. Only
  * then may a sustained reconnect failure re-run discovery and repin; a named
  * hub is retried with the usual backoff forever.
  */
-export const startDaemon = (auth?: AuthState, rediscover = false) =>
+export const startDaemon = (rediscover = false) =>
   Effect.gen(function* () {
     // Every record read once, before anything reads one: what a crash left
     // damaged is in the log and on the first beat now, not at the next spawn.
@@ -2491,9 +2513,6 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       Effect.promise(() => startMcpGateway(() => hubUrl)),
       (listener) => Effect.sync(() => listener.stop(true))
     );
-    // The claude harness's auth is the machine's headline word — the original
-    // rail still reads it — while `register` carries every harness's own.
-    const claude = harnesses().find((adapter) => adapter.kind === "claude");
     const machineIdValue = yield* Effect.promise(() => machineId());
     // Child processes — the opencode server and its plugins most of all — read
     // the machine's identity and the hub off the environment they inherit.
@@ -2521,21 +2540,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       home: homedir(),
       hostname: hostname(),
       os: `${platform()}-${arch()}`,
-      auth:
-        auth ??
-        (yield* Effect.promise(() =>
-          (claude
-            ? claude.detect()
-            : Promise.resolve({ auth: "unauthenticated" as AuthState })
-          ).then((r) => r.auth)
-        )),
     };
-    // `cawco up` read the account dirs and said what it found before this;
-    // a daemon started any other way says it here, in the same words.
-    const note = auth ? undefined : claudeAuthNote(identity.auth);
-    if (note) {
-      yield* Effect.logWarning(note);
-    }
 
     // Outlives any one connection: a hub restart must not kill running sessions.
     const supervisor = yield* Effect.acquireRelease(
@@ -2862,7 +2867,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
  * between turns instead of mid-tool. A second signal arrives with the handler
  * already gone, and kills the daemon the usual way.
  */
-export const runDaemon = (auth?: AuthState, rediscover = false): void => {
+export const runDaemon = (rediscover = false): void => {
   // No log line prints a session credential.
   redactConsole();
   const daemon = Effect.runFork(
@@ -2872,7 +2877,7 @@ export const runDaemon = (auth?: AuthState, rediscover = false): void => {
     Effect.promise(() => endOrphanedSignIns()).pipe(
       // Never rejects: what it cannot judge it leaves and says.
       Effect.andThen(Effect.promise(() => removeCawcoSessionConfigs())),
-      Effect.andThen(startDaemon(auth, rediscover)),
+      Effect.andThen(startDaemon(rediscover)),
       Effect.catchDefect((error) =>
         Effect.logError(
           `[daemon] ${error instanceof Error ? error.message : String(error)}`

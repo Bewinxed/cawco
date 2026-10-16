@@ -255,13 +255,9 @@ export const claudeAuth = async (
   return "unauthenticated";
 };
 
-/** {@link claudeAuth} over this machine's account dirs, read now. */
-export const machineClaudeAuth = async (): Promise<AuthState> =>
-  claudeAuth(await accountReports());
-
 /**
- * What a machine's start says about its Claude accounts, in the one place
- * both `cawco up` and the daemon read it from: nothing while a CawCo account
+ * What a machine's agent says about its Claude accounts once it has read
+ * them (daemon.ts `noteClaudeAuth`): nothing while a CawCo account
  * is signed in here; with none, the sentence pointing at Configure →
  * Accounts; on a Mac whose keychain refuses this process an account's login,
  * that.

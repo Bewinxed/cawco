@@ -970,7 +970,7 @@ if (role === "sessiond") {
     adapter as unknown as import("../packages/agent/src/harness").Harness
   );
   const { runDaemon } = await import("../packages/agent/src/daemon");
-  runDaemon("unauthenticated");
+  runDaemon();
 } else if (!role) {
   const dir = join(
     root,

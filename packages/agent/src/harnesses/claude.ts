@@ -3657,12 +3657,15 @@ export class ClaudeHarness implements Harness {
    * responses report and the hub keeps.
    */
   async detect(): Promise<HarnessReport> {
-    const accounts = await accountReports();
-    const auth = await claudeAuth(accounts);
-    this.auth = auth;
     const executable = resolveClaudeExecutable();
     const installed = executable !== undefined;
-    const version = executable ? await toolVersion(executable) : undefined;
+    // Side by side: each is bounded on its own (`auth status` 20 s, `--version` 5 s).
+    const [accounts, version] = await Promise.all([
+      accountReports(),
+      executable ? toolVersion(executable) : undefined,
+    ]);
+    const auth = await claudeAuth(accounts);
+    this.auth = auth;
     return {
       harness: "claude",
       installed,

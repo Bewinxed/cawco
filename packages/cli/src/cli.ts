@@ -7,7 +7,7 @@
 // and the harnesses load inside the verbs that run them.
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
-import type { AgentRow, AuthState } from "@cawco/core";
+import type { AgentRow } from "@cawco/core";
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
@@ -414,24 +414,11 @@ const status = async (args: Args): Promise<number> => {
 };
 
 /**
- * Asked before registering, because a machine that cannot start a Claude
- * session should say so rather than sit in the fleet looking ready. It reads
- * only the CawCo account dirs here (`~/.cawco/accounts/<id>/claude`), says
- * nothing while one is signed in, and otherwise prints the one sentence and
- * carries on: the fix is signing an account in from the dashboard, once this
- * daemon is up. The daemon is handed the answer and does not say it again.
+ * Starts the daemon at once: whether a Claude account is signed in here is
+ * read by the daemon once it has registered, and said then in the same
+ * sentence (daemon.ts `noteClaudeAuth`). Read here first, it held the start
+ * on `claude auth status` for every account dir.
  */
-const preflight = async (): Promise<AuthState> => {
-  // Loaded here rather than at the top so `status` never pays for the agent SDK.
-  const { claudeAuthNote, machineClaudeAuth } = await import("@cawco/agent");
-  const state = await machineClaudeAuth();
-  const said = claudeAuthNote(state);
-  if (said) {
-    console.error(`cawco: ${said}`);
-  }
-  return state;
-};
-
 const up = async (args: Args): Promise<number> => {
   const hub = await resolve(args);
   if (!hub) {
@@ -440,7 +427,6 @@ const up = async (args: Args): Promise<number> => {
   }
   console.log(`cawco: hub ${hub.httpUrl} (found by ${hub.source})`);
 
-  const auth = await preflight();
   if (process.stdin.isTTY) {
     console.log(
       "cawco: `cawco service install` runs this in the background instead."
@@ -452,7 +438,7 @@ const up = async (args: Args): Promise<number> => {
   const { runDaemon } = await import("@cawco/agent");
   // A hub the operator named is never swapped; only a discovered one may be
   // rediscovered on sustained reconnect failure.
-  runDaemon(auth, hub.source !== "flag" && hub.source !== "env");
+  runDaemon(hub.source !== "flag" && hub.source !== "env");
   return 0;
 };
 

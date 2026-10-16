@@ -86,6 +86,26 @@ export type Placement =
 export const noAccountRefusal = (machine: string): string =>
   `No Claude account is signed in on ${machine}. Add one in Configure → Accounts and sign it in there.`;
 
+/** Each harness as a sentence names it. */
+const HARNESS_NAMES: Record<string, string> = {
+  claude: "Claude Code",
+  opencode: "OpenCode",
+  pi: "pi",
+};
+
+/**
+ * Why a session can't start on a machine that has not reported its harness
+ * yet. A machine's agent registers before it reads its harnesses, whose CLIs
+ * can take many seconds to answer, so for a while after a machine first
+ * joins the hub knows neither whether that harness is installed there nor
+ * who is signed in to it.
+ */
+export const unreportedHarnessRefusal = (
+  machine: string,
+  harness: string
+): string =>
+  `${machine} hasn't said yet whether it can run ${HARNESS_NAMES[harness] ?? harness}: its agent is still checking. Start the session again in a moment. Nothing was started.`;
+
 /** A window's use now: one whose reset has passed with no newer reading is a fresh window. */
 const used = (window: LimitWindow | undefined, now: number): number => {
   if (!window) {

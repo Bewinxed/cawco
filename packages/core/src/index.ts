@@ -548,6 +548,13 @@ export interface HeartbeatPayload {
   homeStores?: string;
   instances: string[];
   /**
+   * What the machine has installed (git, claude, opencode, pi, node, a
+   * browser, a service manager) and at which version. Rides one beat per
+   * connection, once its probe finishes, for the reason `harnesses` does:
+   * the probe asks each tool for its version.
+   */
+  machineCapabilities?: import("./capabilities").MachineCapabilities;
+  /**
    * Every account of a provider other than Claude's with a store on the
    * machine (`~/.cawco/accounts/<id>/credential.json`), and who it is signed
    * in as there: the one credential every harness on the machine uses for

@@ -1572,23 +1572,38 @@ async function standUp(
       );
       socket = undefined;
     });
-  /** The hub's row for `machineId` says its agent is online, with custody. */
+  /**
+   * The hub's row for `machineId` says its agent is online, with custody, and
+   * the reports that follow its register are in: every harness's, and its
+   * capabilities. Until a harness has reported, the hub starts nothing on it
+   * (hub placement.ts `unreportedHarnessRefusal`).
+   */
   const online = async (machineId: string) =>
     (
       await api<
-        { machineId: string; status: string; custody?: { state: string } }[]
+        {
+          custody?: { state: string };
+          harnesses?: { harness: string }[];
+          machineCapabilities?: unknown;
+          machineId: string;
+          status: string;
+        }[]
       >("/api/agents")
     ).some(
       (row) =>
         row.machineId === machineId &&
         row.status === "online" &&
-        row.custody?.state === "available"
+        row.custody?.state === "available" &&
+        row.machineCapabilities !== undefined &&
+        HARNESSES.every((harness) =>
+          row.harnesses?.some((report) => report.harness === harness)
+        )
     );
   const agentUp = async () => {
     await booted("agent", () =>
       answering(
         "agent",
-        "the agent online with custody",
+        "the agent online with custody and its reports",
         () => online(MACHINE),
         Boolean,
         120_000
@@ -1609,7 +1624,7 @@ async function standUp(
     await booted("agent", () =>
       answering(
         "agent",
-        `the agent online with custody as ${machineId}`,
+        `the agent online with custody and its reports as ${machineId}`,
         () => online(machineId),
         Boolean,
         120_000
@@ -1685,7 +1700,7 @@ async function standUp(
       `${machineId}'s agent`,
       agent.child,
       agent.err,
-      `${machineId}'s agent online with custody`,
+      `${machineId}'s agent online with custody and its reports`,
       () => online(machineId),
       Boolean,
       120_000
