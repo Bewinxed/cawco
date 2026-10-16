@@ -22,6 +22,7 @@ import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
 import { conversationHref } from "../links";
 import { keepPrefs } from "../prefs";
+import { store, stored as storedIn } from "../storage";
 import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
@@ -160,15 +161,7 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
 }
 
 function load(): WorkspaceV1 {
-  let stored: string | null = null;
-  try {
-    if (typeof localStorage !== "undefined") {
-      stored = localStorage.getItem(KEY);
-    }
-  } catch {
-    // A browser that will not read storage still has the cookie.
-  }
-  return parse(stored) ?? blank();
+  return parse(storedIn("local", KEY)) ?? blank();
 }
 
 const held = $state<WorkspaceV1>(load());
@@ -178,13 +171,7 @@ function save(): void {
     return;
   }
   const payload = JSON.stringify(held);
-  try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(KEY, payload);
-    }
-  } catch {
-    // A browser that will not store just starts the layout over next time.
-  }
+  store("local", KEY, payload);
   const tree = JSON.stringify({
     v: held.v,
     root: held.root,

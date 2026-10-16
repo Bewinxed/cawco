@@ -1,5 +1,6 @@
 import { flushSync } from "svelte";
 import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
+import { store, stored } from "#lib/cawco/storage.js";
 import { browser } from "$app/env";
 
 type Theme = "light" | "dark" | "system";
@@ -7,11 +8,8 @@ type Scheme = "light" | "dark";
 
 /** No stored choice follows the OS: neither scheme is the default. */
 function getInitialTheme(): Theme {
-  if (!browser) {
-    return "system";
-  }
-  const stored = localStorage.getItem("cawco-theme") as Theme | null;
-  return stored || "system";
+  const kept = stored("local", "cawco-theme") as Theme | null;
+  return kept || "system";
 }
 
 function resolve(themeValue: Theme): Scheme {
@@ -64,7 +62,7 @@ class ThemeState {
     const flip = () =>
       flushSync(() => {
         this.current = value;
-        localStorage.setItem("cawco-theme", value);
+        store("local", "cawco-theme", value);
         this.resolved = applyTheme(value);
       });
     // The page's own colour transitions (a button's hover ink, a row's pill)

@@ -17,6 +17,7 @@
     provideConfig,
   } from "#lib/cawco/config/store.svelte.js";
   import { pageIn, pageOut } from "#lib/cawco/motion/route.svelte.js";
+  import { store as storeLocally } from "#lib/cawco/storage.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { page } from "$app/state";
@@ -60,7 +61,7 @@
 
   $effect(() => {
     if (slug) {
-      localStorage.setItem(LAST_KEY, slug);
+      storeLocally("local", LAST_KEY, slug);
     }
   });
 </script>

@@ -8,6 +8,7 @@
  */
 import { PRESENCE_BEAT_MS, type PresenceBeat } from "@cawco/core";
 import { newId } from "#lib/cawco/id.js";
+import { store, stored } from "#lib/cawco/storage.js";
 
 /** Per tab: sessionStorage outlives a reload and is the tab's own. */
 const CLIENT_KEY = "cawco-presence-client";
@@ -18,14 +19,17 @@ let beating: ReturnType<typeof setInterval> | undefined;
 /** The last state the hub was told, so only a change (or a beat) posts. */
 let told: string | undefined;
 
+/** Minted once per page load where no storage keeps the tab's own. */
+let mintedHere: string | null = null;
+
 const clientId = (): string => {
-  const kept = sessionStorage.getItem(CLIENT_KEY);
+  const kept = stored("session", CLIENT_KEY);
   if (kept) {
     return kept;
   }
-  const minted = newId();
-  sessionStorage.setItem(CLIENT_KEY, minted);
-  return minted;
+  mintedHere ??= newId();
+  store("session", CLIENT_KEY, mintedHere);
+  return mintedHere;
 };
 
 const reading = (): boolean =>

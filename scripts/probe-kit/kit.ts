@@ -41,6 +41,8 @@ export const VIEWS = {
   phoneWide: { width: 430, height: 932, touch: true },
   /** The simulators the iOS specs pair with: iPhone 16 Pro and iPad Pro 13-inch (M4), portrait. */
   iphone: { width: 402, height: 874, touch: true },
+  /** An iPhone 15 Pro, portrait: the owner's phone. */
+  iphone15Pro: { width: 393, height: 852, touch: true },
   ipad: { width: 1032, height: 1376, touch: true },
 } as const;
 export type View = keyof typeof VIEWS;

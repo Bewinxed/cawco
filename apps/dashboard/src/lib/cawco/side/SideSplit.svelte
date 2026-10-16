@@ -49,6 +49,7 @@
   import PlanPane, { planShows } from "../plan/PlanPane.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
+  import { store, stored, unstore } from "../storage";
   import { setSideExpand } from "./expand";
   import SideSheet from "./SideSheet.svelte";
 
@@ -183,25 +184,22 @@
    * as the split is made, so its first layout is the kept one.
    */
   let expandAsked = $state(
-    typeof localStorage !== "undefined" &&
-      localStorage.getItem(
-        `cawco.preview.expanded.${untrack(() => viewId)}`
-      ) === "1"
+    stored("local", `cawco.preview.expanded.${untrack(() => viewId)}`) === "1"
   );
   /** The surface has the whole split: asked, and on a desk with it open. */
   const expanded = $derived(expandAsked && desktopOpen && fits);
   /** The last width beside the conversation, kept for the next visit and for going back. */
   function keepWidth(size: number): void {
     savedWidth = size;
-    localStorage.setItem(`cawco.preview.width.${viewId}`, String(size));
+    store("local", `cawco.preview.width.${viewId}`, String(size));
   }
   function setExpanded(next: boolean): void {
     expandAsked = next;
     const key = `cawco.preview.expanded.${viewId}`;
     if (next) {
-      localStorage.setItem(key, "1");
+      store("local", key, "1");
     } else {
-      localStorage.removeItem(key);
+      unstore("local", key);
     }
   }
   setSideExpand({
@@ -322,9 +320,9 @@
 
   $effect(() => {
     const id = viewId;
-    const stored = Number(localStorage.getItem(`cawco.preview.width.${id}`));
-    savedWidth = stored > 0 ? Math.min(SIDE_MAX, stored) : 45;
-    expandAsked = localStorage.getItem(`cawco.preview.expanded.${id}`) === "1";
+    const kept = Number(stored("local", `cawco.preview.width.${id}`));
+    savedWidth = kept > 0 ? Math.min(SIDE_MAX, kept) : 45;
+    expandAsked = stored("local", `cawco.preview.expanded.${id}`) === "1";
   });
   $effect(() => {
     const opening = desktopOpen && fits;

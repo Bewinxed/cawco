@@ -84,6 +84,7 @@
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { sameRow } from "./same-row";
   import { newSession } from "./spawn/new-session.svelte";
+  import { stored } from "./storage";
   import { inLists, isThreadTab } from "./thread-tabs";
   import { rooted, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
@@ -128,8 +129,8 @@
     let last: string | null = null;
     if (path.startsWith("/config/")) {
       [, , last] = path.split("/");
-    } else if (typeof localStorage !== "undefined") {
-      last = localStorage.getItem(CONFIG_LAST_KEY);
+    } else {
+      last = stored("local", CONFIG_LAST_KEY);
     }
     return `/config/${SECTIONS.some((section) => section.slug === last) ? last : "rules"}`;
   });

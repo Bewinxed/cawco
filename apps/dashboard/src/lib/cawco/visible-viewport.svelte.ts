@@ -73,6 +73,7 @@
  * one that never comes (a hardware keyboard) gives it back.
  */
 import { flushSync } from "svelte";
+import { store, stored, unstore } from "./storage";
 
 /**
  * The visible area, in CSS pixels from the layout viewport's top; a height
@@ -309,7 +310,7 @@ export function trackVisibleViewport(): () => void {
     // No keyboard came (a hardware keyboard): the next tap foresees none.
     const field = document.activeElement;
     if (isField(field) && !up && now > ahead.until) {
-      localStorage.removeItem(keyboardKey(field));
+      unstore("local", keyboardKey(field));
     }
     // Arrived where foreseen; focus gone; or no keyboard came.
     const done =
@@ -343,7 +344,7 @@ export function trackVisibleViewport(): () => void {
       return;
     }
     opened = true;
-    localStorage.setItem(keyboardKey(field), String(keyboard));
+    store("local", keyboardKey(field), String(keyboard));
   };
 
   const measure = () => {
@@ -380,7 +381,7 @@ export function trackVisibleViewport(): () => void {
    * keyboard will leave it, and the field in it, before focus.
    */
   const foresee = (field: HTMLElement): boolean => {
-    const keyboard = Number(localStorage.getItem(keyboardKey(field)));
+    const keyboard = Number(stored("local", keyboardKey(field)));
     if (
       ahead ||
       !raisesKeyboard(field) ||

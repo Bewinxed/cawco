@@ -58,6 +58,7 @@
   import { runShellShortcut, shellShortcutsAre } from "./shell-shortcut";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
+  import { store, stored } from "./storage";
   import { floor } from "./visible-viewport.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
@@ -137,8 +138,8 @@
    * drag handle and the cookie and localStorage never disagree.
    */
   onMount(() => {
-    const stored = Number(localStorage.getItem(RAIL_KEY));
-    const own = Number.isFinite(stored) && stored > 0 ? stored : railWidth;
+    const kept = Number(stored("local", RAIL_KEY));
+    const own = Number.isFinite(kept) && kept > 0 ? kept : railWidth;
     if (own === null) {
       // No width of the reader's: the token's stands, and is not stored as theirs.
       railWidth = tokenWidth();
@@ -171,11 +172,7 @@
    * not while it is changing.
    */
   function rememberRail() {
-    try {
-      localStorage.setItem(RAIL_KEY, String(railWidth));
-    } catch {
-      // A browser that will not store just starts at the default next time.
-    }
+    store("local", RAIL_KEY, String(railWidth));
     // +layout.server.ts renders the first paint at this width (prefs.ts).
     keepPrefs({ "cawco-rail-width": String(railWidth) });
   }
@@ -1130,6 +1127,9 @@
               {#if cawco.reloadHold === "busy"}
                 CawCo updated — this page has stopped updating. It reloads once
                 you're not using it.
+              {:else if cawco.reloadHold === "unkept"}
+                CawCo updated — this page has stopped updating. Reload it to
+                catch up.
               {:else}
                 CawCo updated — this page has stopped updating. It reloads when
                 the dashboard serves the new build.

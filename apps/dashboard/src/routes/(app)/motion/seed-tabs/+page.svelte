@@ -9,6 +9,7 @@
    * strip from the first paint.
    */
   import { onMount } from "svelte";
+  import { store } from "#lib/cawco/storage.js";
   import { page } from "$app/state";
 
   const KEY = "cawco-workspace";
@@ -26,7 +27,7 @@
       focusedLeaf: "preview-leaf",
       ctx: {},
     });
-    localStorage.setItem(KEY, layout);
+    store("local", KEY, layout);
     await fetch("/prefs", {
       method: "POST",
       headers: { "content-type": "application/json" },

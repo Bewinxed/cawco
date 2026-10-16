@@ -1,4 +1,5 @@
 import { keepPrefs, type Pref } from "../prefs";
+import { store, stored } from "../storage";
 
 /**
  * The height each Configure page's card last settled at, by path. A cold
@@ -38,14 +39,9 @@ export function parseCards(raw: string | undefined): Cards {
   return cards;
 }
 
-const storedValue = (): string | undefined => {
-  try {
-    return localStorage.getItem(CARDS_COOKIE) ?? undefined;
-  } catch {
-    // A browser that will not read storage starts from the server's copy.
-    return undefined;
-  }
-};
+/** No storage: the server's copy is where it starts. */
+const storedValue = (): string | undefined =>
+  stored("local", CARDS_COOKIE) ?? undefined;
 
 /**
  * Attachment: keeps the height `node` settles at as `path`'s card, a moment
@@ -66,11 +62,7 @@ export function rememberCard(path: string) {
         delete cards[old];
       }
       const value = JSON.stringify(cards);
-      try {
-        localStorage.setItem(CARDS_COOKIE, value);
-      } catch {
-        // A browser that will not store keeps the server's copy alone.
-      }
+      store("local", CARDS_COOKIE, value);
       keepPrefs({ [CARDS_COOKIE]: value });
     };
     const sizes = new ResizeObserver(() => {

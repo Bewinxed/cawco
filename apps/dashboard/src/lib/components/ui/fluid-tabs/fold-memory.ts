@@ -12,6 +12,7 @@
  * would not fit a cookie: the oldest go first.
  */
 import { keepPrefs, PREF_VALUE_LIMIT, type Pref } from "#lib/cawco/prefs.js";
+import { store, stored as storedIn } from "#lib/cawco/storage.js";
 import type { FoldBox } from "./fold-path";
 
 /** A tab's measured shape: its box, and its rim's stroke and taper. */
@@ -116,14 +117,7 @@ const fitted = (entries: [string, Stored][]): string => {
   return value;
 };
 
-const storedValue = (): string | null => {
-  try {
-    return localStorage.getItem(FOLD_BOXES_PREF);
-  } catch {
-    // A browser that will not read storage starts from nothing kept.
-    return null;
-  }
-};
+const storedValue = (): string | null => storedIn("local", FOLD_BOXES_PREF);
 
 let sending: ReturnType<typeof setTimeout> | undefined;
 
@@ -138,11 +132,7 @@ export function rememberFoldBox(value: string, measure: FoldMeasure): void {
   kept.delete(value);
   kept.set(value, next);
   const fit = fitted([...kept]);
-  try {
-    localStorage.setItem(FOLD_BOXES_PREF, fit);
-  } catch {
-    // A browser that will not store sends the server this one alone.
-  }
+  store("local", FOLD_BOXES_PREF, fit);
   clearTimeout(sending);
   sending = setTimeout(
     () => keepPrefs({ [FOLD_BOXES_PREF]: storedValue() ?? fit }),

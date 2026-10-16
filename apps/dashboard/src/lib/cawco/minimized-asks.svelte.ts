@@ -1,5 +1,5 @@
 import { SvelteSet } from "svelte/reactivity";
-import { browser } from "$app/env";
+import { readJson, writeJson } from "./storage";
 
 /**
  * The parked questions the reader has minimized on this device: the card
@@ -13,12 +13,7 @@ import { browser } from "$app/env";
  */
 const KEY = "cawco:minimized-asks";
 
-const stored = (): string[] => {
-  const raw = sessionStorage.getItem(KEY);
-  return raw ? (JSON.parse(raw) as string[]) : [];
-};
-
-const minimized = new SvelteSet<string>(browser ? stored() : []);
+const minimized = new SvelteSet<string>(readJson<string[]>(KEY, [], "session"));
 
 export const minimizedAsks = {
   has: (requestId: string): boolean => minimized.has(requestId),
@@ -28,6 +23,6 @@ export const minimizedAsks = {
     } else {
       minimized.delete(requestId);
     }
-    sessionStorage.setItem(KEY, JSON.stringify([...minimized]));
+    writeJson(KEY, [...minimized], "session");
   },
 };

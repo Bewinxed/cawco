@@ -22,6 +22,7 @@
 import { version } from "$app/env";
 import { notices } from "./notices.svelte";
 import { runningBuild } from "./served-build.svelte";
+import { store, stored } from "./storage";
 
 /** Writes each composer's unsent words down; each resolves once they are stored. */
 const flushes = new Set<() => Promise<void>>();
@@ -194,9 +195,11 @@ export function busy(): "typing" | "unsent" | "open" | "recent" | null {
 
 /**
  * What a due reload is waiting on: the dashboard does not serve another
- * build yet, or the operator is using the tab.
+ * build yet, or the operator is using the tab; or it never goes by itself,
+ * since the browser keeps no session storage for its once-per-change guard
+ * ({@link RELOADED_FOR}), and the reader reloads.
  */
-export type ReloadHold = "build" | "busy";
+export type ReloadHold = "build" | "busy" | "unkept";
 
 /** What the update notice gives the reload: the notice ids it acknowledges for the build it loads. */
 interface Farewell {
@@ -236,25 +239,13 @@ const nextLook = () =>
  * same other build, has already been reloaded once for it: the reload handed
  * back the old build (a cache, a server still restarting, a preview whose
  * version check another server answered), and reloading again would only
- * loop. One reload per actual version change.
+ * loop. One reload per actual version change. Where the browser keeps no
+ * session storage the mark does not read back, and the tab never reloads
+ * itself: the reader is told to.
  */
 const RELOADED_FOR = "cawco:reloaded-for";
 
-const reloadedFor = (): string | null => {
-  try {
-    return sessionStorage.getItem(RELOADED_FOR);
-  } catch {
-    return null;
-  }
-};
-
-const markReloadFor = (change: string): void => {
-  try {
-    sessionStorage.setItem(RELOADED_FOR, change);
-  } catch {
-    // No storage (a locked-down frame): the reload still goes, unguarded.
-  }
-};
+const reloadedFor = (): string | null => stored("session", RELOADED_FOR);
 
 /**
  * Reloads this tab once the dashboard runs another build and the operator
@@ -294,6 +285,12 @@ export async function reloadWhenIdle(
     ...[...flushes].map((flush) => flush()),
     notices.acknowledge(farewell?.acks(running) ?? []),
   ]);
-  markReloadFor(change);
+  store("session", RELOADED_FOR, change);
+  if (reloadedFor() !== change) {
+    for (const listener of listeners) {
+      listener("unkept");
+    }
+    return;
+  }
   location.reload();
 }

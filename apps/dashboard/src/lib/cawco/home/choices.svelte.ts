@@ -14,6 +14,7 @@
  * - `finished` home.svelte.ts
  */
 import { browser, dev } from "$app/env";
+import { store, stored } from "../storage";
 
 export interface Choices {
   /** One answer form on the needs-you cards: (a) Approve/Deny, (b) open only. */
@@ -56,9 +57,9 @@ function read(): Choices {
   }
   const fromUrl = new URL(location.href).searchParams.get("choice");
   if (fromUrl !== null) {
-    sessionStorage.setItem(KEY, fromUrl);
+    store("session", KEY, fromUrl);
   }
-  return { ...RECOMMENDED, ...parse(sessionStorage.getItem(KEY)) };
+  return { ...RECOMMENDED, ...parse(fromUrl ?? stored("session", KEY)) };
 }
 
 export const choices: Choices = read();

@@ -55,6 +55,32 @@
   },
   "overrides": [
     {
+      // The browser may hand the dashboard no storage (null on a window
+      // WebKit no longer displays, a SecurityError where it is blocked):
+      // storage.ts is the one way to it, and keeps nothing then. app.html's
+      // pre-paint scripts import nothing; each reads inside its own try.
+      "includes": [
+        "apps/dashboard/src/**",
+        "!apps/dashboard/src/lib/cawco/storage.ts",
+        "!apps/dashboard/src/app.html",
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "localStorage": "Use $lib/cawco/storage: the browser may hand back no storage.",
+                  "sessionStorage": "Use $lib/cawco/storage: the browser may hand back no storage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
       // A rejection nobody handles ends the hub or sessiond (Bun's default),
       // so every promise there is awaited, returned, or handed to detach()
       // from @cawco/core/detach. `void` is not handling: noFloatingPromises

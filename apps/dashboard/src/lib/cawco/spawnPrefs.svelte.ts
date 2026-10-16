@@ -11,6 +11,7 @@ import {
   permissionModesFor,
   unpickedMode,
 } from "./permission-modes";
+import { readJson, writeJson } from "./storage";
 
 /**
  * What the new-session form was last set to. A user who picks Fable and a
@@ -43,36 +44,28 @@ const FALLBACK: SpawnPrefs = {
 };
 
 const load = (): SpawnPrefs => {
-  if (typeof localStorage === "undefined") {
+  const parsed = readJson<Partial<SpawnPrefs> | null>(KEY, null);
+  if (!parsed || typeof parsed !== "object") {
     return FALLBACK;
   }
-  try {
-    const stored = localStorage.getItem(KEY);
-    if (!stored) {
-      return FALLBACK;
-    }
-    const parsed = JSON.parse(stored) as Partial<SpawnPrefs>;
-    const harness = ["claude", "opencode", "pi"].includes(parsed.harness ?? "")
-      ? parsed.harness
-      : undefined;
-    return {
-      harness: harness ?? FALLBACK.harness,
-      model:
-        harness && typeof parsed.model === "string"
-          ? parsed.model
-          : FALLBACK.model,
-      permissionMode:
-        typeof parsed.permissionMode === "string"
-          ? (parsed.permissionMode as PermissionMode)
-          : FALLBACK.permissionMode,
-      effort:
-        harness && typeof parsed.effort === "string"
-          ? (parsed.effort as EffortLevel)
-          : FALLBACK.effort,
-    };
-  } catch {
-    return FALLBACK;
-  }
+  const harness = ["claude", "opencode", "pi"].includes(parsed.harness ?? "")
+    ? parsed.harness
+    : undefined;
+  return {
+    harness: harness ?? FALLBACK.harness,
+    model:
+      harness && typeof parsed.model === "string"
+        ? parsed.model
+        : FALLBACK.model,
+    permissionMode:
+      typeof parsed.permissionMode === "string"
+        ? (parsed.permissionMode as PermissionMode)
+        : FALLBACK.permissionMode,
+    effort:
+      harness && typeof parsed.effort === "string"
+        ? (parsed.effort as EffortLevel)
+        : FALLBACK.effort,
+  };
 };
 
 const store = $state<SpawnPrefs>(load());
@@ -132,12 +125,5 @@ export function rememberSpawn(prefs: SpawnPrefs): void {
   store.model = prefs.model;
   store.permissionMode = prefs.permissionMode;
   store.effort = prefs.effort;
-  if (typeof localStorage === "undefined") {
-    return;
-  }
-  try {
-    localStorage.setItem(KEY, JSON.stringify(store));
-  } catch {
-    // A browser that refuses to store just starts from the defaults next time.
-  }
+  writeJson(KEY, store);
 }

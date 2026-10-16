@@ -4,7 +4,7 @@
  * the board. This browser's own, in localStorage as SideSplit keeps its
  * width: the server never draws the dock, so no first-paint cookie is owed.
  */
-import { browser } from "$app/env";
+import { store, stored, unstore } from "../storage";
 
 const key = (projectId: string) => `cawco.caw-dock.${projectId}`;
 
@@ -13,18 +13,15 @@ class CawDock {
 
   /** Read in a template: what was set here, else what was kept. */
   isOpen(projectId: string): boolean {
-    return (
-      this.#open[projectId] ??
-      (browser && localStorage.getItem(key(projectId)) === "1")
-    );
+    return this.#open[projectId] ?? stored("local", key(projectId)) === "1";
   }
 
   set(projectId: string, open: boolean): void {
     this.#open[projectId] = open;
     if (open) {
-      localStorage.setItem(key(projectId), "1");
+      store("local", key(projectId), "1");
     } else {
-      localStorage.removeItem(key(projectId));
+      unstore("local", key(projectId));
     }
   }
 

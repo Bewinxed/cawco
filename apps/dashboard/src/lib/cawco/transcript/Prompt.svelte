@@ -26,7 +26,7 @@
    * as one tracked command whose stages this card's wait line reads.
    *
    * The composer draws the surface: this is what stands in it. Its title,
-   * its body and its foot come up out of a slight blur one after the other
+   * its body and its foot come up, fading and rising, one after the other
    * as the shape grows (`shown`), and sink back as it folds.
    */
   import { ToggleGroup } from "bits-ui";
@@ -946,28 +946,27 @@
     flex: none;
     padding-block-start: var(--space-1);
   }
-  /* The title, the body and the foot come up with the shape, out of a
-     slight blur, one after the other (the queued edit's row, Composer), and
-     sink back together as it folds. */
+  /* The title, the body and the foot come up with the shape one after the
+     other, by opacity and translate alone, and sink back together as it
+     folds. No filter: a blur transitioning on a part hung WebKit's web
+     process for good as the card came up (Playwright WebKit 2359 at an
+     iPhone's size, the owner's iPhone Safari: "stop responding and it didn't
+     even show"; with the blur snapped instead of transitioned, or none, it
+     never hung). */
   .part {
     opacity: 0;
-    filter: blur(4px);
-    transition:
-      opacity var(--dur-fade) var(--ease-out),
-      filter var(--dur-fade) var(--ease-out);
+    transition: opacity var(--dur-fade) var(--ease-out);
 
     @media (prefers-reduced-motion: no-preference) {
       translate: 0 var(--pop-rise);
       transition:
         opacity var(--dur-fade) var(--ease-out),
-        translate var(--dur-panel) var(--ease-drawer),
-        filter var(--dur-fade) var(--ease-out);
+        translate var(--dur-panel) var(--ease-drawer);
     }
   }
   .shown .part {
     opacity: 1;
     translate: none;
-    filter: none;
     transition-delay: calc(var(--part) * var(--dur-stagger));
   }
   h2 {

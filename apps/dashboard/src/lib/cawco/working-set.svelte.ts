@@ -8,6 +8,7 @@
  * on the hub: it is a record of what *this* reader has been looking at, not a
  * property of the fleet.
  */
+import { store, stored } from "./storage";
 import { workspace } from "./workspace/workspace.svelte";
 
 export const WORKING_SET_KEY = "cawco-working-set";
@@ -66,28 +67,10 @@ const parse = (raw: string | null | undefined): Visit[] => {
   }
 };
 
-const load = (): Visit[] => {
-  try {
-    if (typeof localStorage !== "undefined") {
-      return parse(localStorage.getItem(KEY));
-    }
-  } catch {
-    // A browser that will not read storage starts the set over.
-  }
-  return [];
-};
-
-const visits = $state<Visit[]>(load());
+const visits = $state<Visit[]>(parse(stored("local", KEY)));
 
 const save = () => {
-  if (typeof localStorage === "undefined") {
-    return;
-  }
-  try {
-    localStorage.setItem(KEY, JSON.stringify(visits));
-  } catch {
-    // A browser that will not store just starts the set over next time.
-  }
+  store("local", KEY, JSON.stringify(visits));
 };
 
 export const workingSet = {

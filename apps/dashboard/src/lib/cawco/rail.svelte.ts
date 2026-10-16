@@ -4,8 +4,8 @@
  * hostname are the fleet's opinion, this is theirs — so both are persisted
  * here, in one document, because they are the same kind of claim.
  */
-import { browser } from "$app/env";
 import type { Machine } from "./client.svelte";
+import { readJson, writeJson } from "./storage";
 
 export const RAIL_LAYOUT_KEY = "cawco-rail-layout";
 
@@ -47,31 +47,24 @@ const isPin = (value: Pin | undefined): value is Pin =>
   typeof value?.id === "string" && value.kind === "project";
 
 function read(): RailLayout {
-  if (!browser) {
-    return { pins: [], machines: [], sort: "recent", delegates: false };
-  }
-  try {
-    const stored = JSON.parse(
-      localStorage.getItem(RAIL_LAYOUT_KEY) ?? "{}"
-    ) as Partial<RailLayout>;
-    return {
-      pins: (stored.pins ?? []).filter(isPin),
-      machines: (stored.machines ?? []).filter((id) => typeof id === "string"),
-      sort: SORTS.includes(stored.sort ?? "")
-        ? (stored.sort as RailSort)
-        : "recent",
-      delegates: stored.delegates === true,
-    };
-  } catch {
-    return { pins: [], machines: [], sort: "recent", delegates: false };
-  }
+  const kept = readJson<Partial<RailLayout> | null>(RAIL_LAYOUT_KEY, null);
+  const stored = kept && typeof kept === "object" ? kept : {};
+  return {
+    pins: Array.isArray(stored.pins) ? stored.pins.filter(isPin) : [],
+    machines: Array.isArray(stored.machines)
+      ? stored.machines.filter((id) => typeof id === "string")
+      : [],
+    sort: SORTS.includes(stored.sort ?? "")
+      ? (stored.sort as RailSort)
+      : "recent",
+    delegates: stored.delegates === true,
+  };
 }
 
 // Module scope, so the drawer copy of the rail and the desktop one agree.
 const layout = $state<RailLayout>(read());
 
-const save = () =>
-  localStorage.setItem(RAIL_LAYOUT_KEY, JSON.stringify(layout));
+const save = () => writeJson(RAIL_LAYOUT_KEY, layout);
 
 export const rail = {
   get machineOrder(): string[] {

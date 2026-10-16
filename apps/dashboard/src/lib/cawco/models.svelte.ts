@@ -53,10 +53,8 @@ const store = $state({
 // What the last visit learned, read once as the module loads rather than from a
 // getter — a read that writes is a render that mutates. Nothing to read on the
 // server, where the picker is a trigger and no more.
-if (typeof localStorage !== "undefined") {
-  store.offered = readJson<HarnessModel[]>(OFFERED_KEY, []);
-  store.recent = readJson<string[]>(RECENT_KEY, []);
-}
+store.offered = readJson<HarnessModel[]>(OFFERED_KEY, []);
+store.recent = readJson<string[]>(RECENT_KEY, []);
 
 /** One running session per unique harness, so each harness type is queried. */
 function liveByHarness(): InstanceRow[] {

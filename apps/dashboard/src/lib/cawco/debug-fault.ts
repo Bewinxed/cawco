@@ -1,4 +1,4 @@
-import { browser } from "$app/env";
+import { stored } from "./storage";
 
 /**
  * DEBUG only: the region a probe names in localStorage `cawco-debug-fault`
@@ -6,14 +6,7 @@ import { browser } from "$app/env";
  * that region's boundary (RegionBoundary) holds it and the rest of the page
  * keeps working. Nothing in the product writes the key; read once per page.
  */
-const FAULT = (() => {
-  try {
-    return browser ? localStorage.getItem("cawco-debug-fault") : null;
-  } catch {
-    // Storage refused (a sandboxed frame): no fault was asked for.
-    return null;
-  }
-})();
+const FAULT = stored("local", "cawco-debug-fault");
 
 /** Throws when the page was told to fail `region`. */
 export function debugFault(region: string): void {

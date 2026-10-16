@@ -52,6 +52,7 @@
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
+  import { readJson, writeJson } from "../storage";
   import { isThreadTab } from "../thread-tabs";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
@@ -1043,12 +1044,11 @@
    * a row the rows do not hold yet — a reload, whose first rows are the
    * newest page — is read back to, a page at a time (see the reveal).
    */
-  let resume: Landing | null = browser
-    ? JSON.parse(
-        sessionStorage.getItem(LANDING + untrack(() => session.instanceId)) ??
-          "null"
-      )
-    : null;
+  let resume: Landing | null = readJson<Landing | null>(
+    LANDING + untrack(() => session.instanceId),
+    null,
+    "session"
+  );
   /**
    * virtua's size for a row it has not measured yet — and a transcript's
    * newest row is always one it has not measured. The smallest row there is:
@@ -1723,10 +1723,7 @@
         into: lastTop - listStart - list.getItemOffset(index),
       };
     }
-    sessionStorage.setItem(
-      LANDING + session.instanceId,
-      JSON.stringify(landing)
-    );
+    writeJson(LANDING + session.instanceId, landing, "session");
   }
 
   $effect.pre(() => {

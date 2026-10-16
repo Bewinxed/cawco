@@ -18,6 +18,7 @@
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { runningWords } from "../older";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
+  import { store, stored } from "../storage";
   import { workspace } from "../workspace/workspace.svelte";
   import {
     clock,
@@ -38,10 +39,7 @@
 
   const RECENT_PAGE = 30;
   const RECENT_KEY = "cawco-home-recent-open";
-  let recentOpen = $state(
-    typeof localStorage !== "undefined" &&
-      localStorage.getItem(RECENT_KEY) === "true"
-  );
+  let recentOpen = $state(stored("local", RECENT_KEY) === "true");
   let search = $state("");
   let recentShown = $state(RECENT_PAGE);
   /**
@@ -78,7 +76,7 @@
   );
   function toggleRecent() {
     recentOpen = !recentOpen;
-    localStorage.setItem(RECENT_KEY, String(recentOpen));
+    store("local", RECENT_KEY, String(recentOpen));
   }
 </script>
 

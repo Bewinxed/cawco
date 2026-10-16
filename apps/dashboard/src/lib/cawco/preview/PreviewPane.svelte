@@ -58,6 +58,7 @@
   import { runShellShortcut } from "../shell-shortcut";
   import { sideExpand } from "../side/expand";
   import SideSurface from "../side/SideSurface.svelte";
+  import { readJson, store, stored, writeJson } from "../storage";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
     type ArtifactDoc,
@@ -137,22 +138,13 @@
   $effect.pre(() => {
     const keys = { mode: modeKey, list: listKey };
     untrack(() => {
-      try {
-        mode = previewMode(localStorage.getItem(keys.mode)) ?? "interact";
-        listOpen = localStorage.getItem(keys.list) === "open";
-      } catch {
-        mode = "interact";
-        listOpen = false;
-      }
+      mode = previewMode(stored("local", keys.mode)) ?? "interact";
+      listOpen = stored("local", keys.list) === "open";
     });
   });
   function showList(open: boolean) {
     listOpen = open;
-    try {
-      localStorage.setItem(listKey, open ? "open" : "shut");
-    } catch {
-      // Storage refused: the panel holds for this view.
-    }
+    store("local", listKey, open ? "open" : "shut");
   }
   /** ⇧C: every pin on the page hidden, or shown (Figma's own key). */
   let pinsShown = $state(true);
@@ -211,19 +203,15 @@
    */
   const keepKey = $derived(`cawco-preview-at:${instanceId}`);
   function keptAt(): string | null {
-    try {
-      const kept = JSON.parse(localStorage.getItem(keepKey) ?? "null") as {
-        at?: unknown;
-        revision?: unknown;
-      } | null;
-      return kept?.revision === preview?.revision &&
-        typeof kept?.at === "string" &&
-        kept.at.startsWith("/")
-        ? kept.at
-        : null;
-    } catch {
-      return null;
-    }
+    const kept = readJson<{ at?: unknown; revision?: unknown } | null>(
+      keepKey,
+      null
+    );
+    return kept?.revision === preview?.revision &&
+      typeof kept?.at === "string" &&
+      kept.at.startsWith("/")
+      ? kept.at
+      : null;
   }
   /** `at` is the page's own place on its origin (the overlay's `url`). */
   function keepAt(at: URL): void {
@@ -231,10 +219,7 @@
     if (!(paneOrigin && preview)) {
       return;
     }
-    localStorage.setItem(
-      keepKey,
-      JSON.stringify({ revision: preview.revision, at: place })
-    );
+    writeJson(keepKey, { revision: preview.revision, at: place });
   }
   /** Where a show starts: the page the agent named (`path`), else the root. */
   const startAt = $derived(
@@ -761,11 +746,7 @@
   function setMode(next: PreviewMode, place: string | null = null) {
     mode = next;
     placing = next === "comment" ? place : null;
-    try {
-      localStorage.setItem(modeKey, next);
-    } catch {
-      // Storage refused (a private window's quota): the mode holds for this view.
-    }
+    store("local", modeKey, next);
     post({ type: "cawco:mode", mode: next, place: placing });
   }
   /** ⇧C: every pin shown on the page, or hidden. */

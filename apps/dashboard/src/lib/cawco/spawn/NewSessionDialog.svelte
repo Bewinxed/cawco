@@ -92,6 +92,7 @@
   } from "../permission-modes";
   import { checkoutOf, checkoutOn, placedOn } from "../projects";
   import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
+  import { store, stored } from "../storage";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -156,11 +157,13 @@
    * kept in the tab's own storage, so a reload finds the same draft and
    * another tab keeps its own.
    */
+  let mintedKey: string | null = null;
   function keptKey(): string {
-    let id = sessionStorage.getItem(KEPT_KEY);
+    let id = stored("session", KEPT_KEY);
     if (!id) {
-      id = newId();
-      sessionStorage.setItem(KEPT_KEY, id);
+      mintedKey ??= newId();
+      id = mintedKey;
+      store("session", KEPT_KEY, id);
     }
     return `new-session:${id}`;
   }
