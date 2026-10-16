@@ -450,12 +450,6 @@ export interface MainTask {
   invalidated: [string, number][];
   layoutMs: number;
   /**
-   * The frame's other work in it, by phase, ms, the most first (`restyles`
-   * only): what a sampled profile counts as "(program)", script not being
-   * on the stack.
-   */
-  rendering: [string, number][];
-  /**
    * Each style recalculation and layout in it, in order (`restyles` only):
    * what it was, the elements it restyled, its ms, and the script frame
    * that forced it (`url:line:column`), or "the frame" when the frame's own
@@ -481,6 +475,12 @@ export interface MainTask {
    * A layout pass's `elements` are the layout objects it found dirty.
    */
   relaidOut: [string, number][];
+  /**
+   * The frame's other work in it, by phase, ms, the most first (`restyles`
+   * only): what a sampled profile counts as "(program)", script not being
+   * on the stack.
+   */
+  rendering: [string, number][];
   /**
    * How many elements its style recalculations restyled, all of them
    * together (`UpdateLayoutTree`'s `elementCount`); read only when asked
