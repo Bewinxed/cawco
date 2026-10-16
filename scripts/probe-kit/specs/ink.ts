@@ -32,9 +32,25 @@
  *    draws nothing), the icon stands at its end, and Annotate pins the
  *    element under it by id.
  * 7. With reduced motion the icon and the menu animate opacity alone.
+ *
+ * And the owner's report (2026-10-16: "why does sketching around a specific
+ * part select the whole markup of the preview and lag the whole page?", on
+ * test-map, a page 27,383px tall of some 2,000 cards and tiles; its copy is
+ * `fixtures/test-map.html`), in Draw with the mouse, as he drew it:
+ * 8. A loop round "Proposed cut" (its intro line, the three rule cards and
+ *    the "Also in the cut" paragraph) marks those elements, or a container
+ *    of theirs below `main`; never `body`, `html` or `main`. Its delivered
+ *    picture is the loop's box with its 24px margin, never the page.
+ * 9. Over the 2-second loop no main-thread task of the page's runs past
+ *    16.7ms; after it lifts, none past 50ms, a loop round one card or round
+ *    every card in view alike; and the time from the lift to the picture's
+ *    delivery to the hub stays flat between the two.
  */
-import type { CDPSession, Frame, Page } from "playwright-core";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { CDPSession, Frame, Page, Request } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { type MainTask, traceMain } from "../frames";
 import {
   COMPOSER,
   type Kit,
@@ -44,6 +60,165 @@ import {
   settle,
 } from "../kit";
 import { emulateMotion } from "../motion";
+
+/** The owner's test-map page, as he marked it (2026-10-16). */
+export const TEST_MAP = readFileSync(
+  join(import.meta.dir, "..", "fixtures", "test-map.html"),
+  "utf8"
+);
+/** A frame's budget at 60 Hz, ms. */
+const FRAME_MS = 1000 / 60;
+/** A main-thread task the person feels as a stall, ms (the long task's bound). */
+const LONG_TASK_MS = 50;
+/** A mark's crop margin (pins.ts `CROP_PAD`), px. */
+const CROP_PAD = 24;
+
+/**
+ * The test-map page in the pane, once its cards are there, the pane
+ * expanded over the session area (its head's Expand) so the page is as wide
+ * as the owner's was (1421px at a 1440 desk).
+ */
+export const testMapFrame = async (on: On) => {
+  await shownTestMap(on);
+  const expand = on.page.locator('.side-head button[aria-label="Expand"]');
+  if ((await expand.count()) > 0) {
+    await expand.click();
+    await settle(on.page, 600);
+  }
+  return await shownTestMap(on);
+};
+
+const shownTestMap = (on: On) =>
+  until(
+    "the test-map page in the pane",
+    async () => {
+      const shown = await pageFrame(on);
+      return (await shown
+        .locator("article.card")
+        .count()
+        .catch(() => 0)) > 100
+        ? shown
+        : null;
+    },
+    Boolean,
+    60_000
+  ) as Promise<Frame>;
+
+/** A box, the page's or the screen's px. */
+interface Rect {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+
+/** The points of a loop round `box` (the screen's px), clockwise from its top-left, its ends `gap` px apart, `count` long. */
+const loopAround = (box: Rect, count: number, gap = 18): Pt[] => {
+  const perimeter = 2 * (box.w + box.h);
+  const span = perimeter - gap;
+  return Array.from({ length: count }, (_, i) => {
+    let d = (span * i) / (count - 1);
+    if (d < box.w) {
+      return { x: box.x + d, y: box.y };
+    }
+    d -= box.w;
+    if (d < box.h) {
+      return { x: box.x + box.w, y: box.y + d };
+    }
+    d -= box.h;
+    if (d < box.w) {
+      return { x: box.x + box.w - d, y: box.y + box.h };
+    }
+    d -= box.w;
+    return { x: box.x, y: box.y + box.h - d };
+  });
+};
+
+/** The browser's mouse drawing a loop round `box` (the screen's px) over `ms`, one move a frame; when it lifted, `Date.now()`. */
+export const mouseLoop = async (desk: Page, box: Rect, ms = 2000) => {
+  const points = loopAround(box, Math.round(ms / FRAME_MS));
+  const [first] = points;
+  if (!first) {
+    return Date.now();
+  }
+  await desk.mouse.move(first.x, first.y);
+  await desk.mouse.down();
+  for (const p of points.slice(1)) {
+    // biome-ignore lint/performance/noAwaitInLoops: a stroke's moves, one a frame
+    await desk.mouse.move(p.x, p.y);
+    await desk.waitForTimeout(FRAME_MS);
+  }
+  await desk.mouse.up();
+  return Date.now();
+};
+
+/** The pane's mode, by its head's segment (V, C, D), once the page has heard it. */
+export const paneMode = async (on: On, frame: Frame, key: "V" | "C" | "D") => {
+  await on.page
+    .locator(`.preview-pane [role='tab'][aria-keyshortcuts='${key}']`)
+    .click();
+  const want = { V: "", C: "comment", D: "draw" }[key];
+  await until(
+    `the page's mode ${key}`,
+    () =>
+      frame.evaluate(() => {
+        const layer = document
+          .querySelector("cawco-overlay")
+          ?.shadowRoot?.querySelector(".layer");
+        if (layer?.classList.contains("comment")) {
+          return "comment";
+        }
+        return layer?.classList.contains("draw") ? "draw" : "";
+      }),
+    (mode) => mode === want,
+    5000
+  );
+};
+
+/** A PNG's size, read from its header. */
+export const pngSize = (base64: string) => {
+  const bytes = Buffer.from(base64.slice(0, 64), "base64");
+  return { w: bytes.readUInt32BE(16), h: bytes.readUInt32BE(20) };
+};
+
+/** The pictures the page posts to the hub, each mark's with when it went: heard from the desk's page. */
+export const watchPictures = (desk: Page) => {
+  const posted: { at: number; mark: string; png: string }[] = [];
+  const heard = (request: Request) => {
+    if (request.method() !== "POST" || !request.url().endsWith("/pictures")) {
+      return;
+    }
+    const at = Date.now();
+    const body = request.postDataJSON() as {
+      pictures?: { mark: string; png: string }[];
+    } | null;
+    for (const one of body?.pictures ?? []) {
+      posted.push({ at, mark: one.mark, png: one.png });
+    }
+  };
+  desk.on("request", heard);
+  return { posted, stop: () => desk.off("request", heard) };
+};
+
+/** The page's main-thread tasks between two of its marks, past `ms`, said as `ran wall ms`. */
+export const tasksOver = (
+  tasks: MainTask[],
+  from: number,
+  to: number,
+  ms: number
+) =>
+  tasks
+    .filter((task) => task.at >= from && task.at < to && task.wall > ms)
+    .map((task) => `${task.ran} ${task.wall.toFixed(1)}ms`);
+
+/** The longest of the page's main-thread tasks between two of its marks, ms. */
+export const longestIn = (tasks: MainTask[], from: number, to: number) =>
+  Math.max(
+    0,
+    ...tasks
+      .filter((task) => task.at >= from && task.at < to)
+      .map((task) => task.wall)
+  );
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
@@ -375,6 +550,7 @@ const run = async (kit: Kit) => {
   await deliveredChecks(on, frame);
   await canvasChecks(on);
   await reducedChecks(on);
+  await mapChecks(on);
   kit.check(
     "the pages said no error",
     on.said.length === 0,
@@ -589,16 +765,16 @@ const menuChecks = async (on: On, frame: Frame) => {
   await strokeOver(on, frame, "#para");
   await on.page.waitForTimeout(350);
   await dragFromIcon(on, frame, -90, 40);
-  // Comment on the second paragraph's group: it opens the pin's card, which
-  // Esc puts away; with words in it, so its dismissal keeps the pin.
+  // Comment on the second paragraph's group: it opens the pin's card, where
+  // its words are said (Reply), so it is a comment the session hears (core
+  // `pinReady`: a comment with nothing said waits); Esc puts the card away.
   await strokeOver(on, frame, "#second");
   await on.page.waitForTimeout(350);
   await dragFromIcon(on, frame, 0, 40);
-  await on.page.locator(".pin-card").waitFor({ timeout: 5000 });
-  await on.page
-    .locator(".pin-card")
-    .getByRole("textbox")
-    .fill("This one, thicker.");
+  const commentCard = on.page.locator(".pin-card");
+  await commentCard.waitFor({ timeout: 5000 });
+  await commentCard.getByRole("textbox").fill("This one, thicker.");
+  await commentCard.getByRole("button", { name: "Reply" }).click();
   await on.page.keyboard.press("Escape");
   await settle(on.page, 300);
   // Erase the third.
@@ -1063,6 +1239,286 @@ const reducedChecks = async (on: On) => {
     `arriving ${JSON.stringify(arriving)}; opening ${JSON.stringify(opening.runs)}`
   );
   await emulateMotion(on.page, null);
+};
+
+/** A loop round `box` (the screen's px), traced: the page's tasks while it ran and after it lifted, and when its picture reached the hub. */
+const tracedLoop = async (
+  on: On,
+  frame: Frame,
+  box: Rect,
+  pictures: ReturnType<typeof watchPictures>
+) => {
+  const mark = (name: string) =>
+    frame.evaluate((n) => performance.mark(n), name);
+  const before = new Set(Object.keys((await docOf(frame)).ink));
+  let lifted = 0;
+  const main = await traceMain(on.page, async () => {
+    await mark("loop-down");
+    lifted = await mouseLoop(on.page, box);
+    await mark("loop-up");
+    // The picture goes once the marks pause (page.ts PICTURES_AFTER_MS).
+    await until(
+      "the loop's group",
+      async () =>
+        Object.keys((await docOf(frame)).ink).find((one) => !before.has(one)),
+      Boolean,
+      5000
+    ).catch(() => undefined);
+    await on.page.waitForTimeout(2500);
+    await mark("loop-after");
+  });
+  const doc = await docOf(frame);
+  const id = Object.keys(doc.ink).find((one) => !before.has(one));
+  const posted = await until(
+    "the loop's picture at the hub",
+    () => pictures.posted.find((one) => one.mark === id),
+    Boolean,
+    10_000
+  ).catch(() => undefined);
+  const at = (name: string) =>
+    main.marks.find((one) => one.name === name)?.at ?? 0;
+  return {
+    group: id ? doc.ink[id] : undefined,
+    drawing: tasksOver(main.tasks, at("loop-down"), at("loop-up"), FRAME_MS),
+    drawingLongest: longestIn(main.tasks, at("loop-down"), at("loop-up")),
+    after: tasksOver(main.tasks, at("loop-up"), at("loop-after"), LONG_TASK_MS),
+    afterLongest: longestIn(main.tasks, at("loop-up"), at("loop-after")),
+    delivered: posted ? posted.at - lifted : Number.NaN,
+    png: posted?.png ?? null,
+  };
+};
+
+/** The test-map page's boxes the owner's loop is about, in the frame's viewport: its parts, and the elements a loop round them must mark. */
+const proposedCut = (frame: Frame) =>
+  frame.evaluate(() => {
+    const heading = [...document.querySelectorAll("h2")].find(
+      (h) => h.textContent === "Proposed cut"
+    );
+    const intro = heading?.nextElementSibling;
+    const rules = intro?.nextElementSibling;
+    const also = rules?.nextElementSibling;
+    if (!(heading && intro && rules && also)) {
+      return null;
+    }
+    const box = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    };
+    return {
+      heading: box(heading),
+      intro: box(intro),
+      rules: box(rules),
+      also: box(also),
+      cards: rules.children.length,
+    };
+  });
+
+/** Whether every element a group marks is one of the owner's, or holds only them; and every one of his is marked, or held by one marked. */
+const marksProposedCut = (frame: Frame, over: { selector: string }[]) =>
+  frame.evaluate(
+    (selectors) => {
+      const heading = [...document.querySelectorAll("h2")].find(
+        (h) => h.textContent === "Proposed cut"
+      );
+      const intro = heading?.nextElementSibling;
+      const rules = intro?.nextElementSibling;
+      const also = rules?.nextElementSibling;
+      if (!(intro && rules && also)) {
+        return { ok: false, marked: [] as string[] };
+      }
+      const wanted = [intro, ...rules.children, also];
+      const marked = selectors.map((one) => document.querySelector(one));
+      const named = (el: Element | null) =>
+        el
+          ? `${el.localName}${el.className ? `.${el.className}` : ""}`
+          : "none";
+      const pageBoxes = new Set<Element | null>([
+        document.documentElement,
+        document.body,
+        document.querySelector("main"),
+      ]);
+      const ok =
+        marked.length > 0 &&
+        marked.every(
+          (el) =>
+            !!el &&
+            !pageBoxes.has(el) &&
+            wanted.some((one) => el === one || el.contains(one)) &&
+            wanted.every((one) => one === el || !one.contains(el)) &&
+            // Nothing but his: an element marked holds none of the page's other content.
+            [...el.querySelectorAll("*"), el].every((inner) =>
+              wanted.some((one) => one.contains(inner) || inner.contains(one))
+            )
+        ) &&
+        wanted.every((one) => marked.some((el) => el?.contains(one)));
+      return { ok, marked: marked.map(named) };
+    },
+    over.map((one) => one.selector)
+  );
+
+/** 8 and 9. The owner's loop on test-map, and the lag a loop leaves behind, a card's and every card's in view. */
+const mapChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    name: "test-map",
+    html: TEST_MAP,
+  });
+  if (!made.match(ANSWERED_ID)) {
+    on.kit.check("8: the test-map page is made", false, made.slice(0, 200));
+    return;
+  }
+  const frame = await testMapFrame(on);
+  await settle(on.page, 600);
+  await paneMode(on, frame, "D");
+  const pictures = watchPictures(on.page);
+  try {
+    const outer = (await on.page.locator(FRAME).boundingBox()) as Rect & {
+      width: number;
+      height: number;
+    };
+    const parts = await proposedCut(frame);
+    if (!parts) {
+      on.kit.check("8: test-map has its Proposed cut", false, "not found");
+      return;
+    }
+    // His loop: from just under the heading, round the intro line, the three
+    // cards and the "Also" paragraph, closing above "Totals".
+    const top = parts.heading.y + parts.heading.h + 2;
+    const bottom = parts.also.y + parts.also.h + 4;
+    const left = Math.max(4, Math.min(parts.intro.x, parts.rules.x) - 10);
+    const right = Math.min(
+      outer.width - 4,
+      Math.max(
+        parts.intro.x + parts.intro.w,
+        parts.rules.x + parts.rules.w,
+        parts.also.x + parts.also.w
+      ) + 10
+    );
+    const loop = await tracedLoop(
+      on,
+      frame,
+      {
+        x: outer.x + left,
+        y: outer.y + top,
+        w: right - left,
+        h: bottom - top,
+      },
+      pictures
+    );
+    const group = loop.group as
+      | {
+          anchor: { selector: string };
+          over?: { selector: string }[];
+          page: Rect;
+        }
+      | undefined;
+    const marks = group
+      ? await marksProposedCut(frame, group.over ?? [group.anchor])
+      : { ok: false, marked: [] };
+    const anchorIsPage = group
+      ? await frame.evaluate(
+          (selector) =>
+            [
+              document.documentElement,
+              document.body,
+              document.querySelector("main"),
+            ].includes(document.querySelector(selector)),
+          group.anchor.selector
+        )
+      : true;
+    on.kit.check(
+      "8: a mouse loop round Proposed cut's intro line, three rule cards and 'Also' paragraph marks those elements (or a container of theirs below main), anchored on one of them; never body, html or main",
+      !!group && marks.ok && !anchorIsPage,
+      `anchor ${group?.anchor.selector}; marks ${marks.marked.join(", ")}; ${parts.cards} cards`
+    );
+    const extent = await frame.evaluate(() => ({
+      w: Math.max(document.documentElement.scrollWidth, innerWidth),
+      h: Math.max(document.documentElement.scrollHeight, innerHeight),
+    }));
+    const size = loop.png ? pngSize(loop.png) : null;
+    const crop = group
+      ? (() => {
+          const x = Math.max(0, group.page.x - CROP_PAD);
+          const y = Math.max(0, group.page.y - CROP_PAD);
+          return {
+            w: Math.min(extent.w, group.page.x + group.page.w + CROP_PAD) - x,
+            h: Math.min(extent.h, group.page.y + group.page.h + CROP_PAD) - y,
+          };
+        })()
+      : null;
+    const scale = size && crop ? size.w / crop.w : 0;
+    on.kit.check(
+      "8: its delivered picture is the loop's box with its 24px margin (±2px at its scale, at most 2×), never the page",
+      !!size &&
+        !!crop &&
+        scale > 0 &&
+        scale <= 2.01 &&
+        Math.abs(size.h / scale - crop.h) <= 2 &&
+        crop.h < extent.h / 4,
+      `picture ${JSON.stringify(size)}; crop ${JSON.stringify(crop)} at ${scale.toFixed(3)}×; page ${extent.w}×${extent.h}`
+    );
+    on.kit.check(
+      `9: over the 2-second loop no task of the page's runs past ${FRAME_MS.toFixed(1)}ms`,
+      loop.drawing.length === 0,
+      `longest ${loop.drawingLongest.toFixed(1)}ms; over: ${loop.drawing.join(", ") || "none"}`
+    );
+    await on.page.waitForTimeout(4500);
+
+    // One card, then every card in view: the same lag after the lift, the same wait for its picture.
+    const card = await frame.evaluate(() => {
+      const cards = [...document.querySelectorAll("article.card")];
+      const one = cards[Math.floor(cards.length / 2)];
+      one?.scrollIntoView({ block: "center" });
+      const r = one?.getBoundingClientRect();
+      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+    });
+    await settle(on.page, 400);
+    if (!card) {
+      on.kit.check("9: test-map has cards", false, "none");
+      return;
+    }
+    const one = await tracedLoop(
+      on,
+      frame,
+      {
+        x: outer.x + Math.max(4, card.x - 10),
+        y: outer.y + Math.max(4, card.y - 10),
+        w: card.w + 20,
+        h: card.h + 20,
+      },
+      pictures
+    );
+    await on.page.waitForTimeout(4500);
+    const all = await tracedLoop(
+      on,
+      frame,
+      {
+        x: outer.x + 12,
+        y: outer.y + 12,
+        w: outer.width - 24,
+        h: outer.height - 24,
+      },
+      pictures
+    );
+    const allMarks = ((all.group?.over as unknown[] | undefined) ?? []).length;
+    on.kit.check(
+      `9: after the lift no task of the page's runs past ${LONG_TASK_MS}ms, a loop round one card or round every card in view (${allMarks} marked)`,
+      one.after.length === 0 &&
+        all.after.length === 0 &&
+        loop.after.length === 0,
+      `Proposed cut longest ${loop.afterLongest.toFixed(1)}ms; one card ${one.afterLongest.toFixed(1)}ms; every card ${all.afterLongest.toFixed(1)}ms; over: ${[...loop.after, ...one.after, ...all.after].join(", ") || "none"}`
+    );
+    on.kit.check(
+      "9: the lift to the picture's delivery stays flat: every card in view within 750ms of one card's",
+      Number.isFinite(one.delivered) &&
+        Number.isFinite(all.delivered) &&
+        all.delivered - one.delivered <= 750,
+      `one card ${one.delivered}ms; every card in view ${all.delivered}ms; Proposed cut ${loop.delivered}ms`
+    );
+  } finally {
+    pictures.stop();
+    await on.page.keyboard.press("Escape");
+  }
 };
 
 const spec: Spec = { name: "ink", run };

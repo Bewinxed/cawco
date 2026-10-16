@@ -4,9 +4,12 @@
  * it within (hub artifacts/sync.ts).
  *
  * - `ink`: stroke groups by id. A group is the strokes made within two
- *   breaths of each other whose boxes touch, anchored to the deepest element
- *   containing its box, its points kept as fractions of that element's box,
- *   so a reflow, a resize or a re-publish carries the ink with the element.
+ *   breaths of each other whose boxes touch. It marks the elements it
+ *   encloses (a loop) or crosses (a line), `over`; it is anchored to the one
+ *   of them that holds the rest (their nearest container when it is not much
+ *   bigger than the marks), else to the first, its points kept as fractions
+ *   of that element's box, so a reflow, a resize or a re-publish carries the
+ *   ink with the element.
  *   On a canvas the ink is the canvas's own freedraw, and a group names it.
  * - `moved`: groups whose anchor no longer matches anything on the page
  *   (core comments.ts `findAnchor`), kept for the moved tray.
@@ -15,9 +18,11 @@
  *
  * Every entry is a plain JSON value in its map.
  */
-import type { Anchor } from "./comments";
+import type { Anchor, PageAnchor } from "./comments";
 
 export const INK_LIMITS = {
+  /** Elements one group names it marks. Our call. */
+  elementsPerGroup: 20,
   /** Points one stroke keeps. */
   pointsPerStroke: 2000,
   /** Groups an artifact keeps, placed and moved together. */
@@ -43,6 +48,8 @@ export interface InkGroup {
   id: string;
   /** Marked a picture, bound to nothing (Illustrate). */
   illustration?: true;
+  /** On a page: the elements it marks, in document order; `anchor` is one of them or their container. */
+  over?: PageAnchor[];
   /** Where the group stood in the page when it was drawn, px. */
   page: { x: number; y: number; w: number; h: number };
   sentAt?: string;
@@ -56,6 +63,15 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 export function inkGroupProblem(value: unknown): string | null {
   if (!(isObject(value) && Array.isArray(value.strokes))) {
     return "A stroke group is an object with its strokes.";
+  }
+  if (
+    value.over !== undefined &&
+    !(
+      Array.isArray(value.over) &&
+      value.over.length <= INK_LIMITS.elementsPerGroup
+    )
+  ) {
+    return `A stroke group names at most ${INK_LIMITS.elementsPerGroup} elements it marks.`;
   }
   if (value.strokes.length > INK_LIMITS.strokesPerGroup) {
     return `A stroke group keeps at most ${INK_LIMITS.strokesPerGroup} strokes.`;

@@ -14,14 +14,21 @@
  * drawn as perfect-freehand's outline (MIT, pinned at 1.2.3) in
  * `brand-solid`, 2.5px at middle pressure, thinner by less, never under 1px.
  *
+ * While a stroke is down only its pointer data is read: no layout, no hit
+ * test. When it lifts, what it marks is read once ({@link marksOf}): a loop
+ * marks the elements it encloses, a line the ones it crosses, each found by
+ * the browser's hit test at points inside the loop or along the line, then
+ * taken out to the largest of its ancestors the stroke still encloses. The
+ * smallest such set is the group's `over`; never the root or the body, nor a
+ * container as big as the page, while anything else stands under it.
+ *
  * A stroke group is the strokes made within two breaths of each other whose
- * boxes touch. It is anchored to the deepest element containing its box and
- * kept in the doc's `ink` (core ink.ts) as fractions of that element's box,
- * so it is drawn again from the element's box wherever the element stands
- * now: on load, on a resize, when the element itself resizes, after a
- * re-publish. The element is found as a pin's is (core comments.ts
- * `findAnchor`); a page's group whose element is gone goes to `moved`.
- * Its pins are pins.ts's.
+ * boxes touch. It is anchored to the element holding what it marks (core
+ * ink.ts) and kept in the doc's `ink` as fractions of that element's box, so
+ * it is drawn again from the element's box wherever the element stands now:
+ * on load, on a resize, when the element itself resizes, after a re-publish.
+ * The element is found as a pin's is (core comments.ts `findAnchor`); a
+ * page's group whose element is gone goes to `moved`. Its pins are pins.ts's.
  *
  * On a canvas the pen draws the canvas's own freedraw (Excalidraw), so this
  * layer stays off; the canvas's page tells the overlay where a stroke ended
@@ -57,8 +64,22 @@ const STROKE = {
   last: true,
 } as const;
 
-/** Elements a pin names at most. Our call. */
-const PINNED_MAX = 20;
+/** Elements a group names it marks, at most (core `INK_LIMITS`). */
+const MARKED_MAX = INK_LIMITS.elementsPerGroup;
+/** A stroke whose ends come this close, as a share of its box's longer side, is a loop. Our call. */
+const LOOP_GAP = 0.35;
+/** A loop's box is at least this big each way, px; a smaller one is a line or a tap. Our call. */
+const LOOP_MIN = 24;
+/** Points a loop's inside is hit-tested at, at most, on a grid: 16 by 16. Our call. */
+const LOOP_GRID = 16;
+/** Points a line is hit-tested at along itself, at most. Our call. */
+const LINE_SAMPLES = 48;
+/** How far past a loop's box an element may stand and still be enclosed, px. Our call. */
+const ENCLOSE_SLACK = 8;
+/** How far either side of a line an element may reach and still be crossed whole, px: about a line of text. Our call. */
+const LINE_REACH = 24;
+/** A container of the marked elements anchors them while its box is at most this many times their reach's. Our call. */
+const CONTAINER_MOST = 2;
 /** A pen's pressure when it reports none (a pen that does not measure it). */
 const NO_PRESSURE = 0.5;
 /** The pen's eraser in Pointer Events: its `button`, and its bit in `buttons`. */
@@ -90,13 +111,18 @@ export interface InkDeps {
   anchorOf: (el: Element) => PageAnchor;
   chrome: InkChrome;
   describe: (el: Element) => PinnedElement;
-  elementAt: (x: number, y: number) => Element | null;
+  /** The deepest element at each of the viewport's points, inside same-origin frames; one hit test pass. */
+  elementsAt: (points: [x: number, y: number][]) => (Element | null)[];
+  /** A group's stroke has just been kept (its id): the page draws its picture now, once. */
+  ended: (id: string) => void;
   /** Whether a press that is not a pen's inks: the pane's Draw mode, on the overlay's own layer. */
   freehand: (event: PointerEvent) => boolean;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
   locate: (
     anchor: PageAnchor
   ) => { by: "source" | "selector" | "text"; el: Element } | null;
+  /** Whether `el` is the page's own box rather than content on it. */
+  pageSized: (el: Element) => boolean;
   /** The pins, drawn after the ink each time it is drawn. */
   pins: () => Pins;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
@@ -159,6 +185,115 @@ const contains = (outer: Box, inner: Box, slack = 1) =>
 
 const round = (n: number) => Math.round(n * 10_000) / 10_000;
 
+const pad = (box: Box, by: number): Box => ({
+  x: box.x - by,
+  y: box.y - by,
+  w: box.w + 2 * by,
+  h: box.h + 2 * by,
+});
+
+const area = (box: Box) => Math.max(1, box.w) * Math.max(1, box.h);
+
+/** Whether a stroke is a loop: its box big enough both ways, its ends close against its longer side. */
+const isLoop = (points: Point[], box: Box) => {
+  const [first] = points;
+  const end = points.at(-1);
+  return (
+    !!first &&
+    !!end &&
+    box.w >= LOOP_MIN &&
+    box.h >= LOOP_MIN &&
+    Math.hypot(first[0] - end[0], first[1] - end[1]) <=
+      LOOP_GAP * Math.max(box.w, box.h)
+  );
+};
+
+/** Whether the page's point lies inside the loop `ring` closed end to start (even–odd). */
+const insideLoop = (ring: Point[], x: number, y: number) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const [xi, yi] = ring[i] as Point;
+    const [xj, yj] = ring[j] as Point;
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+};
+
+/** At most `most` of `items`, evenly spaced. */
+const every = <T>(items: T[], most: number): T[] => {
+  const step = Math.max(1, Math.ceil(items.length / most));
+  return items.filter((_, index) => index % step === 0);
+};
+
+/** Where a stroke is hit-tested, the page's px: a loop's inside on a grid, a line along itself. */
+const samplesOf = (
+  points: Point[],
+  box: Box,
+  loop: boolean
+): [number, number][] => {
+  if (!loop) {
+    return every(points, LINE_SAMPLES).map(([x, y]) => [x, y]);
+  }
+  const ring = every(points, 200);
+  const inside: [number, number][] = [];
+  for (let i = 0; i < LOOP_GRID; i += 1) {
+    for (let j = 0; j < LOOP_GRID; j += 1) {
+      const x = box.x + ((i + 0.5) * box.w) / LOOP_GRID;
+      const y = box.y + ((j + 0.5) * box.h) / LOOP_GRID;
+      if (insideLoop(ring, x, y)) {
+        inside.push([x, y]);
+      }
+    }
+  }
+  return inside;
+};
+
+/** The elements none of the others holds, in document order. */
+const outermost = (els: Element[]) =>
+  inOrder(els.filter((el) => !els.some((o) => o !== el && o.contains(el))));
+
+/** The elements that hold none of the others, in document order. */
+const innermost = (els: Element[]) =>
+  inOrder(els.filter((el) => !els.some((o) => o !== el && el.contains(o))));
+
+const inOrder = (els: Element[]) =>
+  els.sort((a, b) =>
+    // biome-ignore lint/suspicious/noBitwiseOperators: compareDocumentPosition answers a bitmask
+    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+  );
+
+/** An inline element (a bold word, a code span) as the block it stands in: what a line across words marks. */
+const blockOf = (el: Element): Element => {
+  let at = el;
+  while (
+    at.parentElement &&
+    (at.ownerDocument.defaultView ?? window)
+      .getComputedStyle(at)
+      .display.startsWith("inline")
+  ) {
+    at = at.parentElement;
+  }
+  return at;
+};
+
+/** The nearest element holding every one of `els`, through the frames they stand in; null when none does. */
+const containerOf = (els: Element[]): Element | null => {
+  const [first, ...rest] = els;
+  for (let at: Element | null = first ?? null; at; at = outward(at)) {
+    const holder = at;
+    if (rest.every((el) => holder.contains(el) || holdsAcross(holder, el))) {
+      return holder;
+    }
+  }
+  return null;
+};
+
+/** Whether `holder` holds `el` through the same-origin frames `el` stands in. */
+const holdsAcross = (holder: Element, el: Element) =>
+  framesOf(el).some((frame) => holder === frame || holder.contains(frame));
+
 /** perfect-freehand's outline as a closed path of quadratic curves through its points' midpoints. */
 const pathOf = (points: Point[]): string => {
   const outline = getStroke(points, STROKE);
@@ -174,17 +309,32 @@ const pathOf = (points: Point[]): string => {
   return `${d} Z`;
 };
 
-/** An svg layer at the page's origin, as big as its scroll. */
-export const fitToPage = (svg: SVGSVGElement) => {
+/**
+ * The overlay's layers at the page's origin, each as big as the page's
+ * scroll. The scroll is read with every layer folded away first: a layer
+ * stands in the scroll it measures, so read as it is, one sized for a taller
+ * layout (the page before it reflowed wider) would hold the page at that
+ * height for good.
+ */
+export const fitToPage = () => {
+  const layers = document.querySelectorAll<SVGSVGElement>(
+    "svg[data-cawco-ink], svg[data-cawco-pins]"
+  );
+  for (const layer of layers) {
+    layer.setAttribute("width", "0");
+    layer.setAttribute("height", "0");
+  }
   const root = document.documentElement;
-  svg.setAttribute(
-    "width",
-    String(Math.max(root.scrollWidth, document.body?.scrollWidth ?? 0))
+  const width = String(
+    Math.max(root.scrollWidth, document.body?.scrollWidth ?? 0)
   );
-  svg.setAttribute(
-    "height",
-    String(Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0))
+  const height = String(
+    Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0)
   );
+  for (const layer of layers) {
+    layer.setAttribute("width", width);
+    layer.setAttribute("height", height);
+  }
 };
 
 /** A pen's pressure, or the middle one where it reports none; a mouse's and a finger's are always the middle one. */
@@ -431,21 +581,89 @@ export function startInk(deps: InkDeps): Ink {
     passive: false,
   });
 
-  /** The deepest element whose box holds `box` (the page's px), out through any frame the stroke spills past. */
-  const anchorFor = (box: Box): Element => {
-    let el =
-      deps.elementAt(
-        box.x + box.w / 2 - scrollX,
-        box.y + box.h / 2 - scrollY
-      ) ?? document.body;
-    for (
-      let up = outward(el);
-      up && el !== document.body && !contains(pageBox(el), box);
-      up = outward(el)
-    ) {
-      el = up;
+  /**
+   * What strokes mark, read once as they lift (the page's px): for each, the
+   * browser's hit test at points inside a loop, or along a line; each hit
+   * the stroke encloses is taken out to its largest ancestor it still
+   * encloses. `over` is the outermost of those, in document order, or, when
+   * a stroke encloses nothing, the elements it crosses (an inline one as the
+   * block it stands in); the element under the centre when there are none.
+   * The anchor is their nearest container while it is not much bigger than
+   * what the strokes reach, else the first of them.
+   */
+  /** One stroke's hits, each sorted into what it encloses (taken out as far as it still does) and what it crosses; its reach. */
+  const hitsOf = (
+    points: Point[],
+    boxed: (el: Element) => Box,
+    into: { crossed: Set<Element>; enclosed: Set<Element> }
+  ): Box => {
+    const box = boxOf(points);
+    const loop = isLoop(points, box);
+    const reach = pad(box, loop ? ENCLOSE_SLACK : LINE_REACH);
+    const encloses = (el: Element) =>
+      !deps.pageSized(el) && contains(reach, boxed(el), 0);
+    const hits = new Set(
+      deps.elementsAt(
+        samplesOf(points, box, loop).map(([x, y]) => [x - scrollX, y - scrollY])
+      )
+    );
+    for (const hit of hits) {
+      if (!hit || deps.pageSized(hit)) {
+        continue;
+      }
+      if (!encloses(hit)) {
+        into.crossed.add(hit);
+        continue;
+      }
+      let el = hit;
+      for (let up = outward(el); up && encloses(up); up = outward(up)) {
+        el = up;
+      }
+      into.enclosed.add(el);
     }
-    return el;
+    return reach;
+  };
+
+  const marksOf = (
+    strokes: Point[][]
+  ): { anchor: Element; over: Element[] } => {
+    const boxes = new Map<Element, Box>();
+    const boxed = (el: Element) => {
+      const known = boxes.get(el);
+      if (known) {
+        return known;
+      }
+      const box = pageBox(el);
+      boxes.set(el, box);
+      return box;
+    };
+    const enclosed = new Set<Element>();
+    const crossed = new Set<Element>();
+    const reaches = strokes.map((points) =>
+      hitsOf(points, boxed, { crossed, enclosed })
+    );
+    const over =
+      enclosed.size > 0
+        ? outermost([...enclosed])
+        : innermost([...new Set([...crossed].map(blockOf))]);
+    const reach =
+      reaches.length > 0 ? reaches.reduce(union) : boxOf(strokes.flat());
+    if (over.length === 0) {
+      const [centre] = deps.elementsAt([
+        [reach.x + reach.w / 2 - scrollX, reach.y + reach.h / 2 - scrollY],
+      ]);
+      const el = centre ?? document.body;
+      return { anchor: el, over: [el] };
+    }
+    const marked = over.slice(0, MARKED_MAX);
+    const common = marked.length > 1 ? containerOf(marked) : null;
+    const anchor =
+      common &&
+      !deps.pageSized(common) &&
+      area(boxed(common)) <= CONTAINER_MOST * area(reach)
+        ? common
+        : (marked[0] as Element);
+    return { anchor, over: marked };
   };
 
   /** Why a stroke may not be kept (WORDS.md's error formula), or null: the bounds the hub keeps. */
@@ -483,7 +701,7 @@ export function startInk(deps: InkDeps): Ink {
   ): InkGroup => {
     const all = strokes.map((one) => one.points);
     const groupBox = all.map(boxOf).reduce(union);
-    const anchor = anchorFor(groupBox);
+    const { anchor, over } = marksOf(all);
     const ab = pageBox(anchor);
     const fraction = (p: Point): InkPoint => [
       round((p[0] - ab.x) / ab.w),
@@ -510,6 +728,7 @@ export function startInk(deps: InkDeps): Ink {
         at: stroke.at,
       })),
       at: open?.at ?? at,
+      over: over.map(deps.anchorOf),
       ...(open?.illustration ? { illustration: true as const } : {}),
     };
   };
@@ -536,6 +755,7 @@ export function startInk(deps: InkDeps): Ink {
     const group = groupOf(open, points, new Date(now).toISOString());
     doc.transact(() => ink.set(group.id, group));
     last = { id: group.id, at: now };
+    deps.ended(group.id);
     chrome.showIcon(end[0] - scrollX, end[1] - scrollY, (choice) =>
       act(group.id, choice)
     );
@@ -591,7 +811,7 @@ export function startInk(deps: InkDeps): Ink {
     if (onCanvas()) {
       return;
     }
-    fitToPage(layer);
+    fitToPage();
     const { ink } = maps();
     const brand = chrome.token("--brand-solid");
     const groups = [...ink.values()];
@@ -695,16 +915,19 @@ export function startInk(deps: InkDeps): Ink {
 
   // --- picks ----------------------------------------------------------------
 
-  /** The page's elements under a group's box: its element and those inside it the box crosses. */
+  /** The elements a group marks, as they stand now, each described alone (never its subtree). */
   const elementsUnder = (id: string): PinnedElement[] => {
+    const group = maps().ink.get(id);
     const at = placed.get(id);
-    if (!at?.anchor) {
+    if (!(group && at?.anchor)) {
       return [];
     }
-    const crossed = [at.anchor, ...at.anchor.querySelectorAll("*")].filter(
-      (el) => touches(pageBox(el), at.box)
-    );
-    return crossed.slice(0, PINNED_MAX).map(deps.describe);
+    const marked = (group.over ?? [])
+      .map((anchor) => deps.locate(anchor)?.el ?? null)
+      .filter((el): el is Element => el !== null);
+    return (marked.length > 0 ? marked : [at.anchor])
+      .slice(0, MARKED_MAX)
+      .map(deps.describe);
   };
 
   /** What a pick does to the group `id`. */

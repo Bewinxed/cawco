@@ -41,7 +41,8 @@ import {
 import { heardFromHost, toHost } from "./host-origin";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
-import { type Pins, startPins } from "./pins";
+import { cropPicture } from "./picture";
+import { type Box, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
@@ -143,7 +144,6 @@ function cover(node: HTMLElement, rect: DOMRect) {
 /** The person's pins, drawn after the ink (pins.ts). */
 const pins: Pins = startPins({
   anchorOf,
-  capture: (el, scale) => capture(el, scale),
   chrome,
   describe,
   groupBox: (id) => ink.groupBox(id),
@@ -182,7 +182,10 @@ const ink = startInk({
   anchorOf,
   chrome,
   describe,
-  elementAt,
+  elementsAt,
+  // Drawn once its group is on the page: the next frame, after the ink layer drew it.
+  ended: (id) => requestAnimationFrame(() => groupPicture(id)),
+  pageSized,
   freehand,
   locate,
   pins: () => pins,
@@ -955,6 +958,79 @@ function elementAt(x: number, y: number): Element | null {
   return element === host ? null : deepElementAt(element, x, y);
 }
 
+/** The overlay's own: its host, and the ink and pin layers it puts in the page. */
+const OVERLAY_OWN = "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]";
+
+/**
+ * The page's own deepest element at each of the viewport's points, seen
+ * through the overlay's host and its ink and pin layers (a pin's disc on a
+ * card is not what a stroke over the card marks): the first of the
+ * browser's hits there (`elementsFromPoint`) that is the page's, into every
+ * same-origin frame it lands on.
+ */
+function elementsAt(points: [x: number, y: number][]): (Element | null)[] {
+  return points.map(([x, y]) => {
+    const element =
+      document
+        .elementsFromPoint(x, y)
+        .find((hit) => hit !== host && !hit.closest(OVERLAY_OWN)) ?? null;
+    return deepElementAt(element, x, y);
+  });
+}
+
+/** How much of the page's extent a container covers, each way, to be the page's own box. Our call. */
+const PAGE_SHARE = 0.9;
+
+/**
+ * Whether `el` is the page's own box rather than content on it: its
+ * document's root or body, or a container nearly as wide and as tall as the
+ * body (a `main` holding every card). The body's box, not the document's
+ * scroll: the overlay's own layers stand in that.
+ */
+function pageSized(el: Element): boolean {
+  const doc = el.ownerDocument;
+  if (el === doc.documentElement || el === doc.body || !doc.body) {
+    return true;
+  }
+  const page = doc.body.getBoundingClientRect();
+  const { width, height } = el.getBoundingClientRect();
+  return (
+    width >=
+      PAGE_SHARE * Math.min(page.width, doc.documentElement.clientWidth) &&
+    height >= PAGE_SHARE * page.height
+  );
+}
+
+/** How far round a press it looks for content when the press itself lands on the page's own box, px. Our call. */
+const NEAR_RINGS = [6, 12, 20, 32] as const;
+const NEAR_WAYS = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [1, 1],
+  [-1, 1],
+  [1, -1],
+  [-1, -1],
+] as const;
+
+/**
+ * What a press at the viewport's `x`, `y` names: the smallest element under
+ * it; when that is the page's own box (a press in the gap between two
+ * paragraphs, or in the page's padding), the nearest content round it within
+ * {@link NEAR_RINGS}. The page's box only when nothing else stands there.
+ */
+function contentAt(x: number, y: number): Element | null {
+  const [hit = null] = elementsAt([[x, y]]);
+  if (!(hit && pageSized(hit))) {
+    return hit;
+  }
+  const round = NEAR_RINGS.flatMap((r) =>
+    NEAR_WAYS.map(([dx, dy]): [number, number] => [x + dx * r, y + dy * r])
+  );
+  return elementsAt(round).find((near) => !!near && !pageSized(near)) ?? hit;
+}
+
 /** The selectors of the frames `el` stands in, outermost first, each in its parent's document. */
 const frameSelectors = (el: Element): string[] => framesOf(el).map(selectorOf);
 
@@ -963,11 +1039,31 @@ function ownSource(el: Element): Source | null {
   return sourceAt(el as DevElement, "self");
 }
 
-/** The element's text as a pin keeps it: what it shows, cut to the anchor's bound. */
+/** Elements whose text is never what an element shows. */
+const UNSHOWN = new Set(["script", "style", "template", "noscript"]);
+
+/**
+ * The element's text as a pin keeps it: its words in order, white space
+ * run together, cut to the anchor's bound. Read from its text nodes until
+ * the bound is reached, so a page-sized element costs what a paragraph does.
+ */
 function textOf(el: Element): string {
-  return ((el as HTMLElement).innerText || el.textContent || "")
-    .trim()
-    .slice(0, COMMENT_LIMITS.anchorText);
+  const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let text = "";
+  let parent: Node | null = null;
+  for (
+    let node = walker.nextNode();
+    node && text.length <= COMMENT_LIMITS.anchorText;
+    node = walker.nextNode()
+  ) {
+    if (UNSHOWN.has(node.parentElement?.localName ?? "")) {
+      continue;
+    }
+    // Words of another element than the last are words apart.
+    text += `${parent && node.parentNode !== parent ? " " : ""}${node.textContent ?? ""}`;
+    parent = node.parentNode;
+  }
+  return text.replace(/\s+/g, " ").trim().slice(0, COMMENT_LIMITS.anchorText);
 }
 
 /** What a page's mark stands on, read from `el` as it is now: inside a frame, the frames it stands in too. */
@@ -1179,7 +1275,7 @@ window.addEventListener(
   "mousemove",
   (event) => {
     if (commenting()) {
-      hover(elementAt(event.clientX, event.clientY));
+      hover(contentAt(event.clientX, event.clientY));
     }
   },
   true
@@ -1189,22 +1285,23 @@ let touchCaptured = false;
 
 /** A tap in Comment mode: a comment pinned where it landed, or the moved pin being placed again. */
 function commentAt(clientX: number, clientY: number) {
-  const el = elementAt(clientX, clientY);
-  if (!(el && artifact.keeps())) {
-    return;
-  }
   // A tap on a pin's own disc opens that pin, as it does out of Comment mode.
-  const disc = el.closest("[data-pin-id]")?.getAttribute("data-pin-id");
+  const disc = pinUnder(clientX, clientY);
   if (disc) {
     post("cawco:pin-open", { id: disc });
     return;
   }
+  const el = contentAt(clientX, clientY);
+  if (!(el && artifact.keeps())) {
+    return;
+  }
+  const id = placing ?? pins.commentAt(el, clientX, clientY);
   if (placing) {
     pins.placeAgain(placing, el, clientX, clientY);
     placing = null;
-    return;
   }
-  pins.commentAt(el, clientX, clientY);
+  // Drawn once its disc stands: the next frame.
+  requestAnimationFrame(() => pinPicture(id));
 }
 
 /*
@@ -1408,29 +1505,63 @@ window.addEventListener(
 );
 
 /**
+ * Each mark's picture (picture.ts), by the mark's id: drawn once, when the
+ * mark is made, and again only when what it shows moved or grew (its look).
+ */
+const shots = new Map<string, { look: string; png: Promise<string | null> }>();
+
+/** Mark `id`'s picture, cropped to `box`; the one already drawn while its `look` is the same. */
+function shot(id: string, look: string, box: Box): Promise<string | null> {
+  const had = shots.get(id);
+  if (had?.look === look) {
+    return had.png;
+  }
+  const png = cropPicture(box, (message) => post("cawco:error", { message }));
+  shots.set(id, { look, png });
+  return png;
+}
+
+/** A stroke group's picture: the page round its ink, as the ink layer placed it. */
+function groupPicture(id: string): Promise<string | null> {
+  const box = ink.groupBox(id);
+  return box
+    ? shot(id, JSON.stringify(box), padded(box))
+    : Promise.resolve(null);
+}
+
+/** A pin's picture: its ink's, or the page round its element at its point. */
+function pinPicture(id: string): Promise<string | null> {
+  const crop = pins.cropOf(id);
+  const pin = (artifact.doc().getMap("pins") as YMap<Pin>).get(id);
+  if (pin?.ink) {
+    return groupPicture(pin.ink);
+  }
+  return crop ? shot(id, crop.look, crop.box) : Promise.resolve(null);
+}
+
+/**
  * The pictures of the person's marks the session has not heard: each unsent
- * pin's, and the page with its ink when ink no pin stands on is unsent.
+ * pin's, and each stroke group's no pin stands on. Each was drawn when its
+ * mark was made; only one whose mark moved since is drawn again.
  */
 async function markPictures(): Promise<MarkPicture[]> {
   const doc = artifact.doc();
   const all = [...(doc.getMap("pins") as YMap<Pin>).values()];
   const owed = all.filter(pinUnsent).sort((a, b) => a.number - b.number);
   const pinned = new Set(all.map((pin) => pin.ink));
-  const loose = [...(doc.getMap("ink") as YMap<InkGroup>).values()].some(
+  const loose = [...(doc.getMap("ink") as YMap<InkGroup>).values()].filter(
     (group) => !(group.sentAt || pinned.has(group.id))
   );
+  const marks = [
+    ...loose.map((group) => ({ id: group.id, png: groupPicture(group.id) })),
+    ...owed.map((pin) => ({ id: pin.id, png: pinPicture(pin.id) })),
+  ].slice(0, COMMENT_LIMITS.pictures);
   const pictures: MarkPicture[] = [];
-  if (loose) {
-    const png = await pins.pagePicture();
-    if (png) {
-      pictures.push({ pin: null, png });
-    }
-  }
-  for (const pin of owed.slice(0, COMMENT_LIMITS.pictures - pictures.length)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one raster at a time keeps the page responsive
-    const png = await pins.picture(pin.id);
-    if (png) {
-      pictures.push({ pin: pin.id, png });
+  for (const { id, png } of marks) {
+    // biome-ignore lint/performance/noAwaitInLoops: each was started when its mark was made
+    const drawn = await png;
+    if (drawn) {
+      pictures.push({ mark: id, png: drawn });
     }
   }
   return pictures;

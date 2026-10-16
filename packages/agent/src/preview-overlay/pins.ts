@@ -23,8 +23,9 @@
  * the person places it again.
  *
  * The host (the dashboard's pane) draws the card and the list; this tells it
- * where the card's pin stands as the page scrolls, and draws the pictures a
- * send and a card's thumbnail carry.
+ * where the card's pin stands as the page scrolls, and where each pin's
+ * picture is cropped (`cropOf`): its ink's box, or its element's round the
+ * point it was made at, with room round either.
  */
 import {
   changedAnchor,
@@ -47,13 +48,12 @@ const SVG = "http://www.w3.org/2000/svg";
 const PIN_R = 10;
 /** A resolved pin's opacity: DESIGN.md's 40%. */
 const RESOLVED_OPACITY = "0.4";
-/** The pixels a picture may hold, so its PNG stays inside a send's bound. Our call. */
-const PICTURE_AREA = 1_200_000;
-/** Room round an ink pin's crop, px. Our call. */
-const CROP_PAD = 24;
-const PNG_PREFIX = /^data:image\/png;base64,/;
+/** Room round a mark's crop, px. Our call. */
+export const CROP_PAD = 24;
+/** How far a pin's crop reaches from the point it was made at, each way, px: a big element is cropped round the point. Our call. */
+const PIN_REACH = { x: 960, y: 640 } as const;
 
-interface Box {
+export interface Box {
   h: number;
   w: number;
   x: number;
@@ -63,11 +63,6 @@ interface Box {
 export interface PinsDeps {
   /** What a page's mark stands on, read from `el` as it is now. */
   anchorOf: (el: Element) => PageAnchor;
-  /** `el` drawn as a picture at `scale`; the whole page when `el` is the root. */
-  capture: (
-    el: Element,
-    scale: number
-  ) => Promise<{ png: string | null; error?: string }>;
   chrome: InkChrome;
   /** The overlay's description of `el`, its markup left out. */
   describe: (el: Element) => PinnedElement;
@@ -87,17 +82,18 @@ export interface PinsDeps {
 }
 
 export interface Pins {
-  /** The person tapped `el` at the viewport's `x`, `y` in Comment mode: a comment pin there, and its card opened. */
-  commentAt: (el: Element, x: number, y: number) => void;
+  /** The person tapped `el` at the viewport's `x`, `y` in Comment mode: a comment pin there, and its card opened; its id. */
+  commentAt: (el: Element, x: number, y: number) => string;
+  /**
+   * Where pin `id`'s picture is cropped, the page's px, and what it shows
+   * (its look: a new one is drawn again); null when it is not on the page.
+   */
+  cropOf: (id: string) => { box: Box; look: string } | null;
   /** Pins drawn again where their elements stand now. */
   draw: () => void;
   /** The pin the host focused (J, K, its row), outlined and scrolled into view; or none. */
   focus: (id: string | null, scroll: boolean) => void;
   layer: SVGSVGElement;
-  /** The page with the person's ink on it, as a send carries it. */
-  pagePicture: () => Promise<string | null>;
-  /** A pin's picture, as a delivery carries it: its element, or its ink with the page under it. */
-  picture: (id: string) => Promise<string | null>;
   /** A pin on an ink group (Annotate, Comment); a comment's card opened. */
   pinInk: (
     group: InkGroup,
@@ -138,9 +134,13 @@ interface Standing {
 
 const round = (n: number) => Math.round(n * 10_000) / 10_000;
 
-/** The largest scale at or under `most` that keeps a `w` × `h` box inside {@link PICTURE_AREA}. */
-const fitScale = (w: number, h: number, most: number) =>
-  Math.min(most, Math.sqrt(PICTURE_AREA / Math.max(1, w * h)));
+/** `box` with {@link CROP_PAD} round it. */
+export const padded = (box: Box): Box => ({
+  x: box.x - CROP_PAD,
+  y: box.y - CROP_PAD,
+  w: box.w + 2 * CROP_PAD,
+  h: box.h + 2 * CROP_PAD,
+});
 
 export function startPins(deps: PinsDeps): Pins {
   const { chrome } = deps;
@@ -316,7 +316,7 @@ export function startPins(deps: PinsDeps): Pins {
     if (!(onPage() && artifact.keeps())) {
       return;
     }
-    fitToPage(layer);
+    fitToPage();
     const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
     const gone = placeAll(all);
     if (settled()) {
@@ -370,39 +370,42 @@ export function startPins(deps: PinsDeps): Pins {
     };
   };
 
-  /** The page cropped to `box` (the page's px), ink and all. */
-  const crop = async (box: Box): Promise<string | null> => {
-    const scale = fitScale(box.w, box.h, Math.min(2, devicePixelRatio));
-    const root = document.documentElement;
-    const whole = await deps.capture(root, scale);
-    if (!whole.png) {
-      return null;
-    }
-    const image = new Image();
-    image.src = `data:image/png;base64,${whole.png}`;
-    await image.decode();
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(box.w * scale));
-    canvas.height = Math.max(1, Math.round(box.h * scale));
-    canvas
-      .getContext("2d")
-      ?.drawImage(
-        image,
-        box.x * scale,
-        box.y * scale,
-        box.w * scale,
-        box.h * scale,
-        0,
-        0,
-        canvas.width,
-        canvas.height
-      );
-    return canvas.toDataURL("image/png").replace(PNG_PREFIX, "");
+  /** A pin's element's box, within {@link PIN_REACH} of the point it stands at. */
+  const roundPoint = (box: Box, at: [number, number]): Box => {
+    const x = Math.max(box.x, at[0] - PIN_REACH.x);
+    const y = Math.max(box.y, at[1] - PIN_REACH.y);
+    return {
+      x,
+      y,
+      w: Math.max(1, Math.min(box.x + box.w, at[0] + PIN_REACH.x) - x),
+      h: Math.max(1, Math.min(box.y + box.h, at[1] + PIN_REACH.y) - y),
+    };
   };
 
   return {
     layer,
     draw,
+    cropOf: (id) => {
+      const pin = pinsMap().get(id);
+      const where = placed.get(id);
+      if (!(pin && where)) {
+        return null;
+      }
+      if (pin.ink) {
+        const box = deps.groupBox(pin.ink);
+        return box
+          ? { box: padded(box), look: `ink:${pin.ink}:${JSON.stringify(box)}` }
+          : null;
+      }
+      if (!where.el) {
+        return null;
+      }
+      const box = roundPoint(pageBox(where.el), where.at);
+      return {
+        box: padded(box),
+        look: `pin:${JSON.stringify(box)}`,
+      };
+    },
     commentAt: (el, x, y) => {
       const pin: Pin = {
         id: newId(),
@@ -417,6 +420,7 @@ export function startPins(deps: PinsDeps): Pins {
       };
       write(pin);
       deps.post("cawco:pin-open", { id: pin.id, made: true });
+      return pin.id;
     },
     pinInk: (group, kind, elements) => {
       const pin: Pin = {
@@ -495,36 +499,6 @@ export function startPins(deps: PinsDeps): Pins {
       if (!shown) {
         deps.peek(null);
       }
-    },
-    picture: async (id) => {
-      const pin = pinsMap().get(id);
-      const where = placed.get(id);
-      if (!(pin && where)) {
-        return null;
-      }
-      if (pin.ink) {
-        const box = deps.groupBox(pin.ink);
-        return box
-          ? await crop({
-              x: Math.max(0, box.x - CROP_PAD),
-              y: Math.max(0, box.y - CROP_PAD),
-              w: box.w + 2 * CROP_PAD,
-              h: box.h + 2 * CROP_PAD,
-            })
-          : null;
-      }
-      if (!where.el) {
-        return null;
-      }
-      const box = pageBox(where.el);
-      const scale = fitScale(box.w, box.h, Math.min(2, devicePixelRatio));
-      return (await deps.capture(where.el, scale)).png;
-    },
-    pagePicture: async () => {
-      const root = document.documentElement;
-      const w = Math.max(root.scrollWidth, innerWidth);
-      const h = Math.max(root.scrollHeight, innerHeight);
-      return (await deps.capture(root, fitScale(w, h, 1))).png;
     },
   };
 }

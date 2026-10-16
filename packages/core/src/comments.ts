@@ -61,18 +61,19 @@ export const COMMENT_LIMITS = {
   file: 300,
   /** Characters of the element's text an anchor keeps. */
   anchorText: 200,
-  /** Pictures one post carries: a pin's crop each, and the page with its ink. Our call. */
+  /** Pictures one post carries: one crop per mark. Our call. */
   pictures: 20,
   /** Base64 characters one picture holds, about 2.2 MB of PNG. Our call. */
   pictureChars: 3_000_000,
 } as const;
 
 /**
- * A picture the page draws of the person's marks: pin `pin`'s element or
- * ink, cropped, or with `pin` null the page with the person's ink on it.
+ * A picture the page draws of one of the person's marks: the page cropped
+ * round it, its ink on it. `mark` is a pin's id (its element, or its ink)
+ * or a stroke group's id (ink no pin stands on).
  */
 export interface MarkPicture {
-  pin: string | null;
+  mark: string;
   /** Base64 PNG. */
   png: string;
 }
@@ -631,9 +632,9 @@ export function pinDelivery(
 
 /**
  * A stroke group no pin stands on, as a delivery says it: what it is drawn
- * over (its element by selector, source and text, or a canvas's element),
- * and its box in the page; `picture` when the delivery carries the page with
- * the ink on it.
+ * over (its element by selector, source and text, and every element it
+ * encloses when it marks more than one; or a canvas's element), and its box
+ * in the page; `picture` when the delivery carries its crop.
  */
 export function inkSection(
   group: InkGroup,
@@ -642,10 +643,15 @@ export function inkSection(
   const { anchor, page } = group;
   const what = group.illustration ? "Illustration" : "Ink";
   const box = `- Box: ${Math.round(page.w)} × ${Math.round(page.h)} px at ${Math.round(page.x)}, ${Math.round(page.y)} in the page`;
+  const over = (group.over ?? []).map(
+    (one) =>
+      `  - ${one.selector}${one.text?.trim() ? ` ${JSON.stringify(one.text.trim().slice(0, 80))}` : ""}`
+  );
   const lines =
     "selector" in anchor
       ? [
           `## ${what} over ${anchor.selector}`,
+          ...(over.length > 1 ? ["- Encloses:", ...over] : []),
           ...(anchor.frames?.length
             ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]
             : []),
@@ -663,7 +669,7 @@ export function inkSection(
         ]
       : [`## ${what} on the canvas's element ${anchor.element}`];
   if (context.picture) {
-    lines.push("- In the picture of the page with its ink.");
+    lines.push("- In its picture, with the ink on it.");
   }
   return lines.join("\n");
 }

@@ -77,18 +77,35 @@
  * f. A pin whose thread runs past the card's cap: the thread scrolls in its
  *    room and the card does not, and Resolve, Reply and the field stand
  *    inside the card's box.
+ *
+ * And the owner's report (2026-10-16: on test-map, 27,383px of some 2,000
+ * cards, his press on the intro text was pinned on `main`, the whole page,
+ * "and lagged it"):
+ * g. A press on the intro paragraph pins that paragraph; a press in the
+ *    page's padding beside it pins it too, the nearest content, never `main`.
+ *    Each finishes, its picture drawn, with no main-thread task of the
+ *    page's past 50ms, and its picture is the paragraph's box with its 24px
+ *    margin, never the page.
  */
 import { join } from "node:path";
 import type { Frame, Locator } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { traceMain } from "../frames";
 import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
 import {
   docOf,
   dragFromIcon,
+  longestIn,
   type On,
   pageFrame,
+  paneMode,
+  pngSize,
   screenBox,
   strokeOver,
+  TEST_MAP,
+  tasksOver,
+  testMapFrame,
+  watchPictures,
 } from "./ink";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -354,6 +371,7 @@ const run = async (kit: Kit) => {
     () => roomChecks(on),
     () => wordlessChecks(on),
     () => documentChecks(on),
+    () => mapPressChecks(on),
   ]) {
     // biome-ignore lint/performance/noAwaitInLoops: the checks run in order, one after another
     await shutList(on);
@@ -2295,6 +2313,110 @@ const documentChecks = async (on: On) => {
     .first()
     .click()
     .catch(() => undefined);
+};
+
+/** A main-thread task the person feels as a stall, ms (the long task's bound). */
+const LONG_TASK_MS = 50;
+/** A mark's crop margin (pins.ts `CROP_PAD`), px. */
+const CROP_PAD = 24;
+
+/** (g) Presses on test-map: on its intro paragraph, and in the page's padding beside it. */
+const mapPressChecks = async (on: On) => {
+  await on.call(CREATE, { kind: "page", name: "test-map", html: TEST_MAP });
+  const frame = await testMapFrame(on);
+  await settle(on.page, 600);
+  await frame.evaluate(() => scrollTo(0, 0));
+  await paneMode(on, frame, "C");
+  const pictures = watchPictures(on.page);
+  const outer = await on.page.locator(FRAME).boundingBox();
+  const intro = await frame.evaluate(() => {
+    const p = document.querySelector("main > h1 + p");
+    const r = p?.getBoundingClientRect();
+    return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+  });
+  if (!(outer && intro)) {
+    on.kit.check("g: test-map has its intro paragraph", false, "none");
+    return;
+  }
+  /** A press at the frame's `x`, `y`, traced to its picture; the pin it made, what it names, its picture. */
+  const press = async (x: number, y: number) => {
+    const before = new Set(Object.keys((await docOf(frame)).pins));
+    const mark = (name: string) =>
+      frame.evaluate((n) => performance.mark(n), name);
+    const main = await traceMain(on.page, async () => {
+      await mark("press");
+      await on.page.mouse.click(outer.x + x, outer.y + y);
+      await on.page.waitForTimeout(2000);
+      await mark("press-after");
+    });
+    const { pins } = await docOf(frame);
+    const id = Object.keys(pins).find((one) => !before.has(one));
+    const pin = id
+      ? (pins[id] as { anchor: { selector: string }; number: number })
+      : undefined;
+    const names = pin
+      ? await frame.evaluate((selector) => {
+          const el = document.querySelector(selector);
+          return {
+            intro: el === document.querySelector("main > h1 + p"),
+            tag: el?.localName ?? "none",
+          };
+        }, pin.anchor.selector)
+      : { intro: false, tag: "none" };
+    const at = (name: string) =>
+      main.marks.find((one) => one.name === name)?.at ?? 0;
+    // Words in it, so its card's going keeps it, and its picture goes to the hub.
+    if (pin) {
+      await writeIn(on, pin.number, "This one.");
+    }
+    await on.page.keyboard.press("Escape");
+    const posted = await until(
+      "the pin's picture at the hub",
+      () => pictures.posted.find((one) => one.mark === id),
+      Boolean,
+      5000
+    ).catch(() => undefined);
+    return {
+      names,
+      selector: pin?.anchor.selector,
+      over: tasksOver(main.tasks, at("press"), at("press-after"), LONG_TASK_MS),
+      longest: longestIn(main.tasks, at("press"), at("press-after")),
+      size: posted ? pngSize(posted.png) : null,
+    };
+  };
+  try {
+    const onText = await press(intro.x + intro.w * 0.3, intro.y + intro.h / 2);
+    const inPadding = await press(
+      Math.max(2, intro.x - 6),
+      intro.y + intro.h / 2
+    );
+    on.kit.check(
+      "g: a press on test-map's intro paragraph pins that paragraph, and one in the page's padding beside it pins it too, never main",
+      onText.names.intro && inPadding.names.intro,
+      `on the text: ${onText.names.tag} ${onText.selector}; in the padding: ${inPadding.names.tag} ${inPadding.selector}`
+    );
+    on.kit.check(
+      `g: each press finishes, its picture drawn, with no task of the page's past ${LONG_TASK_MS}ms`,
+      onText.over.length === 0 && inPadding.over.length === 0,
+      `longest ${onText.longest.toFixed(1)}ms and ${inPadding.longest.toFixed(1)}ms; over: ${[...onText.over, ...inPadding.over].join(", ") || "none"}`
+    );
+    const crop = {
+      w: intro.w + 2 * CROP_PAD,
+      h: intro.h + 2 * CROP_PAD,
+    };
+    const scale = onText.size ? onText.size.w / crop.w : 0;
+    on.kit.check(
+      "g: the pin's picture is the paragraph's box with its 24px margin (±2px at its scale, at most 2×), never the page",
+      !!onText.size &&
+        scale > 0 &&
+        scale <= 2.01 &&
+        Math.abs(onText.size.h / scale - crop.h) <= 2,
+      `picture ${JSON.stringify(onText.size)}; crop ${JSON.stringify(crop)} at ${scale.toFixed(3)}×`
+    );
+  } finally {
+    pictures.stop();
+    await on.page.keyboard.press("Escape");
+  }
 };
 
 /** Pin `number`'s card in the pane, and whether its field has the keyboard. */

@@ -361,6 +361,8 @@ const PICTURES_BODY_MAX =
 
 /** The longest page address a post names. Our call. */
 const URL_MAX = 2048;
+/** The longest mark id a picture names: a pin's or a stroke group's. Our call. */
+const MARK_ID_MAX = 100;
 
 const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;
 
@@ -406,12 +408,13 @@ const picturesBodyProblem = (body: unknown): string | null => {
   for (const picture of pictures as (Record<string, unknown> | null)[]) {
     if (!(
       picture &&
-      (picture.pin === null || typeof picture.pin === "string") &&
+      typeof picture.mark === "string" &&
+      picture.mark.length <= MARK_ID_MAX &&
       typeof picture.png === "string" &&
       picture.png.length <= COMMENT_LIMITS.pictureChars &&
       PNG_BASE64.test(picture.png)
     )) {
-      return `A picture is { pin, png }: a base64 PNG of at most ${COMMENT_LIMITS.pictureChars.toLocaleString()} characters.`;
+      return `A picture is { mark, png }: a mark's id and a base64 PNG of at most ${COMMENT_LIMITS.pictureChars.toLocaleString()} characters.`;
     }
   }
   return null;

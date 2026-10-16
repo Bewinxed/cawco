@@ -1099,21 +1099,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
-  /**
-   * A delivered page with the person's ink on it (its picture with no pin)
-   * becomes a page's or preview's picture, as a canvas keeps its own;
-   * `artifact_promote` writes it.
-   */
-  const keepComposited = (row: ArtifactRow, png: string | undefined) => {
-    if (!png || row.kind === "canvas") {
-      return;
-    }
-    writeStateFileSync(
-      picturePath(deps.root, row.id),
-      Buffer.from(png, "base64")
-    );
-  };
-
   /*
    * The person's marks (pins, replies, resolves, ink) go by themselves
    * (core comments.ts). Each person's write on an artifact's `pins` or `ink`
@@ -1128,7 +1113,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   >();
   const held = new Map<
     string,
-    { pictures: Map<string | null, string>; url?: string }
+    { pictures: Map<string, string>; url?: string }
   >();
   const delivering = new Set<string>();
   const marked = (id: string) => {
@@ -1226,18 +1211,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
   };
 
-  /** What went is let go of the held pictures; a pin not ready yet keeps its own for its delivery. */
-  const letGoPictures = (id: string, owed: Pin[], pins: Pin[]) => {
+  /**
+   * What went is let go of the held pictures, and what is gone from the doc;
+   * a pin not ready yet keeps its own for its delivery.
+   */
+  const letGoPictures = (id: string, went: string[], standing: Set<string>) => {
     const kept = held.get(id);
     if (!kept) {
       return;
     }
-    kept.pictures.delete(null);
-    const went = new Set(owed.map((pin) => pin.id));
-    const here = new Set(pins.map((pin) => pin.id));
-    for (const pin of kept.pictures.keys()) {
-      if (pin !== null && (went.has(pin) || !here.has(pin))) {
-        kept.pictures.delete(pin);
+    const gone = new Set(went);
+    for (const mark of kept.pictures.keys()) {
+      if (gone.has(mark) || !standing.has(mark)) {
+        kept.pictures.delete(mark);
       }
     }
     if (kept.pictures.size === 0) {
@@ -1273,13 +1259,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       kept?.url ??
       (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
       routeOf(id);
-    // The page with its ink: a canvas's own picture, else the one the page drew.
-    const page =
-      (row.kind === "canvas" ? pictureOf(id) : kept?.pictures.get(null)) ??
-      undefined;
-    const shown = loose.length > 0 && page !== undefined;
+    // A canvas's loose ink is in its own picture; a page's each in the crop the page drew round it.
+    const canvas = row.kind === "canvas" ? pictureOf(id) : null;
+    const pictureOfGroup = (group: InkGroup) =>
+      row.kind === "canvas" ? null : (kept?.pictures.get(group.id) ?? null);
     const images = [
-      ...(shown && page ? [page] : []),
+      ...(canvas && loose.length > 0 ? [canvas] : []),
+      ...loose.flatMap((group) => pictureOfGroup(group) ?? []),
       ...owed.flatMap((pin) => kept?.pictures.get(pin.id) ?? []),
     ]
       .slice(0, COMMENT_LIMITS.pictures)
@@ -1291,7 +1277,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ...(pin.ink && groups[pin.ink] ? { ink: groups[pin.ink].page } : {}),
         })
       ),
-      ...loose.map((group) => inkSection(group, { url, picture: shown })),
+      ...loose.map((group) =>
+        inkSection(group, {
+          url,
+          picture: !!canvas || pictureOfGroup(group) !== null,
+        })
+      ),
     ];
     // A sheet's compile errors go on the person's marks' own channel.
     const text = marksText(row, marks, errors);
@@ -1314,8 +1305,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       url
     );
     errorsHeard(id, errors);
-    keepComposited(row, shown ? page : undefined);
-    letGoPictures(id, owed, pins);
+    letGoPictures(
+      id,
+      [...owed.map((pin) => pin.id), ...loose.map((group) => group.id)],
+      new Set([...pins.map((pin) => pin.id), ...Object.keys(groups)])
+    );
   };
 
   /** A canvas's `.excalidraw` file and its outline, as the doc holds them now. */
@@ -2394,9 +2388,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * The page's pictures of the marks the person just made there (core
-     * `MarkPictures`), each pin's by its id and the page with its ink: the
-     * next delivery carries the ones it delivers. A later post replaces a
-     * pin's picture.
+     * `MarkPictures`), each a crop round one mark, by the pin's or the
+     * stroke group's id: the next delivery carries the ones it delivers. A
+     * later post replaces a mark's picture.
      */
     pictures: (
       instanceId: string,
@@ -2404,10 +2398,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       body: MarkPictures
     ): { held: number } => {
       const row = own(sessionOf(instanceId), id);
-      const kept: { pictures: Map<string | null, string>; url?: string } =
-        held.get(row.id) ?? { pictures: new Map() };
+      const kept: { pictures: Map<string, string>; url?: string } = held.get(
+        row.id
+      ) ?? { pictures: new Map() };
       for (const picture of body.pictures) {
-        kept.pictures.set(picture.pin, picture.png);
+        kept.pictures.set(picture.mark, picture.png);
       }
       if (body.url) {
         kept.url = body.url;
