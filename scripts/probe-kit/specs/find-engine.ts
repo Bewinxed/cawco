@@ -995,16 +995,23 @@ const checkScreens = async (
   // Excalidraw draws on two canvases; the interactive one, on top, takes the pointer.
   const DRAWING = "canvas.excalidraw__canvas.interactive";
   const canvas = await frameOf(page, "Canvas", DRAWING);
-  // What the canvas itself made of each key: read after every listener of
-  // its own, before the overlay's own last word (page.ts `leftToShell`).
+  // What the canvas made of each key: heard first (Excalidraw stops a key it
+  // claims from reaching any later listener) and read once its dispatch is
+  // over. The overlay prevents only what the page left alone, so a combo
+  // the canvas left reads as prevented too, by the overlay, and the shell
+  // acting on it is what tells the two apart.
   await canvas.evaluate(() => {
-    const seen: string[] = [];
-    (window as unknown as { probeKeys: string[] }).probeKeys = seen;
-    window.addEventListener("keydown", (event) => {
-      if (event.ctrlKey) {
-        seen.push(`${event.key}:${event.defaultPrevented}`);
-      }
-    });
+    const seen: KeyboardEvent[] = [];
+    (window as unknown as { probeKeys: KeyboardEvent[] }).probeKeys = seen;
+    window.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.ctrlKey && event.key !== "Control") {
+          seen.push(event);
+        }
+      },
+      true
+    );
   });
   const box = await (await canvas.$(DRAWING))?.boundingBox();
   await canvas.click(DRAWING, {
@@ -1021,14 +1028,16 @@ const checkScreens = async (
     (state) => state.groups > before.groups,
     10_000
   ).catch(() => page.evaluate(SHELL_STATE));
-  const keys = await canvas.evaluate(
-    () => (window as unknown as { probeKeys: string[] }).probeKeys
+  const keys = await canvas.evaluate(() =>
+    (window as unknown as { probeKeys: KeyboardEvent[] }).probeKeys.map(
+      (event) => `${event.key}:${event.defaultPrevented}`
+    )
   );
   kit.check(
     "h. a canvas keeps ⌘K (Excalidraw claims it, Jump stays shut); its ⌘\\, left alone, splits the group",
     keys.includes("k:true") &&
       !afterK.open &&
-      keys.includes("\\:false") &&
+      keys.some((key) => key.startsWith("\\:")) &&
       afterSplit.groups === before.groups + 1,
     JSON.stringify({ keys, before, afterK, afterSplit })
   );
