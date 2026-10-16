@@ -39,7 +39,7 @@
   }}
   open={peek.open}
 >
-  <Drawer.Content class="peek-sheet">
+  <Drawer.Content data-peek-sheet class="peek-sheet">
     <Drawer.Title class="sr-only">Peek</Drawer.Title>
     <Drawer.Description class="sr-only"
       >The tail of one session. Open dives into it; closing keeps your place.</Drawer.Description

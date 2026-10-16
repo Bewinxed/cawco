@@ -89,7 +89,7 @@
     {#if problem}
       <p class="problem" role="alert">{problem}</p>
     {/if}
-    <div class="actions">
+    <div data-slot="actions" class="actions">
       {#if stages}
         <Select.Root
           onValueChange={(value) => {

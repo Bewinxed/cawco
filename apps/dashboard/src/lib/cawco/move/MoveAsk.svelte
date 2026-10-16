@@ -21,7 +21,7 @@
   <Collapsible.Root bind:open>
     <Collapsible.Trigger class="move-details-trigger mark-line press-tint">
       <span>Details</span>
-      <span aria-hidden="true" class="chev" class:open data-box
+      <span data-slot="chev" aria-hidden="true" class="chev" class:open data-box
         ><IconChevronRight /></span
       >
     </Collapsible.Trigger>

@@ -543,6 +543,7 @@
        conversation is, and it holds its scroll position underneath the
        groups rather than being rebuilt on every visit. -->
   <div
+    data-slot="board"
     class="board"
     inert={!onBoard}
     bind:this={boardEl}

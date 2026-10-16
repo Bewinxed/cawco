@@ -5,7 +5,7 @@
   let { children }: { children: Snippet } = $props();
 </script>
 
-<p aria-live="polite" class="well">{@render children()}</p>
+<p data-slot="well" aria-live="polite" class="well">{@render children()}</p>
 
 <style>
   .well {

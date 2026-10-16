@@ -183,6 +183,7 @@ export class GrownShape {
     this.#dropFilter = this.#drop.querySelector("filter") as SVGFilterElement;
     this.#halo = document.createElement("div");
     this.#halo.className = "grown-halo";
+    this.#halo.setAttribute("data-slot", "grown-halo");
     this.#halo.setAttribute("aria-hidden", "true");
     // Solid, not the composer's glass: the transcript must not read through
     // what stands in it. Only the top of the grown part fades.

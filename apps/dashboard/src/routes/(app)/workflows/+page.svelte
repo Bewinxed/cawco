@@ -140,10 +140,11 @@
       <tbody aria-hidden="true">
         {#each [0, 1, 2] as index (index)}
           <tr class="workflow-row">
-            <td class="name"><Skeleton class="h-4 w-40" /></td>
+            <td data-slot="name" class="name"><Skeleton class="h-4 w-40" /></td>
             <td><Skeleton class="h-5 w-16" /></td>
             <td class="age"><Skeleton class="h-4 w-20" /></td>
-            <td class="count"><Skeleton class="h-4 w-6" /></td>
+            <td data-slot="count" class="count"><Skeleton class="h-4 w-6" /></td
+            >
             <td><Skeleton class="h-8 w-14" /></td>
           </tr>
         {/each}
@@ -179,7 +180,7 @@
         {#each rows as { workflow, runs, last } (workflow.id)}
           <tr class="workflow-row">
             <td>
-              <a class="name" href="/workflows/{workflow.id}"
+              <a data-slot="name" class="name" href="/workflows/{workflow.id}"
                 >{workflow.name}
                 <span class="wf-muted">{workflow.description}</span></a
               >
@@ -197,7 +198,7 @@
                 >{` · ${runs.length} ${runs.length === 1 ? "run" : "runs"}`}</span
               >
             </td>
-            <td class="count">{runs.length}</td>
+            <td data-slot="count" class="count">{runs.length}</td>
             <td>
               <button
                 class="wf-btn desktop"

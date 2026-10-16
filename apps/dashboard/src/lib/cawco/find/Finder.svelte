@@ -450,8 +450,8 @@
 </script>
 
 {#snippet field_()}
-  <div class={["field", { phone }]}>
-    <SearchIcon class="lead" aria-hidden="true" />
+  <div data-slot="finder-field" class={["field", { phone }]}>
+    <SearchIcon data-finder-lead class="lead" aria-hidden="true" />
     <input
       bind:this={field}
       aria-activedescendant={activeKey ? idOf(activeKey) : undefined}
@@ -472,6 +472,7 @@
     />
     {#if finder.text}
       <button
+        data-slot="clear"
         class="clear"
         aria-label="Clear the words"
         onclick={clear}
@@ -485,6 +486,7 @@
 
 {#snippet whoChips()}
   <div
+    data-slot="chips"
     class={["chips", { phone }]}
     data-flip
     role="toolbar"
@@ -528,13 +530,13 @@
       >
     {/if}
     {#if finder.searching}
-      <span class="searching mark-line" aria-hidden="true"
+      <span data-slot="searching" class="searching mark-line" aria-hidden="true"
         ><span>Searching {machines(finder.askable)}…</span><Spinner
           class="spin"
         /></span
       >
     {:else if finder.coverage?.asked && !short}
-      <span class="covered"
+      <span data-slot="covered" class="covered"
         >{machineCount === 1
           ? "The machine answered"
           : `All ${machineCount} machines answered`}</span
@@ -562,7 +564,7 @@
       )}
     />
   {:else if item.t === "peek"}
-    <div class="peek-slot" data-flip>
+    <div data-slot="peek-slot" class="peek-slot" data-flip>
       <FindPeek
         id={`${idOf(item.row)}-peek`}
         {activeKey}
@@ -594,6 +596,7 @@
     {@const row = stopKey(item.result)}
     <!-- biome-ignore lint/a11y/useSemanticElements: an option group inside a listbox (WAI-ARIA listbox); a fieldset groups form controls, not options -->
     <div
+      data-slot="acts"
       class="acts"
       aria-label={`${item.result.title}, what to do`}
       data-flip
@@ -623,6 +626,7 @@
     {@const open = finder.unfolded.has(item.key)}
     {@const count = item.entry.results.length}
     <button
+      data-slot="fold-row"
       id={idOf(item.key)}
       class={["fold-row mark-line", { phone }]}
       aria-label={`${count} ${kindNoun(first, count)} match “${finder.asked}”, ${open ? "shown" : "folded"}`}
@@ -638,7 +642,7 @@
     >
       <Glyph class="fold-glyph" aria-hidden="true" />
       <span class="fold-label"
-        ><span class="num">{count}</span>
+        ><span data-slot="num" class="num">{count}</span>
         {kindNoun(first, count)} match “{finder.asked}”</span
       >
       <ChevronRight
@@ -663,22 +667,27 @@
     >
       <NeedsYou class="waiting-glyph" aria-hidden="true" data-box />
       <span class="waiting-label"
-        >Waiting for you<span class="sep">·</span><span class="num"
-          >{waitingCount}</span
+        >Waiting for you<span class="sep">·</span><span
+          data-slot="num"
+          class="num">{waitingCount}</span
         ></span
       >
       <ChevronRight class="fold-chev" aria-hidden="true" data-box />
     </button>
   {:else if item.t === "head"}
-    <div class="head" data-flip role="presentation">{item.label}</div>
+    <div data-slot="head" class="head" data-flip role="presentation">
+      {item.label}
+    </div>
   {:else if item.t === "chips"}
     {@render whoChips()}
   {:else if item.t === "coverage"}
-    <div class="coverage" data-flip>
+    <div data-slot="coverage" class="coverage" data-flip>
       {#if finder.missing.length > 0}
-        <span class="num">{answered} of {machines(machineCount)}</span><span
-          class="sep">·</span
-        >{missingNames} didn't<span class="sep">·</span>
+        <span data-slot="num" class="num"
+          >{answered} of {machines(machineCount)}</span
+        ><span class="sep">·</span>{missingNames} didn't<span class="sep"
+          >·</span
+        >
       {/if}
       {#if finder.indexing.length > 0}
         {indexingNames}
@@ -694,11 +703,16 @@
     <hr class="rule" data-flip />
   {:else if item.t === "skeleton"}
     <div class="skeleton-slot" aria-hidden="true" data-flip>
-      <Skeleton class={item.tall ? "skeleton-row tall" : "skeleton-row"} />
+      <Skeleton
+        data-tall={item.tall || undefined}
+        class={item.tall ? "skeleton-row tall" : "skeleton-row"}
+      />
     </div>
   {:else if item.t === "nothing"}
-    <div class="nothing" data-flip>
-      <p class="nothing-line">No sessions for “{finder.text.trim()}”</p>
+    <div data-slot="nothing" class="nothing" data-flip>
+      <p data-slot="nothing-line" class="nothing-line">
+        No sessions for “{finder.text.trim()}”
+      </p>
       <button class="link" onclick={clear} type="button"
         >Open today's sessions</button
       >
@@ -708,6 +722,7 @@
 
 {#snippet findList()}
   <div
+    data-slot="list"
     bind:this={list}
     id={listId}
     class={["list kit-edge-fade-block", { phone }]}
@@ -734,6 +749,7 @@
          stands between them on .mark-text, its x-height on their middle. -->
     <span class="waiting-title mark-text"
       >Waiting for you{#if waitingCount > 0}<span class="sep">·</span><span
+          data-slot="num"
           class="num">{waitingCount}</span
         >{/if}</span
     >
@@ -750,6 +766,7 @@
     />
   </div>
   <div
+    data-slot="list"
     bind:this={list}
     id={listId}
     class={["list kit-edge-fade-block", { phone }]}
@@ -759,8 +776,10 @@
     {@attach highlight({ rows: "[data-find-row]", hovered: "data-active" })}
   >
     {#if finder.waiting.state === "ok" && waitingCount === 0}
-      <div class="nothing" data-flip>
-        <p class="nothing-line">Nothing waits for you</p>
+      <div data-slot="nothing" class="nothing" data-flip>
+        <p data-slot="nothing-line" class="nothing-line">
+          Nothing waits for you
+        </p>
         <button class="link" onclick={() => finder.showFind()} type="button"
           >Open today's sessions</button
         >
@@ -793,7 +812,7 @@
   {#if !phone}
     {@render field_()}
   {/if}
-  <div class="body">
+  <div data-slot="body" class="body">
     {#if finder.hubDown || finder.refused}
       <div class="fault" role="alert">
         {#if finder.hubDown}
@@ -820,7 +839,7 @@
   {#if phone}
     {@render field_()}
   {:else}
-    <div class="hints" aria-hidden="true">
+    <div data-slot="hints" class="hints" aria-hidden="true">
       {#if finder.view === "waiting"}
         <span><kbd>↵</kbd> open</span><span><kbd>←</kbd> back</span><span
           ><kbd>esc</kbd></span

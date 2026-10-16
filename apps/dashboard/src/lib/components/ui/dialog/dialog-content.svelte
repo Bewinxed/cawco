@@ -54,6 +54,7 @@
     {#snippet child({ props, open })}
       <div {...props} style:pointer-events={pressable(open)}>
         <div
+          data-slot="grid"
           class={cn(
             "kit-dialog-body relative grid gap-6 text-body text-foreground",
             bodyClass

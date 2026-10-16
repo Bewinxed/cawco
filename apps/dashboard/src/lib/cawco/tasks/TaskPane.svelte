@@ -381,8 +381,8 @@
 
 {#snippet content()}
   <div class="task-frame" data-task-pane={taskId}>
-    <header class="head">
-      <div class="meta">
+    <header data-slot="head" class="head">
+      <div data-slot="meta" class="meta">
         {#if shown}
           <Select.Root
             disabled={moving}
@@ -465,7 +465,7 @@
           />
         </form>
       {:else}
-        <h2 class="title">
+        <h2 data-slot="title" class="title">
           <button
             class="title-button press-tint focus-inset"
             disabled={!shown}
@@ -481,7 +481,7 @@
       {/if}
       <RowFault again={saveTitle} reason={titleProblem} />
       {#if decided}
-        <p class="decided">
+        <p data-slot="decided" class="decided">
           Decided on <a href={decided.href}
             >{decided.question
               ? `${decided.page} › ${decided.question}`
@@ -519,7 +519,7 @@
         </AlertDescription>
       </Alert>
     {:else if !shown}
-      <div aria-hidden="true" class="skeleton">
+      <div data-slot="task-pane-skeleton" aria-hidden="true" class="skeleton">
         <Skeleton class="h-24 w-full rounded-[var(--radius-md)]" />
         <Skeleton class="mt-2 h-4 w-1/3" />
         <Skeleton class="h-3.5 w-full" />
@@ -535,7 +535,7 @@
         task={shown}
       />
     {:else}
-      <div class="task-body">
+      <div data-slot="task-body" class="task-body">
         <TaskNeeds
           ended={false}
           onchanged={took}
@@ -624,15 +624,18 @@
             <h3 class="kit-section-head">
               Sessions
               {#if shown.attempts.length > 0}
-                <span class="count num">{shown.attempts.length}</span>
+                <span data-num data-slot="count" class="count num"
+                  >{shown.attempts.length}</span
+                >
               {/if}
             </h3>
             <RowFault reason={flags.startProblem} />
-            <ol class="sessions">
+            <ol data-slot="sessions" class="sessions">
               {#each shown.attempts as attempt (attempt.workItemId)}
                 {@const word = attemptWord(attempt.state)}
                 <li>
                   <a
+                    data-slot="session"
                     class="session mark-line press-tint focus-inset"
                     href={rowHref(attempt.instanceId)}
                     onclick={(event) => {
@@ -693,7 +696,7 @@
 
 {#if page}
   <section aria-label="Task {taskId}" class="task-page">
-    <header class="page-head">
+    <header data-slot="page-head" class="page-head">
       <Button onclick={onclose} size="sm" variant="ghost">
         <IconChevronLeft />
         <span>{backLabel}</span>

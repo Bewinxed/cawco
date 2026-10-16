@@ -39,15 +39,17 @@
 </script>
 
 <article
+  data-slot="notice"
   aria-label={label}
   class={["notice", nested && "nested"]}
   data-flip="box"
 >
-  <span class="lead">{@render lead()}</span>
-  <div class="body">{@render children()}</div>
+  <span data-slot="lead" class="lead">{@render lead()}</span>
+  <div data-slot="body" class="body">{@render children()}</div>
   {#if ondismiss}
-    <span class="end">
+    <span data-slot="end" class="end">
       <button
+        data-slot="x"
         aria-label={dismissLabel}
         class="x touch-hit pointer-hit"
         onclick={ondismiss}

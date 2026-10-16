@@ -147,7 +147,7 @@
                   {verb}
                 {/snippet}
                 <div class="panel">
-                  <p class="title">{name}</p>
+                  <p data-slot="title" class="title">{name}</p>
                   {#if flow?.kind === "paste"}
                     <SigninPanel
                       expected={account.email}
@@ -187,7 +187,7 @@
           </span>
         </span>
         {#if refusals.get(machine.machineId)}
-          <p class="refused" data-flip role="alert">
+          <p data-slot="refused" class="refused" data-flip role="alert">
             {refusals.get(machine.machineId)}
           </p>
         {/if}

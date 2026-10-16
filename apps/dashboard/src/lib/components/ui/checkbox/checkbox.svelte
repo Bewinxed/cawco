@@ -35,6 +35,7 @@
 >
   {#snippet children({ checked, indeterminate })}
     <div
+      data-grid
       class="[&>svg]:size-3 grid place-content-center text-current transition-none"
       data-slot="checkbox-indicator"
     >

@@ -61,7 +61,7 @@
 <svelte:head><title>Caw bench · CawCo</title></svelte:head>
 
 <main>
-  <div class="stage">
+  <div data-slot="stage" class="stage">
     {#if mounted}
       {#key generation}
         <Caw
@@ -78,7 +78,7 @@
       {/key}
     {/if}
   </div>
-  <div class="controls">
+  <div data-slot="controls" class="controls">
     {#each STATUSES as s (s)}
       <button
         onclick={() => (mounted ? bench.change(s) : bench.mount(s))}

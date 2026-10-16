@@ -118,10 +118,11 @@
 <section
   aria-label="Home"
   class="home {variant}"
+  data-home-variant={variant}
   data-flip={variant === "rail" && !relaying ? "box" : undefined}
   {@attach reflow()}
 >
-  <div class="top" class:bare={bare || machinesThere !== null}>
+  <div data-slot="top" class="top" class:bare={bare || machinesThere !== null}>
     <!-- The line every other line on this screen is believed by; live and
          read, it says nothing and takes no room. -->
     <StatusLine />
@@ -152,7 +153,7 @@
     {/if}
 
     {#if machinesThere}
-      <div class="machines" data-flip>
+      <div data-slot="machines" class="machines" data-flip>
         <MachinesEmpty
           fleet={machinesThere}
           ongone={() => {
@@ -199,7 +200,7 @@
   {#if variant === "page" && !noFleet && !machineless}
     <!-- The phone's thumb reaches the bottom; Start session lives there,
          while a machine is online to start one on. -->
-    <div class="dock" data-safe-bottom>
+    <div data-slot="dock" class="dock" data-safe-bottom>
       <Button class="w-full" onclick={() => newSession()} size="lg">
         <IconPlus />
         <span>Start session</span>

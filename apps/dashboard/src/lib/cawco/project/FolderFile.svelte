@@ -82,7 +82,7 @@
     {:else if markdown}
       <Markdown source={content} />
     {:else}
-      <pre class="text">{content}</pre>
+      <pre data-slot="text" class="text">{content}</pre>
     {/if}
   </div>
 </SideSurface>

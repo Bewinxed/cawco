@@ -295,7 +295,7 @@
   {ready}
   title={section.label}
 >
-  <div class="group">
+  <div data-slot="group" class="group">
     <SectionHeader hue={HUE} icon={IconGlobe} label="OpenRouter">
       {#snippet right()}
         {#if openrouter?.connected}
@@ -321,16 +321,17 @@
         {/if}
       {/snippet}
     </SectionHeader>
-    <p class="note">
+    <p data-slot="note" class="note">
       One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
       class="morph"
       style:block-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
     >
-      <div class="stack" bind:clientHeight={openrouterHeight}>
+      <div data-slot="stack" class="stack" bind:clientHeight={openrouterHeight}>
         {#key phase}
           <p
+            data-slot="num"
             aria-live="polite"
             class="status num mark-line"
             data-tone={phase === "connected" ? "ok" : "off"}
@@ -346,7 +347,12 @@
             }}
           >
             {#if phase === "exchanging"}
-              <span aria-hidden="true" class="dot pulse" data-box></span>
+              <span
+                data-slot="dot"
+                aria-hidden="true"
+                class="dot pulse"
+                data-box
+              ></span>
               <span>Finishing the connection with OpenRouter…</span>
             {:else if phase === "connected" && openrouter?.connectedAt}
               <svg aria-hidden="true" class="check" viewBox="0 0 20 20">
@@ -359,7 +365,8 @@
                 )}</span
               >
             {:else}
-              <span aria-hidden="true" class="dot" data-box></span>
+              <span data-slot="dot" aria-hidden="true" class="dot" data-box
+              ></span>
               <span>Not connected</span>
             {/if}
           </p>
@@ -371,10 +378,10 @@
     {/if}
   </div>
 
-  <form class="group" data-group="jev" onsubmit={saveKey}>
+  <form data-slot="group" class="group" data-group="jev" onsubmit={saveKey}>
     <SectionHeader hue={HUE} icon={IconJev} label="Jev">
       {#snippet right()}
-        <div class="actions">
+        <div data-slot="actions" class="actions">
           {#if jev?.typesafe}
             <Button
               disabled={savingKey}
@@ -398,7 +405,7 @@
         </div>
       {/snippet}
     </SectionHeader>
-    <p class="note">
+    <p data-slot="note" class="note">
       Answers the hub's yes/no questions: meaning rules, fleet watch,
       suggestions and its own judgments. It goes straight to TypeSafe while a
       key is held here, otherwise through OpenRouter.
@@ -409,7 +416,7 @@
       data-testid="jev-route"
       data-tone={jev?.route ? "ok" : "off"}
     >
-      <span aria-hidden="true" class="dot" data-box></span>
+      <span data-slot="dot" aria-hidden="true" class="dot" data-box></span>
       <span>{routeLine}</span>
     </p>
     <Field id="typesafe-key" label="TypeSafe key">
@@ -427,9 +434,10 @@
       class="morph"
       style:block-size={keyHeight ? `${keyHeight}px` : undefined}
     >
-      <div class="stack" bind:clientHeight={keyHeight}>
+      <div data-slot="stack" class="stack" bind:clientHeight={keyHeight}>
         {#key keyPhase}
           <p
+            data-slot="num"
             aria-live="polite"
             class="status num mark-line"
             data-testid="typesafe-key-state"
@@ -452,7 +460,8 @@
               </svg>
               <span>Held, ends …{jev.typesafe.ends}</span>
             {:else}
-              <span aria-hidden="true" class="dot" data-box></span>
+              <span data-slot="dot" aria-hidden="true" class="dot" data-box
+              ></span>
               <span>Not set</span>
             {/if}
           </p>
@@ -474,9 +483,9 @@
     {/if}
   </form>
 
-  <div class="group">
+  <div data-slot="group" class="group">
     <SectionHeader hue={HUE} icon={IconRules} label="Fleet watch" />
-    <p class="note">
+    <p data-slot="note" class="note">
       Reads every session's stream for a loop or a stall. A yes from Jev, or a
       second signal while Jev is off, starts one triage that tells the session's
       lead. In a project whose Caw is off, it tells you instead.
@@ -492,7 +501,7 @@
       onchange={setWatch}
     />
     {#if watch}
-      <ul class="facts num">
+      <ul data-slot="num" class="facts num">
         <li>
           Same error {watch.limits.sameError} times in
           {watch.limits.errorTurns}

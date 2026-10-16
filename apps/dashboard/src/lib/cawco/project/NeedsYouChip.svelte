@@ -25,6 +25,7 @@
 </script>
 
 <button
+  data-slot="needs"
   aria-pressed={on}
   class={["needs mark-line pressable", className]}
   onclick={ontoggle}
@@ -34,7 +35,7 @@
 >
   <IconNeedsYou aria-hidden="true" />
   <span>Needs you</span>
-  <span class="num">{count}</span>
+  <span data-slot="num" class="num">{count}</span>
 </button>
 
 <style>

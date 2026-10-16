@@ -42,6 +42,7 @@
 </script>
 
 <button
+  data-slot="caw-seat"
   aria-expanded={lead.open}
   aria-haspopup="dialog"
   aria-label="Caw, lead of {projectName}. {lead.sentence}"

@@ -28,7 +28,7 @@
   {#each under(parentId) as item (item.id)}
     {@const kids = under(item.id)}
     <li data-item={item.id}>
-      <div class="row mark-line">
+      <div data-slot="row" class="row mark-line">
         {#if item.lead.kind === "session"}
           <SessionMark
             caw={item.lead.caw ?? null}
@@ -38,15 +38,15 @@
             status={item.lead.status ?? "idle"}
           />
         {:else if item.lead.kind === "machine"}
-          <span class="lead" data-box
+          <span data-slot="lead" class="lead" data-box
             ><OsMark class="size-4" os={item.lead.os} /></span
           >
         {:else}
-          <span class="lead" data-box
+          <span data-slot="lead" class="lead" data-box
             ><item.lead.icon aria-hidden="true" /></span
           >
         {/if}
-        <span class="title">{item.title}</span>
+        <span data-slot="title" class="title">{item.title}</span>
         {#if item.status}
           <span class="status">{item.status}</span>
         {/if}
@@ -60,7 +60,7 @@
   {/each}
 {/snippet}
 
-<ul aria-label={label} class="reach" {@attach echoBeat()}>
+<ul data-slot="reach" aria-label={label} class="reach" {@attach echoBeat()}>
   {@render branch(null)}
 </ul>
 

@@ -71,6 +71,7 @@
 {#snippet row(pin: Pin)}
   <li>
     <button
+      data-slot="pin-row"
       aria-current={pin.id === focused || undefined}
       class="pin-row"
       data-pin-row={pin.number}
@@ -78,21 +79,25 @@
       type="button"
     >
       <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
-      <span class="words">
-        <span class="name">{pinName(pin)}</span>
+      <span data-slot="words" class="words">
+        <span data-slot="name" class="name">{pinName(pin)}</span>
         <span class="last">{lastLine(pin)}</span>
       </span>
       {#if live.has(pin.id)}
-        <span aria-label="The agent is working on it" class="live" role="img"
+        <span
+          data-slot="live"
+          aria-label="The agent is working on it"
+          class="live"
+          role="img"
         ></span>
       {/if}
     </button>
   </li>
 {/snippet}
 
-<section aria-label="Comments" class="pin-list">
-  <header class="head">
-    <h2 class="title">Comments</h2>
+<section data-slot="pin-list" aria-label="Comments" class="pin-list">
+  <header data-slot="head" class="head">
+    <h2 data-slot="title" class="title">Comments</h2>
     <Button
       aria-label="Close comments"
       icon={IconClose}
@@ -124,25 +129,29 @@
         {/each}
       </ul>
     {:else if filter === "open"}
-      <p class="empty">
+      <p data-slot="pin-list-empty" class="empty">
         <span class="empty-title">No open comments</span>
         Choose Comment, then click the page to pin one.
       </p>
     {:else}
-      <p class="empty">
+      <p data-slot="pin-list-empty" class="empty">
         <span class="empty-title">No resolved comments</span>
         A pin you resolve leaves the page and waits here.
       </p>
     {/if}
     {#if moved.length > 0}
-      <section aria-label="Moved" class="moved">
+      <section data-slot="moved" aria-label="Moved" class="moved">
         <p class="moved-head mark-line"><IconMapPoint /><span>Moved</span></p>
         <ul class="rows">
           {#each moved as pin (pin.id)}
-            <li class="moved-row" data-moved-row={pin.number}>
+            <li
+              data-slot="moved-row"
+              class="moved-row"
+              data-moved-row={pin.number}
+            >
               <PinDisc moved number={pin.number} />
-              <span class="words">
-                <span class="name">{pinName(pin)}</span>
+              <span data-slot="words" class="words">
+                <span data-slot="name" class="name">{pinName(pin)}</span>
                 <span class="last">Its element is gone from the page</span>
               </span>
               <Button

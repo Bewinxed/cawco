@@ -96,10 +96,15 @@
 
 <!-- Its height moves with its steps as one opens or folds its result
      (`morph` on the rows' clock), so the chat under it never jumps. -->
-<div class="run-block rail-row" data-nest-host {@attach morph({ rows: true })}>
+<div
+  data-slot="rail-row"
+  class="run-block rail-row"
+  data-nest-host
+  {@attach morph({ rows: true })}
+>
   {#snippet words()}
-    <span class="name">{name}</span>
-    <span class="num progress" {@attach clock.watch}
+    <span data-slot="name" class="name">{name}</span>
+    <span data-slot="num" class="num progress" {@attach clock.watch}
       >{progress.steps}{#if progress.took}<span role="timer"
           >{progress.steps ? " · " : ""}{progress.took}</span
         >{/if}</span
@@ -107,22 +112,27 @@
   {/snippet}
   <!-- The glyph stands before the link, in its own cell: the steps' line
        leaves its foot outside any control. -->
-  <div class="head rail-line">
-    <span class="mark rail-cell"
+  <div data-slot="head" class="head rail-line">
+    <span data-rail-cell data-slot="mark" class="mark rail-cell"
       >{#if runId}
         <SessionStatus compact sessionId={runTabId(runId)} />
       {/if}</span
     >
     {#if runId && !here}
-      <a class="words mark-line press-tint" data-box href={runHref(runId)}
-        >{@render words()}</a
+      <a
+        data-slot="words"
+        class="words mark-line press-tint"
+        data-box
+        href={runHref(runId)}>{@render words()}</a
       >
     {:else}
-      <p class="words mark-line" data-box>{@render words()}</p>
+      <p data-slot="words" class="words mark-line" data-box>
+        {@render words()}
+      </p>
     {/if}
   </div>
   {#if failure}
-    <p class="failure rail-hang">{failure}</p>
+    <p data-slot="failure" class="failure rail-hang">{failure}</p>
   {/if}
   <!-- The steps come from the run's detail, read once if it isn't yet
        (RunSteps), whether or not the run's row is still on the board. -->

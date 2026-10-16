@@ -87,7 +87,10 @@
   });
 </script>
 
-<article class={["wf-node", { map: node.kind === "map", selected }]}>
+<article
+  data-workflow-node-card-selected={selected || undefined}
+  class={["wf-node", { map: node.kind === "map", selected }]}
+>
   {#if node.kind !== "start"}
     <Handle
       aria-label="Input for {title}"
@@ -97,17 +100,21 @@
     />
   {/if}
   <header class="mark-line">
-    <span class="glyph" class:filled={modelled} data-box
+    <span data-slot="glyph" class="glyph" class:filled={modelled} data-box
       ><Glyph aria-hidden="true" class="size-4" /></span
     ><strong>{title}</strong>
   </header>
-  <div class="body">
+  <div data-slot="body" class="body">
     {#if node.kind === "step"}
-      <p class="meta">{node.harness} · {node.model || "Choose a model"}</p>
+      <p data-slot="meta" class="meta">
+        {node.harness} · {node.model || "Choose a model"}
+      </p>
     {/if}
     <p class="summary">{summary}</p>
     {#if node.kind === "map"}
-      <p class="group">{node.body.nodes.length} nodes in body</p>
+      <p data-slot="group" class="group">
+        {node.body.nodes.length} nodes in body
+      </p>
     {/if}
     {#if data.problem}
       <div class="problem">

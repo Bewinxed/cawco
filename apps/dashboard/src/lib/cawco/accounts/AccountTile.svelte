@@ -15,6 +15,7 @@
 </script>
 
 <span
+  data-slot="tile"
   aria-hidden="true"
   class="tile"
   style:--c={hueVar(hue)}

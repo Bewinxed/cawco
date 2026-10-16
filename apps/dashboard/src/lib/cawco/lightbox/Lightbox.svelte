@@ -277,7 +277,7 @@
           {/snippet}
         </Tip>
       </header>
-      <div class="doc-body">
+      <div data-slot="doc-body" class="doc-body">
         {#if extension === "md" || extension === "markdown"}
           <!-- The markdown loads when a document needs it: an artifact's own
                tab mounts the lightbox and seldom opens a document. -->

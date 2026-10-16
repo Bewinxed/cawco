@@ -18,6 +18,7 @@
 </script>
 
 <span
+  data-slot="mark"
   aria-hidden="true"
   class={["mark", mono && "mono"]}
   data-box

@@ -82,6 +82,7 @@
   {@attach highlight({ rows: "[data-fh]" })}
 >
   <span
+    data-slot="fill"
     aria-hidden="true"
     class="fill"
     style={`transform:translateY(calc(${index} * (var(--row-h) + 2px)));opacity:${rows.some((row) => row.value === value) ? 1 : 0}`}
@@ -91,6 +92,7 @@
     {@const on = row.value === value}
     <!-- biome-ignore lint/a11y/useSemanticElements: the permission rows are designed tiles with a sliding fill; a native radio cannot render them -->
     <button
+      data-slot="row"
       aria-checked={on}
       aria-describedby={row.reason
         ? `${uid}-perm-${row.value}-reason`
@@ -104,9 +106,11 @@
       style={`--delay:${i * 35}ms`}
       type="button"
     >
-      <span class="ns-tile tile" style={`color:${row.hue}`}><Icon /></span>
-      <span class="text">
-        <span class="name">{row.name}</span>
+      <span data-slot="tile" class="ns-tile tile" style={`color:${row.hue}`}
+        ><Icon /></span
+      >
+      <span data-slot="text" class="text">
+        <span data-slot="name" class="name">{row.name}</span>
         <span class="desc">{row.desc}</span>
       </span>
       <!-- Every row keeps the check's slot, so the rows share one width

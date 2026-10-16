@@ -91,11 +91,18 @@
          one cell: when the hits move, the new marks cross-fade over the old
          over --dur-control while the words stay put. -->
     <div
+      data-slot="grid"
       class="preview relative grid max-h-40 overflow-y-auto rounded-[var(--radius-sm)] bg-background font-mono text-label leading-relaxed"
     >
-      <p class="layer">{sample}</p>
+      <p data-slot="layer" class="layer">{sample}</p>
       {#key marked}
-        <p aria-hidden="true" class="layer marks" in:crossIn out:crossOut>
+        <p
+          data-slot="layer"
+          aria-hidden="true"
+          class="layer marks"
+          in:crossIn
+          out:crossOut
+        >
           {#each segments as segment, index (index)}
             {#if segment.hit}
               <mark class="rounded-[var(--radius-xs)] bg-success/25"

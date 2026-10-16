@@ -356,6 +356,7 @@
   <Popover.Root bind:open>
     {#key generation}
       <HangCard
+        data-caw-pop
         align="end"
         anchor={glass}
         aria-label="Needs you"
@@ -383,7 +384,7 @@
 
 {#if !framed}
   <main>
-    <div class="controls">
+    <div data-slot="controls" class="controls">
       <h1>Caw's notices</h1>
       <div class="switch">
         <span>Fixture</span>

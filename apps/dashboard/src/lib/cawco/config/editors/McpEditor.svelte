@@ -284,11 +284,11 @@
       <p class="problem" in:appear>{nameProblem}</p>
     {:else if server && serverName.trim() !== "" && serverName.trim() !== server.name}
       <!-- Said before Save, where the name is changed: that is its consequence. -->
-      <p class="note" in:appear>
+      <p data-slot="note" class="note" in:appear>
         A new name makes a new server; {server.name} stays as it is.
       </p>
     {:else}
-      <p class="note">
+      <p data-slot="note" class="note">
         What sessions call its tools —
         <span class="font-mono">mcp__{serverName || "name"}__…</span>. New
         sessions pick it up; a running session keeps the servers it started
@@ -322,10 +322,14 @@
     <!-- One kind's note and fields cross-fade into the next's
          (--dur-control) in one box, whose height follows over --dur-pop on
          --ease-drawer. -->
-    <div class="kind" {@attach morph({ ms: dur("--dur-pop") })}>
+    <div
+      data-slot="kind"
+      class="kind"
+      {@attach morph({ ms: dur("--dur-pop") })}
+    >
       {#if mode === "bunx"}
-        <div class="fold" in:crossIn out:crossOut>
-          <p class="note">{HOW.bunx}</p>
+        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
+          <p data-slot="note" class="note">{HOW.bunx}</p>
           <Field id="mcp-package" label="Package">
             <Input
               autocomplete="off"
@@ -353,8 +357,8 @@
           </Field>
         </div>
       {:else if mode === "command"}
-        <div class="fold" in:crossIn out:crossOut>
-          <p class="note">{HOW.command}</p>
+        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
+          <p data-slot="note" class="note">{HOW.command}</p>
           <Field id="mcp-command" label="Command">
             <Input
               autocomplete="off"
@@ -381,8 +385,8 @@
           </Field>
         </div>
       {:else}
-        <div class="fold" in:crossIn out:crossOut>
-          <p class="note">{HOW.remote}</p>
+        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
+          <p data-slot="note" class="note">{HOW.remote}</p>
           <Field id="mcp-url" label="URL">
             <Input
               autocomplete="off"
@@ -418,12 +422,16 @@
         icon={IconKey}
         label={mode === "remote" ? "Headers" : "Environment"}
       >
-        <p class="note">
+        <p data-slot="note" class="note">
           <span class="font-mono">&#36;&#123;VAR&#125;</span>
           is expanded on each machine, from that machine's own environment — secrets
           never pass through the hub.
         </p>
-        <div class="kind" {@attach morph({ ms: dur("--dur-pop") })}>
+        <div
+          data-slot="kind"
+          class="kind"
+          {@attach morph({ ms: dur("--dur-pop") })}
+        >
           {#if mode === "remote"}
             <div in:crossIn out:crossOut>
               <KeyValueRows
@@ -449,7 +457,7 @@
   {/if}
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p class="note">
+    <p data-slot="note" class="note">
       Every machine in the fleet unless you narrow it to one project. A
       project's server reaches each of its checkouts and delegate workspaces.
     </p>

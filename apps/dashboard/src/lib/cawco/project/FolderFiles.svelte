@@ -29,7 +29,7 @@
         type="button"
       >
         <IconDocument class="icon" />
-        <bdi class="path">{path}</bdi>
+        <bdi data-slot="path" class="path">{path}</bdi>
       </button>
     </li>
   {/each}

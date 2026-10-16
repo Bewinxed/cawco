@@ -248,10 +248,10 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="proof" data-head-tint onclickcapture={benchClick}>
   <PaneTabs {leaf} />
-  <div class="stack">
+  <div data-slot="stack" class="stack">
     {#each ids as id (id)}
       {@const shown = leaf.active === id}
-      <div class="slot" data-pane={id} class:hidden={!shown}>
+      <div data-slot="slot" class="slot" data-pane={id} class:hidden={!shown}>
         <SessionPane
           active={shown}
           browsing={null}

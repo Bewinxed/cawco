@@ -613,7 +613,12 @@
 {#snippet header(group: Group, style: string)}
   {@const finished = shown === "finished" ? finishedOn(group.machineId) : []}
   <!-- Where these run, said once for the rows under it. -->
-  <h3 class="machine mark-line" data-key="head:{group.machineId}" {style}>
+  <h3
+    data-slot="machine"
+    class="machine mark-line"
+    data-key="head:{group.machineId}"
+    {style}
+  >
     <OsMark class="size-3.5" os={group.os} />
     <span>{group.name}</span>
     {#if finished.length > 0}
@@ -661,12 +666,16 @@
   {@const older = olderOf(line.tab, line.key)}
   <!-- The row's nesting line is this item's own (app.css .kit-nest): it
        leaves on the row's exit, in the row's frames (`--leave`). -->
-  <li class="tree-node" style={leaveLine(line.key)}>
-    <div class="tree-line" style={leaveAnim(line.key)}>
+  <li data-slot="tree-node" class="tree-node" style={leaveLine(line.key)}>
+    <div data-slot="tree-line" class="tree-line" style={leaveAnim(line.key)}>
       {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
     </div>
     {#if kids.length > 0}
-      <ul class="kit-nest tree-branch" {@attach nestFrom(".tree-mark")}>
+      <ul
+        data-slot="tree-branch"
+        class="kit-nest tree-branch"
+        {@attach nestFrom(".tree-mark")}
+      >
         {#each kids as kid (kid.key)}
           {@render leavingTree(kid, lines)}
         {/each}
@@ -690,6 +699,7 @@
 {#snippet leaving(lines: Line[], layer: boolean)}
   {@const keys = new Set(lines.map((line) => line.key))}
   <div
+    data-layer={layer || undefined}
     aria-hidden="true"
     class={layer ? "leaving layer" : "leaving"}
     data-leaving
@@ -710,10 +720,11 @@
     class="work"
     data-flip={plan ? undefined : "box"}
   >
-    <div class="head">
+    <div data-slot="head" class="head">
       <!-- The session tabs' folder tabs, hosted: no shelf, the chosen
            sheet the only mark, the section's seam under the row. -->
       <Tabs
+        data-work-tabs
         boxes={(page.data as { foldBoxes?: Record<string, FoldMeasure> })
           .foldBoxes}
         class="work-tabs"
@@ -731,6 +742,8 @@
                 {#if !waiting}
                   {#key count}
                     <span
+                      data-num
+                      data-slot="count"
                       class="num count"
                       data-failed={(tab.id === "finished" && finishedFailed) ||
                         undefined}
@@ -791,6 +804,7 @@
            move, never through nothing. -->
       <div class="panel" in:crossIn>
         <div
+          data-slot="list"
           class="list"
           bind:this={listEl}
           {@attach reflow()}
@@ -802,6 +816,7 @@
           {#each drawn as entry (entry.group.machineId)}
             {@const id = entry.group.machineId}
             <div
+              data-slot="group"
               class="group"
               data-flip={plan ? undefined : "box"}
               data-kind={entry.kind}
@@ -846,6 +861,7 @@
                 <!-- A line of the list like the rows above it (`data-flip`): when
                  a tree over it opens or folds, it slides with them. -->
                 <button
+                  data-slot="more"
                   class="more focus-inset touch-hit press-tint"
                   data-flip={plan ? undefined : ""}
                   data-key={moreKey(id)}
@@ -861,6 +877,7 @@
                 </button>
               {:else if plan?.more.get(id)}
                 <span
+                  data-slot="more"
                   aria-hidden="true"
                   class="more"
                   style={leaveAnim(moreKey(id))}>{plan.more.get(id)}</span

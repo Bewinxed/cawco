@@ -102,7 +102,7 @@
 <div class="bench" class:phone>
   {#if !phone}
     <header class="bar">
-      <span class="title">Finder bench</span>
+      <span data-slot="title" class="title">Finder bench</span>
       <button
         class="jump"
         data-jump
@@ -120,7 +120,7 @@
         <li class="sent-line">{text}</li>
       {/each}
     </ol>
-    <div class="composer" data-composer>
+    <div data-slot="composer" class="composer" data-composer>
       <MentionField
         bind:this={mentionField}
         bind:editor
@@ -128,9 +128,10 @@
         onsubmit={send}
         {phone}
       />
-      <div class="controls">
+      <div data-slot="controls" class="controls">
         <button class="attach" type="button">Attach</button>
         <button
+          data-slot="send"
           class="send"
           data-send
           onclick={() => send(message)}
@@ -147,7 +148,7 @@
 
   {#if open}
     {#if phone}
-      <div class="sheet" data-finder-card>
+      <div data-slot="sheet" class="sheet" data-finder-card>
         <div class="grabber" aria-hidden="true"></div>
         <Finder
           bind:field
@@ -161,6 +162,7 @@
       </div>
     {:else}
       <div
+        data-slot="finder-page-card"
         class="card"
         data-finder-card
         role="dialog"

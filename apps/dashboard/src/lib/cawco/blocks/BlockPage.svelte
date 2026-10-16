@@ -262,8 +262,14 @@
   {@const only = places[0]?.block ?? ""}
   {@render items[only]?.content(only)}
 {:else}
-  <div class="block-page" data-columns={columns} data-page={page}>
+  <div
+    data-slot="block-page"
+    class="block-page"
+    data-columns={columns}
+    data-page={page}
+  >
     <div
+      data-slot="blocks"
       bind:this={grid}
       bind:clientWidth={gridWidth}
       class="blocks"
@@ -300,7 +306,7 @@
     {#if hidden.length > 0 || refused}
       <div class="page-end">
         {#if refused}
-          <p class="refused" role="status">{refused}</p>
+          <p data-slot="refused" class="refused" role="status">{refused}</p>
         {/if}
         {#if hidden.length > 0}
           <DropdownMenu.Root>
@@ -310,7 +316,10 @@
                 size: 'sm',
               })} mark-line touch-hit"
             >
-              <span>Hidden <span class="num">{hidden.length}</span></span>
+              <span
+                >Hidden <span data-slot="num" class="num">{hidden.length}</span
+                ></span
+              >
               <IconChevronDown />
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" class="w-auto min-w-48">

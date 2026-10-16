@@ -11,11 +11,12 @@
 </script>
 
 <div
+  data-slot="decision-group"
   class="decision-group"
   style:block-size="{height}px"
   style:inline-size="{width}px"
 >
-  <span class="label">{group.name}</span>
+  <span data-slot="decision-group-label" class="label">{group.name}</span>
 </div>
 
 <style>

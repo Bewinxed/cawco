@@ -48,6 +48,8 @@
 
 <!-- Comes and goes as "Catching up…" does, which shares its dock. -->
 <div
+  data-floating={floating || undefined}
+  data-slot="behind"
   class={["behind", floating && "floating"]}
   role="status"
   in:rise={"--dur-panel"}
@@ -55,13 +57,13 @@
 >
   {#if reconnectingNow(fault)}
     <p>
-      <span class="name">{machine}</span>
+      <span data-slot="name" class="name">{machine}</span>
       is reconnecting. The rest comes in once it's back.
     </p>
   {:else if fault.reason === "offline"}
     <p>
-      Not caught up: <span class="name">{machine}</span> is offline. The rest comes
-      in once it's back.
+      Not caught up: <span data-slot="name" class="name">{machine}</span> is offline.
+      The rest comes in once it's back.
     </p>
   {:else}
     <p>Not caught up</p>

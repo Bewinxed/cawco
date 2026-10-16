@@ -124,6 +124,9 @@
 {#each [...stages.values()] as stage (stage.id)}
   <Portal>
     <div
+      data-standing={stage.at === "composer" || undefined}
+      data-canvas-stages-docked={stage.at === "panel" || undefined}
+      data-slot="canvas-stage"
       class="canvas-stage"
       data-artifact={stage.id}
       hidden
@@ -162,6 +165,7 @@
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -- a focusable separator is a widget (WAI-ARIA window splitter): it takes focus, arrows and a drag. -->
   <!-- biome-ignore lint/a11y/useSemanticElements: a resize handle is a focusable separator (WAI-ARIA window splitter); <hr> takes no focus or keys. -->
   <div
+    data-slot="grab"
     aria-label={LABELS[handle]}
     aria-orientation={handle === "top" ? "horizontal" : "vertical"}
     aria-valuemax={Math.round(value?.max ?? 0)}
@@ -171,6 +175,7 @@
       ? stage.grabValue.corner.text
       : undefined}
     class="grab grab-{handle}"
+    data-canvas-stages-grab={handle}
     onkeydown={(event) => stage.grab?.key(handle, event)}
     onpointerdown={(event) => stage.grab?.down(handle, event)}
     role="separator"

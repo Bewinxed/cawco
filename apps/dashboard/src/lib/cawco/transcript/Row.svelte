@@ -446,6 +446,7 @@
 </script>
 
 <div
+  data-slot="row"
   class={["row", { continues }]}
   data-drawn={drawn || undefined}
   data-marked={marked}

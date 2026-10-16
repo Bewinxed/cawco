@@ -29,16 +29,17 @@
   import { layerBlur, layerMask, PROGRESSIVE_BLUR } from "./progressive-blur";
 </script>
 
-<div aria-hidden="true" class="head-fade">
+<div data-slot="head-fade" aria-hidden="true" class="head-fade">
   {#each PROGRESSIVE_BLUR as layer, k (k)}
     <div
+      data-slot="layer"
       class="layer"
       style="-webkit-backdrop-filter: {layerBlur(
         layer
       )}; backdrop-filter: {layerBlur(layer)}; mask-image: {layerMask(layer)}"
     ></div>
   {/each}
-  <div class="layer tint"></div>
+  <div data-slot="layer" class="layer tint"></div>
 </div>
 
 <style>

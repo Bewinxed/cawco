@@ -99,7 +99,7 @@
     icon={IconLaptop}
     label="On each machine"
   />
-  <p class="note">
+  <p data-slot="note" class="note">
     What each machine really has, whoever put it there — read live, never
     stored. Anything the fleet does not manage can be adopted into it.
   </p>
@@ -108,18 +108,19 @@
        drops for a moment says "Offline" in the same place, so nothing under
        the list moves. It opens only while it is up; open, it can still close. -->
   {#if machines.length === 0}
-    <p class="note">
+    <p data-slot="note" class="note">
       <AddMachineLink>No machines yet</AddMachineLink>
       — each one reports what it has once it registers.
     </p>
   {:else}
-    <ul class="machines">
+    <ul data-slot="machines" class="machines">
       {#each machines as machine (machine.machineId)}
         {@const inspection = found[machine.machineId]}
         {@const rows =
           kind === "mcp" ? (inspection?.mcp ?? []) : (inspection?.skills ?? [])}
-        <li class="machine">
+        <li data-slot="machine" class="machine">
           <button
+            data-slot="head"
             aria-expanded={open[machine.machineId] === true}
             class="head mark-line focus-inset press-tint"
             disabled={machine.status !== "online" && !open[machine.machineId]}
@@ -132,8 +133,10 @@
               <IconChevronRight />
             {/if}
             <OsMark class="size-4 shrink-0" os={machine.os} />
-            <span class="host">{machineLabel(machine.hostname)}</span>
-            <span class="note">
+            <span data-slot="host" class="host"
+              >{machineLabel(machine.hostname)}</span
+            >
+            <span data-slot="note" class="note">
               {#if open[machine.machineId]}
                 Hide
               {:else if machine.status === "online"}
@@ -145,7 +148,7 @@
           </button>
           {#if open[machine.machineId]}
             {#if reading[machine.machineId]}
-              <p class="note busy mark-line" role="status">
+              <p data-slot="note" class="note busy mark-line" role="status">
                 <Spinner class="size-4 shrink-0" /><span
                   >Asking this machine…</span
                 >
@@ -155,7 +158,7 @@
                 <AlertDescription>{unread[machine.machineId]}</AlertDescription>
               </Alert>
             {:else if rows.length === 0}
-              <p class="note">
+              <p data-slot="note" class="note">
                 {kind === "mcp"
                   ? "This machine has no MCP servers at all."
                   : "This machine has no skills at all."}
@@ -164,10 +167,10 @@
               <ul class="found">
                 {#each rows as row ("path" in row ? row.path : `${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
-                  <li class="entry">
-                    <span class="text">
+                  <li data-slot="entry" class="entry">
+                    <span data-slot="text" class="text">
                       <span class="line">
-                        <span class="name">{row.name}</span>
+                        <span data-slot="name" class="name">{row.name}</span>
                         <Badge variant="outline"><span>{row.scope}</span></Badge
                         >
                         {#if row.managed}
@@ -180,7 +183,9 @@
                         {/if}
                       </span>
                       {#if "description" in row && row.description}
-                        <span class="note clamp">{row.description}</span>
+                        <span data-slot="note" class="note clamp"
+                          >{row.description}</span
+                        >
                       {/if}
                     </span>
                     {#if !(row.managed || taken.includes(row.name))}
@@ -197,7 +202,7 @@
                         variant="outline"
                       />
                     {:else if taken.includes(row.name) && !row.managed}
-                      <span class="note">In the fleet</span>
+                      <span data-slot="note" class="note">In the fleet</span>
                     {/if}
                     <RowFault class="adopt-fault" reason={adoptFailed[key]} />
                   </li>

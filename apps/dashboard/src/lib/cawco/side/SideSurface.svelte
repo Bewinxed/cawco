@@ -69,6 +69,9 @@
 </script>
 
 <section
+  data-side-surface-class={className}
+  data-slot="side-card"
+  data-side-surface-expanded={expanded || undefined}
   aria-label={label}
   class="side-card {className}"
   bind:this={section}
@@ -77,7 +80,7 @@
 >
   <!-- mark-line: its icons are controls at the head's end, each its own
        button, not marks set beside the title -->
-  <header class="side-head">
+  <header data-slot="side-head" class="side-head">
     {#if switcher}
       {@render switcher()}
     {/if}
@@ -85,7 +88,7 @@
       {#if titleControl}
         {@render titleControl()}
       {:else if title}
-        <span class="title">{title}</span>
+        <span data-slot="title" class="title">{title}</span>
       {/if}
       {#if subtitle}
         <span class="subtitle">{subtitle}</span>
@@ -109,6 +112,7 @@
       </button>
     {/if}
     <button
+      data-slot="close"
       aria-busy={closing || undefined}
       aria-disabled={closing || undefined}
       aria-label="Close"
@@ -121,7 +125,7 @@
     </button>
   </header>
   {#if recessed}
-    <div class="side-well" bind:this={well}>
+    <div data-slot="side-well" class="side-well" bind:this={well}>
       {@render children()}
     </div>
   {:else}

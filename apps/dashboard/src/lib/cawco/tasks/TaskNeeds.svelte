@@ -120,18 +120,18 @@
 {#if asks.length > 0 || actions.length > 0 || failed || blockers.length > 0}
   <div class="needs-stack">
     {#each asks as blocked (blocked.request.requestId)}
-      <section aria-label="Its session asks" class="needs">
-        <h3 class="head mark-line">
-          <IconNeedsYou class="glyph" />
+      <section data-slot="needs" aria-label="Its session asks" class="needs">
+        <h3 data-slot="head" class="head mark-line">
+          <IconNeedsYou data-task-needs-glyph class="glyph" />
           <span>Its session asks you</span>
-          <span class="when"
+          <span data-slot="when" class="when"
             >{blocked.request.raisedAt
               ? ago(blocked.request.raisedAt)
               : ""}</span
           >
         </h3>
         <p class="line">{blocked.request.presentation.summary}</p>
-        <div class="acts">
+        <div data-slot="acts" class="acts">
           <Button href={rowHref(blocked.instanceId)} label="Answer" size="sm" />
         </div>
       </section>
@@ -139,20 +139,22 @@
 
     {#each actions as action (action.id)}
       {@const proposed = action.state === "proposed"}
-      <section aria-label="An approved action" class="needs">
-        <h3 class="head mark-line">
+      <section data-slot="needs" aria-label="An approved action" class="needs">
+        <h3 data-slot="head" class="head mark-line">
           {#if proposed}
-            <IconNeedsYou class="glyph" />
+            <IconNeedsYou data-task-needs-glyph class="glyph" />
             <span>Approve {action.tool} on {action.connection}</span>
           {:else}
-            <IconError class="glyph fail" />
+            <IconError data-task-needs-glyph class="glyph fail" />
             <span
               >{action.state === "unknown"
                 ? `${action.tool} may or may not have happened`
                 : `${action.tool} failed`}</span
             >
           {/if}
-          <span class="when">{ago(action.endedAt ?? action.createdAt)}</span>
+          <span data-slot="when" class="when"
+            >{ago(action.endedAt ?? action.createdAt)}</span
+          >
         </h3>
         <p class="line">
           {#if action.state === "unknown"}
@@ -164,12 +166,13 @@
           {/if}
         </p>
         {#if proposed}
-          <pre class="args">{action.args}</pre>
+          <pre data-slot="args" class="args">{action.args}</pre>
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
-        <div class="acts peers">
+        <div data-slot="peers" data-acts class="acts peers">
           {#if proposed}
             <Button
+              data-deny
               aria-label="Deny {action.tool} on {action.connection}"
               class="peer deny"
               disabled={deciding !== null}
@@ -181,6 +184,7 @@
               <span>Deny</span>
             </Button>
             <Button
+              data-approve
               aria-label="Approve {action.tool} on {action.connection}"
               class="peer approve"
               disabled={deciding !== null}
@@ -207,15 +211,20 @@
     {/each}
 
     {#if failed && lastAttempt}
-      <section aria-label="Its session" class="needs" data-reason="failed">
-        <h3 class="head mark-line">
-          <IconError class="glyph fail" />
+      <section
+        data-slot="needs"
+        aria-label="Its session"
+        class="needs"
+        data-reason="failed"
+      >
+        <h3 data-slot="head" class="head mark-line">
+          <IconError data-task-needs-glyph class="glyph fail" />
           <span
             >{lastAttempt.state === "cancelled"
               ? "Its session was stopped"
               : "Its session failed"}</span
           >
-          <span class="when"
+          <span data-slot="when" class="when"
             >{ago(lastAttempt.endedAt ?? lastAttempt.startedAt)}</span
           >
         </h3>
@@ -223,7 +232,7 @@
           <p class="line">{lastAttempt.endedHow}</p>
         {/if}
         <RowFault reason={retryProblem} />
-        <div class="acts">
+        <div data-slot="acts" class="acts">
           <Button
             label="Try again"
             onclick={retry}
@@ -242,9 +251,9 @@
     {/if}
 
     {#if blockers.length > 0}
-      <section aria-label="Waits on" class="needs quiet">
-        <h3 class="head mark-line">
-          <IconLock class="glyph" />
+      <section data-slot="needs" aria-label="Waits on" class="needs quiet">
+        <h3 data-slot="head" class="head mark-line">
+          <IconLock data-task-needs-glyph class="glyph" />
           <span
             >Waits on {blockers.length === 1
               ? "a task that has not landed"

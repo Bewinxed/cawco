@@ -1386,6 +1386,7 @@
 <!-- `''` when the board is showing: a value no segment carries, so nothing
      is drawn as chosen. -->
 <Tabs
+  data-session-tabs
   boxes={servedBoxes}
   class="session-tabs {hosted ? 'hosted' : ''}"
   data-strip={leaf.id}
@@ -1411,6 +1412,9 @@
            the keyboard reaches the same card from the tab's link. -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
+        data-slot="tab"
+        data-needs={tab.activity === "blocked" || undefined}
+        data-drop-before={dropHint.tabIndexIn(leaf.id) === i || undefined}
         class="tab"
         data-chosen={chosen ? "" : undefined}
         data-flush={hungFlush(cardHere, menuHere)}
@@ -1469,7 +1473,7 @@
       >
         <!-- Its shadow on the tab behind it, first so its own card covers
              what casts it. -->
-        <span aria-hidden="true" class="shade"
+        <span data-slot="shade" aria-hidden="true" class="shade"
           ><span class="s"></span><span class="e"></span></span
         >
         <!-- The tab's options: a finger's hanging menu and a mouse's both. -->
@@ -1641,6 +1645,7 @@
                      tab's own Delete (`closeByKey`), so this one is not in
                      the tablist's tree. -->
                 <button
+                  data-slot="tclose"
                   aria-hidden="true"
                   class="tclose touch-hit pointer-hit pressable"
                   onauxclick={(event) => middleClose(tab.id, event)}
@@ -1697,7 +1702,7 @@
   </TabsList>
   <!-- A new session in the front tab's place: after the tabs, outside the
        tablist (`startHere`). -->
-  <div class="strip-new">
+  <div data-slot="strip-new" class="strip-new">
     <Tooltip.Root bind:open={newTip}>
       <Tooltip.Trigger>
         {#snippet child({ props })}
@@ -1727,7 +1732,9 @@
       <Tooltip.Content collisionPadding={8} side="bottom">
         <span class="whitespace-pre-line"
           >{#if refused}
-            <strong class="block font-medium">Couldn't start a session</strong>
+            <strong data-slot="block" class="block font-medium"
+              >Couldn't start a session</strong
+            >
             {refused}
           {:else}
             New session
@@ -1753,6 +1760,7 @@
 >
   <Popover.Portal>
     <HangCard
+      data-session-details-popover
       align="start"
       alignOffset={cardPlace ? cardPlace.offset : 0}
       anchor={detailAnchor}
@@ -1804,6 +1812,7 @@
       bind:ref={cardEl}
     >
       <div
+        data-slot="details-morph"
         class="details-morph"
         style:height={detailsHeight ? `${detailsHeight}px` : undefined}
       >

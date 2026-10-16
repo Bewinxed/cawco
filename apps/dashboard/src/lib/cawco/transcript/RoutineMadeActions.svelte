@@ -80,7 +80,7 @@
 
 <div class="made rail-hang" data-routine-made={routine.routineId}>
   {#if now}
-    <span class="lasts">{lasts}</span>
+    <span data-slot="lasts" class="lasts">{lasts}</span>
     {#if now.enabled && !now.keep && routine.expiresAt !== null}
       <Button
         label="Keep"

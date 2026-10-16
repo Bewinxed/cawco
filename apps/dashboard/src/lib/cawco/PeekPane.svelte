@@ -263,7 +263,7 @@
   }
 </script>
 
-<div class="peek flex min-h-0 flex-1 flex-col overflow-hidden">
+<div data-slot="peek" class="peek flex min-h-0 flex-1 flex-col overflow-hidden">
   <ContextMenu.Root>
     <ContextMenu.Trigger class="contents">
       <header class="flex items-start gap-2 px-4 py-3">
@@ -407,6 +407,7 @@
       {#if !question && request.presentation.command}
         <!-- What runs, under why: Approve here is made on the command. -->
         <code
+          data-slot="block"
           class="block truncate whitespace-pre border-l-2 border-[var(--border-hairline)] ps-2 font-mono text-meta text-[var(--ink-muted)]"
           >{request.presentation.command.trim().split("\n")[0]}</code
         >
@@ -422,8 +423,9 @@
       {:else}
         <!-- Equal peers at opposite ends, each outlined in its tint
              (DESIGN.md, The Peer Rule's apart form). -->
-        <div class="choice">
+        <div data-slot="choice" class="choice">
           <Button
+            data-deny
             aria-label="Deny {summary}"
             class="peer deny"
             onclick={() => answer(request, "deny")}
@@ -434,6 +436,7 @@
             <span>Deny</span>
           </Button>
           <Button
+            data-approve
             aria-label="Approve {summary}"
             class="peer approve"
             onclick={() => answer(request, "allow")}

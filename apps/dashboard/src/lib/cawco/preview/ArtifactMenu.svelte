@@ -198,6 +198,7 @@
 
 <DropdownMenu.Root bind:open>
   <DropdownMenu.Trigger
+    data-artifact-trigger
     class="artifact-trigger mark-line"
     data-artifact={shown.id}
   >
@@ -207,6 +208,7 @@
     <IconChevronDown />
   </DropdownMenu.Trigger>
   <DropdownMenu.Content
+    data-artifact-list
     align="start"
     class="artifact-list w-64"
     bind:ref={list}
@@ -215,6 +217,7 @@
       {#each rows as artifact (artifact.id)}
         {@const Glyph = GLYPHS[artifact.kind]}
         <DropdownMenu.Item
+          data-artifact-row
           aria-busy={removing.has(artifact.id) || undefined}
           aria-current={artifact.id === shown.id || undefined}
           aria-keyshortcuts="Delete Backspace"
@@ -237,11 +240,14 @@
           onSelect={() => choose(artifact)}
         >
           <Glyph />
-          <span class="row-name" id={part(artifact.id, "name")}
-            >{artifact.name}</span
+          <span
+            data-slot="row-name"
+            class="row-name"
+            id={part(artifact.id, "name")}>{artifact.name}</span
           >
           {#if artifact.promoted}
             <span
+              data-slot="row-promoted"
               class="row-promoted"
               id={part(artifact.id, "promoted")}
               title="Promoted into the project's folder at artifacts/{artifact.name}/"
@@ -249,7 +255,10 @@
             >
           {/if}
           {#if artifact.createdAt}
-            <span class="row-age" id={part(artifact.id, "age")}
+            <span
+              data-slot="row-age"
+              class="row-age"
+              id={part(artifact.id, "age")}
               >{formatAgeShort(Date.parse(artifact.createdAt))}</span
             >
           {/if}

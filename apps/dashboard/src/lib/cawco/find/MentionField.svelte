@@ -454,6 +454,7 @@
   }): HTMLElement {
     const span = document.createElement("span");
     span.className = "mention-chip";
+    span.setAttribute("data-slot", "mention-chip");
     span.contentEditable = "false";
     span.dataset.mention = chip.serialised;
     span.dataset.tip = chip.tip;
@@ -697,6 +698,9 @@
 {/if}
 
 <div
+  data-slot="editor"
+  data-mention-field-empty={empty || undefined}
+  data-editor
   {...rest}
   bind:this={editor}
   class={["editor", className, { phone, empty }]}

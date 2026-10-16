@@ -11,7 +11,7 @@
 
 <div class="status">
   <span aria-live="polite" class="said mark-line">
-    <span class="dot" data-box></span>
+    <span data-slot="dot" class="dot" data-box></span>
     <span>Waiting for check-in…</span>
   </span>
   {#if trail}

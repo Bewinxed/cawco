@@ -52,7 +52,7 @@
   });
 </script>
 
-<div class="well">
+<div data-slot="well" class="well">
   {#if lines}
     <pre><code
         >{#each lines as line}<span class="ln"

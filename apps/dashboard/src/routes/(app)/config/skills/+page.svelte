@@ -412,6 +412,7 @@
     <!-- Acts on the rows below, so it arrives with them, not in the header. -->
     {#if hubBroken.length > 0}
       <Button
+        data-num
         class="num"
         disabled={hubDown() !== null}
         failed={refetchFailed}
@@ -441,10 +442,10 @@
     />
   {/snippet}
 
-  <div class="group">
+  <div data-slot="group" class="group">
     <SectionHeader hue={HUE} icon={IconBolt} label="Skills" />
     {#if skills.length === 0}
-      <p class="note">
+      <p data-slot="note" class="note">
         No skills fetched yet. Paste what you would otherwise have run and the
         hub downloads the files itself.
       </p>
@@ -513,6 +514,7 @@
               {#if historyOf === row.name}
                 {#if versionsOf[row.name] === undefined && !versionsFailed[row.name]}
                   <div
+                    data-slot="listing"
                     aria-label="Reading {row.name}'s previous versions"
                     class="listing"
                     role="status"
@@ -537,16 +539,16 @@
         {/each}
       </RowList>
     {/if}
-    <p class="note">
+    <p data-slot="note" class="note">
       CawCo installs a skill's files. A skill that also ships hooks or subagents
       runs in its degraded mode until those are set up by hand.
     </p>
   </div>
 
-  <div class="group">
+  <div data-slot="group" class="group">
     <SectionHeader hue={HUE} icon={IconShop} label="Marketplaces" />
     {#if marketplaces.length === 0}
-      <p class="note">
+      <p data-slot="note" class="note">
         No marketplaces linked yet. Link one and its plugins become browsable
         here.
       </p>
@@ -598,6 +600,7 @@
               {#if browsing === row.name}
                 {#if reading[row.name]}
                   <div
+                    data-slot="listing"
                     aria-label="Reading {row.name}"
                     class="listing"
                     role="status"
@@ -609,30 +612,36 @@
                 {:else if unread[row.name]}
                   <p class="caution" role="alert">{unread[row.name]}</p>
                 {:else if (listings[row.name] ?? []).length === 0}
-                  <p class="note">This marketplace lists no plugins.</p>
+                  <p data-slot="note" class="note">
+                    This marketplace lists no plugins.
+                  </p>
                 {:else}
-                  <ul class="listing">
+                  <ul data-slot="listing" class="listing">
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
                       <li class="offer">
-                        <span class="text">
+                        <span data-slot="text" class="text">
                           <span class="line">
                             <span class="pname">{plugin.name}</span>
                             {#if plugin.version}
-                              <span class="note font-mono"
+                              <span data-slot="note" class="note font-mono"
                                 >{plugin.version}</span
                               >
                             {/if}
                             {#if plugin.category}
-                              <span class="note">{plugin.category}</span>
+                              <span data-slot="note" class="note"
+                                >{plugin.category}</span
+                              >
                             {/if}
                           </span>
                           {#if plugin.description}
-                            <span class="note">{plugin.description}</span>
+                            <span data-slot="note" class="note"
+                              >{plugin.description}</span
+                            >
                           {/if}
                         </span>
                         {#if installed(id)}
-                          <span class="note">Added</span>
+                          <span data-slot="note" class="note">Added</span>
                         {:else}
                           <Button
                             failed={id in installFailed}
@@ -660,10 +669,10 @@
     {/if}
   </div>
 
-  <div class="group">
+  <div data-slot="group" class="group">
     <SectionHeader hue={HUE} icon={IconLayers} label="Plugins" />
     {#if plugins.length === 0}
-      <p class="note">
+      <p data-slot="note" class="note">
         Nothing installed yet. Browse a marketplace above and add a plugin.
       </p>
     {:else}
@@ -724,7 +733,7 @@
         {/each}
       </RowList>
     {/if}
-    <p class="note">
+    <p data-slot="note" class="note">
       Disabling a plugin uninstalls it from the machines and keeps its row here.
     </p>
   </div>

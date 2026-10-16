@@ -96,6 +96,7 @@
     <Popover.Portal>
       {#if shown}
         <Popover.Content
+          data-ns-pop
           align={shown.align}
           class="ns-theme ns-pop"
           collisionPadding={8}

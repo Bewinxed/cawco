@@ -108,8 +108,11 @@
 </script>
 
 <div class="order">
-  <p class="label" id="order-label">{words.order}</p>
+  <p data-slot="order-list-label" class="label" id="order-label">
+    {words.order}
+  </p>
   <ol
+    data-slot="list"
     aria-labelledby="order-label"
     class="list"
     bind:this={list}
@@ -117,6 +120,7 @@
   >
     {#each rows as account (account.id)}
       <li
+        data-slot="slot"
         class={["slot", held === account.id && "held"]}
         data-flip={held === account.id ? undefined : ""}
         style:transform={held === account.id
@@ -124,6 +128,7 @@
           : undefined}
       >
         <button
+          data-slot="row"
           aria-label={words.place(
             nameOf(account),
             order.indexOf(account.id) + 1,
@@ -138,7 +143,7 @@
           style:--c={hueVar(account.hue)}
         >
           <span aria-hidden="true" class="handle"></span>
-          <span aria-hidden="true" class="dot"></span>
+          <span data-slot="dot" aria-hidden="true" class="dot"></span>
           <AccountName {account} row />
         </button>
       </li>

@@ -22,7 +22,7 @@
 {#key key}
   <!-- mark-line: a line of text; an account's dot stands in it on
        vertical-align: middle, the x-height's middle -->
-  <span class="words" in:wordsIn
+  <span data-slot="words" class="words" in:wordsIn
     >{#each parts as part, i (i)}
       {#if typeof part === "string"}
         {part}
@@ -31,7 +31,9 @@
       {:else if "figure" in part}
         <b class="mono-figure">{part.figure}</b>
       {:else}
-        <span class="dot" style:--c={part.color}></span><b>{part.account}</b>
+        <span data-slot="dot" class="dot" style:--c={part.color}></span><b
+          >{part.account}</b
+        >
       {/if}
     {/each}</span
   >

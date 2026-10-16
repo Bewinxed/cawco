@@ -1137,7 +1137,7 @@
   </EmptyState>
 {/snippet}
 
-<div class="pane" bind:clientWidth={paneWidth}>
+<div data-slot="pane" class="pane" bind:clientWidth={paneWidth}>
   {#if prestart}
     <!-- Nothing stands behind the wait: the session does not exist yet. -->
   {:else if session}
@@ -1153,6 +1153,7 @@
       bind:share={previewShare}
     >
       <div
+        data-slot="body"
         class="body"
         style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
       >

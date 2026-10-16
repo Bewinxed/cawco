@@ -73,14 +73,21 @@
 </script>
 
 {#if said || children}
-  <div class={cn("row-fault", className)} {...rest} transition:unfold>
+  <div
+    data-slot="row-fault"
+    data-row-fault
+    class={cn("row-fault", className)}
+    {...rest}
+    transition:unfold
+  >
     {#if children}
       {@render children()}
     {:else}
       <div class="line">
-        <p class="reason" role="alert">{said}</p>
+        <p data-slot="reason" class="reason" role="alert">{said}</p>
         {#if again}
           <Button
+            data-again
             class="again"
             icon={IconRefresh}
             label={againLabel}

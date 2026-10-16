@@ -358,6 +358,7 @@
      the reader just looked. `focusin` rather than `click`: reaching the
      composer with the keyboard should move focus too. -->
 <section
+  data-slot="leaf"
   class="leaf"
   data-leaf={leaf.id}
   onfocusincapture={() => workspace.focus(leaf.id)}
@@ -368,7 +369,13 @@
        typing here" must not compete with it. Said on the mark itself: said
        on the group, every focus change invalidated the group's whole
        subtree, both panes and their composer. -->
-  <span aria-hidden="true" class="rail" class:shown={railShown}></span>
+  <span
+    data-pane-leaf-shown={railShown || undefined}
+    data-slot="rail"
+    aria-hidden="true"
+    class="rail"
+    class:shown={railShown}
+  ></span>
 
   {#if !hosted}
     <RegionBoundary region="tabs">
@@ -384,6 +391,7 @@
        one shape to the next instead of swapping boxes. -->
   {#if previewInset}
     <div
+      data-slot="drop-preview"
       aria-hidden="true"
       class="drop-preview"
       style:inset={previewInset}
@@ -399,6 +407,7 @@
        settle runs, and a tap that jumps along the strip keeps the pane it
        left painted until it lands (gesture.svelte.ts, `veiled`, `leaving`). -->
   <div
+    data-slot="stack"
     class="stack"
     data-drop-leaf={leaf.id}
     bind:this={stack}
@@ -425,6 +434,9 @@
            with `inert`, an inherited style (CSS `interactivity`), every switch
            set and lifted it on two panes, restyling each of their elements. -->
       <div
+        data-pane-settling={(!shown && laidOut) || undefined}
+        data-pane-hidden={!(shown || laidOut) || undefined}
+        data-slot="pane"
         class="pane"
         data-delta={delta}
         data-pane={paneId}
@@ -470,6 +482,8 @@
     <!-- A side surface expanded over the whole conversation (SideSplit)
          leaves the transcript no share: its composer is put away with it. -->
     <div
+      data-slot="dock"
+      data-pane-leaf-away={lent.transcriptShare === 0 || undefined}
       class="dock"
       inert={lent.transcriptShare === 0}
       style:width="{lent.transcriptShare * 100}%"

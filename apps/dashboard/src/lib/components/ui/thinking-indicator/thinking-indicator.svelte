@@ -61,7 +61,7 @@
          each other on a 6s breath. Each is its own <svg> so its transform
          and opacity run on the compositor; morphing the path itself
          repainted the page every frame. -->
-    <span aria-hidden="true" class="mark">
+    <span data-slot="mark" aria-hidden="true" class="mark">
       {#each motion.current ? MORPHING : STILL as mark (mark.name)}
         <svg
           aria-hidden="true"

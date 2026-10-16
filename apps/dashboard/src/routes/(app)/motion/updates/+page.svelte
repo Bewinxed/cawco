@@ -296,22 +296,30 @@
 
 <main>
   <h1>Channel cards</h1>
-  <section class="card" data-states="cards-stable">
+  <section
+    data-slot="updates-page-card"
+    class="card"
+    data-states="cards-stable"
+  >
     <p>The fleet follows Stable; Stable chosen.</p>
     <ChannelCards channels={CHANNELS} chosen="stable" current="stable" />
   </section>
-  <section class="card" data-states="cards-nightly">
+  <section
+    data-slot="updates-page-card"
+    class="card"
+    data-states="cards-nightly"
+  >
     <p>The fleet follows Nightly; Stable chosen.</p>
     <ChannelCards channels={CHANNELS} chosen="stable" current="nightly" />
   </section>
 
   <h1>Update cell, rows 1 to 12</h1>
-  <section class="card" data-states="table">
+  <section data-slot="updates-page-card" class="card" data-states="table">
     <UpdateTable machines={ROWS} policy={OFF} />
   </section>
 
   <h1>Notices 1 to 7, as the update row of Caw's panel</h1>
-  <div class="notices" data-states="notices">
+  <div data-slot="notices" class="notices" data-states="notices">
     {#each NOTICES as notice (notice.kind)}
       <div class="kit-pop panel" data-notice={notice.kind}>
         <UpdateCard alone={false} {notice} onaction={noop} ondismiss={noop} />
@@ -320,7 +328,7 @@
   </div>
 
   <h1>Updated, with notes written before sections</h1>
-  <div class="notices" data-states="notice-plain">
+  <div data-slot="notices" class="notices" data-states="notice-plain">
     <div class="kit-pop panel" data-notice="plain">
       <UpdateCard
         alone
@@ -346,7 +354,7 @@
       The next row of the panel follows the row's edge
     </div>
   </div>
-  <div class="notices" data-states="update-card">
+  <div data-slot="notices" class="notices" data-states="update-card">
     <div class="kit-pop panel">
       <UpdateCard alone notice={UPDATED} onaction={noop} ondismiss={noop} />
     </div>

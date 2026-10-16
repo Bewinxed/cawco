@@ -153,6 +153,7 @@
           {/if}
         </div>
         <div
+          data-slot="grid"
           class="grid grid-cols-6 gap-1.5"
           {@attach highlight({ rows: "button", axis: "xy" })}
         >

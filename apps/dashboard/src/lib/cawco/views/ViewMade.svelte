@@ -35,8 +35,9 @@
 
 <ul aria-label="Made" class="made">
   {#each made as task (task.id)}
-    <li class="tile" data-open={task.id === open || undefined}>
+    <li data-slot="tile" class="tile" data-open={task.id === open || undefined}>
       <a
+        data-slot="head"
         class="head press-tint focus-inset"
         href={hrefOf(task.id)}
         onclick={(event) => {
@@ -52,11 +53,16 @@
           onopen(task.id);
         }}
       >
-        <span class="id">{task.id}</span>
-        <span class="title">{task.title}</span>
-        <span class="stage mark-line" class:you={task.kind === "you"}>
+        <span data-slot="id" class="id">{task.id}</span>
+        <span data-slot="title" class="title">{task.title}</span>
+        <span
+          data-you={task.kind === "you" || undefined}
+          data-slot="stage"
+          class="stage mark-line"
+          class:you={task.kind === "you"}
+        >
           {#if task.kind === "you"}
-            <IconNeedsYou class="glyph" />
+            <IconNeedsYou data-view-made-glyph class="glyph" />
           {/if}
           <span>{stageLabel(task.stage)}</span>
         </span>

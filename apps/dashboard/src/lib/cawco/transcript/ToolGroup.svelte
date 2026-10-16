@@ -261,7 +261,7 @@
   }
 </script>
 
-<div class="tools rail-row">
+<div data-slot="tools" data-tool-group-rail-row class="tools rail-row">
   {#each messages as m (m.id ?? m.toolCallId)}
     {@const d = describe(m)}
     {@const Icon = d.icon}
@@ -285,9 +285,14 @@
       m.metadata?.toolDiff
     )}
     {#snippet line()}
-      <span class="ic rail-cell">
+      <span data-slot="rail-cell" class="ic rail-cell">
         {#key m.metadata?.toolStatus}
-          <span class="glyph" class:err={failed} in:glyphIn out:glyphOut
+          <span
+            data-slot="glyph"
+            class="glyph"
+            class:err={failed}
+            in:glyphIn
+            out:glyphOut
             >{#if d.favicon && !brokenIcons.has(d.favicon)}
               {@const src = d.favicon}
               <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback — a site with no icon keeps the tool's glyph -->
@@ -329,7 +334,11 @@
       {#if d.fact && d.factTone === "diff"}
         <span class="d" in:factIn
           >{#each factParts(d.fact) as part, i (i)}
-            <span class:add={part.add} class:del={part.del}>{part.text}</span>
+            <span
+              data-add={part.add || undefined}
+              class:add={part.add}
+              class:del={part.del}>{part.text}</span
+            >
           {/each}</span
         >
       {:else if d.fact}
@@ -339,7 +348,7 @@
     <!-- The call opens its own line, so a run's rail grows one call at a time. -->
     <TranscriptRow id={callId(m)}>
       {#snippet children()}
-        <div class="row" class:err={failed}>
+        <div data-slot="row" class="row" class:err={failed}>
           {#if d.expanded === "preview"}
             {@const called = calledArtifact(
               m.metadata?.toolInput ?? undefined,
@@ -381,7 +390,7 @@
                 )}
                 type="button"
               >
-                <span class="mark"><IconWindow /></span>
+                <span data-slot="mark" class="mark"><IconWindow /></span>
                 <span class="artifact-label"
                   ><span class="artifact-title"
                     ><PendingContent
@@ -432,7 +441,9 @@
               type="button"
             >
               {@render line()}
-              <span class="chev" data-box><IconChevronRight /></span>
+              <span data-slot="chev" class="chev" data-box
+                ><IconChevronRight /></span
+              >
             </button>
             {#if disclosed.get() || opened.has(callId(m))}
               <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
@@ -452,7 +463,7 @@
                        it attempted, under the harness's reason. -->
                       <div class="diffs">
                         {#if refusal}
-                          <p class="refusal">{refusal}</p>
+                          <p data-slot="refusal" class="refusal">{refusal}</p>
                         {/if}
                         {#each changes as change, i (i)}
                           <DiffView
@@ -471,7 +482,7 @@
                       />
                     {:else if d.expanded === "memory" && result}
                       <div class="fields">
-                        <div class="field">
+                        <div data-slot="tool-group-field" class="field">
                           <span class="k">result</span>
                           <pre class="v">{result.text}</pre>
                         </div>
@@ -483,17 +494,17 @@
                     {:else}
                       <div class="fields">
                         {#each fields as f (f.key)}
-                          <div class="field">
+                          <div data-slot="tool-group-field" class="field">
                             <span class="k">{f.key}</span>
                             <pre class="v">{f.text}</pre>
                           </div>
                         {/each}
                         {#if result}
-                          <div class="field">
+                          <div data-slot="tool-group-field" class="field">
                             <span class="k">result</span>
                             <pre class="v">{result.text}</pre>
                             {#if result.more}
-                              <span class="more"
+                              <span data-slot="more" class="more"
                                 >… {result.more.toLocaleString()} more chars</span
                               >
                             {/if}

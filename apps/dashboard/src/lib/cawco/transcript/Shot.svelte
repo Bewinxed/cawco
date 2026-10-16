@@ -202,7 +202,10 @@
   }
 </script>
 
-<figure class:thumb={size === "thumb"}>
+<figure
+  data-thumb={size === "thumb" || undefined}
+  class:thumb={size === "thumb"}
+>
   {#if video && failed !== src}
     <div class="box">
       <!-- biome-ignore lint/a11y/useMediaCaption: an agent's screen recording carries no caption track -->
@@ -221,7 +224,7 @@
     <div class="box missing">
       <span>{video ? "Video" : "Image"} not available</span>
       {#if path}
-        <span class="path">{path}</span>
+        <span data-slot="path" class="path">{path}</span>
       {/if}
     </div>
   {:else}
@@ -270,7 +273,7 @@
         <span>{caption}</span>
       {/if}
       {#if path}
-        <span class="path">{path}</span>
+        <span data-slot="path" class="path">{path}</span>
       {/if}
     </figcaption>
   {/if}

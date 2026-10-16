@@ -615,9 +615,9 @@
      you, after its title. -->
 {#snippet meta(id: Part)}
   {@const said = metaOf(id)}
-  <span class="count num">{said.count}</span>
+  <span data-num data-slot="count" class="count num">{said.count}</span>
   {#if said.needs > 0}
-    <span class="needs" title={said.said}
+    <span data-slot="needs" class="needs" title={said.said}
       ><IconNeedsYou aria-hidden="true" /><span class="sr-only"
         >, {said.said}</span
       ></span
@@ -663,7 +663,11 @@
 <!-- The session Composer, words alone: its box as tall as what it stands
      over its foot (Composer .dock stands on its foot), as the view ask's. -->
 {#snippet askCaw()}
-  <div class="ask-caw" style:block-size="calc({askFoot}px + var(--space-4))">
+  <div
+    data-slot="ask-caw"
+    class="ask-caw"
+    style:block-size="calc({askFoot}px + var(--space-4))"
+  >
     <Composer
       agentName="Caw"
       attach={false}
@@ -703,15 +707,17 @@
   >
     {#snippet child({ props })}
       <Table.Body
+        data-view-routines-routine
         {...props}
         class="routine"
         data-enabled={routine.enabled ? "" : undefined}
         data-routine={routine.id}
         data-zone={routine.timeZone}
       >
-        <Table.Row class="row">
+        <Table.Row data-view-routines-row class="row">
           <Table.Cell class="col-state">
             <span
+              data-slot="lead"
               aria-label={lead.said}
               class="lead"
               data-lead={leadOf(routine)}
@@ -720,15 +726,15 @@
           </Table.Cell>
           <Table.Cell class="col-name">
             <Collapsible.Trigger class="opener focus-inset">
-              <span class="name">{routine.name}</span>
+              <span data-slot="name" class="name">{routine.name}</span>
             </Collapsible.Trigger>
-            <span class="sub" title={line.title}>
-              <span class="sub-words">{line.words}</span>
+            <span data-slot="sub" class="sub" title={line.title}>
+              <span data-slot="sub-words" class="sub-words">{line.words}</span>
               {#if line.off}
                 <span class="sub-off">· {line.off}</span>
               {/if}
               <!-- On a narrow ledger, Last and Next in the same order. -->
-              <span class="folded">
+              <span data-slot="folded" class="folded">
                 · Last <RunStatus
                   said={last.said}
                   status={last.status}
@@ -736,13 +742,15 @@
                   title={last.title}
                 />
                 · Next
-                <span class="num" title={next.title ?? undefined}
-                  >{next.text}</span
+                <span
+                  data-slot="num"
+                  class="num"
+                  title={next.title ?? undefined}>{next.text}</span
                 >
               </span>
             </span>
           </Table.Cell>
-          <Table.Cell class="col-last" data-cell="last">
+          <Table.Cell data-col-last class="col-last" data-cell="last">
             <RunStatus
               said={last.said}
               status={last.status}
@@ -752,6 +760,8 @@
           </Table.Cell>
           <Table.Cell class="col-next" data-cell="next">
             <span
+              data-slot="time"
+              data-num
               class="time num"
               data-paused={routine.enabled ? undefined : ""}
               title={next.title ?? undefined}>{next.text}</span
@@ -766,7 +776,11 @@
         {#if deleting === routine.id}
           <tr class="ask-row">
             <td colspan="5">
-              <fieldset aria-label="Delete {routine.name}" class="row-ask">
+              <fieldset
+                data-slot="row-ask"
+                aria-label="Delete {routine.name}"
+                class="row-ask"
+              >
                 <span
                   >Delete {routine.name}? It stops now; its past runs stay in
                   the project's history.</span
@@ -816,6 +830,7 @@
                  a press putting its words in the composer under them, unsent. -->
             {#if starters.length > 0}
               <ul
+                data-slot="routine-starters"
                 aria-label="Routines to ask Caw for"
                 class="routine-starters kit-chips"
               >
@@ -827,7 +842,11 @@
                       onclick={() => pick(starter.text)}
                       type="button"
                     >
-                      <Glyph aria-hidden="true" class="starter-glyph" />
+                      <Glyph
+                        data-starter-glyph
+                        aria-hidden="true"
+                        class="starter-glyph"
+                      />
                       <span>{starter.text}</span>
                     </button>
                   </li>
@@ -851,8 +870,9 @@
       <!-- New routine: the composer stands over the ledger it will land in. -->
       <div class="new-routine">{@render askCaw()}</div>
     {/if}
-    <div class="ledger">
+    <div data-slot="ledger" class="ledger">
       <Table.Root
+        data-routines
         aria-label="Routines"
         class="routines table-fixed"
         ghostRows="tr.row"
@@ -866,7 +886,9 @@
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head class="col-name" scope="col">Routine</Table.Head>
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head class="col-last" scope="col">Last run</Table.Head>
+            <Table.Head data-col-last class="col-last" scope="col"
+              >Last run</Table.Head
+            >
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head class="col-next" scope="col">Next run</Table.Head>
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -890,7 +912,7 @@
       event, like a merged pull request.
     </p>
   {:else}
-    <div class="ledger">
+    <div data-slot="ledger" class="ledger">
       <Table.Root aria-label="Event sources" class="quiet table-fixed">
         <Table.Header>
           <Table.Row class="band border-0">
@@ -901,25 +923,29 @@
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head class="col-name" scope="col">Source</Table.Head>
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head class="col-last" scope="col">Last read</Table.Head>
+            <Table.Head data-col-last class="col-last" scope="col"
+              >Last read</Table.Head
+            >
           </Table.Row>
         </Table.Header>
         <Table.Body class="quiet">
           {#each routes as route (route.id)}
-            <Table.Row class="row">
+            <Table.Row data-view-routines-row class="row">
               <Table.Cell class="col-state"
-                ><span class="lead"
+                ><span data-slot="lead" class="lead"
                   ><ProviderLogo provider={route.service} /></span
                 ></Table.Cell
               >
               <Table.Cell class="col-name">
-                <span class="name"
+                <span data-slot="name" class="name"
                   >{routines.find((each) => each.id === route.routineId)
                     ?.name ?? route.routineId}</span
                 >
-                <span class="sub code">{eventOf(route)}</span>
+                <span data-sub data-slot="code" class="sub code"
+                  >{eventOf(route)}</span
+                >
               </Table.Cell>
-              <Table.Cell class="col-last" data-cell="last">
+              <Table.Cell data-col-last class="col-last" data-cell="last">
                 {#if route.lastDeliveryAt === null}
                   <RunStatus status="neutral" text="No events yet" />
                 {:else}
@@ -934,20 +960,21 @@
             </Table.Row>
           {/each}
           {#each polls as poll (poll.id)}
-            <Table.Row class="row">
+            <Table.Row data-view-routines-row class="row">
               <Table.Cell class="col-state"
-                ><span class="lead"
+                ><span data-slot="lead" class="lead"
                   ><ProviderLogo provider={poll.service.toLowerCase()} /></span
                 ></Table.Cell
               >
               <Table.Cell class="col-name">
-                <span class="name">{poll.what}</span>
-                <span class="sub"
-                  >{#if poll.tool}<span class="code">{poll.tool}</span
+                <span data-slot="name" class="name">{poll.what}</span>
+                <span data-slot="sub" class="sub"
+                  >{#if poll.tool}<span data-slot="code" class="code"
+                      >{poll.tool}</span
                     >{" · "}{/if}{everyOf(poll)}</span
                 >
               </Table.Cell>
-              <Table.Cell class="col-last" data-cell="last">
+              <Table.Cell data-col-last class="col-last" data-cell="last">
                 {#if poll.polledAt === null}
                   <RunStatus status="neutral" text="Not read yet" />
                 {:else if poll.failure === null}
@@ -981,7 +1008,7 @@
       anything, and what you decide is kept here.
     </p>
   {:else}
-    <div class="ledger">
+    <div data-slot="ledger" class="ledger">
       <ActionsTable {actions} label="Approved actions" {routineNames} />
     </div>
   {/if}

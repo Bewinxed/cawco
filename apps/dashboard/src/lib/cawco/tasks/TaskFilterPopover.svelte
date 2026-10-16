@@ -94,6 +94,7 @@
     <Popover.Trigger>
       {#snippet child({ props })}
         <Button
+          data-filter-trigger
           {...props}
           aria-label={compact ? compactName : undefined}
           class="filter-trigger pressable"
@@ -110,7 +111,7 @@
             <span>Filter</span>
           {/if}
           {#if active > 0}
-            <span class="count num">{active}</span>
+            <span data-num data-slot="count" class="count num">{active}</span>
           {/if}
           {#if !compact}
             <IconChevronDown />
@@ -135,16 +136,19 @@
         >
       {/if}
       <RowFault again={() => find.again()} reason={find.problem} />
-      <div class="row">
-        <span class="name">Label</span>
+      <div data-slot="row" class="row">
+        <span data-slot="name" class="name">Label</span>
         <Select.Root
           onValueChange={(value) =>
             onchange({ ...filter, label: value === "any" ? null : value })}
           type="single"
           value={filter.label ?? "any"}
         >
-          <Select.Trigger aria-label="Label" class="pick" size="sm"
-            >{filter.label ?? "Any label"}</Select.Trigger
+          <Select.Trigger
+            data-task-filter-popover-pick
+            aria-label="Label"
+            class="pick"
+            size="sm">{filter.label ?? "Any label"}</Select.Trigger
           >
           <Select.Content>
             <Select.Item label="Any label" value="any" />
@@ -154,16 +158,19 @@
           </Select.Content>
         </Select.Root>
       </div>
-      <div class="row">
-        <span class="name">Type</span>
+      <div data-slot="row" class="row">
+        <span data-slot="name" class="name">Type</span>
         <Select.Root
           onValueChange={(value) =>
             onchange({ ...filter, type: value === "any" ? null : value })}
           type="single"
           value={filter.type ?? "any"}
         >
-          <Select.Trigger aria-label="Type" class="pick" size="sm"
-            >{filter.type ?? "Any type"}</Select.Trigger
+          <Select.Trigger
+            data-task-filter-popover-pick
+            aria-label="Type"
+            class="pick"
+            size="sm">{filter.type ?? "Any type"}</Select.Trigger
           >
           <Select.Content>
             <Select.Item label="Any type" value="any" />
@@ -175,14 +182,17 @@
       </div>
       {#if fieldKeys.length > 0}
         {#each rows as [key, value], index (index)}
-          <div class="row">
+          <div data-slot="row" class="row">
             <Select.Root
               onValueChange={(next) => setField(index, next, "")}
               type="single"
               value={key}
             >
-              <Select.Trigger aria-label="Field" class="pick" size="sm"
-                >{key || "Field"}</Select.Trigger
+              <Select.Trigger
+                data-task-filter-popover-pick
+                aria-label="Field"
+                class="pick"
+                size="sm">{key || "Field"}</Select.Trigger
               >
               <Select.Content>
                 {#each fieldKeys as each (each)}
@@ -197,8 +207,11 @@
               type="single"
               {value}
             >
-              <Select.Trigger aria-label="Value" class="pick" size="sm"
-                >{value || "value"}</Select.Trigger
+              <Select.Trigger
+                data-task-filter-popover-pick
+                aria-label="Value"
+                class="pick"
+                size="sm">{value || "value"}</Select.Trigger
               >
               <Select.Content>
                 {#each valuesOf(key) as each (each)}

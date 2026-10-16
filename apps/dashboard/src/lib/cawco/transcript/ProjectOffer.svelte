@@ -80,10 +80,10 @@
     role="status"
   >
     <p class="line mark-line">
-      <IconFolder aria-hidden="true" class="glyph" />
+      <IconFolder data-project-offer-glyph aria-hidden="true" class="glyph" />
       <span>{joinedLine}</span>
     </p>
-    <div class="actions">
+    <div data-slot="actions" class="actions">
       <Button
         class={btn}
         href="/project/{encodeURIComponent(joined.project.id)}"
@@ -105,10 +105,10 @@
     data-offer={instanceId}
   >
     <p class="line mark-line">
-      <IconFolder aria-hidden="true" class="glyph" />
+      <IconFolder data-project-offer-glyph aria-hidden="true" class="glyph" />
       <span>{offer.line}</span>
     </p>
-    <div class="actions">
+    <div data-slot="actions" class="actions">
       <Button
         class={btn}
         disabled={pending !== null}
@@ -128,7 +128,7 @@
         pendingLabel="Making project…"
       />
     </div>
-    <RowFault class="refused" reason={refused} />
+    <RowFault data-project-offer-refused class="refused" reason={refused} />
   </section>
 {/if}
 

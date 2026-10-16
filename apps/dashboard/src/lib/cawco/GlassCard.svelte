@@ -407,6 +407,7 @@
     anchor={glass}
     aria-label={LABEL[shown]}
     class={[FRAME[shown], rehearsing && "invisible"]}
+    data-glass-card-frame={FRAME[shown]}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
     escapeKeydownBehavior={shown === "jump" ? "ignore" : "close"}
@@ -510,6 +511,7 @@
   >
     {#each faces as one (one.card)}
       <div
+        data-slot="glass-face"
         class="glass-face"
         data-face={one.card}
         {@attach mountFace(one.card)}

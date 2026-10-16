@@ -777,6 +777,7 @@
     <li data-row={row.s.id} {@attach item(row.s.id)}>
       <div class="rin">
         <div
+          data-slot="row"
           class="row mark-line"
           data-away={row.state === "away" || undefined}
         >
@@ -791,7 +792,7 @@
               <Sprite aria-hidden="true" class="stop-mark-glyph" />
             {/snippet}
           </TreeMark>
-          <span class="title"
+          <span data-slot="title" class="title"
             ><span class="sr-only">{status.word}: </span>
             {#if shownAs.href}
               <a href={shownAs.href}>{title}</a>
@@ -799,10 +800,14 @@
               {title}
             {/if}</span
           >
-          <span class="stat mark-line {status.tone}" data-box>
-            <span class="glyph" data-box>
+          <span
+            class="stat mark-line {status.tone}"
+            data-stop-tray-tone={status.tone}
+            data-box
+          >
+            <span data-slot="glyph" class="glyph" data-box>
               {#key status.word}
-                <span class="mark" in:glyphIn out:glyphOut>
+                <span data-slot="mark" class="mark" in:glyphIn out:glyphOut>
                   {#if status.icon}
                     <status.icon aria-hidden="true" />
                   {:else}
@@ -813,7 +818,7 @@
             </span>
             <span class="word"><MorphText text={status.word} /></span>
           </span>
-          <span class="trail num">{trailOf(row)}</span>
+          <span data-slot="num" class="trail num">{trailOf(row)}</span>
         </div>
         <RowFault
           again={() => stop([row.s.id])}
@@ -852,12 +857,12 @@
     transition:unfold
     {@attach unfoldHere}
   >
-    <div class="tile">
-      <div class="head">
+    <div data-slot="tile" class="tile">
+      <div data-slot="head" class="head">
         <!-- The caller's place in the tray's head: empty, it takes no room. -->
         <div aria-hidden="true" class="caw-slot">{@render head?.()}</div>
-        <div class="words">
-          <p class="title" id="{uid}-title">{words.title}</p>
+        <div data-slot="words" class="words">
+          <p data-slot="title" class="title" id="{uid}-title">{words.title}</p>
           <!-- As wide as the head, whatever its words: sized to them, it
                followed the morph's own box and narrowed mid-morph. Its
                words say each state ("Stopped 3 sessions."), so they are
@@ -872,11 +877,16 @@
         </div>
       </div>
       {#if rows.some((row) => !row.gone)}
-        <ul aria-label="Running sessions" class="sessions" {@attach echoBeat()}>
+        <ul
+          data-slot="sessions"
+          aria-label="Running sessions"
+          class="sessions"
+          {@attach echoBeat()}
+        >
           {@render branch(null)}
         </ul>
       {/if}
-      <div class="actions">
+      <div data-slot="actions" class="actions">
         <Button
           data-stop-cancel
           label={cancelLabel}

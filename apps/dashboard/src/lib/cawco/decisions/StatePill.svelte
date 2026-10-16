@@ -21,10 +21,10 @@
   } = $props();
 </script>
 
-<span class="state-pill" data-tone={tone} {title}>
+<span data-slot="state-pill" class="state-pill" data-tone={tone} {title}>
   {word}
   {#if who}
-    <span class="who">· {who}</span>
+    <span data-slot="who" class="who">· {who}</span>
   {/if}
 </span>
 

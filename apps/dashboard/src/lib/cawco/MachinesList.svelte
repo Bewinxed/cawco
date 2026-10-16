@@ -106,10 +106,10 @@
 
 {#if hubAuth.waiting.length > 0}
   <!-- Machines waiting to be admitted (hub hub-auth.ts): first, as they wait on you. -->
-  <ul class="list waiting">
+  <ul data-slot="list" class="list waiting">
     {#each hubAuth.waiting as machine (machine.machineId)}
       {@const name = machineLabel(machine.hostname ?? machine.machineId)}
-      <li class="row waits" data-waiting={machine.machineId}>
+      <li data-slot="row" class="row waits" data-waiting={machine.machineId}>
         <MachineRow
           hue={machineHue(0, false)}
           icon={machineIcon(machine.platform ?? "")}
@@ -148,11 +148,12 @@
 {#if cawco.machines.length === 0}
   <!-- No machine yet: the empty fleet's two ways in, as rows. -->
   <p class="none">Connect a machine to run sessions</p>
-  <ul class="list">
+  <ul data-slot="list" class="list">
     {#each JOIN_WAYS as way (way.way)}
       {@const Icon = way.icon}
       <li>
         <button
+          data-slot="row"
           aria-haspopup="dialog"
           class="row way press-tint focus-inset"
           onclick={() => {
@@ -161,17 +162,19 @@
           }}
           type="button"
         >
-          <span class="glyph" style:color={way.hue}><Icon /></span>
-          <span class="words">
-            <span class="name">{way.name}</span>
-            <span class="meta">{way.meta}</span>
+          <span data-slot="glyph" class="glyph" style:color={way.hue}
+            ><Icon /></span
+          >
+          <span data-slot="words" class="words">
+            <span data-slot="name" class="name">{way.name}</span>
+            <span data-slot="meta" class="meta">{way.meta}</span>
           </span>
         </button>
       </li>
     {/each}
   </ul>
 {:else}
-  <ul class="list">
+  <ul data-slot="list" class="list">
     {#each cawco.machines as machine, index (machine.machineId)}
       {@const up = machine.status === "online"}
       {@const live = liveOn(machine.machineId)}
@@ -180,7 +183,7 @@
       {@const updateFailed = updateFault(machine)}
       <li data-machine={machine.machineId}>
         <MachineMenu {machine}>
-          <div class="row press-tint focus-inset" tabindex="-1">
+          <div data-slot="row" class="row press-tint focus-inset" tabindex="-1">
             <MachineRow
               hue={machineHue(index, up)}
               icon={machineIcon(machine.os ?? "")}
@@ -206,6 +209,8 @@
     {/each}
   </ul>
   <button
+    data-slot="row"
+    data-add
     class="row add mark-line press-tint focus-inset"
     onclick={() => {
       onleave?.();

@@ -36,9 +36,13 @@
 </script>
 
 {#if shape === "unknown"}
-  <IconServer class={cn("size-4 shrink-0", className)} />
+  <IconServer
+    data-os-mark-class={className}
+    class={cn("size-4 shrink-0", className)}
+  />
 {:else}
   <svg
+    data-os-mark-class={className}
     aria-hidden="true"
     class={cn("size-4 shrink-0", className)}
     fill="currentColor"

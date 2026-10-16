@@ -27,7 +27,7 @@
   {...rest}
 >
   <!-- Each stroke runs ±8.485 (the X's half diagonal, 6√2) along its own axis. -->
-  <line class="a" x1="-8.485" x2="8.485" y1="0" y2="0" />
+  <line data-slot="a" class="a" x1="-8.485" x2="8.485" y1="0" y2="0" />
   <line class="b" x1="-8.485" x2="8.485" y1="0" y2="0" />
 </svg>
 

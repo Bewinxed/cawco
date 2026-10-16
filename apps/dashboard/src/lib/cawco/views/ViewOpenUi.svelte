@@ -54,7 +54,7 @@
   const dropped = $derived(view.dropped.join(", "));
 </script>
 
-<div class="view-frame">
+<div data-slot="view-frame" class="view-frame">
   {#if view.dropped.length > 0}
     <Alert data-view-dropped={dropped} variant="warning">
       <AlertDescription

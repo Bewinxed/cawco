@@ -123,6 +123,7 @@
 <div class="toast-home" bind:this={home}>
   <div class="toast-layer" bind:this={layer} class:under-nav={navSheet.open}>
     <Sonner
+      data-sonner-group
       class="toaster group"
       style="--normal-bg: var(--surface-raised); --normal-text: var(--ink-strong); --normal-border: var(--border-control);"
       theme={theme.current}

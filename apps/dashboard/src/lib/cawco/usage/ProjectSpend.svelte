@@ -213,7 +213,7 @@
 
 <section aria-label="{projectName}'s spend" class="project-spend">
   {#if refused && !spend}
-    <p class="note" role="alert">
+    <p data-slot="note" class="note" role="alert">
       The spend for {projectName} could not be read: {refused}
     </p>
   {:else if !spend}
@@ -268,12 +268,12 @@
                   saveCap();
                 }}
               >
-                <p class="note">
+                <p data-slot="note" class="note">
                   What {projectName} may spend, its Caw and its attempts together.
                   Leave it empty for no limit.
                 </p>
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label class="field"
+                <label data-slot="project-spend-field" class="field"
                   >Dollars
                   <Input
                     inputmode="decimal"
@@ -281,7 +281,7 @@
                     bind:value={capAmount}
                   /></label
                 >
-                <div class="field">
+                <div data-slot="project-spend-field" class="field">
                   <span>Each</span>
                   <Tabs
                     onValueChange={(next) => {
@@ -295,7 +295,10 @@
                     </TabsList>
                   </Tabs>
                 </div>
-                <label class="field" for="cap-on"
+                <label
+                  data-slot="project-spend-field"
+                  class="field"
+                  for="cap-on"
                   >When it is reached
                   <NativeSelect
                     class="w-full"
@@ -317,7 +320,9 @@
                   </NativeSelect>
                 </label>
                 {#if capRefused}
-                  <p class="refused" role="alert" in:appear>{capRefused}</p>
+                  <p data-slot="refused" class="refused" role="alert" in:appear>
+                    {capRefused}
+                  </p>
                 {/if}
                 <div class="form-acts">
                   {#if cap}
@@ -365,12 +370,12 @@
                   saveBudget();
                 }}
               >
-                <p class="note">
+                <p data-slot="note" class="note">
                   What one attempt at a task may spend before it stops. Leave a
                   field empty for no limit.
                 </p>
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label class="field"
+                <label data-slot="project-spend-field" class="field"
                   >Dollars
                   <Input
                     inputmode="decimal"
@@ -379,7 +384,7 @@
                   /></label
                 >
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label class="field"
+                <label data-slot="project-spend-field" class="field"
                   >Turns
                   <Input
                     inputmode="numeric"
@@ -388,7 +393,7 @@
                   /></label
                 >
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label class="field"
+                <label data-slot="project-spend-field" class="field"
                   >Minutes
                   <Input
                     inputmode="numeric"
@@ -397,7 +402,9 @@
                   /></label
                 >
                 {#if budgetRefused}
-                  <p class="refused" role="alert" in:appear>{budgetRefused}</p>
+                  <p data-slot="refused" class="refused" role="alert" in:appear>
+                    {budgetRefused}
+                  </p>
                 {/if}
                 <Button
                   class="self-end"
@@ -418,7 +425,7 @@
       <!-- This month's ledger: Caw's threads (and his turns no thread
            woke), the attempts, every other session, and their total, which
            is the This month tile. -->
-      <div class="ledger">
+      <div data-slot="ledger" class="ledger">
         <Table.Root class="table-fixed">
           {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
             <Table.Header>
@@ -427,38 +434,47 @@
                 <Table.Head class="col-name" scope="col">Caw</Table.Head>
                 <Table.Head class="col-count" scope="col">Wakes</Table.Head>
                 <Table.Head class="col-usd" scope="col">Spent</Table.Head>
-                <Table.Head class="col-last" scope="col">Last</Table.Head>
+                <Table.Head data-col-last class="col-last" scope="col"
+                  >Last</Table.Head
+                >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
               </Table.Row>
             </Table.Header>
             <Table.Body>
               {#each spend.threads as thread (thread.id)}
-                <Table.Row class="row">
+                <Table.Row data-project-spend-row class="row">
                   <Table.Cell class="col-name">
-                    <a class="name" href="/session/thread:{thread.id}"
+                    <a
+                      data-slot="name"
+                      class="name"
+                      href="/session/thread:{thread.id}"
                       >Thread · {thread.title}</a
                     >
                   </Table.Cell>
-                  <Table.Cell class="col-count num"
+                  <Table.Cell data-num class="col-count num"
                     >{thread.wakes}
                     {thread.wakes === 1 ? "wake" : "wakes"}</Table.Cell
                   >
-                  <Table.Cell class="col-usd num">{usd(thread.usd)}</Table.Cell>
-                  <Table.Cell class="col-last num"
+                  <Table.Cell data-num class="col-usd num"
+                    >{usd(thread.usd)}</Table.Cell
+                  >
+                  <Table.Cell data-num data-col-last class="col-last num"
                     >{formatAgeShort(thread.lastAt, now)}</Table.Cell
                   >
                 </Table.Row>
               {/each}
               {#if spend.caw.unthreadedMonthUsd > 0}
-                <Table.Row class="row">
+                <Table.Row data-project-spend-row class="row">
                   <Table.Cell class="col-name"
-                    ><span class="name plain">Not in a thread</span></Table.Cell
+                    ><span data-slot="name" class="name plain"
+                      >Not in a thread</span
+                    ></Table.Cell
                   >
                   <Table.Cell class="col-count"></Table.Cell>
-                  <Table.Cell class="col-usd num"
+                  <Table.Cell data-num class="col-usd num"
                     >{usd(spend.caw.unthreadedMonthUsd)}</Table.Cell
                   >
-                  <Table.Cell class="col-last"></Table.Cell>
+                  <Table.Cell data-col-last class="col-last"></Table.Cell>
                 </Table.Row>
               {/if}
             </Table.Body>
@@ -470,32 +486,37 @@
                 <Table.Head class="col-name" scope="col">Attempts</Table.Head>
                 <Table.Head class="col-count" scope="col">Tries</Table.Head>
                 <Table.Head class="col-usd" scope="col">Spent</Table.Head>
-                <Table.Head class="col-last" scope="col">Now</Table.Head>
+                <Table.Head data-col-last class="col-last" scope="col"
+                  >Now</Table.Head
+                >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
               </Table.Row>
             </Table.Header>
             <Table.Body>
               {#each spend.attempts as attempt (attempt.taskId)}
-                <Table.Row class="row">
+                <Table.Row data-project-spend-row class="row">
                   <Table.Cell class="col-name">
                     <a
+                      data-slot="name"
                       class="name"
                       href="/project/{encodeURIComponent(
                         projectId
                       )}?task={attempt.taskId}"
-                      >{attempt.title}<span class="id">{attempt.taskId}</span
+                      >{attempt.title}<span data-slot="id" class="id"
+                        >{attempt.taskId}</span
                       ></a
                     >
                   </Table.Cell>
-                  <Table.Cell class="col-count num"
+                  <Table.Cell data-num class="col-count num"
                     >{attempt.attempts}
                     {attempt.attempts === 1
                       ? "attempt"
                       : "attempts"}</Table.Cell
                   >
-                  <Table.Cell class="col-usd num">{usd(attempt.usd)}</Table.Cell
+                  <Table.Cell data-num class="col-usd num"
+                    >{usd(attempt.usd)}</Table.Cell
                   >
-                  <Table.Cell class="col-last"
+                  <Table.Cell data-col-last class="col-last"
                     >{STATE_WORD[attempt.state] ?? attempt.state}</Table.Cell
                   >
                 </Table.Row>
@@ -504,30 +525,35 @@
           {/if}
           <Table.Body>
             {#if spend.others.monthUsd > 0}
-              <Table.Row class="row">
+              <Table.Row data-project-spend-row class="row">
                 <Table.Cell class="col-name"
-                  ><span class="name plain">Other sessions</span></Table.Cell
+                  ><span data-slot="name" class="name plain"
+                    >Other sessions</span
+                  ></Table.Cell
                 >
                 <Table.Cell class="col-count"></Table.Cell>
-                <Table.Cell class="col-usd num"
+                <Table.Cell data-num class="col-usd num"
                   >{usd(spend.others.monthUsd)}</Table.Cell
                 >
-                <Table.Cell class="col-last"></Table.Cell>
+                <Table.Cell data-col-last class="col-last"></Table.Cell>
               </Table.Row>
             {/if}
-            <Table.Row class="row total">
+            <Table.Row data-project-spend-row class="row total">
               <Table.Cell class="col-name"
-                ><span class="name plain">This month</span></Table.Cell
+                ><span data-slot="name" class="name plain">This month</span
+                ></Table.Cell
               >
               <Table.Cell class="col-count"></Table.Cell>
-              <Table.Cell class="col-usd num">{usd(spend.monthUsd)}</Table.Cell>
-              <Table.Cell class="col-last"></Table.Cell>
+              <Table.Cell data-num class="col-usd num"
+                >{usd(spend.monthUsd)}</Table.Cell
+              >
+              <Table.Cell data-col-last class="col-last"></Table.Cell>
             </Table.Row>
           </Table.Body>
         </Table.Root>
       </div>
     {:else}
-      <p class="note">
+      <p data-slot="note" class="note">
         No spend on {projectName} yet. The first wake or attempt shows up here.
       </p>
     {/if}

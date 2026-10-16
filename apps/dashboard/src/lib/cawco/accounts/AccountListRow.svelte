@@ -26,9 +26,16 @@
 
 <li class="arow" data-flip>
   <a class={["link", problem && "two"]} {href}>
-    <i aria-hidden="true" class="dot" style:--c={hueVar(account.hue)}></i>
-    <span class="name"
-      ><span class="words" data-share="title:{href}">{name}</span></span
+    <i
+      data-slot="dot"
+      aria-hidden="true"
+      class="dot"
+      style:--c={hueVar(account.hue)}
+    ></i>
+    <span data-slot="name" class="name"
+      ><span data-slot="words" class="words" data-share="title:{href}"
+        >{name}</span
+      ></span
     >
     {#if problem}
       <span class="problem mark-line" data-flip>
@@ -36,7 +43,9 @@
         <span><MorphText text={problem} /></span>
       </span>
     {/if}
-    <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+    <span data-slot="chev" aria-hidden="true" class="chev"
+      ><IconChevronRight /></span
+    >
   </a>
 </li>
 

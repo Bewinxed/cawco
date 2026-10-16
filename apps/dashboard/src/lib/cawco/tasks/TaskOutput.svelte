@@ -112,9 +112,10 @@
 </script>
 
 <figure class="output" data-kind={kind} class:compact>
-  <figcaption class="row mark-line">
+  <figcaption data-slot="row" class="row mark-line">
     <IconDocument class="icon" />
-    <bdi class="path" title={path}>{compact ? name : path}</bdi>
+    <bdi data-slot="path" class="path" title={path}>{compact ? name : path}</bdi
+    >
     {#if kind === "file"}
       <a
         class="open mark-line press-tint focus-inset"
@@ -124,17 +125,21 @@
         target="_blank"
       >
         <span>Open</span>
-        <IconArrowUpRight class="glyph" />
+        <IconArrowUpRight data-task-output-glyph class="glyph" />
       </a>
     {/if}
   </figcaption>
   {#if kind !== "file"}
     <!-- mark-line: the body stacks the output itself; no mark sits beside words in it -->
-    <div class="body">
+    <div data-slot="body" class="body">
       {#if problem || postProblem}
         <p class="problem">{problem ?? postProblem}</p>
       {:else if read && content === null}
-        <div aria-hidden="true" class="skeleton">
+        <div
+          data-slot="task-output-skeleton"
+          aria-hidden="true"
+          class="skeleton"
+        >
           <Skeleton class="h-3.5 w-full" />
           <Skeleton class="h-3.5 w-11/12" />
           <Skeleton class="h-3.5 w-3/5" />

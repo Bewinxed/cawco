@@ -12,6 +12,7 @@
 </script>
 
 <span
+  data-moved={moved || undefined}
   aria-hidden="true"
   class={["disc", resolved && "resolved", moved && "moved"]}>{number}</span
 >

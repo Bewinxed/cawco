@@ -57,20 +57,21 @@
   };
 </script>
 
-<article class="record" id={card.id}>
+<article data-slot="record" class="record" id={card.id}>
   {#if card.still}
     <img alt={chosen[0]?.label ?? ""} class="still" src={card.still} />
   {/if}
   <!-- A task filed onto the card arrives as rows do (motion/rows): its row
        is uncovered, each chip pops in, as the hub files it. -->
-  <div class="body" {@attach reflow()}>
-    <h3 class="question">{card.question}</h3>
+  <div data-slot="body" class="body" {@attach reflow()}>
+    <h3 data-slot="question" class="question">{card.question}</h3>
     {#if chosen.length > 0}
       {#each chosen as option (option.id)}
-        <p class="chosen">
-          <span class="kit-chip sel picked">
-            <span class="kit-keycap">{option.keycap}</span><span class="label"
-              >{option.label}</span
+        <p data-slot="chosen" class="chosen">
+          <span data-slot="sel" class="kit-chip sel picked">
+            <span class="kit-keycap">{option.keycap}</span><span
+              data-slot="record-card-label"
+              class="label">{option.label}</span
             >
           </span>
           {#if option.line}
@@ -79,7 +80,7 @@
         </p>
       {/each}
     {:else}
-      <p class="open-card">Left open</p>
+      <p data-slot="open-card" class="open-card">Left open</p>
     {/if}
     {#if card.dials.length > 0}
       <p class="dials">
@@ -93,15 +94,16 @@
       </p>
     {/if}
     {#if card.note}
-      <p class="note mark-line">
+      <p data-slot="note" class="note mark-line">
         <span aria-hidden="true" class="mark-cell"
-          ><span class="mark" data-box><IconUser /></span></span
+          ><span data-slot="mark" class="mark" data-box><IconUser /></span
+          ></span
         >
-        <span class="words">{card.note}</span>
+        <span data-slot="words" class="words">{card.note}</span>
       </p>
     {/if}
     {#if card.tasks.length > 0}
-      <p class="tasks" data-flip>
+      <p data-slot="tasks" class="tasks" data-flip>
         {#each card.tasks as id (id)}
           {@const task = taskOf(id)}
           <Badge
@@ -117,17 +119,18 @@
             }}
             variant={variantOf(task?.kind)}
           >
-            <span class="id">{id}</span>
+            <span data-slot="id" class="id">{id}</span>
             {#if task}
-              <span class="title">{task.title}</span>
+              <span data-slot="title" class="title">{task.title}</span>
             {/if}
           </Badge>
         {/each}
       </p>
     {/if}
     {#if others.length > 0 && card.options.length > 1}
-      <div class="fold-row">
+      <div data-slot="fold-row" class="fold-row">
         <Button
+          data-toggle
           aria-controls="{fid}-others"
           aria-expanded={open}
           class="toggle"
@@ -139,6 +142,7 @@
         >
           <span>{foldWords}</span>
           <IconChevronDown
+            data-chev
             aria-hidden="true"
             class="chev"
             data-icon="inline-end"
@@ -146,25 +150,27 @@
         </Button>
       </div>
       <div
+        data-slot="fold"
         class="fold"
         data-open={open || undefined}
         id="{fid}-others"
         inert={!open}
       >
-        <div class="fold-inner">
+        <div data-slot="fold-inner" class="fold-inner">
           <div class="fold-body">
             {#if card.why}
-              <p class="why">{card.why}</p>
+              <p data-slot="why" class="why">{card.why}</p>
             {/if}
             {#each others as option (option.id)}
-              <p class="other">
+              <p data-slot="other" class="other">
                 <span class="kit-chip turned">
                   <span class="kit-keycap">{option.keycap}</span><span
+                    data-slot="record-card-label"
                     class="label">{option.label}</span
                   >
                 </span>
                 {#if option.recommended}
-                  <span class="tag">Recommended</span>
+                  <span data-slot="tag" class="tag">Recommended</span>
                 {/if}
                 {#if option.line}
                   <span class="line">{option.line}</span>

@@ -91,7 +91,7 @@
   <Content collisionPadding={8} customAnchor={anchor ?? null} {side}>
     <span class="whitespace-pre-line"
       >{#if title}
-        <strong class="block font-medium">{title}</strong>
+        <strong data-slot="block" class="block font-medium">{title}</strong>
       {/if}
       {label}</span
     >

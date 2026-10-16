@@ -17,6 +17,7 @@
 </script>
 
 <div
+  data-standing={solid !== undefined || undefined}
   aria-hidden="true"
   class="foot-fade"
   style:--fade-solid={solid ?? null}

@@ -263,6 +263,8 @@
 </script>
 
 <span
+  data-tab-item-selected={selected || undefined}
+  data-slot="ff-tab"
   class={cn("ff-tab", selected && "selected", className)}
   data-flush={flush}
   data-tab-index={index}
@@ -275,6 +277,7 @@
          inside its edge (clipped to it), the stroke's ink tapering up from
          each foot's tip (the gradient), drawn to the tab's measured box. -->
     <svg
+      data-slot="fold"
       aria-hidden="true"
       class="fold"
       preserveAspectRatio="none"
@@ -298,9 +301,9 @@
           {/each}
         </linearGradient>
       </defs>
-      <use class="sheet" href="#{uid}-outline" />
+      <use data-slot="sheet" class="sheet" href="#{uid}-outline" />
       {#if !hung}
-        <g class="rim">
+        <g data-slot="rim" class="rim">
           <use
             class="stroke"
             clip-path="url(#{uid}-inside)"
@@ -313,6 +316,8 @@
   {/if}
   <svelte:element
     this={href ? "a" : "button"}
+    data-slot="hit"
+    data-hit
     aria-selected={selected}
     class="hit touch-hit"
     draggable={href ? "false" : undefined}
@@ -331,13 +336,18 @@
     <!-- The name, and over it the same name in the strong ink: a folder tab
          fades the strong one in as it is chosen (transitions.dev, text swap
          soft), so its ink travels with the choice. -->
-    <span class="label">
-      <span class="text">{label}</span>
+    <span data-slot="tab-item-label" class="label">
+      <span data-slot="text" class="text">{label}</span>
       <!-- Its words drawn, not written (`::before`): as a second copy of
            the name in the link's text, the tab's visible text was the name
            twice, which its accessible name does not hold (axe,
            label-content-name-mismatch). -->
-      <span aria-hidden="true" class="text strong" data-text={label}></span>
+      <span
+        data-slot="text"
+        aria-hidden="true"
+        class="text strong"
+        data-text={label}
+      ></span>
     </span>
   </svelte:element>
   {#if trail}

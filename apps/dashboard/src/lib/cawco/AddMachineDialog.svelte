@@ -251,7 +251,7 @@
 <!-- The address the machine is told to reach this hub on, the same choice on
      both tabs: the script is downloaded from it and `join` saves it. -->
 {#snippet addressField(id: string)}
-  <div class="field">
+  <div data-slot="add-machine-dialog-field" class="field">
     <Label for={id}>Hub address this machine should use</Label>
     <NativeSelect.Root
       class="w-full"
@@ -306,8 +306,8 @@
       <ul aria-label="Machines waiting to be admitted" class="waiting">
         {#each hubAuth.waiting as machine (machine.machineId)}
           <li>
-            <span class="who">
-              <span class="name"
+            <span data-slot="who" class="who">
+              <span data-slot="name" class="name"
                 >{machine.hostname ?? machine.machineId} waits to be admitted</span
               >
               {#if machine.address}
@@ -347,7 +347,11 @@
                 {#if index === steps.length - 1}
                   <Spinner class="size-4" />
                 {:else}
-                  <IconSuccess aria-hidden="true" class="size-4 done" />
+                  <IconSuccess
+                    data-add-machine-dialog-done
+                    aria-hidden="true"
+                    class="size-4 done"
+                  />
                 {/if}
                 <span>{step}</span>
               </li>
@@ -359,9 +363,11 @@
           </ol>
           <details class="output">
             <summary class="mark-line">
-              <IconChevronRight aria-hidden="true" class="chev size-4" /><span
-                >Output</span
-              >
+              <IconChevronRight
+                data-chev
+                aria-hidden="true"
+                class="chev size-4"
+              /><span>Output</span>
             </summary>
             <pre {@attach followTail()}>{job.lines.join("\n")}</pre>
           </details>
@@ -372,8 +378,11 @@
           id="ssh-join"
           onsubmit={start}
         >
-          <div class="grid grid-cols-[minmax(0,1fr)_6rem] gap-[var(--space-3)]">
-            <div class="field">
+          <div
+            data-slot="grid"
+            class="grid grid-cols-[minmax(0,1fr)_6rem] gap-[var(--space-3)]"
+          >
+            <div data-slot="add-machine-dialog-field" class="field">
               <Label for="join-target">SSH target</Label>
               <Input
                 autocapitalize="off"
@@ -384,7 +393,7 @@
                 bind:value={target}
               />
             </div>
-            <div class="field">
+            <div data-slot="add-machine-dialog-field" class="field">
               <Label for="join-port">Port</Label>
               <Input
                 aria-invalid={portValid ? undefined : "true"}
@@ -416,7 +425,11 @@
 
           <details class="output" bind:open={keyOpen}>
             <summary class="mark-line">
-              <IconChevronRight aria-hidden="true" class="chev size-4" />
+              <IconChevronRight
+                data-chev
+                aria-hidden="true"
+                class="chev size-4"
+              />
               <span>This hub's SSH key</span>
             </summary>
             <div class="flex flex-col gap-[var(--space-2)] pt-[var(--space-2)]">

@@ -60,7 +60,7 @@
   </div>
   <!-- The two editors cross-fade in one place and the box tweens between
        their heights. -->
-  <div class="swap" {@attach morph()}>
+  <div data-slot="swap" class="swap" {@attach morph()}>
     {#key json}
       <div class="alt" transition:crossIn>
         {#if json}

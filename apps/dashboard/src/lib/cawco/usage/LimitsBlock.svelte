@@ -114,15 +114,17 @@
     {#if ring.sessions.length > 0}
       <span class="heading"
         >Running
-        <span class="count mono-figure">{ring.sessions.length}</span></span
+        <span data-slot="count" class="count mono-figure"
+          >{ring.sessions.length}</span
+        ></span
       >
-      <div class="sessions">
+      <div data-slot="sessions" class="sessions">
         {#each ring.sessions as row (row.id)}
           {@const project = projectOf(row)}
-          <div class="session">
-            <span class="what"
+          <div data-slot="session" class="session">
+            <span data-slot="what" class="what"
               >{#if project}
-                <span class="project">{project}</span>
+                <span data-slot="project" class="project">{project}</span>
               {/if}
               {titleOf(row)}</span
             >
@@ -143,19 +145,21 @@
   say: Part[]
 )}
   <div
+    data-slot="tile"
     class="tile"
     data-account={ring.id}
     data-tile
     class:limit={ring.state === "limit"}
   >
-    <div class="head">
-      <span class="dot" style:--c={ring.color}></span>
+    <div data-slot="head" class="head">
+      <span data-slot="dot" class="dot" style:--c={ring.color}></span>
       <AccountName account={nameFields(ring)} wrap />
     </div>
-    <div class="mark">
+    <div data-slot="mark" class="mark">
       <Rings {index} reveal {ring} size={56} />
       <span class="figure">
         <span
+          data-slot="value"
           class="value"
           class:muted={ring.state === "limit" || ring.state === "stale"}
           >{#if figure.back}
@@ -172,14 +176,18 @@
   </div>
 {/snippet}
 
-<section aria-labelledby="limits-title" class="card">
-  <h2 class="title" id="limits-title">Limits</h2>
+<section
+  data-slot="limits-block-card"
+  aria-labelledby="limits-title"
+  class="card"
+>
+  <h2 data-slot="title" class="title" id="limits-title">Limits</h2>
 
   {#if !read}
     <div class="loading" data-slot="skeleton-rows">
       <Skeleton class="h-7 w-24" />
       <Skeleton class="h-4 w-3/4" />
-      <div class="grid">
+      <div data-slot="grid" class="grid">
         {#each [0, 1, 2] as one (one)}
           <Skeleton class="h-48 w-full" />
         {/each}
@@ -187,9 +195,13 @@
     </div>
   {:else}
     {#if lead}
-      <div class="lead">
+      <div data-slot="lead" class="lead">
         <p class="big">
-          <span class="kpi num" data-lead-figure class:muted={claude?.stale}
+          <span
+            data-slot="num"
+            class="kpi num"
+            data-lead-figure
+            class:muted={claude?.stale}
             >{#if lead.back}
               <span aria-hidden="true" class="back-glyph"><IconRefresh /></span>
             {/if}
@@ -197,13 +209,17 @@
           >
           <span class="of">{lead.of}</span>
         </p>
-        <p class="sentence" data-lead><Words parts={lead.say} /></p>
+        <p data-slot="sentence" class="sentence" data-lead>
+          <Words parts={lead.say} />
+        </p>
       </div>
     {/if}
 
     <div class="provider mark-line">
-      <span aria-hidden="true" class="glyph" data-box><ClaudeIcon /></span>
-      <span class="name">Claude</span>
+      <span data-slot="glyph" aria-hidden="true" class="glyph" data-box
+        ><ClaudeIcon /></span
+      >
+      <span data-slot="name" class="name">Claude</span>
       {#if claude?.delegate}
         {@const why = delegateTip(claude, claude.delegate)}
         <!-- Where new delegates go; why, on a rest or a tap, in placement's
@@ -228,7 +244,7 @@
       {/if}
     </div>
     {#if claude}
-      <div class="grid">
+      <div data-slot="grid" class="grid">
         {#each claude.accounts as ring, i (ring.id)}
           {@render tile(
             ring,
@@ -239,7 +255,10 @@
         {/each}
       </div>
       {#if extraText}
-        <p class="line"><span class="label">Extra usage</span>{extraText}</p>
+        <p class="line">
+          <span data-slot="limits-block-label" class="label">Extra usage</span
+          >{extraText}
+        </p>
       {/if}
     {:else if claudeUnknown}
       <div class="unknown">
@@ -258,11 +277,13 @@
 
     {#if openCode || (spend && spend.all > 0)}
       <div class="provider mark-line">
-        <span aria-hidden="true" class="glyph" data-box><OpenCodeLogo /></span>
-        <span class="name">opencode Go</span>
+        <span data-slot="glyph" aria-hidden="true" class="glyph" data-box
+          ><OpenCodeLogo /></span
+        >
+        <span data-slot="name" class="name">opencode Go</span>
       </div>
       {#if openCode}
-        <div class="grid">
+        <div data-slot="grid" class="grid">
           {@render tile(
             openCode,
             0,
@@ -273,7 +294,7 @@
       {/if}
       {#if spend && spend.all > 0}
         <p class="line">
-          <span class="label">Spend</span><span
+          <span data-slot="limits-block-label" class="label">Spend</span><span
             ><span class="mono-figure">{money(spend.today)}</span>
             today, <span class="mono-figure">{money(spend.week)}</span>
             this week,

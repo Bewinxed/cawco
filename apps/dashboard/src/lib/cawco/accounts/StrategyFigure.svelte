@@ -124,6 +124,7 @@
      only on a board that writes one; the build sets it again once its
      captions are measured, taller only where one wraps. -->
 <div
+  data-slot="stage"
   class="stage"
   bind:this={stage}
   style:height="{figureHeight(

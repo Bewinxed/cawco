@@ -91,8 +91,8 @@
   ready={settings !== null}
   title={section.label}
 >
-  <div class="group">
-    <p class="note">
+  <div data-slot="group" class="group">
+    <p data-slot="note" class="note">
       A previewed app runs on an origin of its own, so it never shares the
       dashboard's storage or sign-ins. Every open preview moves to the new
       address once this is saved.
@@ -140,11 +140,11 @@
       <!-- What the names need before Save, where the operator sets them. -->
       <div class="steps">
         <p class="steps-head">Before you save</p>
-        <p class="note">
+        <p data-slot="note" class="note">
           Every name the pattern makes has to reach the hub's port {firstPort}.
           Behind Cloudflare, with the dashboard on a tunnel already:
         </p>
-        <ol class="note">
+        <ol data-slot="note" class="note">
           {#if byPort}
             <li>
               In DNS, add a proxied CNAME record for each port of the range,
@@ -185,13 +185,13 @@
             </li>
           {/if}
         </ol>
-        <p class="note">
+        <p data-slot="note" class="note">
           Leave these names out of Cloudflare Access, or any sign-in in front of
           them. The hub locks them itself: a name opens only for the dashboard
           and the app, which ask the hub for a pass, and answers anyone else
           with 401.
         </p>
-        <p class="note">
+        <p data-slot="note" class="note">
           Without Cloudflare: point the pattern's names ({byPort
             ? "one per port"
             : "a wildcard"}) at the hub, or at a proxy that sends them to port

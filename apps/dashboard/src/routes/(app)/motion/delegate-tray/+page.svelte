@@ -240,9 +240,9 @@
 <svelte:head><title>Delegate tray | CawCo</title></svelte:head>
 
 <div class="bench" data-delegate-tray>
-  <div class="leaf">
-    <div class="stack">
-      <div class="pane">
+  <div data-slot="leaf" class="leaf">
+    <div data-slot="stack" class="stack">
+      <div data-slot="pane" class="pane">
         <SessionPane
           active
           browsing={null}
@@ -255,7 +255,11 @@
       </div>
     </div>
     {#if lent}
-      <div class="dock" style:width="{lent.transcriptShare * 100}%">
+      <div
+        data-slot="dock"
+        class="dock"
+        style:width="{lent.transcriptShare * 100}%"
+      >
         <Composer
           agentName={lent.agentName}
           ask={lent.ask}

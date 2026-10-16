@@ -77,13 +77,16 @@
 >
   {#snippet trigger()}
     {#if shown}
-      <span class="dot" style:--c={shown.color}></span>
+      <span data-slot="dot" class="dot" style:--c={shown.color}></span>
     {/if}
-    <span class="chip-label" data-account-chip>{label}</span>
+    <span data-slot="chip-label" class="chip-label" data-account-chip
+      >{label}</span
+    >
     <Down class="chevron" />
   {/snippet}
-  <div aria-label="Account" class="list" role="listbox">
+  <div data-slot="list" aria-label="Account" class="list" role="listbox">
     <button
+      data-slot="option"
       aria-selected={tool.value === null}
       class="option auto"
       data-account-option="auto"
@@ -98,6 +101,7 @@
     </button>
     {#each tool.options as option (option.id)}
       <button
+        data-slot="option"
         aria-selected={tool.value === option.id}
         class="option"
         data-account-option={option.id}
@@ -109,9 +113,14 @@
         {#if option.ring}
           <Rings ring={option.ring} size={16} />
         {:else}
-          <span class="dot lead" style:--c={option.color}></span>
+          <span
+            data-account-chip-lead
+            data-slot="dot"
+            class="dot lead"
+            style:--c={option.color}
+          ></span>
         {/if}
-        <span class="words">
+        <span data-slot="words" class="words">
           <AccountName account={nameFields(option)} row wrap />
           {#if option.line.length > 0}
             <span class="line"><Words parts={option.line} /></span>

@@ -119,7 +119,13 @@
   });
 </script>
 
-<div class="move" class:live class:open class:settled={watched && !live}>
+<div
+  data-account-move-divider-live={live || undefined}
+  class="move"
+  class:live
+  class:open
+  class:settled={watched && !live}
+>
   <!-- A button, so a keyboard and a finger can bring in the second line, as
        a pointer does by hovering. -->
   <button
@@ -150,14 +156,19 @@
       {/if}
       {#if !live}
         <span
+          data-slot="mark"
           class="mark"
           data-box
           in:fade={{ duration: watched ? dur("--dur-fade") : 0 }}
-          ><IconTransfer aria-hidden="true" class="glyph" />
-          <span aria-hidden="true" class="dot"></span></span
+          ><IconTransfer
+            data-account-move-divider-glyph
+            aria-hidden="true"
+            class="glyph"
+          />
+          <span data-slot="dot" aria-hidden="true" class="dot"></span></span
         >
       {/if}
-      <span class="words"
+      <span data-slot="words" class="words"
         >{#if watched}
           <MorphText text={words.line} />
         {:else}
@@ -165,12 +176,14 @@
         {/if}</span
       >
       {#if row.brief !== null}
-        <span class="chev" data-box><IconChevron aria-hidden="true" /></span>
+        <span data-slot="chev" class="chev" data-box
+          ><IconChevron aria-hidden="true" /></span
+        >
       {/if}</span
     >
     <span class="arm"></span>
   </button>
-  <p class="detail"><span>{words.detail}</span></p>
+  <p data-slot="detail" class="detail"><span>{words.detail}</span></p>
   {#if open && row.brief !== null}
     <div class="brief" data-state="open" transition:unfold>
       <MessageBody source={row.brief} />

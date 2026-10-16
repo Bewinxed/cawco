@@ -230,7 +230,7 @@
   <RowFault class="act-fault" reason={faultOf(key)} />
 {/snippet}
 
-<div class="run-view tx-columns">
+<div data-slot="tx-columns" data-run-view class="run-view tx-columns">
   {#if errorMessage}
     <Alert role="alert" variant="destructive">
       <AlertDescription>{errorMessage}</AlertDescription>
@@ -247,7 +247,7 @@
   {:else}
     <!-- What the tab cannot say, before the run: it stands at the page's
          edge as a transcript's prose does, clear of the run's lines. -->
-    <header class="head">
+    <header data-slot="head" class="head">
       <div class="facts">
         <p class="started">Started {startedAt}</p>
         <!-- A command of the run held by its machine's pause, or queued for
@@ -262,13 +262,19 @@
             {#each inputs as [key, value] (key)}
               <div>
                 <dt>{key}</dt>
-                <dd class:code={typeof value !== "string"}>{shown(value)}</dd>
+                <dd
+                  data-workflow-run-view-code={typeof value !== "string" ||
+                    undefined}
+                  class:code={typeof value !== "string"}
+                >
+                  {shown(value)}
+                </dd>
               </div>
             {/each}
           </dl>
         {/if}
       </div>
-      <div class="actions">
+      <div data-slot="actions" class="actions">
         {#if going}
           <Button
             aria-expanded={asks.pending !== null}
@@ -349,14 +355,14 @@
                 {/each}
               </ul>
             {/if}
-            <div class="field">
+            <div data-slot="workflow-run-view-field" class="field">
               <Label for="run-note-{runId}">Note (optional)</Label>
               <Input id="run-note-{runId}" bind:value={note} />
             </div>
             {#if ask.answerSchema}
               <!-- A typed answer: its JSON is checked by the hub against the
                    schema the program declared, shown here as the placeholder. -->
-              <div class="field">
+              <div data-slot="workflow-run-view-field" class="field">
                 <Label for="run-value-{runId}">Answer value (JSON)</Label>
                 <Textarea
                   id="run-value-{runId}"
@@ -366,7 +372,7 @@
                 />
               </div>
               {#if !ask.options.length}
-                <div class="send">
+                <div data-slot="send" class="send">
                   <Button
                     disabled={!valueText.trim() ||
                       (busy && acting !== "value") ||
@@ -390,9 +396,9 @@
               {/if}
             {/if}
             {#if ask.allowOther}
-              <div class="field">
+              <div data-slot="workflow-run-view-field" class="field">
                 <Label for="run-other-{runId}">Other answer</Label>
-                <div class="other">
+                <div data-slot="other" class="other">
                   <Input id="run-other-{runId}" bind:value={other} />
                   <Button
                     disabled={!other || (busy && acting !== "answer") || !live}
@@ -423,13 +429,17 @@
 
     {#if logLines.length}
       <details class="log" bind:open={logOpen} in:unfold out:unfold>
-        <summary>Log · <span class="num">{logLines.length}</span></summary>
+        <summary
+          >Log · <span data-slot="num" class="num">{logLines.length}</span
+          ></summary
+        >
         <!-- A line arrives the house way (motion/rows), and the log keeps
              the newest in view only while the reader is at its end. -->
         <ol {@attach reflow()} {@attach followTail()}>
           {#each logLines as line (line.seq)}
             <li data-flip>
-              <time class="num">{new Date(line.at).toLocaleTimeString()}</time
+              <time data-slot="num" class="num"
+                >{new Date(line.at).toLocaleTimeString()}</time
               ><span>{line.text}</span>
             </li>
           {/each}

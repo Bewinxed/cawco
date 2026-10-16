@@ -423,11 +423,12 @@
     />
   {/snippet}
 
-  <div class="host">
+  <div data-slot="host" class="host">
     <div class="setup">
       <ol aria-label={words.stepsLabel} class="steps">
         {#each STEPS as id, place (id)}
           <li
+            data-account-setup-done={place < step || undefined}
             aria-current={place === step ? "step" : undefined}
             class={[
               "step",
@@ -439,9 +440,10 @@
             {#if place < step}
               <IconSuccess aria-hidden="true" />
             {:else}
-              <span aria-hidden="true" class="dot" data-box></span>
+              <span data-slot="dot" aria-hidden="true" class="dot" data-box
+              ></span>
             {/if}
-            <span class="name">{words.steps[id]}</span>
+            <span data-slot="name" class="name">{words.steps[id]}</span>
           </li>
         {/each}
       </ol>
@@ -450,6 +452,7 @@
         <div class="box" {@attach morph()}>
           {#key step}
             <div
+              data-picker={at === "provider" || undefined}
               class={["in", at === "provider" && "picker"]}
               in:stepIn
               out:stepOut
@@ -481,7 +484,7 @@
                 {@const line = routingLine(pair, { yours, delegates })}
                 <section class="sec">
                   <h2>{words.setUp(nameOf(pair[0]), nameOf(pair[1]))}</h2>
-                  <p class="lead">
+                  <p data-slot="lead" class="lead">
                     {limits && atLimit.move ? words.withMoves(line) : line}
                   </p>
                 </section>
@@ -492,7 +495,7 @@
         {#if refused}
           <p class="problem" role="alert" in:appear>{refused}</p>
         {/if}
-        <div class="foot" {@attach aboveKeyboard()}>
+        <div data-slot="foot" class="foot" {@attach aboveKeyboard()}>
           <Button
             disabled={step === 0 || busy || (step === 1 && signedIn > 0)}
             label={words.back}
@@ -517,6 +520,7 @@
   <section class="sec">
     {#if choices.length > 8}
       <Input
+        data-search
         aria-label={words.search}
         autocomplete="off"
         class="search"
@@ -546,6 +550,7 @@
       {@const label = choiceLabel(row)}
       {#snippet button(props: Record<string, unknown>)}
         <button
+          data-choice
           {...props}
           aria-disabled={free ? undefined : "true"}
           class="choice mark-line"
@@ -563,7 +568,7 @@
             ><ProviderMark provider={row.provider} /></span
           >
           <span class="plabel">{label}</span>
-          <span aria-hidden="true" class="chev" data-box
+          <span data-slot="chev" aria-hidden="true" class="chev" data-box
             ><IconChevronRight /></span
           >
         </button>
@@ -613,7 +618,7 @@
     {#if choice?.signin === "api-key"}
       <KeyPanel account={ensureAccount} {machines} primary={keyFirst} />
     {:else}
-      <ul class="machines">
+      <ul data-slot="machines" class="machines">
         {#each machines as machine (machine.machineId)}
           {@const name = machineName(machine)}
           {@const online = machineOnline(machine)}
@@ -624,7 +629,7 @@
           {#if device}
             <li class="mrow device">
               <b class="mname">{name}</b>
-              <div class="controls">
+              <div data-slot="controls" class="controls">
                 <DevicePanel flow={device} machine={name} {online} />
               </div>
               <span class={["st", "mark-line", state === "mismatch" && "warn"]}>
@@ -672,7 +677,7 @@
                 {/if}
               </span>
               {#if asked && !done}
-                <div class="controls" in:unfold>
+                <div data-slot="controls" class="controls" in:unfold>
                   {#if paste.url}
                     <Button
                       href={paste.url}
@@ -695,6 +700,7 @@
                     />
                   {/if}
                   <Input
+                    data-account-setup-code
                     aria-invalid={paste.problem ? "true" : undefined}
                     aria-label={words.codeFor(name)}
                     autocomplete="off"
@@ -746,14 +752,16 @@
   <section class="sec">
     <h2>{words.steps.nameIt}</h2>
     <div class="fld">
-      <span class="label">{words.howItShows}</span>
+      <span data-slot="account-setup-label" class="label"
+        >{words.howItShows}</span
+      >
       <div class="preview">
         <AccountTile {hue} provider={choice?.provider ?? ""} size={28} />
         <AccountName account={shown} />
       </div>
     </div>
     <div class="fld">
-      <label class="label" for="setup-nickname">
+      <label data-slot="account-setup-label" class="label" for="setup-nickname">
         {words.nickname}
         <span class="optional">{words.optional}</span>
       </label>
@@ -766,7 +774,9 @@
       />
     </div>
     <div class="fld">
-      <span class="label">{accountsWords.colour}</span>
+      <span data-slot="account-setup-label" class="label"
+        >{accountsWords.colour}</span
+      >
       <Swatches bind:value={hue} />
     </div>
   </section>

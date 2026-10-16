@@ -74,8 +74,8 @@
   ready={onCap !== null}
   title={section.label}
 >
-  <div class="group">
-    <p class="note">
+  <div data-slot="group" class="group">
+    <p data-slot="note" class="note">
       Each project sets what it may spend in a day or a month on its Usage page,
       and follows this unless it chooses otherwise.
     </p>

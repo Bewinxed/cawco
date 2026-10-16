@@ -1372,7 +1372,7 @@
      bar on a wide screen (`inBar`, bar-strip), as the page's own row under
      the head on a phone. -->
 {#snippet strip(inBar: boolean)}
-  <div class="strip" class:in-bar={inBar}>
+  <div data-slot="strip" class="strip" class:in-bar={inBar}>
     <Tabs onValueChange={choose} value={current}>
       <TabsList aria-label="Views" scrollable>
         {#each tabs as each (each.value)}
@@ -1387,7 +1387,9 @@
                   ><span>draft</span></Badge
                 >
               {:else if each.value === "decisions" && decisions.waiting > 0}
-                <span class="tab-num">{decisions.waiting}</span>
+                <span data-slot="tab-num" class="tab-num"
+                  >{decisions.waiting}</span
+                >
               {/if}
             {/snippet}
           </TabItem>
@@ -1397,7 +1399,11 @@
     {#if trailing}
       <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
            stands only while Needs you follows it there. -->
-      <span aria-hidden="true" class="rule" class:wide={needsYou.length === 0}
+      <span
+        data-wide={needsYou.length === 0 || undefined}
+        aria-hidden="true"
+        class="rule"
+        class:wide={needsYou.length === 0}
       ></span>
     {/if}
     <div class="trail">
@@ -1424,6 +1430,7 @@
       {/if}
       {#if strippedNewTask}
         <Button
+          data-wide
           class="wide pressable"
           onclick={() => {
             if (current !== "table") {
@@ -1440,6 +1447,7 @@
       {/if}
       {#if canTalk}
         <Button
+          data-wide
           class="wide pressable"
           onclick={(event) => ask(event.currentTarget as HTMLElement)}
           size="sm"
@@ -1530,7 +1538,7 @@
 {/snippet}
 <!-- A task view's block counts the tasks it shows. -->
 {#snippet taskCount()}
-  <span class="block-count num">{shownTasks.length}</span>
+  <span data-slot="num" class="block-count num">{shownTasks.length}</span>
 {/snippet}
 <!-- A kept view placed on a page, drawn as its tab draws it. -->
 {#snippet viewBody(block: string)}
@@ -1578,7 +1586,7 @@
           </div>
         {:else}
           <!-- A kept view's head: its ⋯ places it on a page, as a block. -->
-          <div class="view-head mark-line">
+          <div data-slot="view-head" class="view-head mark-line">
             <span aria-hidden="true" class="view-glyph" data-box
               ><IconArtifactSheet /></span
             >
@@ -1669,14 +1677,19 @@
     {#if !lead.view}
       <Skeleton class="h-48 w-full max-w-xl rounded-[var(--radius-lg)]" />
     {:else if canTalk}
-      <div class="state caw-empty">
+      <div data-slot="caw-empty" class="state caw-empty">
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
             <!-- He stands here instead of sitting in the head, and is the
                  same seat at 80: a press opens his panel over the page
                  (CawFloat). His switch is under the head's ⋯, empty board
                  or not. -->
-            <div class="caw-80" data-share="caw:{projectId}" out:sitDown|global>
+            <div
+              data-slot="caw-80"
+              class="caw-80"
+              data-share="caw:{projectId}"
+              out:sitDown|global
+            >
               <CawSeat
                 {lead}
                 {projectId}
@@ -1770,7 +1783,7 @@
 {:else}
   {#if phone && openTask && stages}
     <!-- A phone: the task is its own page, with Back to the view. -->
-    <div class="project-page task-only">
+    <div data-slot="project-page" class="project-page task-only">
       <TaskPane
         {allowedFrom}
         backLabel={project.name}
@@ -1788,7 +1801,10 @@
   {:else}
     <!-- The frame the phone's views bar docks in, over the page's foot. -->
     <div class="project-frame">
-      <div class={["project-page", fadeOn === "page" && "kit-edge-fade-block"]}>
+      <div
+        data-slot="project-page"
+        class={["project-page", fadeOn === "page" && "kit-edge-fade-block"]}
+      >
         <ProjectHead
           bind:this={head}
           {lead}
@@ -1813,28 +1829,28 @@
         />
 
         {#if lead.view?.problem}
-          <Alert class="notice" variant="warning">
+          <Alert data-id-page-notice class="notice" variant="warning">
             <AlertDescription>{lead.view.problem}</AlertDescription>
           </Alert>
         {/if}
         {#if stages && stages.problems.length > 0}
-          <Alert class="notice" variant="warning">
+          <Alert data-id-page-notice class="notice" variant="warning">
             <AlertDescription>{unreadStages}</AlertDescription>
           </Alert>
         {:else if stagesProblem}
-          <Alert class="notice" variant="warning">
+          <Alert data-id-page-notice class="notice" variant="warning">
             <AlertDescription>
               The project's stages could not be read: {stagesProblem}
             </AlertDescription>
           </Alert>
         {/if}
         {#if list && list.problems.length > 0}
-          <Alert class="notice" variant="warning">
+          <Alert data-id-page-notice class="notice" variant="warning">
             <AlertDescription>{list.problems.join(" ")}</AlertDescription>
           </Alert>
         {/if}
         {#if viewsProblem}
-          <Alert class="notice" variant="warning">
+          <Alert data-id-page-notice class="notice" variant="warning">
             <AlertDescription
               >The project's views could not be read:
               {viewsProblem}</AlertDescription
@@ -1923,6 +1939,7 @@
 
 {#snippet viewPane()}
   <div
+    data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
     class={["pane", fadeOn === "pane" && "kit-edge-fade-block"]}
     data-view={reading ? "board" : paneView}
@@ -1940,7 +1957,7 @@
         {/each}
       </div>
     {:else}
-      <div class="swap" in:crossIn>
+      <div data-slot="swap" class="swap" in:crossIn>
         {#key shown}
           <div
             class="current"

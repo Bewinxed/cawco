@@ -44,7 +44,7 @@
 </script>
 
 <div class="machines-empty" class:leaving={!present}>
-  <div class="caw-80">
+  <div data-slot="caw-80" class="caw-80">
     <Caw
       next={["ready", "idle"]}
       {ongone}
@@ -53,12 +53,14 @@
       status={fleet === "none" ? "ready" : "idle"}
     />
   </div>
-  <div class="body">
+  <div data-slot="body" class="body">
     {#key fleet}
       <!-- mark-line: a column; the machine cards stand under the words -->
-      <div class="words" in:crossIn out:crossOut>
+      <div data-slot="words" class="words" in:crossIn out:crossOut>
         {#if fleet === "none"}
-          <h1 class="title">Connect a machine to run sessions</h1>
+          <h1 data-slot="title" class="title">
+            Connect a machine to run sessions
+          </h1>
           <p class="line">
             Sessions run on your own machines. Install CawCo on one and it joins
             this fleet.
@@ -92,7 +94,9 @@
             {/each}
           </div>
         {:else}
-          <h1 class="title">None of your machines are online</h1>
+          <h1 data-slot="title" class="title">
+            None of your machines are online
+          </h1>
           <p class="line">
             Sessions run on a machine that is online. See which ones dropped and
             why.

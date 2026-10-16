@@ -212,7 +212,7 @@
      opens a tab (a modifier, the middle button) still does. -->
 {#snippet under()}
   {#if earlier.length > 0}
-    <section aria-label="Earlier threads" class="earlier">
+    <section data-slot="earlier" aria-label="Earlier threads" class="earlier">
       <h3>Earlier</h3>
       <ul>
         {#each earlier as each (each.id)}
@@ -246,10 +246,11 @@
 {/snippet}
 
 <div class="caw-thread" data-caw-panel>
-  <div class="head" data-caw-head>
+  <div data-slot="head" class="head" data-caw-head>
     <div class="identity">
       {#if leadId}
         <button
+          data-slot="name"
           aria-expanded={cardOpen}
           aria-haspopup="dialog"
           class="name press-tint"
@@ -265,7 +266,7 @@
           Caw{#if off}<span class="off-word">{" · off"}</span>{/if}
         </button>
       {:else}
-        <span class="name"
+        <span data-slot="name" class="name"
           >Caw{#if off}<span class="off-word">{" · off"}</span>{/if}</span
         >
       {/if}
@@ -302,7 +303,7 @@
       {/if}
     </div>
   </div>
-  <div class="well">
+  <div data-slot="well" class="well">
     {#key chosen}
       <!-- The panel's thread is the transcript being read over the page:
            focused, so its rows follow every message as it lands and it rides
@@ -335,6 +336,7 @@
     open={cardOpen}
   >
     <Popover.Content
+      data-caw-lead-card
       align="start"
       aria-label="Caw's session"
       class="caw-lead-card"

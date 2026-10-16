@@ -49,7 +49,7 @@
   );
 </script>
 
-<p class="note">
+<p data-slot="note" class="note">
   Every save keeps what it replaced. Restoring writes an old version back as
   this one.
 </p>
@@ -59,14 +59,14 @@
   {#if failed}
     <p class="caution" role="alert">{failed}</p>
   {:else if versions.length === 0}
-    <p class="note">Nothing has been saved over yet.</p>
+    <p data-slot="note" class="note">Nothing has been saved over yet.</p>
   {:else}
     <ul class="versions">
       {#each visibleVersions as version (version.id)}
         <li class="version" data-flip>
           <span class="vtext">
             <span class="vname">{version.name}</span>
-            <span class="note">
+            <span data-slot="note" class="note">
               {new Date(version.createdAt).toLocaleString()}
               · from {sourceLabel(version.source)}
               · <span class="font-mono">{version.hash.slice(0, 7)}</span>
@@ -92,7 +92,7 @@
       {/each}
     </ul>
     {#if versions.length > LATEST}
-      <div class="more" data-flip>
+      <div data-slot="more" class="more" data-flip>
         <Button
           onclick={() => {
             allVersions = !allVersions;

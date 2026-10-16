@@ -21,7 +21,7 @@
   } = $props();
 </script>
 
-<section class="section">
+<section data-slot="section" class="section">
   <SectionHeader {hue} {icon} {label} {right} wrap />
   {@render children()}
 </section>

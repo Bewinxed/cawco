@@ -10,7 +10,7 @@
 
 <div class="view-board">
   {#if props.title}
-    <h3 class="title">{String(props.title)}</h3>
+    <h3 data-slot="title" class="title">{String(props.title)}</h3>
   {/if}
   <div class="columns">{@render renderNode(props.children)}</div>
 </div>

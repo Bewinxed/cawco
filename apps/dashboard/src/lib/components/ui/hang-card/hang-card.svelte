@@ -360,6 +360,7 @@
      unless the site keeps it drawn (`forceMount`): the page has its pointer
      back at the dismissal (floating-presence). -->
 <Content
+  data-glass-card={glass || undefined}
   {...rest}
   class={cn(
     "kit-pop kit-hang",

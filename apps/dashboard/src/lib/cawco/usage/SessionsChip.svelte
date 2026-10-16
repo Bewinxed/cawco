@@ -206,23 +206,28 @@
     style={reach > 0 ? `min-block-size: ${reach}px` : undefined}
     trapFocus={!byPointer}
   >
-    <div class="card" bind:this={card}>
-      <p class="head" data-flyover-head>
+    <div data-slot="sessions-chip-card" class="card" bind:this={card}>
+      <p data-slot="head" class="head" data-flyover-head>
         {name}
         · {count === 1 ? "1 session" : `${count} sessions`}
       </p>
-      <ul aria-label={label} class="list">
+      <ul data-slot="list" aria-label={label} class="list">
         {#each sessions as session (session.id)}
           <li>
             <a
+              data-slot="item"
               class="item"
               data-session-link={session.id}
               href={conversationHref(session.id, cawco.instanceIndex)}
               onclick={opened}
             >
               <SessionStatus compact sessionId={session.id} />
-              <span class="title">{instanceTitle(session)}</span>
-              <span class="project">{projectOfRow(session)}</span>
+              <span data-slot="title" class="title"
+                >{instanceTitle(session)}</span
+              >
+              <span data-slot="project" class="project"
+                >{projectOfRow(session)}</span
+              >
             </a>
           </li>
         {/each}

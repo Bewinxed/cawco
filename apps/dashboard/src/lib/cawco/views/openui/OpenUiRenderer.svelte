@@ -435,6 +435,7 @@
   {@render pendingContent()}
 {:else if evaluated}
   <div
+    data-open-ui-renderer-class={className}
     aria-busy={loading}
     class={className}
     data-query-loading={loading ? "" : undefined}

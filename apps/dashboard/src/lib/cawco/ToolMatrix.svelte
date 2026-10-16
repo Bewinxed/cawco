@@ -111,7 +111,9 @@
     <span class="flex items-center gap-[var(--space-1)]">
       <Badge class="{CHIP} text-success" variant="ghost">
         <IconCheck class="size-4 shrink-0" />
-        <span class="num font-mono">{toolStatus?.version ?? "—"}</span>
+        <span data-slot="num" class="num font-mono"
+          >{toolStatus?.version ?? "—"}</span
+        >
       </Badge>
       <span
         class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 md:opacity-0"
@@ -325,7 +327,9 @@
                     <IconExternal class="size-3" />
                   </a>
                 </span>
-                <span class="num text-meta text-muted-foreground"
+                <span
+                  data-slot="num"
+                  class="num text-meta text-muted-foreground"
                   >{installedOn(spec)}/{machines.length}
                   installed</span
                 >

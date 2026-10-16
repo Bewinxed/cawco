@@ -217,6 +217,7 @@
 <!-- `data-frame`: the card's surface is its frame, opened before what is
      on it (Row's arrival). -->
 <section
+  data-slot="hitl"
   aria-label="Question from {asker}"
   class="hitl"
   data-frame
@@ -225,20 +226,33 @@
   <!-- The card's head is a rail line: its state's mark in the glyph cell,
        the title at the text column, the state in words after it. -->
   <h2 class="rail-line">
-    <span class="state rail-cell">
+    <span data-slot="rail-cell" class="state rail-cell">
       {#if answered}
-        <span class="mark done" in:pillSwap out:pillSwap><IconCheck /></span>
+        <span
+          data-slot="mark"
+          data-question-card-done
+          class="mark done"
+          in:pillSwap
+          out:pillSwap><IconCheck /></span
+        >
       {:else if dismissed || failed}
-        <span class="mark muted" in:pillSwap out:pillSwap><IconClose /></span>
+        <span data-slot="mark" class="mark muted" in:pillSwap out:pillSwap
+          ><IconClose /></span
+        >
       {:else}
-        <span class="mark attn" in:pillSwap out:pillSwap><IconAsk /></span>
+        <span data-slot="mark" class="mark attn" in:pillSwap out:pillSwap
+          ><IconAsk /></span
+        >
       {/if}
     </span>
     <span>Question from {asker}</span>
     <span class="state" data-box>
       {#if answered}
-        <span class="pill done mark-line" in:pillSwap out:pillSwap
-          ><span>answered</span></span
+        <span
+          data-slot="done"
+          class="pill done mark-line"
+          in:pillSwap
+          out:pillSwap><span>answered</span></span
         >
       {:else if dismissed}
         <span class="pill muted mark-line" in:pillSwap out:pillSwap
@@ -261,7 +275,7 @@
   </h2>
 
   {#each questions as q (q.question)}
-    <p class="lede rail-hang">{q.question}</p>
+    <p data-slot="lede" class="lede rail-hang">{q.question}</p>
     <div class="qopts kit-chips rail-hang" data-question={q.question}>
       {#each settled ? [] : q.options as opt, i (opt.label)}
         <span
@@ -275,6 +289,7 @@
       {#if answered}
         {#each q.options.filter( (opt) => isSelected(q.question, opt.label) ) as opt (opt.label)}
           <span
+            data-slot="sel"
             class="kit-chip sel"
             {@attach land(() => shareKey(q.question, opt.label), {
               ms: dur("--dur-pop"),

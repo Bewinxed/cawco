@@ -70,7 +70,7 @@
     }
   }}
 />
-<div class="tools wf">
+<div data-slot="tools" class="tools wf">
   {#if onpan}
     <button aria-pressed={pan} class="wf-btn" onclick={onpan} type="button">
       {pan ? "Pan" : "Select"}

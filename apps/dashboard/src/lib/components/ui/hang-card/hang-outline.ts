@@ -38,9 +38,10 @@ export function outlineLayer(card: HTMLElement): OutlineLayer {
   const id = `hang-outline-${made}`;
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("class", "hang-outline");
+  svg.setAttribute("data-slot", "hang-outline");
   svg.setAttribute("aria-hidden", "true");
   svg.innerHTML = `<defs>
-<linearGradient id="${id}-ink" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" y2="1"><stop offset="0" class="rim"/><stop offset="1" class="edge"/></linearGradient>
+<linearGradient id="${id}-ink" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" y2="1"><stop offset="0" data-slot="rim" class="rim"/><stop offset="1" class="edge"/></linearGradient>
 <clipPath id="${id}-under"><rect x="-100000" y="0" width="200000" height="200000"/></clipPath>
 <filter id="${id}-cast" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
 <feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dy="18" result="far"/><feFlood class="far"/><feComposite in2="far" operator="in" result="farInk"/>

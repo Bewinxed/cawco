@@ -20,10 +20,10 @@
   } = $props();
 </script>
 
-<div class="row">
+<div data-slot="row" class="row">
   <Switch {disabled} {id} onCheckedChange={onchange} bind:checked />
   <span class="copy">
-    <label class="label" for={id}>{label}</label>
+    <label data-slot="switch-field-label" class="label" for={id}>{label}</label>
     {#if typeof hint === "string"}
       <span class="hint">{hint}</span>
     {:else if hint}

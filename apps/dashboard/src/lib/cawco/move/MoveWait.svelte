@@ -407,10 +407,11 @@
   const cancellable = $derived(waiting && job.stage !== "start");
 </script>
 
-<div class="wait" data-move={job.id} class:phone>
+<div data-slot="wait" class="wait" data-move={job.id} class:phone>
   <!-- A stopped move has no Caw and no room for him: its column starts at
        the same top whatever stage it stopped at, as on the phone app. -->
   <div
+    data-move-wait-empty={!cawThere || undefined}
     class="caw"
     class:empty={!cawThere}
     class:gone={job.stage === "cancelled"}
@@ -432,10 +433,10 @@
   </div>
 
   {#if columnShown}
-    <div class="column" in:crossIn>
+    <div data-slot="column" class="column" in:crossIn>
       <ThinkingSteps>
         {#each rows as row, index (row.step)}
-          <div class="row" data-phase={row.phase} out:unfold>
+          <div data-slot="row" class="row" data-phase={row.phase} out:unfold>
             <ThinkingStep
               icon={GLYPHS[row.phase]}
               isLast={index === rows.length - 1}
@@ -443,7 +444,9 @@
               status={STATUS[row.phase]}
             >
               {#if row.step === "snapshot" && job.snapshot?.branch && row.phase !== "ahead"}
-                <code class="sub mono">{job.snapshot.branch}</code>
+                <code data-slot="sub" class="sub mono"
+                  >{job.snapshot.branch}</code
+                >
               {/if}
               {#if (row.step === "clone" || row.step === "lfs") && row.phase === "active" && job.progress}
                 {@const progress = job.progress}
@@ -452,7 +455,7 @@
                     aria-label={row.label}
                     value={share(progress.bytes, progress.total)}
                   />
-                  <span class="meta num"
+                  <span data-num data-slot="meta" class="meta num"
                     >{share(progress.bytes, progress.total)}% ·
                     {partWords(progress.bytes, progress.total)}{left
                       ? ` · ${left}`
@@ -466,24 +469,35 @@
                 {@const file = job.lfsFile}
                 <div class="file" in:unfold out:unfold>
                   {#key file.file}
-                    <span class="path" title={file.file} in:crossIn out:crossOut
-                      ><bdi>{file.file}</bdi></span
+                    <span
+                      data-slot="path"
+                      class="path"
+                      title={file.file}
+                      in:crossIn
+                      out:crossOut><bdi>{file.file}</bdi></span
                     >
                   {/key}
                   <Progress
                     class="file-bar"
                     value={share(file.bytes, file.total)}
                   />
-                  <span class="meta num"
+                  <span data-num data-slot="meta" class="meta num"
                     >{partWords(file.bytes, file.total)}</span
                   >
                 </div>
               {/if}
               {#if row.step === "install" && (row.phase === "active" || row.phase === "failed") && job.install}
-                <code class="sub mono">{job.install.command}</code>
+                <code data-slot="sub" class="sub mono"
+                  >{job.install.command}</code
+                >
               {/if}
               {#if row.phase === "asking" && job.ask}
-                <div class="card" in:unfold out:unfold>
+                <div
+                  data-slot="move-wait-card"
+                  class="card"
+                  in:unfold
+                  out:unfold
+                >
                   <p class="card-title">{job.ask.title}</p>
                   <MoveAskBody ask={job.ask} />
                   <div class="answers">
@@ -493,7 +507,7 @@
                       size="sm"
                       variant="secondary"
                     >
-                      <IconClose class="deny" />
+                      <IconClose data-slot="deny" class="deny" />
                       <span>{DONT_MOVE}</span>
                     </Button>
                     <!-- The yes is the action, coral as in New session's step 2. -->
@@ -509,7 +523,7 @@
                 </div>
               {/if}
               {#if row.phase === "failed" && job.error}
-                <div class="failure" in:unfold out:unfold>
+                <div data-slot="failure" class="failure" in:unfold out:unfold>
                   <Alert role="alert" variant="destructive">
                     <IconError />
                     <!-- The machine's words, unless they only repeat the step's. -->
@@ -518,12 +532,14 @@
                     {/if}
                     <AlertDescription>
                       {#if job.error.detail}
-                        <code class="detail mono">{job.error.detail}</code>
+                        <code data-slot="detail" class="detail mono"
+                          >{job.error.detail}</code
+                        >
                       {/if}
                       {#if job.error.stage === "clone"}
                         <span>The partial clone is removed first.</span>
                       {/if}
-                      <span class="alert-actions">
+                      <span data-slot="alert-actions" class="alert-actions">
                         <Button
                           disabled={retrying}
                           failed={refused?.by === "cancel"}
@@ -564,9 +580,10 @@
     </div>
     <!-- Cancel and Close are one control in one place: bordered, its edge on
          the glyph column, the foot's whole width on a phone (design 2g). -->
-    <div class="foot">
+    <div data-slot="foot" class="foot">
       {#if cancellable}
         <Button
+          data-foot-button
           class="foot-button"
           failed={refused?.by === "cancel"}
           label="Cancel"
@@ -580,6 +597,7 @@
         {/if}
       {:else if job.stage === "cancelled"}
         <Button
+          data-foot-button
           class="foot-button"
           onclick={() => workspace.close(job.targetInstanceId)}
           variant="secondary">Close</Button

@@ -28,14 +28,14 @@
      problem arrives or leaves, the panel's edge slides to its new place
      instead of jumping. -->
 <div class="program" {@attach reflow()}>
-  <p class="wf-muted note">
+  <p data-slot="note" class="wf-muted note">
     {#if origin === "editor"}
       Compiled from this graph on save. Edit the graph to change it.
     {:else}
       The program is the workflow. It saves as you type.
     {/if}
   </p>
-  <div class="code">
+  <div data-slot="code" class="code">
     <CodeView
       {editable}
       label="Workflow program"
@@ -53,11 +53,11 @@
       data-flip
       {@attach reflow()}
     >
-      <div class="head">
+      <div data-slot="head" class="head">
         {#key problems.length > 0}
           <div transition:crossIn>
             {#if problems.length}
-              <h2 class="num">Problems · {problems.length}</h2>
+              <h2 data-slot="num" class="num">Problems · {problems.length}</h2>
             {:else}
               <p class="wf-muted">
                 The hub compiled and typechecked this program. No problems

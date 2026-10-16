@@ -407,36 +407,38 @@
   const Sprite = $derived(sessionSprite(seed));
 </script>
 
-<div class="branch delegate rail-row">
+<div data-slot="rail-row" class="branch delegate rail-row">
   <Collapsible.Root onOpenChange={onToggle} {open}>
-    <div class="head">
-      <Collapsible.Trigger class="bhead rail-line press-tint">
+    <div data-slot="head" class="head">
+      <Collapsible.Trigger data-bhead class="bhead rail-line press-tint">
         <!-- The mark the delegate tray's chip flies out of, the first time
              this card leaves the view (tray.svelte.ts). -->
         <span
+          data-rail-cell
+          data-slot="mark"
           aria-hidden="true"
           class="mark rail-cell m{markHue(seed)}"
           {@attach trayCard(() => (elsewhere ? null : id))}><Sprite /></span
         >
         <span class="tk">{label}</span>
-        <span aria-hidden="true" class="chev" data-box
+        <span data-slot="chev" aria-hidden="true" class="chev" data-box
           ><IconChevronRight /></span
         >
         {#if started}
-          <span class="kind mark-text" data-box>session</span>
+          <span data-slot="kind" class="kind mark-text" data-box>session</span>
         {:else if type}
-          <span class="kind mark-text" data-box>{type}</span>
+          <span data-slot="kind" class="kind mark-text" data-box>{type}</span>
         {/if}
         {#if harness}
-          <span class="meta">{harness}</span>
+          <span data-slot="meta" class="meta">{harness}</span>
         {/if}
         {#if model}
-          <span class="meta">{modelLabel(model)}</span>
+          <span data-slot="meta" class="meta">{modelLabel(model)}</span>
         {/if}
         {#if mayDelegate}
           <span class="may">may delegate</span>
         {/if}
-        <span class="pill mark-text {tone}" data-box>
+        <span class="pill mark-text {tone}" data-delegate-tone={tone} data-box>
           <MorphText text={pillWords} />
           {#if elapsed}
             {pillWords ? " · " : ""}
@@ -481,7 +483,7 @@
             in:lineSwap
             out:lineSwap
           >
-            <span aria-hidden="true" class="rail-cell"
+            <span data-slot="rail-cell" aria-hidden="true" class="rail-cell"
               >{#if status.beat}
                 <span class="beat"></span>
               {/if}</span
@@ -494,9 +496,9 @@
 
     <ul class="asks" {@attach reflow()}>
       {#each waiting as ask (ask.key)}
-        <li class="ask rail-line" data-flip title={ask.detail}>
-          <span aria-hidden="true" class="rail-cell"
-            ><span class="dot"></span></span
+        <li data-slot="ask" class="ask rail-line" data-flip title={ask.detail}>
+          <span data-slot="rail-cell" aria-hidden="true" class="rail-cell"
+            ><span data-slot="dot" class="dot"></span></span
           >
           <span class="astate">{ask.status}</span>
           <span class="ashort">{ask.short}</span>
@@ -509,7 +511,11 @@
         <!-- The report closes the card: drawn after the last of its rows. -->
         {#snippet after()}
           {#if report}
-            <section class="report" class:failed={report.failed}>
+            <section
+              data-delegate-failed={report.failed || undefined}
+              class="report"
+              class:failed={report.failed}
+            >
               <h4>
                 {report.failed ? "Report — failed" : "Report"}
                 {#if report.count > 1}

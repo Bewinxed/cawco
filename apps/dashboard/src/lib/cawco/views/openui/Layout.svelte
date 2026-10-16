@@ -29,6 +29,7 @@
 </script>
 
 <div
+  data-layout-row={axis === "row" || undefined}
   class={axis === "row" ? "layout row" : "layout"}
   style:align-items={ALIGN[align ?? "stretch"]}
   style:justify-content={JUSTIFY[justify ?? "start"]}

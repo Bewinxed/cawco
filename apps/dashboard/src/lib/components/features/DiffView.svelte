@@ -133,7 +133,7 @@
 
   <!-- The skeleton and the rows share one cell: the rows lay out under it
        unseen and fade in where it stood. -->
-  <div class="body" {@attach morph()}>
+  <div data-slot="body" class="body" {@attach morph()}>
     {#if failure}
       <div
         class="mark-line flex items-center justify-center gap-2 p-8 text-label text-error"

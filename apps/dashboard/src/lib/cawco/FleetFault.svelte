@@ -245,16 +245,16 @@
 </script>
 
 <div class="fault" class:hub={group.origin === "hub"}>
-  <div class="top mark-line">
+  <div data-slot="top" class="top mark-line">
     <IconWarningTriangle class="size-4 shrink-0" />
-    <span class="title">{copy.title}</span>
+    <span data-slot="title" class="title">{copy.title}</span>
     <!-- Where, never left implicit: the whole point of the investigation this
          came out of was that a badge named no machine. -->
-    <span class="where" data-box>
+    <span data-slot="where" class="where" data-box>
       {#if group.origin === "hub"}
-        <span class="tag">at the hub</span>
+        <span data-slot="tag" class="tag">at the hub</span>
       {:else if machine}
-        <span class="tag mark-line">
+        <span data-slot="tag" class="tag mark-line">
           <OsMark class="size-4 shrink-0" os={machine.os} />
           <span
             >{machineLabel(machine.hostname)}
@@ -263,7 +263,7 @@
           >
         </span>
       {:else}
-        <span class="tag">{group.machineId}</span>
+        <span data-slot="tag" class="tag">{group.machineId}</span>
       {/if}
     </span>
     {#if compact}
@@ -282,8 +282,13 @@
     {/if}
   </div>
 
-  <div class="body" inert={!whole} {@attach disclose(() => whole)}>
-    <div class="inner">
+  <div
+    data-slot="body"
+    class="body"
+    inert={!whole}
+    {@attach disclose(() => whole)}
+  >
+    <div data-slot="inner" class="inner">
       <p class="rows">
         <span class="noun"
           >{SCOPE_NOUN[group.scope]}
@@ -293,16 +298,16 @@
           <code>{faultLabel(fault)}</code>
         {/each}
         {#if extra > 0}
-          <span class="more">and {extra} more</span>
+          <span data-slot="more" class="more">and {extra} more</span>
         {/if}
       </p>
 
-      <p class="why">{copy.why}</p>
+      <p data-slot="why" class="why">{copy.why}</p>
 
       {#if copy.toolchain && toolchain}
         <!-- The attribution that was missing: which binary said it, and whether a
          newer one is sitting on the same machine behind it. -->
-        <div class="tool">
+        <div data-slot="tool" class="tool">
           <span class="k">claude on this machine</span>
           {#if toolchain.used}
             <span class="line used">
@@ -361,7 +366,7 @@
 
       <p class="fix">{copy.fix}</p>
 
-      <div class="acts">
+      <div data-slot="acts" class="acts">
         {#if copy.action === "resync"}
           <Button
             disabled={!online}
@@ -381,6 +386,7 @@
           >
         {:else if copy.action === "refresh"}
           <Button
+            data-num
             class="num"
             failed={actFailed}
             icon={IconRefresh}
@@ -438,6 +444,7 @@
       </div>
       {#if result}
         <p
+          data-slot="result"
           class="result"
           data-flip
           data-tone={result.tone}

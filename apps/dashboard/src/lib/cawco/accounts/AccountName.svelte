@@ -23,7 +23,12 @@
 </script>
 
 <!-- Its own mark line (app.css), and a box to the row it stands in. -->
-<span class={["name", "mark-line", row && "row", wrap && "wrap"]} data-box>
+<span
+  data-account-name-row={row || undefined}
+  data-slot="name"
+  class={["name", "mark-line", row && "row", wrap && "wrap"]}
+  data-box
+>
   <b
     >{account.label || account.email
       ? nameOf(account)

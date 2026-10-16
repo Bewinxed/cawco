@@ -89,7 +89,7 @@
 {#snippet row(name: string, ids: string[], edgeName: TaskEdge | null)}
   <div class="edge">
     <span class="edge-name">{name}</span>
-    <div class="edge-list">
+    <div data-slot="edge-list" class="edge-list">
       {#each ids as id (id)}
         {@render ref(
           id,
@@ -114,7 +114,7 @@
         {/snippet}
       </Popover.Trigger>
       <Popover.Content align="end" class="w-80">
-        <div class="pick">
+        <div data-slot="pick" class="pick">
           <Choice
             label="Edge"
             onchange={(next) => {

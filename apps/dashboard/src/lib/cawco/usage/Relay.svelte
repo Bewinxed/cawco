@@ -231,6 +231,7 @@
         </Tip>
       {:else}
         <span
+          data-stop={seg.key === stopKey || undefined}
           aria-hidden="true"
           class="blank"
           data-relay-stop={seg.key === stopKey ? "" : undefined}
@@ -244,14 +245,17 @@
     {#each ticks as tick (tick.hour)}
       <!-- mark-line: the tick stands above its hour, not beside it -->
       <span
+        data-end={tick.hour === 5 || undefined}
         class="tick"
         data-tick={tick.hour}
         style:inset-inline-start={tick.at}
         class:end={tick.hour === 5}
         class:start={tick.hour === 0}
       >
-        <span class="mark" data-tick-mark></span>
-        <span class="label mono-figure" data-tick-label>{tick.text}</span>
+        <span data-slot="mark" class="mark" data-tick-mark></span>
+        <span data-slot="relay-label" class="label mono-figure" data-tick-label
+          >{tick.text}</span
+        >
       </span>
     {/each}
   </div>

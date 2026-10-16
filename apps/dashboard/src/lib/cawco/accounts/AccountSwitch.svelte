@@ -45,9 +45,14 @@
 </script>
 
 {#snippet face()}
-  <span aria-hidden="true" class="dot" style:--c={hueVar(shown?.hue ?? "amber")}
+  <span
+    data-slot="dot"
+    aria-hidden="true"
+    class="dot"
+    style:--c={hueVar(shown?.hue ?? "amber")}
   ></span>
-  <span class="chip-label" data-account-chip>{name}</span>
+  <span data-slot="chip-label" class="chip-label" data-account-chip>{name}</span
+  >
 {/snippet}
 
 {#if shown}
@@ -68,11 +73,12 @@
         {@render face()}
         <Down class="chevron" />
       {/snippet}
-      <div aria-label="Account" class="list" role="listbox">
+      <div data-slot="list" aria-label="Account" class="list" role="listbox">
         {#each accounts as account (account.id)}
           {@const current = account.id === instance.accountId}
           {@const going = account.id === target}
           <button
+            data-slot="option"
             aria-selected={current}
             class="option mark-line"
             data-account-option={account.id}
@@ -82,6 +88,8 @@
             type="button"
           >
             <span
+              data-account-switch-lead
+              data-slot="dot"
               aria-hidden="true"
               class="dot lead"
               data-box
@@ -101,7 +109,11 @@
     <!-- Nothing to pick: one account of its provider here, a move in
          flight (the feedback line says so), or a session that takes no
          changes now. -->
-    <span class="ns-chip-btn tool static account-chip">
+    <span
+      data-tool
+      data-slot="ns-chip-btn"
+      class="ns-chip-btn tool static account-chip"
+    >
       <span class="sr-only">Account:</span>
       {@render face()}
     </span>

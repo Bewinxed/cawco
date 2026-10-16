@@ -180,9 +180,14 @@
   }
 </script>
 
-<div bind:this={pane} class="decisions" data-mode={page ? "page" : view}>
+<div
+  data-slot="decisions"
+  bind:this={pane}
+  class="decisions"
+  data-mode={page ? "page" : view}
+>
   {#if graphed && !page}
-    <div class="seg-row">
+    <div data-slot="seg-row" class="seg-row">
       <ToggleGroup.Root
         aria-label="Show the decisions as"
         onValueChange={(next) => {
@@ -245,13 +250,14 @@
             </EmptyState>
           </div>
         {:else if empty && canTalk}
-          <div class="state caw-empty">
+          <div data-slot="caw-empty" class="state caw-empty">
             <EmptyState
               line="Caw writes a decision page: the choices this project needs you to make, each with its options."
               title="No decisions yet"
             >
               {#snippet mark()}
                 <div
+                  data-slot="caw-80"
                   class="caw-80"
                   data-share="caw:{projectId}"
                   out:sitDown|global
@@ -290,7 +296,7 @@
         {:else}
           <!-- A page published while the list is open arrives as rows do
                (motion/rows); the tiles it moves slide to their places. -->
-          <div class="grid" {@attach reflow()}>
+          <div data-slot="grid" class="grid" {@attach reflow()}>
             {#if list}
               {#each pages as each (each.name)}
                 <div class="cell" data-flip>

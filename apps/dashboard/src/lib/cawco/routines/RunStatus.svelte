@@ -44,6 +44,8 @@
 </script>
 
 <span
+  data-slot="time"
+  data-num
   class="time num mark-line"
   data-status={status}
   title={title ?? undefined}

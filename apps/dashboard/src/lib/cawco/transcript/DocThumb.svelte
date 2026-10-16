@@ -84,7 +84,7 @@
 
 {#snippet face()}
   {#if uploading}
-    <span aria-hidden="true" class="glyph">
+    <span data-slot="glyph" aria-hidden="true" class="glyph">
       <svg aria-hidden="true" class="ring" viewBox="0 0 24 24">
         <circle class="track" cx="12" cy="12" r="9" />
         <circle
@@ -98,24 +98,27 @@
       </svg>
     </span>
   {:else}
-    <span aria-hidden="true" class="glyph"><Glyph /></span>
+    <span data-slot="glyph" aria-hidden="true" class="glyph"><Glyph /></span>
   {/if}
-  <span class="text">
-    <span class="name"
-      ><span class="head">{name.slice(0, cut)}</span><span class="tail"
-        >{name.slice(cut)}</span
+  <span data-slot="text" class="text">
+    <span data-slot="name" class="name"
+      ><span data-slot="head" class="head">{name.slice(0, cut)}</span><span
+        class="tail">{name.slice(cut)}</span
       ></span
     >
     {#if file?.failed}
-      <span class="meta failed">Couldn't upload</span>
+      <span data-slot="meta" data-doc-thumb-failed class="meta failed"
+        >Couldn't upload</span
+      >
     {:else}
-      <span class="meta">{meta}</span>
+      <span data-slot="meta" class="meta">{meta}</span>
     {/if}
   </span>
 {/snippet}
 
 {#if "content" in props}
   <button
+    data-slot="doc"
     aria-label={`Open ${name}`}
     class="doc press-tint"
     data-share={share}
@@ -128,6 +131,7 @@
   </button>
 {:else if file?.href}
   <a
+    data-slot="doc"
     aria-label={`Download ${name}`}
     class="doc press-tint"
     download={name}
@@ -138,6 +142,7 @@
   </a>
 {:else if file?.failed}
   <button
+    data-slot="doc"
     aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
     class="doc press-tint"
     onclick={() => file?.onretry?.()}
@@ -149,6 +154,7 @@
 {:else}
   {#if uploading}
     <span
+      data-slot="doc"
       aria-busy="true"
       aria-label={`Uploading ${name}`}
       class="doc still"
@@ -158,7 +164,7 @@
       {@render face()}
     </span>
   {:else}
-    <span class="doc still" title={name}>{@render face()}</span>
+    <span data-slot="doc" class="doc still" title={name}>{@render face()}</span>
   {/if}
 {/if}
 

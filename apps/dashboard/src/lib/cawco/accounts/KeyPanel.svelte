@@ -153,11 +153,11 @@
   </InputGroup.Root>
 
   {#if !one}
-    <ul aria-label={words.machines} class="machines">
+    <ul data-slot="machines" aria-label={words.machines} class="machines">
       {#each machines as machine (machine.machineId)}
         {@const online = machineOnline(machine)}
         <li class="mrow">
-          <span class="pick" class:off={!online}>
+          <span data-slot="pick" class="pick" class:off={!online}>
             <Checkbox
               disabled={!online}
               id="{id}-{machine.machineId}"
@@ -176,7 +176,7 @@
               >{machineName(machine)}</label
             >
           </span>
-          <span class="result">
+          <span data-slot="result" class="result">
             {#if !online}
               <span class="muted">{words.offline}</span>
             {:else}
@@ -188,7 +188,7 @@
     </ul>
   {/if}
 
-  <div class="send">
+  <div data-slot="send" class="send">
     <Button
       disabled={key.trim() === "" || targets.length === 0}
       label={words.send}
@@ -199,7 +199,9 @@
       variant={primary ? "default" : "outline"}
     />
     {#if one && machines[0]}
-      <span class="result">{@render outcome(machines[0].machineId)}</span>
+      <span data-slot="result" class="result"
+        >{@render outcome(machines[0].machineId)}</span
+      >
     {/if}
   </div>
   {#if problem}

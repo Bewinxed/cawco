@@ -114,7 +114,7 @@
 
 <!-- A failure fades up in place (--dur-control), with a retry. -->
 {#if failed}
-  <div class="failed" role="alert" in:crossIn>
+  <div data-slot="failed" class="failed" role="alert" in:crossIn>
     <p>The editor did not load: {failed}</p>
     <Button onclick={load} size="sm" variant="outline">Retry</Button>
   </div>

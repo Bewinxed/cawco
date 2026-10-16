@@ -164,12 +164,13 @@
 
 {#if open}
   <section
+    data-slot="unlock"
     aria-labelledby="{id}-title"
     class="unlock"
     transition:unfold
     {@attach arrive}
   >
-    <div class="tile">
+    <div data-slot="tile" class="tile">
       {#key view}
         <div
           class="flex flex-col gap-[var(--space-3)]"
@@ -190,11 +191,11 @@
             />
           {:else}
             <div class="flex flex-col gap-[var(--space-1)]">
-              <p class="title mark-line" id="{id}-title">
+              <p data-slot="title" class="title mark-line" id="{id}-title">
                 <IconKey class="size-4 text-warning" />
                 <span>Unlock {machine.hostname}</span>
               </p>
-              <p class="body">
+              <p data-slot="body" class="body">
                 Its login keychain is locked, so Claude Code there cannot read
                 its credentials. This is the macOS login password for that
                 machine.
@@ -222,7 +223,7 @@
                   {phase.message}
                 </p>
               {:else}
-                <p class="body" id="{id}-note">
+                <p data-slot="body" class="body" id="{id}-note">
                   Sent over your tunnel to that machine, used once, and not
                   stored anywhere.
                 </p>

@@ -4,7 +4,7 @@
 
 <svelte:head><title>Configure · CawCo</title></svelte:head>
 
-<div class="list"><ConfigRail variant="list" /></div>
+<div data-slot="list" class="list"><ConfigRail variant="list" /></div>
 
 <style>
   .list {

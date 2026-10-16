@@ -54,6 +54,7 @@
         <!-- One column no wider than the tray: a row's unwrapping title is cut
              to it, never pushes past it. -->
         <div
+          data-slot="grid"
           class="kit-dialog-body grid grid-cols-[minmax(0,1fr)] gap-6 text-body text-foreground"
           {@attach resize}
         >

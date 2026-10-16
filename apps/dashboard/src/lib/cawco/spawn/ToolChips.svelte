@@ -107,46 +107,54 @@
 
 {#snippet effortChip()}
   <Tuning style="color:var(--hue-orange-500)" />
-  <span class="chip-label level">{tools.effort ?? "Default"}</span>
+  <span data-slot="chip-label" class="chip-label level"
+    >{tools.effort ?? "Default"}</span
+  >
 {/snippet}
 <!-- The level as plain text, or why there is none: never a picker. -->
 {#snippet effortStatic()}
   {#if effortOff}
     <span
+      data-tool
+      data-slot="ns-chip-btn"
       aria-disabled="true"
       class={["ns-chip-btn tool off", readonly && "static"]}
       title={effortOff.reason}
     >
       <Tuning style="color:var(--hue-orange-500)" />
-      <span class="chip-label">{effortOff.label}</span>
+      <span data-slot="chip-label" class="chip-label">{effortOff.label}</span>
       <span class="sr-only">: {effortOff.reason}</span>
     </span>
   {:else}
-    <span class="ns-chip-btn tool static">{@render effortChip()}</span>
+    <span data-tool data-slot="ns-chip-btn" class="ns-chip-btn tool static"
+      >{@render effortChip()}</span
+    >
   {/if}
 {/snippet}
 {#snippet permissionChip()}
   {#if look}
     {@const Icon = look.icon}
     <Icon style={`color:${look.hue}`} />
-    <span class="chip-label">{look.name}</span>
+    <span data-slot="chip-label" class="chip-label">{look.name}</span>
   {/if}
 {/snippet}
 
 <!-- Read-only and editable cross-fade in place (motion/curves crossIn/crossOut). -->
 <span class="tool-chips">
   {#if readonly}
-    <span class="swap" in:crossIn out:crossOut>
+    <span data-slot="swap" class="swap" in:crossIn out:crossOut>
       {@render effortStatic()}
       {#if tools.modes.length && tools.permission}
         <span
+          data-tool
+          data-slot="ns-chip-btn"
           class={["ns-chip-btn tool static", fullSend && "full-send"]}
           title={look?.desc || undefined}>{@render permissionChip()}</span
         >
       {/if}
     </span>
   {:else}
-    <span class="swap" in:crossIn out:crossOut>
+    <span data-slot="swap" class="swap" in:crossIn out:crossOut>
       {#if !effortPicker}
         {@render effortStatic()}
       {/if}

@@ -35,6 +35,7 @@
 </script>
 
 <input
+  data-slot="hidden-file"
   class="hidden-file"
   multiple
   onchange={onpick}
@@ -43,7 +44,11 @@
 />
 {#if ondraw}
   <DropdownMenu.Root>
-    <DropdownMenu.Trigger aria-label="Attach or draw" class="att-btn touch-hit">
+    <DropdownMenu.Trigger
+      data-att-btn
+      aria-label="Attach or draw"
+      class="att-btn touch-hit"
+    >
       <IconPlus />
     </DropdownMenu.Trigger>
     <DropdownMenu.Content align="start" side="top">
@@ -60,6 +65,7 @@
   </DropdownMenu.Root>
 {:else}
   <button
+    data-slot="att-btn"
     aria-label="Attach a file or image"
     class="att-btn touch-hit"
     onclick={() => input?.click()}

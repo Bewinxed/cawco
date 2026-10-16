@@ -255,6 +255,7 @@
   {@const Icon = GLYPH[one.kind]}
   {#if compact}
     <button
+      data-slot="attachment"
       aria-label="Open {task.id}: {nameOf(one)}"
       class="attachment press-tint focus-inset"
       onclick={() => onopen?.(task.id)}
@@ -266,6 +267,7 @@
     </button>
   {:else}
     <a
+      data-slot="attachment"
       class="attachment press-tint focus-inset"
       href={hrefOf(one)}
       rel="noopener"
@@ -281,7 +283,7 @@
 {#snippet checkList()}
   {#if check.length > 0}
     <h4 class="check-head">Check</h4>
-    <ul class="check-list">
+    <ul data-slot="check-list" class="check-list">
       {#each check as line, index (index)}
         <li>{line}</li>
       {/each}
@@ -296,9 +298,13 @@
   class:words-staged={wordsStage}
 >
   <!-- Band 1: the session, its words, what it attached -->
-  <div class="band result" data-band="result">
+  <div data-slot="result" class="band result" data-band="result">
     {#if from}
-      <div class="session mark-line" data-session={from.instanceId}>
+      <div
+        data-slot="session"
+        class="session mark-line"
+        data-session={from.instanceId}
+      >
         <SessionMark
           id={from.instanceId}
           place={row?.cwd ?? from.instanceId}
@@ -329,13 +335,22 @@
         </a>
       </div>
       {#if ended && newest?.endedHow}
-        <p class="ended" class:fail={newest.state === "failed"}>
+        <p
+          data-slot="ended"
+          class="ended"
+          class:fail={newest.state === "failed"}
+        >
           {newest.endedHow}
         </p>
       {/if}
     {/if}
     {#if summary && !wordsStage}
-      <div class="words" bind:this={wordsBox} class:open={more}>
+      <div
+        data-slot="words"
+        class="words"
+        bind:this={wordsBox}
+        class:open={more}
+      >
         <p class="summary">{summary}</p>
         <!-- The last line: what to check, and More at its end. -->
         <div class="tail">
@@ -347,6 +362,7 @@
           {/if}
           {#if clipped || more}
             <button
+              data-slot="more"
               aria-expanded={more}
               class="more press-tint focus-inset"
               onclick={() => {
@@ -377,6 +393,7 @@
   <!-- Band 2: the stage, the only part that scrolls -->
   {#if !compact}
     <div
+      data-slot="stage"
       class="band stage"
       class:framed={!!presented}
       data-band="stage"
@@ -408,7 +425,7 @@
     <div class="band decide" data-band="decide">
       <RowFault reason={problem} />
       {#if note === null}
-        <div class="acts">
+        <div data-slot="acts" class="acts">
           {#if ended}
             <Button
               label="Try again"
@@ -471,7 +488,7 @@
           <p class="send-goes" id="send-back-{task.id}-goes">
             Goes on the task as your comment.
           </p>
-          <div class="acts">
+          <div data-slot="acts" class="acts">
             <Button
               disabled={!note.trim()}
               label="Send back → {stageLabel(backTo.name)}"

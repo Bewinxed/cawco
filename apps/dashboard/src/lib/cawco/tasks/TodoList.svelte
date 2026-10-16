@@ -112,6 +112,7 @@
 
 {#snippet addForm(under: string, depth: number)}
   <form
+    data-slot="add"
     class="add"
     onsubmit={add}
     style:--depth={depth}
@@ -156,7 +157,9 @@
   <h3 class="kit-section-head">
     To-dos
     {#if todos.length > 0}
-      <span class="count num">{done}/{todos.length}</span>
+      <span data-num data-slot="count" class="count num"
+        >{done}/{todos.length}</span
+      >
     {/if}
   </h3>
   {#if problem}
@@ -167,7 +170,7 @@
       {#each todos as todo (todo.path)}
         {@const ref = refOf(todo)}
         {@const checked = ticking[ref] ?? todo.done}
-        <li class="todo" style:--depth={todo.depth}>
+        <li data-slot="todo" class="todo" style:--depth={todo.depth}>
           <Checkbox
             aria-label={todo.text}
             {checked}
@@ -199,6 +202,7 @@
             </form>
           {:else}
             <button
+              data-slot="text"
               class="text press-tint focus-inset"
               data-done={checked ? "" : undefined}
               onclick={() => {
@@ -240,7 +244,7 @@
       {/each}
     </ul>
   {:else}
-    <p class="empty">
+    <p data-slot="todo-list-empty" class="empty">
       Break the task into steps here; a session working on it ticks them as it
       goes.
     </p>

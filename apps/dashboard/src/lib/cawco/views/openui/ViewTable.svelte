@@ -53,7 +53,7 @@
   }
 </script>
 
-<div class="ledger">
+<div data-slot="ledger" class="ledger">
   <Table.Root ghostRows="tbody tr" scrollClass="kit-edge-fade">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
@@ -68,7 +68,7 @@
     </Table.Header>
     <Table.Body>
       {#each table.getRowModel().rows as row (row.id)}
-        <Table.Row class="row">
+        <Table.Row data-view-table-row class="row">
           {#each row.getAllCells() as cell, i (cell.id)}
             <Table.Cell>
               {#if i === 0}

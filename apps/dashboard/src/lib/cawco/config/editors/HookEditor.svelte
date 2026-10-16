@@ -497,6 +497,7 @@
       />
     {/if}
     <span
+      data-slot="reach"
       class="reach"
       title={reach.map((m) => machineLabel(m.hostname)).join(", ")}
       >{reach.length > 0
@@ -534,7 +535,7 @@
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconClock} label="When it runs">
-    <p class="note">
+    <p data-slot="note" class="note">
       One lifecycle event. The events with a matcher are the ones Claude Code
       lets you narrow further.
     </p>
@@ -556,11 +557,11 @@
     {#if shown("event")}
       <p class="problem" in:appear>{wrong.event}</p>
     {:else if eventInfo}
-      <p class="note">Runs {eventInfo.blurb}.</p>
+      <p data-slot="note" class="note">Runs {eventInfo.blurb}.</p>
     {/if}
     {#if hookTakesMatcher(draft.event)}
       <!-- The matcher comes and goes with the event: it folds (240 / 160). -->
-      <div class="fold" in:unfold out:unfold>
+      <div data-slot="fold" class="fold" in:unfold out:unfold>
         <Field
           id="hook-matcher"
           label="Matcher — {eventInfo?.filters}"
@@ -593,7 +594,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlay} label="What it runs">
-    <p class="note">
+    <p data-slot="note" class="note">
       CawCo writes this to every machine it applies to and registers it — no
       prompt, no approval, every time the event fires.
     </p>
@@ -607,7 +608,7 @@
          one box, whose height follows over --dur-pop on --ease-drawer. -->
     <div class="handler" {@attach morph({ ms: dur("--dur-pop") })}>
       {#if draft.handler.type === "command"}
-        <div class="fold" in:crossIn out:crossOut>
+        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
           <Field
             hint="Written to every machine, at a path CawCo picks — the hook always points at that copy, never at one you keep locally."
             id="hook-script"
@@ -664,7 +665,7 @@
           />
         </div>
       {:else if draft.handler.type === "http"}
-        <div class="fold" in:crossIn out:crossOut>
+        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
           <Field
             hint="Every machine posts the event's own JSON here — https, or localhost for something running on the same box."
             id="hook-url"
@@ -721,7 +722,7 @@
           </Field>
         </div>
       {:else}
-        <div class="fold" in:crossIn out:crossOut>
+        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
           <Field id="hook-prompt" label="Prompt" problem={shown("prompt")}>
             <Textarea
               aria-invalid={shown("prompt") ? "true" : undefined}
@@ -736,7 +737,7 @@
             />
           </Field>
           {#if draft.handler.type === "agent"}
-            <div class="fold" in:unfold out:unfold>
+            <div data-slot="fold" class="fold" in:unfold out:unfold>
               <Field id="hook-agent" label="Subagent (optional)">
                 <Input
                   autocomplete="off"
@@ -815,7 +816,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p class="note">
+    <p data-slot="note" class="note">
       Every machine in the fleet unless you narrow it to one project.
     </p>
     <div>
@@ -840,13 +841,13 @@
   {#if id}
     <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
       {#if machines.length === 0}
-        <p class="note">
+        <p data-slot="note" class="note">
           <AddMachineLink>No machines yet</AddMachineLink>
           — this lands on the first one that registers.
         </p>
       {:else}
         {#if applied.length > 0}
-          <p class="note">
+          <p data-slot="note" class="note">
             In sync on
             {applied.length}
             machine{applied.length === 1 ? "" : "s"}.
@@ -856,7 +857,7 @@
             {/if}
           </p>
         {/if}
-        <ul class="machines">
+        <ul data-slot="machines" class="machines">
           {#each machines as machine, index (machine.machineId)}
             {@const item = stateOn(machine)}
             {@const online = machine.status === "online"}
@@ -864,7 +865,7 @@
             {@const drifted = refused && causeOf(item?.detail) === "drifted"}
             {@const comparingThis = comparing === machine.machineId}
             {@const settle = settling[machine.machineId]}
-            <li class="machine">
+            <li data-slot="machine" class="machine">
               <div class="line">
                 <MachineRow
                   hue={machineHue(index, online)}
@@ -878,7 +879,7 @@
                   presence={online ? "online" : "off"}
                 />
                 {#if drifted}
-                  <span class="acts" in:crossIn out:crossOut>
+                  <span data-slot="acts" class="acts" in:crossIn out:crossOut>
                     <Button
                       disabled={!online}
                       onclick={() => compare(machine)}
@@ -917,10 +918,11 @@
               {#if comparingThis}
                 <!-- The machine's script folds open under its row; reading
                      cross-fades to what was read as the box follows. -->
-                <div class="fold" in:unfold out:unfold>
+                <div data-slot="fold" class="fold" in:unfold out:unfold>
                   <div class="handler" {@attach morph()}>
                     {#if peeking[machine.machineId]}
                       <p
+                        data-slot="note"
                         class="note busy mark-line"
                         role="status"
                         in:crossIn
@@ -935,7 +937,7 @@
                         {unread[machine.machineId]}
                       </p>
                     {:else if copies[machine.machineId] === null}
-                      <p class="note" in:crossIn out:crossOut>
+                      <p data-slot="note" class="note" in:crossIn out:crossOut>
                         This machine has no copy of this script.
                       </p>
                     {:else if copies[machine.machineId] !== undefined}

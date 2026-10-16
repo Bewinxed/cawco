@@ -426,6 +426,7 @@
      state's cards, or at the head of the list under its menu. -->
 {#snippet addForm(service: Service)}
   <form
+    data-slot="add"
     aria-label="Sign in to {service.label}"
     class="add"
     onsubmit={add}
@@ -506,15 +507,16 @@
     <!-- The Empty Starts Work Rule, its by-hand branch: a sign-in is the
          service asking you, so Caw can't start it. The line says so, and
          each card signs in to one service, its row then saying how it goes. -->
-    <div class="empty">
-      <p class="empty-line">
+    <div data-slot="connections-page-empty" class="empty">
+      <p data-slot="empty-line" class="empty-line">
         Each service asks you, not Caw, to let the hub in, so signing in is
         yours. The projects you allow then read from it and act through it.
       </p>
-      <ul aria-label="Services" class="cards">
+      <ul data-slot="cards" aria-label="Services" class="cards">
         {#each SERVICES as service (service.service)}
           <li>
             <button
+              data-slot="connections-page-card"
               class="card mark-line press-tint"
               onclick={() => startAdding(service)}
               type="button"
@@ -564,6 +566,7 @@
           {#snippet below()}
             {#if keying === row.name}
               <form
+                data-slot="row-ask"
                 aria-label="{labelOf(row)} key"
                 class="row-ask"
                 onsubmit={(event) => {
@@ -603,6 +606,7 @@
             {/if}
             {#if removing === row.name}
               <fieldset
+                data-slot="row-ask"
                 aria-label="Remove {labelOf(row)}"
                 class="row-ask"
                 transition:unfold
@@ -647,7 +651,8 @@
                 {/each}
                 {#if shown.more > 0}
                   <Badge variant="ghost"
-                    ><span class="num">+{shown.more}</span></Badge
+                    ><span data-slot="num" class="num">+{shown.more}</span
+                    ></Badge
                   >
                 {/if}
               </span>

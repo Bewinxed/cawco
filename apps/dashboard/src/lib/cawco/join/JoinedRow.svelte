@@ -94,6 +94,8 @@
     {#key said}
       <div class="line" transition:fade={{ duration: dur("--dur-fade") }}>
         <span
+          data-slot="glyph"
+          data-joined-row-done={line.hue === "done" || undefined}
           class="glyph"
           class:attn={line.hue === "attn"}
           class:done={line.hue === "done"}
@@ -104,13 +106,15 @@
             <Spinner aria-hidden="true" class="size-4" role="presentation" />
           {/if}
         </span>
-        <div class="words">
-          <p class="sentence" {@attach fitLabel}>
+        <div data-slot="words" class="words">
+          <p data-slot="sentence" class="sentence" {@attach fitLabel}>
             {#if label === name}
-              <span class="who">{name}</span>
+              <span data-slot="who" class="who">{name}</span>
             {:else}
               <span class="sr-only">{name}</span>
-              <span aria-hidden="true" class="who" title={name}>{label}</span>
+              <span data-slot="who" aria-hidden="true" class="who" title={name}
+                >{label}</span
+              >
             {/if}
             {line.rest}
           </p>

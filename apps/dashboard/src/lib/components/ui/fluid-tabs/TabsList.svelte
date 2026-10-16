@@ -1109,6 +1109,7 @@
 </script>
 
 <div
+  data-slot="ff-tabs-list"
   class={cn(
     "ff-tabs-list",
     scrollable && "scrollable kit-edge-fade",

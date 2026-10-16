@@ -70,19 +70,23 @@
   <ol aria-label={parts.length > 1 ? "Thread" : "Post"} class="parts">
     {#each parts as text, index (index)}
       {@const length = postLength(text)}
-      <li class="card" data-part={index}>
-        <div class="who mark-line">
-          <span aria-hidden="true" class="mark" data-box
+      <li data-slot="post-card-card" class="card" data-part={index}>
+        <div data-slot="who" class="who mark-line">
+          <span data-slot="mark" aria-hidden="true" class="mark" data-box
             >{handle.slice(0, 1).toUpperCase()}</span
           >
           <span class="account">{post.account}</span>
           {#if parts.length > 1}
-            <span class="part num">{index + 1}/{parts.length}</span>
+            <span data-slot="num" class="part num"
+              >{index + 1}/{parts.length}</span
+            >
           {/if}
         </div>
-        <p class="text">{text}</p>
+        <p data-slot="text" class="text">{text}</p>
         {#if !compact}
           <span
+            data-num
+            data-slot="count"
             class="count num"
             title="As X counts it: a link is 23, a line break is one"
             class:over={length > POST_LIMIT}>{length}/{POST_LIMIT}</span
@@ -96,7 +100,7 @@
       {#if post.community}
         <div class="fact">
           <dt>Community</dt>
-          <dd class="name">{post.community}</dd>
+          <dd data-slot="name" class="name">{post.community}</dd>
         </div>
       {/if}
       {#if media.length > 0}
@@ -127,7 +131,7 @@
       {:else if post.media}
         <div class="fact">
           <dt>Media plan</dt>
-          <dd class="sentence">{post.media.plan}</dd>
+          <dd data-slot="sentence" class="sentence">{post.media.plan}</dd>
         </div>
       {/if}
     </dl>

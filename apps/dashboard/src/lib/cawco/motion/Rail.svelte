@@ -172,6 +172,8 @@
 </script>
 
 <div
+  data-rail-class={className}
+  data-slot="rail"
   aria-label={label}
   class="rail {className}"
   data-axis={axis}
@@ -188,6 +190,7 @@
   bind:this={root}
 >
   <span
+    data-slot="thumb"
     aria-hidden="true"
     class="thumb"
     data-placed={placed || undefined}
@@ -202,6 +205,7 @@
       aria-checked={entry.id === value}
       aria-label={entry.label}
       class="rail-item {itemClass}"
+      data-rail-item-class={itemClass}
       data-rail-item={entry.id}
       disabled={entry.disabled}
       onclick={() => onpick(entry.id)}

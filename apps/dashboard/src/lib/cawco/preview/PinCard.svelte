@@ -291,6 +291,8 @@
 </script>
 
 <div
+  data-sheet={sheet || undefined}
+  data-slot="pin-card"
   aria-label={`Pin ${pin.number}`}
   class="pin-card"
   data-pin-card={pin.number}
@@ -303,17 +305,21 @@
   bind:offsetHeight={height}
   bind:offsetWidth={width}
 >
-  <header class="head" bind:this={head}>
+  <header data-slot="head" class="head" bind:this={head}>
     <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
-    <span class="anchor" title={selector ?? undefined}>
-      <span class="name">{pinName(pin)}</span>
+    <span data-slot="anchor" class="anchor" title={selector ?? undefined}>
+      <span data-slot="name" class="name">{pinName(pin)}</span>
       {#if source}
         <!-- Cut from its start, so the file's name and line stay. -->
-        <span class="source"><bdi>{source}</bdi></span>
+        <span data-slot="source" class="source"><bdi>{source}</bdi></span>
       {/if}
     </span>
     {#if live}
-      <span aria-label="The agent is working on it" class="live" role="img"
+      <span
+        data-slot="live"
+        aria-label="The agent is working on it"
+        class="live"
+        role="img"
       ></span>
     {/if}
     {#if pin.resolvedAt}
@@ -367,6 +373,7 @@
        house edge fade says there is more above or below. -->
   {#if pin.thread.length > 0 && Body}
     <div
+      data-whole={squeezed || undefined}
       class={["room kit-edge-fade-block", squeezed && "whole"]}
       data-pin-room
       onscroll={readAt}
@@ -378,7 +385,7 @@
       <ol class="thread">
         {#each pin.thread as entry, i (entry.id)}
           {@const grouped = pin.thread[i - 1]?.by === entry.by}
-          <li class="entry" data-by={entry.by}>
+          <li data-slot="entry" class="entry" data-by={entry.by}>
             {#if entry.by === "person"}
               {@const runsOn = pin.thread[i + 1]?.by === "person"}
               <Turn {grouped} {runsOn} you>
@@ -410,8 +417,9 @@
       </ol>
     </div>
   {/if}
-  <div class="foot" bind:this={foot}>
+  <div data-slot="foot" class="foot" bind:this={foot}>
     <Textarea
+      data-field
       aria-describedby={problem ? `pin-error-${pin.id}` : undefined}
       aria-invalid={problem ? true : undefined}
       aria-label={pin.thread.length > 0 ? "Reply" : "Comment"}
@@ -430,7 +438,7 @@
     {#if problem}
       <p class="error" id={`pin-error-${pin.id}`} role="alert">{problem}</p>
     {/if}
-    <footer class="actions">
+    <footer data-slot="actions" class="actions">
       <Button
         disabled={!draft.trim()}
         label="Reply"

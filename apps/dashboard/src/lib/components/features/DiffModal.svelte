@@ -80,7 +80,7 @@
     bodyClass="flex h-full flex-col gap-0 overflow-hidden p-0"
     class="h-[90vh] w-[95vw] sm:max-w-7xl"
   >
-    <header class="head">
+    <header data-slot="head" class="head">
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex min-w-0 items-center gap-2">
           <Dialog.Title class="truncate font-mono text-label"
@@ -93,7 +93,7 @@
             variant="ghost"
           />
         </div>
-        <div class="num flex items-center gap-2 text-meta">
+        <div data-slot="num" class="num flex items-center gap-2 text-meta">
           <span class="text-success">+{stats.additions}</span>
           <span class="text-error">-{stats.deletions}</span>
         </div>
@@ -120,6 +120,7 @@
     <div class="scroll">
       {#key diffStyle}
         <div
+          data-slot="layer"
           class="layer"
           in:crossIn
           out:crossOut

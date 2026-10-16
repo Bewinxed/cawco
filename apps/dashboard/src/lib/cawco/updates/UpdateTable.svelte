@@ -64,6 +64,7 @@
           <Table.Row class={online ? "" : "opacity-50"}>
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
+              data-update-table-machine
               class="machine h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-2)]"
               scope="row"
             >
@@ -97,7 +98,9 @@
                 {#if isCurrent(machine)}
                   <IconCheck class="size-4 shrink-0 text-success" />
                 {/if}
-                <code class="num font-mono">{runningOf(machine)}</code>
+                <code data-slot="num" class="num font-mono"
+                  >{runningOf(machine)}</code
+                >
               </span>
             </Table.Cell>
             <Table.Cell

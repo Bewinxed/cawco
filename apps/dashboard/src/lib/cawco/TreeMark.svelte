@@ -123,6 +123,7 @@
 </script>
 
 <span
+  data-slot="tree-mark"
   class="tree-mark"
   data-box
   data-bare={fill ? undefined : ""}
@@ -138,43 +139,52 @@
   {#if has}
     <span aria-hidden="true" class="deck" data-deck={Math.min(count, 3)}>
       {#each [1, 2, 3] as i (i)}
-        <span class="card" style:--i={i}></span>
+        <span data-slot="tree-mark-card" class="card" style:--i={i}></span>
       {/each}
     </span>
   {/if}
   <!-- What the tile shows: its face, or its count, and the chevron either
        gives way to. The echo is the bare tile: only what grows past the
        tile is ever seen of it. -->
-  <span aria-hidden="true" class="face tile">
+  <span data-slot="tile" aria-hidden="true" class="face tile">
     <span class="rest">
       {#if has && !faceAlways}
-        <span class="num"><MorphText text={shown} /></span>
+        <span data-slot="num" class="num"><MorphText text={shown} /></span>
       {:else}
         {@render face()}
       {/if}
     </span>
     {#if parent && !faceAlways}
-      <span class="chev"><ChevronIcon aria-hidden="true" /></span>
+      <span data-slot="chev" class="chev"
+        ><ChevronIcon aria-hidden="true" /></span
+      >
     {/if}
   </span>
   <span aria-hidden="true" class="skin" data-ride-skin></span>
   {#if dot}
-    <span aria-hidden="true" class="dot"></span>
+    <span data-slot="dot" aria-hidden="true" class="dot"></span>
   {/if}
   {#if status === "live"}
     <!-- Last of what the mark draws, in a box cut to the outside of the
          tile and its deck (the style below says why). -->
     <span aria-hidden="true" class="echo-box">
-      <span class="echo tile" data-echo></span>
+      <span data-slot="tile" class="echo tile" data-echo></span>
     </span>
   {:else if status === "attn"}
     <!-- The dot's echo, on its list's beat with the working tiles. Over the
          dot it is the dot's own colour, so it needs no cut. -->
-    <span aria-hidden="true" class="dot ping" data-echo></span>
+    <span
+      data-ping
+      data-slot="dot"
+      aria-hidden="true"
+      class="dot ping"
+      data-echo
+    ></span>
   {/if}
   {#if switches}
     <!-- biome-ignore lint/a11y/useSemanticElements: it sits inside the row's link, and a <button> cannot nest in an <a>. -->
     <span
+      data-slot="hit"
       aria-expanded={open}
       aria-label={label}
       class="hit focus-inset touch-hit"

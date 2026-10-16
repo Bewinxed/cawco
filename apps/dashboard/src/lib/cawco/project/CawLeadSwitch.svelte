@@ -148,7 +148,7 @@
   />
 {/if}
 {#if lead.refused}
-  <p class="refused" role="alert">{lead.refused}</p>
+  <p data-slot="refused" class="refused" role="alert">{lead.refused}</p>
 {/if}
 
 <style>

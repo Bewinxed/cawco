@@ -238,7 +238,7 @@
             </span>
           {/snippet}
         </TreeMark>
-        <span class="num"
+        <span data-slot="num" class="num"
           ><span
             style="display:inline-grid;inline-size:{String(count).length}ch"
             ><MorphText text={String(count)} /></span

@@ -31,11 +31,11 @@
   });
 </script>
 
-<div class="caw-panel">
-  <p class="head">Caw · lead of {projectName}</p>
-  <div class="row status mark-line">
+<div data-slot="caw-panel" class="caw-panel">
+  <p data-slot="head" class="head">Caw · lead of {projectName}</p>
+  <div data-slot="row" class="row status mark-line">
     <CawFace size={18} status={lead.status} />
-    <span class="sentence">{lead.sentence}</span>
+    <span data-slot="sentence" class="sentence">{lead.sentence}</span>
   </div>
   {#if lead.capLine}
     <p class="capped">{lead.capLine}</p>

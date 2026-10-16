@@ -84,30 +84,32 @@
      list itself is built only while it is open. -->
 {#if home.ready && home.recentCount > 0}
   <section
+    data-slot="recent"
     class={["recent", { inset }]}
     data-flip="box"
     {@attach holdWhileInside("home:recent")}
   >
     <button
+      data-slot="disclosure"
       aria-expanded={recentOpen}
       class="kit-section-head disclosure press-tint focus-inset"
       onclick={toggleRecent}
       type="button"
     >
-      <span class="chev" class:open={recentOpen} data-box
+      <span data-slot="chev" class="chev" class:open={recentOpen} data-box
         ><IconChevronRight /></span
       >
       <span>Recent</span>
       <!-- Closed, the count says what is still live inside, as an "N older"
            row says what it hides (older.ts): nothing else on a closed list
            tells the reader a running session is in it. -->
-      <span class="num count" data-box>
+      <span data-num data-slot="count" class="num count" data-box>
         <span
           style="display:inline-grid;inline-size:{String(home.recentCount)
             .length}ch"><MorphText text={String(home.recentCount)} /></span
         >
         {#if !recentOpen && home.recentRunning > 0}
-          <span class="live"
+          <span data-slot="live" class="live"
             ><MorphText text={runningWords(home.recentRunning)} /></span
           >
         {/if}
@@ -121,7 +123,7 @@
         {@attach echoBeat()}
         {@attach view.keys}
       >
-        <label class="search touch-hit">
+        <label data-slot="search" class="search touch-hit">
           <IconSearch aria-hidden="true" />
           <input
             aria-label="Search recent sessions"

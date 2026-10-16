@@ -30,24 +30,28 @@
     cawco.accounts?.accounts.find((one) => one.id === accountId)?.provider;
 </script>
 
-<div class="group">
+<div data-slot="group" class="group">
   <NoticeRow
     dismissLabel="Dismiss all {notices.length} rebalances"
     label="Sessions rebalanced"
     ondismiss={() => ondismiss(notices.map((one) => one.id))}
   >
     {#snippet lead()}
-      <span class="glyph"><IconAccounts aria-hidden="true" /></span>
+      <span data-slot="glyph" class="glyph"
+        ><IconAccounts aria-hidden="true" /></span
+      >
     {/snippet}
-    <h3 class="head">
-      Sessions rebalanced <span class="count">{notices.length}</span>
+    <h3 data-slot="head" class="head">
+      Sessions rebalanced <span data-slot="count" class="count"
+        >{notices.length}</span
+      >
     </h3>
-    <p class="explainer">
+    <p data-slot="explainer" class="explainer">
       An account came, so sessions moved off accounts about to run out and held
       ones were placed again.
     </p>
   </NoticeRow>
-  <ul class="entries">
+  <ul data-slot="entries" class="entries">
     {#each notices as notice (notice.id)}
       {@const words = rebalanceWords(notice)}
       {@const first = notice.came[0]?.account}
@@ -64,7 +68,7 @@
               <AccountTile hue={first.hue} {provider} size={28} />
             {/if}
           {/snippet}
-          <span class="title">{words.title}</span>
+          <span data-slot="title" class="title">{words.title}</span>
           {#each words.lines as line, n (n)}
             <span class="line">{line}</span>
           {/each}
