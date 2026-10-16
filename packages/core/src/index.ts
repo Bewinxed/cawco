@@ -77,6 +77,8 @@ export * from "./ring";
 export * from "./rules";
 // What reads as a credential in text: a memory note's words, a file a place's first commit would take.
 export * from "./secret-text";
+// A project's starters: what its empty board and Caw's panel offer to say to him.
+export * from "./starters";
 // The Ledger Protocol: canonical session streams + acknowledged commands.
 export * from "./stream";
 // A project's threads with its Caw: rows, messages and their frames.
@@ -1417,6 +1419,7 @@ export type FramePayload =
   | import("./frames").TasksChangedFrame
   | import("./frames").DecisionsChangedFrame
   | import("./frames").BlocksChangedFrame
+  | import("./starters").StartersChangedFrame
   | import("./frames").ProjectsChangedFrame
   | import("./frames").FleetUpstreamFrame
   | import("./frames").FleetFetchFrame
@@ -1643,6 +1646,12 @@ export const CAWCO_ENV = {
   githubApi: "CAWCO_GITHUB_API",
   /** TypeSafe's System One URL Jev's typesafe route posts to, for pointing it at a local stand-in in its live proof. */
   typesafeUrl: "CAWCO_TYPESAFE_URL",
+  /**
+   * `<quietMs>/<gapMs>`: how long a project's starters wait for quiet, and
+   * the least time between two of its asks of Jev (hub project-starters.ts),
+   * for pacing a scratch fleet's live proof; unset, 60 s and 10 min.
+   */
+  startersPace: "CAWCO_STARTERS_PACE",
   /** The loopback port the hub's relay receiver listens on (default: one the OS picks free). */
   relayPort: "CAWCO_RELAY_PORT",
   telegramAsrUrl: "CAWCO_TELEGRAM_ASR_URL",

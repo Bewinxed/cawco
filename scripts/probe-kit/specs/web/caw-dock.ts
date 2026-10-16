@@ -36,6 +36,7 @@ import type { Page, WebSocketRoute } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { r2 } from "../../geom";
 import { contrast } from "../../ink";
+import { jevMock, jevOn } from "../../jev-mock";
 import {
   COMPOSER_FIELD,
   type Kit,
@@ -1640,11 +1641,17 @@ async function checkReplies(kit: Kit, fleet: Fleet, base: string) {
 const spec: Spec = {
   name: "caw-dock",
   async run(kit) {
+    // The hero's starters are Jev's (hub project-starters.ts): a stand-in
+    // answers each with its first ask, so the project has some to show.
+    const jev = jevMock();
     const fleet = await kit.fleet(respond);
+    fleet.env.CAWCO_TYPESAFE_URL = jev.url;
+    fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
     fleet.launch("sessiond");
     await fleet.sessiondUp();
     fleet.launch("hub");
     await fleet.hubUp();
+    await jevOn(fleet.base);
     fleet.fileAccount();
     fleet.launch("agent");
     await fleet.agentUp();
@@ -1737,12 +1744,14 @@ const spec: Spec = {
       project.id
     );
     if (!kit.check("the panel's project has a thread", !!thread)) {
+      jev.stop();
       return;
     }
     const threadId = (thread as { id: string }).id;
     await checkQuestion(kit, base, project, threadId, "desk", "panel 380");
     await checkQuestion(kit, base, project, threadId, "phone", "phone 390");
     await checkUnread(kit, fleet, base, project, threadId);
+    jev.stop();
   },
 };
 export default spec;

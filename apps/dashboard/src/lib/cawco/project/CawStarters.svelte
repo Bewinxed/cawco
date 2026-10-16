@@ -3,7 +3,8 @@
    * What to ask Caw (The Empty Starts Work Rule), under him in his panel:
    * the project's starters, each a sentence the person would say to him
    * with the glyph for its kind of work. The starters are the hub's,
-   * written for the project's template (stages.ts `startersFor`).
+   * written for the project from what it holds now (project-starters.ts),
+   * in its order.
    *
    * A press hands the starter's sentence to `onpick`, which puts it in his
    * composer with the caret after it: nothing is sent. Each is the kit

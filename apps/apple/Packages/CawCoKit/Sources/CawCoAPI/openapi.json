@@ -6989,6 +6989,156 @@
         }
       }
     },
+    "/api/projects/{id}/starters/outcome": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "picked",
+                      "edited"
+                    ]
+                  }
+                },
+                "required": [
+                  "text",
+                  "outcome"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdStartersOutcome",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdStartersOutcome 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdStartersOutcome200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdStartersOutcome 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdStartersOutcome 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdStartersOutcome 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdStartersOutcome 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdStartersOutcome 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdStartersOutcome 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdStartersOutcome 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdStartersOutcome 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdStartersOutcome 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/plan": {
       "get": {
         "parameters": [
@@ -23623,6 +23773,20 @@
           "ok"
         ]
       },
+      "postApiProjectsByIdStartersOutcome200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "getApiThreads200": {
         "type": "object"
       },
@@ -28902,6 +29066,9 @@
             "$ref": "#/components/schemas/BlocksChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/StartersChangedFrame"
+          },
+          {
             "$ref": "#/components/schemas/ProjectsChangedFrame"
           },
           {
@@ -28973,6 +29140,7 @@
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "decisions.changed": "#/components/schemas/DecisionsChangedFrame",
             "blocks.changed": "#/components/schemas/BlocksChangedFrame",
+            "starters.changed": "#/components/schemas/StartersChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
             "fleet.upstream": "#/components/schemas/FleetUpstreamFrame",
             "fleet.fetch": "#/components/schemas/FleetFetchFrame",
@@ -31572,10 +31740,10 @@
             }
           },
           "starters": {
-            "description": "What an empty board offers to start with Caw: the recorded template's, or the general four.",
+            "description": "What an empty board and Caw's panel offer to say to him: written for the\nproject from what it holds now (project-starters.ts), in that order;\nnone while Jev is off.",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Starter"
+              "$ref": "#/components/schemas/ProjectStarter"
             }
           },
           "template": {
@@ -31624,7 +31792,7 @@
         ]
       },
       "Starter": {
-        "description": "One starter on an empty board: a sentence the person would say to Caw,\nsent as it stands when pressed, and the glyph for its kind of work.",
+        "description": "A routine an empty Routines page offers to ask Caw for: the sentence, and\nthe glyph for its kind of work. A project's own starters are written for\nit (project-starters.ts), not listed here.",
         "type": "object",
         "properties": {
           "glyph": {
@@ -31716,6 +31884,61 @@
           "todo",
           "waiting",
           "you"
+        ]
+      },
+      "ProjectStarter": {
+        "description": "One starter: a sentence the person would say to Caw, put in the composer\nwhen pressed (nothing is sent), the glyph for its kind of work, why it is\noffered, and what it comes from.",
+        "type": "object",
+        "properties": {
+          "glyph": {
+            "$ref": "#/components/schemas/StarterGlyph"
+          },
+          "reason": {
+            "description": "Why it is offered, naming what in the project it comes from; at most 120 characters.",
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StarterSource"
+            }
+          },
+          "text": {
+            "description": "At most 90 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "glyph",
+          "reason",
+          "sources",
+          "text"
+        ]
+      },
+      "StarterSource": {
+        "description": "One thing a starter comes from: a task id, a thread id, a folder path, a commit sha, a routine id.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/StarterSourceKind"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ref"
+        ]
+      },
+      "StarterSourceKind": {
+        "type": "string",
+        "enum": [
+          "commit",
+          "path",
+          "routine",
+          "task",
+          "thread"
         ]
       },
       "StageView": {
@@ -49709,6 +49932,32 @@
         "required": [
           "kind",
           "projectId"
+        ]
+      },
+      "StartersChangedFrame": {
+        "description": "Hub-originated: a project's starters were written again; the whole set,\nin its order (empty when none is offered, Jev off included).",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "starters.changed"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "starters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectStarter"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "projectId",
+          "starters"
         ]
       },
       "ProjectsChangedFrame": {

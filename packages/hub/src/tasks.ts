@@ -41,6 +41,7 @@ import type {
   EndedBy,
   InstanceRow,
   LandsMode,
+  ProjectStarter,
   ResultArtifact,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
@@ -97,7 +98,6 @@ import {
   type StageView,
   type Starter,
   stageNamed,
-  startersFor,
   startProblem,
   TEMPLATES,
   templateStages,
@@ -383,6 +383,8 @@ export interface TaskStore {
   /** Records the template a project's stages came from: its starter skills follow it. */
   readonly setTemplate: (id: string, template: StagesTemplate) => void;
   readonly setTracker: (id: string, tracker: Tracker) => void;
+  /** The project's starters as they were last written for it (project-starters.ts); none while Jev is off. */
+  readonly starters: (projectId: string) => ProjectStarter[];
   /** Why the hub last could not start an attempt at a task, while that stands (dispatch.ts). */
   readonly startProblem?: (
     projectId: string,
@@ -469,8 +471,12 @@ export interface StagesView {
   /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
   source: "file" | "template";
   stages: Stage[];
-  /** What an empty board offers to start with Caw: the recorded template's, or the general four. */
-  starters: readonly Starter[];
+  /**
+   * What an empty board and Caw's panel offer to say to him: written for the
+   * project from what it holds now (project-starters.ts), in that order;
+   * none while Jev is off.
+   */
+  starters: ProjectStarter[];
   /** The template the stages are, word for word, if any. */
   template: StagesTemplate | null;
   views: StageView[];
@@ -1299,10 +1305,11 @@ const stagesView = (
   content: string,
   reading: StagesReading,
   /** The template the project was made from or last had applied (`projects.template`). */
-  recorded: StagesTemplate | null
+  recorded: StagesTemplate | null,
+  starters: ProjectStarter[]
 ): StagesView => ({
   source,
-  starters: startersFor(recorded),
+  starters,
   routineStarters: routineStartersFor(recorded),
   template: TEMPLATES.find((name) => templateText(name) === content) ?? null,
   stages: reading.ok ? reading.stages.stages : [],
@@ -3354,7 +3361,8 @@ export const createTasks = (store: TaskStore) => {
         source,
         content,
         reading,
-        store.project(projectId)?.template ?? null
+        store.project(projectId)?.template ?? null,
+        store.starters(projectId)
       );
     },
 
@@ -3379,7 +3387,8 @@ export const createTasks = (store: TaskStore) => {
           "file",
           content,
           ruled(projectId, reading),
-          store.project(projectId)?.template ?? null
+          store.project(projectId)?.template ?? null,
+          store.starters(projectId)
         );
       }).then((written) => told({ kind: "changed", projectId }, written));
     },
@@ -3415,7 +3424,8 @@ export const createTasks = (store: TaskStore) => {
             template === DEFAULT_TEMPLATE ? "template" : "file",
             content,
             ruled(projectId, { ok: true, stages }),
-            template
+            template,
+            store.starters(projectId)
           ),
           stranded: rows
             .filter((row) => !stageNamed(stages, row.stage))

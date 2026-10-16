@@ -145,6 +145,36 @@ export class ComposerDraft {
    * as asked: said over the field until the next keystroke or send.
    */
   notice = $state("");
+  /**
+   * The starter last pressed into this draft, its words as the press put
+   * them: the send after it says whether they went as they stood.
+   */
+  pressed = $state<string | null>(null);
+
+  /** A starter's words into the field, the caret after them: nothing is sent. */
+  press(words: string): void {
+    this.text = words;
+    this.pressed = words;
+    this.focusWanted = true;
+  }
+
+  /**
+   * At a send: the starter pressed into this draft and what became of it,
+   * `picked` when `sent` is its words as they stood, else `edited`; once.
+   */
+  takePressed(
+    sent: string
+  ): { outcome: "picked" | "edited"; text: string } | null {
+    const { pressed } = this;
+    this.pressed = null;
+    if (pressed === null) {
+      return null;
+    }
+    return {
+      text: pressed,
+      outcome: sent.trim() === pressed.trim() ? "picked" : "edited",
+    };
+  }
 
   /**
    * What should survive a reload right now: the message being written, or,

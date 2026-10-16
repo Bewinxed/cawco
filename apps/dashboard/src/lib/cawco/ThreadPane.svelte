@@ -73,13 +73,14 @@
     listTasks,
     movesFrom,
     moveTask,
+    type ProjectStarter,
     readStages,
     type StageKind,
     type StagesView,
-    type Starter,
     stageLabel,
     type TaskSummary,
     type TaskView,
+    tellStarterOutcome,
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
   import RowFault from "./RowFault.svelte";
@@ -564,8 +565,10 @@
   const hero = $derived(
     messages !== null && messages.length === 0 && !sending && !readProblem
   );
-  /** The project's starters (its stages' `starters`), read for the hero. */
-  let starters = $state<Starter[]>([]);
+  /** The project's starters its stages carried, read for the hero. */
+  let startersRead = $state<ProjectStarter[] | undefined>(undefined);
+  /** The project's starters, live: a new set the hub writes replaces the read one. */
+  const starters = $derived(cawco.startersOf(projectId, startersRead));
   $effect(() => {
     const pid = projectId;
     if (!(hero && pid && cawco.status === "connected")) {
@@ -573,9 +576,9 @@
     }
     untrack(() => {
       readStages(pid).then(
-        (read) => {
+        (stagesRead) => {
           if (pid === projectId) {
-            ({ starters } = read);
+            startersRead = stagesRead.starters;
           }
         },
         () => undefined
@@ -587,8 +590,7 @@
   );
   /** A starter's sentence into the composer, the caret after it; nothing is sent. */
   function pick(text: string) {
-    draft.text = text;
-    draft.focusWanted = true;
+    draft.press(text);
   }
   /**
    * The hero's Caw departs as it goes, and his seat on the composer lands
@@ -609,6 +611,15 @@
       const said = threadId
         ? await sayInThread(projectId, threadId, text, id, extras)
         : await startThread(projectId, text, id, extras);
+      // A starter pressed into the field went: as its words stood, or
+      // changed. Told after the hub took the words; the hub keeps it as
+      // Jev's steering, and nothing here waits on it.
+      const pressed = draft.takePressed(text);
+      if (pressed) {
+        tellStarterOutcome(projectId, pressed.text, pressed.outcome).catch(
+          () => undefined
+        );
+      }
       if (!threadId) {
         if (docked) {
           docked.onthread(said.thread.id);

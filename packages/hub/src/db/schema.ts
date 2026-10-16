@@ -49,6 +49,9 @@ import type {
   SessionTooling,
   SigninState,
   SkillFile,
+  StarterGlyph,
+  StarterOutcome,
+  StarterSourceKind,
   StoppedCommands,
   StrategyChoice,
   ThreadAnswer,
@@ -3080,6 +3083,75 @@ export const designOffers = sqliteTable("design_offers", {
   /** The "Build the design system" task Build filed. */
   builtTaskId: text("built_task_id"),
 });
+
+/**
+ * A project's starters as they were last written (project-starters.ts): one
+ * row per project, kept even when the set is empty, so an unchanged project
+ * (`input_hash`) and a set's age (`generated_at`) are known without one.
+ */
+export const projectStarterSets = sqliteTable("project_starter_sets", {
+  projectId: text("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  generatedAt: timestamp("generated_at").notNull(),
+  /** The hash of the inputs Jev was asked over. */
+  inputHash: text("input_hash").notNull(),
+  /** What asked for it: `project created`, `task moved`, `turn ended`, `commit landed`, `attempt failed`, `routine failed`, `stale`. */
+  trigger: text("trigger").notNull(),
+});
+
+/** One starter of a project's set, at its place in the set's order. */
+export const projectStarters = sqliteTable(
+  "project_starters",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectStarterSets.projectId, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    text: text("text").notNull(),
+    glyph: text("glyph").$type<StarterGlyph>().notNull(),
+    reason: text("reason").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.position] })]
+);
+
+/** What one starter comes from, in its order. */
+export const projectStarterSources = sqliteTable(
+  "project_starter_sources",
+  {
+    projectId: text("project_id").notNull(),
+    position: integer("position").notNull(),
+    seq: integer("seq").notNull(),
+    kind: text("kind").$type<StarterSourceKind>().notNull(),
+    ref: text("ref").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.position, table.seq] }),
+    foreignKey({
+      columns: [table.projectId, table.position],
+      foreignColumns: [projectStarters.projectId, projectStarters.position],
+    }).onDelete("cascade"),
+  ]
+);
+
+/**
+ * What the person did with a starter (project-starters.ts): sent it as it
+ * stood (`picked`) or changed (`edited`), or let its set be replaced without
+ * pressing it (`ignored`). The newest are Jev's steering input.
+ */
+export const starterOutcomes = sqliteTable(
+  "starter_outcomes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    outcome: text("outcome").$type<StarterOutcome>().notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [index("starter_outcomes_project").on(table.projectId, table.at)]
+);
 
 /**
  * A session's own plan (Projects spec §5.2, `plan.ts`), as it last wrote it

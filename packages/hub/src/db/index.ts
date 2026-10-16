@@ -217,6 +217,7 @@ import {
   workspaces,
 } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
+import { type StartersDb, startersDb } from "./starters";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
@@ -2049,6 +2050,8 @@ export interface DbShape {
     enabled?: boolean;
     projectId?: string | null;
   }) => FleetSkillMeta;
+  /** A project's starters as last written, and what was done with them (project-starters.ts). */
+  readonly starters: StartersDb;
   /**
    * The one-time reclassification a taxonomy change needs when the column is
    * plain text and there is no SQL migration to hang it on. Idempotent by
@@ -8904,6 +8907,7 @@ const make = async (path: string): Promise<DbShape> => {
     atLimit: atLimitDb(db),
     designOffers: designOffersDb(db),
     blocks: blocksDb(db),
+    starters: startersDb(db),
     routines: routinesDb(db),
     connections: connectionsDb(db),
     ingress: ingressDb(db),

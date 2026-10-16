@@ -134,7 +134,18 @@ export class CawLead {
    */
   ask(text: string): void {
     this.draft.text = text;
+    this.draft.pressed = null;
     this.draft.focusWanted = true;
+    this.open = true;
+  }
+
+  /**
+   * One of the project's starters into his panel's composer, as {@link ask}
+   * does; the send after it tells the hub whether its words went as they
+   * stood (project-starters.ts outcomes).
+   */
+  askStarter(text: string): void {
+    this.draft.press(text);
     this.open = true;
   }
 

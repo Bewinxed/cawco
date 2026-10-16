@@ -45,7 +45,11 @@
  * stage: it is every task whose stage is of kind `you`, worked out on read.
  */
 
-import { STAGE_KINDS as KINDS, type StageKind } from "@cawco/core";
+import {
+  STAGE_KINDS as KINDS,
+  type StageKind,
+  type StarterGlyph,
+} from "@cawco/core";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind), core's: a view binds to them too. */
 export type { StageKind } from "@cawco/core";
@@ -703,131 +707,17 @@ views
     },
   };
 
-// --- starters ----------------------------------------------------------------------
+// --- routine starters ----------------------------------------------------------------
 
 /**
- * The kinds of work a starter names, each drawn by the dashboard as its
- * Solar duotone glyph (CawStarters).
- */
-export const STARTER_GLYPHS = [
-  "brief",
-  "bug",
-  "calendar",
-  "draft",
-  "explore",
-  "grill",
-  "ideas",
-  "mail",
-  "palette",
-  "people",
-  "refresh",
-  "reply",
-  "rocket",
-  "routine",
-  "screen",
-  "search",
-  "site",
-  "stages",
-  "system",
-  "tasks",
-  "triage",
-  "voice",
-] as const;
-export type StarterGlyph = (typeof STARTER_GLYPHS)[number];
-
-/**
- * One starter on an empty board: a sentence the person would say to Caw,
- * sent as it stands when pressed, and the glyph for its kind of work.
+ * A routine an empty Routines page offers to ask Caw for: the sentence, and
+ * the glyph for its kind of work. A project's own starters are written for
+ * it (project-starters.ts), not listed here.
  */
 export interface Starter {
   glyph: StarterGlyph;
   text: string;
 }
-
-/** A design system built from the project's own material (design-system plan §1; caw.ts answers it). */
-const BUILD_SYSTEM: Starter = {
-  glyph: "system",
-  text: "Build a design system from our site and code",
-};
-
-/**
- * Each template's starters, worded so Caw reaches the skill that does the
- * work: grill ("Grill me on"), to-tasks ("into tasks"), triage ("Triage"),
- * screen ("Design the … flow"), the template's own starter skill
- * (bundled-skills.ts `TEMPLATE_SKILLS`), and, for the templates whose work
- * calls for one, {@link BUILD_SYSTEM}.
- */
-const TEMPLATE_STARTERS: Record<StagesTemplate, readonly Starter[]> = {
-  code: [
-    { glyph: "triage", text: "Triage the repo's open issues into Ready" },
-    { glyph: "tasks", text: "Turn the repo's spec into tasks" },
-    {
-      glyph: "grill",
-      text: "Grill me on the next feature until it has a spec",
-    },
-    { glyph: "bug", text: "Find the riskiest bugs and file a task for each" },
-  ],
-  social: [
-    { glyph: "draft", text: "Draft this week's posts in our voice" },
-    { glyph: "ideas", text: "Write ten post ideas into Idea" },
-    { glyph: "reply", text: "Draft replies to this week's mentions" },
-    { glyph: "calendar", text: "Plan two weeks of posts on the calendar" },
-    BUILD_SYSTEM,
-  ],
-  launch: [
-    { glyph: "rocket", text: "Plan the launch as tasks on a timeline" },
-    { glyph: "draft", text: "Draft the launch announcement" },
-    { glyph: "mail", text: "Write the launch email to our list" },
-    { glyph: "grill", text: "Grill me on the launch until it has a plan" },
-    BUILD_SYSTEM,
-  ],
-  seo: [
-    { glyph: "search", text: "Find ten topics we could rank for" },
-    { glyph: "brief", text: "Write a content brief for our best topic" },
-    { glyph: "refresh", text: "Refresh our weakest article for search" },
-    { glyph: "grill", text: "Grill me on who we're writing for" },
-  ],
-  brand: [
-    { glyph: "site", text: "Read our site and build the brand kit" },
-    { glyph: "voice", text: "Write a voice guide from our past posts" },
-    { glyph: "palette", text: "Pull our colours, type and logo into the kit" },
-    { glyph: "grill", text: "Grill me on the brand until its voice is clear" },
-    {
-      glyph: "system",
-      text: "Build a design system from our site and brand kit",
-    },
-  ],
-  design: [
-    { glyph: "explore", text: "Explore three directions for the home screen" },
-    { glyph: "screen", text: "Design the onboarding flow and every state" },
-    {
-      glyph: "grill",
-      text: "Grill me on the next screen until it has a brief",
-    },
-    { glyph: "tasks", text: "Turn my design notes into briefs" },
-    BUILD_SYSTEM,
-  ],
-  outreach: [
-    { glyph: "people", text: "Find ten prospects who fit what we sell" },
-    { glyph: "mail", text: "Write a first message to our best prospect" },
-    { glyph: "reply", text: "Write the follow-up for three days of silence" },
-    { glyph: "grill", text: "Grill me on who we sell to and why" },
-  ],
-};
-
-/** A project with no template recorded. */
-const GENERAL_STARTERS: readonly Starter[] = [
-  { glyph: "grill", text: "Grill me on what this project is for" },
-  { glyph: "tasks", text: "Read the project and file its first tasks" },
-  { glyph: "stages", text: "Set up stages that fit this project's work" },
-  { glyph: "routine", text: "Suggest routines that fit this project" },
-];
-
-/** The starters for a project made from `template`, or from none. */
-export const startersFor = (
-  template: StagesTemplate | null | undefined
-): readonly Starter[] =>
-  template ? TEMPLATE_STARTERS[template] : GENERAL_STARTERS;
 
 /** A code project's routines to ask Caw for, each with its schedule or event in its words. */
 const CODE_ROUTINE_STARTERS: readonly Starter[] = [

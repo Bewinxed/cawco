@@ -1,28 +1,39 @@
 /**
- * The empty board's Caw starters (The Empty Starts Work Rule), on a scratch
- * fleet (real hub, agent and sessiond; Claude Code against the mock model)
- * in the built dashboard, read from the engine and the hub's answers:
+ * A project's starters, written for it by Jev from what it holds now (hub
+ * project-starters.ts, jev-placement.ts `jevStarters`), on a scratch fleet
+ * (real hub, agent and sessiond; Claude Code against the mock model; Jev a
+ * stand-in on `CAWCO_TYPESAFE_URL`, probe-kit jev-mock.ts) in the built
+ * dashboard, read from the hub's answers, the stand-in's requests, the
+ * hub's log and the engine, one run each:
  *
- * 1. An empty social project shows the social template's starters as the
- *    hub serves them (every one, in its order: five today) under Caw on the
- *    empty board, in the columns the recipe gives at the grid's width (one
- *    at 390; three at 680, where the board's column is narrower than four
- *    cards; four at 768 and 1440), every card the same height and at least
- *    56px.
- * 2. Pressing one opens Caw's floating panel (CawFloat) with its sentence
- *    in the panel Composer's field, focused with the caret at its end, and
- *    sends nothing (the hub's threads are as they were); pressing another
- *    replaces the words. The Composer's Send then sends it: the hub holds a
- *    thread whose first words are it.
- * 3. An empty code project shows the code starters.
- * 4. A project with a task shows no starters.
+ * d. Jev off: a new project gets no starters (served or on its board), and
+ *    the hub logs `[jev off] Starters project=<id>: none offered, Jev is off`.
+ * a. A project with a task gets starters whose reasons and sources cite that
+ *    task, in the order Jev's probabilities give; Caw's panel hero shows
+ *    them in the hub's order. An empty project's board shows its own set
+ *    (its commit, its notes, design/ missing) in the hub's order, laid out
+ *    in the recipe's columns for however many there are.
+ * c. An answer about a task not in the inputs never reaches the hub's set
+ *    or the page, and the hub says it dropped it; an ask below the
+ *    confidence gate is not offered.
+ * b. Moving the task asks Jev once after the quiet; moving it away and
+ *    back inside the quiet asks nothing (the inputs hash as before).
+ * e. A press opens Caw's panel with its words in his composer, focused,
+ *    the caret at the end, sending nothing; another press replaces them.
+ *    Send as it stands records `picked`; a press, an edit and Send records
+ *    `edited`.
+ * f. Every input the stand-in received is within its stated bound, on a
+ *    project with more of everything than the bounds let through.
  *
  *   bun scripts/probe-kit/run.ts starters
  */
+// biome-ignore-all lint/performance/noAwaitInLoops: a few files, tasks and threads, made one after another
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: one scenario, read in order, one check after another.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { type JevCall, jevMock, jevOn, type StarterPick } from "../jev-mock";
 import { COMPOSER_FIELD, type Kit, open, type Spec, settle } from "../kit";
 
 const respond = (request: Seen): Reply => ({
@@ -30,27 +41,73 @@ const respond = (request: Seen): Reply => ({
   words: [request.tools ? "ok" : "Probe title"],
 });
 
-/** What the hub's stages.ts gives each template: the spec holds it to them. */
-const SOCIAL = [
-  "Draft this week's posts in our voice",
-  "Write ten post ideas into Idea",
-  "Draft replies to this week's mentions",
-  "Plan two weeks of posts on the calendar",
-  "Build a design system from our site and code",
-];
-const CODE = [
-  "Triage the repo's open issues into Ready",
-  "Turn the repo's spec into tasks",
-  "Grill me on the next feature until it has a spec",
-  "Find the riskiest bugs and file a task for each",
-];
+/** The scratch hub's pace: 1.5 s of quiet, 5 s between asks (production: 60 s, 10 min). */
+const QUIET_MS = 1500;
+const GAP_MS = 5000;
+
+/** The bounds the hub states (jev-placement.ts `STARTER_BOUNDS`), as the stand-in checks them. */
+const BOUNDS = {
+  agents: 1500,
+  knowledge: 20,
+  path: 160,
+  tasks: 12,
+  title: 160,
+  threads: 5,
+  line: 200,
+  commits: 5,
+  subject: 120,
+  failures: 5,
+  failure: 200,
+  shown: 10,
+};
+
+/** A task the inputs never hold: the stand-in answers about it anyway. */
+const GHOST = "task:tsk-999";
+
+/**
+ * The stand-in's starters answers: each question's first ask, at a
+ * probability by what it is about, so the hub's order is Jev's; a thread's
+ * under the confidence gate; and one answer about a task no input holds.
+ */
+const PICKED: Record<string, number> = {
+  task: 0.92,
+  design: 0.9,
+  project: 0.85,
+  routine: 0.8,
+  commit: 0.7,
+  thread: 0.4,
+};
+const picks = (call: JevCall): Record<string, StarterPick> => ({
+  ...Object.fromEntries(
+    Object.entries(call.questions).map(([id, asked]) => [
+      id,
+      {
+        choice:
+          Object.keys((asked.criteria ?? {}) as Record<string, unknown>).find(
+            (option) => option !== "none"
+          ) ?? "none",
+        p: PICKED[id.split(":")[0] as string] ?? 0.9,
+      },
+    ])
+  ),
+  [GHOST]: { choice: "start", p: 0.99 },
+});
+
+interface Served {
+  glyph: string;
+  reason: string;
+  sources: { kind: string; ref: string }[];
+  text: string;
+}
 
 /** The empty board's starter cards (StarterCards under Caw at 80). */
 const STARTERS = ".caw-empty .starter";
-/** Caw's floating panel (CawThread) and its Composer's field and Send. */
+/** Caw's floating panel (CawThread), its hero's chips, and its Composer's field and Send. */
 const PANEL = "[data-caw-panel]";
+const CHIPS = `${PANEL} .caw-starters .kit-chip`;
 const FIELD = `${PANEL} ${COMPOSER_FIELD}[aria-label="Message the project"]`;
 const SEND = `${PANEL} button[aria-label="Send message"]`;
+const SEAT = ".project-head button.caw-seat";
 
 interface Layout {
   columns: number;
@@ -102,8 +159,61 @@ const layout = (page: Page): Promise<Layout> =>
 const same = (a: string[], b: string[]) =>
   a.length === b.length && a.every((each, i) => each === b[i]);
 
+/** What in one call's state passes its bound, in words; empty when all is within. */
+const overBounds = (call: JevCall): string[] => {
+  const state = call.state as {
+    agents_md: string;
+    failures: { name: string; reason: string }[];
+    knowledge: string[];
+    repository: { commits: { subject: string }[] };
+    shown: { text: string }[];
+    tasks: Record<string, { last_attempt_failed?: string; title: string }>;
+    threads: Record<string, { last_line: string; title: string }>;
+  };
+  const over: string[] = [];
+  const most = (what: string, n: number, max: number) => {
+    if (n > max) {
+      over.push(`${what} ${n} > ${max}`);
+    }
+  };
+  most("agents_md chars", state.agents_md.length, BOUNDS.agents);
+  most("knowledge files", state.knowledge.length, BOUNDS.knowledge);
+  for (const path of state.knowledge) {
+    most("a knowledge path", path.length, BOUNDS.path);
+  }
+  const tasks = Object.values(state.tasks);
+  most("tasks", tasks.length, BOUNDS.tasks);
+  for (const task of tasks) {
+    most("a task title", task.title.length, BOUNDS.title);
+    most(
+      "a task's failure",
+      task.last_attempt_failed?.length ?? 0,
+      BOUNDS.failure
+    );
+  }
+  const threads = Object.values(state.threads);
+  most("threads", threads.length, BOUNDS.threads);
+  for (const thread of threads) {
+    most("a thread title", thread.title.length, BOUNDS.title);
+    most("a thread's last line", thread.last_line.length, BOUNDS.line);
+  }
+  most("commits", state.repository.commits.length, BOUNDS.commits);
+  for (const commit of state.repository.commits) {
+    most("a commit subject", commit.subject.length, BOUNDS.subject);
+  }
+  most("failures", state.failures.length, BOUNDS.failures);
+  for (const failure of state.failures) {
+    most("a failure's reason", failure.reason.length, BOUNDS.failure);
+  }
+  most("shown", state.shown.length, BOUNDS.shown);
+  return over;
+};
+
 const run = async (kit: Kit) => {
+  const jev = jevMock(picks);
   const fleet = await kit.fleet(respond);
+  fleet.env.CAWCO_TYPESAFE_URL = jev.url;
+  fleet.env.CAWCO_STARTERS_PACE = `${QUIET_MS}/${GAP_MS}`;
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -118,99 +228,225 @@ const run = async (kit: Kit) => {
     join(home, ".gitconfig"),
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
-  /** A project of its own folder, made from `template`, Caw on. */
-  const project = async (name: string, template: string) => {
-    const src = join(fleet.sandbox, name);
-    await mkdir(src, { recursive: true });
-    await Bun.$`git init -q -b main && echo ${name} > README.md && git add -A && git commit -qm 'First commit'`
+  const git = (src: string) => (command: string) =>
+    Bun.$`sh -c ${command}`
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
+  /** A project of its own checkout, made from `template`. */
+  const project = async (
+    name: string,
+    template: string,
+    caw: boolean,
+    commits: string[] = ["First commit"]
+  ) => {
+    const src = join(fleet.sandbox, name);
+    await mkdir(src, { recursive: true });
+    const sh = git(src);
+    await sh("git init -q -b main");
+    for (const [i, subject] of commits.entries()) {
+      await sh(
+        `echo ${i} > f${i}.txt && git add -A && git commit -qm ${JSON.stringify(subject)}`
+      );
+    }
     return fleet.api<{ id: string; name: string }>("/api/projects", {
       name,
       machineId: MACHINE,
       cwd: src,
-      caw: true,
+      caw,
       template,
     });
   };
-  const social = await project("social", "social");
-  const code = await project("code", "code");
-  const busy = await project("busy", "social");
-  await fleet.api(`/api/projects/${busy.id}/tasks`, { title: "A task" });
-
   const served = async (id: string) =>
-    (
-      await fleet.api<{ starters: { text: string }[] }>(
-        `/api/projects/${id}/stages`
-      )
-    ).starters.map((each) => each.text);
+    (await fleet.api<{ starters: Served[] }>(`/api/projects/${id}/stages`))
+      .starters;
+  /** The project's starters once the hub has written a set with some in it. */
+  const written = (id: string) =>
+    until(
+      `the hub's starters for ${id}`,
+      () => served(id),
+      (set) => set.length > 0,
+      60_000
+    );
+  const hubLog = () => fleet.logs("hub");
+  const base = await fleet.dashboard();
+  const desk = await kit.page("desk");
+  desk.setDefaultTimeout(60_000);
+
+  // ── d. Jev off: none anywhere, and the line ─────────────────────────────
+  const quiet = await project("quiet", "social", true);
+  const offLine = `[jev off] Starters project=${quiet.id}: none offered, Jev is off`;
+  const said = await until(
+    "the Jev-off line",
+    hubLog,
+    (text) => text.includes(offLine),
+    30_000
+  ).catch(() => "");
+  await open(desk, `${base}/project/${quiet.id}`, ".caw-empty");
+  await settle(desk);
+  const quietCards = await desk.locator(STARTERS).count();
   kit.check(
-    "the hub serves each template's own starters",
-    same(await served(social.id), SOCIAL) && same(await served(code.id), CODE),
-    `${(await served(social.id)).join(" | ")} // ${(await served(code.id)).join(" | ")}`
+    "d: Jev off, a new project gets no starters, served or on its board, and the hub logs the Jev-off line",
+    said.includes(offLine) &&
+      (await served(quiet.id)).length === 0 &&
+      quietCards === 0 &&
+      jev.starterCalls().length === 0,
+    `line ${said.includes(offLine)}; served ${(await served(quiet.id)).length}; cards ${quietCards}; Jev starters calls ${jev.starterCalls().length}`
   );
 
-  /** What the board must show: the hub's starters, every one, in its order. */
-  const socialServed = await served(social.id);
-  const codeServed = await served(code.id);
+  await jevOn(fleet.base);
 
-  const base = await fleet.dashboard();
+  // ── a. a project with a task: its reasons cite the task ────────────────
+  const harbour = await project("harbour", "code", false);
+  const task = await fleet.api<{ id: string; stage: string }>(
+    `/api/projects/${harbour.id}/tasks`,
+    { title: "Ship the onboarding emails" }
+  );
+  const harbourSet = await written(harbour.id);
+  const [lead] = harbourSet;
+  const harbourCalls = jev.starterCalls("harbour");
+  const order = harbourSet.map((starter) => starter.sources[0]?.kind ?? "");
+  kit.check(
+    "a: a project with a task gets starters whose reasons and sources cite that task, in Jev's order (task, then commit)",
+    lead?.reason.includes(task.id) === true &&
+      lead.sources.some(
+        (source) => source.kind === "task" && source.ref === task.id
+      ) &&
+      same(order, ["task", "commit"]),
+    harbourSet
+      .map(
+        (s) =>
+          `“${s.text}” (${s.glyph}) — ${s.reason} [${s.sources.map((x) => `${x.kind}:${x.ref}`).join(", ")}]`
+      )
+      .join(" | ")
+  );
 
-  // ── 1. an empty social project at 390, 768 and 1440 ─────────────────
-  const phone = await kit.page("phone");
-  await open(phone, `${base}/project/${social.id}`, STARTERS);
-  await settle(phone);
-  await phone.screenshot({ path: join(kit.out, "social-390.png") });
-  const at390 = await layout(phone);
+  // The panel's hero: the head's Caw opens his panel on an empty thread.
+  await open(desk, `${base}/project/${harbour.id}`, SEAT);
+  await settle(desk, 400);
+  await desk.click(SEAT);
+  const chips = await desk
+    .waitForSelector(CHIPS, { timeout: 30_000 })
+    .then(() =>
+      desk
+        .locator(CHIPS)
+        .evaluateAll((all) => all.map((chip) => chip.textContent?.trim() ?? ""))
+    )
+    .catch(() => [] as string[]);
+  await desk.screenshot({ path: join(kit.out, "harbour-hero.png") });
+  kit.check(
+    "a: Caw's panel hero shows the project's starters in the hub's order",
+    same(
+      chips,
+      harbourSet.map((starter) => starter.text)
+    ),
+    `chips ${chips.join(" | ")}`
+  );
+  await desk.keyboard.press("Escape");
 
-  const desk = await kit.page("desk");
-  await desk.setViewportSize({ width: 768, height: 1024 });
-  await open(desk, `${base}/project/${social.id}`, STARTERS);
+  // ── c. a source not in the inputs never reaches the page ───────────────
+  const page = await desk.evaluate(() => document.body.innerText);
+  const log = await hubLog();
+  kit.check(
+    "c: an answer about a task not in the inputs is dropped: not served, not on the page, and the hub says so",
+    harbourCalls.length > 0 &&
+      !harbourSet.some((starter) =>
+        starter.sources.some((source) => source.ref === "tsk-999")
+      ) &&
+      !page.includes("tsk-999") &&
+      new RegExp(
+        `\\[starters\\] project=${harbour.id} trigger=[^:]+: wrote ${harbourSet.length}, dropped 1 not grounded in the inputs`
+      ).test(log),
+    `${harbourCalls.length} call(s); served sources ${harbourSet.flatMap((s) => s.sources.map((x) => x.ref)).join(", ")}; “tsk-999” on the page ${page.includes("tsk-999")}`
+  );
+
+  // ── b. a move asks once after the quiet; an unchanged project asks nothing ─
+  const before = jev.starterCalls("harbour").length;
+  await fleet.api(`/api/projects/${harbour.id}/tasks/${task.id}/stage`, {
+    stage: "review",
+  });
+  await until(
+    "Jev asked again after the move",
+    async () => jev.starterCalls("harbour").length,
+    (n) => n > before,
+    30_000
+  ).catch(() => 0);
+  const askedAt = jev.starterCalls("harbour").at(-1)?.at ?? 0;
+  // Long enough for a second ask the quiet and the gap would allow.
+  await Bun.sleep(QUIET_MS + GAP_MS + 2000);
+  const afterMove = jev.starterCalls("harbour").length;
+  const moved = await served(harbour.id);
+  kit.check(
+    "b: moving the task asks Jev once, after the quiet; the new set names its new stage",
+    afterMove === before + 1 &&
+      moved.some((starter) => starter.reason.includes("review")),
+    `calls ${before} → ${afterMove}; set ${moved.map((s) => `“${s.text}” — ${s.reason}`).join(" | ")}`
+  );
+  // Away and back inside the quiet: what the project holds is what it was asked over.
+  await fleet.api(`/api/projects/${harbour.id}/tasks/${task.id}/stage`, {
+    stage: "ready",
+  });
+  await fleet.api(`/api/projects/${harbour.id}/tasks/${task.id}/stage`, {
+    stage: "review",
+  });
+  const unchanged = `[starters] project=${harbour.id} trigger=task moved: unchanged since`;
+  const heard = await until(
+    "the hub's unchanged line",
+    hubLog,
+    (text) => text.includes(unchanged),
+    30_000
+  ).catch(() => "");
+  kit.check(
+    "b: an unchanged project asks nothing: the hub hashes the same inputs and says so",
+    heard.includes(unchanged) &&
+      jev.starterCalls("harbour").length === afterMove,
+    `unchanged line ${heard.includes(unchanged)}; calls ${afterMove} → ${jev.starterCalls("harbour").length}; last asked ${new Date(askedAt).toISOString()}`
+  );
+
+  // ── a. an empty project's board: its own set, in the hub's order ───────
+  const wren = await project("wren", "design", true);
+  const wrenSet = await written(wren.id);
+  await open(desk, `${base}/project/${wren.id}`, STARTERS);
   await settle(desk);
-  await desk.screenshot({ path: join(kit.out, "social-768.png") });
-  const at768 = await layout(desk);
-
-  await desk.setViewportSize({ width: 1440, height: 900 });
-  await settle(desk);
-  await desk.screenshot({ path: join(kit.out, "social-1440.png") });
-  const at1440 = await layout(desk);
-
-  await desk.setViewportSize({ width: 680, height: 900 });
-  await settle(desk);
-  await desk.screenshot({ path: join(kit.out, "social-680.png") });
-  const at680 = await layout(desk);
-
-  // The columns are the recipe's at the grid's width; where the board's
-  // column holds that many: one on the phone, three at 680, four at 1440,
-  // the rows as many as the hub's starters fill.
-  // Open question for the owner: the social template's fifth starter (the
-  // design-system one, 513a6fd8e) lays the cards out 4 + 1 at 1440 and
-  // 3 + 2 at 680. Whether that stays is his call; this asserts what the
-  // grid recipe gives today.
-  for (const [width, read, columns] of [
-    [390, at390, 1],
-    [680, at680, 3],
-    [768, at768, null],
-    [1440, at1440, 4],
-  ] as const) {
+  const wrenTexts = wrenSet.map((starter) => starter.text);
+  const shots: [number, Layout][] = [];
+  for (const width of [390, 768, 1440]) {
+    await desk.setViewportSize({ width, height: 900 });
+    await settle(desk);
+    await desk.screenshot({ path: join(kit.out, `wren-${width}.png`) });
+    shots.push([width, await layout(desk)]);
+  }
+  for (const [width, read] of shots) {
     kit.check(
-      `1: at ${width}, the social starters stand under Caw in the recipe's columns${columns ? ` (${columns})` : ""}, equal heights ≥ 56px`,
-      same(read.texts, socialServed) &&
+      `a: at ${width}, an empty project's board shows its own starters in the hub's order, in the recipe's columns, equal heights ≥ 56px`,
+      same(read.texts, wrenTexts) &&
         read.columns === read.fits &&
-        (columns === null || read.columns === columns) &&
         read.rows === Math.ceil(read.texts.length / read.columns) &&
         new Set(read.heights).size === 1 &&
         (read.heights[0] ?? 0) >= 56,
-      `grid ${read.width}px fits ${read.fits}: ${read.columns} col × ${read.rows} rows; heights ${read.heights.join(", ")}`
+      `${read.texts.join(" | ")}; grid ${read.width}px fits ${read.fits}: ${read.columns} col × ${read.rows} rows; heights ${read.heights.join(", ")}`
     );
   }
+  kit.check(
+    "a: the empty project's starters carry their reasons: design/ missing, its notes, its commit; a thread under the confidence gate is not offered",
+    wrenSet.some(
+      (s) => s.glyph === "system" && s.reason.startsWith("No design/ yet")
+    ) &&
+      wrenSet.some((s) => s.sources.some((x) => x.kind === "commit")) &&
+      !wrenSet.some((s) => s.sources.some((x) => x.kind === "thread")),
+    wrenSet
+      .map(
+        (s) =>
+          `“${s.text}” — ${s.reason} [${s.sources.map((x) => `${x.kind}:${x.ref}`).join(", ")}]`
+      )
+      .join(" | ")
+  );
 
-  // ── 2. a press opens Caw's panel with its words; Send sends them ────
+  // ── e. press, Send as it stands: picked; press, edit, Send: edited ─────
   const threadCount = async () =>
-    (await fleet.api<{ id: string }[]>(`/api/projects/${social.id}/threads`))
+    (await fleet.api<{ id: string }[]>(`/api/projects/${wren.id}/threads`))
       .length;
-  const before = await threadCount();
+  const threadsBefore = await threadCount();
   /** The panel Composer's field: its words, focus, and a caret (Selection) collapsed at its end. */
   const readField = (selector: string) => {
     const field = document.querySelector<HTMLElement>(selector);
@@ -231,14 +467,8 @@ const run = async (kit: Kit) => {
       value: field?.textContent ?? "",
       focused: field !== null && active === field,
       caret,
-      active: `${active?.tagName.toLowerCase()}.${String(active?.className).split(" ")[0]}`,
     };
   };
-  /**
-   * The field once a press has settled: its words drawn, the focus taken
-   * and the caret placed after them (the Composer places it on the tick
-   * after the words are drawn), or as it stands after 5s.
-   */
   const pressedRead = (words: string) =>
     until(
       `the field settled on “${words}”`,
@@ -246,67 +476,137 @@ const run = async (kit: Kit) => {
       (seen) => seen.value === words && seen.focused && seen.caret,
       5000
     ).catch(() => desk.evaluate(readField, FIELD));
-  const firstWords = socialServed[1] as string;
-  await desk.locator(STARTERS, { hasText: firstWords }).click();
-  const first = await pressedRead(firstWords);
-  const pressed = socialServed[0] as string;
-  await desk.locator(STARTERS, { hasText: pressed }).click();
-  const filled = await pressedRead(pressed);
+  const [firstText, secondText] = wrenTexts as [string, string];
+  await desk.locator(STARTERS, { hasText: secondText }).click();
+  const first = await pressedRead(secondText);
+  await desk.locator(STARTERS, { hasText: firstText }).click();
+  const filled = await pressedRead(firstText);
   // Long enough for a send the press must not have made to reach the hub.
   await desk.waitForTimeout(1500);
-  const unsent = (await threadCount()) === before;
+  const unsent = (await threadCount()) === threadsBefore;
   kit.check(
-    "2: a press opens Caw's panel with its sentence in the Composer, focused, caret at the end, and sends nothing; another press replaces it",
-    first.value === firstWords &&
-      filled.value === pressed &&
+    "e: a press opens Caw's panel with its sentence in the Composer, focused, caret at the end, and sends nothing; another press replaces it",
+    first.value === secondText &&
+      filled.value === firstText &&
       filled.focused &&
       filled.caret &&
       unsent,
-    `first “${first.value}”, caret at end ${first.caret}; then “${filled.value}”, focused ${filled.focused} (${filled.active}), caret at end ${filled.caret}; threads unchanged ${unsent}`
+    `first “${first.value}”; then “${filled.value}”, focused ${filled.focused}, caret at end ${filled.caret}; threads unchanged ${unsent}`
   );
+  const told = (outcome: string) =>
+    desk.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/projects/${wren.id}/starters/outcome`) &&
+        (response.request().postDataJSON() as { outcome?: string }).outcome ===
+          outcome,
+      { timeout: 30_000 }
+    );
+  const pickedTold = told("picked");
   await desk.click(SEND);
-  const thread = await until(
-    "a thread opened by the starter",
-    async () => {
-      const threads = await fleet.api<{ id: string }[]>(
-        `/api/projects/${social.id}/threads`
-      );
-      for (const each of threads) {
-        // biome-ignore lint/performance/noAwaitInLoops: a project's few threads, one read each
-        const read = await fleet.api<{
-          messages: { author: string; body?: string }[];
-        }>(`/api/projects/${social.id}/threads/${each.id}`);
-        const opening = read.messages.find((m) => m.author === "you");
-        if (opening?.body === pressed) {
-          return each.id;
-        }
-      }
-    },
+  const pickedAnswer = await pickedTold.catch(() => null);
+  // Caw answers in the new thread; the set is written again after it.
+  await until(
+    "the set written after Caw's answer",
+    async () =>
+      jev
+        .starterCalls("wren")
+        .some((call) => Object.keys(call.state.threads as object).length > 1),
     Boolean,
     60_000
+  ).catch(() => false);
+  await Bun.sleep(QUIET_MS + 1000);
+  const nowSet = (await served(wren.id)).map((starter) => starter.text);
+  const editWith = nowSet.find((text) => text !== firstText) ?? nowSet[0];
+  await desk.locator(STARTERS, { hasText: editWith }).click();
+  await pressedRead(editWith ?? "");
+  await desk.keyboard.type(" first");
+  const editedTold = told("edited");
+  await desk.click(SEND);
+  const editedAnswer = await editedTold.catch(() => null);
+  await Bun.sleep(500);
+  const rows = fleet.query<{ outcome: string; text: string }>(
+    "SELECT text, outcome FROM starter_outcomes WHERE project_id = ? AND outcome != 'ignored' ORDER BY id",
+    wren.id
   );
   kit.check(
-    "2: Send opens the project's thread with those words",
-    Boolean(thread),
-    `thread ${thread}`
+    "e: Send as it stands records picked; a press, an edit and Send records edited",
+    pickedAnswer?.status() === 200 &&
+      editedAnswer?.status() === 200 &&
+      rows.some((row) => row.text === firstText && row.outcome === "picked") &&
+      rows.some((row) => row.text === editWith && row.outcome === "edited"),
+    `picked ${pickedAnswer?.status()}, edited ${editedAnswer?.status()}; rows ${rows.map((row) => `${row.outcome} “${row.text}”`).join(" | ")}`
   );
 
-  // ── 3. an empty code project shows the code starters ────────────────
-  await open(desk, `${base}/project/${code.id}`, STARTERS);
-  const codeRead = await layout(desk);
-  kit.check(
-    "3: an empty code project shows the code starters",
-    same(codeRead.texts, codeServed),
-    codeRead.texts.join(" | ")
+  // ── f. every input within its bound ─────────────────────────────────────
+  const crowd = await project(
+    "crowd",
+    "code",
+    false,
+    Array.from({ length: 7 }, (_, i) => `Commit ${i} ${"x".repeat(150)}`)
   );
-
-  // ── 4. a project with a task shows none ─────────────────────────────
-  await open(desk, `${base}/project/${busy.id}`, "[data-share^='task:']");
-  await settle(desk);
+  const put = (path: string, content: string) =>
+    fetch(`${fleet.base}/api/projects/${crowd.id}/folder/file`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path, content }),
+    });
+  await put("AGENTS.md", `# Crowd\n\n${"What this is for. ".repeat(200)}`);
+  for (let i = 0; i < 22; i += 1) {
+    await put(`knowledge/${"n".repeat(170)}-${i}.md`, `Note ${i}`);
+  }
+  const crowdTasks: string[] = [];
+  for (let i = 0; i < 14; i += 1) {
+    const filed = await fleet.api<{ id: string }>(
+      `/api/projects/${crowd.id}/tasks`,
+      // The hub takes titles up to 200; the starters read 160 of one.
+      { title: `Task ${i} ${"t".repeat(i === 0 ? 185 : 10)}` }
+    );
+    crowdTasks.push(filed.id);
+  }
+  for (let i = 0; i < 6; i += 1) {
+    await fleet.api(`/api/projects/${crowd.id}/threads`, {
+      body: `Thread ${i}: ${"w".repeat(400)}`,
+    });
+  }
+  await until(
+    "crowd's first set",
+    async () => jev.starterCalls("crowd").length,
+    (n) => n > 0,
+    60_000
+  ).catch(() => 0);
+  /** A crowd call that read the most starters shown before it, once one has. */
+  const full = () =>
+    jev
+      .starterCalls("crowd")
+      .find((call) => (call.state.shown as unknown[]).length >= BOUNDS.shown);
+  // Each set replaced unpressed adds its starters as `ignored`: a few moves,
+  // and a set reads more than ten shown before it.
+  for (let i = 1; i <= 6 && !full(); i += 1) {
+    const calls = jev.starterCalls("crowd").length;
+    await fleet.api(`/api/projects/${crowd.id}/tasks/${crowdTasks[i]}/stage`, {
+      stage: "review",
+    });
+    await until(
+      `crowd's set after move ${i}`,
+      async () => jev.starterCalls("crowd").length,
+      (n) => n > calls,
+      60_000
+    ).catch(() => 0);
+  }
+  const lastCrowd = full()?.state as
+    { shown: unknown[]; tasks: object; threads: object } | undefined;
+  const over = jev.starterCalls().flatMap((call) => overBounds(call));
   kit.check(
-    "4: a project with a task shows no starters",
-    (await desk.locator(STARTERS).count()) === 0
+    "f: every input the stand-in received is within its stated bound, on a project with more of everything",
+    jev.starterCalls().length > 0 &&
+      over.length === 0 &&
+      lastCrowd !== undefined &&
+      Object.keys(lastCrowd.tasks).length === BOUNDS.tasks &&
+      Object.keys(lastCrowd.threads).length === BOUNDS.threads &&
+      lastCrowd.shown.length === BOUNDS.shown,
+    `${jev.starterCalls().length} starters calls; over: ${over.join("; ") || "none"}; crowd's last: ${lastCrowd ? `${Object.keys(lastCrowd.tasks).length} tasks, ${Object.keys(lastCrowd.threads).length} threads, ${lastCrowd.shown.length} shown` : "none"}`
   );
+  jev.stop();
 };
 
 export default { name: "starters", run } satisfies Spec;

@@ -12,8 +12,10 @@
  * 3. Build (another such project) files "Build the design system" in the
  *    first to-do stage, its description naming the design-system skill.
  * 4. A project whose folder has design/ is never asked.
- * 5. On an empty design project's board, the "Build a design system" starter
- *    opens Caw's panel with its words in his composer, and sends nothing.
+ * 5. On an empty design project's board, with Jev on (a stand-in on
+ *    `CAWCO_TYPESAFE_URL`, probe-kit jev-mock.ts), the "Build a design
+ *    system" starter Jev offers for a design project with no design/ opens
+ *    Caw's panel with its words in his composer, and sends nothing.
  *
  *   bun scripts/probe-kit/run.ts design-offers
  */
@@ -21,6 +23,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { jevMock, jevOn } from "../jev-mock";
 import { COMPOSER_FIELD, type Kit, open, type Spec, settle } from "../kit";
 
 const respond = (request: Seen): Reply => ({
@@ -44,7 +47,12 @@ interface Card {
 }
 
 const run = async (kit: Kit) => {
+  // Jev answers each starters question with its first ask; it is on only
+  // for 5, so 1 to 4 run as they always have.
+  const jev = jevMock();
   const fleet = await kit.fleet(respond);
+  fleet.env.CAWCO_TYPESAFE_URL = jev.url;
+  fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -252,7 +260,19 @@ const run = async (kit: Kit) => {
   );
 
   // ── 5. the starter puts its words in the field, sends nothing ───────
+  await jevOn(fleet.base);
   const wren = await project("wren");
+  await until(
+    "Wren's starters",
+    async () =>
+      (
+        await fleet.api<{ starters: { text: string }[] }>(
+          `/api/projects/${wren.id}/stages`
+        )
+      ).starters,
+    (starters) => starters.length > 0,
+    60_000
+  );
   const threadCount = async () =>
     (await fleet.api<{ id: string }[]>(`/api/projects/${wren.id}/threads`))
       .length;
@@ -286,6 +306,7 @@ const run = async (kit: Kit) => {
       (await threadCount()) === before,
     `starters ${shown.join(" | ")}; field “${value}”; threads ${before} → ${await threadCount()}`
   );
+  jev.stop();
 };
 
 export default { name: "design-offers", run } satisfies Spec;

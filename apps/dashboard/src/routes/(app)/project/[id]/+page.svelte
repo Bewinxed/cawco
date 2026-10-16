@@ -187,6 +187,8 @@
     data.stages.ok ? data.stages.value : null
   );
   let stagesProblem = $derived(refusal(data.stages));
+  /** The project's starters, live: a new set the hub writes replaces the one its stages carried. */
+  const starters = $derived(cawco.startersOf(projectId, stages?.starters));
   /** The task open beside the view, or as its own page on a phone: the URL's `?task=`. */
   const openTask = $derived(
     (page.shallow?.url ?? page.url).searchParams.get("task")
@@ -1677,11 +1679,11 @@
             <!-- A starter opens his panel with its words in his composer;
                  a press on one is no press outside the panel (CawFloat,
                  data-caw-asks), so another starter replaces the words. -->
-            {#if (stages?.starters ?? []).length > 0}
+            {#if starters.length > 0}
               <div class="contents" data-caw-asks>
                 <StarterCards
-                  onpick={(text) => lead.ask(text)}
-                  starters={stages?.starters ?? []}
+                  onpick={(text) => lead.askStarter(text)}
+                  {starters}
                 />
               </div>
             {/if}

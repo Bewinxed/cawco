@@ -577,6 +577,7 @@ import {
   PROJECT_SETTINGS,
   type ProjectSettings,
 } from "./project-settings";
+import { createProjectStarters, starterRoutes } from "./project-starters";
 import { createProjectStops } from "./project-stops";
 import { readRemote } from "./projects";
 import { createPush, pushRoutes } from "./push";
@@ -16406,6 +16407,7 @@ export const createServer = (
       template: asked.template ?? null,
     });
     projectsChanged();
+    projectStarters.touched(created.id, "project created");
     madeFromFolder(created.id, checkout || undefined, remote);
     // The place it was made from: its checkout, else its folder on the hub.
     const place =
@@ -16593,6 +16595,7 @@ export const createServer = (
         push.itemEnded(item);
         caw.itemEnded(item);
         routines.itemEnded(item);
+        projectStarters.itemEnded(item);
       }),
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),
@@ -16835,6 +16838,7 @@ export const createServer = (
     put: db.putTaskIndex,
     drop: db.dropTaskIndex,
     setTracker: db.setProjectTracker,
+    starters: (projectId) => projectStarters.read(projectId),
     // The template's starter skills go to the project's places, and the old one's leave.
     setTemplate: (id, template) => {
       db.setProjectTemplate(id, template);
@@ -17038,8 +17042,17 @@ export const createServer = (
     upstreamAnswered: () => db.upstreamPosts() !== null,
     projectsChanged,
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
-    publish: (payload) =>
-      registry.broadcast({ verb: "frames", machineId: "hub", payload }),
+    // Caw's answer in a thread is his turn there ending: the project's
+    // starters are asked again (project-starters.ts).
+    publish: (payload) => {
+      registry.broadcast({ verb: "frames", machineId: "hub", payload });
+      if (
+        payload.kind === "thread.message" &&
+        payload.message.author === "caw"
+      ) {
+        projectStarters.threadAnswered(payload.threadId);
+      }
+    },
     spawn: async (machineId, payload) => {
       await spawnSession(machineId, payload);
     },
@@ -17396,6 +17409,18 @@ export const createServer = (
       caw.notice(projectId, threadId, note),
   });
   tasks.listen(designOffers.taskChanged);
+  // A project's starters, written for it by Jev from what it holds now, on
+  // its changes (project-starters.ts): a task filed or moved here; its
+  // making, Caw's answers, attempts and routines at their own sites.
+  const projectStarters = createProjectStarters({
+    db,
+    tasks,
+    run: runOnMachine,
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    broadcast: (payload) =>
+      registry.broadcast({ verb: "frames", machineId: "hub", payload }),
+  });
+  tasks.listen(projectStarters.taskChanged);
   // Every session's plan (§5.2): its steps, its spec, an attempt's to-dos,
   // live to the session's followers (plans.ts).
   const plans = createPlans({
@@ -17648,7 +17673,16 @@ export const createServer = (
     online: (machineId) => Boolean(registry.agent(machineId)),
     pauses: (projectId) => caps.pauses(projectId),
     quiets: (projectId) => caps.quiets(projectId),
-    push,
+    // A routine's failure, told to you, asks for its project's starters again.
+    push: {
+      routine: (said) => {
+        push.routine(said);
+        if (said.failed) {
+          projectStarters.routineFailed(said.projectId);
+        }
+      },
+      routineMade: (said) => push.routineMade(said),
+    },
     types: (projectId) => projectTypes.typesFor(projectId),
     jevAccess: () => jevAccess(db),
     workItems,
@@ -19607,6 +19641,7 @@ export const createServer = (
         appleDiagnosticsRoutes(),
         projectOfferRoutes(projectOffers, YOU_ACTOR),
         designOfferRoutes(designOffers, YOU_ACTOR),
+        starterRoutes(projectStarters),
         planRoutes(plans),
         dispatchRoutes(dispatcher),
         cawRoutes(caw),

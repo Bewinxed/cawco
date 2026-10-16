@@ -61,12 +61,11 @@
   /**
    * A project's starters as cards (The Empty Starts Work Rule): each a
    * sentence the person would say to Caw with the glyph for its kind of
-   * work. The starters are the hub's, written for the project's template
-   * (stages.ts `startersFor`), so they name this kind of project's work.
-   * A press hands the sentence to whatever field stands under them
-   * (`onpick`); nothing is sent. The empty board's (into Caw's panel,
-   * `lead.ask`) and a thread tab's hero (into its composer) both take them
-   * so.
+   * work. The starters are the hub's, written for the project from what it
+   * holds now (project-starters.ts), in its order. A press hands the
+   * sentence to whatever field stands under them (`onpick`); nothing is
+   * sent. The empty board's (into Caw's panel, `lead.askStarter`) and a
+   * thread tab's hero (into its composer) both take them so.
    *
    * Cards on the kit's card recipe (12px radius, raised surface, the tile
    * shadow, no border), every card the tallest card's height with its words

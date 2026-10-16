@@ -52,6 +52,7 @@ import type {
   ProjectCap,
   ProjectOfferSummary,
   ProjectSpend,
+  ProjectStarter,
   ProjectStopFrame,
   ProviderChoice,
   ProviderRouting,
@@ -891,6 +892,12 @@ const state = $state({
    * when it moves.
    */
   blocksChanged: {} as Record<string, number>,
+  /**
+   * Each project's starters as the hub last wrote them while this page was
+   * connected (`starters.changed` frames), by project id: newer than the
+   * set its stages read carried.
+   */
+  starters: {} as Record<string, ProjectStarter[]>,
   sessions: {} as Record<string, SessionState>,
   /**
    * Each instance's coarse now-state, pushed by the daemon ~1/sec (broadcast).
@@ -3044,6 +3051,11 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  if (frame.kind === "starters.changed") {
+    state.starters[frame.projectId] = frame.starters;
+    return;
+  }
+
   if (frame.kind === "project_offer") {
     if (frame.offer) {
       state.projectOffers[frame.instanceId] = frame.offer;
@@ -4549,6 +4561,9 @@ let connections = 0;
 function hubReached(): void {
   state.status = "connected";
   state.retryAt = null;
+  // A set heard before the socket went may have been replaced while it was
+  // away: the stages each page reads again on a connection carry the newer.
+  state.starters = {};
   state.failed = false;
   clearTimeout(outageTimer);
   outageTimer = undefined;
@@ -7881,6 +7896,14 @@ export const cawco = {
   /** A count that moves each time the project's arrangement of blocks changes (`blocks.changed`). */
   blocksChangedOf: (projectId: string): number =>
     state.blocksChanged[projectId] ?? 0,
+  /**
+   * The project's starters: the set the hub last sent while this page was
+   * connected, else `read`, the set its stages read carried.
+   */
+  startersOf: (
+    projectId: string,
+    read: ProjectStarter[] | undefined
+  ): ProjectStarter[] => state.starters[projectId] ?? read ?? [],
   threadMessagesOf: (threadId: string): ThreadMessage[] | null =>
     state.threadMessages[threadId] ?? null,
   session: (instanceId: string): SessionState | null =>

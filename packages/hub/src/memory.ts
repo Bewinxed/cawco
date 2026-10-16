@@ -566,7 +566,10 @@ const saysAlready = (known: string, text: string): boolean => {
 // --- the folder -----------------------------------------------------------------------
 
 /** A text file of the folder, or "" when it is not there. */
-const fileOr = async (projectId: string, path: string): Promise<string> => {
+export const fileOr = async (
+  projectId: string,
+  path: string
+): Promise<string> => {
   try {
     return (await readFolderFile(projectId, path)).content;
   } catch (error) {

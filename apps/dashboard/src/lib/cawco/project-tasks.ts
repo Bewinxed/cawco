@@ -9,7 +9,12 @@
  * Not to be confused with `tasks.svelte.ts`, which reads a session's own plan
  * off its machine (WORDS.md: plan).
  */
-import { type AttemptResult, outputArtifacts } from "@cawco/core";
+import {
+  type AttemptResult,
+  outputArtifacts,
+  type ProjectStarter,
+  type StarterGlyph,
+} from "@cawco/core";
 import { HUB_UNREACHABLE, HubUnreachable, unreachedAnswer } from "./hub-read";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind). */
@@ -49,38 +54,24 @@ export interface StagesView {
   /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
   source: "file" | "template";
   stages: Stage[];
-  /** What an empty board offers to start with Caw: the recorded template's, or the general four. */
-  starters: Starter[];
+  /**
+   * What an empty board and Caw's panel offer to say to him, written for the
+   * project from what it holds now (hub project-starters.ts), in the hub's
+   * order; none while Jev is off. `starters.changed` brings a new set.
+   */
+  starters: ProjectStarter[];
   template: StagesTemplate | null;
   views: { by: string | null; name: string }[];
 }
 
-/** The kind of work a starter names (stages.ts `STARTER_GLYPHS`); CawStarters draws its glyph. */
-export type StarterGlyph =
-  | "brief"
-  | "bug"
-  | "calendar"
-  | "draft"
-  | "explore"
-  | "grill"
-  | "ideas"
-  | "mail"
-  | "palette"
-  | "people"
-  | "refresh"
-  | "reply"
-  | "rocket"
-  | "routine"
-  | "screen"
-  | "search"
-  | "site"
-  | "stages"
-  | "system"
-  | "tasks"
-  | "triage"
-  | "voice";
+/** The kind of work a starter names (core starters.ts `STARTER_GLYPHS`); CawStarters draws its glyph. */
+export type { ProjectStarter, StarterGlyph } from "@cawco/core";
 
-/** A sentence to Caw an empty board offers, sent as it stands (stages.ts `Starter`). */
+/**
+ * A sentence to Caw a press puts in the composer, and its glyph: what
+ * CawStarters and StarterCards draw. A project's own starters
+ * ({@link ProjectStarter}) carry their reason and sources besides.
+ */
 export interface Starter {
   glyph: StarterGlyph;
   text: string;
@@ -470,6 +461,14 @@ export const listTasksWaiting = async (
 
 export const readStages = (projectId: string): Promise<StagesView> =>
   send(`${base(projectId)}/stages`);
+
+/** What you did with a starter you pressed, as the composer sent: its words as they stood, or changed. */
+export const tellStarterOutcome = (
+  projectId: string,
+  text: string,
+  outcome: "picked" | "edited"
+): Promise<{ ok: true }> =>
+  send(`${base(projectId)}/starters/outcome`, json("POST", { text, outcome }));
 
 export const readTask = (
   projectId: string,
