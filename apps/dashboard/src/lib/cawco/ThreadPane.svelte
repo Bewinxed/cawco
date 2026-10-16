@@ -374,7 +374,7 @@
     untrack(() => {
       const gone = [...waitingOn].filter((id) => !now.has(id));
       const lines = gone.flatMap((id) => {
-        const note = cawco.withdrawnAsk(id);
+        const note = cawco.askEnd(id);
         return note ? [{ ...note, instanceId: viewId }] : [];
       });
       if (lines.length > 0) {

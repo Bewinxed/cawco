@@ -8,6 +8,7 @@ import type {
   AgentBusyReport,
   AgentRow,
   ArchiveView,
+  AskAnswer,
   BuildInfo,
   CarrySessionOutcome,
   CarrySessionRequest,
@@ -537,7 +538,7 @@ import {
   notificationRoutes,
   turnCollapseId,
 } from "./notifications";
-import type { PendingShape } from "./pending";
+import type { AnswerFrom, PendingShape } from "./pending";
 import {
   answerPermission,
   answerWorkflow,
@@ -2639,10 +2640,13 @@ export const createServer = (
   // frame, whichever path settled it (an answer from any device, Telegram, a
   // parent session or a workflow; a harness settling it itself; a timeout; its
   // process ending). Without it every other client kept a card nobody could
-  // answer until it reconnected.
+  // answer until it reconnected. An answer in flight carries what it says and
+  // where it came from, which that frame tells every screen, whichever path
+  // happens to settle the ask first (the machine's echo usually beats its
+  // reply to the answer).
   const answeringPermissions = new Map<
     string,
-    { outcome?: "answered" | "cancelled" }
+    { answer: AskAnswer; outcome?: "answered" | "cancelled" }
   >();
   // The one gate every notification about a session goes through, and the
   // ledger of the ones that are over (notifications.ts): dropped when a
@@ -2827,7 +2831,7 @@ export const createServer = (
           other.id !== row.id && nested(posix.resolve(other.cwd), place)
       );
   };
-  pending.onSettled((parked, outcome, why) => {
+  pending.onSettled((parked, outcome, said) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
     }
@@ -2839,6 +2843,11 @@ export const createServer = (
     if (answering) {
       answering.outcome = outcome;
     }
+    const why = said?.why;
+    // What won and where: the answer in flight, else what the path that
+    // settled it could say (the harness, answering in its own interface).
+    const answer =
+      outcome === "answered" ? (answering?.answer ?? said?.answer) : undefined;
     push.onSettled(parked.requestId);
     // Over on every device: its push taken down, its Telegram message deleted.
     notifications.clear([askCollapseId(parked.requestId)], "settled");
@@ -2856,6 +2865,7 @@ export const createServer = (
         instanceId: parked.instanceId,
         requestId: parked.requestId,
         outcome,
+        ...(answer ? { answer } : {}),
         // An ask no screen was shown: the transcript's only word of it.
         ...(why
           ? { reason: why, toolName: peek(parked.payload, "toolName") }
@@ -13937,6 +13947,32 @@ export const createServer = (
   };
   /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
   const dashboardDevices = new Map<AuthSocket, string | null>();
+  /**
+   * What each dashboard socket is, by its id, as an answer it gives is said
+   * to every other screen: a page (it sent `Origin`) or the app, and its
+   * paired device's name when it has one.
+   */
+  const dashboardClients = new Map<string, AnswerFrom>();
+  /** `page`: the origin it sent, if any; `device`: the paired device it came as. */
+  const noteDashboardClient = (
+    socket: HubSocket,
+    page: string | undefined | null,
+    device: { name: string } | null | undefined
+  ): void => {
+    dashboardClients.set(socket.id, {
+      via: page ? "page" : "app",
+      ...(device ? { name: device.name } : {}),
+    });
+  };
+  const answeredFrom = (socket: HubSocket): AnswerFrom => {
+    const from = dashboardClients.get(socket.id);
+    if (!from) {
+      throw new Error(
+        "An answer came on a dashboard socket the hub never opened."
+      );
+    }
+    return from;
+  };
 
   /**
    * Whether `message`, a register, may stand: in trusted mode always; in
@@ -15818,11 +15854,13 @@ export const createServer = (
   /**
    * One answer transaction for dashboards, Telegram and parent tools. The
    * machine's receipt and the ledger's settlement must both precede success.
+   * `from` is where it was given, said to every screen with the ask's end.
    */
   const answerPendingPermission = async (
     instanceId: string,
     requestId: string,
-    answer: PermissionResult
+    answer: PermissionResult,
+    from: AnswerFrom
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction validates ownership, workflow answers, delivery receipts and concurrent process death before reporting success.
   ): Promise<void> => {
     const parked = pending.get(requestId);
@@ -15834,7 +15872,9 @@ export const createServer = (
     if (answeringPermissions.has(requestId)) {
       throw new Error("That request is already being answered.");
     }
-    const receipt: { outcome?: "answered" | "cancelled" } = {};
+    const receipt: { answer: AskAnswer; outcome?: "answered" | "cancelled" } = {
+      answer: { ...from, behavior: result.behavior },
+    };
     answeringPermissions.set(requestId, receipt);
     try {
       // A memory proposal (memory.ts): applied or rejected here, its ask
@@ -15965,7 +16005,8 @@ export const createServer = (
       pending,
       message.instanceId ?? message.payload.instanceId ?? "",
       answer?.requestId ?? "",
-      answer?.result as PermissionResult
+      answer?.result as PermissionResult,
+      answeredFrom(dashboard)
     ).then(
       () =>
         reply({ kind: "control_result", requestId: correlationId, ok: true }),
@@ -19295,7 +19336,10 @@ export const createServer = (
             "That ask is Caw's own shell or edit call waiting on the person; only they answer it."
           );
         }
-        await answerPermission(pending, row.id, answer.requestId, result);
+        await answerPermission(pending, row.id, answer.requestId, result, {
+          via: "session",
+          name: sessionName(requester),
+        });
         return;
       }
       const agent = registry.agent(row.machineId);
@@ -26809,7 +26853,9 @@ export const createServer = (
                     `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${peek(message.payload, "toolName") ?? "unknown"}: ${refusal}`
                   );
                   pending.remember(message.requestId, message);
-                  pending.resolve(message.requestId, "cancelled", refusal);
+                  pending.resolve(message.requestId, "cancelled", {
+                    why: refusal,
+                  });
                   // Admission does not wait on the machine.
                   detach(withdrawUnshown(message, refusal), "ask withdrawal");
                   break;
@@ -26975,11 +27021,16 @@ export const createServer = (
                   peek(parked.payload, "processGeneration") ===
                     peek(message.payload, "processGeneration")
                 ) {
+                  // Answered with no answer of the hub's in flight: the
+                  // harness took it in its own interface, and says not how.
+                  // One in flight is that answer's, and says itself
+                  // (`answeringPermissions`).
                   pending.resolve(
                     message.requestId,
                     peek(message.payload, "outcome") === "cancelled"
                       ? "cancelled"
-                      : "answered"
+                      : "answered",
+                    { answer: { via: "harness" } }
                   );
                 }
                 break;
@@ -27788,6 +27839,7 @@ export const createServer = (
           // pages (the Apple app, scripts) send none and read this wire.
           const named = Number(ws.query.protocol);
           const page = pageOrigin(ws.headers);
+          noteDashboardClient(ws, page, caller.device);
           const older = Number.isFinite(named)
             ? named < WIRE_PROTOCOL
             : Boolean(page);
@@ -27951,6 +28003,7 @@ export const createServer = (
         close(ws) {
           closeLine(ws);
           dashboardDevices.delete(ws);
+          dashboardClients.delete(ws.id);
           registry.dropDashboard(ws);
           // Follows nothing, awaits nothing: a stream subscription and a command
           // ack both die with the socket that asked for them.

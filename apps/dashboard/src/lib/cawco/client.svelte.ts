@@ -103,6 +103,7 @@ import {
   classifyCommand,
   HEARTBEAT_DEADLINE_MS,
   HEARTBEAT_INTERVAL_MS,
+  machineFaultWords,
   questionsOf,
   RESOLVE_PERMISSION,
   relaunchOf,
@@ -187,12 +188,14 @@ import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
 import { toast } from "./toasts";
 import { warmCompactionMark } from "./transcript/compaction-mark";
 import {
+  answeredNote,
   errorMessage,
   localUserMessage,
   withdrawnNote,
 } from "./transcript/local";
 import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
+import { speakerName } from "./transcript/speaker";
 import type { DelegateAskEvent, Message } from "./types";
 import { updates } from "./updates/updates.svelte";
 import {
@@ -962,12 +965,13 @@ const state = $state({
    */
   runAskRaisedAt: {} as Record<string, number>,
   /**
-   * The line that says an ask was withdrawn before it was answered (the
-   * turn interrupted, the session gone), keyed by its request id. A
-   * session's transcript draws it as a note; a thread, whose asks are its
-   * lead's, reads it from here.
+   * The line an ask leaves when it ends with no answer from this tab:
+   * withdrawn before it was answered (the turn interrupted, the session
+   * gone), or answered somewhere else, keyed by its request id. A session's
+   * transcript draws it as a note; a thread, whose asks are its lead's, reads
+   * it from here.
    */
-  withdrawnAsks: {} as Record<string, Message>,
+  askEnds: {} as Record<string, Message>,
   /**
    * The socket's first full `instances` frame has landed: the hub's own
    * now-state (pulses) for every session is in, so "nothing is working" can
@@ -2903,7 +2907,25 @@ function handleFrame(frame: FramePayload): void {
         ? questionsOf(parked.toolName, parked.input) !== null
         : frame.toolName === ASK_USER_QUESTION;
       const note = withdrawnNote(frame.instanceId, question, frame.reason);
-      state.withdrawnAsks[frame.requestId] = note;
+      state.askEnds[frame.requestId] = note;
+      addNote(target, note);
+    }
+    // Answered somewhere else while this tab held the card (another tab, the
+    // app, Telegram, a session, the harness): it says what won and where.
+    if (
+      target &&
+      parked &&
+      frame.outcome === "answered" &&
+      frame.answer &&
+      !answeredHere(frame.requestId)
+    ) {
+      const note = answeredNote(
+        frame.instanceId,
+        questionsOf(parked.toolName, parked.input) !== null,
+        frame.answer,
+        speakerName(target.harness)
+      );
+      state.askEnds[frame.requestId] = note;
       addNote(target, note);
     }
     return;
@@ -3514,6 +3536,12 @@ export function answerFor(requestId: string): CommandRecord | null {
   return commandId ? commandRecord(commandId) : null;
 }
 
+/** Whether this tab answered the ask `requestId` itself, with an answer the hub has not refused. */
+function answeredHere(requestId: string): boolean {
+  const record = answerFor(requestId);
+  return record !== null && record.stage !== "failed";
+}
+
 /** Every command this tab has submitted for a session, oldest first. */
 export function commandsFor(instanceId: string): CommandRecord[] {
   return sessionCommands(streamState, instanceId);
@@ -4087,13 +4115,9 @@ export function userTurnActions(message: Message): {
   if (!target || message.type !== "user") {
     return { edit: null, fork: false, retry: false };
   }
-  const machine = cawco.machines.find(
-    (entry) => entry.machineId === target.machineId
-  );
   const delivered =
     message.type === "user" &&
-    cawco.status === "connected" &&
-    machine?.status === "online" &&
+    machineConnected(target.machineId) &&
     !!target.sessionId &&
     harnessCan(target, "rewind") &&
     rewindableTurns(target).has(message.id);
@@ -4548,7 +4572,7 @@ export function reconnectNow(): void {
 /**
  * Whether this module instance has claimed the socket on `globalThis`. Claiming
  * happens once: the adoption below reads the registry, and reading the registry
- * goes through `waitForOpen`, which calls back in here. Without the latch that
+ * goes through `waitForHub`, which calls back in here. Without the latch that
  * is not a slow path, it is a loop that re-enters itself for every catalog it
  * loads and never returns.
  */
@@ -4578,15 +4602,7 @@ function connect(): void {
     announcingParts(`${hubSocketUrl()}?protocol=${WIRE_PROTOCOL}`)
   );
 
-  // The hub is reached when it speaks, not when the upgrade opens: a proxy in
-  // front of it (the dashboard's own server, a preview's relay) accepts the
-  // upgrade before it knows whether the hub is there. Counted on open, each
-  // such socket reset the backoff to one second and reread the fleet, the
-  // build and the policy, every second for as long as the hub was down. The
-  // hub's board is the first message on every socket (`olderThanHub`), so the
-  // first frame is the proof.
-  socket.addEventListener("message", () => hubReached(), { once: true });
-
+  // The hub is reached once its board on this socket is read (`bind`).
   bind(socket);
   // This module made it, so it already owns it: `ensureConnected` has nothing
   // left to adopt, and `hubReached` above is what refreshes.
@@ -4689,6 +4705,22 @@ function bind(socket: WebSocket): void {
   };
   startHeartbeat(socket);
   line.listen((message) => {
+    // The hub is reached once its board on this socket is read: the board is
+    // the first frame the hub owes every socket (`olderThanHub`), and a proxy
+    // in front of it (the dashboard's own server, a preview's relay) accepts
+    // the upgrade before it knows whether the hub is there, so an open socket
+    // proves nothing (counted on open, every such socket reset the backoff and
+    // reread the fleet each second the hub was down). Not the socket's first
+    // message either: until the board is applied the store holds the last
+    // hub's machines and rows, and "connected" over them let a page asking
+    // after a hub restart ask a machine that wasn't back yet. The board is
+    // applied in this same turn, before anything reads the status.
+    if (
+      state.status !== "connected" &&
+      (message as { payload?: FramePayload }).payload?.kind === "instances"
+    ) {
+      hubReached();
+    }
     if (olderThanHub(message)) {
       return;
     }
@@ -4883,14 +4915,15 @@ if (typeof window !== "undefined" && !globalThis.__cawcoWakeBound) {
 }
 
 /**
- * Resolves once the app socket is OPEN, connecting it if needed. A socket
- * that does not open in time throws saying the hub could not be reached:
- * the machine was never asked.
+ * Resolves once the hub is reached (its board on the socket read,
+ * `hubReached`), connecting it if needed: what {@link machineConnected} reads
+ * is this hub's word from then on. A hub not reached in time throws saying
+ * so: the machine was never asked.
  */
-async function waitForOpen(timeoutMs = 5000): Promise<void> {
+async function waitForHub(timeoutMs = 5000): Promise<void> {
   ensureConnected();
-  const isOpen = () => globalThis.__cawcoSocket?.readyState === WebSocket.OPEN;
-  if (isOpen()) {
+  const reached = () => state.status === "connected";
+  if (reached()) {
     return;
   }
   const opened = await readWithin(
@@ -4898,7 +4931,7 @@ async function waitForOpen(timeoutMs = 5000): Promise<void> {
     (signal) =>
       new Promise<void>((resolve) => {
         const poll = () => {
-          if (isOpen()) {
+          if (reached()) {
             resolve();
           } else if (!signal.aborted) {
             setTimeout(poll, 100);
@@ -5560,27 +5593,6 @@ function settleStopped(instanceId: string): void {
   trackWorking(target);
 }
 
-function control(
-  instanceId: string,
-  machineId: string,
-  method: string,
-  args: unknown[]
-): void {
-  const payload: ControlPayload = {
-    instanceId,
-    requestId: newId(),
-    method,
-    args,
-  };
-  send({
-    verb: "control",
-    machineId,
-    instanceId,
-    requestId: payload.requestId,
-    payload,
-  });
-}
-
 /**
  * Asks the session's preview to be brought into view: a phone's sheet comes
  * back to its middle snap from wherever the reader left it.
@@ -5610,7 +5622,7 @@ export async function machineControl<T>(
   replyTimeoutMs = CONTROL_TIMEOUT_MS,
   harness?: HarnessKind
 ): Promise<Bounded<T>> {
-  await waitForOpen();
+  await waitForHub();
   const requestId = newId();
   const payload: ControlPayload = {
     requestId,
@@ -5618,7 +5630,7 @@ export async function machineControl<T>(
     args,
     ...(harness && { harness }),
   };
-  return ask<T>(requestId, replyTimeoutMs, () =>
+  return askMachine<T>(machineId, requestId, replyTimeoutMs, () =>
     send({ verb: "control", machineId, requestId, payload })
   );
 }
@@ -5635,7 +5647,7 @@ export async function machineFs<T>(
   /** `path` is relative to this root, as the machine places it (`FsPayload.root`). */
   root?: FsPayload["root"]
 ): Promise<Bounded<T>> {
-  await waitForOpen();
+  await waitForHub();
   const requestId = newId();
   const payload: FsPayload = {
     requestId,
@@ -5644,7 +5656,7 @@ export async function machineFs<T>(
     content,
     ...(root ? { root } : {}),
   };
-  return ask<T>(requestId, CONTROL_TIMEOUT_MS, () =>
+  return askMachine<T>(machineId, requestId, CONTROL_TIMEOUT_MS, () =>
     send({ verb: "fs", machineId, requestId, payload })
   );
 }
@@ -6389,6 +6401,45 @@ export async function removeSession(instanceId: string): Promise<void> {
 }
 
 /**
+ * Whether the dashboard may ask `machineId` anything now: the one presence
+ * every ask to a machine goes through. The hub is reached and its board on
+ * this socket is in (`hubReached`), and that board says the machine is online,
+ * which the hub derives from holding the machine's socket right now (server.ts
+ * `withPresence`), the same test it routes by. Across a hub restart the page
+ * is back before its machines are, and nothing is asked of them until the hub
+ * says each one is back.
+ */
+export function machineConnected(machineId: string): boolean {
+  return (
+    state.status === "connected" &&
+    state.machines.some(
+      (machine) =>
+        machine.machineId === machineId && machine.status === "online"
+    )
+  );
+}
+
+/**
+ * {@link ask}, of a machine: refused here, with the hub's words for it, while
+ * {@link machineConnected} says the machine is not back, never sent to be
+ * refused there.
+ */
+function askMachine<T>(
+  machineId: string,
+  requestId: string,
+  timeoutMs: number,
+  dispatch: () => void,
+  readAnswer?: (result: unknown, leftOut?: LeftOut) => T
+): Promise<Bounded<T>> {
+  if (!machineConnected(machineId)) {
+    return Promise.reject(
+      new Error(machineFaultWords(machineName(machineId), "offline"))
+    );
+  }
+  return ask<T>(requestId, timeoutMs, dispatch, readAnswer);
+}
+
+/**
  * Sends something the agent answers by `requestId`, and waits `timeoutMs` for
  * that answer. A refusal rejects in the machine's words; no answer in time is
  * its own outcome, `unanswered`, which every caller says as such
@@ -6498,14 +6549,15 @@ interface LeftOut {
  */
 export async function loadCatalog(machineId: string): Promise<void> {
   try {
-    await waitForOpen();
+    await waitForHub();
     const requestId = newId();
     const payload: ControlPayload = {
       requestId,
       method: "listSessions",
       args: [SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {}],
     };
-    const listed = await ask(
+    const listed = await askMachine(
+      machineId,
       requestId,
       CONTROL_TIMEOUT_MS,
       () => send({ verb: "control", machineId, requestId, payload }),
@@ -7243,17 +7295,6 @@ async function readOlderInto(
   }
 }
 
-export function interrupt(instanceId: string, machineId: string): void {
-  control(instanceId, machineId, "interrupt", []);
-  const target = session(instanceId);
-  target.busy = false;
-  // The block the partials were painting is not being finished, and a session
-  // with a subagent still out stays "working" — long enough for a trace nobody
-  // is writing any more to read as one that is.
-  clearTurnPhase(target);
-  trackWorking(target);
-}
-
 /**
  * Changes how a live session answers permissions, from now on. Unlike the other
  * instance controls this one is awaited: the view already shows the mode that
@@ -7292,8 +7333,11 @@ export async function setPermissionMode(
   };
   let switched: Bounded<void>;
   try {
-    switched = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
-      send({ verb: "control", machineId, instanceId, requestId, payload })
+    switched = await askMachine<void>(
+      machineId,
+      requestId,
+      CONTROL_TIMEOUT_MS,
+      () => send({ verb: "control", machineId, instanceId, requestId, payload })
     );
   } catch (error) {
     target.permissionMode = previous;
@@ -7327,8 +7371,10 @@ export async function refreshContext(
   machineId: string
 ): Promise<void> {
   const target = session(instanceId);
+  // Not asked of a machine that isn't back: the last reading stands.
   if (
     target.contextPending ||
+    !machineConnected(machineId) ||
     !harnessCan({ machineId, harness: target.harness }, "contextUsage")
   ) {
     return;
@@ -7342,12 +7388,12 @@ export async function refreshContext(
     args: [],
   };
   try {
-    const read = await ask<{
+    const read = await askMachine<{
       totalTokens: number;
       maxTokens: number;
       percentage: number;
       categories: { name: string; tokens: number; color: string }[];
-    }>(requestId, CONTROL_TIMEOUT_MS, () =>
+    }>(machineId, requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "control", machineId, instanceId, requestId, payload })
     );
     switch (read.kind) {
@@ -7400,7 +7446,7 @@ export async function loadModels(
     method: "supportedModels",
     args: [],
   };
-  return ask<ModelInfo[]>(requestId, CONTROL_TIMEOUT_MS, () =>
+  return askMachine<ModelInfo[]>(machineId, requestId, CONTROL_TIMEOUT_MS, () =>
     send({ verb: "control", machineId, instanceId, requestId, payload })
   );
 }
@@ -7435,7 +7481,7 @@ const detailsOf = (commands: SlashCommand[]): Map<string, SlashCommand> => {
 /**
  * The menu asks the session what it has every time the reader opens it,
  * throttled to once per three seconds. Init and `commands_changed` are the
- * free prefill.
+ * free prefill. Not asked of a machine that isn't back: the names held stand.
  */
 export async function refreshCommands(
   instanceId: string,
@@ -7445,6 +7491,7 @@ export async function refreshCommands(
   if (
     target.commandsPending ||
     Date.now() - target.commands.at < 3000 ||
+    !machineConnected(machineId) ||
     !harnessCan({ machineId, harness: target.harness }, "supportedCommands")
   ) {
     return;
@@ -7459,7 +7506,7 @@ export async function refreshCommands(
       method,
       args: [],
     };
-    return ask<T>(requestId, CONTROL_TIMEOUT_MS, () =>
+    return askMachine<T>(machineId, requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "control", machineId, instanceId, requestId, payload })
     );
   };
@@ -7512,8 +7559,11 @@ function askMcp(
     method: "mcpServerStatus",
     args: [],
   };
-  return ask<McpServerStatus[]>(requestId, CONTROL_TIMEOUT_MS, () =>
-    send({ verb: "control", machineId, instanceId, requestId, payload })
+  return askMachine<McpServerStatus[]>(
+    machineId,
+    requestId,
+    CONTROL_TIMEOUT_MS,
+    () => send({ verb: "control", machineId, instanceId, requestId, payload })
   );
 }
 
@@ -7523,14 +7573,19 @@ function askMcp(
  * only a live session answers. A refused ask stores `[]` rather than staying
  * null: null is what re-triggers the asking effect, and a machine that
  * refuses must not be asked in a loop. One nobody answered in time stays
- * null, not known: the next time the session goes live it is asked again.
+ * null, not known: the next time the session goes live it is asked again. A
+ * machine that isn't back is not asked, and the null stays for when it is.
  */
 export async function loadMcpServers(
   instanceId: string,
   machineId: string
 ): Promise<void> {
   const target = session(instanceId);
-  if (target.mcp !== null || target.mcpPending) {
+  if (
+    target.mcp !== null ||
+    target.mcpPending ||
+    !machineConnected(machineId)
+  ) {
     return;
   }
   if (!harnessCan({ machineId, harness: target.harness }, "mcpStatus")) {
@@ -7601,8 +7656,11 @@ export async function setModel(
   };
   let switched: Bounded<void>;
   try {
-    switched = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
-      send({ verb: "control", machineId, instanceId, requestId, payload })
+    switched = await askMachine<void>(
+      machineId,
+      requestId,
+      CONTROL_TIMEOUT_MS,
+      () => send({ verb: "control", machineId, instanceId, requestId, payload })
     );
   } catch (error) {
     target.model = previous;
@@ -8449,9 +8507,8 @@ export const cawco = {
   /** When the hub parked a waiting workflow run's question, ms epoch. */
   runAskRaisedAt: (runId: string): number | undefined =>
     state.runAskRaisedAt[runId],
-  /** The line saying an ask was withdrawn unanswered; none for one answered or still waiting. */
-  withdrawnAsk: (requestId: string): Message | undefined =>
-    state.withdrawnAsks[requestId],
+  /** The line an ask left: withdrawn unanswered, or answered elsewhere; none for one answered here or still waiting. */
+  askEnd: (requestId: string): Message | undefined => state.askEnds[requestId],
   /**
    * The ledger stats the fleet table shows per session — turns, context %.
    * Only populated for a session this browser has state for (subscribed / a turn

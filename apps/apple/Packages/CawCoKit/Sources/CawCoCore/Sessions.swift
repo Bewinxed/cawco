@@ -183,14 +183,26 @@ public final class SessionsStore {
     /// errorMessage(instanceId, message))`): an error line in that session's
     /// transcript, after what it holds now.
     public func noteError(_ id: String, _ text: String) {
+        note(id, type: "ui.error", text)
+    }
+
+    /// An ask this device held ended with no answer from it, withdrawn or
+    /// answered elsewhere (AskEnd; client.svelte.ts `addNote(target,
+    /// withdrawnNote(…))`, `answeredNote`): its quiet line, after what the
+    /// session holds now.
+    func noteAskEnd(_ id: String, _ line: String) {
+        note(id, type: "ui.system_note", line)
+    }
+
+    private func note(_ id: String, type: String, _ text: String) {
         let fields: [String: Any] = [
-            "id": "local:\(UUID().uuidString.lowercased())", "instanceId": id, "type": "ui.error", "content": text,
+            "id": "local:\(UUID().uuidString.lowercased())", "instanceId": id, "type": type, "content": text,
             "timestamp": ISO8601DateFormatter().string(from: Date()),
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: fields),
               let block = try? Wire.decoder().decode(Components.Schemas.TranscriptBlock.self, from: data)
         else {
-            log.error("could not note an error on \(id, privacy: .public): \(text, privacy: .public)")
+            log.error("could not note \(type, privacy: .public) on \(id, privacy: .public): \(text, privacy: .public)")
             return
         }
         notes[id, default: []].append(block)

@@ -29,9 +29,9 @@
     clearReadFault,
     clearRestore,
     faultMessage,
-    interrupt,
     latestCommandFor,
     loadMcpServers,
+    machineConnected,
     openSession,
     type PendingPermission,
     pendingRestore,
@@ -695,16 +695,16 @@
   // the instant the call it just fired flips them — on a session that can't
   // answer, the rejection clears the guard and the effect re-fires in a tight
   // loop (thousands of `supportedCommands … failed` a second). Only a change in
-  // whether this pane addresses a live session, or the hub becoming reachable,
-  // should start a load: a first run before the socket opens is refused, and
-  // the MCP ask keeps that refusal as `[]`. `isLive` is the board's notion —
-  // a sleeping row is on the board too — and a sleeping session has no process
-  // to ask, so the gate is the running list.
+  // whether this pane addresses a live session, or its machine being back,
+  // should start a load. `isLive` is the board's notion — a sleeping row is on
+  // the board too — and a sleeping session has no process to ask, so the gate
+  // is the running list. Its machine is asked only once the hub says it is
+  // back (`machineConnected`): across a hub restart the page reconnects first.
   const liveForCommands = $derived(
     !!session &&
       cawco.runningInstances.some((row) => row.id === viewId) &&
       !!machineId &&
-      cawco.status === "connected"
+      machineConnected(machineId)
   );
   $effect(() => {
     if (!liveForCommands) {
