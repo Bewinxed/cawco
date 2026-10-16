@@ -17,32 +17,48 @@
  * except a keep-alive the spec has set to miss.
  *
  * On a scratch fleet (real hub, agent and sessiond, Claude Code against the
- * mock model), one Claude session, the lead, in a project's checkout:
+ * mock model) with two accounts of one organization, A and B, one Claude
+ * session, the lead, on A in a project's checkout. Once it is there, B is
+ * put first in order: placement now puts a session it re-places on B, so a
+ * wake that finds the lead cold moves it (`replaceAtWake`).
  *
  * (a) The lead takes a turn and is not cold.
  * (b) A user-layer skill is written to the machine (`~/.claude/skills`):
  *     the lead is still not cold.
  * (c) The same fleet sent again writes nothing: the lead is still not cold.
- * (d) The lead's next turn sends the prompt its first did: the same system
+ * (d) The lead put to sleep, its next turn wakes it (`wakeForSend`, where a
+ *     cold session is re-placed). That turn sends the prompt its first did: the same system
  *     prompt and tools to the byte, its first turn's messages leading (cache
- *     breakpoints aside), and the mock's cache reads it; still not cold.
+ *     breakpoints aside), and the mock's cache reads it; still not cold, and
+ *     still on A: that wake moved it nowhere.
  * (e) Keep-alive on, its last request an hour less ten minutes ago: a ping
  *     that reads its cache leaves the lead warm.
  * (f) The next ping misses (the mock reports it rewrote its prompt): the
  *     lead is cold, `ping read 0%`, and no further ping goes to it.
+ * (g) Keep-alive off and put to sleep, its next wake, cold as measured,
+ *     re-places it: it moves to B, so (d)'s
+ *     staying on A is the warm lead's, not a move that could not happen.
  *
  *   bun scripts/probe-kit/run.ts prompt-cache-scope
  */
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  ACCOUNT,
+  MACHINE,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import type { KitFleet, Spec } from "../kit";
+import { B, furnishAccount } from "./account-move";
 
 const RUN = crypto.randomUUID().slice(0, 8);
 const SKILL = `probe-user-skill-${RUN}`;
 const FIRST = `PROBE-CACHE-FIRST-${RUN}`;
 const SECOND = `PROBE-CACHE-SECOND-${RUN}`;
+const THIRD = `PROBE-CACHE-THIRD-${RUN}`;
 const KEEP_ALIVE = /Keep-alive [0-9a-f]{4}:/;
 /** Fifty minutes back: a 1h cache's ping is due ten minutes before it ends. */
 const DUE_AGO_MS = 51 * 60_000;
@@ -163,6 +179,11 @@ const spec: Spec = {
         id
       )[0];
     const cold = (id: string) => keepAlive(id)?.cache_cold ?? null;
+    const accountOf = (id: string) =>
+      fleet.query<{ account_id: string | null }>(
+        "SELECT account_id FROM instances WHERE id = ?",
+        id
+      )[0]?.account_id ?? null;
     const fleetReport = () =>
       fleet.query<{ fleet: string | null }>(
         "SELECT fleet FROM agents WHERE machine_id = ?",
@@ -188,6 +209,20 @@ const spec: Spec = {
       );
       return request as Seen;
     };
+    /**
+     * The lead put to sleep, its process ended: the next send wakes it
+     * (server.ts `wakeForSend`), which is where a session found cold is
+     * re-placed (`replaceAtWake`).
+     */
+    const asleep = async (id: string): Promise<string | undefined> => {
+      await fleet.control(id, "sleep");
+      return await until(
+        "the lead asleep",
+        async () => fleet.instance(id)?.status,
+        (status) => status === "sleeping",
+        120_000
+      ).catch(() => fleet.instance(id)?.status);
+    };
     /** The lead's last request moved back so its next ping is due now. */
     const dueNow = (id: string) =>
       fleet.write(
@@ -197,14 +232,30 @@ const spec: Spec = {
       );
 
     try {
+      await furnishAccount(fleet.home, B);
       fleet.launch("sessiond");
       await fleet.sessiondUp();
       fleet.launch("hub");
       await fleet.hubUp();
       fleet.fileAccount();
+      fleet.write(
+        "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Probe B', 'green', 1, 0, ?)",
+        B,
+        Date.now()
+      );
       fleet.launch("agent");
       await fleet.agentUp();
       await fleet.accountSignedIn();
+      await until(
+        "account B signed in",
+        () =>
+          fleet.query<{ state: string }>(
+            "SELECT state FROM account_signins WHERE account_id = ?",
+            B
+          )[0],
+        (row) => row?.state === "signed-in",
+        120_000
+      );
       await writeFile(
         join(fleet.env.HOME as string, ".gitconfig"),
         "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
@@ -220,13 +271,17 @@ const spec: Spec = {
         projectId: project.id,
       });
 
-      // (a) The lead's first turn.
+      // (a) The lead's first turn, on A.
       const first = await turn(lead, FIRST);
+      const home = accountOf(lead);
       check(
-        "(a) the lead took a turn and is not cold",
-        cold(lead) === null,
-        `cache_cold ${cold(lead)}`
+        "(a) the lead took a turn on A and is not cold",
+        home === ACCOUNT && cold(lead) === null,
+        `account ${home}; cache_cold ${cold(lead)}`
       );
+      // B first in order from here: a re-placed session goes to B.
+      fleet.write('UPDATE accounts SET "order" = 2 WHERE id = ?', ACCOUNT);
+      fleet.write('UPDATE accounts SET "order" = 0 WHERE id = ?', B);
 
       // (b) A user-layer skill, which every Claude session on the machine lists.
       await hub("PUT", `/api/fleet/skills/${SKILL}`, {
@@ -268,7 +323,14 @@ const spec: Spec = {
         `cache_cold ${cold(lead)}`
       );
 
-      // (d) The lead's next turn keeps its prompt's prefix.
+      // (d) Asleep, then woken by its next turn: that turn keeps its prompt's
+      // prefix, and the wake leaves it where it is.
+      const sleptD = await asleep(lead);
+      check(
+        "(d) the lead is asleep before its next turn wakes it",
+        sleptD === "sleeping",
+        `status ${sleptD}`
+      );
       const second = await turn(lead, SECOND);
       const was = promptOf(first);
       const now = promptOf(second);
@@ -288,6 +350,13 @@ const spec: Spec = {
         "(d) after that turn, which read its cache, the lead is still not cold",
         cold(lead) === null,
         `cache_cold ${cold(lead)}`
+      );
+      // A move owed at a wake lands at its turn's end: give it the time (g)'s takes.
+      await Bun.sleep(20_000);
+      check(
+        "(d) that wake, after the user-layer skill write, left the lead on A",
+        accountOf(lead) === ACCOUNT,
+        `account ${accountOf(lead)}`
       );
 
       // (e) Keep-alive on, a ping due: it reads its cache.
@@ -330,6 +399,28 @@ const spec: Spec = {
         "(f) no ping goes to the lead once it is cold",
         pings.length === 2,
         `pings ${pings.join(",")}`
+      );
+
+      // (g) A wake that finds it cold, as measured, re-places it on B.
+      // Keep-alive off first: the hub keeps a session it keeps warm awake.
+      await hub("PATCH", `/api/instances/${lead}`, { keepAlive: false });
+      const sleptG = await asleep(lead);
+      check(
+        "(g) the cold lead is asleep before its next turn wakes it",
+        sleptG === "sleeping",
+        `status ${sleptG}`
+      );
+      await turn(lead, THIRD);
+      const movedTo = await until(
+        "the cold lead re-placed on B",
+        async () => accountOf(lead) ?? undefined,
+        (one) => one === B,
+        120_000
+      ).catch(() => accountOf(lead));
+      check(
+        "(g) its next wake, cold as measured, moves it to B",
+        movedTo === B,
+        `account ${movedTo}`
       );
     } finally {
       await server.stop(true);
