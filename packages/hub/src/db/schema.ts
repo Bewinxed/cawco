@@ -3032,17 +3032,39 @@ export const leadTurns = sqliteTable("lead_turns", {
   what: text("what"),
   /** The turn under way read a send: the idle after it ends that turn. */
   started: integer("started", { mode: "boolean" }).notNull().default(false),
-  /** Threads whose wake the turn under way read: `working` until it ends. */
-  reading: text("reading", { mode: "json" })
-    .$type<string[]>()
-    .notNull()
-    .default([]),
-  /** Wakes sent and not yet read, by send uuid: the thread each woke (`""` for none), `working` until read and answered. */
-  waiting: text("waiting", { mode: "json" })
-    .$type<Record<string, string>>()
-    .notNull()
-    .default({}),
 });
+
+/** Threads whose wake a lead's turn under way read: `working` until it ends. In the order read (rowid). */
+export const leadTurnReading = sqliteTable(
+  "lead_turn_reading",
+  {
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => leadTurns.instanceId, { onDelete: "cascade" }),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => projectThreads.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.threadId] })]
+);
+
+/**
+ * Wakes sent to a lead and not yet read, by send uuid: the thread each woke
+ * (null for none), `working` until read and answered.
+ */
+export const leadTurnWaiting = sqliteTable(
+  "lead_turn_waiting",
+  {
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => leadTurns.instanceId, { onDelete: "cascade" }),
+    sendUuid: text("send_uuid").notNull(),
+    threadId: text("thread_id").references(() => projectThreads.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.sendUuid] })]
+);
 
 /** A harness subagent a session started and that has not ended: its task, and the call that started it. */
 export interface OpenSubagent {

@@ -144,7 +144,9 @@ import {
   instances,
   jevSettings,
   leadCalls,
+  leadTurnReading,
   leadTurns,
+  leadTurnWaiting,
   limitEvents,
   limitHolds,
   limitSummaries,
@@ -320,6 +322,15 @@ export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
 };
 /** One of Caw's shell or edit calls (lead-gate.ts). */
 export type LeadCallRow = typeof leadCalls.$inferSelect;
+/**
+ * A lead's turn (caw.ts `turns`): the threads its turn under way read
+ * (`lead_turn_reading`), and its unread wakes by send uuid, each the thread
+ * it woke or `""` for none (`lead_turn_waiting`).
+ */
+export type LeadTurnRow = typeof leadTurns.$inferSelect & {
+  reading: string[];
+  waiting: Record<string, string>;
+};
 export type ThreadRow = typeof projectThreads.$inferSelect;
 /** A thread's message, with the tasks it is about (`thread_message_tasks`); null for none. */
 export type ThreadMessageRow = typeof threadMessages.$inferSelect & {
@@ -951,7 +962,7 @@ export interface DbShape {
   /** The sends to a project's Caw sessions (role `lead`) accepted after `after`, oldest first. */
   readonly leadSends: (projectId: string, after: Date) => SentMessageRow[];
   /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
-  readonly leadTurns: () => (typeof leadTurns.$inferSelect)[];
+  readonly leadTurns: () => LeadTurnRow[];
   /** The limit lines kept on the session's row, oldest first. */
   readonly limitNotesOf: (id: string) => LimitNote[];
   /** Keys a send to the id its harness stores it under. */
@@ -1480,7 +1491,8 @@ export interface DbShape {
     scope?: MemoryScope;
   }) => MemoryDocRow;
   /** Stores the turn a project's Caw is in, replacing what his session had. */
-  readonly putLeadTurn: (turn: typeof leadTurns.$inferInsert) => void;
+  /** Stores a lead's turn as it stands, replacing what it had, its threads with it, in one transaction. */
+  readonly putLeadTurn: (turn: LeadTurnRow) => void;
   readonly putMarketplace: (marketplace: FleetMarketplace) => FleetMarketplace;
   readonly putMcpOauth: (row: typeof fleetMcpOauth.$inferInsert) => void;
   /**
@@ -6599,13 +6611,68 @@ const make = async (path: string): Promise<DbShape> => {
           .orderBy(leadCalls.at)
           .all(),
     },
-    leadTurns: () => db.select().from(leadTurns).all(),
-    putLeadTurn: (turn) => {
-      const { instanceId: _id, ...rest } = turn;
-      db.insert(leadTurns)
-        .values(turn)
-        .onConflictDoUpdate({ target: leadTurns.instanceId, set: rest })
-        .run();
+    leadTurns: () => {
+      const reading = new Map<string, string[]>();
+      for (const { instanceId, threadId } of db
+        .select()
+        .from(leadTurnReading)
+        .orderBy(sql`rowid`)
+        .all()) {
+        reading.set(instanceId, [...(reading.get(instanceId) ?? []), threadId]);
+      }
+      const waiting = new Map<string, Record<string, string>>();
+      for (const { instanceId, sendUuid, threadId } of db
+        .select()
+        .from(leadTurnWaiting)
+        .orderBy(sql`rowid`)
+        .all()) {
+        waiting.set(instanceId, {
+          ...waiting.get(instanceId),
+          [sendUuid]: threadId ?? "",
+        });
+      }
+      return db
+        .select()
+        .from(leadTurns)
+        .all()
+        .map((row) => ({
+          ...row,
+          reading: reading.get(row.instanceId) ?? [],
+          waiting: waiting.get(row.instanceId) ?? {},
+        }));
+    },
+    putLeadTurn: ({ reading, waiting, ...turn }) => {
+      const { instanceId, ...rest } = turn;
+      db.transaction((tx) => {
+        tx.insert(leadTurns)
+          .values(turn)
+          .onConflictDoUpdate({ target: leadTurns.instanceId, set: rest })
+          .run();
+        tx.delete(leadTurnReading)
+          .where(eq(leadTurnReading.instanceId, instanceId))
+          .run();
+        tx.delete(leadTurnWaiting)
+          .where(eq(leadTurnWaiting.instanceId, instanceId))
+          .run();
+        const read = [...new Set(reading)];
+        if (read.length > 0) {
+          tx.insert(leadTurnReading)
+            .values(read.map((threadId) => ({ instanceId, threadId })))
+            .run();
+        }
+        const unread = Object.entries(waiting);
+        if (unread.length > 0) {
+          tx.insert(leadTurnWaiting)
+            .values(
+              unread.map(([sendUuid, threadId]) => ({
+                instanceId,
+                sendUuid,
+                threadId: threadId || null,
+              }))
+            )
+            .run();
+        }
+      });
     },
     dropLeadTurn: (instanceId) => {
       db.delete(leadTurns).where(eq(leadTurns.instanceId, instanceId)).run();
