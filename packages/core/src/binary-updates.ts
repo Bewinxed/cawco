@@ -160,6 +160,16 @@ export const RESTART_WAIT_CAP_MS = 30 * 60_000;
 export const waitedOut = (since: number, now = Date.now()): boolean =>
   now - since >= RESTART_WAIT_CAP_MS;
 
+/**
+ * How long an installed build has to become healthy, from the swap, before
+ * it is rolled back (cli binary-apply.ts): 180 s. Ours: a build that starts
+ * at all answers in seconds (the hub's first 200 on obelisk's data is under a
+ * second), and a migration moves the deadline for as long as it runs. The
+ * hub reads a machine whose connection ended mid-install as on its way back
+ * for this long, and its reconnect after it (hub server.ts `awaitMachine`).
+ */
+export const UPDATE_TRIAL_MS = 180_000;
+
 /** What a request refused by a raised fence answers: it was not started. */
 export const AGENT_RESTARTING =
   "The agent is restarting. This request was not started; retry it in a minute.";

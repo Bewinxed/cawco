@@ -1583,9 +1583,13 @@ function noteRecord(target: SessionState, record: SendRecord): void {
     held?.state !== "read" &&
     commandRecord(record.uuid)
   ) {
-    sendFailureNotices[target.instanceId] = record.reason
-      ? `Message not sent: ${record.reason}`
-      : "Message not sent.";
+    // A refusal the hub made is said once, on the send's row, with its way
+    // back (transcript/send-recovery.svelte.ts): not over the composer too.
+    if (!record.refusal) {
+      sendFailureNotices[target.instanceId] = record.reason
+        ? `Message not sent: ${record.reason}`
+        : "Message not sent.";
+    }
     target.busy = pulseOf(target.instanceId)?.busy ?? false;
   }
 }

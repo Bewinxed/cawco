@@ -14,8 +14,8 @@ import {
 } from "@cawco/core/keepers";
 import type { SessiondProcInfo } from "@cawco/core/sessiond";
 import {
-  DIAL_TIMEOUT_MS,
   ensureSessiond,
+  KeeperEnded,
   SessiondClient,
   type SessiondWelcomeInfo,
 } from "./sessiond-client";
@@ -25,25 +25,23 @@ const NOBODY_THERE = new Set(["ECONNREFUSED", "ENOENT"]);
 const nobodyThere = (error: unknown): boolean =>
   NOBODY_THERE.has((error as NodeJS.ErrnoException).code ?? "");
 
+/** A reading that ended with no keeper there: none listened, or the one that did ended before it answered. */
+const keeperGone = (error: unknown): boolean =>
+  nobodyThere(error) || error instanceof KeeperEnded;
+
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 /**
- * How long a keeper's listing may take once dialled: as long as its welcome
- * ({@link DIAL_TIMEOUT_MS}); the keeper answers a `list` in the same turn of
- * its loop as it reads it.
- */
-const LIST_TIMEOUT_MS = DIAL_TIMEOUT_MS;
-
-/**
- * Keepers that are there and did not answer: whether one of them holds a
- * child is not known, so "no keeper holds it" is never said past them.
+ * Keepers that are there and could not be read, for a reason other than
+ * their end: whether one of them holds a child is not known, so "no keeper
+ * holds it" is never said past them, nor is a listing without them whole.
  */
 export class KeepersUnanswered extends Error {
   readonly unanswered: readonly string[];
-  constructor(procId: string, unanswered: readonly string[]) {
+  constructor(what: string, unanswered: readonly string[]) {
     super(
-      `[sessiond] no keeper that answered holds ${procId}, and ${unanswered.length === 1 ? "one" : unanswered.length} did not answer: ${unanswered.join("; ")}`
+      `[sessiond] ${what} is not known: ${unanswered.length === 1 ? "a keeper" : `${unanswered.length} keepers`} could not be read: ${unanswered.join("; ")}`
     );
     this.unanswered = unanswered;
   }
@@ -66,6 +64,17 @@ export interface HeldProc extends SessiondProcInfo {
  * One connection per keeper, by the keeper's own endpoint, dialled lazily and
  * again once it has ended or its keeper is draining. Each harness keeps one,
  * as each kept its one connection before keepers ran side by side.
+ *
+ * A READING OF THE KEEPERS WAITS ON EACH KEEPER'S OWN WORD: its listing, or
+ * its connection's end, which is the keeper's end ({@link KeeperEnded}); a
+ * wedged one reaches that end once the watchdog ends it (keeper-watchdog.ts).
+ * Never on a timer. A keeper answers a `list` in the turn of its loop that
+ * reads it, but writes the answer on the same ordered socket as every ring
+ * it is replaying to this agent, behind them: after an update, the keeper of
+ * the build before held every session, and while each one's ring was read
+ * for its attach, its listing took more than the two seconds the reading
+ * gave it. Its sessions were read as held by nobody, started afresh, and
+ * the starts failed with the item each one ran (obelisk, 2026-10-16 18:43).
  */
 export class KeeperPool {
   readonly #clients = new Map<string, Promise<SessiondClient>>();
@@ -88,24 +97,41 @@ export class KeeperPool {
     return this.#client(await currentEndpoint(machine));
   }
 
-  /** Connections to every keeper that answers, the current one first. */
+  /** Connections to every keeper there, the current one first; one that is gone is left out, and one that could not be reached is unknown ({@link KeepersUnanswered}). */
   async all(): Promise<SessiondClient[]> {
     const found = await keeperEndpoints();
     const clients = await Promise.all(
       found.map(({ endpoint }) =>
         this.#client(endpoint).catch((error: unknown) => {
-          this.#sayUnanswered(endpoint, error);
+          if (keeperGone(error)) {
+            this.#sayGone(endpoint, error);
+            return;
+          }
+          return `${endpoint}: ${reasonOf(error)}`;
         })
       )
     );
+    const unanswered = clients.filter(
+      (one): one is string => typeof one === "string"
+    );
+    if (unanswered.length > 0) {
+      throw new KeepersUnanswered("the keepers there", unanswered);
+    }
     return clients.filter(
-      (client): client is SessiondClient => client !== undefined
+      (client): client is SessiondClient => client instanceof SessiondClient
     );
   }
 
-  /** Every child each keeper that answers lists, live or not, with its keeper; the current keeper's first. */
+  /**
+   * Every child each keeper there lists, live or not, with its keeper; the
+   * current keeper's first. A keeper that could not be read makes the
+   * listing unknown: {@link KeepersUnanswered}, never a listing without it.
+   */
   async held(): Promise<HeldProc[]> {
-    const { listings } = await this.#survey();
+    const { listings, unanswered } = await this.#survey();
+    if (unanswered.length > 0) {
+      throw new KeepersUnanswered("what the keepers hold", unanswered);
+    }
     return listings.flatMap(({ client, welcome }) =>
       welcome.procs.map((proc) => ({ ...proc, client, epoch: welcome.epoch }))
     );
@@ -114,7 +140,7 @@ export class KeeperPool {
   /**
    * The keeper holding a live child under `procId`, the current one's answer
    * first; undefined only once every keeper there answered and none holds
-   * it. A keeper that is there and did not answer makes it unknown: {@link
+   * it. A keeper that could not be read makes it unknown: {@link
    * KeepersUnanswered}, naming each.
    */
   async holding(procId: string): Promise<HeldProc | undefined> {
@@ -128,17 +154,18 @@ export class KeeperPool {
       }
     }
     if (unanswered.length > 0) {
-      throw new KeepersUnanswered(procId, unanswered);
+      throw new KeepersUnanswered(`which keeper holds ${procId}`, unanswered);
     }
     return undefined;
   }
 
   /**
-   * One reading of every keeper there, the current one first: each one's
-   * listing, and each one that is there and did not answer, with why. An
-   * endpoint nothing listens on (`ECONNREFUSED`, `ENOENT`) is a file a keeper
-   * that is gone left, and is no keeper ({@link keeperEndpoints}); it is
-   * named once in the log.
+   * One reading of every keeper there, the current one first, each waited
+   * on for its own word: its listing, or its end. A keeper that ended before
+   * it answered, or an endpoint nothing listens on (`ECONNREFUSED`,
+   * `ENOENT`: a file a keeper that is gone left, {@link keeperEndpoints}),
+   * holds nothing; its end is said once, with why. One that is there and
+   * could not be read for another reason is named with it, unanswered.
    */
   async #survey(): Promise<{ listings: Listing[]; unanswered: string[] }> {
     const found = await keeperEndpoints();
@@ -146,12 +173,16 @@ export class KeeperPool {
       found.map(async ({ endpoint }): Promise<Listing | string | undefined> => {
         try {
           const client = await this.#client(endpoint);
-          return { client, welcome: await listWithin(client, endpoint) };
+          return { client, welcome: await client.list() };
         } catch (error) {
-          this.#sayUnanswered(endpoint, error);
-          return nobodyThere(error)
-            ? undefined
-            : `${endpoint}: ${reasonOf(error)}`;
+          if (keeperGone(error)) {
+            this.#sayGone(endpoint, error);
+            return;
+          }
+          console.warn(
+            `[sessiond] ${endpoint} could not be read: ${reasonOf(error)}`
+          );
+          return `${endpoint}: ${reasonOf(error)}`;
         }
       })
     );
@@ -163,21 +194,20 @@ export class KeeperPool {
     };
   }
 
-  /** The endpoints already named as answering nothing, each named once. */
+  /** The endpoints already said to be a keeper that is gone, each said once. */
   readonly #saidGone = new Set<string>();
 
-  /** Names an endpoint that did not answer: each time when it is there, once when nothing listens on it. */
-  #sayUnanswered(endpoint: string, error: unknown): void {
-    if (!nobodyThere(error)) {
-      console.warn(`[sessiond] ${endpoint} did not answer: ${reasonOf(error)}`);
+  /** Says once that the keeper at `endpoint` is gone, and so is what it held. */
+  #sayGone(endpoint: string, error: unknown): void {
+    if (this.#saidGone.has(endpoint)) {
       return;
     }
-    if (!this.#saidGone.has(endpoint)) {
-      this.#saidGone.add(endpoint);
-      console.info(
-        `[sessiond] ${endpoint} answers nothing (${(error as NodeJS.ErrnoException).code}): read as a file a keeper that is gone left`
-      );
-    }
+    this.#saidGone.add(endpoint);
+    console.info(
+      error instanceof KeeperEnded
+        ? `[sessiond] the keeper at ${endpoint} ended before it answered, and what it held ended with it`
+        : `[sessiond] ${endpoint} answers nothing (${(error as NodeJS.ErrnoException).code}): read as a file a keeper that is gone left`
+    );
   }
 
   /** The keeper whose boot epoch is `epoch` (each connection learns its keeper's from its welcome), while it answers. */
@@ -240,7 +270,8 @@ export class KeeperPool {
   }
 
   #dial(endpoint: string): Promise<SessiondClient> {
-    const dialled = SessiondClient.connect(endpoint);
+    // Waits on the keeper's welcome or its end, as every reading here does.
+    const dialled = SessiondClient.connect(endpoint, null);
     this.#clients.set(endpoint, dialled);
     dialled.catch(() => {
       if (this.#clients.get(endpoint) === dialled) {
@@ -250,26 +281,6 @@ export class KeeperPool {
     return dialled;
   }
 }
-
-/** A keeper's listing, or why it did not come within {@link LIST_TIMEOUT_MS}. */
-const listWithin = (
-  client: SessiondClient,
-  endpoint: string
-): Promise<SessiondWelcomeInfo> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    client.list(),
-    new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(
-            new Error(`no listing from ${endpoint} within ${LIST_TIMEOUT_MS}ms`)
-          ),
-        LIST_TIMEOUT_MS
-      );
-    }),
-  ]).finally(() => clearTimeout(timer));
-};
 
 /** One keeper as {@link withKeepers} hands it: a connection of its own, closed after. */
 export interface KeeperConnection {

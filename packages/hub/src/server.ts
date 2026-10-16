@@ -301,6 +301,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
   RESTART_WAIT_CAP_MS,
+  UPDATE_TRIAL_MS,
   waitedOut,
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
@@ -775,15 +776,6 @@ const rangedResponse = (
 const RESTORE_HORIZON_MS = 30 * 60_000;
 
 /**
- * How long a send to a machine whose socket just closed waits for it to
- * register again. An agent restart (every deploy) is a socket closed and a
- * register about two seconds later; a send in that gap used to fail "not
- * connected" though its session survived the restart. A machine not back
- * within this is away, and what waited for it fails as it always did.
- */
-const RECONNECT_GRACE_MS = 60_000;
-
-/**
  * At most one activity write per session per minute. The daemon pulses up to
  * once a second while a session is working, and `updatedAt` is read in minutes
  * by everything that reads it at all — the rail's age column, the restore
@@ -984,10 +976,15 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 const READ_TIMEOUT_MS = 10_000;
 
 /**
- * How recently a machine that is not connected must have been heard from to
- * read as reconnecting, not offline (`machineReconnecting`). Our choice: two
- * of the agent's longest waits between tries (30 s, agent daemon.ts
- * `reconnect`).
+ * THE RECONNECTING WINDOW: how long a machine whose agent is away reads as on
+ * its way back, not offline, from its connection's end or this hub's start
+ * (`awaitMachine`). Inside it a send to one of its sessions is taken and
+ * waits for it, and a read says when to ask again; past it, the machine is
+ * offline. Our choice: two of the agent's longest waits between tries (30 s,
+ * agent daemon.ts `reconnect`). An update restarts the agent within its
+ * trial ({@link UPDATE_TRIAL_MS}), and the hub with it on the hub's machine,
+ * so a connection that ended while its machine installed an update, and
+ * every machine at this hub's start, gets the trial before this.
  */
 const RECONNECTING_MS = 60_000;
 
@@ -4889,6 +4886,9 @@ export const createServer = (
       undefined,
       row.instanceId
     );
+    if (reply === "offline") {
+      throw new Error(commandAwayWords(machineId));
+    }
     if (typeof reply === "string") {
       throw new Error(`Withdrawal ${reply}.`);
     }
@@ -7039,7 +7039,7 @@ export const createServer = (
           }
         : {
             state: "failed" as const,
-            reason: refused?.reason ?? `machine ${machineId} is not connected`,
+            reason: refused?.reason ?? machineAwayWords(machineId),
             refusal: refused
               ? (refused.refusal ?? null)
               : { kind: "machine-away" as const, machineId },
@@ -7148,29 +7148,65 @@ export const createServer = (
   };
 
   /**
-   * Machines whose agent is away within its reconnect grace, and why: its
-   * socket closed (`agent`, restarting) or this hub has just started and not
-   * heard it yet (`hub`); from then until it registers or
-   * {@link RECONNECT_GRACE_MS} runs out. A send to one of their sessions is
-   * owed ({@link deliverSend}). Each grace is its own: the timer of one that
-   * ended (the machine came back and went again) leaves a newer one alone.
+   * Machines whose agent is away inside its reconnecting window
+   * ({@link RECONNECTING_MS}), why, and until when: its socket closed
+   * (`agent`, restarting) or this hub has just started and not heard it yet
+   * (`hub`); from then until it registers or the window ends. A send to one
+   * of their sessions is owed ({@link deliverSend}), and a read of one says
+   * when to ask again ({@link reconnectingFor}). Each window is its own: the
+   * timer of one that ended (the machine came back and went again) leaves a
+   * newer one alone.
    */
   const awaitingMachine = new Map<
     string,
-    { why: "agent" | "hub"; grace: symbol }
+    { why: "agent" | "hub"; until: number; window: symbol }
   >();
-  const awaitGrace = (machineId: string, why: "agent" | "hub"): void => {
-    const grace = Symbol(machineId);
-    awaitingMachine.set(machineId, { why, grace });
-    lifetime.after(RECONNECT_GRACE_MS, () => {
-      if (awaitingMachine.get(machineId)?.grace !== grace) {
+  /** Opens `machineId`'s window, the update's trial first when `updating`. */
+  const awaitMachine = (
+    machineId: string,
+    why: "agent" | "hub",
+    updating: boolean
+  ): void => {
+    const window = Symbol(machineId);
+    const ms = (updating ? UPDATE_TRIAL_MS : 0) + RECONNECTING_MS;
+    awaitingMachine.set(machineId, { why, until: Date.now() + ms, window });
+    lifetime.after(ms, () => {
+      if (awaitingMachine.get(machineId)?.window !== window) {
         return;
       }
       awaitingMachine.delete(machineId);
       if (!registry.agent(machineId)) {
+        console.warn(
+          `[hub] ${machineId} did not come back within its reconnecting window (${ms / 1000} s): what was kept for it fails`
+        );
         failOwedAway(machineId);
       }
     });
+  };
+  /**
+   * A send to a machine past its window, as the person reads it (WORDS.md's
+   * error formula): the machine by its name, never its id; what is safe;
+   * what to do.
+   */
+  const machineAwayWords = (machineId: string): string => {
+    const name = knownMachineName(machineId);
+    return `${name ?? "Its machine"} isn't connected, so this message wasn't delivered. It's kept here: send it again once ${name ?? "the machine"} is back.`;
+  };
+  /** A machine's name for a sentence, when this hub knows the machine. */
+  const knownMachineName = (machineId: string): string | undefined =>
+    db.listAgents().some((each) => each.machineId === machineId)
+      ? machineName(machineId)
+      : undefined;
+  /**
+   * A command (an interrupt, a model change) refused for its machine's
+   * absence, as the person reads it: the machine by its name, and, inside
+   * its window, that it is on its way back.
+   */
+  const commandAwayWords = (machineId: string): string => {
+    const name = knownMachineName(machineId) ?? "The session's machine";
+    return reconnectingFor(machineId) > 0
+      ? `${name} is restarting, so that didn't reach it. Try again in a moment.`
+      : `${name} isn't connected, so that didn't reach it. Try again once it's back.`;
   };
 
   /**
@@ -7373,16 +7409,20 @@ export const createServer = (
         continue;
       }
       if (db.takeOwedSend(send.uuid) !== undefined) {
-        failSend(send, `machine ${machineId} is not connected`, {
+        failSend(send, machineAwayWords(machineId), {
           kind: "machine-away",
           machineId,
         });
       }
     }
   };
-  // A hub that just started has heard no machine yet: each gets the grace a
-  // restarting agent gets, so a send to it waits for its register.
-  db.listAgents().map((machine) => awaitGrace(machine.machineId, "hub"));
+  // A hub that just started has heard no machine yet: each gets the window a
+  // machine that is updating gets, since a hub's start is most often its own
+  // machine's update, which restarts that machine's agent too, so a send to
+  // any of them waits for its register.
+  db.listAgents().map((machine) =>
+    awaitMachine(machine.machineId, "hub", true)
+  );
   /**
    * Each session's final message of the turn in flight: the text frames that
    * followed its last tool call. A tool call empties it, so what came before
@@ -12690,7 +12730,7 @@ export const createServer = (
     if (!agent) {
       sendFrame(
         dashboard,
-        failure(envelope, `machine ${envelope.machineId} is not connected`)
+        failure(envelope, commandAwayWords(envelope.machineId))
       );
       return false;
     }
@@ -15738,6 +15778,7 @@ export const createServer = (
       return await withdrawPending(row, machineId);
     },
     isMachineConnected: (machineId) => registry.agent(machineId) !== undefined,
+    machineAwayWords: commandAwayWords,
     relaySend,
     relayControl: (envelope, dashboard) =>
       relayControl(envelope, dashboard, false),
@@ -15796,22 +15837,16 @@ export const createServer = (
   };
 
   /**
-   * Whether a machine that is not connected is on its way back: this hub (or
-   * the process before it, whose word the database keeps) heard from it
-   * within {@link RECONNECTING_MS}. A machine's agent tries its hub again
-   * within seconds of losing it, and never waits more than 30 s between tries
-   * (agent daemon.ts `reconnect`), so a hub that just restarted reads every
-   * machine it was serving this way until each registers. Silent longer, it
-   * is offline. The ms left before it is (0: offline now), which a refused
-   * read says as its `Retry-After`, so a reader asks again once the hub's
-   * word on the machine changes rather than holding "reconnecting" for good.
+   * Whether a machine that is not connected is on its way back: the ms left
+   * in its reconnecting window ({@link awaitingMachine}, the one window sends
+   * wait in too), 0 when it is offline now. A refused read says it as its
+   * `Retry-After`, so a reader asks again once the hub's word on the machine
+   * changes rather than holding "reconnecting" for good.
    */
   const reconnectingFor = (machineId: string): number => {
-    const heard = db
-      .listAgents()
-      .find((agent) => agent.machineId === machineId)?.lastSeenAt;
-    return heard instanceof Date
-      ? Math.max(0, RECONNECTING_MS - (Date.now() - heard.getTime()))
+    const away = awaitingMachine.get(machineId);
+    return away && !registry.agent(machineId)
+      ? Math.max(0, away.until - Date.now())
       : 0;
   };
 
@@ -26384,8 +26419,13 @@ export const createServer = (
           if (!machineId) {
             return;
           }
-          // Sends to it wait for its next register, within the grace.
-          awaitGrace(machineId, "agent");
+          // Sends to it wait for its next register, within its window: one
+          // that went while installing an update has the update's trial too.
+          awaitMachine(
+            machineId,
+            "agent",
+            binaryUpdateStates.get(machineId)?.phase === "installing"
+          );
           // A summariser's turn cannot end where nobody hears it: its
           // continuation waits for the machine's next register instead.
           for (const waiter of turnWaiters.values()) {

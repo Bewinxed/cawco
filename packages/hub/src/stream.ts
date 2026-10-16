@@ -112,6 +112,8 @@ export interface StreamPorts {
   readonly isMachineConnected: (machineId: string) => boolean;
   /** Runs the TTL sweep until the hub closes. */
   readonly lifetime: HubLifetimeShape;
+  /** A command refused because its machine is not connected, as the person reads it: the machine by its name, never its id. */
+  readonly machineAwayWords: (machineId: string) => string;
   /**
    * The session's plan whole, handed to `send` for one socket that just
    * subscribed or asked (plans.ts `snapshotTo`).
@@ -530,7 +532,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // workflow's question) is settled here with no machine involved, and one
     // a machine raised says its machine is not connected from there.
     if (kind !== "permission.answer" && !ports.isMachineConnected(machineId)) {
-      fail(socket, commandId, `machine ${machineId} is not connected`);
+      fail(socket, commandId, ports.machineAwayWords(machineId));
       return;
     }
 
@@ -595,7 +597,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     );
     if (!relayed) {
       awaiting.delete(requestId);
-      fail(socket, commandId, `machine ${machineId} is not connected`);
+      fail(socket, commandId, ports.machineAwayWords(machineId));
       return;
     }
     ackTo(socket, { type: "command.ack", commandId, stage: "accepted" });

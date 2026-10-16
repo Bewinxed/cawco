@@ -1281,15 +1281,21 @@ export const rearmHooks = (): Promise<void> => {
         now.push(id);
       }
     }
+    const revive = await cliWithoutBoundary(
+      ids.filter((id) => !running.includes(id)),
+      live,
+      commands
+    );
     for (const id of ids) {
-      if (!now.includes(id)) {
+      if (!(now.includes(id) || revive.some((ref) => ref.id === id))) {
         unarmed.add(id);
       }
     }
     return {
       now,
+      revive,
       idle: running.length - now.length,
-      later: ids.length - running.length,
+      later: ids.length - running.length - revive.length,
     };
   })();
   let armed = 0;
@@ -1299,17 +1305,68 @@ export const rearmHooks = (): Promise<void> => {
       armed += 1;
     }
   };
-  rearmListed = listing.then(({ now }) => {
+  /** A workspace a CLI runs in with no boundary: started again, which arms its hook and starts its judge. */
+  const reviveNow = async (ref: WorkspaceRef): Promise<void> => {
+    await limit(() =>
+      ensureNow(ref).then(
+        () => {
+          armed += 1;
+        },
+        (error: unknown) => {
+          console.warn(
+            `[workspace] ${ref.id}: a session's process runs in it with no boundary, and its boundary could not be started again: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      )
+    );
+  };
+  rearmListed = listing.then(({ now, revive }) => {
     for (const id of now) {
       rearming.set(id, armNow(id));
     }
+    for (const ref of revive) {
+      rearming.set(ref.id, reviveNow(ref));
+    }
   });
-  return listing.then(async ({ now, idle, later }) => {
-    await Promise.all(now.map((id) => rearming.get(id)));
+  return listing.then(async ({ now, revive, idle, later }) => {
+    await Promise.all(
+      [...now, ...revive.map((ref) => ref.id)].map((id) => rearming.get(id))
+    );
     console.info(
-      `[workspace] boundary hooks written for ${armed} of ${now.length} workspace(s) with a boundary running and a session or command in it, in ${Date.now() - started} ms; ${idle} with a boundary running and nothing in it are left as they are and close once quiet; ${later} with none are armed when a session there starts`
+      `[workspace] boundary hooks written for ${armed} of ${now.length + revive.length} workspace(s) with a session or command in it (${revive.length} of them with no boundary running, started again), in ${Date.now() - started} ms; ${idle} with a boundary running and nothing in it are left as they are and close once quiet; ${later} with none are armed when a session there starts`
     );
   });
+};
+
+/**
+ * EVERY WORKSPACE A SESSION'S PROCESS RUNS IN HAS ITS JUDGE, WHATEVER BECAME
+ * OF THAT SESSION'S ATTACH. Of `ids`, workspaces whose boundary no keeper
+ * runs, each clone a keeper still holds a Claude Code or pi process in
+ * ({@link attachedIn}): its hook names a judge that is gone, and refuses
+ * every call the process makes (b895ec57, 2026-10-16: closed as quiet while
+ * its session's attach had failed, its process still running on the keeper
+ * before the update). A project lead's place has no clone record, and is
+ * armed as its session starts.
+ */
+const cliWithoutBoundary = async (
+  ids: readonly string[],
+  live: readonly HeldProc[],
+  commands: Commands
+): Promise<WorkspaceRef[]> => {
+  const found: WorkspaceRef[] = [];
+  for (const id of ids) {
+    if (isLeadPlace(id)) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one small record read per workspace with no boundary running
+    const created = await readRecord<{ path?: string }>(
+      join(stateDir(id), "create.json")
+    ).catch(() => undefined);
+    if (created?.path && attachedIn(id, created.path, live, commands)) {
+      found.push({ id, path: created.path });
+    }
+  }
+  return found;
 };
 
 /**

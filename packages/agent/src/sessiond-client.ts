@@ -66,12 +66,26 @@ export const heldSessions = (procs: readonly SessiondProcInfo[]): number =>
   }).length;
 
 /**
- * How long a dial or a `welcome` may take before the agent calls the endpoint
- * dead. Our choice: a unix socket on the same machine answers in microseconds,
- * so anything past a couple of seconds is a wedged daemon, not a slow one, and
- * the ad-hoc path needs a bound before it decides to spawn a replacement.
+ * How long a probe of the endpoint, and the register's own reading of the
+ * keepers ({@link SessiondClient.connect}'s default), may take before the
+ * agent reads the endpoint as not answering. Our choice: a unix socket on the
+ * same machine answers in microseconds, and the ad-hoc path needs a bound
+ * before it decides to spawn a replacement. What a session's custody is
+ * decided by waits on the keeper's own word instead ({@link KeeperEnded}).
  */
 export const DIAL_TIMEOUT_MS = 2000;
+
+/**
+ * The keeper's connection ended before it answered: the keeper ended (the
+ * kernel closes a process's sockets as it exits), and what it held ended with
+ * it. The one way a wait on a keeper's word ends without its answer.
+ */
+export class KeeperEnded extends Error {
+  constructor(what: string) {
+    super(`[sessiond] the keeper's connection ended before ${what}`);
+    this.name = "KeeperEnded";
+  }
+}
 
 /**
  * How long the ad-hoc path waits for a freshly spawned sessiond to bind before
@@ -423,18 +437,10 @@ export class SessiondClient {
       const pending = [...this.#acks.values()];
       this.#acks.clear();
       for (const { reject } of pending) {
-        reject(
-          new Error(
-            "[sessiond] the keeper's connection ended before it answered"
-          )
-        );
+        reject(new KeeperEnded("it answered"));
       }
       for (const waiter of this.#welcomeWaiters.splice(0)) {
-        waiter.reject(
-          new Error(
-            "[sessiond] the keeper's connection ended before its listing came"
-          )
-        );
+        waiter.reject(new KeeperEnded("its listing came"));
       }
       this.onClose.emit("close");
     });
@@ -443,21 +449,30 @@ export class SessiondClient {
     });
   }
 
+  /**
+   * A connection to the keeper at `endpoint`, once its welcome has come.
+   * `timeoutMs` bounds the wait; `null` waits on the keeper's own word: its
+   * welcome, or its connection's end ({@link KeeperEnded}), which a keeper
+   * that is wedged reaches once the watchdog ends it (keeper-watchdog.ts).
+   */
   static connect(
     endpoint: string = sessiondEndpoint(),
-    timeoutMs = DIAL_TIMEOUT_MS
+    timeoutMs: number | null = DIAL_TIMEOUT_MS
   ): Promise<SessiondClient> {
     return new Promise((resolve, reject) => {
       // Same ordering rule as {@link probeEndpoint}: listeners before dial.
       const socket = new Socket();
-      const timer = setTimeout(() => {
-        socket.destroy();
-        reject(
-          new Error(
-            `[sessiond] no welcome from ${endpoint} within ${timeoutMs}ms`
-          )
-        );
-      }, timeoutMs);
+      const timer =
+        timeoutMs === null
+          ? undefined
+          : setTimeout(() => {
+              socket.destroy();
+              reject(
+                new Error(
+                  `[sessiond] no welcome from ${endpoint} within ${timeoutMs}ms`
+                )
+              );
+            }, timeoutMs);
       socket.once("error", (error) => {
         clearTimeout(timer);
         reject(error);
@@ -783,9 +798,7 @@ export class SessiondClient {
     // would wait for a welcome that never comes.
     // biome-ignore lint/suspicious/noUnnecessaryConditions: set true at runtime by the socket's "close" and by close(); biome's inference sees only the initializer
     if (this.#closed) {
-      return Promise.reject(
-        new Error("[sessiond] the keeper's connection has ended")
-      );
+      return Promise.reject(new KeeperEnded("this listing was asked"));
     }
     return new Promise((resolve, reject) => {
       this.#send({ type: "list" });
