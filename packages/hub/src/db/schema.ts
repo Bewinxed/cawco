@@ -1978,12 +1978,21 @@ export const accountCatalogs = sqliteTable("account_catalogs", {
     .primaryKey()
     .references(() => accounts.id, { onDelete: "cascade" }),
   models: text("models", { mode: "json" }).$type<ModelInfo[]>().notNull(),
-  defaultEfforts: text("default_efforts", { mode: "json" })
-    .$type<Record<string, string>>()
-    .notNull()
-    .default({}),
   readAt: timestamp("read_at").notNull(),
 });
+
+/** The effort a model ran at on an account when a session asked for none, one row per model; kept as the catalog is read again. */
+export const accountModelEfforts = sqliteTable(
+  "account_model_efforts",
+  {
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accountCatalogs.accountId, { onDelete: "cascade" }),
+    model: text("model").notNull(),
+    effort: text("effort").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.accountId, table.model] })]
+);
 
 /**
  * Accounts out of placement until their window resets: one of their sessions'

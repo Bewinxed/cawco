@@ -21,6 +21,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   accountBench,
   accountCatalogs,
+  accountModelEfforts,
   accountReadings,
   accountRouting,
   accountSignins,
@@ -178,17 +179,25 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
       .all()
       .map(toAccount);
 
-  const catalogs = (): AccountCatalog[] =>
-    db
+  const catalogs = (): AccountCatalog[] => {
+    const efforts = new Map<string, Record<string, string>>();
+    for (const { accountId, model, effort } of db
+      .select()
+      .from(accountModelEfforts)
+      .all()) {
+      efforts.set(accountId, { ...efforts.get(accountId), [model]: effort });
+    }
+    return db
       .select()
       .from(accountCatalogs)
       .all()
       .map((row) => ({
         accountId: row.accountId,
         models: row.models,
-        defaultEfforts: row.defaultEfforts,
+        defaultEfforts: efforts.get(row.accountId) ?? {},
         readAt: row.readAt.getTime(),
       }));
+  };
 
   return {
     list,
@@ -207,13 +216,20 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .run();
     },
     putDefaultEffort: (accountId, model, effort) => {
-      const row = catalogs().find((one) => one.accountId === accountId);
-      if (!row || row.defaultEfforts[model] === effort) {
+      const catalog = db
+        .select({ accountId: accountCatalogs.accountId })
+        .from(accountCatalogs)
+        .where(eq(accountCatalogs.accountId, accountId))
+        .get();
+      if (!catalog) {
         return;
       }
-      db.update(accountCatalogs)
-        .set({ defaultEfforts: { ...row.defaultEfforts, [model]: effort } })
-        .where(eq(accountCatalogs.accountId, accountId))
+      db.insert(accountModelEfforts)
+        .values({ accountId, model, effort })
+        .onConflictDoUpdate({
+          target: [accountModelEfforts.accountId, accountModelEfforts.model],
+          set: { effort },
+        })
         .run();
     },
     create: ({ provider, kind, label, hue, identity }) => {
