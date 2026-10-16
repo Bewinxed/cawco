@@ -50,6 +50,18 @@ export const LAYER =
 const press = (name: string | RegExp) => (page: Page) =>
   page.getByRole("button", { name }).filter({ visible: true }).first().click();
 
+/**
+ * The composer focused and empty. A pass reads a surface's states on one
+ * page, and the draft an earlier state typed stays the session's (it is
+ * kept across loads): `@` after it opens no mention, Up in it recalls
+ * nothing.
+ */
+const emptyComposer = async (page: Page) => {
+  await page.locator(COMPOSER_FIELD).first().click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Delete");
+};
+
 /** The phone and tablet's rail: the sheet the navigation button opens. */
 const openRail = async (page: Page) => {
   const burger = page.getByRole("button", { name: "Open navigation" });
@@ -263,7 +275,7 @@ export const SURFACES: Surface[] = [
         // An @ in the composer: the mention menu.
         name: "mention",
         act: async (page) => {
-          await page.locator(COMPOSER_FIELD).first().click();
+          await emptyComposer(page);
           await page.keyboard.type("@");
         },
         root: "body",
@@ -272,10 +284,10 @@ export const SURFACES: Surface[] = [
         // Up in an empty composer: the recall wheel over what was sent.
         name: "recall",
         act: async (page) => {
-          await page.locator(COMPOSER_FIELD).first().click();
+          await emptyComposer(page);
           await page.keyboard.press("ArrowUp");
         },
-        root: MAIN,
+        root: "body",
       },
       {
         // The Write card's change opened whole.
@@ -377,8 +389,7 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: (s) => `/project/${s.project}`,
     // Each view is the project's route with its `view` (the view tabs' own hrefs).
-    // `week` is the scene's made view (views/week.oui).
-    states: ["table", "pipeline", "routines", "decisions", "week"].map(
+    states: ["table", "pipeline", "routines", "decisions"].map(
       (view): State => ({
         name: view,
         route: (s) => `/project/${s.project}?view=${view}`,

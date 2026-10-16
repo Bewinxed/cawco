@@ -13,7 +13,7 @@
  *  - "Lay out the chip wraps": an artifact page it made;
  *  - "Name the hang card's states": a question it asked, answered;
  *  - "Decide the chip's wrap", in the project: a decision page it made;
- *  - the project "cawco": tasks, a routine and a made view (views/week.oui);
+ *  - the project "cawco": tasks and a routine;
  *  - a workflow and one finished run of it, and a workflow drawn as a graph.
  * The mock model plays a script per message: the message carries
  * `PROBE-STEP:<name>`, and each request after it takes the plan's next step
@@ -27,16 +27,6 @@ import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet } from "../kit";
 
 const DAY = 24 * 60 * 60 * 1000;
-/** A made view (views spec's good draft): figures, a table, the board by stage and a month, over the view tools. */
-const WEEK_VIEW = `root = Column([title, figures, table, board, month])
-tasks = Query("tasks", {}, {rows: []})
-stages = Query("stages", {}, {stages: [], byKind: {you: 0, done: 0}, total: 0})
-title = Text("Chip week", "title")
-figures = Row([StatTile("All tasks", stages.total), StatTile("Waiting on you", stages.byKind.you, "attn")])
-table = Table(tasks.rows, [{label: "Task", field: "title"}, {label: "Stage", field: "stage"}])
-board = Board(@Each(stages.stages, "s", StageColumn(s, tasks.rows)), "By stage")
-month = Calendar(tasks.rows, "dates.createdAt", "month")
-`;
 /** A workflow drawn as a graph (the editor's canvas): start, one step, end. */
 const GRAPH = {
   nodes: [
@@ -513,18 +503,6 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   );
   await mkdir(join(fleet.repo, "notes"), { recursive: true });
 
-  // A made view, kept, as a hand-written view file is (views.ts: files are the truth).
-  const view = await fetch(
-    `${fleet.base}/api/projects/${project.id}/folder/file`,
-    {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "views/week.oui", content: WEEK_VIEW }),
-    }
-  );
-  if (!view.ok) {
-    throw new Error(`PUT views/week.oui: ${view.status} ${await view.text()}`);
-  }
   // A decision: a page a session of the project made (written to its decisions/).
   const decision = await fleet.spawn(
     "claude",

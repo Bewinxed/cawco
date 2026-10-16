@@ -46,6 +46,7 @@
     "jump",
     "not-found",
     "project",
+    "rail",
     "session",
     "task",
     "usage",
@@ -57,8 +58,12 @@
     "new-session",
     "session"
   ],
-  "apps/dashboard/src/lib/cawco/HookTester.svelte": ["config-hooks"],
-  "apps/dashboard/src/lib/cawco/HoverPanel.svelte": [],
+  "apps/dashboard/src/lib/cawco/HookTester.svelte": [
+    "config-hooks"
+  ],
+  "apps/dashboard/src/lib/cawco/HoverPanel.svelte": [
+    "rail"
+  ],
   "apps/dashboard/src/lib/cawco/MachineAuthStatus.svelte": [],
   "apps/dashboard/src/lib/cawco/MachineInventory.svelte": [
     "config-mcp",
@@ -66,9 +71,19 @@
   ],
   "apps/dashboard/src/lib/cawco/MachinesButton.svelte": [
     "artifact",
+    "bench-caw",
+    "bench-caw-notices",
     "bench-folder-proof",
     "bench-lift",
+    "bench-mac-readiness",
+    "bench-new-session",
     "bench-overlays",
+    "bench-recall",
+    "bench-seed-tabs",
+    "bench-session-limit",
+    "bench-traffic",
+    "bench-updates",
+    "bench-usage-limits",
     "bench-usage-relay",
     "config-accounts",
     "config-cli-tools",
@@ -77,22 +92,32 @@
     "config-devices",
     "config-hooks",
     "config-mcp",
+    "config-memory",
+    "config-models",
     "config-phone",
     "config-previews",
     "config-rules",
+    "config-skills",
     "config-spend",
     "config-subagents",
     "config-updates",
     "not-found",
+    "project",
+    "rail",
+    "session",
     "usage",
     "workflows"
   ],
   "apps/dashboard/src/lib/cawco/MachinesEmpty.svelte": [],
-  "apps/dashboard/src/lib/cawco/MachinesList.svelte": ["jump", "rail"],
+  "apps/dashboard/src/lib/cawco/MachinesList.svelte": [
+    "rail",
+    "session"
+  ],
   "apps/dashboard/src/lib/cawco/MessageBody.svelte": [
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/NeedsCaw.svelte": [
@@ -132,6 +157,7 @@
     "config-updates",
     "not-found",
     "project",
+    "rail",
     "session",
     "task",
     "usage",
@@ -151,7 +177,9 @@
   "apps/dashboard/src/lib/cawco/RegionBoundary.svelte": [],
   "apps/dashboard/src/lib/cawco/RowFault.svelte": [],
   "apps/dashboard/src/lib/cawco/RuleActivity.svelte": [],
-  "apps/dashboard/src/lib/cawco/RuleTester.svelte": ["config-rules"],
+  "apps/dashboard/src/lib/cawco/RuleTester.svelte": [
+    "config-rules"
+  ],
   "apps/dashboard/src/lib/cawco/RunSteps.svelte": [],
   "apps/dashboard/src/lib/cawco/ScreenEdges.svelte": [
     "artifact",
@@ -191,23 +219,34 @@
     "config-updates",
     "not-found",
     "project",
+    "rail",
     "session",
     "task",
     "usage",
     "workflows"
   ],
-  "apps/dashboard/src/lib/cawco/SessionHover.svelte": [],
+  "apps/dashboard/src/lib/cawco/SessionHover.svelte": [
+    "rail"
+  ],
   "apps/dashboard/src/lib/cawco/SessionMark.svelte": [],
   "apps/dashboard/src/lib/cawco/SessionPane.svelte": [
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/SessionRow.svelte": [
+    "artifact",
+    "bench-caw",
+    "bench-caw-notices",
     "bench-folder-proof",
     "bench-lift",
+    "bench-new-session",
     "bench-overlays",
+    "bench-session-limit",
+    "bench-updates",
+    "bench-usage-limits",
     "bench-usage-relay",
     "config-accounts",
     "config-cli-tools",
@@ -216,16 +255,27 @@
     "config-devices",
     "config-hooks",
     "config-mcp",
+    "config-memory",
+    "config-models",
+    "config-phone",
+    "config-previews",
     "config-rules",
+    "config-skills",
     "config-spend",
     "config-subagents",
     "config-updates",
-    "jump",
+    "not-found",
+    "project",
     "rail",
+    "session",
     "usage",
     "workflows"
   ],
-  "apps/dashboard/src/lib/cawco/SessionSurface.svelte": ["artifact", "session"],
+  "apps/dashboard/src/lib/cawco/SessionSurface.svelte": [
+    "artifact",
+    "rail",
+    "session"
+  ],
   "apps/dashboard/src/lib/cawco/Shell.svelte": [
     "artifact",
     "bench-caw",
@@ -234,6 +284,48 @@
     "bench-echo",
     "bench-folder-proof",
     "bench-head-tint",
+    "bench-lift",
+    "bench-mac-readiness",
+    "bench-new-session",
+    "bench-overlays",
+    "bench-recall",
+    "bench-seed-tabs",
+    "bench-session-limit",
+    "bench-traffic",
+    "bench-updates",
+    "bench-usage-limits",
+    "bench-usage-relay",
+    "board",
+    "config-accounts",
+    "config-cli-tools",
+    "config-connections",
+    "config-delegate-types",
+    "config-devices",
+    "config-hooks",
+    "config-mcp",
+    "config-memory",
+    "config-models",
+    "config-phone",
+    "config-previews",
+    "config-rules",
+    "config-skills",
+    "config-spend",
+    "config-subagents",
+    "config-updates",
+    "not-found",
+    "project",
+    "rail",
+    "session",
+    "task",
+    "usage",
+    "views",
+    "workflows"
+  ],
+  "apps/dashboard/src/lib/cawco/Sidebar.svelte": [
+    "artifact",
+    "bench-caw",
+    "bench-caw-notices",
+    "bench-folder-proof",
     "bench-lift",
     "bench-mac-readiness",
     "bench-new-session",
@@ -265,41 +357,21 @@
     "project",
     "rail",
     "session",
-    "task",
-    "usage",
-    "views",
-    "workflows"
-  ],
-  "apps/dashboard/src/lib/cawco/Sidebar.svelte": [
-    "artifact",
-    "bench-folder-proof",
-    "bench-lift",
-    "bench-overlays",
-    "bench-usage-relay",
-    "config-accounts",
-    "config-cli-tools",
-    "config-connections",
-    "config-delegate-types",
-    "config-devices",
-    "config-hooks",
-    "config-mcp",
-    "config-phone",
-    "config-previews",
-    "config-rules",
-    "config-spend",
-    "config-subagents",
-    "config-updates",
-    "jump",
-    "not-found",
-    "rail",
     "usage",
     "workflows"
   ],
   "apps/dashboard/src/lib/cawco/StatTile.svelte": [],
   "apps/dashboard/src/lib/cawco/StopTray.svelte": [],
-  "apps/dashboard/src/lib/cawco/TaskRing.svelte": ["bench-delegate-tray"],
-  "apps/dashboard/src/lib/cawco/ThreadPane.svelte": [],
-  "apps/dashboard/src/lib/cawco/ToolMatrix.svelte": ["config-cli-tools"],
+  "apps/dashboard/src/lib/cawco/TaskRing.svelte": [
+    "bench-delegate-tray",
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/ThreadPane.svelte": [
+    "project"
+  ],
+  "apps/dashboard/src/lib/cawco/ToolMatrix.svelte": [
+    "config-cli-tools"
+  ],
   "apps/dashboard/src/lib/cawco/TreeCount.svelte": [],
   "apps/dashboard/src/lib/cawco/TreeMark.svelte": [
     "artifact",
@@ -337,21 +409,31 @@
     "config-spend",
     "config-subagents",
     "config-updates",
-    "jump",
     "not-found",
     "project",
     "rail",
     "session",
     "task",
     "usage",
+    "views",
     "workflows"
   ],
   "apps/dashboard/src/lib/cawco/UnlockKeychain.svelte": [],
   "apps/dashboard/src/lib/cawco/UsageMeter.svelte": [
     "artifact",
+    "bench-caw",
+    "bench-caw-notices",
     "bench-folder-proof",
     "bench-lift",
+    "bench-mac-readiness",
+    "bench-new-session",
     "bench-overlays",
+    "bench-recall",
+    "bench-seed-tabs",
+    "bench-session-limit",
+    "bench-traffic",
+    "bench-updates",
+    "bench-usage-limits",
     "bench-usage-relay",
     "config-accounts",
     "config-cli-tools",
@@ -360,14 +442,17 @@
     "config-devices",
     "config-hooks",
     "config-mcp",
+    "config-memory",
+    "config-models",
     "config-phone",
     "config-previews",
     "config-rules",
+    "config-skills",
     "config-spend",
     "config-subagents",
     "config-updates",
-    "jump",
     "not-found",
+    "project",
     "rail",
     "session",
     "usage",
@@ -390,7 +475,9 @@
     "config-accounts"
   ],
   "apps/dashboard/src/lib/cawco/accounts/AccountSubmenu.svelte": [],
-  "apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte": ["session"],
+  "apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte": [
+    "session"
+  ],
   "apps/dashboard/src/lib/cawco/accounts/AccountTile.svelte": [
     "bench-caw-notices"
   ],
@@ -408,9 +495,15 @@
   "apps/dashboard/src/lib/cawco/accounts/SigninPanel.svelte": [],
   "apps/dashboard/src/lib/cawco/accounts/StrategyFigure.svelte": [],
   "apps/dashboard/src/lib/cawco/accounts/StrategyPicker.svelte": [],
-  "apps/dashboard/src/lib/cawco/accounts/Swatches.svelte": ["config-accounts"],
-  "apps/dashboard/src/lib/cawco/blocks/Block.svelte": ["views"],
-  "apps/dashboard/src/lib/cawco/blocks/BlockPage.svelte": ["views"],
+  "apps/dashboard/src/lib/cawco/accounts/Swatches.svelte": [
+    "config-accounts"
+  ],
+  "apps/dashboard/src/lib/cawco/blocks/Block.svelte": [
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/blocks/BlockPage.svelte": [
+    "views"
+  ],
   "apps/dashboard/src/lib/cawco/canvas/CanvasStages.svelte": [],
   "apps/dashboard/src/lib/cawco/config/Choice.svelte": [],
   "apps/dashboard/src/lib/cawco/config/ConfigRail.svelte": [
@@ -463,25 +556,32 @@
     "config-rules",
     "config-subagents"
   ],
-  "apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte": [],
+  "apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte": [
+    "config-skills"
+  ],
   "apps/dashboard/src/lib/cawco/config/Field.svelte": [
     "config-delegate-types",
     "config-hooks",
     "config-mcp",
+    "config-memory",
     "config-models",
     "config-previews",
     "config-rules",
+    "config-skills",
     "config-spend"
   ],
   "apps/dashboard/src/lib/cawco/config/LinkMarketplacePopover.svelte": [
     "config-skills"
   ],
   "apps/dashboard/src/lib/cawco/config/McpSignIn.svelte": [],
-  "apps/dashboard/src/lib/cawco/config/NewMemoryPopover.svelte": [],
+  "apps/dashboard/src/lib/cawco/config/NewMemoryPopover.svelte": [
+    "config-memory"
+  ],
   "apps/dashboard/src/lib/cawco/config/PickerChip.svelte": [
     "config-hooks",
     "config-mcp",
-    "config-rules"
+    "config-rules",
+    "config-skills"
   ],
   "apps/dashboard/src/lib/cawco/config/PreviousVersions.svelte": [],
   "apps/dashboard/src/lib/cawco/config/ReadingWell.svelte": [
@@ -519,13 +619,7 @@
     "config-memory",
     "config-rules"
   ],
-  "apps/dashboard/src/lib/cawco/config/SkeletonRows.svelte": [
-    "config-phone",
-    "config-previews",
-    "config-rules",
-    "config-spend",
-    "config-updates"
-  ],
+  "apps/dashboard/src/lib/cawco/config/SkeletonRows.svelte": [],
   "apps/dashboard/src/lib/cawco/config/SwitchField.svelte": [
     "config-accounts",
     "config-delegate-types",
@@ -559,8 +653,12 @@
     "config-subagents"
   ],
   "apps/dashboard/src/lib/cawco/decisions/DecisionPage.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/DecisionTile.svelte": [],
-  "apps/dashboard/src/lib/cawco/decisions/DecisionsView.svelte": ["views"],
+  "apps/dashboard/src/lib/cawco/decisions/DecisionTile.svelte": [
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/decisions/DecisionsView.svelte": [
+    "views"
+  ],
   "apps/dashboard/src/lib/cawco/decisions/PageFrame.svelte": [],
   "apps/dashboard/src/lib/cawco/decisions/RecordCard.svelte": [],
   "apps/dashboard/src/lib/cawco/decisions/StatePill.svelte": [],
@@ -568,8 +666,12 @@
   "apps/dashboard/src/lib/cawco/decisions/graph/DecisionGroup.svelte": [],
   "apps/dashboard/src/lib/cawco/decisions/graph/DecisionNode.svelte": [],
   "apps/dashboard/src/lib/cawco/find/FindPeek.svelte": [],
-  "apps/dashboard/src/lib/cawco/find/FindRow.svelte": ["jump"],
-  "apps/dashboard/src/lib/cawco/find/Finder.svelte": ["jump"],
+  "apps/dashboard/src/lib/cawco/find/FindRow.svelte": [
+    "jump"
+  ],
+  "apps/dashboard/src/lib/cawco/find/Finder.svelte": [
+    "jump"
+  ],
   "apps/dashboard/src/lib/cawco/find/FinderCard.svelte": [],
   "apps/dashboard/src/lib/cawco/find/MentionField.svelte": [
     "artifact",
@@ -577,11 +679,16 @@
     "bench-finder",
     "bench-recall",
     "project",
+    "rail",
     "session",
     "task"
   ],
   "apps/dashboard/src/lib/cawco/find/MentionMenu.svelte": [],
-  "apps/dashboard/src/lib/cawco/home/Caw.svelte": ["project", "views"],
+  "apps/dashboard/src/lib/cawco/home/Caw.svelte": [
+    "board",
+    "project",
+    "views"
+  ],
   "apps/dashboard/src/lib/cawco/home/CawFace.svelte": [
     "artifact",
     "bench-caw",
@@ -619,6 +726,7 @@
     "config-updates",
     "not-found",
     "project",
+    "rail",
     "session",
     "task",
     "usage",
@@ -666,17 +774,30 @@
     "config-updates",
     "not-found",
     "project",
+    "rail",
     "session",
     "task",
     "usage",
     "workflows"
   ],
-  "apps/dashboard/src/lib/cawco/home/CawPosePicture.svelte": ["project"],
+  "apps/dashboard/src/lib/cawco/home/CawPosePicture.svelte": [
+    "project"
+  ],
   "apps/dashboard/src/lib/cawco/home/Home.svelte": [
     "artifact",
+    "bench-caw",
+    "bench-caw-notices",
     "bench-folder-proof",
     "bench-lift",
+    "bench-mac-readiness",
+    "bench-new-session",
     "bench-overlays",
+    "bench-recall",
+    "bench-seed-tabs",
+    "bench-session-limit",
+    "bench-traffic",
+    "bench-updates",
+    "bench-usage-limits",
     "bench-usage-relay",
     "config-accounts",
     "config-cli-tools",
@@ -685,14 +806,17 @@
     "config-devices",
     "config-hooks",
     "config-mcp",
+    "config-memory",
+    "config-models",
     "config-phone",
     "config-previews",
     "config-rules",
+    "config-skills",
     "config-spend",
     "config-subagents",
     "config-updates",
-    "jump",
     "not-found",
+    "project",
     "rail",
     "session",
     "usage",
@@ -702,8 +826,12 @@
     "artifact",
     "session"
   ],
-  "apps/dashboard/src/lib/cawco/home/MovedLogin.svelte": ["bench-caw-notices"],
-  "apps/dashboard/src/lib/cawco/home/MovedLogins.svelte": ["bench-caw-notices"],
+  "apps/dashboard/src/lib/cawco/home/MovedLogin.svelte": [
+    "bench-caw-notices"
+  ],
+  "apps/dashboard/src/lib/cawco/home/MovedLogins.svelte": [
+    "bench-caw-notices"
+  ],
   "apps/dashboard/src/lib/cawco/home/NeedsCard.svelte": [
     "artifact",
     "bench-caw",
@@ -742,6 +870,7 @@
     "config-updates",
     "not-found",
     "project",
+    "rail",
     "session",
     "task",
     "usage",
@@ -756,11 +885,10 @@
     "bench-folder-proof"
   ],
   "apps/dashboard/src/lib/cawco/home/StatusLine.svelte": [
-    "artifact",
-    "config-phone",
-    "config-previews",
-    "config-rules",
-    "not-found"
+    "bench-mac-readiness",
+    "bench-recall",
+    "bench-seed-tabs",
+    "bench-traffic"
   ],
   "apps/dashboard/src/lib/cawco/home/UpdateCard.svelte": [
     "bench-caw-notices",
@@ -768,9 +896,19 @@
   ],
   "apps/dashboard/src/lib/cawco/home/WorkTabs.svelte": [
     "artifact",
+    "bench-caw",
+    "bench-caw-notices",
     "bench-folder-proof",
     "bench-lift",
+    "bench-mac-readiness",
+    "bench-new-session",
     "bench-overlays",
+    "bench-recall",
+    "bench-seed-tabs",
+    "bench-session-limit",
+    "bench-traffic",
+    "bench-updates",
+    "bench-usage-limits",
     "bench-usage-relay",
     "config-accounts",
     "config-cli-tools",
@@ -779,14 +917,17 @@
     "config-devices",
     "config-hooks",
     "config-mcp",
+    "config-memory",
+    "config-models",
     "config-phone",
     "config-previews",
     "config-rules",
+    "config-skills",
     "config-spend",
     "config-subagents",
     "config-updates",
-    "jump",
     "not-found",
+    "project",
     "rail",
     "session",
     "usage",
@@ -795,7 +936,9 @@
   "apps/dashboard/src/lib/cawco/join/AddMachineLink.svelte": [],
   "apps/dashboard/src/lib/cawco/join/CheckInStatus.svelte": [],
   "apps/dashboard/src/lib/cawco/join/CopyBox.svelte": [],
-  "apps/dashboard/src/lib/cawco/join/JoinedRow.svelte": ["bench-mac-readiness"],
+  "apps/dashboard/src/lib/cawco/join/JoinedRow.svelte": [
+    "bench-mac-readiness"
+  ],
   "apps/dashboard/src/lib/cawco/lightbox/Lightbox.svelte": [],
   "apps/dashboard/src/lib/cawco/motion/Rail.svelte": [
     "bench-new-session",
@@ -804,42 +947,80 @@
   "apps/dashboard/src/lib/cawco/move/MoveAsk.svelte": [],
   "apps/dashboard/src/lib/cawco/move/MoveWait.svelte": [],
   "apps/dashboard/src/lib/cawco/plan/PlanPane.svelte": [],
-  "apps/dashboard/src/lib/cawco/plan/PlanRing.svelte": ["bench-delegate-tray"],
-  "apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte": ["artifact"],
+  "apps/dashboard/src/lib/cawco/plan/PlanRing.svelte": [
+    "bench-delegate-tray"
+  ],
+  "apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte": [
+    "artifact",
+    "rail"
+  ],
   "apps/dashboard/src/lib/cawco/preview/PinCard.svelte": [],
   "apps/dashboard/src/lib/cawco/preview/PinDisc.svelte": [],
   "apps/dashboard/src/lib/cawco/preview/PinList.svelte": [],
   "apps/dashboard/src/lib/cawco/preview/PlacePick.svelte": [],
-  "apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte": ["artifact"],
+  "apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte": [
+    "artifact",
+    "rail"
+  ],
   "apps/dashboard/src/lib/cawco/preview/SheetInspector.svelte": [],
-  "apps/dashboard/src/lib/cawco/project/CardFace.svelte": ["project"],
-  "apps/dashboard/src/lib/cawco/project/CawFloat.svelte": [],
+  "apps/dashboard/src/lib/cawco/project/CardFace.svelte": [
+    "project"
+  ],
+  "apps/dashboard/src/lib/cawco/project/CawFloat.svelte": [
+    "project"
+  ],
   "apps/dashboard/src/lib/cawco/project/CawLeadSwitch.svelte": [],
   "apps/dashboard/src/lib/cawco/project/CawPanel.svelte": [],
-  "apps/dashboard/src/lib/cawco/project/CawSeat.svelte": ["project", "views"],
-  "apps/dashboard/src/lib/cawco/project/CawStarters.svelte": ["views"],
-  "apps/dashboard/src/lib/cawco/project/CawThread.svelte": [],
+  "apps/dashboard/src/lib/cawco/project/CawSeat.svelte": [
+    "board",
+    "project",
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/project/CawStarters.svelte": [],
+  "apps/dashboard/src/lib/cawco/project/CawThread.svelte": [
+    "project"
+  ],
   "apps/dashboard/src/lib/cawco/project/FolderFile.svelte": [],
   "apps/dashboard/src/lib/cawco/project/FolderFiles.svelte": [],
   "apps/dashboard/src/lib/cawco/project/NeedsYouChip.svelte": [],
   "apps/dashboard/src/lib/cawco/project/ProjectDetails.svelte": [],
   "apps/dashboard/src/lib/cawco/project/ProjectHead.svelte": [
+    "board",
     "project",
     "views"
   ],
   "apps/dashboard/src/lib/cawco/project/StarterCards.svelte": [],
-  "apps/dashboard/src/lib/cawco/project/TemplateCards.svelte": ["project"],
-  "apps/dashboard/src/lib/cawco/project/UpstreamMenu.svelte": ["project"],
-  "apps/dashboard/src/lib/cawco/project/ViewBar.svelte": ["project", "views"],
+  "apps/dashboard/src/lib/cawco/project/TemplateCards.svelte": [
+    "project"
+  ],
+  "apps/dashboard/src/lib/cawco/project/UpstreamMenu.svelte": [
+    "project"
+  ],
+  "apps/dashboard/src/lib/cawco/project/ViewBar.svelte": [
+    "project",
+    "views"
+  ],
   "apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte": [],
-  "apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte": ["views"],
-  "apps/dashboard/src/lib/cawco/routines/RunStatus.svelte": ["views"],
-  "apps/dashboard/src/lib/cawco/side/SideSheet.svelte": ["artifact"],
-  "apps/dashboard/src/lib/cawco/side/SideSurface.svelte": ["artifact"],
+  "apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte": [
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/routines/RunStatus.svelte": [
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/side/SideSheet.svelte": [
+    "artifact"
+  ],
+  "apps/dashboard/src/lib/cawco/side/SideSurface.svelte": [
+    "artifact",
+    "rail"
+  ],
   "apps/dashboard/src/lib/cawco/side/Split.svelte": [
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "board",
+    "project",
+    "rail",
     "session",
     "views"
   ],
@@ -886,26 +1067,61 @@
     "session"
   ],
   "apps/dashboard/src/lib/cawco/spawn/TriggerMenu.svelte": [],
-  "apps/dashboard/src/lib/cawco/tasks/BulkBar.svelte": [],
-  "apps/dashboard/src/lib/cawco/tasks/NewTaskForm.svelte": ["project"],
+  "apps/dashboard/src/lib/cawco/tasks/BulkBar.svelte": [
+    "board"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/NewTaskForm.svelte": [
+    "project"
+  ],
   "apps/dashboard/src/lib/cawco/tasks/PostCard.svelte": [],
   "apps/dashboard/src/lib/cawco/tasks/StagesControl.svelte": [],
-  "apps/dashboard/src/lib/cawco/tasks/TaskActivity.svelte": ["task"],
-  "apps/dashboard/src/lib/cawco/tasks/TaskBoard.svelte": ["project"],
-  "apps/dashboard/src/lib/cawco/tasks/TaskCard.svelte": ["project"],
-  "apps/dashboard/src/lib/cawco/tasks/TaskColumn.svelte": ["project"],
-  "apps/dashboard/src/lib/cawco/tasks/TaskFields.svelte": ["task"],
-  "apps/dashboard/src/lib/cawco/tasks/TaskFilterPopover.svelte": ["board"],
-  "apps/dashboard/src/lib/cawco/tasks/TaskLabels.svelte": ["task"],
+  "apps/dashboard/src/lib/cawco/tasks/TaskActivity.svelte": [
+    "task"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/TaskBoard.svelte": [
+    "board",
+    "project",
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/TaskCard.svelte": [
+    "board",
+    "project",
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/TaskColumn.svelte": [
+    "board",
+    "project",
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/TaskFields.svelte": [
+    "task"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/TaskFilterPopover.svelte": [
+    "board",
+    "project"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/TaskLabels.svelte": [
+    "task"
+  ],
   "apps/dashboard/src/lib/cawco/tasks/TaskNeeds.svelte": [],
   "apps/dashboard/src/lib/cawco/tasks/TaskNeedsFor.svelte": [],
   "apps/dashboard/src/lib/cawco/tasks/TaskOutput.svelte": [],
-  "apps/dashboard/src/lib/cawco/tasks/TaskPane.svelte": ["task"],
-  "apps/dashboard/src/lib/cawco/tasks/TaskRelations.svelte": ["task"],
+  "apps/dashboard/src/lib/cawco/tasks/TaskPane.svelte": [
+    "task"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/TaskRelations.svelte": [
+    "task"
+  ],
   "apps/dashboard/src/lib/cawco/tasks/TaskReview.svelte": [],
-  "apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte": ["views"],
-  "apps/dashboard/src/lib/cawco/tasks/TextSection.svelte": ["task"],
-  "apps/dashboard/src/lib/cawco/tasks/TodoList.svelte": ["task"],
+  "apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte": [
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/TextSection.svelte": [
+    "task"
+  ],
+  "apps/dashboard/src/lib/cawco/tasks/TodoList.svelte": [
+    "task"
+  ],
   "apps/dashboard/src/lib/cawco/tasks/stage/ArtifactStage.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/AccountMoveDivider.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/AttachButton.svelte": [
@@ -914,6 +1130,8 @@
     "bench-new-session",
     "bench-recall",
     "new-session",
+    "project",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte": [],
@@ -925,14 +1143,18 @@
     "bench-delegate-tray",
     "bench-recall",
     "project",
+    "rail",
     "session",
     "task"
   ],
   "apps/dashboard/src/lib/cawco/transcript/Delegate.svelte": [],
-  "apps/dashboard/src/lib/cawco/transcript/DelegateTail.svelte": [],
+  "apps/dashboard/src/lib/cawco/transcript/DelegateTail.svelte": [
+    "rail"
+  ],
   "apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte": [
     "artifact",
     "bench-delegate-tray",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/transcript/DesignOfferActions.svelte": [],
@@ -941,44 +1163,58 @@
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "project",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/transcript/HeadFade.svelte": [
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/transcript/InlineTranscript.svelte": [],
-  "apps/dashboard/src/lib/cawco/transcript/Latest.svelte": ["session"],
+  "apps/dashboard/src/lib/cawco/transcript/Latest.svelte": [
+    "session"
+  ],
   "apps/dashboard/src/lib/cawco/transcript/LiveRow.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/MessageRow.svelte": [
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/transcript/Peer.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/ProjectOffer.svelte": [],
-  "apps/dashboard/src/lib/cawco/transcript/Prompt.svelte": ["session"],
-  "apps/dashboard/src/lib/cawco/transcript/QuestionCard.svelte": [],
+  "apps/dashboard/src/lib/cawco/transcript/Prompt.svelte": [
+    "session"
+  ],
+  "apps/dashboard/src/lib/cawco/transcript/QuestionCard.svelte": [
+    "session"
+  ],
   "apps/dashboard/src/lib/cawco/transcript/RecallWheel.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/RoutineMadeActions.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/Row.svelte": [
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/transcript/RunBlock.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/Shot.svelte": [],
-  "apps/dashboard/src/lib/cawco/transcript/Subagent.svelte": [],
+  "apps/dashboard/src/lib/cawco/transcript/Subagent.svelte": [
+    "session"
+  ],
   "apps/dashboard/src/lib/cawco/transcript/SuggestionChips.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/SystemLine.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/Thinking.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/ToolGroup.svelte": [
     "artifact",
     "bench-head-tint",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/transcript/Transcript.svelte": [
@@ -986,10 +1222,10 @@
     "bench-delegate-tray",
     "bench-head-tint",
     "bench-traffic",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/transcript/TranscriptSkeleton.svelte": [
-    "artifact",
     "bench-head-tint",
     "session"
   ],
@@ -997,18 +1233,21 @@
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/turn/Well.svelte": [
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/turn/Who.svelte": [
     "artifact",
     "bench-delegate-tray",
     "bench-head-tint",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/updates/ChannelCards.svelte": [
@@ -1028,7 +1267,9 @@
     "config-updates"
   ],
   "apps/dashboard/src/lib/cawco/usage/AccountDot.svelte": [],
-  "apps/dashboard/src/lib/cawco/usage/History.svelte": ["usage"],
+  "apps/dashboard/src/lib/cawco/usage/History.svelte": [
+    "usage"
+  ],
   "apps/dashboard/src/lib/cawco/usage/LimitBar.svelte": [
     "bench-session-limit",
     "session"
@@ -1041,12 +1282,16 @@
   "apps/dashboard/src/lib/cawco/usage/ProviderLimit.svelte": [
     "bench-session-limit"
   ],
-  "apps/dashboard/src/lib/cawco/usage/Relay.svelte": ["bench-usage-relay"],
+  "apps/dashboard/src/lib/cawco/usage/Relay.svelte": [
+    "bench-usage-relay"
+  ],
   "apps/dashboard/src/lib/cawco/usage/Rings.svelte": [
     "bench-usage-limits",
     "bench-usage-relay"
   ],
-  "apps/dashboard/src/lib/cawco/usage/RingsKey.svelte": ["bench-usage-limits"],
+  "apps/dashboard/src/lib/cawco/usage/RingsKey.svelte": [
+    "bench-usage-limits"
+  ],
   "apps/dashboard/src/lib/cawco/usage/SessionsChip.svelte": [
     "bench-usage-relay"
   ],
@@ -1054,7 +1299,9 @@
     "bench-usage-limits",
     "bench-usage-relay"
   ],
-  "apps/dashboard/src/lib/cawco/usage/WhereItGoes.svelte": ["usage"],
+  "apps/dashboard/src/lib/cawco/usage/WhereItGoes.svelte": [
+    "usage"
+  ],
   "apps/dashboard/src/lib/cawco/usage/Words.svelte": [
     "bench-usage-limits",
     "bench-usage-relay"
@@ -1063,8 +1310,12 @@
   "apps/dashboard/src/lib/cawco/views/ViewCanvas.svelte": [],
   "apps/dashboard/src/lib/cawco/views/ViewMade.svelte": [],
   "apps/dashboard/src/lib/cawco/views/ViewOpenUi.svelte": [],
-  "apps/dashboard/src/lib/cawco/views/ViewPipeline.svelte": ["views"],
-  "apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte": ["views"],
+  "apps/dashboard/src/lib/cawco/views/ViewPipeline.svelte": [
+    "views"
+  ],
+  "apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte": [
+    "views"
+  ],
   "apps/dashboard/src/lib/cawco/views/canvas/TaskNode.svelte": [],
   "apps/dashboard/src/lib/cawco/views/openui/Layout.svelte": [],
   "apps/dashboard/src/lib/cawco/views/openui/ViewBoard.svelte": [],
@@ -1079,27 +1330,37 @@
   "apps/dashboard/src/lib/cawco/workspace/PaneGrid.svelte": [],
   "apps/dashboard/src/lib/cawco/workspace/PaneHost.svelte": [
     "artifact",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/workspace/PaneLeaf.svelte": [
     "artifact",
+    "rail",
     "session"
   ],
   "apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte": [
     "artifact",
     "bench-folder-proof",
     "bench-head-tint",
+    "rail",
     "session"
   ],
-  "apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte": ["session"],
+  "apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte": [
+    "session"
+  ],
   "apps/dashboard/src/lib/cawco/workspace/SessionStatus.svelte": [
     "artifact",
     "bench-folder-proof",
     "bench-head-tint",
+    "rail",
     "session"
   ],
-  "apps/dashboard/src/lib/components/features/DiffModal.svelte": [],
-  "apps/dashboard/src/lib/components/features/DiffView.svelte": ["session"],
+  "apps/dashboard/src/lib/components/features/DiffModal.svelte": [
+    "session"
+  ],
+  "apps/dashboard/src/lib/components/features/DiffView.svelte": [
+    "session"
+  ],
   "apps/dashboard/src/lib/components/features/MarkdownEditor.svelte": [],
   "apps/dashboard/src/lib/components/features/ProviderLogo.svelte": [],
   "apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte": [],
@@ -1113,15 +1374,27 @@
   "apps/dashboard/src/lib/components/features/workflows/SchemaBuilder.svelte": [],
   "apps/dashboard/src/lib/components/features/workflows/TemplateInput.svelte": [],
   "apps/dashboard/src/lib/components/features/workflows/WhenFields.svelte": [],
-  "apps/dashboard/src/lib/components/features/workflows/WorkflowCanvas.svelte": [],
-  "apps/dashboard/src/lib/components/features/workflows/WorkflowCanvasTools.svelte": [],
-  "apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte": [],
+  "apps/dashboard/src/lib/components/features/workflows/WorkflowCanvas.svelte": [
+    "workflows"
+  ],
+  "apps/dashboard/src/lib/components/features/workflows/WorkflowCanvasTools.svelte": [
+    "workflows"
+  ],
+  "apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte": [
+    "workflows"
+  ],
   "apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.svelte": [
     "workflows"
   ],
-  "apps/dashboard/src/lib/components/features/workflows/WorkflowInspector.svelte": [],
-  "apps/dashboard/src/lib/components/features/workflows/WorkflowLaunch.svelte": [],
-  "apps/dashboard/src/lib/components/features/workflows/WorkflowNodeCard.svelte": [],
+  "apps/dashboard/src/lib/components/features/workflows/WorkflowInspector.svelte": [
+    "workflows"
+  ],
+  "apps/dashboard/src/lib/components/features/workflows/WorkflowLaunch.svelte": [
+    "workflows"
+  ],
+  "apps/dashboard/src/lib/components/features/workflows/WorkflowNodeCard.svelte": [
+    "workflows"
+  ],
   "apps/dashboard/src/lib/components/features/workflows/WorkflowProgram.svelte": [
     "workflows"
   ],
@@ -1149,6 +1422,7 @@
     "bench-updates",
     "bench-usage-limits",
     "bench-usage-relay",
+    "board",
     "caw-panel",
     "config-accounts",
     "config-cli-tools",
@@ -1179,10 +1453,20 @@
   ],
   "apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte": [
     "artifact",
+    "bench-caw",
+    "bench-caw-notices",
     "bench-folder-proof",
     "bench-head-tint",
     "bench-lift",
+    "bench-mac-readiness",
+    "bench-new-session",
     "bench-overlays",
+    "bench-recall",
+    "bench-seed-tabs",
+    "bench-session-limit",
+    "bench-traffic",
+    "bench-updates",
+    "bench-usage-limits",
     "bench-usage-relay",
     "config-accounts",
     "config-cli-tools",
@@ -1191,13 +1475,15 @@
     "config-devices",
     "config-hooks",
     "config-mcp",
+    "config-memory",
+    "config-models",
     "config-phone",
     "config-previews",
     "config-rules",
+    "config-skills",
     "config-spend",
     "config-subagents",
     "config-updates",
-    "jump",
     "not-found",
     "project",
     "rail",
@@ -1208,10 +1494,20 @@
   ],
   "apps/dashboard/src/lib/components/ui/fluid-tabs/TabsList.svelte": [
     "artifact",
+    "bench-caw",
+    "bench-caw-notices",
     "bench-folder-proof",
     "bench-head-tint",
     "bench-lift",
+    "bench-mac-readiness",
+    "bench-new-session",
     "bench-overlays",
+    "bench-recall",
+    "bench-seed-tabs",
+    "bench-session-limit",
+    "bench-traffic",
+    "bench-updates",
+    "bench-usage-limits",
     "bench-usage-relay",
     "config-accounts",
     "config-cli-tools",
@@ -1220,13 +1516,15 @@
     "config-devices",
     "config-hooks",
     "config-mcp",
+    "config-memory",
+    "config-models",
     "config-phone",
     "config-previews",
     "config-rules",
+    "config-skills",
     "config-spend",
     "config-subagents",
     "config-updates",
-    "jump",
     "not-found",
     "project",
     "rail",
@@ -1236,8 +1534,8 @@
     "workflows"
   ],
   "apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte": [
-    "jump",
-    "rail"
+    "rail",
+    "session"
   ],
   "apps/dashboard/src/lib/components/ui/markdown/markdown.svelte": [
     "artifact",
@@ -1245,6 +1543,7 @@
     "bench-delegate-tray",
     "bench-head-tint",
     "bench-updates",
+    "rail",
     "session",
     "views"
   ],
@@ -1267,6 +1566,7 @@
     "bench-updates",
     "bench-usage-limits",
     "bench-usage-relay",
+    "board",
     "caw-panel",
     "config-accounts",
     "config-cli-tools",
@@ -1284,7 +1584,6 @@
     "config-spend",
     "config-subagents",
     "config-updates",
-    "jump",
     "new-session",
     "not-found",
     "project",
@@ -1312,8 +1611,8 @@
     "new-session"
   ],
   "apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte": [
-    "jump",
-    "rail"
+    "rail",
+    "session"
   ],
   "apps/dashboard/src/lib/components/ui/sonner/sonner.svelte": [
     "artifact",
@@ -1352,6 +1651,7 @@
     "config-updates",
     "not-found",
     "project",
+    "rail",
     "session",
     "task",
     "usage",
@@ -1361,7 +1661,9 @@
   "apps/dashboard/src/lib/components/ui/thinking-steps/thinking-step.svelte": [],
   "apps/dashboard/src/lib/components/ui/thinking-steps/thinking-steps-header.svelte": [],
   "apps/dashboard/src/lib/components/ui/thinking-steps/thinking-steps.svelte": [],
-  "apps/dashboard/src/routes/(app)/+error.svelte": ["not-found"],
+  "apps/dashboard/src/routes/(app)/+error.svelte": [
+    "not-found"
+  ],
   "apps/dashboard/src/routes/(app)/config/+layout.svelte": [
     "config-accounts",
     "config-cli-tools",
@@ -1380,7 +1682,9 @@
     "config-subagents",
     "config-updates"
   ],
-  "apps/dashboard/src/routes/(app)/config/+page.svelte": [],
+  "apps/dashboard/src/routes/(app)/config/+page.svelte": [
+    "config-rules"
+  ],
   "apps/dashboard/src/routes/(app)/config/accounts/+page.svelte": [
     "config-accounts"
   ],
@@ -1394,15 +1698,21 @@
   "apps/dashboard/src/routes/(app)/config/models/+page.svelte": [
     "config-models"
   ],
-  "apps/dashboard/src/routes/(app)/config/phone/+page.svelte": ["config-phone"],
+  "apps/dashboard/src/routes/(app)/config/phone/+page.svelte": [
+    "config-phone"
+  ],
   "apps/dashboard/src/routes/(app)/config/previews/+page.svelte": [
     "config-previews"
   ],
-  "apps/dashboard/src/routes/(app)/config/rules/+page.svelte": ["config-rules"],
+  "apps/dashboard/src/routes/(app)/config/rules/+page.svelte": [
+    "config-rules"
+  ],
   "apps/dashboard/src/routes/(app)/config/skills/+page.svelte": [
     "config-skills"
   ],
-  "apps/dashboard/src/routes/(app)/config/spend/+page.svelte": ["config-spend"],
+  "apps/dashboard/src/routes/(app)/config/spend/+page.svelte": [
+    "config-spend"
+  ],
   "apps/dashboard/src/routes/(app)/config/subagents/+page.svelte": [
     "config-subagents"
   ],
@@ -1412,18 +1722,24 @@
   "apps/dashboard/src/routes/(app)/motion/caw-notices/+page.svelte": [
     "bench-caw-notices"
   ],
-  "apps/dashboard/src/routes/(app)/motion/caw/+page.svelte": ["bench-caw"],
+  "apps/dashboard/src/routes/(app)/motion/caw/+page.svelte": [
+    "bench-caw"
+  ],
   "apps/dashboard/src/routes/(app)/motion/delegate-tray/+page.svelte": [
     "bench-delegate-tray"
   ],
-  "apps/dashboard/src/routes/(app)/motion/echo/+page.svelte": ["bench-echo"],
+  "apps/dashboard/src/routes/(app)/motion/echo/+page.svelte": [
+    "bench-echo"
+  ],
   "apps/dashboard/src/routes/(app)/motion/folder-proof/+page.svelte": [
     "bench-folder-proof"
   ],
   "apps/dashboard/src/routes/(app)/motion/head-tint/+page.svelte": [
     "bench-head-tint"
   ],
-  "apps/dashboard/src/routes/(app)/motion/lift/+page.svelte": ["bench-lift"],
+  "apps/dashboard/src/routes/(app)/motion/lift/+page.svelte": [
+    "bench-lift"
+  ],
   "apps/dashboard/src/routes/(app)/motion/mac-readiness/+page.svelte": [
     "bench-mac-readiness"
   ],
@@ -1453,14 +1769,25 @@
   ],
   "apps/dashboard/src/routes/(app)/oauth/mcp/+page.svelte": [],
   "apps/dashboard/src/routes/(app)/project/[id]/+page.svelte": [
+    "board",
     "project",
     "task",
     "views"
   ],
-  "apps/dashboard/src/routes/(app)/project/new/+page.svelte": ["project"],
-  "apps/dashboard/src/routes/(app)/usage/+page.svelte": ["usage"],
-  "apps/dashboard/src/routes/(app)/workflows/+page.svelte": ["workflows"],
-  "apps/dashboard/src/routes/artifact/[id]/+page.svelte": ["artifact"],
-  "apps/dashboard/src/routes/dev/finder/+page.svelte": ["bench-finder"],
+  "apps/dashboard/src/routes/(app)/project/new/+page.svelte": [
+    "project"
+  ],
+  "apps/dashboard/src/routes/(app)/usage/+page.svelte": [
+    "usage"
+  ],
+  "apps/dashboard/src/routes/(app)/workflows/+page.svelte": [
+    "workflows"
+  ],
+  "apps/dashboard/src/routes/artifact/[id]/+page.svelte": [
+    "artifact"
+  ],
+  "apps/dashboard/src/routes/dev/finder/+page.svelte": [
+    "bench-finder"
+  ],
   "apps/dashboard/src/routes/project/[id]/view/[name]/+page.svelte": []
 }
