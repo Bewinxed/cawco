@@ -222,6 +222,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.userContentController.add(WeakHandler(self), name: "cawco")
+        #if DEBUG
+        if PreviewProbe.on, let report = PreviewProbe.report {
+            configuration.userContentController.addUserScript(WKUserScript(source: report, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        #endif
         configuration.allowsInlineMediaPlayback = true
         web = WKWebView(frame: .zero, configuration: configuration)
         web.navigationDelegate = self

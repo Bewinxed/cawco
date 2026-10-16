@@ -41,18 +41,8 @@
  *     `comment_read`'s, the send through the session's transcript, the
  *     `shown` word through `artifact_show`'s `opened`).
  *
- * Not axe: every axe tap, touch and drag first reads the frontmost app
- * through the host's accessibility translator (OrientationAwareCoordinates
- * fetches the app's frame), which reaches only the app's own process. With
- * the preview's page drawn by WebKit's web content process it returns
- * nothing, and axe refuses the tap whatever the point: "No translation
- * object returned for simulator", as the Caw and Safari probes met it
- * (532f5489). Maestro's runner reads and touches from inside the simulator.
- *
- * The runner is an XCTest bundle kept up by `xcodebuild test-without-building`,
- * which dials the simulator's testmanagerd socket: a CawCo workspace's
- * boundary lets that one socket through (boundary.ts `TEST_MANAGER_SOCKET`)
- * and gives Maestro its home in the workspace (paths.ts `workspaceMaestroEnv`).
+ * Not axe, which can't touch a page WebKit draws: Maestro's runner, which
+ * reads and touches from inside the simulator (lib/sim-touch.ts says why).
  *
  * It stops only what it started: the fleet's processes by PID, the runner,
  * and the simulator it took (deleted at the end). `--keep` keeps the fleet's sandbox.
@@ -63,6 +53,7 @@ import { join, resolve } from "node:path";
 import { simulatorApp, staleApp } from "./lib/apple-app";
 import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
+import { type SimTouch, simTouch } from "./lib/sim-touch";
 
 // The dependencies first (lib/deps.ts): the fleet loads after them.
 await ensureDeps();
@@ -71,18 +62,6 @@ const { scratchFleet, until } = await import("./scratch-fleet");
 const keep = process.argv.includes("--keep");
 const build = !process.argv.includes("--no-build");
 const root = resolve(import.meta.dir, "..");
-/**
- * Maestro on the Mac, as probe-ios-caw-panel.ts runs it: on the JDK Homebrew
- * keeps for it (its `opt` link, which `brew --prefix openjdk` names; `brew`
- * itself cannot run in a workspace), its analytics, update check and analysis
- * notice off, and JDK 26's final-field warning answered after the
- * workspace's own options (MAESTRO_OPTS reaches its `java` line).
- */
-const MAESTRO = `JAVA_HOME=/opt/homebrew/opt/openjdk MAESTRO_OPTS="\${MAESTRO_OPTS:-} --enable-final-field-mutation=ALL-UNNAMED" MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro`;
-/** Maestro's runner app in the simulator. */
-const RUNNER = "dev.mobile.maestro-driver-iosUITests.xctrunner";
-/** What Maestro's CLI prints after its error, before the stack. */
-const MAESTRO_STACK = "The stack trace was:";
 console.log(
   `  at ${(await Bun.$`git -C ${root} log -1 --format=%h\ %s`.text()).trim()}`
 );
@@ -487,8 +466,8 @@ const fleet = await scratchFleet({
 });
 let sim: MacSim | undefined;
 let stream: ReturnType<typeof Bun.spawn> | undefined;
-/** Maestro's runner's port on the Mac, once picked. */
-let runnerPort: number | undefined;
+/** Maestro's runner in the simulator (lib/sim-touch.ts), once it has one. */
+let finger: SimTouch | undefined;
 
 try {
   fleet.launch("sessiond");
@@ -569,39 +548,10 @@ xcrun simctl install ${udid} "${app}"`);
 
   // Where things are comes from the app's own log (its views' frames and the
   // page's rects), not the accessibility tree. The touches are Maestro's
-  // runner's, in points: its first read (`maestro hierarchy`) starts it on a
-  // free port of its own (the default, 22087, is every simulator's).
-  const free = Bun.listen({
-    hostname: "127.0.0.1",
-    port: 0,
-    socket: { data: () => undefined },
-  });
-  runnerPort = free.port;
-  free.stop(true);
-  /** The foreground app's name as Maestro's runner reads it from inside the simulator. */
-  const front = async () => {
-    const text = await sh(
-      `${MAESTRO} --device ${udid} --driver-host-port ${runnerPort} hierarchy --no-reinstall-driver`
-    ).catch((error: unknown) => {
-      const words = (error instanceof Error ? error.message : String(error))
-        .split(MAESTRO_STACK)[0]
-        .trim();
-      throw new Error(`Maestro's read of the screen failed: ${words}`);
-    });
-    const whole = JSON.parse(
-      text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
-    ) as { children?: { attributes?: Record<string, string> }[] };
-    return (
-      whole.children?.[0]?.attributes?.accessibilityText || "nothing named"
-    );
-  };
-  const runner = (route: string, body: Record<string, unknown>) =>
-    sh(
-      `curl -sS --fail-with-body --max-time 30 -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:${runnerPort}/${route} <<'BODY'\n${JSON.stringify(body)}\nBODY`
-    );
-  /** Types into what has the keyboard, the runner's `POST /inputText` (InputTextRequest: `text`, `appIds`). */
-  const type = (text: string) =>
-    runner("inputText", { text, appIds: ["dev.cawco.app"] });
+  // runner's, in points (lib/sim-touch.ts): its first read starts it.
+  const touches = simTouch(udid);
+  finger = touches;
+  const { front, type } = touches;
   /** The artifact's pins as the hub has them (`comment_read`'s route). */
   const pinsOnHub = async () =>
     (
@@ -628,10 +578,7 @@ xcrun simctl install ${udid} "${app}"`);
     console.log(
       `  tap ${what} at ${Math.round(point.x)},${Math.round(point.y)}`
     );
-    return runner("touch", {
-      x: Math.round(point.x),
-      y: Math.round(point.y),
-    });
+    return touches.touch(point);
   };
   /** One finger from `from` to `to` over `seconds`, the runner's `POST /swipeV2`. */
   const drag = (
@@ -643,13 +590,7 @@ xcrun simctl install ${udid} "${app}"`);
     console.log(
       `  drag from ${from.x},${from.y} to ${to.x},${to.y} over ${seconds}s (${what})`
     );
-    return runner("swipeV2", {
-      startX: Math.round(from.x),
-      startY: Math.round(from.y),
-      endX: Math.round(to.x),
-      endY: Math.round(to.y),
-      duration: seconds,
-    });
+    return touches.swipe(from, to, seconds);
   };
   /** A tap on what the page named, at its centre, which must lie in the web view's frame of the same post. */
   const tapPage = async (name: string, now: Page) => {
@@ -1405,14 +1346,7 @@ xcrun simctl install ${udid} "${app}"`);
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
   stream?.kill();
-  // The runner app and the `xcodebuild` keeping it up (the bracket keeps
-  // the pattern off the shell running the match).
-  if (sim && runnerPort !== undefined) {
-    await sh(`xcrun simctl terminate ${sim.udid} ${RUNNER} >/dev/null 2>&1 || true
-pkill -f "[x]codebuild test-without-building .*-destination id=${sim.udid} " || true`).catch(
-      () => undefined
-    );
-  }
+  await finger?.stop();
   await sim?.release();
   await fleet.close();
   if (failed.length > 0) {

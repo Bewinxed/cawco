@@ -885,6 +885,16 @@ enum PreviewProbe {
     static let replyAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-reply")
     /// `-preview-send`: Send picks runs once, the first time a pick is unsent.
     static let sendAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-send")
+    /// `-preview-report <base64>`: a probe's own `report()` for a page that
+    /// has none of its own (a sheet's stage page), added at each document's
+    /// end. The heartbeat calls it, and its `cawco:probe` post is logged as
+    /// `preview page …` (scripts/probe-kit/specs/live-sheet.ts).
+    static let report: String? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-preview-report"), arguments.indices.contains(flag + 1),
+              let data = Data(base64Encoded: arguments[flag + 1]) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }()
     /// The click, in the page: what the overlay's Comment mode hears from a mouse.
     static let click = """
     (() => {

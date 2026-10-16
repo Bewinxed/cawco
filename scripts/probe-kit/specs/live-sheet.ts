@@ -25,16 +25,31 @@
  * 4. A pin on the agent mark's icon (a virtual `~icons/…` component) carries
  *    `source` at its call site in Who.svelte and a two-level `chain`:
  *    IconAgent where Who uses it, then the story Agent.
+ * 6. The iPad (spec proof 9's device): the app built from this tree, on an
+ *    iPad simulator (a mac-slot.sh slot), opened on the session, shows the
+ *    sheet in its panel by the same route and overlay as a preview. Read
+ *    from the app's DEBUG lines and a `report()` the probe hands the page
+ *    (`-preview-report`): the three frames render; the edit redraws them with
+ *    no new document; with the desk's pin resolved off the icon, a finger's
+ *    tap in Comment (Maestro's runner, lib/sim-touch.ts) pins the icon, and
+ *    the hub's record of that pin carries the desk's `source` and `chain`.
  * 5. The pane closed (no viewer) and no agent read: the stage sleeps after
  *    its idle time (`STAGE_IDLE_MS`, 30 min); the pane opened again wakes
  *    it, and the three frames render.
  *
+ *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts live-sheet
+ *
+ * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Subprocess } from "bun";
 import type { Frame, Page } from "playwright-core";
 import { STAGE_IDLE_MS } from "../../../packages/core/src/stage";
+import { freshApp } from "../../lib/apple-app";
+import { type MacSim, macSim } from "../../lib/mac-sim";
+import { type SimTouch, simTouch } from "../../lib/sim-touch";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
@@ -345,8 +360,35 @@ const errorChecks = async (
   );
 };
 
+/** A pin's anchor as the overlay writes it on a sheet: the tapped element's source, its chain, the sheet's story. */
+interface SheetAnchor {
+  chain?: {
+    column: number;
+    component: string;
+    file: string;
+    line: number;
+  }[];
+  sheet?: { file: string; story: string };
+  source?: {
+    column: number | null;
+    file: string | null;
+    line: number | null;
+  };
+}
+
+/** Where Who.svelte uses the agent's icon, `file:line:column` from the Vite root, 1-based: what a pin on the icon names. */
+const iconPlace = (component: string) => {
+  const lines = component.split("\n");
+  const line = lines.findIndex((one) => one.includes("<IconAgent"));
+  return `${COMPONENT_AT_ROOT}:${line + 1}:${lines[line].indexOf("<IconAgent") + 1}`;
+};
+
 /** 4: a pin on the icon inside the agent's mark: source at its call site in Who.svelte, a two-level chain. */
-const pinChecks = async (kit: Kit, on: On, frame: Frame) => {
+const pinChecks = async (
+  kit: Kit,
+  on: On,
+  frame: Frame
+): Promise<{ anchor: SheetAnchor; id: string }> => {
   const { page } = on;
   const comment = page.locator(".preview-pane button[aria-keyshortcuts='C']");
   await comment.focus();
@@ -370,22 +412,7 @@ const pinChecks = async (kit: Kit, on: On, frame: Frame) => {
   );
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
-  const pin = Object.values(doc.pins)[0] as {
-    anchor: {
-      chain?: {
-        column: number;
-        component: string;
-        file: string;
-        line: number;
-      }[];
-      sheet?: { file: string; story: string };
-      source?: {
-        column: number | null;
-        file: string | null;
-        line: number | null;
-      };
-    };
-  };
+  const pin = Object.values(doc.pins)[0] as { anchor: SheetAnchor; id: string };
   const { source, chain, sheet } = pin.anchor;
   const component = await readFile(join(ROOT, COMPONENT), "utf8");
   const atLine = source?.line
@@ -406,6 +433,285 @@ const pinChecks = async (kit: Kit, on: On, frame: Frame) => {
       sheet?.story === "Agent",
     JSON.stringify({ chain, sheet })
   );
+  return pin;
+};
+
+/** The iPad: iOS 18.5, the app's floor, as ios-accounts.ts takes it (its slot's template already made). */
+const IPAD = {
+  runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+  device: "iPad Pro 13-inch (M4)",
+};
+/** A log line's head, up to and with its `[dev.cawco.app:<category>] `. */
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
+/** The report's `preview page …` line (PreviewController `probePage`): the frames, the edited names, the document's load stamp, the icon's centre in window points. */
+const PAGE_LINE =
+  /^preview page stories=(\S*) whos=(\d+) edited=(\d+) loaded=(\d+)(?: icon=(-?\d+),(-?\d+))?$/;
+/**
+ * The sheet page's `report()`, which the app's DEBUG heartbeat calls every
+ * 0.7 s (`-preview-report`): the stories' frames, how many names carry the
+ * edit's mark, the document's own load stamp (a reload makes a new one), and
+ * the agent mark's icon, as `cawco:probe` with its rect.
+ */
+const REPORT = `
+window.__probeLoaded = window.__probeLoaded || Date.now();
+function report() {
+  const frames = [...document.querySelectorAll("[data-cawco-story]")];
+  const edited = [...document.querySelectorAll("[data-cawco-story] .role")]
+    .filter((one) => (one.textContent || "").endsWith("·N")).length;
+  const rects = {};
+  const icon = document.querySelector('[data-cawco-story="Agent"] .dot.a svg');
+  if (icon) {
+    const r = icon.getBoundingClientRect();
+    rects.icon = { x: r.x, y: r.y, width: r.width, height: r.height };
+  }
+  window.parent.postMessage({
+    type: "cawco:probe",
+    state: "stories=" + frames.map((one) => one.dataset.cawcoStory).join(",") +
+      " whos=" + document.querySelectorAll("[data-cawco-story] h2.who").length +
+      " edited=" + edited + " loaded=" + window.__probeLoaded,
+    rects,
+  }, "*");
+}`;
+
+interface IpadPage {
+  edited: number;
+  icon?: { x: number; y: number };
+  loaded: string;
+  stories: string;
+  whos: number;
+}
+
+const ipadPageOf = (line: string): IpadPage | undefined => {
+  const m = line.match(PAGE_LINE);
+  return m
+    ? {
+        stories: m[1],
+        whos: Number(m[2]),
+        edited: Number(m[3]),
+        loaded: m[4],
+        icon: m[5] ? { x: Number(m[5]), y: Number(m[6]) } : undefined,
+      }
+    : undefined;
+};
+
+/**
+ * 6: the iPad. The app built from this tree, on the session, shows the sheet
+ * in its panel through the same route and overlay as a preview: its three
+ * frames render, an edit to Who.svelte redraws them with no reload, and a
+ * finger's tap in Comment on the agent's icon pins it with the same source
+ * and chain the desk's click gave (`desk`), read from the hub's record of it.
+ */
+const ipadChecks = async (
+  kit: Kit,
+  fleet: Fleet,
+  session: string,
+  artifact: string,
+  clone: string,
+  original: string,
+  desk: { anchor: SheetAnchor; id: string }
+) => {
+  const { path: app, problem } = freshApp(ROOT);
+  if (
+    !kit.check(
+      "6: the app is built from this tree",
+      !problem,
+      problem ?? app
+    )
+  ) {
+    return;
+  }
+  // The desk's pin stands on the same icon: resolved, its disc leaves the page and takes no tap.
+  await fleet.api(
+    `/api/instances/${session}/artifacts/comments/${desk.id}/resolve`,
+    {}
+  );
+  const pinsOnHub = async () =>
+    (
+      await fleet.api<{
+        artifacts: { id: string; pins: { anchor: SheetAnchor; id: string }[] }[];
+      }>(
+        `/api/instances/${session}/artifacts/comments?artifact=${artifact}&filter=all`
+      )
+    ).artifacts.find((one) => one.id === artifact)?.pins ?? [];
+
+  let sim: MacSim | undefined;
+  let finger: SimTouch | undefined;
+  let stream: Subprocess | undefined;
+  const heard: string[] = [];
+  /** The newest report after `from` that `test` passes, waited for. */
+  const pageAfter = (from: number, test: (page: IpadPage) => boolean, ms: number) =>
+    until(
+      "the sheet's report in the app",
+      () =>
+        heard
+          .slice(from)
+          .map(ipadPageOf)
+          .findLast((page) => page !== undefined && test(page)),
+      Boolean,
+      ms
+    ).catch(() => undefined);
+  /** What the app said of the preview since `from`, for a failure's detail. */
+  const story = (from: number) =>
+    heard
+      .slice(from)
+      .filter(
+        (one) =>
+          one.startsWith("preview loads") ||
+          one.startsWith("preview answered") ||
+          one.startsWith("preview failed") ||
+          one === "preview ready" ||
+          one === "preview document"
+      )
+      .map((one) => one.slice(0, 200))
+      .join(" | ") || "nothing";
+  try {
+    sim = await macSim(IPAD);
+    const { udid } = sim;
+    console.log(`  iPad simulator ${udid}`);
+    await Bun.$`xcrun simctl bootstatus ${udid} -b`.quiet();
+    await Bun.$`xcrun simctl install ${udid} ${app}`.quiet();
+    const child = Bun.spawn(
+      [
+        "xcrun",
+        "simctl",
+        "spawn",
+        udid,
+        "log",
+        "stream",
+        "--style",
+        "compact",
+        "--predicate",
+        'subsystem == "dev.cawco.app" AND category == "Probe"',
+      ],
+      { stdout: "pipe", stderr: "ignore" }
+    );
+    stream = child;
+    (async () => {
+      const decoder = new TextDecoder();
+      const reader = child.stdout.getReader();
+      let rest = "";
+      for (;;) {
+        // biome-ignore lint/performance/noAwaitInLoops: the stream is read in order
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        rest += decoder.decode(value, { stream: true });
+        const split = rest.split("\n");
+        rest = split.pop() ?? "";
+        for (const line of split) {
+          if (LOG_HEAD.test(line)) {
+            heard.push(line.replace(LOG_HEAD, "").trim());
+          }
+        }
+      }
+    })().catch(() => undefined);
+    await Bun.sleep(1500);
+    const report = Buffer.from(REPORT).toString("base64");
+    await until(
+      "the app launched on the iPad",
+      () =>
+        Bun.$`xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} -preview-probe -preview-comment -preview-report ${report}`
+          .quiet()
+          .then(() => true),
+      Boolean,
+      60_000
+    );
+
+    // 6a: the sheet in the app's panel, its three frames.
+    const first = await pageAfter(0, (page) => page.whos === 3, 120_000);
+    const rendered = kit.check(
+      "6: on the iPad, the app's panel renders the sheet's three frames, each a real Who",
+      first?.whos === 3 && first.stories === "Agent,You,Grouped",
+      first
+        ? `stories ${first.stories}, ${first.whos} Who`
+        : `no frames reported; the app said ${story(0)}`
+    );
+    if (!(first && rendered)) {
+      return;
+    }
+
+    // 6b: an edit to Who.svelte, both named frames redrawn in the web view; no new document.
+    const mark = heard.length;
+    const file = join(clone, COMPONENT);
+    const t0 = Date.now();
+    await writeFile(
+      file,
+      original.replace(ROLE, '<span class="role">{name}·N</span>')
+    );
+    const redrawn = await pageAfter(mark, (page) => page.edited === 2, 20_000);
+    const took = Date.now() - t0;
+    const documents = heard
+      .slice(mark)
+      .filter((one) => one === "preview document").length;
+    kit.check(
+      "6: an edit to Who.svelte redraws both named frames on the iPad, with no reload",
+      !!redrawn && redrawn.loaded === first.loaded && documents === 0,
+      redrawn
+        ? `redrawn within ${took} ms of the write; ${documents} new document(s); load stamp ${first.loaded} → ${redrawn.loaded}`
+        : `never redrawn in 20 s; the app said ${story(mark)}`
+    );
+    await writeFile(file, original);
+    await pageAfter(heard.length, (page) => page.edited === 0, 20_000);
+
+    // 6c: Comment on (`-preview-comment`, at the first ready), a finger's tap on the agent's icon.
+    const commenting = heard.includes("preview comment on");
+    finger = simTouch(udid);
+    const front = await finger.front();
+    if (
+      !kit.check(
+        "6: the app stands in front in Comment before the tap",
+        front === "CawCo" && commenting,
+        `Maestro reads "${front}" in front; Comment ${commenting ? "on" : "not on"}`
+      )
+    ) {
+      return;
+    }
+    const now = await pageAfter(heard.length, (page) => !!page.icon, 15_000);
+    const before = new Set((await pinsOnHub()).map((one) => one.id));
+    if (now?.icon) {
+      console.log(`  tap the agent's icon at ${now.icon.x},${now.icon.y}`);
+      await finger.touch(now.icon);
+    }
+    const made = await until(
+      "the iPad's pin on the hub",
+      async () => (await pinsOnHub()).find((one) => !before.has(one.id)),
+      Boolean,
+      15_000
+    ).catch(() => undefined);
+    const { source, chain, sheet } = made?.anchor ?? {};
+    const said = source
+      ? `${source.file}:${source.line}:${source.column}`
+      : "no source";
+    const wanted = iconPlace(original);
+    kit.check(
+      `6: a tap-to-pin on the iPad gives the icon's source ${wanted}, as the desk's click did`,
+      said === wanted &&
+        JSON.stringify(source) === JSON.stringify(desk.anchor.source),
+      made
+        ? `iPad ${said}; desk ${JSON.stringify(desk.anchor.source)}`
+        : `no new pin on the hub after the tap at ${now?.icon ? `${now.icon.x},${now.icon.y}` : "no icon point"}`
+    );
+    kit.check(
+      "6: its chain is the desk's two levels: IconAgent where Who uses it, then the story Agent",
+      chain?.length === 2 &&
+        chain[0]?.component === "IconAgent" &&
+        chain[1]?.component === "Agent" &&
+        sheet?.story === "Agent" &&
+        JSON.stringify(chain) === JSON.stringify(desk.anchor.chain),
+      JSON.stringify({ chain, sheet })
+    );
+  } finally {
+    stream?.kill();
+    await finger?.stop();
+    // Gone before the sleep step: the app's open page is a viewer the stage stays awake for.
+    if (sim) {
+      await Bun.$`xcrun simctl terminate ${sim.udid} dev.cawco.app`
+        .quiet()
+        .nothrow();
+    }
+    await sim?.release();
+  }
 };
 
 /** 5: no viewer, no read: asleep after its idle time; the pane again wakes it, and its frames render. */
@@ -494,7 +800,8 @@ const run = async (kit: Kit) => {
   );
   await hmrChecks(kit, frame, clone, original);
   await errorChecks(kit, fleet, page, session, artifact, clone, original);
-  await pinChecks(kit, on, frame);
+  const desk = await pinChecks(kit, on, frame);
+  await ipadChecks(kit, fleet, session, artifact, clone, original, desk);
   await sleepChecks(kit, fleet, page, session, delegate.workspaceId);
   await call(fleet, session, FINISH, {
     headline: "The sheet ran.",
