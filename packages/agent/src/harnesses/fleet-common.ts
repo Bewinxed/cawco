@@ -154,7 +154,8 @@ export const syncSkillFiles = async (
     }
 
     try {
-      await writeSkill(skill, dir);
+      // This harness's own skills dir: no Claude session lists it.
+      await writeSkill(skill, dir, null);
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
     } catch (error) {

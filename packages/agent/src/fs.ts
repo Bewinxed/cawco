@@ -147,12 +147,14 @@ const write = async (
   ) {
     return { bytes: next.byteLength };
   }
-  const reason = promptWriteReason(path);
+  const prompt = promptWriteReason(path);
   const mutate = async () => {
     await writeStateFile(path, next);
     return { bytes: next.byteLength };
   };
-  return reason ? await promptWrite(reason, mutate) : await mutate();
+  return prompt
+    ? await promptWrite(prompt.reason, mutate, prompt.readers)
+    : await mutate();
 };
 
 /** A path under the user layer, kept inside it. */

@@ -24002,11 +24002,16 @@ export const createServer = (
             case "frames": {
               const kind = peek(message.payload, "kind");
               if (kind === "cache_invalidated") {
-                const { reason, at } = message.payload as Extract<
+                const { reason, at, folder } = message.payload as Extract<
                   FramePayload,
                   { kind: "cache_invalidated" }
                 >;
-                db.invalidateClaudeCaches(message.machineId, reason, at);
+                db.invalidateClaudeCaches(
+                  message.machineId,
+                  reason,
+                  at,
+                  folder
+                );
                 publishInstances(message.machineId);
                 // Cache bookkeeping is neither a turn nor fleet attention.
                 break;

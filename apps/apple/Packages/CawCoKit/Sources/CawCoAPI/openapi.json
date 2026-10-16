@@ -44893,6 +44893,10 @@
           "at": {
             "type": "number"
           },
+          "folder": {
+            "description": "The folder whose Claude sessions read what was written: those running at\nor under it. Absent for the user layer, which every Claude session on the\nmachine reads.",
+            "type": "string"
+          },
           "kind": {
             "type": "string",
             "enum": [

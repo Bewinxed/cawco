@@ -36,6 +36,12 @@ export interface FleetMcpFrame {
 
 export interface CacheInvalidatedFrame {
   at: number;
+  /**
+   * The folder whose Claude sessions read what was written: those running at
+   * or under it. Absent for the user layer, which every Claude session on the
+   * machine reads.
+   */
+  folder?: string;
   instanceId?: undefined;
   kind: "cache_invalidated";
   reason: string;

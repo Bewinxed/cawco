@@ -134,7 +134,11 @@ import { gaugeGroup, gaugeTables } from "./memory";
 import { Outbox } from "./outbox";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
-import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
+import {
+  type PromptWriteNotice,
+  readsFolder,
+  withPromptWrites,
+} from "./prompt-writes";
 import { rememberCredential } from "./redaction";
 import { fenced } from "./restart";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
@@ -903,23 +907,54 @@ export class SessionSupervisor {
    */
   readonly #failureRun = new Map<string, { words: string; count: number }>();
   readonly #cacheCold = new Set<string>();
+  /** Each attached session's working folder: which project files its prompt reads. */
+  readonly #cwds = new Map<string, string>();
+  /** The epoch each Claude session's real turn started in ({@link #promptEpochs}). */
   readonly #realPromptEpoch = new Map<string, number>();
-  #promptEpoch = 0;
-  #promptWrites = 0;
+  /** How many prompt writes have reached each Claude session: its epoch. */
+  readonly #promptEpochs = new Map<string, number>();
+  /** The prompt writes in flight that each Claude session reads. */
+  readonly #promptWrites = new Map<string, number>();
+  /**
+   * Only the Claude sessions that read the write go cold: a workspace's placed
+   * skill is no change to a session working elsewhere (2026-10-16: every
+   * delegate workspace's `review-attempt` marked the lead cold).
+   */
   readonly #observePromptWrite = ({
     phase,
     reason,
     at,
+    folder,
   }: PromptWriteNotice): void => {
-    this.#promptEpoch += 1;
-    this.#promptWrites += phase === "begin" ? 1 : -1;
     for (const [id, session] of this.#sessions) {
-      if (session.harness === "claude") {
-        this.#cacheCold.add(id);
+      const cwd = this.#cwds.get(id);
+      if (
+        session.harness !== "claude" ||
+        (folder !== undefined && cwd !== undefined && !readsFolder(cwd, folder))
+      ) {
+        continue;
       }
+      this.#promptEpochs.set(id, (this.#promptEpochs.get(id) ?? 0) + 1);
+      const writes = this.#promptWrites.get(id) ?? 0;
+      if (phase === "begin") {
+        this.#promptWrites.set(id, writes + 1);
+      } else if (writes > 1) {
+        this.#promptWrites.set(id, writes - 1);
+      } else {
+        this.#promptWrites.delete(id);
+      }
+      this.#cacheCold.add(id);
     }
-    this.sink({ kind: "cache_invalidated", reason, at });
+    // The hub marks its rows by the same rule, asleep ones included.
+    this.sink({
+      kind: "cache_invalidated",
+      reason,
+      at,
+      ...(folder === undefined ? {} : { folder }),
+    });
   };
+  readonly #promptEpochOf = (instanceId: string): number =>
+    this.#promptEpochs.get(instanceId) ?? 0;
   readonly #imageRequests = new Map<string, string>();
 
   /**
@@ -2104,7 +2139,10 @@ export class SessionSupervisor {
    */
   #forgetPulse(instanceId: string): void {
     this.#cacheCold.delete(instanceId);
+    this.#cwds.delete(instanceId);
     this.#realPromptEpoch.delete(instanceId);
+    this.#promptEpochs.delete(instanceId);
+    this.#promptWrites.delete(instanceId);
     this.#keepAlive.delete(instanceId);
     this.#failureRun.delete(instanceId);
     this.#busy.delete(instanceId);
@@ -2724,6 +2762,7 @@ export class SessionSupervisor {
         throw refused;
       }
       this.#sessions.set(instanceId, session);
+      this.#cwds.set(instanceId, workdir);
       if (boundary && this.#failOpen.delete(instanceId)) {
         console.info(
           `boundary: relaunched ${instanceId} onto the fail-closed hook`
@@ -3219,7 +3258,7 @@ export class SessionSupervisor {
       message.subtype === "init" &&
       !this.#realPromptEpoch.has(instanceId)
     ) {
-      this.#realPromptEpoch.set(instanceId, this.#promptEpoch);
+      this.#realPromptEpoch.set(instanceId, this.#promptEpochOf(instanceId));
     }
     if (message.type !== "result") {
       return;
@@ -3232,8 +3271,8 @@ export class SessionSupervisor {
       return;
     }
     message.cacheReusable =
-      this.#promptWrites === 0 &&
-      this.#realPromptEpoch.get(instanceId) === this.#promptEpoch;
+      !this.#promptWrites.has(instanceId) &&
+      this.#realPromptEpoch.get(instanceId) === this.#promptEpochOf(instanceId);
     if (
       message.cacheReusable &&
       message.lastRequestAt !== undefined &&
@@ -3560,6 +3599,7 @@ export class SessionSupervisor {
     holder.session = session;
     // Attached: the live child is this session's process from here, running.
     this.#sessions.set(row.instanceId, session);
+    this.#cwds.set(row.instanceId, row.cwd);
     // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
     void this.#dateActivity(row.instanceId, claude, session, row.cwd);
     session.attached?.();
@@ -4040,7 +4080,10 @@ export class SessionSupervisor {
       return;
     }
     if (keepAlive) {
-      if (this.#cacheCold.has(instanceId) || this.#promptWrites > 0) {
+      if (
+        this.#cacheCold.has(instanceId) ||
+        this.#promptWrites.has(instanceId)
+      ) {
         throw new Error(
           "Keep-alive refused: the Claude prompt changed; a real turn must refresh its cache."
         );
@@ -4057,7 +4100,7 @@ export class SessionSupervisor {
       this.#keepAlive.set(instanceId, message.uuid);
     } else {
       if (session.harness === "claude" && !this.#busy.has(instanceId)) {
-        this.#realPromptEpoch.set(instanceId, this.#promptEpoch);
+        this.#realPromptEpoch.set(instanceId, this.#promptEpochOf(instanceId));
       }
       this.#touch(instanceId);
       // A send is the reader trying again: whatever failed before it is not

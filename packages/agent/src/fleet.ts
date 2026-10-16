@@ -66,7 +66,11 @@ import {
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
 import { placedMemoryDir } from "./placed-memory";
-import { promptWrite } from "./prompt-writes";
+import {
+  MACHINE_READERS,
+  type PromptReaders,
+  promptWrite,
+} from "./prompt-writes";
 import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, resolveBin, toolEnv, toolPath } from "./tools";
 import {
@@ -283,11 +287,12 @@ const readJson = async <T>(path: string): Promise<T | undefined> => {
 export const writeAtomic = async (
   path: string,
   content: string | Buffer,
-  reason?: string
+  reason?: string,
+  readers: PromptReaders = MACHINE_READERS
 ): Promise<void> => {
   const write = () => writeStateFile(path, content);
   if (reason) {
-    await promptWrite(reason, write);
+    await promptWrite(reason, write, readers);
   } else {
     await write();
   }
@@ -1116,11 +1121,14 @@ const dirExists = async (path: string): Promise<boolean> => {
  * is how a skill drifts. What the fleet never carried (a script's
  * `__pycache__`, a note someone added) goes into the new version as it is.
  * Swapped in with one rename ({@link placeTree}), because a running session
- * reads it.
+ * reads it. `readers` are the Claude sessions whose prompt lists it: the
+ * user layer's reach every one, a folder's only those working there, and
+ * another harness's skills dir none.
  */
 export const writeSkill = async (
   skill: FleetSkillPayload,
-  root = SKILLS_DIR
+  root = SKILLS_DIR,
+  readers: PromptReaders | null = MACHINE_READERS
 ): Promise<void> => {
   const dir = join(root, skill.name);
   const write = () => placeTree(dir, skill.files ?? [], carriedPaths(skill));
@@ -1131,10 +1139,10 @@ export const writeSkill = async (
     skill.workflowId &&
     (!(await previous.exists()) ||
       MANUAL_ONLY_SKILL.test(await previous.text()));
-  if (hiddenWorkflow) {
+  if (hiddenWorkflow || readers === null) {
     await write();
   } else {
-    await promptWrite(`skill ${skill.name}`, write);
+    await promptWrite(`skill ${skill.name}`, write, readers);
   }
 };
 
@@ -1888,7 +1896,7 @@ const placeSkill = async (
     return recorded;
   }
   try {
-    await writeSkill(skill, root);
+    await writeSkill(skill, root, { kind: "folder", path: cwd });
     // The skill's link and the store of the trees behind it (tree-swap.ts).
     await excludeFromCheckout(dir);
     await excludeFromCheckout(dirname(treeStoreOf(root)));
@@ -2343,7 +2351,10 @@ const placeMemoryDoc = async (
     return recorded;
   }
   try {
-    await writeAtomic(file, doc.content, `project memory ${doc.path}`);
+    await writeAtomic(file, doc.content, `project memory ${doc.path}`, {
+      kind: "folder",
+      path: cwd,
+    });
     await excludeFromCheckout(placedMemoryDir(cwd));
     report[key] = { state: "applied" };
     return doc.hash;
