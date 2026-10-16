@@ -14,6 +14,7 @@ import {
   artifactChanges,
   artifacts,
   instances,
+  projectTaskLabels,
   projectTasks,
   routineRuns,
   routines,
@@ -114,7 +115,10 @@ export interface FindDb {
   /** Every routine, with its newest ended run's outcome. */
   readonly routines: () => FindRoutineRow[];
   /** Every project's task index. */
-  readonly tasks: () => (typeof projectTasks.$inferSelect)[];
+  /** Every indexed task, with its labels. */
+  readonly tasks: () => (typeof projectTasks.$inferSelect & {
+    labels: string[];
+  })[];
   /** Every thread message of yours or Caw's: the words a thread is found by. */
   readonly threadWords: () => {
     at: Date;
@@ -234,7 +238,25 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         };
       });
   },
-  tasks: () => db.select().from(projectTasks).all(),
+  tasks: () => {
+    const labels = new Map<string, string[]>();
+    for (const { projectId, path, label } of db
+      .select()
+      .from(projectTaskLabels)
+      .orderBy(sql`rowid`)
+      .all()) {
+      const key = `${projectId}\0${path}`;
+      labels.set(key, [...(labels.get(key) ?? []), label]);
+    }
+    return db
+      .select()
+      .from(projectTasks)
+      .all()
+      .map((row) => ({
+        ...row,
+        labels: labels.get(`${row.projectId}\0${row.path}`) ?? [],
+      }));
+  },
   threadWords: () =>
     db
       .select({

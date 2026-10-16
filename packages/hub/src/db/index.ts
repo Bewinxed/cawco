@@ -162,6 +162,9 @@ import {
   projectPlaces,
   projectRepositories,
   projects,
+  projectTaskEdges,
+  projectTaskFields,
+  projectTaskLabels,
   projectTasks,
   projectThreads,
   pushDevices,
@@ -292,7 +295,15 @@ export type ProjectRow = Omit<
   places: PlaceRow[];
 };
 /** One task file as a project's task index holds it (tasks.ts). */
-export type TaskIndexRow = typeof projectTasks.$inferSelect;
+export type TaskIndexRow = typeof projectTasks.$inferSelect & {
+  /** The tasks it waits for (`tsk-…`), as its file lists them. */
+  after: string[];
+  /** The tasks it is related to: the canvas's other edges. */
+  related: string[];
+  labels: string[];
+  /** Its file's own scalar fields (`priority`, `due`), as written. */
+  fields: Record<string, string>;
+};
 /** A device the iOS app registered for pushes, by its Cawrier pairing. */
 /** A device the hub can push to: its sealed pairing secret and key opened. */
 export type PushDeviceRow = Omit<
@@ -1546,7 +1557,7 @@ export interface DbShape {
     /** When the fleet's choices were set through `PUT /api/fleet/choices`. */
     choicesSetAt?: Date | null;
   }) => void;
-  /** Files or refreshes rows of a project's task index, each by its file's path. */
+  /** Files or refreshes rows of a project's task index, each by its file's path, its lists with it. */
   readonly putTaskIndex: (rows: TaskIndexRow[]) => void;
   readonly putToolListing: (listing: string, toolsHash: string) => void;
   /** Upsert; a patch names only what it changes and the rest stays as it was. */
@@ -1995,6 +2006,11 @@ export interface DbShape {
   readonly takeOwedSpawn: (id: string) => boolean;
   /** Every row of a project's task index, in id order. */
   readonly taskIndex: (projectId: string) => TaskIndexRow[];
+  /** The indexed tasks that wait for `taskId` (`after:`), by number: an indexed lookup. */
+  readonly taskWaiters: (
+    projectId: string,
+    taskId: string
+  ) => { id: string; path: string }[];
   readonly thread: (id: string) => ThreadRow | undefined;
   /** One thread message by its id, in any thread. */
   readonly threadMessage: (id: string) => ThreadMessageRow | undefined;
@@ -6928,11 +6944,73 @@ const make = async (path: string): Promise<DbShape> => {
         .orderBy(desc(workItems.createdAt))
         .limit(1)
         .get(),
-    taskIndex: (projectId) =>
-      db
+    taskIndex: (projectId) => {
+      const ofTask = new Map<
+        string,
+        Pick<TaskIndexRow, "after" | "related" | "labels" | "fields">
+      >();
+      const lists = (file: string) => {
+        const known = ofTask.get(file);
+        if (known) {
+          return known;
+        }
+        const made: Pick<
+          TaskIndexRow,
+          "after" | "related" | "labels" | "fields"
+        > = { after: [], related: [], labels: [], fields: {} };
+        ofTask.set(file, made);
+        return made;
+      };
+      for (const edge of db
+        .select()
+        .from(projectTaskEdges)
+        .where(eq(projectTaskEdges.projectId, projectId))
+        .orderBy(sql`rowid`)
+        .all()) {
+        lists(edge.path)[edge.kind].push(edge.otherId);
+      }
+      for (const labelled of db
+        .select()
+        .from(projectTaskLabels)
+        .where(eq(projectTaskLabels.projectId, projectId))
+        .orderBy(sql`rowid`)
+        .all()) {
+        lists(labelled.path).labels.push(labelled.label);
+      }
+      for (const field of db
+        .select()
+        .from(projectTaskFields)
+        .where(eq(projectTaskFields.projectId, projectId))
+        .orderBy(sql`rowid`)
+        .all()) {
+        lists(field.path).fields[field.key] = field.value;
+      }
+      return db
         .select()
         .from(projectTasks)
         .where(eq(projectTasks.projectId, projectId))
+        .orderBy(asc(projectTasks.number), asc(projectTasks.path))
+        .all()
+        .map((row) => ({ ...row, ...lists(row.path) }));
+    },
+    taskWaiters: (projectId, taskId) =>
+      db
+        .select({ id: projectTasks.id, path: projectTasks.path })
+        .from(projectTaskEdges)
+        .innerJoin(
+          projectTasks,
+          and(
+            eq(projectTasks.projectId, projectTaskEdges.projectId),
+            eq(projectTasks.path, projectTaskEdges.path)
+          )
+        )
+        .where(
+          and(
+            eq(projectTaskEdges.projectId, projectId),
+            eq(projectTaskEdges.kind, "after"),
+            eq(projectTaskEdges.otherId, taskId)
+          )
+        )
         .orderBy(asc(projectTasks.number), asc(projectTasks.path))
         .all(),
     putTaskIndex: (rows) => {
@@ -6952,7 +7030,10 @@ const make = async (path: string): Promise<DbShape> => {
             .all()
             .map((project) => project.id)
         );
-        for (const row of rows.filter((r) => live.has(r.projectId))) {
+        for (const { after, related, labels, fields, ...row } of rows.filter(
+          (r) => live.has(r.projectId)
+        )) {
+          const { projectId, path: file } = row;
           tx.insert(projectTasks)
             .values(row)
             .onConflictDoUpdate({
@@ -6960,6 +7041,50 @@ const make = async (path: string): Promise<DbShape> => {
               set: row,
             })
             .run();
+          // Its lists as its file has them now, in its file's order.
+          const ofIt = (
+            table:
+              | typeof projectTaskEdges
+              | typeof projectTaskLabels
+              | typeof projectTaskFields
+          ) => and(eq(table.projectId, projectId), eq(table.path, file));
+          tx.delete(projectTaskEdges).where(ofIt(projectTaskEdges)).run();
+          tx.delete(projectTaskLabels).where(ofIt(projectTaskLabels)).run();
+          tx.delete(projectTaskFields).where(ofIt(projectTaskFields)).run();
+          const edges = [
+            ...[...new Set(after)].map((otherId) => ({
+              kind: "after" as const,
+              otherId,
+            })),
+            ...[...new Set(related)].map((otherId) => ({
+              kind: "related" as const,
+              otherId,
+            })),
+          ];
+          if (edges.length > 0) {
+            tx.insert(projectTaskEdges)
+              .values(edges.map((edge) => ({ projectId, path: file, ...edge })))
+              .run();
+          }
+          const named = [...new Set(labels)];
+          if (named.length > 0) {
+            tx.insert(projectTaskLabels)
+              .values(named.map((label) => ({ projectId, path: file, label })))
+              .run();
+          }
+          const scalars = Object.entries(fields);
+          if (scalars.length > 0) {
+            tx.insert(projectTaskFields)
+              .values(
+                scalars.map(([key, value]) => ({
+                  projectId,
+                  path: file,
+                  key,
+                  value,
+                }))
+              )
+              .run();
+          }
         }
       });
     },

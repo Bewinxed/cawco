@@ -16840,6 +16840,7 @@ export const createServer = (
     machines: () => db.listAgents(),
     projectIds: () => db.listProjects().map((project) => project.id),
     index: db.taskIndex,
+    waiters: db.taskWaiters,
     put: db.putTaskIndex,
     drop: db.dropTaskIndex,
     setTracker: db.setProjectTracker,

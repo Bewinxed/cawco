@@ -76,6 +76,7 @@ import type {
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import {
   customType,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -552,35 +553,17 @@ export const projectTasks = sqliteTable(
     stage: text("stage").notNull(),
     /** The delegate type it is assigned to. */
     type: text("type"),
-    /** The tasks it waits for (`tsk-…`). */
-    after: text("after", { mode: "json" })
-      .$type<string[]>()
-      .notNull()
-      .default([]),
     parent: text("parent"),
-    /** Tasks it is related to, and the task it was found in: the canvas's other edges. */
-    related: text("related", { mode: "json" })
-      .$type<string[]>()
-      .notNull()
-      .default([]),
+    /** The task it was found in: one of the canvas's edges (the others are `project_task_edges`). */
     foundIn: text("found_in"),
     /** The task it repeats (`duplicate_of`): a task waiting on it waits on that one instead. */
     duplicateOf: text("duplicate_of"),
     rank: text("rank"),
-    labels: text("labels", { mode: "json" })
-      .$type<string[]>()
-      .notNull()
-      .default([]),
-    /** The project folder files its work produces (`outputs:`): what the project's Made list draws. */
+    /** The project folder files its work produces (`outputs:`): what the project's Made list draws, read whole. */
     outputs: text("outputs", { mode: "json" })
       .$type<string[]>()
       .notNull()
       .default([]),
-    /** The front matter fields a task file does not know that hold one scalar (`priority`, `due`), as written: what lists filter and sort on. */
-    fields: text("fields", { mode: "json" })
-      .$type<Record<string, string>>()
-      .notNull()
-      .default({}),
     todosDone: integer("todos_done").notNull().default(0),
     todosTotal: integer("todos_total").notNull().default(0),
     /** What in the file could not be read, in a sentence; null when all of it could. */
@@ -595,6 +578,86 @@ export const projectTasks = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.projectId, table.path] }),
     index("project_tasks_id").on(table.projectId, table.id),
+  ]
+);
+
+/** A task file's edge to another task: one it waits for (`after`), or one it is related to (`related`). */
+export type TaskEdgeKind = "after" | "related";
+
+/**
+ * A task's edges to other tasks (`after:`, `related:`), one row each, in the
+ * order its file lists them (rowid). Rebuilt with its task's index row; the
+ * other task is named by id, not keyed, since a file may name a task that
+ * has no file.
+ */
+export const projectTaskEdges = sqliteTable(
+  "project_task_edges",
+  {
+    projectId: text("project_id").notNull(),
+    /** The task's file: its index row's key with `projectId`. */
+    path: text("path").notNull(),
+    kind: text("kind").$type<TaskEdgeKind>().notNull(),
+    /** `tsk-…`. */
+    otherId: text("other_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.projectId, table.path, table.kind, table.otherId],
+    }),
+    foreignKey({
+      columns: [table.projectId, table.path],
+      foreignColumns: [projectTasks.projectId, projectTasks.path],
+    }).onDelete("cascade"),
+    // Who waits for a task, who is related to it.
+    index("project_task_edges_other").on(
+      table.projectId,
+      table.kind,
+      table.otherId
+    ),
+  ]
+);
+
+/** A task's labels, one row each, in the order its file lists them (rowid). */
+export const projectTaskLabels = sqliteTable(
+  "project_task_labels",
+  {
+    projectId: text("project_id").notNull(),
+    path: text("path").notNull(),
+    label: text("label").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.path, table.label] }),
+    foreignKey({
+      columns: [table.projectId, table.path],
+      foreignColumns: [projectTasks.projectId, projectTasks.path],
+    }).onDelete("cascade"),
+    index("project_task_labels_label").on(table.projectId, table.label),
+  ]
+);
+
+/**
+ * The front matter fields a task file does not know that hold one scalar
+ * (`priority`, `due`), as written, one row each: what lists filter and sort on.
+ */
+export const projectTaskFields = sqliteTable(
+  "project_task_fields",
+  {
+    projectId: text("project_id").notNull(),
+    path: text("path").notNull(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.path, table.key] }),
+    foreignKey({
+      columns: [table.projectId, table.path],
+      foreignColumns: [projectTasks.projectId, projectTasks.path],
+    }).onDelete("cascade"),
+    index("project_task_fields_value").on(
+      table.projectId,
+      table.key,
+      table.value
+    ),
   ]
 );
 

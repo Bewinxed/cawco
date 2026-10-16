@@ -388,6 +388,11 @@ export interface TaskStore {
     projectId: string,
     task: { hash: string; id: string }
   ) => string | null;
+  /** The indexed tasks that wait for a task (db `taskWaiters`). */
+  readonly waiters: (
+    projectId: string,
+    taskId: string
+  ) => { id: string; path: string }[];
 }
 
 /**
@@ -1094,23 +1099,20 @@ const holds = (
   );
 
 /** Ids joined with what they do: `tsk-4 waits`, `tsk-4, tsk-5 wait`. */
-const named = (rows: TaskIndexRow[], one: string, many: string): string =>
+const named = (rows: { id: string }[], one: string, many: string): string =>
   `${rows.map((row) => row.id).join(", ")} ${rows.length === 1 ? one : many}`;
 
 /**
- * Who holds on to task `id`, in a sentence: the tasks waiting for it
- * (`after`) and the tasks under it (`parent`); empty when none does.
+ * Who holds on to a task, in a sentence: the tasks waiting for it (`after`)
+ * and the tasks under it (`parent`); empty when none does.
  */
-const holders = (rows: TaskIndexRow[], id: string): string => {
-  const waiting = rows.filter((row) => row.after.includes(id));
-  const under = rows.filter((row) => row.parent === id);
-  return [
+const holders = (waiting: { id: string }[], under: { id: string }[]): string =>
+  [
     ...(waiting.length > 0
       ? [`${named(waiting, "waits", "wait")} for it`]
       : []),
     ...(under.length > 0 ? [`${named(under, "is", "are")} under it`] : []),
   ].join(", and ");
-};
 
 /** A list's sort: ranked tasks by rank, then the rest by number. */
 const byRank = (a: TaskSummary, b: TaskSummary): number => {
@@ -3307,8 +3309,8 @@ export const createTasks = (store: TaskStore) => {
         const { path, number } = await locate(projectId, ref);
         const id = taskId(number);
         const held = holders(
-          rows.filter((row) => row.path !== path),
-          id
+          store.waiters(projectId, id).filter((row) => row.path !== path),
+          rows.filter((row) => row.path !== path && row.parent === id)
         );
         if (held) {
           refuse(
