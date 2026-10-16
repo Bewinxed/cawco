@@ -108,6 +108,7 @@ import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
 import {
   accountSignins,
+  accounts,
   actions,
   agentHarnesses,
   agents,
@@ -141,6 +142,7 @@ import {
   type HubFolder,
   inboundEvents,
   instanceAliases,
+  instanceConversations,
   instances,
   jevSettings,
   leadCalls,
@@ -1383,6 +1385,8 @@ export interface DbShape {
   ) => PublicInstanceRow | undefined;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
   readonly previews: PreviewsDb;
+  /** The harness conversations a session had before the one it runs now, oldest first (`instance_conversations`). */
+  readonly priorConversations: (instanceId: string) => PriorConversation[];
   /** A project with its places, or undefined for an id the hub does not hold. */
   readonly project: (id: string) => ProjectRow | undefined;
   /**
@@ -2538,7 +2542,6 @@ const make = async (path: string): Promise<DbShape> => {
     limitNotes: _limitNotes,
     watchLines: _watchLines,
     tooling: _tooling,
-    conversations: _conversations,
     ...publicColumns
   } = getTableColumns(instances);
   const boardColumns = publicColumns;
@@ -2719,6 +2722,71 @@ const make = async (path: string): Promise<DbShape> => {
   }
 
   type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+  /** A session's prior conversations, oldest first. */
+  const conversationsOf = (
+    from: Pick<Tx, "select">,
+    instanceId: string
+  ): PriorConversation[] =>
+    from
+      .select()
+      .from(instanceConversations)
+      .where(eq(instanceConversations.instanceId, instanceId))
+      .orderBy(asc(instanceConversations.ord))
+      .all()
+      .map((row) => ({
+        sessionId: row.sessionId,
+        harness: row.harness,
+        model: row.model,
+        accountId: row.accountId,
+        endedAt: row.endedAt.getTime(),
+        next: row.nextEventId,
+      }));
+
+  /**
+   * A session's prior conversations replaced by `list`, oldest first. An
+   * account the hub no longer keeps is named as none: a session's own
+   * account has no key, and a conversation's must not outlive its account.
+   */
+  const putConversations = (
+    tx: Tx,
+    instanceId: string,
+    list: PriorConversation[]
+  ): void => {
+    tx.delete(instanceConversations)
+      .where(eq(instanceConversations.instanceId, instanceId))
+      .run();
+    if (list.length === 0) {
+      return;
+    }
+    const named = list.flatMap((one) => (one.accountId ? [one.accountId] : []));
+    const known = new Set(
+      named.length === 0
+        ? []
+        : tx
+            .select({ id: accounts.id })
+            .from(accounts)
+            .where(inArray(accounts.id, named))
+            .all()
+            .map((row) => row.id)
+    );
+    tx.insert(instanceConversations)
+      .values(
+        list.map((one, ord) => ({
+          instanceId,
+          ord,
+          sessionId: one.sessionId,
+          harness: one.harness,
+          model: one.model,
+          accountId:
+            one.accountId && known.has(one.accountId) ? one.accountId : null,
+          endedAt: new Date(one.endedAt),
+          nextEventId: one.next,
+        }))
+      )
+      .run();
+  };
+
   /** One project and its places, read inside a transaction or out of one. */
   const projectOf = (
     from: Pick<Tx, "select">,
@@ -3121,9 +3189,14 @@ const make = async (path: string): Promise<DbShape> => {
     const parent = members
       .map((member) => member.parentInstanceId)
       .find((id) => id !== null && !ids.includes(id));
+    // Its conversations: the former rows' first, in the order they began,
+    // then the survivor's own.
+    putConversations(tx, survivorId, [
+      ...prior,
+      ...conversationsOf(tx, survivorId),
+    ]);
     tx.update(instances)
       .set({
-        conversations: [...prior, ...survivor.conversations],
         createdAt: root.createdAt,
         parentInstanceId: parent ?? null,
         workItemId: first("workItemId"),
@@ -4603,25 +4676,32 @@ const make = async (path: string): Promise<DbShape> => {
           .from(instances)
           .where(eq(instances.id, id))
           .get();
-        if (
-          !row?.sessionId ||
-          row.conversations.some((one) => one.next === to.next)
-        ) {
+        const held = row ? conversationsOf(tx, id) : [];
+        if (!row?.sessionId || held.some((one) => one.next === to.next)) {
           return false;
         }
+        // The conversation it leaves joins its prior ones, last.
+        const account = row.accountId
+          ? tx
+              .select({ id: accounts.id })
+              .from(accounts)
+              .where(eq(accounts.id, row.accountId))
+              .get()?.id
+          : undefined;
+        tx.insert(instanceConversations)
+          .values({
+            instanceId: id,
+            ord: held.length,
+            sessionId: row.sessionId,
+            harness: row.harness ?? "claude",
+            model: row.model,
+            accountId: account ?? null,
+            endedAt: new Date(),
+            nextEventId: to.next,
+          })
+          .run();
         tx.update(instances)
           .set({
-            conversations: [
-              ...row.conversations,
-              {
-                sessionId: row.sessionId,
-                harness: row.harness ?? "claude",
-                model: row.model,
-                accountId: row.accountId,
-                endedAt: Date.now(),
-                next: to.next,
-              },
-            ],
             sessionId: null,
             accountId: to.accountId,
             harness: to.harness,
@@ -4642,6 +4722,7 @@ const make = async (path: string): Promise<DbShape> => {
           .run();
         return true;
       }),
+    priorConversations: (instanceId) => conversationsOf(db, instanceId),
     undoContinueInPlace: (id, next) =>
       db.transaction((tx) => {
         const row = tx
@@ -4649,13 +4730,21 @@ const make = async (path: string): Promise<DbShape> => {
           .from(instances)
           .where(eq(instances.id, id))
           .get();
-        const left = row?.conversations.at(-1);
+        const held = row ? conversationsOf(tx, id) : [];
+        const left = held.at(-1);
         if (!(row && left?.next === next && row.sessionId === null)) {
           return false;
         }
+        tx.delete(instanceConversations)
+          .where(
+            and(
+              eq(instanceConversations.instanceId, id),
+              eq(instanceConversations.ord, held.length - 1)
+            )
+          )
+          .run();
         tx.update(instances)
           .set({
-            conversations: row.conversations.slice(0, -1),
             sessionId: left.sessionId,
             accountId: left.accountId,
             harness: left.harness,

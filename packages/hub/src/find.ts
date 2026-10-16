@@ -302,8 +302,8 @@ const sessionIdsOf = (
     if (row.sessionId) {
       bySessionId.set(row.sessionId, row.id);
     }
-    for (const prior of row.conversations) {
-      bySessionId.set(prior.sessionId, row.id);
+    for (const prior of row.priorSessionIds) {
+      bySessionId.set(prior, row.id);
     }
   }
   return bySessionId;

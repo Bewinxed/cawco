@@ -115,7 +115,7 @@ const sealedJson = <T>(column: string) =>
 
 /**
  * One harness conversation a session had before the one it runs now
- * (`instances.conversations`): its key, the harness and account it ran on,
+ * (`instance_conversations`): its key, the harness and account it ran on,
  * when the session left it, and the hub's line placed right after it in the
  * transcript (the `continued` line of the move that left it; null for a
  * conversation folded in with no line of its own).
@@ -922,18 +922,6 @@ export const instances = sqliteTable("instances", {
    * session's cache, so it never moves to another account on its own.
    */
   forkedFrom: text("forked_from"),
-  /**
-   * The harness conversations this session had before the one it runs now
-   * (`sessionId`), oldest first: each time it went on from a summary in a
-   * fresh conversation (at its account's limit, or because it asked), the
-   * one it left. Its transcript reads them in order, then the current one,
-   * each on the machine it runs on, in the account dir it ran in there.
-   * Empty on a session that never continued.
-   */
-  conversations: text("conversations", { mode: "json" })
-    .$type<PriorConversation[]>()
-    .notNull()
-    .default([]),
   /**
    * The session that started this one (`delegate`, `start_session`, a
    * workflow's supervisor): nested under it in every rail. Null on a session
@@ -2705,6 +2693,46 @@ export const continuations = sqliteTable("continuations", {
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
+
+/**
+ * The harness conversations a session had before the one it runs now
+ * (`instances.session_id`), oldest first (`ord`): each time it went on from
+ * a summary in a fresh conversation (at its account's limit, or because it
+ * asked), the one it left. Its transcript reads them in order, then the
+ * current one, each on the machine it runs on, in the account dir it ran in
+ * there. None on a session that never continued.
+ */
+export const instanceConversations = sqliteTable(
+  "instance_conversations",
+  {
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    /** Its place, oldest first. */
+    ord: integer("ord").notNull(),
+    sessionId: text("session_id").notNull(),
+    harness: text("harness").notNull(),
+    model: text("model"),
+    /** The account it ran on; null once that account is removed. */
+    accountId: text("account_id").references(() => accounts.id, {
+      onDelete: "set null",
+    }),
+    endedAt: timestamp("ended_at").notNull(),
+    /**
+     * The hub's line drawn right after it in the transcript: the
+     * `continued` line of the move that left it. Null for a conversation
+     * folded in with no line of its own, or once the line is gone.
+     */
+    nextEventId: text("next_event_id").references(() => limitEvents.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.instanceId, table.ord] }),
+    uniqueIndex("instance_conversations_next").on(table.nextEventId),
+    index("instance_conversations_session").on(table.sessionId),
+  ]
+);
 
 /**
  * The ids a session had before the hub folded its continuations into it

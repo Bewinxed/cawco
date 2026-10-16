@@ -12010,8 +12010,8 @@ export const createServer = (
     await leaveConversation(job);
     const [row] = db.getInstancesByIds([id]);
     const left = db
-      .ownedInstance(id)
-      ?.conversations.find((conversation) => conversation.next === job.id);
+      .priorConversations(id)
+      .find((conversation) => conversation.next === job.id);
     if (!(row && left)) {
       throw new Error(`${job.prepared.source.title} is no longer recorded`);
     }
@@ -12100,8 +12100,8 @@ export const createServer = (
     const { target } = job.request;
     if (
       db
-        .ownedInstance(id)
-        ?.conversations.some((conversation) => conversation.next === job.id)
+        .priorConversations(id)
+        .some((conversation) => conversation.next === job.id)
     ) {
       return;
     }
@@ -15749,7 +15749,7 @@ export const createServer = (
       return found;
     }
     const [held] = db.getInstancesByIds([instanceId]);
-    const prior = held ? (db.ownedInstance(held.id)?.conversations ?? []) : [];
+    const prior = held ? db.priorConversations(held.id) : [];
     const { where } = found;
     const row = "row" in found ? found.row : held;
     // The conversations it went on from, oldest first, each followed by the
@@ -15907,9 +15907,7 @@ export const createServer = (
     // the one between two of its conversations stands between them already
     // ({@link priorEntries}).
     const between = new Set(
-      (db.ownedInstance(row.id)?.conversations ?? []).map(
-        (conversation) => conversation.next
-      )
+      db.priorConversations(row.id).map((conversation) => conversation.next)
     );
     for (const event of db.atLimit.events([row.id])) {
       if (between.has(event.id)) {
@@ -18680,7 +18678,7 @@ export const createServer = (
   const noteFreshStart = (row: InstanceRow): void => {
     // One that went on from a summary starts its fresh conversation under
     // the "Continued" line already: that is no first start that never began.
-    if ((db.ownedInstance(row.id)?.conversations.length ?? 0) > 0) {
+    if (db.priorConversations(row.id).length > 0) {
       return;
     }
     const at = Date.now();

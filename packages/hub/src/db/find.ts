@@ -13,6 +13,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   artifactChanges,
   artifacts,
+  instanceConversations,
   instances,
   projectTaskLabels,
   projectTasks,
@@ -41,7 +42,6 @@ const findColumns = {
   projectId: instances.projectId,
   sessionId: instances.sessionId,
   harness: instances.harness,
-  conversations: instances.conversations,
   parentInstanceId: instances.parentInstanceId,
   cwd: instances.cwd,
   launchDir: instances.launchDir,
@@ -57,6 +57,9 @@ const findColumns = {
 
 export type FindInstanceRow = {
   [Key in keyof typeof findColumns]: (typeof instances.$inferSelect)[Key];
+} & {
+  /** The harness session ids of the conversations it went on from (`instance_conversations`). */
+  priorSessionIds: string[];
 };
 
 /** How much of a work item's brief names what it was for: its opening, not the whole spec. */
@@ -114,8 +117,7 @@ export interface FindDb {
   ) => { endedAt: Date; id: string; result: string | null }[];
   /** Every routine, with its newest ended run's outcome. */
   readonly routines: () => FindRoutineRow[];
-  /** Every project's task index. */
-  /** Every indexed task, with its labels. */
+  /** Every project's indexed tasks, each with its labels. */
   readonly tasks: () => (typeof projectTasks.$inferSelect & {
     labels: string[];
   })[];
@@ -165,12 +167,26 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
           .all()
           .map((row) => row.id)
       : [],
-  instances: (ids) =>
-    db
+  instances: (ids) => {
+    const prior = new Map<string, string[]>();
+    for (const { instanceId, sessionId } of db
+      .select({
+        instanceId: instanceConversations.instanceId,
+        sessionId: instanceConversations.sessionId,
+      })
+      .from(instanceConversations)
+      .where(ids ? inArray(instanceConversations.instanceId, ids) : undefined)
+      .orderBy(instanceConversations.instanceId, instanceConversations.ord)
+      .all()) {
+      prior.set(instanceId, [...(prior.get(instanceId) ?? []), sessionId]);
+    }
+    return db
       .select(findColumns)
       .from(instances)
       .where(ids ? and(findable(), inArray(instances.id, ids)) : findable())
-      .all(),
+      .all()
+      .map((row) => ({ ...row, priorSessionIds: prior.get(row.id) ?? [] }));
+  },
   lookedAt: () =>
     new Map(
       db

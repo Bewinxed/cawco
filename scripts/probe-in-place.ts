@@ -537,7 +537,9 @@ if (role === "sessiond") {
           .get("/proof/rows", () =>
             sql
               .query(
-                "SELECT id, kind, status, end_intent AS endIntent, session_id AS sessionId, conversations, work_item_id AS workItemId, parent_instance_id AS parent, account_id AS account, title FROM instances"
+                // A session's prior conversations, oldest first, as one JSON
+                // list built from their rows (instance_conversations).
+                "SELECT id, kind, status, end_intent AS endIntent, session_id AS sessionId, (SELECT json_group_array(json_object('sessionId', c.session_id, 'harness', c.harness, 'model', c.model, 'accountId', c.account_id, 'endedAt', c.ended_at, 'next', c.next_event_id)) FROM (SELECT * FROM instance_conversations WHERE instance_id = instances.id ORDER BY ord) c) AS conversations, work_item_id AS workItemId, parent_instance_id AS parent, account_id AS account, title FROM instances"
               )
               .all()
           )
