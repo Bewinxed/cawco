@@ -2888,12 +2888,23 @@ export const sessionTaints = sqliteTable("session_taints", {
   delivered: integer("delivered", { mode: "boolean" }).notNull().default(false),
   /** The routine whose wake its turn read (a lead's). */
   routine: text("routine"),
-  /** Its harness subagents still running. */
-  subagents: text("subagents", { mode: "json" })
-    .$type<OpenSubagent[]>()
-    .notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
+
+/** A session's harness subagents still running (`session_taints`), one row each. */
+export const sessionSubagents = sqliteTable(
+  "session_subagents",
+  {
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => sessionTaints.instanceId, { onDelete: "cascade" }),
+    /** The harness's task id. */
+    task: text("task").notNull(),
+    /** The tool call that started it. */
+    call: text("call"),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.task] })]
+);
 
 /**
  * What became of one of Caw's shell or edit calls (lead-gate.ts): `asked`

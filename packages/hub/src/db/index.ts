@@ -143,6 +143,7 @@ import {
   moves,
   notificationCleared,
   notificationSent,
+  type OpenSubagent,
   openrouterConnection,
   type PriorConversation,
   parkedAsks,
@@ -163,6 +164,7 @@ import {
   sessionIdentities,
   sessionLimits,
   sessionPlans,
+  sessionSubagents,
   sessionTaints,
   skills,
   spendSettings,
@@ -280,8 +282,10 @@ export type PushDeviceRow = Omit<
 > & { key: string; secret: string };
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type SessionPlanRow = typeof sessionPlans.$inferSelect;
-/** What a session has done that taints its memory notes (memory.ts). */
-export type SessionTaintRow = typeof sessionTaints.$inferSelect;
+/** What a session has done that taints its memory notes (memory.ts), its open subagents with it. */
+export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
+  subagents: OpenSubagent[];
+};
 /** One of Caw's shell or edit calls (lead-gate.ts). */
 export type LeadCallRow = typeof leadCalls.$inferSelect;
 export type ThreadRow = typeof projectThreads.$inferSelect;
@@ -6390,18 +6394,42 @@ const make = async (path: string): Promise<DbShape> => {
     dropLeadTurn: (instanceId) => {
       db.delete(leadTurns).where(eq(leadTurns.instanceId, instanceId)).run();
     },
-    sessionTaint: (instanceId) =>
-      db
+    sessionTaint: (instanceId) => {
+      const row = db
         .select()
         .from(sessionTaints)
         .where(eq(sessionTaints.instanceId, instanceId))
-        .get(),
-    putSessionTaint: (row) => {
-      const { instanceId: _id, ...rest } = row;
-      db.insert(sessionTaints)
-        .values(row)
-        .onConflictDoUpdate({ target: sessionTaints.instanceId, set: rest })
-        .run();
+        .get();
+      return (
+        row && {
+          ...row,
+          subagents: db
+            .select({
+              task: sessionSubagents.task,
+              call: sessionSubagents.call,
+            })
+            .from(sessionSubagents)
+            .where(eq(sessionSubagents.instanceId, instanceId))
+            .all(),
+        }
+      );
+    },
+    putSessionTaint: ({ subagents, ...row }) => {
+      const { instanceId, ...rest } = row;
+      db.transaction((tx) => {
+        tx.insert(sessionTaints)
+          .values(row)
+          .onConflictDoUpdate({ target: sessionTaints.instanceId, set: rest })
+          .run();
+        tx.delete(sessionSubagents)
+          .where(eq(sessionSubagents.instanceId, instanceId))
+          .run();
+        if (subagents.length > 0) {
+          tx.insert(sessionSubagents)
+            .values(subagents.map((open) => ({ instanceId, ...open })))
+            .run();
+        }
+      });
     },
     bookCawTurn: ({ harness, projectId, threadId, usd }) => {
       db.insert(cawTurns)
