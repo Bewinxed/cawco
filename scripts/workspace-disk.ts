@@ -45,11 +45,11 @@ interface Row {
 
 /** A live workspace's items: how many are still going, and when the last one ended. */
 interface Items {
-  workspace_id: string;
-  open: number;
   ended: number;
   last_end: number | null;
+  open: number;
   states: string;
+  workspace_id: string;
 }
 
 const db = new Database(hubDbPath(), { readonly: true });
@@ -105,11 +105,11 @@ const ageHours = async (path: string): Promise<number> => {
 };
 
 interface Found {
+  ageHours: number;
+  bytes: number;
   class: string;
   path: string;
-  bytes: number;
   why: string;
-  ageHours: number;
 }
 
 const ID8 = /^[0-9a-f]{8}$/;
@@ -255,7 +255,28 @@ const cloneSize = async (path: string) => {
 const liveRows = rows.filter(
   (row) => live(row) && row.path.startsWith(worktrees)
 );
-const clones = [];
+interface Clone {
+  id: string;
+  idleHours: number | null;
+  itemStates: string;
+  itemsOpen: number;
+  nodeModulesOwn: number;
+  nodeModulesShared: number;
+  path: string;
+  present: boolean;
+  state: string;
+  total: number;
+}
+
+/** How a live clone's items stand: idle since its last one ended, or one still open. */
+const itemWords = (clone: Clone): string => {
+  if (clone.idleHours !== null) {
+    return `, idle ${clone.idleHours.toFixed(1)}h`;
+  }
+  return clone.itemsOpen > 0 ? ", one open" : "";
+};
+
+const clones: Clone[] = [];
 for (const row of liveRows) {
   // biome-ignore lint/performance/noAwaitInLoops: one clone at a time, find and du are the bulk
   const there = await stat(row.path).catch(() => undefined);
@@ -310,7 +331,7 @@ if (json) {
     );
     for (const clone of of) {
       console.log(
-        `    ${basename(clone.path)}  ${clone.present ? gb(clone.total) : "gone"}  node_modules own ${gb(clone.nodeModulesOwn)}, linked ${gb(clone.nodeModulesShared)}  items ${clone.itemStates || "none"}${clone.idleHours === null ? (clone.itemsOpen > 0 ? ", one open" : "") : `, idle ${clone.idleHours.toFixed(1)}h`}`
+        `    ${basename(clone.path)}  ${clone.present ? gb(clone.total) : "gone"}  node_modules own ${gb(clone.nodeModulesOwn)}, linked ${gb(clone.nodeModulesShared)}  items ${clone.itemStates || "none"}${itemWords(clone)}`
       );
     }
   }
