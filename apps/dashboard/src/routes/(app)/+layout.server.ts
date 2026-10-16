@@ -1,4 +1,9 @@
-import type { InstanceRow, WorkflowListing, WorkflowRun } from "@cawco/core";
+import type {
+  HubAuthState,
+  InstanceRow,
+  WorkflowListing,
+  WorkflowRun,
+} from "@cawco/core";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
@@ -165,6 +170,12 @@ export const load: LayoutServerLoad = async ({
 }) => {
   const pref = (name: Pref) => cookies.get(prefCookie(name, url));
   const narrow = narrowOf(pref(NARROW_KEY), request.headers);
+  // Who this browser is to the hub (hub-auth.svelte.ts): one that must pair
+  // is shown the pairing screen from the first paint. Its cookie is
+  // SameSite=Strict, so a page opened from another site's link reads as no
+  // device here; the client reads it again as it opens.
+  const authRead = await readHub<HubAuthState>(fetch, "/api/auth");
+  const auth = authRead.ok ? authRead.value : null;
   const stored = Number(pref(RAIL_KEY));
   const railWidth =
     Number.isFinite(stored) && stored > 0
@@ -221,12 +232,12 @@ export const load: LayoutServerLoad = async ({
   // whose name read failed says so in the strip until the fleet names it.
   const names: Record<string, HubRead<string>> = {};
   if (!workspace) {
-    return { railWidth, narrow, workspace, names, foldBoxes };
+    return { railWidth, narrow, workspace, names, foldBoxes, auth };
   }
 
   const open = leavesOf(workspace.root).flatMap((leaf) => leaf.tabs);
   if (open.length === 0) {
-    return { railWidth, narrow, workspace, names, foldBoxes };
+    return { railWidth, narrow, workspace, names, foldBoxes, auth };
   }
 
   // What the fleet calls these conversations.
@@ -316,5 +327,5 @@ export const load: LayoutServerLoad = async ({
     }
   }
 
-  return { railWidth, narrow, workspace, names, foldBoxes };
+  return { railWidth, narrow, workspace, names, foldBoxes, auth };
 };

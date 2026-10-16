@@ -1005,7 +1005,8 @@ export const credentialStores = (): string[] => {
     accountsRoot(),
     // Session credentials, OpenCode's bridge credentials, redaction values.
     sessionIdentityDir(),
-    // The hub's env file (its Telegram token), the release signing key.
+    // The hub's env file (its Telegram token), the release signing key, the
+    // machine's key the hub admitted it with (machine-key.ts).
     cawcoConfigDir(),
     // The hub's database (fleet MCP OAuth tokens, API keys, push device
     // keys) and its backups, the transcript index.

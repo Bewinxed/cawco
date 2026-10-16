@@ -33,6 +33,8 @@
   import { followTail } from "#lib/hooks/follow-tail.js";
   import { IconChevronRight, IconError, IconSuccess } from "#lib/icons.js";
   import { cawco } from "./client.svelte";
+  import { answerMachine, hubAuth } from "./hub-auth.svelte";
+  import { failureWords } from "./hub-read";
   import CheckInStatus from "./join/CheckInStatus.svelte";
   import CopyBox from "./join/CopyBox.svelte";
   import JoinedRow from "./join/JoinedRow.svelte";
@@ -57,6 +59,20 @@
   let keyOpen = $state(false);
   let checkIn = $state<CheckIn | null>(null);
   let starting = $state(false);
+  /** A waiting machine's Admit on its way, and the hub's refusal of the last. */
+  let admitting = $state<string | null>(null);
+  let admitRefused = $state<string | null>(null);
+  async function admit(machineId: string) {
+    admitting = machineId;
+    admitRefused = null;
+    try {
+      await answerMachine(machineId, true);
+    } catch (error) {
+      admitRefused = failureWords(error);
+    } finally {
+      admitting = null;
+    }
+  }
 
   /**
    * Everything that belongs to one opening is set as it opens: the hub's
@@ -284,6 +300,40 @@
       </Alert.Root>
     {/if}
 
+    {#if hubAuth.waiting.length > 0}
+      <!-- This hub requires paired devices: the machine that just connected
+           waits here for its Admit (hub hub-auth.ts). -->
+      <ul aria-label="Machines waiting to be admitted" class="waiting">
+        {#each hubAuth.waiting as machine (machine.machineId)}
+          <li>
+            <span class="who">
+              <span class="name"
+                >{machine.hostname ?? machine.machineId} waits to be admitted</span
+              >
+              {#if machine.address}
+                <span class="hint">{machine.address}</span>
+              {/if}
+            </span>
+            <Button
+              aria-label="Admit {machine.hostname ?? machine.machineId}"
+              disabled={admitting !== null}
+              label="Admit"
+              onclick={() => admit(machine.machineId)}
+              pending={admitting === machine.machineId}
+              size="sm"
+              variant="secondary"
+            />
+          </li>
+        {/each}
+      </ul>
+      {#if admitRefused}
+        <Alert.Root role="alert" variant="destructive">
+          <IconError aria-hidden="true" />
+          <Alert.Description>{admitRefused}</Alert.Description>
+        </Alert.Root>
+      {/if}
+    {/if}
+
     {#if tab === "ssh"}
       {#if view === "running" && job}
         {@const steps = stepsOf(job)}
@@ -508,6 +558,33 @@
   .hint {
     font: var(--type-meta);
     color: var(--ink-subtle);
+  }
+  /* A machine waiting for its Admit: what it is, then the button. */
+  .waiting {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface-recess);
+    list-style: none;
+  }
+  .waiting li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .who {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .name {
+    font: var(--type-body);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
   }
   .steps {
     display: flex;

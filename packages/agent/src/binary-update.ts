@@ -70,11 +70,17 @@ import {
   launchHelper,
   removeFinishedHelpers,
 } from "./helper-jobs";
+import { provenFetch } from "./hub-proof";
 import { keeperJob, keeperJobsHere } from "./keeper-jobs";
 import { withKeepers } from "./keepers";
 import { runBinaryPins } from "./pin-record";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions } from "./sessiond-client";
+
+// Every call this module makes goes to this machine's hub, carrying the
+// machine's proof (hub-proof.ts): a hub that requires paired devices answers
+// what machines read and report to an admitted machine alone.
+const fetch = provenFetch;
 
 const POLL_MS = 60_000;
 /** The lease of the fence an install raises: the helper restarts the services well within it. */

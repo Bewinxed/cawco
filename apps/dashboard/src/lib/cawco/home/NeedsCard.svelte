@@ -42,8 +42,10 @@
     IconDollar,
     IconError,
     IconFolder,
+    IconLock,
     IconMaximize,
     IconSend,
+    IconServer,
     IconShield,
     IconTick,
     IconWarningTriangle,
@@ -60,6 +62,7 @@
     submitCommand,
   } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
+  import { answerMachine, answerPairing } from "../hub-auth.svelte";
   import { conversationHref } from "../links";
   import OsMark from "../OsMark.svelte";
   import SessionMark from "../SessionMark.svelte";
@@ -111,6 +114,10 @@
         return item.notice.title;
       case "choice":
         return UPSTREAM_WORDS.risk;
+      case "pairing":
+        return `Wants to run your fleet with code ${item.request.userCode}. Approve only if it's the code on that device.`;
+      case "admission":
+        return "Waits to join your fleet. Admitted, it runs sessions like your other machines.";
       case "action":
         if (item.action.state === "unknown") {
           return `This may or may not have happened. Check ${item.action.service}.`;
@@ -198,14 +205,46 @@
    * machine by its mark.
    */
   const meta = $derived.by(() => {
-    if (item.kind === "run") {
-      return `Workflow · ${item.place}`;
+    switch (item.kind) {
+      case "run":
+        return `Workflow · ${item.place}`;
+      case "watch":
+        return `Fleet watch · ${item.place}`;
+      case "choice":
+        return "Onboarding · each project can change it";
+      case "pairing":
+        return item.place ? `Pairing · ${item.place}` : "Pairing";
+      case "admission":
+        return ["Machine", item.machine.platform, item.place]
+          .filter(Boolean)
+          .join(" · ");
+      default:
+        return "Budget";
     }
-    if (item.kind === "choice") {
-      return "Onboarding · each project can change it";
-    }
-    return item.kind === "watch" ? `Fleet watch · ${item.place}` : "Budget";
   });
+
+  /** Your answer to a pairing or a waiting machine, on its way, and the hub's refusal of it. */
+  let admitting = $state<boolean | null>(null);
+  async function admitOrDeny(approve: boolean) {
+    if (
+      !(item.kind === "pairing" || item.kind === "admission") ||
+      held ||
+      admitting !== null
+    ) {
+      return;
+    }
+    admitting = approve;
+    refusal = null;
+    try {
+      await (item.kind === "pairing"
+        ? answerPairing(item.request.userCode, approve)
+        : answerMachine(item.machine.machineId, approve));
+    } catch (error) {
+      refusal = failureWords(error);
+    } finally {
+      admitting = null;
+    }
+  }
   /**
    * The row stands but cannot be answered yet: the hub is not live, or its
    * session's machine is offline. It keeps its place, dimmed, and its
@@ -353,6 +392,10 @@
       <IconWorkflow aria-hidden="true" />
     {:else if item.kind === "choice"}
       <IconShield aria-hidden="true" />
+    {:else if item.kind === "pairing"}
+      <IconLock aria-hidden="true" />
+    {:else if item.kind === "admission"}
+      <IconServer aria-hidden="true" />
     {:else if item.kind === "action"}
       {#if item.action.state === "unknown"}
         <IconWarningTriangle aria-hidden="true" />
@@ -523,6 +566,44 @@
         onclick={() => choose(true)}
         pending={choosing === true}
         pendingLabel="Saving…"
+        size="sm"
+        variant="secondary"
+      />
+    </div>
+  {:else if item.kind === "pairing" || item.kind === "admission"}
+    {@const who =
+      item.kind === "pairing"
+        ? `${item.title}, code ${item.request.userCode}`
+        : item.title}
+    <div class="peers">
+      {#if refusal}
+        <ErrorText
+          class="refusal"
+          message={refusal}
+          title="The hub refused that answer"
+        />
+      {/if}
+      <Button
+        aria-label="Deny {who}"
+        class="peer deny"
+        disabled={held || admitting === true}
+        icon={IconClose}
+        label="Deny"
+        onclick={() => admitOrDeny(false)}
+        pending={admitting === false}
+        pendingLabel="Denying…"
+        size="sm"
+        variant="secondary"
+      />
+      <Button
+        aria-label="{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}"
+        class="peer approve"
+        disabled={held || admitting === false}
+        icon={IconTick}
+        label={item.kind === "pairing" ? "Approve" : "Admit"}
+        onclick={() => admitOrDeny(true)}
+        pending={admitting === true}
+        pendingLabel={item.kind === "pairing" ? "Approving…" : "Admitting…"}
         size="sm"
         variant="secondary"
       />

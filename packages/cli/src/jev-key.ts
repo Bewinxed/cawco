@@ -10,6 +10,7 @@
  */
 import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
+import { OwnerApprovalError, ownerFetch } from "./owner";
 
 /** What `GET /api/jev` answers with. */
 interface JevView {
@@ -32,10 +33,14 @@ const callHub = async (
   init: RequestInit,
   refused: string
 ): Promise<JevView> => {
-  const response = await fetch(`${hub}/api/jev/typesafe-key`, {
-    ...init,
-    signal: AbortSignal.timeout(30_000),
-  }).catch((error: unknown) => {
+  const response = await ownerFetch(
+    `${hub}/api/jev/typesafe-key`,
+    { ...init, signal: AbortSignal.timeout(30_000) },
+    "cawco jev"
+  ).catch((error: unknown) => {
+    if (error instanceof OwnerApprovalError) {
+      throw new ConnectionKeyError(error.message);
+    }
     throw new ConnectionKeyError(
       `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
     );

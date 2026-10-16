@@ -2,7 +2,7 @@
 
 **UI wordmark:** “Caw&Co”, set in the landing's Nunito Variable face. Product names in sentences, page titles and notices remain “CawCo”.
 
-**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing)
+**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs)
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
 formula per Yifrah (2017), plain language per Redish (2007), destructive confirmation per Nielsen
 #5 (1994) and the microcopy-patterns catalog. **Pairs with DESIGN.md** (visual tokens, LOCKED) and
@@ -186,6 +186,10 @@ it actually means.
 | A provider's sign-in or key, held once per machine for the harnesses there that speak that provider (Claude Code, pi, OpenCode) | **account** | Configure › Accounts; the New session account chip. | "connection" (a connection is a service key the hub holds) |
 | A signed-in outside service whose key the hub holds | **connection** | Settings › Connections; `x-brand`. | "integration", "account" (an account is what a connection signs in as) |
 | The optional public path that lets push-only services reach the hub | **relay** | "Relay off · Set up". | "tunnel", "webhook server" in copy |
+| A browser (on one address), the app or a CLI run the hub knows as the person's, by a token it was handed once | **paired device** / **pair** (verb) | Configure › Devices; "Pair this browser"; "This hub requires paired devices." | "logged in", "signed in", "session" (a session is an agent's), "authorized device" |
+| The one fleet setting that makes every device and machine prove itself to the hub; off, being on the network is enough | **Require paired devices** | The Devices section's switch; its confirm names what every other device will see. | "lockdown", "secure mode", "auth" in copy |
+| The short code a device shows while it waits, matched by the person before approving (`KQ7-M3P`) | **code** | "Approve only if this is the code on the device in front of you." | "PIN", "token" (the token is never shown) |
+| Letting a machine that dialled the hub join the fleet, once, with a click; refused is **Deny** | **admit** (verb) / **Admit** (the button) | "Waits to be admitted"; Admit on the Machines list, Needs you and Configure › Devices. | "approve" for a machine (approve is for asks and devices), "trust", "accept" |
 | The hub's watch over every session for a loop or a stall, read by code from what the session streams: a **signal** is one thing it noticed (the same error 3 times, the same call 3 times in a row, no file changed in 6 turns, no output for 10 min in a running turn); a yes from Jev, or a second signal, starts one **triage** that decides once; its message to the session's lead is a **nudge**. A session is never told about itself | **fleet watch** / **signal** / **triage** / **nudge** | Settings › Models CawCo uses › Fleet watch; a session's line "Fleet watch · Same Bash call 3 times in a row · nudged Caw". | "supervisor", "autopilot", "assistant", "monitor" |
 
 **Banned-synonym quick list** (for the gate and for writers): `run` ≡ entity, `session` ≡ execution,
@@ -261,7 +265,7 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
 Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy, Draw, Dock, Undock, Annotate,
-Comment, Illustrate, Erase, Done*. "Continue" is acceptable only where the
+Comment, Illustrate, Erase, Done, Admit, Require*. "Continue" is acceptable only where the
 next step is already visible in context (microcopy-patterns catalog).
 
 **Composer exception (recorded):** the transcript composer's `<textarea>` carries `aria-label="Message

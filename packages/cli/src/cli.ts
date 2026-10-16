@@ -384,7 +384,10 @@ const status = async (args: Args): Promise<number> => {
   console.log(`found    ${hub.source}`);
   console.log(`config   ${CONFIG_PATH}`);
 
-  const agents = await fetch(`${hub.httpUrl}/api/agents`)
+  // As this machine (core machine-key.ts): a hub that requires paired
+  // devices lists the fleet to an admitted machine.
+  const { machineFetch } = await import("@cawco/core/machine-key");
+  const agents = await machineFetch(`${hub.httpUrl}/api/agents`)
     .then((response) =>
       response.ok ? (response.json() as Promise<AgentRow[]>) : undefined
     )

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { machineLabel } from "@cawco/core";
+  import { Button } from "#lib/components/ui/button/index.js";
   /**
    * The machines as a list: each machine (its menu on right-click or
    * long-press: update, reload, log in, unlock, forget), then Add machine.
@@ -16,6 +17,8 @@
   import { IconPlus } from "#lib/icons.js";
   import { cawco, type Machine } from "./client.svelte";
   import { home } from "./home/home-state.svelte";
+  import { answerMachine, hubAuth } from "./hub-auth.svelte";
+  import { failureWords } from "./hub-read";
   import { addMachine, JOIN_WAYS } from "./join/join.svelte";
   import MachineMenu from "./MachineMenu.svelte";
   import { pausedWords } from "./machine-pause";
@@ -24,6 +27,21 @@
   import { updates } from "./updates/updates.svelte";
 
   let { onleave }: { onleave?: () => void } = $props();
+
+  /** The waiting machine an answer is on its way for, and the hub's refusal of the last. */
+  let answering = $state<string | null>(null);
+  let admitRefused = $state<string | undefined>(undefined);
+  async function answer(machineId: string, admit: boolean) {
+    answering = machineId;
+    admitRefused = undefined;
+    try {
+      await answerMachine(machineId, admit);
+    } catch (error) {
+      admitRefused = failureWords(error);
+    } finally {
+      answering = null;
+    }
+  }
 
   const liveOn = (machineId: string): number =>
     cawco.runningRows.filter((row) => row.machineId === machineId).length;
@@ -86,6 +104,47 @@
   }
 </script>
 
+{#if hubAuth.waiting.length > 0}
+  <!-- Machines waiting to be admitted (hub hub-auth.ts): first, as they wait on you. -->
+  <ul class="list waiting">
+    {#each hubAuth.waiting as machine (machine.machineId)}
+      {@const name = machineLabel(machine.hostname ?? machine.machineId)}
+      <li class="row waits" data-waiting={machine.machineId}>
+        <MachineRow
+          hue={machineHue(0, false)}
+          icon={machineIcon(machine.platform ?? "")}
+          meta={["Waits to be admitted", machine.address]
+            .filter(Boolean)
+            .join(" · ")}
+          {name}
+          presence="away"
+        />
+        <span class="answers">
+          <Button
+            aria-label="Deny {name}"
+            disabled={answering !== null}
+            label="Deny"
+            onclick={() => answer(machine.machineId, false)}
+            size="xs"
+            variant="ghost"
+          />
+          <Button
+            aria-label="Admit {name}"
+            disabled={answering !== null}
+            label="Admit"
+            onclick={() => answer(machine.machineId, true)}
+            pending={answering === machine.machineId}
+            size="xs"
+            variant="secondary"
+          />
+        </span>
+      </li>
+    {/each}
+  </ul>
+  {#if admitRefused}
+    <RowFault class="machine-fault" reason={admitRefused} />
+  {/if}
+{/if}
 {#if cawco.machines.length === 0}
   <!-- No machine yet: the empty fleet's two ways in, as rows. -->
   <p class="none">Connect a machine to run sessions</p>
@@ -201,6 +260,21 @@
   .list :global(.machine-ask) {
     --ask-indent: var(--space-2);
     --ask-end: var(--space-2);
+  }
+  /* A waiting machine: its row, then Deny and Admit at its end. */
+  .waiting {
+    margin-bottom: var(--space-1);
+    padding-bottom: var(--space-1);
+    border-bottom: 1px solid var(--seam);
+  }
+  .waits {
+    cursor: default;
+  }
+  .answers {
+    display: flex;
+    flex: none;
+    gap: var(--space-1);
+    margin-inline-start: auto;
   }
   .none {
     margin: 0;

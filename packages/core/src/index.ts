@@ -39,6 +39,7 @@ export * from "./harness";
 // shared so the hub and the form refuse the same drafts for the same reasons —
 // this is the one row whose convergence executes code, so it is gated twice.
 export * from "./hooks";
+export * from "./hub-auth";
 export * from "./injected";
 // Adding a machine: the join routes' shapes and the install script's step
 // prefix, which `cawco binary-install agent` prints and the hub reads back off SSH output.
@@ -118,7 +119,27 @@ export type Verb =
   | "frames"
   | "fs"
   | "usage"
-  | "launch";
+  | "launch"
+  | "admission";
+
+/**
+ * `admission`, hub → agent, on the machine socket only (hub hub-auth.ts):
+ *
+ * - `challenge`: the first frame on every connection. The register answers
+ *   it with `proof`, `HMAC(machineKey, nonce ‖ hubId ‖ machineId)` (core
+ *   machine-key.ts), when the machine holds a key.
+ * - `waiting`: the hub requires paired devices and this connection proved no
+ *   key: it is held, and hears nothing more, until the person admits or
+ *   refuses the machine.
+ * - `admitted`: the person admitted the machine (or turned pairing on while
+ *   it was connected): its key, sent this once over this socket. A waiting
+ *   machine writes it and connects again with its proof; a connected one
+ *   writes it and carries on.
+ */
+export type AdmissionPayload =
+  | { kind: "challenge"; hubId: string; nonce: string }
+  | { kind: "waiting"; message: string }
+  | { kind: "admitted"; key: string };
 
 /**
  * `launch`, agent → hub: a launch the hub sent this machine is starting now,
@@ -1392,6 +1413,7 @@ export type FramePayload =
   | import("./frames").FleetFetchFrame
   | import("./frames").ProjectCapFrame
   | import("./actions").ActionsFrame
+  | import("./hub-auth").HubAuthFrame
   | import("./frames").ProjectStopFrame
   | import("./frames").DelegateEventFrame
   /** Hub-originated: every open fleet-watch notice, whole, on each change. */

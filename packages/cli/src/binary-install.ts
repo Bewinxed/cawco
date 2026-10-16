@@ -5,7 +5,7 @@
  * the person what is missing and offers to install it.
  */
 import { rm } from "node:fs/promises";
-import { platform } from "node:os";
+import { hostname, platform } from "node:os";
 import { probeCapabilities } from "@cawco/agent/capabilities";
 import {
   type AgentRow,
@@ -30,6 +30,7 @@ import type {
 } from "@cawco/core/binary-updates";
 import { writeWrapper } from "@cawco/core/binary-wrapper";
 import { machineId } from "@cawco/core/machine-id";
+import { machineFetch } from "@cawco/core/machine-key";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { askYes, closeAsking } from "./ask";
 import { discoverHub } from "./discover";
@@ -43,6 +44,8 @@ import {
 /** Tools offered at install: what CawCo uses, none of it required to start. */
 const OFFERED = ["git", "opencode", "pi"] as const;
 const JOIN_TIMEOUT_MS = 90_000;
+/** How long a machine waits for the person to admit it, once the hub says it requires paired devices. */
+const ADMISSION_TIMEOUT_MS = 10 * 60_000;
 const LOCAL_NETWORK_URL =
   /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
@@ -65,20 +68,35 @@ export const binaryLayout = (keeper: string) => ({
 
 async function awaitJoined(hubUrl: string): Promise<void> {
   const id = await machineId();
-  const deadline = Date.now() + JOIN_TIMEOUT_MS;
+  let deadline = Date.now() + JOIN_TIMEOUT_MS;
+  let waiting = false;
   while (Date.now() < deadline) {
+    // As this machine (core machine-key.ts): a hub that requires paired
+    // devices lists the fleet to an admitted machine, and tells one it has
+    // not admitted yet that it must pair.
     // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the hub after the previous one
-    const agents = await fetch(`${hubUrl}/api/agents`, {
+    const answer = await machineFetch(`${hubUrl}/api/agents`, {
       signal: AbortSignal.timeout(5000),
-    })
-      .then((response) =>
-        response.ok ? (response.json() as Promise<AgentRow[]>) : []
-      )
-      .catch(() => [] as AgentRow[]);
+    }).catch(() => undefined);
+    if (answer?.headers.get("x-cawco-pairing") === "required" && !waiting) {
+      waiting = true;
+      deadline = Date.now() + ADMISSION_TIMEOUT_MS;
+      console.log(
+        `${INSTALL_STEP_PREFIX}waiting to be admitted: this hub requires paired devices. Admit ${hostname()} on the dashboard's Machines list.`
+      );
+    }
+    const agents = answer?.ok
+      ? ((await answer.json().catch(() => [])) as AgentRow[])
+      : [];
     if (agents.some((a) => a.machineId === id && a.status === "online")) {
       return;
     }
     await Bun.sleep(1000);
+  }
+  if (waiting) {
+    throw new Error(
+      `The agent started, and ${hubUrl} still waits for the person to admit this machine after ${ADMISSION_TIMEOUT_MS / 60_000} minutes. Admit it on the dashboard's Machines list; it connects the moment it is admitted.`
+    );
   }
   const lan = process.platform === "darwin" && LOCAL_NETWORK_URL.test(hubUrl);
   throw new Error(

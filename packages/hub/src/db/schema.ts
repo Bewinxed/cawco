@@ -2540,6 +2540,48 @@ export const pushDevices = sqliteTable("push_devices", {
 });
 
 /**
+ * Whether the hub requires paired devices (hub-auth.ts) — one row, keyed
+ * `'pairing'`, following the {@link spendSettings} precedent. No row reads as
+ * off: the hub trusts its network until the person turns it on.
+ */
+export const pairingSettings = sqliteTable("pairing_settings", {
+  /** Always `'pairing'`. */
+  id: text("id").primaryKey(),
+  required: integer("required", { mode: "boolean" }).notNull().default(false),
+  changedAt: timestamp("changed_at").notNull(),
+});
+
+/**
+ * The person's paired devices (hub-auth.ts): a browser on one origin, the
+ * app, each keyed by the sha256 of its token. The token itself went to the
+ * device once and is kept nowhere here (OWASP Session Management: "store a
+ * one-way verifier instead"). Emptied when pairing is turned off.
+ */
+export const ownerDevices = sqliteTable("owner_devices", {
+  id: text("id").primaryKey(),
+  /** sha256 of the device's token, hex. */
+  tokenHash: text("token_hash").notNull().unique(),
+  /** "Chrome on Linux", "CawCo on iPhone". */
+  name: text("name").notNull(),
+  kind: text("kind").$type<"browser" | "app" | "cli">().notNull(),
+  createdAt: timestamp("created_at").notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  /** The address it was last seen at. */
+  lastAddress: text("last_address"),
+});
+
+/**
+ * The key each machine the person admitted proves itself with (hub-auth.ts),
+ * sealed: the machine answers a nonce with it at every connection, so the
+ * hub needs the key itself, never a hash. Emptied when pairing is turned off.
+ */
+export const machineKeys = sqliteTable("machine_keys", {
+  machineId: text("machine_id").primaryKey(),
+  key: sealedText("key").notNull(),
+  admittedAt: timestamp("admitted_at").notNull(),
+});
+
+/**
  * Notifications a device or Telegram was shown and nobody has cleared yet
  * (notifications.ts), by collapse id: a look or a settle clears only what
  * was sent, so looking at a session no notification named sends nothing.

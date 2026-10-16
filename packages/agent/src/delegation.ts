@@ -16,15 +16,14 @@ export const delegationHubUrl = () =>
     .replace(WS_PATH, "");
 
 /**
- * Remote hubs are reached by the agent; every harness talks only to loopback:
- * the hub itself when it is on this machine, else this agent's MCP gateway
- * ({@link mcpGatewayPort}).
+ * Every harness talks only to loopback: this agent's MCP gateway
+ * ({@link mcpGatewayPort}), which relays to the hub, on the hub's own machine
+ * too. The gateway signs what it relays with this machine's key once the
+ * person admitted it (mcp-oauth.ts), so a hub that requires paired devices
+ * takes its sessions' tool calls from the machine they run on.
  */
-export const harnessMcpUrl = (path: string): string => {
-  const hub = new URL(delegationHubUrl());
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(hub.hostname);
-  return `${local ? hub.origin : `http://127.0.0.1:${mcpGatewayPort()}`}${path}`;
-};
+export const harnessMcpUrl = (path: string): string =>
+  `http://127.0.0.1:${mcpGatewayPort()}${path}`;
 /** How long any call to the hub's tools may run: finish_item's checks set it. */
 const DELEGATION_CALL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 

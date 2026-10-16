@@ -9,6 +9,7 @@
  * back, so the sentence a rollback is filed under says why on its own.
  */
 import type { BinaryInstallation } from "./binary-installation";
+import { machineFetch } from "./machine-key";
 
 /** How long one request of a probe is waited on. */
 const PROBE_TIMEOUT_MS = 3000;
@@ -45,7 +46,9 @@ async function ask<T>(
   const after = () => `after ${Math.round(performance.now() - started)}ms`;
   let response: Response;
   try {
-    response = await fetch(url, {
+    // As this machine: a hub that requires paired devices answers the
+    // fleet's rows to an admitted machine (machine-key.ts).
+    response = await machineFetch(url, {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
   } catch (error) {

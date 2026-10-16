@@ -2,6 +2,7 @@ import { hostname } from "node:os";
 import type {
   Envelope,
   FramePayload,
+  PairingRequest,
   PermissionResult,
   SendPayload,
   UserAnswers,
@@ -34,6 +35,11 @@ type UserMessage = Extract<FramePayload, { kind: "user_message" }>;
 
 export interface TelegramBridge {
   /**
+   * A device asks to be paired (hub-auth.ts): its name, address and code,
+   * with Approve and Deny. The pinned chat is an owner channel already.
+   */
+  readonly askPairing: (request: PairingRequest) => void;
+  /**
    * `send_to_user`: the words, then each attachment, in order. Answers with
    * what did not reach the chat and why, one line each; empty when all did.
    */
@@ -60,6 +66,10 @@ export interface TelegramBridge {
    * offered there, and a cleared one is deleted from the chat.
    */
   readonly setNotifications: (notifications: Notifications) => void;
+  /** The server's answer to a pairing, registered as the others are: whether one waited with that code. */
+  readonly setPairingAnswer: (
+    answer: (userCode: string, approve: boolean) => boolean
+  ) => void;
   /**
    * The server's one send path, registered after construction like
    * {@link setMediaReader}: a reply typed here is a message sent to the
@@ -70,6 +80,8 @@ export interface TelegramBridge {
   readonly setSender: (
     send: (envelope: Envelope<SendPayload>) => boolean
   ) => void;
+  /** That pairing was settled, here or anywhere: its message says how, and its buttons go. */
+  readonly settlePairing: (userCode: string, verdict: string) => void;
   readonly start: () => void;
 }
 
@@ -549,6 +561,54 @@ export const createTelegramBridge = ({
     });
   };
 
+  /** The server's answer to a pairing (`setPairingAnswer`). */
+  let pairingAnswer:
+    ((userCode: string, approve: boolean) => boolean) | undefined;
+  /** Each pairing's message, by its code, with what it said. */
+  const pairingMessages = new Map<
+    string,
+    { messageId: number; text: string }
+  >();
+
+  const askPairing = (request: PairingRequest): void => {
+    const text = fit([
+      `🔐 <b>${esc(request.name)}</b>${request.address ? ` at ${esc(request.address)}` : ""} wants to run your fleet.`,
+      "",
+      `Code <code>${esc(request.userCode)}</code>. Approve only if this is the code on the device in front of you.`,
+    ]);
+    detach(
+      send(text, [
+        [
+          { text: "Approve", callback_data: `pair:${request.userCode}:a` },
+          { text: "Deny", callback_data: `pair:${request.userCode}:d` },
+        ],
+      ]).then((message) => {
+        if (message) {
+          pairingMessages.set(request.userCode, {
+            messageId: message.message_id,
+            text,
+          });
+        }
+      }),
+      "telegram pairing ask"
+    );
+  };
+
+  const closePairing = async (userCode: string, verdict: string) => {
+    const shown = pairingMessages.get(userCode);
+    if (!shown || chatId === undefined) {
+      return;
+    }
+    pairingMessages.delete(userCode);
+    await call("editMessageText", {
+      chat_id: chatId,
+      message_id: shown.messageId,
+      text: fit([shown.text, "", verdict]),
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [] },
+    });
+  };
+
   /** The gate, which the server registers before the first ask. */
   const gate = (): Notifications => {
     if (!notifications) {
@@ -832,6 +892,18 @@ export const createTelegramBridge = ({
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses the callback tag, acks Telegram first, then routes permission/allow-always/deny through their settlement and message-edit paths
   ): Promise<void> => {
     const [tag, requestId, arg] = (query.data ?? "").split(":");
+    // A pairing's buttons: the device's code, approve or deny (hub-auth.ts).
+    if (tag === "pair" && requestId) {
+      const settled = pairingAnswer?.(requestId, arg === "a") ?? false;
+      await call("answerCallbackQuery", {
+        callback_query_id: query.id,
+        ...(settled ? {} : { text: "That pairing is no longer waiting" }),
+      });
+      if (!settled) {
+        await closePairing(requestId, "☑️ That pairing is no longer waiting");
+      }
+      return;
+    }
     const envelope = requestId ? pending.get(requestId) : undefined;
     // Answered before anything is awaited: Telegram spins the button until the
     // callback is acknowledged, and a resolve is slower than a map read.
@@ -1082,6 +1154,12 @@ export const createTelegramBridge = ({
     },
     setSender(sender) {
       sendMessage = sender;
+    },
+    askPairing,
+    settlePairing: (userCode, verdict) =>
+      detach(closePairing(userCode, verdict), "telegram pairing settle"),
+    setPairingAnswer(answer) {
+      pairingAnswer = answer;
     },
   };
 };

@@ -17,6 +17,7 @@ import {
   type ConnectionView,
   readEnv,
 } from "@cawco/core";
+import { OwnerApprovalError, ownerFetch } from "./owner";
 
 export class ConnectionKeyError extends Error {}
 
@@ -118,15 +119,19 @@ export const setConnectionKey = async (
   if (!key) {
     throw new ConnectionKeyError("no key was given; nothing was sent");
   }
-  const response = await fetch(
+  const response = await ownerFetch(
     `${hub}/api/connections/${encodeURIComponent(name)}/key`,
     {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ key }),
       signal: AbortSignal.timeout(90_000),
-    }
+    },
+    `cawco connections ${name}`
   ).catch((error: unknown) => {
+    if (error instanceof OwnerApprovalError) {
+      throw new ConnectionKeyError(error.message);
+    }
     throw new ConnectionKeyError(
       `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
     );

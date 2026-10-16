@@ -4,6 +4,7 @@ import { arch, homedir, hostname, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type {
   AccountIdentity,
+  AdmissionPayload,
   AuthState,
   BuildInfo,
   Envelope,
@@ -70,6 +71,12 @@ import {
 } from "@cawco/core/binary-updates";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
+import {
+  machineKeyPath,
+  readMachineKey,
+  socketProof,
+  writeMachineKey,
+} from "@cawco/core/machine-key";
 import { userLayerPath } from "@cawco/core/paths";
 import { STAGE_ENSURE } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -109,6 +116,7 @@ import {
   removeHostCheckout,
 } from "./host-check";
 import { serveHubCredential } from "./hub-git";
+import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import { readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { withKeepers } from "./keepers";
@@ -581,6 +589,11 @@ export interface RegisterPayload extends MachineIdentity {
    */
   previews: ReturnType<typeof servingPreviews>;
   /**
+   * This connection's answer to the hub's challenge with the machine's key
+   * ({@link keyProof}); absent before the person admitted the machine.
+   */
+  proof?: string;
+  /**
    * The sessions this machine could resume, so the rows the daemon no
    * longer carries settle as sleeping or as lost rather than all alike. Absent
    * when the catalog could not be read.
@@ -841,49 +854,112 @@ const send = (socket: WebSocket, envelope: Envelope): void => {
  */
 const OPEN_TIMEOUT_MS = 30_000;
 
-/** Succeeds with an open socket; fails if the socket closes, or is not answered, before opening. */
+/** The hub's first frame on a connection: what its register proves this machine's key against. */
+interface Challenge {
+  hubId: string;
+  nonce: string;
+}
+
+/** A frame off the socket as the hub's challenge, or undefined for any other. */
+const challengeIn = (data: unknown): Challenge | undefined => {
+  let frame: unknown;
+  try {
+    frame = JSON.parse(String(data));
+  } catch {
+    return;
+  }
+  const envelope = frame as Envelope<Partial<AdmissionPayload>> | null;
+  const payload = envelope?.payload as
+    { hubId?: unknown; kind?: unknown; nonce?: unknown } | undefined;
+  return envelope?.verb === "admission" &&
+    payload?.kind === "challenge" &&
+    typeof payload.nonce === "string" &&
+    typeof payload.hubId === "string"
+    ? { nonce: payload.nonce, hubId: payload.hubId }
+    : undefined;
+};
+
+/**
+ * Succeeds with an open socket and the hub's challenge, its first frame;
+ * fails if the socket closes, or is not answered, before both. The listener
+ * goes on as the socket is made: the challenge can arrive before anything
+ * else here would listen for it.
+ */
 const open = (url: string) =>
-  Effect.callback<WebSocket, ConnectionLost>((resume) => {
-    // Says this agent reads parts; without it the hub sends whole messages,
-    // as to an agent on the build before (`WIRE_PARTS_PARAM`).
-    const socket = new WebSocket(announcingParts(url));
-    const settle = () => {
-      clearTimeout(unanswered);
-      socket.removeEventListener("open", onOpen);
-      socket.removeEventListener("close", onClose);
-    };
-    const onOpen = () => {
-      settle();
-      resume(Effect.succeed(socket));
-    };
-    const onClose = (event: CloseEvent) => {
-      settle();
-      resume(
-        Effect.fail(new ConnectionLost({ url, reason: closeReason(event) }))
-      );
-    };
-    const unanswered = setTimeout(() => {
-      settle();
-      socket.close();
-      resume(
-        Effect.fail(
-          new ConnectionLost({
-            url,
-            reason: `the hub did not answer the connection within ${OPEN_TIMEOUT_MS / 1000} s`,
-          })
-        )
-      );
-    }, OPEN_TIMEOUT_MS);
-    socket.addEventListener("open", onOpen, { once: true });
-    socket.addEventListener("close", onClose, { once: true });
-    return Effect.sync(() => {
-      settle();
-      socket.close();
-    });
-  });
+  Effect.callback<{ challenge: Challenge; socket: WebSocket }, ConnectionLost>(
+    (resume) => {
+      // Says this agent reads parts; without it the hub sends whole messages,
+      // as to an agent on the build before (`WIRE_PARTS_PARAM`).
+      const socket = new WebSocket(announcingParts(url));
+      let opened = false;
+      let challenge: Challenge | undefined;
+      const settle = () => {
+        clearTimeout(unanswered);
+        socket.removeEventListener("open", onOpen);
+        socket.removeEventListener("close", onClose);
+        socket.removeEventListener("message", onMessage);
+      };
+      const ready = () => {
+        if (opened && challenge) {
+          settle();
+          resume(Effect.succeed({ socket, challenge }));
+        }
+      };
+      const onOpen = () => {
+        opened = true;
+        ready();
+      };
+      const onMessage = (event: MessageEvent) => {
+        challenge ??= challengeIn(event.data);
+        ready();
+      };
+      const onClose = (event: CloseEvent) => {
+        settle();
+        resume(
+          Effect.fail(new ConnectionLost({ url, reason: closeReason(event) }))
+        );
+      };
+      const unanswered = setTimeout(() => {
+        settle();
+        socket.close();
+        resume(
+          Effect.fail(
+            new ConnectionLost({
+              url,
+              reason: opened
+                ? `the hub sent no challenge within ${OPEN_TIMEOUT_MS / 1000} s of the connection`
+                : `the hub did not answer the connection within ${OPEN_TIMEOUT_MS / 1000} s`,
+            })
+          )
+        );
+      }, OPEN_TIMEOUT_MS);
+      socket.addEventListener("open", onOpen, { once: true });
+      socket.addEventListener("close", onClose, { once: true });
+      socket.addEventListener("message", onMessage);
+      return Effect.sync(() => {
+        settle();
+        socket.close();
+      });
+    }
+  );
+
+/**
+ * The register's answer to the hub's challenge: `HMAC(machineKey, nonce ‖
+ * hubId ‖ machineId)` (core machine-key.ts), when the person admitted this
+ * machine; nothing before then. The key itself never leaves the machine.
+ */
+const keyProof = (
+  challenge: Challenge,
+  machine: string
+): { proof?: string } => {
+  const key = readMachineKey();
+  return key
+    ? { proof: socketProof(key, challenge.nonce, challenge.hubId, machine) }
+    : {};
+};
 
 const connection = (url: string) =>
-  Effect.acquireRelease(open(url), (socket) =>
+  Effect.acquireRelease(open(url), ({ socket }) =>
     Effect.sync(() => socket.close())
   );
 
@@ -1137,7 +1213,11 @@ const attach = (
     // Started before the socket, so it runs while the hub is still booting:
     // see {@link sessionsReader}.
     const reading = sessions();
-    const socket = yield* connection(url);
+    const { socket, challenge } = yield* connection(url);
+    // The hub this socket reached, by its own word: what this machine's HTTP
+    // proofs name (hub-proof.ts).
+    setConnectedHub(challenge.hubId);
+    yield* Effect.promise(() => recordJoinedHub(url, challenge.hubId));
     supervisor.setHubContract(false);
     supervisor.resetStopSequence();
     process.env[CAWCO_ENV.hubUrl] = url;
@@ -1156,6 +1236,7 @@ const attach = (
       snapshot: Awaited<ReturnType<typeof readSessions>>
     ): RegisterPayload => ({
       ...identity,
+      ...keyProof(challenge, identity.machineId),
       ...(machineAgent ? { accountStores: accountStoreIds() } : {}),
       sessionAddresses: supervisor.sessionAddresses,
       machineCapabilities,
@@ -1712,6 +1793,8 @@ const attach = (
      */
     const heldSpawns: Envelope[] = [];
     let awaitingRegisterAck = true;
+    /** The hub holds this connection until the person admits the machine ({@link admission}). */
+    let waitingAdmission = false;
     /**
      * WHAT IS SENT TO A SESSION WHILE ITS CUSTODY IS TAKEN WAITS FOR IT, AND
      * FOR NOTHING ELSE.
@@ -2109,6 +2192,45 @@ const attach = (
       return true;
     };
 
+    /**
+     * The hub's word on this machine's admission (hub hub-auth.ts). Waiting:
+     * the hub requires paired devices and holds this connection until the
+     * person admits the machine; nothing more is sent on it meanwhile.
+     * Admitted: the key, kept beside `config.json`; a waiting connection
+     * then ends, and the next one proves the key.
+     */
+    const admission = (said: AdmissionPayload): void => {
+      if (said.kind === "waiting") {
+        waitingAdmission = true;
+        Effect.runFork(Effect.logWarning(`[admission] ${said.message}`));
+        return;
+      }
+      if (said.kind !== "admitted") {
+        return;
+      }
+      writeMachineKey(said.key).then(
+        () => {
+          Effect.runFork(
+            Effect.logInfo(
+              `[admission] admitted: this machine's key is kept at ${machineKeyPath()}`
+            )
+          );
+          if (waitingAdmission && socket.readyState === WebSocket.OPEN) {
+            socket.close(
+              4000,
+              "admitted: connecting again with this machine's key"
+            );
+          }
+        },
+        (error: unknown) =>
+          Effect.runFork(
+            Effect.logError(
+              `[admission] the key could not be written to ${machineKeyPath()}: ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
+      );
+    };
+
     const onEnvelope = (envelope: Envelope): void => {
       if (launchAsks.answer(envelope) || refusedByHub(envelope)) {
         return;
@@ -2143,7 +2265,15 @@ const attach = (
     // Every frame is read in order through the socket's line, a part's worth
     // per turn of the loop; a message too long for one frame arrives as parts.
     const line = clientLine(socket);
-    line.listen((message) => onEnvelope(message as Envelope));
+    // The hub's word on this machine's admission is its own ({@link admission}).
+    line.listen((message) => {
+      const envelope = message as Envelope;
+      if (envelope.verb === "admission") {
+        admission(envelope.payload as AdmissionPayload);
+      } else {
+        onEnvelope(envelope);
+      }
+    });
     // When anything last came from the hub: what the heartbeat's deadline reads.
     let lastHeard = Date.now();
     socket.addEventListener("message", (event) => {
@@ -2172,7 +2302,8 @@ const attach = (
               ? { binaryUpdate: latestBinaryUpdate() }
               : {}),
           } satisfies HeartbeatPayload;
-          if (socket.readyState !== WebSocket.OPEN) {
+          // A connection waiting to be admitted says nothing more until it is.
+          if (socket.readyState !== WebSocket.OPEN || waitingAdmission) {
             return;
           }
           send(socket, {

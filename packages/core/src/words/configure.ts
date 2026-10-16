@@ -39,6 +39,7 @@ export type ConfigSlug =
   | "models"
   | "spend"
   | "phone"
+  | "devices"
   | "previews"
   | "updates";
 
@@ -194,6 +195,16 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     badge: "fleet-faults",
     icon: "smartphone-bold-duotone",
     hue: "hue-green-500",
+  },
+  {
+    slug: "devices",
+    group: "Hub",
+    label: "Devices",
+    purpose: "Which browsers, apps and machines may run your fleet",
+    counted: false,
+    badge: "fleet-faults",
+    icon: "lock-keyhole-minimalistic-bold-duotone",
+    hue: "hue-orange-500",
   },
   {
     slug: "previews",

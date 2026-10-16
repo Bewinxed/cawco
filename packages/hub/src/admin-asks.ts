@@ -94,6 +94,9 @@ const askedFor = (name: string) => {
   if (name === "relay_create") {
     return "opening this relay";
   }
+  if (name === "update_machines") {
+    return "installing this build";
+  }
   return name === "project_settings"
     ? "this project-settings change"
     : "this fleet-settings change";

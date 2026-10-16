@@ -16,7 +16,9 @@ import type {
   ApprovedActionView,
   FleetWatchNotice,
   NeutralSessionInfo,
+  PairingRequest,
   ProjectCap,
+  WaitingMachine,
   WorkflowRun,
 } from "@cawco/core";
 import {
@@ -37,6 +39,7 @@ import {
 } from "../client.svelte";
 import { buildConvergence } from "../convergence";
 import { machineFaults } from "../fleet-faults";
+import { hubAuth } from "../hub-auth.svelte";
 import {
   catalogTitle,
   conversationHref,
@@ -366,8 +369,40 @@ export interface ChoiceItem {
   title: string;
 }
 
+/**
+ * A device asking to pair (hub hub-auth.ts): approved here, it runs the
+ * fleet as you. Its code is the one on that device's screen.
+ */
+export interface PairingItem {
+  href: string;
+  key: string;
+  kind: "pairing";
+  place: string;
+  raisedAt: number;
+  request: PairingRequest;
+  title: string;
+}
+
+/** A machine waiting to be admitted (hub hub-auth.ts): admitted, it joins the fleet. */
+export interface AdmissionItem {
+  href: string;
+  key: string;
+  kind: "admission";
+  machine: WaitingMachine;
+  place: string;
+  raisedAt: number;
+  title: string;
+}
+
 export type NeedsItem =
-  AskItem | RunItem | CapItem | ActionItem | WatchItem | ChoiceItem;
+  | AskItem
+  | RunItem
+  | CapItem
+  | ActionItem
+  | WatchItem
+  | ChoiceItem
+  | PairingItem
+  | AdmissionItem;
 
 export interface RecentItem {
   at: number;
@@ -978,6 +1013,26 @@ class Home {
             },
           ]
         : [];
+    // Devices asking to pair and machines waiting to be admitted
+    // (hub-auth.svelte.ts): answered here or in Configure › Devices.
+    const pairings: NeedsItem[] = hubAuth.requests.map((request) => ({
+      kind: "pairing",
+      key: `pairing:${request.userCode}`,
+      request,
+      title: request.name,
+      place: request.address ?? "",
+      href: "/config/devices",
+      raisedAt: request.at,
+    }));
+    const admissions: NeedsItem[] = hubAuth.waiting.map((machine) => ({
+      kind: "admission",
+      key: `admission:${machine.machineId}`,
+      machine,
+      title: machine.hostname ?? machine.machineId,
+      place: machine.address ?? "",
+      href: "/config/devices",
+      raisedAt: machine.since,
+    }));
     // Longest wait first; an ask the hub has not stamped sorts last.
     return [
       ...asks,
@@ -986,6 +1041,8 @@ class Home {
       ...actions,
       ...watched,
       ...unanswered,
+      ...pairings,
+      ...admissions,
     ].sort(
       (a, b) =>
         (a.raisedAt ?? Number.POSITIVE_INFINITY) -

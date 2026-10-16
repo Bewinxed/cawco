@@ -100,6 +100,7 @@ import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type FindDb, findDb } from "./find";
+import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
@@ -848,6 +849,8 @@ export interface DbShape {
    * session's next start; false when it is no longer pending.
    */
   readonly holdSend: (uuid: string, envelope: string) => boolean;
+  /** Who may call the hub: the pairing setting, the person's devices, the machines' keys (hub-auth.ts). */
+  readonly hubAuth: HubAuthDb;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
   readonly ingress: IngressDb;
   readonly insertContinuation: (
@@ -7805,6 +7808,7 @@ const make = async (path: string): Promise<DbShape> => {
     connections: connectionsDb(db),
     ingress: ingressDb(db),
     relays: relaysDb(db),
+    hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db),
     find: findDb(db),
     previews: previewsDb(db),

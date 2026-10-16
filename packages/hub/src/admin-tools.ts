@@ -17,8 +17,8 @@ import {
 } from "@cawco/core";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { z } from "zod";
-import { hubHttpUrl } from "./delegation-actions";
 import { landedFetch } from "./fleet-fetches";
+import { hubHttpUrl, selfFetch } from "./hub-self";
 
 /**
  * API timeout for one admin call. A fetch from GitHub is not waited on in
@@ -50,7 +50,8 @@ const api = async (
   body?: unknown
 ): Promise<unknown> => {
   const url = `${hubHttpUrl()}${path}`;
-  const response = await fetch(url, {
+  // The hub calling its own route, as itself (hub-self.ts).
+  const response = await selfFetch(url, {
     method,
     ...(body === undefined
       ? {}

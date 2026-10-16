@@ -11,9 +11,11 @@
   import { ensureConnected } from "#lib/cawco/client.svelte.js";
   import { GROUPS } from "#lib/cawco/config/sections.js";
   import { PREFETCHES as CAW_PREFETCHES } from "#lib/cawco/home/Caw.svelte";
+  import { hubAuth, mustPair, readAuth } from "#lib/cawco/hub-auth.svelte.js";
   import { restWhenHidden } from "#lib/cawco/motion/rest.js";
   import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
   import { departAll } from "#lib/cawco/motion/share.svelte.js";
+  import PairingScreen from "#lib/cawco/PairingScreen.svelte";
   import { fleetPane } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import { setPaneFleet } from "#lib/cawco/preview/pane-fleet.js";
   import Shell from "#lib/cawco/Shell.svelte";
@@ -58,8 +60,24 @@
       : undefined
   );
 
+  // Whether this browser must pair: as the server read it for this request
+  // until the page has read it itself, where its SameSite=Strict cookie
+  // always rides (hub-auth.svelte.ts). The store is the client's alone: a
+  // server render never writes it, so one request never reads another's.
+  const pairing = $derived(
+    hubAuth.known
+      ? mustPair()
+      : data.auth?.mode === "pairing" && data.auth.caller !== "owner"
+  );
   // One socket for the whole app; routes only read the state it fills in.
-  onMount(ensureConnected);
+  // A browser that must pair opens none until it is paired.
+  onMount(() => {
+    readAuth().then(() => {
+      if (!mustPair()) {
+        ensureConnected();
+      }
+    });
+  });
   // The update notice's upkeep: an idle old tab reloads, "running on N
   // machines" leaves by itself. The notice itself is a row of Caw's panel.
   onMount(startUpdateWatch);
@@ -123,5 +141,9 @@
   offset={toastOffset}
   position={narrowToasts.current ? "top-center" : "bottom-right"}
 />
-<Shell railWidth={data.railWidth}>{@render children()}</Shell>
-<CanvasStages />
+{#if pairing}
+  <PairingScreen />
+{:else}
+  <Shell railWidth={data.railWidth}>{@render children()}</Shell>
+  <CanvasStages />
+{/if}

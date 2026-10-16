@@ -52,19 +52,38 @@ export const toWsUrl = (httpBase: string): string =>
   `${httpBase.replace(HTTP_PREFIX, "ws")}/ws`;
 
 /**
- * What tells a cawco hub apart from whatever else is listening on the port:
- * `/api/agents` is the fleet, so a 200 carrying an array is the whole test.
+ * The id of the cawco hub at `httpUrl` (hub hub-id.ts), off its `/health`,
+ * which answers anyone; undefined when nothing there says one. Never the
+ * fleet's own list: a hub that requires paired devices answers that to its
+ * person alone.
  */
-export const probeHub = async (httpUrl: string): Promise<boolean> => {
-  try {
-    const response = await fetch(`${httpUrl}/api/agents`, {
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-    return response.ok && Array.isArray(await response.json());
-  } catch {
-    return false;
-  }
+export const hubIdAt = async (httpUrl: string): Promise<string | undefined> => {
+  const body: { hubId?: unknown } = await fetch(`${httpUrl}/health`, {
+    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+  })
+    .then((response) =>
+      response.ok ? (response.json() as Promise<{ hubId?: unknown }>) : {}
+    )
+    .catch(() => ({}));
+  return typeof body.hubId === "string" && body.hubId ? body.hubId : undefined;
 };
+
+/** A probe that answers true for the hub `joined` alone, and says when another hub answered. */
+const joinedHubAt =
+  (joined: string, note: (line: string) => void) =>
+  async (httpUrl: string): Promise<boolean> => {
+    const id = await hubIdAt(httpUrl);
+    if (id !== undefined && id !== joined) {
+      note(
+        `[rediscover] ${httpUrl} is another hub (${id}), not the one this machine joined (${joined}): ignored`
+      );
+    }
+    return id === joined;
+  };
+
+/** What tells a cawco hub apart from whatever else is listening on the port: it says its id. */
+export const probeHub = async (httpUrl: string): Promise<boolean> =>
+  (await hubIdAt(httpUrl)) !== undefined;
 
 /** Probes every candidate at once and takes whichever answers first. */
 export const firstToAnswer = (
@@ -176,6 +195,8 @@ export const tailscaleCandidates = async (
 /** Everything {@link rediscoverHub} calls out to, injectable so a test never touches the real network or `CONFIG_PATH`. */
 export interface RediscoverProbes {
   readonly browseMdns?: () => Promise<string[]>;
+  /** The id of the hub this machine joined; `config.json`'s `hubId` when not given. */
+  readonly joinedHubId?: string;
   readonly log?: (line: string) => void;
   readonly port?: number;
   readonly probe?: (httpUrl: string) => Promise<boolean>;
@@ -190,6 +211,12 @@ export interface RediscoverProbes {
  * Re-runs the rungs that can find a hub without being told one: cached → mDNS
  * → tailscale-walk. On a hit, repins the winner into the CLI's config the same
  * way `discoverHub` does, and returns it.
+ *
+ * A hit is the hub this machine joined and no other: one whose `/health`
+ * says the id `config.json` recorded for it (machine-agent.ts records it). A
+ * second hub on the same LAN or tailnet answers too, and taking the first to
+ * answer let it capture this machine. With no id recorded, nothing is taken:
+ * the agent stays on the address it has.
  *
  * Skips two of `discoverHub`'s five rungs on purpose: `--hub`/env have nothing
  * new to read this long after `cawco up` started, and localhost is not a
@@ -208,19 +235,35 @@ export const rediscoverHub = async (
     ((): void => {
       // no-op: a caller that doesn't want narration doesn't get any
     });
-  const probe = probes.probe ?? probeHub;
+  const joined = probes.joinedHubId ?? (await readConfig())?.hubId;
+  if (!joined) {
+    note(
+      "[rediscover] no joined hub id is recorded, so no other address is taken — the existing backoff series continues"
+    );
+    return undefined;
+  }
+  return await walkRungs(probes, joined, note);
+};
+
+/** The rungs, cached → mDNS → tailscale, held to the hub `joined`. */
+const walkRungs = async (
+  probes: RediscoverProbes,
+  joined: string,
+  note: (line: string) => void
+): Promise<string | undefined> => {
+  const probe = probes.probe ?? joinedHubAt(joined, note);
   const findMdns = probes.browseMdns ?? browseMdns;
   const findTailscale = probes.tailscaleCandidates ?? tailscaleCandidates;
   const port =
     probes.port ?? Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
 
+  // The same hub at a new address: its id stays recorded.
+  const repin =
+    probes.repin ??
+    ((httpUrl: string) => writeConfig({ hubUrl: httpUrl, hubId: joined }));
   const settle = async (httpUrl: string, rung: string): Promise<string> => {
     note(`[rediscover/${rung}] ${httpUrl} answered — repinning`);
-    if (probes.repin) {
-      await probes.repin(httpUrl);
-    } else {
-      await writeConfig({ hubUrl: httpUrl });
-    }
+    await repin(httpUrl);
     return httpUrl;
   };
 

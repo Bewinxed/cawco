@@ -1,9 +1,28 @@
-import { CAWCO_ENV, readEnv } from "@cawco/core";
+import {
+  CAWCO_ENV,
+  OWNER_COOKIE,
+  OWNER_COOKIE_SECURE,
+  readEnv,
+} from "@cawco/core";
+import { PAGE_ORIGIN_HEADER } from "@cawco/core/browser-gate";
 import {
   HUB_UNREACHABLE,
   HUB_UNREACHABLE_HEADER,
 } from "#lib/cawco/hub-read.js";
+import { publicOrigin } from "../../../../public-origin.js";
 import type { RequestHandler } from "./$types";
+
+/** The browser's paired-device cookie, as one `Cookie` value; none without one. */
+const ownerCookieOf = (cookie: string | null): string | undefined =>
+  cookie
+    ?.split(";")
+    .map((part) => part.trim())
+    .filter(
+      (part) =>
+        part.startsWith(`${OWNER_COOKIE}=`) ||
+        part.startsWith(`${OWNER_COOKIE_SECURE}=`)
+    )
+    .join("; ") || undefined;
 
 const WS_SCHEME = /^ws(s?):\/\//;
 const TRAILING_WS_PATH = /\/ws\/?$/;
@@ -49,6 +68,9 @@ async function proxyToHub(
   const url = new URL(request.url);
   const targetUrl = `${HUB_URL}/api/${path}${url.search}`;
   const authorization = request.headers.get("authorization");
+  // The person's paired-device cookie and nothing else of the browser's
+  // (core hub-auth.ts): the hub reads who is calling from it.
+  const cookie = ownerCookieOf(request.headers.get("cookie"));
 
   const fileName = request.headers.get("x-file-name");
   // A video element reads a machine's clip in ranges, and Safari plays none
@@ -66,6 +88,15 @@ async function proxyToHub(
           request.headers.get("content-type") || "application/json",
         // Forward relevant headers
         ...(authorization && { Authorization: authorization }),
+        ...(cookie && { Cookie: cookie }),
+        // What a pairing is named by ("Chrome on Linux", hub hub-auth.ts).
+        ...(request.headers.has("user-agent") && {
+          "User-Agent": request.headers.get("user-agent") as string,
+        }),
+        // The page's own origin, which the gate (hooks.server.ts) found
+        // ours: an https one gets its cookie with `__Host-` and `Secure`.
+        [PAGE_ORIGIN_HEADER]: publicOrigin(Object.fromEntries(request.headers))
+          .origin,
         ...(clientAddress && { "X-Cawco-Client-Address": clientAddress }),
         ...(fileName && { "X-File-Name": fileName }),
         ...(range && { Range: range }),
@@ -107,6 +138,15 @@ async function proxyToHub(
         ...(response.headers.has("Retry-After") && {
           "Retry-After": response.headers.get("Retry-After") as string,
         }),
+        // A pairing approved, or pairing turned on from this browser: its
+        // device cookie, set by the hub (HttpOnly, SameSite=Strict).
+        ...(response.headers.has("Set-Cookie") && {
+          "Set-Cookie": response.headers.get("Set-Cookie") as string,
+        }),
+        // The hub requires paired devices and this browser is none.
+        ...(response.headers.has("X-Cawco-Pairing") && {
+          "X-Cawco-Pairing": response.headers.get("X-Cawco-Pairing") as string,
+        }),
         ...Object.fromEntries(
           (response.status === PARTIAL_CONTENT
             ? RANGE_HEADERS
@@ -147,11 +187,17 @@ export const GET: RequestHandler = async ({
   getClientAddress,
 }) => proxyToHub(request, params.path, getClientAddress());
 
-export const POST: RequestHandler = async ({ request, params }) =>
-  proxyToHub(request, params.path);
+export const POST: RequestHandler = async ({
+  request,
+  params,
+  getClientAddress,
+}) => proxyToHub(request, params.path, getClientAddress());
 
-export const PUT: RequestHandler = async ({ request, params }) =>
-  proxyToHub(request, params.path);
+export const PUT: RequestHandler = async ({
+  request,
+  params,
+  getClientAddress,
+}) => proxyToHub(request, params.path, getClientAddress());
 
 export const PATCH: RequestHandler = async ({ request, params }) =>
   proxyToHub(request, params.path);

@@ -284,21 +284,49 @@ Claude's SDK status, OpenCode's `mcp.status()`, and pi's explicit **Not supporte
 The machine row carries the worst state; its popover names every harness and
 its connection result.
 
-## The trust boundary: the tailnet is the perimeter
+## The trust boundary: who may call the hub
 
-CawCo is a single-operator fleet reachable only over a tailnet (or a trusted LAN), and
-that network boundary *is* the authentication. It is stated here because several things in
-the system only make sense once it is: the hub's `/ws` accepts a `register` for any
-`machineId` and relays any `control` verb without a token
-(`packages/hub/src/registry.ts`, `packages/hub/src/server.ts` `case 'register'`); sessiond's
-unix socket authorizes by filesystem permission alone — `0600` inside a `0700` directory,
-which is the whole of design §9 (`packages/sessiond/src/server.ts:151-166`); and anyone who
-can reach the hub's API can change the fleet's update setting or press Install now on a
-machine (`packages/hub/src/binary-updates.ts`), which installs only a build signed with the
-release key. Anyone who can open a socket to the hub can already spawn a
-session with an arbitrary `cwd`, which is arbitrary code execution as the operator. No
-in-band control adds capability beyond that, so adding tokens *inside* the perimeter would
-be ceremony; keeping the perimeter closed is the actual control.
+CawCo is a single-operator fleet reachable over a tailnet (or a trusted LAN). Every
+request to the hub is one class, read from the credential it presents
+(`packages/hub/src/hub-auth.ts`): the **hub** itself (an in-memory secret on its own
+self-calls, `hub-self.ts`), a **session** (`Authorization: Bearer <its credential>`), the
+**owner** (a paired device's token, `Authorization: Owner <token>` or the browser's
+`cawco-owner` cookie), a **machine** (its key's proof), or **anonymous**. Every route is the
+owner's unless `hub-auth.ts` `RULES` lists it for sessions, machines or anyone: a route
+that is added starts closed. The hub runs in one of two modes, the person's one fleet
+setting, "Require paired devices" (Configure › Devices):
+
+- **Trusted** (the default): being on the network is enough for the person's own devices,
+  so anonymous is the owner. Three things hold even here. A request that presents a session
+  credential is that session and never the owner: it is refused on every owner route, so a
+  session's tool path cannot act as the person, whatever else it sends. Agents stay with the
+  hub they joined: rediscovery (`packages/agent/src/discovery.ts` `rediscoverHub`) takes
+  only a hub whose `/health` says the id `config.json` recorded, never the first responder.
+  A boundaried workspace reaches nothing but its tool door.
+- **Pairing**: anonymous reaches only the open routes (`/health`, `/install.sh`, a
+  pairing's start and poll, and routes that authenticate their own caller). A machine is
+  admitted with an Admit click, which hands it a 32-byte key over its socket once (kept in
+  `machine-key` beside `config.json`, sealed on the hub); from then on it answers the nonce
+  the hub sends on every `/ws` connection with `HMAC(key, nonce ‖ hubId ‖ machineId)`, and
+  signs what it asks over HTTP (`packages/core/src/machine-key.ts`). A connection that
+  proves nothing is held as waiting; one that names an admitted machine without its proof
+  is refused, and never evicts the machine's own. Each owner client pairs once, in RFC
+  8628's shape, approved from a paired device or the pinned Telegram chat; the hub keeps
+  each token's sha256. The CLI's owner commands ask for one approval per run and keep the
+  token in memory. Sessions keep their tools: their harnesses reach the hub through their
+  machine's loopback gateway, which signs each call with the machine's key.
+
+What a session once did on the person's routes is its own tool now: `archive_workspace`
+for its own delegates' workspaces, and `update_machines`, which asks the person first in
+pairing mode. Sessiond's unix socket still authorizes by filesystem permission alone —
+`0600` inside a `0700` directory, design §9 (`packages/sessiond/src/server.ts:151-166`).
+
+What is left in both modes: on the hub's machine, an unboundaried session runs as the
+hub's own Unix user and can open its database and `secrets.key`; on a machine with a
+paired browser, a same-user process can read that browser's profile. Only a workspace
+boundary closes file-level access (it hides the hub's folder, `cawcoConfigDir`, every
+credential store). On a LAN address over plain http, an owner token crosses in the clear;
+over the tailnet it rides WireGuard. A machine's key never crosses after admission.
 
 What follows from that, concretely, and what must stay true:
 

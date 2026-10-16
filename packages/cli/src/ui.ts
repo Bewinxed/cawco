@@ -9,6 +9,17 @@ import { spawn } from "bun";
 const HTTP_PREFIX = /^http/;
 
 /**
+ * Bun's client, which takes headers on its constructor ("In Bun, you can
+ * also set custom headers directly in the constructor",
+ * bun.com/docs/runtime/http/websockets); the DOM's type, loaded here too,
+ * declares protocols alone.
+ */
+const BunWebSocket = WebSocket as unknown as new (
+  url: string,
+  options?: Bun.WebSocketOptions
+) => WebSocket;
+
+/**
  * Serves the dashboard on this machine, whichever machine that is.
  *
  * The built dashboard is an adapter-node server: it renders pages and knows
@@ -40,6 +51,12 @@ const isHubPath = (path: string): boolean =>
  * through an outbox, so a slow side holds frames rather than losing them.
  */
 interface Relay {
+  /**
+   * The browser's paired-device cookie, carried to the hub's socket: a hub
+   * that requires paired devices opens it to the person alone (hub
+   * hub-auth.ts).
+   */
+  cookie: string | null;
   /** The socket this process opened to the hub. */
   hub: WebSocket | null;
   /** Frames the browser sent before the hub socket opened. */
@@ -102,6 +119,7 @@ export async function serveUi({
         if (
           self.upgrade(request, {
             data: {
+              cookie: request.headers.get("cookie"),
               hub: null,
               queued: [],
               search: url.search,
@@ -176,8 +194,11 @@ export async function serveUi({
         const toBrowser = new Outbox(serverTransport(browser, true));
         browser.data.toBrowser = toBrowser;
         const wsOrigin = hub.origin.replace(HTTP_PREFIX, "ws");
-        const upstream = new WebSocket(
-          `${wsOrigin}/ws/dashboard${browser.data.search}`
+        const upstream = new BunWebSocket(
+          `${wsOrigin}/ws/dashboard${browser.data.search}`,
+          {
+            headers: browser.data.cookie ? { cookie: browser.data.cookie } : {},
+          }
         );
         browser.data.hub = upstream;
 

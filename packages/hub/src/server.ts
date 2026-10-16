@@ -1,9 +1,10 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { hostname as osHostname } from "node:os";
 import { join, posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
+  AdmissionPayload,
   AgentBusyReport,
   AgentRow,
   ArchiveView,
@@ -232,6 +233,7 @@ import {
   type NeutralSystemMessage,
   namedAccount,
   namedAmong,
+  PAIRING_REQUIRED,
   PLACEMENT_STRATEGIES,
   type PlacementPreview,
   type PlacementStrategy,
@@ -307,6 +309,7 @@ import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
+import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
@@ -320,6 +323,7 @@ import type { UpstreamRules } from "@cawco/core/upstream-guard";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
+import { z } from "zod";
 import {
   type AccountProber,
   accountOfIdentity,
@@ -334,7 +338,7 @@ import {
 } from "./accounts";
 import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
-import { adminTools, isAdminWrite } from "./admin-tools";
+import { tool as adminTool, adminTools, isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createArtifactSessions } from "./artifact-session";
 import { createArtifactDocs } from "./artifacts/docs";
@@ -427,11 +431,7 @@ import {
   decisionRoutes,
 } from "./decisions";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
-import {
-  hubHttpUrl,
-  type SendDelivery,
-  type SendHold,
-} from "./delegation-actions";
+import type { SendDelivery, SendHold } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree } from "./delegation-tree";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
@@ -455,7 +455,9 @@ import { accountForecasts, carrySequence } from "./forecast";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
+import { addressOf, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
+import { hubHttpUrl, selfFetch } from "./hub-self";
 import { createIngress, ingressRoutes } from "./ingress";
 import { jevAccess } from "./jev";
 import { JevFailed, jevAttach, jevType, offLine } from "./jev-placement";
@@ -1288,6 +1290,12 @@ const isEnvelope = (value: unknown): value is Envelope =>
   value !== null &&
   typeof (value as Envelope).verb === "string" &&
   typeof (value as Envelope).machineId === "string";
+
+/** A request's session credential (`Authorization: Bearer …`), or null: never the person's `Owner` token. */
+const bearerOf = (request: Request): string | null => {
+  const authorization = request.headers.get("authorization");
+  return authorization?.startsWith("Bearer ") ? authorization : null;
+};
 
 const ack = (envelope: Envelope): Envelope<{ ok: true }> => ({
   verb: envelope.verb,
@@ -5383,6 +5391,13 @@ export const createServer = (
    * inside the boundary or refuses to start it. Any other spawn passes as is.
    */
   const identities = createSessionIdentities(db);
+  // Who may call the hub: the mode, the person's devices, machines' keys
+  // (hub-auth.ts). Its hooks are set once the sockets they reach exist.
+  const hubAuth = createHubAuth({
+    db: db.hubAuth,
+    hubId,
+    session: (authorization) => identities.resolve(authorization),
+  });
   /**
    * ONE LAUNCH IN FLIGHT PER SESSION. A launch carries the credential minted
    * for it ({@link bounded}), and minting replaces the one hash the hub
@@ -12928,6 +12943,167 @@ export const createServer = (
   /** What each fleet machine proves itself with to the git remote (machine-credentials.ts). */
   const machineCredentials = createMachineCredentials();
 
+  // ── Who may connect (hub-auth.ts) ──────────────────────────────────────
+  /** Each machine socket's nonce, sent on open, answered by its register. */
+  const machineNonces = new Map<string, string>();
+  /** The machine each socket registered as: it speaks for that one alone. */
+  const socketMachines = new Map<string, string>();
+  /** Sockets held waiting for the person, by the machine they claim. */
+  const waitingSockets = new Map<string, string>();
+  /** A socket the hub may close, and the address it came from. */
+  type AuthSocket = HubSocket & {
+    close: (code?: number, reason?: string) => void;
+    readonly remoteAddress?: string;
+  };
+  /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
+  const dashboardDevices = new Map<AuthSocket, string | null>();
+
+  /**
+   * Whether `message`, a register, may stand: in trusted mode always; in
+   * pairing mode when it answers this socket's nonce with its machine's key.
+   * A machine admitted with a key that did not prove it is refused and its
+   * connection closed (a forged register by a known id); a machine never
+   * admitted is held, told it waits, and listed for the person to Admit.
+   * Neither touches the machine's real connection.
+   */
+  const registerProven = (ws: AuthSocket, message: Envelope): boolean => {
+    const bound = socketMachines.get(ws.id) ?? waitingSockets.get(ws.id);
+    if (bound && bound !== message.machineId) {
+      const fault = `register refused: this connection registered as machine ${bound}, not ${message.machineId}`;
+      console.warn(`[hub-auth] ${fault}`);
+      sendFrame(ws, refusalFrame(message, fault));
+      return false;
+    }
+    const nonce = machineNonces.get(ws.id);
+    const proof = (message.payload as { proof?: unknown } | undefined)?.proof;
+    const verdict = nonce
+      ? hubAuth.proveSocket(
+          message.machineId,
+          nonce,
+          typeof proof === "string" ? proof : undefined
+        )
+      : "unknown";
+    if (verdict === "proven" || hubAuth.mode() === "trusted") {
+      socketMachines.set(ws.id, message.machineId);
+      return true;
+    }
+    if (verdict === "wrong") {
+      const fault = `register refused: machine ${message.machineId} is admitted with a key, and this connection did not prove it. If this is that machine and it lost its key, remove it from Machines and admit it again.`;
+      console.warn(`[hub-auth] ${fault} (from ${ws.remoteAddress})`);
+      sendFrame(ws, refusalFrame(message, fault));
+      ws.close(4403, "machine key not proven");
+      return false;
+    }
+    if (waitingSockets.get(ws.id) !== message.machineId) {
+      holdWaiting(ws, message);
+    }
+    return false;
+  };
+
+  /** A connection that proved no key, from a machine never admitted: held, told it waits, listed for the person. */
+  const holdWaiting = (ws: AuthSocket, message: Envelope): void => {
+    const identity = message.payload as {
+      hostname?: unknown;
+      os?: unknown;
+    };
+    waitingSockets.set(ws.id, message.machineId);
+    hubAuth.hold({
+      machineId: message.machineId,
+      hostname:
+        typeof identity.hostname === "string" ? identity.hostname : null,
+      platform: typeof identity.os === "string" ? identity.os : null,
+      address: ws.remoteAddress ?? null,
+      since: Date.now(),
+      socket: ws.id,
+      admit: (key) =>
+        sendFrame(ws, {
+          verb: "admission",
+          machineId: message.machineId,
+          payload: { kind: "admitted", key },
+        } satisfies Envelope<AdmissionPayload>),
+      refuse: (reason) => ws.close(4403, reason),
+    });
+    sendFrame(ws, {
+      verb: "admission",
+      machineId: message.machineId,
+      payload: {
+        kind: "waiting",
+        message:
+          "This hub requires paired devices: this machine waits until the person admits it on the dashboard's Machines list.",
+      },
+    } satisfies Envelope<AdmissionPayload>);
+  };
+
+  /** Writes this hub's own machine's key where its agent reads it, and keeps it: no click for the hub's own machine. */
+  const keyOwnMachine = async (): Promise<string> => {
+    const own = await hostMachineId();
+    const key = hubAuth.mintMachineKey(own);
+    await writeMachineKey(key);
+    return own;
+  };
+
+  hubAuth.setHooks({
+    asked: (request) => telegram?.askPairing(request),
+    settled: (code, verdict) => telegram?.settlePairing(code, verdict),
+    changed: (frame) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: frame,
+      } satisfies Envelope<FramePayload>),
+    deviceRemoved: (deviceId) => {
+      for (const [socket, device] of dashboardDevices) {
+        if (device === deviceId) {
+          socket.close(4401, PAIRING_REQUIRED);
+        }
+      }
+    },
+    pairingOn: () => {
+      // Every machine connected now is admitted: handed its key on its own
+      // socket, kept connected. The hub's own machine's key is written for
+      // its agent too, connected or not.
+      detach(
+        (async () => {
+          const own = await keyOwnMachine();
+          for (const id of registry.machineIds()) {
+            const socket = registry.agent(id);
+            if (!socket || id === own) {
+              continue;
+            }
+            sendFrame(socket, {
+              verb: "admission",
+              machineId: id,
+              payload: { kind: "admitted", key: hubAuth.mintMachineKey(id) },
+            } satisfies Envelope<AdmissionPayload>);
+          }
+          console.log(
+            `[hub-auth] admitted the ${registry.machineIds().length} machine(s) connected as pairing turned on`
+          );
+        })(),
+        "pairing on: admit connected machines"
+      );
+      // Every dashboard the hub trusted by its network opens again as what
+      // it is: a paired device, or one that must pair.
+      for (const [socket, device] of dashboardDevices) {
+        if (device === null) {
+          socket.close(4401, PAIRING_REQUIRED);
+        }
+      }
+    },
+  });
+  // The pinned chat approves a pairing as a paired device does.
+  telegram?.setPairingAnswer((code, approve) =>
+    hubAuth.answer(code, approve, "via Telegram")
+  );
+  // A hub that requires paired devices keys its own machine at every start,
+  // so its agent never waits for a click.
+  const keyAtStart = () => {
+    if (hubAuth.mode() === "pairing") {
+      detach(keyOwnMachine(), "own machine key");
+    }
+  };
+  keyAtStart();
+
   /**
    * Project moves (moves.ts): a machine's control throws {@link MoveAway}
    * when the machine is not here or went while it answered, so the job
@@ -17449,10 +17625,142 @@ export const createServer = (
     },
     workspaces: (id8) => db.workspacesNamed(id8),
   };
+  /**
+   * What sessions once did on the person's routes, as their own tools, so a
+   * hub that requires paired devices still lets them (hub-auth.ts):
+   *
+   * - `archive_workspace`, for `POST /api/workspaces/:id/archive`: a
+   *   workspace one of the caller's own delegates works in, and no other.
+   * - `update_machines`, for `POST /api/binary-updates/check` and `POST
+   *   /api/agents/:id/update`: the check runs at once; installing asks the
+   *   person first when the hub requires paired devices (admin-asks.ts),
+   *   and runs at once while it trusts its network.
+   */
+  const hubTools = (actor: InstanceRow | undefined) => {
+    const me = (): InstanceRow => {
+      if (!actor) {
+        throw new Error("Discovery cannot execute tools");
+      }
+      return actor;
+    };
+    const ok = (data: unknown) => ({
+      content: [{ type: "text" as const, text: JSON.stringify(data) }],
+      structuredContent: data,
+    });
+    const said = async (response: Response): Promise<unknown> => {
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(text || `the hub answered ${response.status}`);
+      }
+      return JSON.parse(text) as unknown;
+    };
+    return [
+      adminTool(
+        "archive_workspace",
+        "Archive a workspace one of your own delegates worked in, once its work has landed (its id or the short id in its delegate's name). Refused while its clone holds work that is nowhere else, and for a workspace none of your delegates worked in.",
+        { workspace: z.string().trim().min(1) },
+        async ({ workspace }) => {
+          const caller = me();
+          const named = db.workspacesNamed(workspace);
+          if (named.length !== 1) {
+            throw new Error(
+              named.length === 0
+                ? `No workspace ${workspace} on this hub.`
+                : `${workspace} names ${named.length} workspaces; give more of its id.`
+            );
+          }
+          const [found] = named as [WorkspaceRow];
+          if (
+            !db
+              .workItemsIn(found.id)
+              .some((item) => item.parentInstanceId === caller.id)
+          ) {
+            throw new Error(
+              `Workspace ${found.id} is not one of your delegates': you archive only the workspaces of work items you delegated.`
+            );
+          }
+          const { workspace: archived, carry } = await workItems.archive(
+            found.id,
+            { discard: false }
+          );
+          workspaceArchived(archived);
+          return ok({ ...archived, carry });
+        }
+      ),
+      adminTool(
+        "update_machines",
+        "Look for a new CawCo build and tell every machine (check_only), or install it on one machine or every online machine. Installing asks the person first when the hub requires paired devices.",
+        {
+          machine: z
+            .string()
+            .optional()
+            .describe("A machine id; every online machine when left out."),
+          check_only: z.boolean().optional(),
+          reason: z
+            .string()
+            .max(300)
+            .optional()
+            .describe("One sentence on why: the person reads it on the ask."),
+        },
+        async (input) => {
+          const caller = me();
+          const machines = input.machine
+            ? [input.machine]
+            : registry.machineIds();
+          // The person first, before anything runs: installing the newest
+          // build on these machines.
+          if (!input.check_only && hubAuth.mode() === "pairing") {
+            await adminAsks.ask(caller, "update_machines", {
+              ...input,
+              machines,
+            });
+          }
+          const found = (await said(
+            await selfFetch(`${hubHttpUrl()}/api/binary-updates/check`, {
+              method: "POST",
+            })
+          )) as { version: string };
+          if (input.check_only) {
+            return ok({ found });
+          }
+          const updates = await Promise.all(
+            machines.map(async (id) => {
+              try {
+                return {
+                  machine: id,
+                  report: await said(
+                    await selfFetch(
+                      `${hubHttpUrl()}/api/agents/${encodeURIComponent(id)}/update`,
+                      {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({
+                          version: found.version,
+                          commandId: crypto.randomUUID(),
+                        }),
+                        timeout: false,
+                      }
+                    )
+                  ),
+                };
+              } catch (error) {
+                return {
+                  machine: id,
+                  error: error instanceof Error ? error.message : String(error),
+                };
+              }
+            })
+          );
+          return ok({ found, updates });
+        }
+      ),
+    ];
+  };
   const delegationMcp = createDelegationMcp({
     lifetime,
     tasks,
     connections,
+    hubTools,
     workItemTask: (id) => db.workItem(id)?.taskId,
     workItemLands: (id) => db.workItem(id)?.lands,
     duplicates: (projectId, task) => jevTasks.filed(projectId, task, "session"),
@@ -19177,6 +19485,12 @@ export const createServer = (
           );
         }
       })
+      // Who is calling, and whether they may (hub-auth.ts): every route is
+      // the person's unless it is listed for sessions, machines or anyone.
+      // A socket's upgrade passes here too.
+      .request(({ request, server }) =>
+        hubAuth.gate(request, addressOf(server, request))
+      )
       // Each route's body cap, met before a request is routed or its body
       // read (body-limits.ts).
       .request(async ({ request }) => await bodyLimitRefusal(request))
@@ -19205,6 +19519,7 @@ export const createServer = (
       // would chained (elysiajs.com/patterns/typescript).
       .use([
         websocket(),
+        hubAuth.routes(),
         dashboardErrorsRoutes(),
         delegateTypesRoutes(delegateTypes),
         projectDelegateTypesRoutes(projectTypes, (id) =>
@@ -19453,8 +19768,28 @@ export const createServer = (
             instanceIds: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
           }),
         },
-        async ({ body }) =>
-          Promise.all(body.instanceIds.map(installSessionIdentity))
+        // A machine's proof (hub-auth.ts `machine-proof`): the credential is
+        // minted onto that machine's socket, so only the machine asks, and
+        // only for its own sessions. The person may too while the hub
+        // trusts its network.
+        async ({ body, request, server, status }) => {
+          const caller = hubAuth.callerOf(request, addressOf(server, request));
+          if (caller.kind === "machine") {
+            const others = db
+              .getInstancesByIds(body.instanceIds)
+              .filter((row) => row.machineId !== caller.machineId)
+              .map((row) => row.id);
+            if (others.length > 0) {
+              return status(
+                403,
+                `Machine ${caller.machineId} installs credentials for its own sessions only; not ${others.join(", ")}.`
+              );
+            }
+          }
+          return await Promise.all(
+            body.instanceIds.map(installSessionIdentity)
+          );
+        }
       )
       .post(
         "/api/delegation/call/:instanceId",
@@ -19849,6 +20184,8 @@ export const createServer = (
         forgetInstances(gone.instanceIds);
         // A removed machine proves nothing to the git remote any more.
         machineCredentials.forget(params.machineId);
+        // Its key goes too: if it comes back, the person admits it again.
+        db.hubAuth.forgetMachineKey(params.machineId);
         // The frame that carries the machine list: every dashboard drops the
         // machine and its sessions without a reload.
         publishInstances(params.machineId);
@@ -22376,7 +22713,9 @@ export const createServer = (
         },
         async ({ body, request, status, server }) => {
           server?.timeout(request, 0);
-          const authorization = request.headers.get("authorization");
+          // A session's own credential, or none: the gate let through only
+          // a session, the person, or the hub acting for a session's tool.
+          const authorization = bearerOf(request);
           const identity = identities.resolve(authorization);
           if (authorization !== null && !identity) {
             return status(401, "Invalid session credential");
@@ -22453,7 +22792,9 @@ export const createServer = (
           },
         },
         ({ body, request, status }) => {
-          const authorization = request.headers.get("authorization");
+          // A session's own credential, or none: the gate let through only
+          // a session, the person, or the hub acting for a session's tool.
+          const authorization = bearerOf(request);
           const identity = identities.resolve(authorization);
           if (authorization !== null && !identity) {
             return status(401, "Invalid session credential");
@@ -22500,7 +22841,9 @@ export const createServer = (
           }),
         },
         async ({ body, status, request, server }) => {
-          const authorization = request.headers.get("authorization");
+          // A session's own credential, or none: the gate let through only
+          // a session, the person, or the hub acting for a session's tool.
+          const authorization = bearerOf(request);
           const identity = identities.resolve(authorization);
           if (authorization !== null && !identity) {
             return status(401, "Invalid session credential");
@@ -22537,7 +22880,9 @@ export const createServer = (
           }),
         },
         ({ body, request, status }) => {
-          const authorization = request.headers.get("authorization");
+          // A session's own credential, or none: the gate let through only
+          // a session, the person, or the hub acting for a session's tool.
+          const authorization = bearerOf(request);
           const identity = identities.resolve(authorization);
           if (authorization !== null && !identity) {
             return status(401, "Invalid session credential");
@@ -22579,7 +22924,9 @@ export const createServer = (
         },
         async ({ body, request, status, server }) => {
           server?.timeout(request, 0);
-          const authorization = request.headers.get("authorization");
+          // A session's own credential, or none: the gate let through only
+          // a session, the person, or the hub acting for a session's tool.
+          const authorization = bearerOf(request);
           const identity = identities.resolve(authorization);
           if (authorization !== null && !identity) {
             return status(401, "Invalid session credential");
@@ -22618,7 +22965,9 @@ export const createServer = (
           }),
         },
         ({ body, request, status }) => {
-          const authorization = request.headers.get("authorization");
+          // A session's own credential, or none: the gate let through only
+          // a session, the person, or the hub acting for a session's tool.
+          const authorization = bearerOf(request);
           const identity = identities.resolve(authorization);
           if (authorization !== null && !identity) {
             return status(401, "Invalid session credential");
@@ -23408,6 +23757,15 @@ export const createServer = (
         maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
         open(ws) {
           openLine(ws, false);
+          // The first frame on every connection: the nonce its register
+          // answers with its key's proof (hub-auth.ts).
+          const nonce = randomBytes(24).toString("base64url");
+          machineNonces.set(ws.id, nonce);
+          sendFrame(ws, {
+            verb: "admission",
+            machineId: "",
+            payload: { kind: "challenge", nonce, hubId: hubId() },
+          } satisfies Envelope<AdmissionPayload>);
         },
         drain(ws) {
           drainLine(ws);
@@ -23421,10 +23779,13 @@ export const createServer = (
             return;
           }
           // Only the machine's registered connection speaks for it: a
-          // superseded or unregistered one is not acted on, and is told so.
+          // superseded, unregistered or unproven one is not acted on, and is
+          // told so. A connection speaks for the one machine it registered
+          // as, never another.
           if (
             message.verb !== "register" &&
-            registry.agent(message.machineId)?.id !== ws.id
+            (socketMachines.get(ws.id) !== message.machineId ||
+              registry.agent(message.machineId)?.id !== ws.id)
           ) {
             const fault = `${message.verb} refused: this connection is not machine ${message.machineId}'s registered one; register first`;
             console.warn(`[hub] ${fault}`);
@@ -23434,6 +23795,11 @@ export const createServer = (
 
           switch (message.verb) {
             case "register": {
+              // Its key's proof first: an unproven register never evicts a
+              // machine's connection, nor hears anything meant for it.
+              if (!registerProven(ws, message)) {
+                break;
+              }
               lifecycle.disconnect(message.machineId);
               const claims = addressClaims(message.payload);
               if (claims) {
@@ -25664,6 +26030,14 @@ export const createServer = (
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: releases each kind of machine-owned state when its socket goes away.
         close(ws) {
           closeLine(ws);
+          machineNonces.delete(ws.id);
+          const claimed =
+            socketMachines.get(ws.id) ?? waitingSockets.get(ws.id);
+          socketMachines.delete(ws.id);
+          waitingSockets.delete(ws.id);
+          if (claimed) {
+            hubAuth.released(claimed, ws.id);
+          }
           // Calls waiting on it fail as it leaves (registry `onAgentLeft`),
           // here or at the register that replaced it, whichever came first.
           const machineId = registry.dropAgent(ws.id);
@@ -25775,6 +26149,27 @@ export const createServer = (
         open(ws) {
           // Before anything is sent to it: every frame goes through its line.
           openLine(ws, true);
+          // The person's alone (the gate refused anyone else at the upgrade;
+          // read again here, so nothing but the person ever holds one). Its
+          // device is kept, so removing the device closes it.
+          const caller = hubAuth.classify(
+            (name) => ws.headers[name],
+            "GET",
+            "/ws/dashboard",
+            ws.remoteAddress ?? null
+          );
+          if (caller.kind !== "owner") {
+            ws.close(4401, PAIRING_REQUIRED);
+            return;
+          }
+          dashboardDevices.set(ws, caller.device?.id ?? null);
+          if (hubAuth.mode() === "pairing") {
+            sendFrame(ws, {
+              verb: "frames",
+              machineId: "hub",
+              payload: hubAuth.frame(),
+            } satisfies Envelope<FramePayload>);
+          }
           // A page names the wire it was built for (WIRE_PROTOCOL, 6). One
           // that names none was built before pages did: a browser sends
           // `Origin` on every socket it opens, and the clients that are not
@@ -25935,6 +26330,7 @@ export const createServer = (
         }),
         close(ws) {
           closeLine(ws);
+          dashboardDevices.delete(ws);
           registry.dropDashboard(ws);
           // Follows nothing, awaits nothing: a stream subscription and a command
           // ack both die with the socket that asked for them.

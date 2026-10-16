@@ -177,6 +177,435 @@
         }
       }
     },
+    "/api/auth": {
+      "get": {
+        "operationId": "getApiAuth",
+        "responses": {
+          "200": {
+            "description": "getApiAuth 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubAuthState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "browser",
+                      "app",
+                      "cli"
+                    ]
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiPair",
+        "responses": {
+          "200": {
+            "description": "postApiPair 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingStart"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiPair 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiPair 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair/poll": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "deviceCode": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "deviceCode"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiPairPoll",
+        "responses": {
+          "200": {
+            "description": "postApiPairPoll 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiPairPoll200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiPairPoll 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair/requests": {
+      "get": {
+        "operationId": "getApiPairRequests",
+        "responses": {
+          "200": {
+            "description": "getApiPairRequests 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiPairRequests200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair/requests/{userCode}/approve": {
+      "post": {
+        "parameters": [
+          {
+            "name": "userCode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiPairRequestsByUserCodeApprove",
+        "responses": {
+          "200": {
+            "description": "postApiPairRequestsByUserCodeApprove 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiPairRequestsByUserCodeApprove200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiPairRequestsByUserCodeApprove 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair/requests/{userCode}/deny": {
+      "post": {
+        "parameters": [
+          {
+            "name": "userCode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiPairRequestsByUserCodeDeny",
+        "responses": {
+          "200": {
+            "description": "postApiPairRequestsByUserCodeDeny 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiPairRequestsByUserCodeDeny200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiPairRequestsByUserCodeDeny 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices": {
+      "get": {
+        "operationId": "getApiDevices",
+        "responses": {
+          "200": {
+            "description": "getApiDevices 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiDevices200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/devices/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiDevicesById",
+        "responses": {
+          "200": {
+            "description": "deleteApiDevicesById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiDevicesById200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiDevicesById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiDevicesById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/pairing": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "browser",
+                      "app"
+                    ]
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "required"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiAuthPairing",
+        "responses": {
+          "200": {
+            "description": "putApiAuthPairing 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiAuthPairing200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiAuthPairing 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/waiting": {
+      "get": {
+        "operationId": "getApiMachinesWaiting",
+        "responses": {
+          "200": {
+            "description": "getApiMachinesWaiting 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiMachinesWaiting200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/waiting/{machineId}/admit": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiMachinesWaitingByMachineIdAdmit",
+        "responses": {
+          "200": {
+            "description": "postApiMachinesWaitingByMachineIdAdmit 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiMachinesWaitingByMachineIdAdmit200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiMachinesWaitingByMachineIdAdmit 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/waiting/{machineId}/refuse": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiMachinesWaitingByMachineIdRefuse",
+        "responses": {
+          "200": {
+            "description": "postApiMachinesWaitingByMachineIdRefuse 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiMachinesWaitingByMachineIdRefuse200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiMachinesWaitingByMachineIdRefuse 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/dashboard-errors": {
       "post": {
         "requestBody": {
@@ -21674,6 +22103,241 @@
           "type"
         ]
       },
+      "postApiPairPoll200": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": [
+                  "authorization_pending",
+                  "slow_down"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": [
+                  "access_denied",
+                  "expired_token"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "approved"
+                ]
+              },
+              "device": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "device",
+              "status"
+            ]
+          }
+        ]
+      },
+      "getApiPairRequests200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/PairingRequest"
+        }
+      },
+      "postApiPairRequestsByUserCodeApprove200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiPairRequestsByUserCodeDeny200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "getApiDevices200": {
+        "type": "object",
+        "properties": {
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnerDevice"
+            }
+          },
+          "current": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "current",
+          "devices"
+        ]
+      },
+      "deleteApiDevicesById200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "putApiAuthPairing200": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/HubAuthState"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "$ref": "#/components/schemas/HubAuthMode"
+              },
+              "device": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "device",
+              "mode"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "$ref": "#/components/schemas/HubAuthMode"
+              },
+              "device": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              }
+            },
+            "required": [
+              "device",
+              "mode"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "$ref": "#/components/schemas/HubAuthMode"
+              },
+              "device": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "device",
+              "mode",
+              "token"
+            ]
+          }
+        ]
+      },
+      "getApiMachinesWaiting200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/WaitingMachine"
+        }
+      },
+      "postApiMachinesWaitingByMachineIdAdmit200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiMachinesWaitingByMachineIdRefuse200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "getApiDelegateTypes200": {
         "type": "object",
         "properties": {
@@ -27068,6 +27732,9 @@
         "description": "`frames`: everything a session produces, flowing agent→hub→dashboard. The\n`frame` kind is a neutral message; `raw` on it carries the harness's own\nevent verbatim.",
         "oneOf": [
           {
+            "$ref": "#/components/schemas/HubAuthFrame"
+          },
+          {
             "$ref": "#/components/schemas/StageFrame"
           },
           {
@@ -27191,6 +27858,7 @@
         "discriminator": {
           "propertyName": "kind",
           "mapping": {
+            "hub_auth": "#/components/schemas/HubAuthFrame",
             "stage": "#/components/schemas/StageFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
             "preview": "#/components/schemas/PreviewFrame",
@@ -28178,6 +28846,196 @@
         "required": [
           "expiresAt",
           "ticket"
+        ]
+      },
+      "HubAuthState": {
+        "description": "What `GET /api/auth` answers: the mode, what this request is, and, for a\npaired device, which one. Any client reads it to know whether it must pair.",
+        "type": "object",
+        "properties": {
+          "caller": {
+            "$ref": "#/components/schemas/CallerKind"
+          },
+          "device": {
+            "description": "The paired device this request came from; null for anything else.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "mode": {
+            "$ref": "#/components/schemas/HubAuthMode"
+          }
+        },
+        "required": [
+          "caller",
+          "mode"
+        ]
+      },
+      "CallerKind": {
+        "description": "What a request is to the hub.",
+        "type": "string",
+        "enum": [
+          "anonymous",
+          "machine",
+          "owner",
+          "session"
+        ]
+      },
+      "HubAuthMode": {
+        "description": "Which way the hub admits callers.",
+        "type": "string",
+        "enum": [
+          "pairing",
+          "trusted"
+        ]
+      },
+      "PairingStart": {
+        "description": "A client waiting to be paired (RFC 8628 §3.2's device authorization\nresponse): what it shows (`userCode`), what it polls with (`deviceCode`,\nkept by that client alone), how often, and for how long.",
+        "type": "object",
+        "properties": {
+          "deviceCode": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "type": "number"
+          },
+          "interval": {
+            "type": "number"
+          },
+          "userCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deviceCode",
+          "expiresIn",
+          "interval",
+          "userCode"
+        ]
+      },
+      "PairingRequest": {
+        "description": "A pairing waiting on the person, as every paired screen shows it.",
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "at": {
+            "type": "number"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DeviceKind"
+          },
+          "name": {
+            "description": "\"Chrome on Linux\", \"CawCo on iPhone\", \"cawco relay\".",
+            "type": "string"
+          },
+          "userCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "at",
+          "kind",
+          "name",
+          "userCode"
+        ]
+      },
+      "DeviceKind": {
+        "description": "The kind of client a pairing is for.",
+        "type": "string",
+        "enum": [
+          "app",
+          "browser",
+          "cli"
+        ]
+      },
+      "OwnerDevice": {
+        "description": "A paired device, as `GET /api/devices` lists it. Its token never leaves the hub but once.",
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DeviceKind"
+          },
+          "lastAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastUsedAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "id",
+          "kind",
+          "lastAddress",
+          "lastUsedAt",
+          "name"
+        ]
+      },
+      "WaitingMachine": {
+        "description": "A machine that dialled the hub without a key's proof and waits for the person.",
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hostname": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "platform": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "since": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "address",
+          "hostname",
+          "machineId",
+          "platform",
+          "since"
         ]
       },
       "DelegateType": {
@@ -34248,6 +35106,9 @@
           "byKind": {
             "type": "object",
             "properties": {
+              "waiting": {
+                "type": "number"
+              },
               "done": {
                 "type": "number"
               },
@@ -34255,9 +35116,6 @@
                 "type": "number"
               },
               "active": {
-                "type": "number"
-              },
-              "waiting": {
                 "type": "number"
               },
               "you": {
@@ -39302,6 +40160,7 @@
         "description": "The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision.",
         "type": "string",
         "enum": [
+          "admission",
           "control",
           "frames",
           "fs",
@@ -45896,6 +46755,39 @@
       },
       "T_1": {
         "type": "object"
+      },
+      "HubAuthFrame": {
+        "description": "What every paired screen keeps current (`verb: \"frames\"` from the hub):\nthe mode, the pairings waiting on the person, and the machines waiting to\nbe admitted. Sent whenever any of them changes.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hub_auth"
+            ]
+          },
+          "mode": {
+            "$ref": "#/components/schemas/HubAuthMode"
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairingRequest"
+            }
+          },
+          "waiting": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingMachine"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "mode",
+          "requests",
+          "waiting"
+        ]
       },
       "StageFrame": {
         "description": "The daemon's word on each change of a stage: every sheet of the workspace's that root hears it.",

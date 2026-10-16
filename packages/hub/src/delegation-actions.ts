@@ -23,8 +23,6 @@ import type {
   WorkflowAction,
 } from "@cawco/core";
 import {
-  CAWCO_ENV,
-  CAWCO_HUB_PORT,
   delegateTypeProblem,
   handoffMarker,
   IMAGE_GENERATION_TIMEOUT_MS,
@@ -43,21 +41,15 @@ import type {
   WorkItemSubmission,
 } from "./db/schema";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
+import { hubHttpUrl, selfFetch } from "./hub-self";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { type QueuedDelegate, resolveSpawnType } from "./work-items";
 import type { KeptWorkspace } from "./workspace-retire";
 
-const WS_SCHEME = /^ws/;
-const WS_PATH_SUFFIX = /\/ws$/;
-
-/** Where the hub answers REST, derived from the websocket url the daemon uses. */
-export const hubHttpUrl = (): string => {
-  const ws =
-    process.env[CAWCO_ENV.hubUrl] ??
-    `ws://localhost:${process.env[CAWCO_ENV.hubPort] ?? CAWCO_HUB_PORT}/ws`;
-  return ws.replace(WS_SCHEME, "http").replace(WS_PATH_SUFFIX, "");
-};
+// Every call this module makes is the hub calling its own routes, as itself
+// (hub-self.ts): `selfFetch` refuses any other origin.
+const fetch = selfFetch;
 
 /**
  * The fleet's delegate types (`@cawco/core`'s `DelegateType`), read once

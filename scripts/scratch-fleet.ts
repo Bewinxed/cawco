@@ -1385,15 +1385,28 @@ async function standUp(
     }
   };
 
+  /**
+   * The paired device's token the probe acts as the person with, once a
+   * spec turned "Require paired devices" on (hub hub-auth.ts); null while
+   * the hub trusts its network, where no credential is the person.
+   */
+  let owner: string | null = null;
+  const ownerHeaders = (): Record<string, string> =>
+    owner ? { authorization: `Owner ${owner}` } : {};
+  /** Acts as the person with `token` from here on (null: with no credential); the dashboard socket opens again with it. */
+  const authorize = (token: string | null) => {
+    owner = token;
+    socket?.close();
+    socket = undefined;
+  };
   const api = async <T>(path: string, body?: unknown): Promise<T> => {
     const response = await fetch(`${base}${path}`, {
       method: body === undefined ? "GET" : "POST",
-      ...(body === undefined
-        ? {}
-        : {
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
+      headers: {
+        ...ownerHeaders(),
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(30_000),
     });
     const text = await response.text();
@@ -1407,7 +1420,15 @@ async function standUp(
     if (socket?.readyState === WebSocket.OPEN) {
       return socket;
     }
-    const next = new WebSocket(`ws://127.0.0.1:${hubPort}/ws/dashboard`);
+    // Bun's client takes headers on its constructor; the DOM's type declares protocols alone.
+    const next = new (
+      WebSocket as unknown as new (
+        url: string,
+        options?: { headers: Record<string, string> }
+      ) => WebSocket
+    )(`ws://127.0.0.1:${hubPort}/ws/dashboard`, {
+      headers: ownerHeaders(),
+    });
     await new Promise<void>((done, fail) => {
       next.onopen = () => done();
       next.onerror = () => fail(new Error("the dashboard socket did not open"));
@@ -1867,6 +1888,7 @@ async function standUp(
     repo,
     workdir,
     seen,
+    authorize,
     launch,
     stop,
     freeze,

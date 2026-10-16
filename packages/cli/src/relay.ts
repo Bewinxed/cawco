@@ -16,6 +16,7 @@
  */
 import { CAWCO_ENV, type RelayView, readEnv } from "@cawco/core";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
+import { OwnerApprovalError, ownerFetch } from "./owner";
 import { callTool, toolDoor } from "./tools";
 
 export class RelayError extends Error {}
@@ -56,17 +57,24 @@ const call = async (
   if (!hub) {
     throw new RelayError("no hub found");
   }
-  const response = await fetch(`${hub}${path}`, {
-    method,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-    // Opening a relay waits on Tailscale and on GitHub's ping.
-    signal: AbortSignal.timeout(180_000),
-  }).catch((error: unknown) => {
+  const response = await ownerFetch(
+    `${hub}${path}`,
+    {
+      method,
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+      // Opening a relay waits on Tailscale and on GitHub's ping.
+      signal: AbortSignal.timeout(180_000),
+    },
+    "cawco relay"
+  ).catch((error: unknown) => {
+    if (error instanceof OwnerApprovalError) {
+      throw new RelayError(error.message);
+    }
     throw new RelayError(
       `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
     );

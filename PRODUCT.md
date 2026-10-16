@@ -89,7 +89,7 @@ Working product with 9 route surfaces (fleet board, session detail, project deta
 ## Product Principles
 
 1. **Trust the board.** Every liveness claim traces to a live source. An empty board with a live connection is a verifiable assertion that nothing needs the operator, not an absence of data.
-2. **The network is the perimeter.** Self-hosted, single-tenant, no cloud. Authentication is network reachability; the hub never binds publicly.
+2. **The network is the perimeter, and pairing is one switch away.** Self-hosted, single-tenant, no cloud; the hub never binds publicly. By default being on the network is enough for the person's own devices, and a session's credential is never the person. "Require paired devices" makes every browser, app and machine prove itself: each device pairs once, each machine is admitted with one click.
 3. **One board, every agent.** Harness-neutral by design — Claude Code, OpenCode, and pi are peers, not first-class-and-also-rans.
 4. **Ship the daemon, not the sessions.** sessiond exists so agent-daemon deploys don't kill running work. The process keeper is protocol-blind and ships approximately never.
 5. **Derived, not stored.** Status is computed at read time from live sources. The hub records what happened (durable history); the daemon reports what is happening (live truth). The UI renders the derivation and invents nothing.

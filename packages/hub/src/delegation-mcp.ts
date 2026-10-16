@@ -17,7 +17,12 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ACTION_TOOLS, type Actions } from "./actions";
-import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
+import {
+  type tool as adminTool,
+  adminTools,
+  answeredWithoutAsking,
+  isAdminWrite,
+} from "./admin-tools";
 import type { Caw } from "./caw";
 import type { Connections } from "./connections";
 import type {
@@ -60,6 +65,14 @@ type ActionTool = ReturnType<Actions["tools"]>[number];
 type RelayTool = ReturnType<Relay["tools"]>[number];
 type MemoryTool = ReturnType<Memory["tools"]>[number];
 type TriageTool = ReturnType<FleetWatch["tools"]>[number];
+/** One of the hub's own session tools (server.ts `hubTools`). */
+type HubTool = ReturnType<typeof adminTool>;
+
+/** The hub's own session tools, by name: what sessions once did on the person's routes. */
+export const HUB_TOOLS: ReadonlySet<string> = new Set([
+  "archive_workspace",
+  "update_machines",
+]);
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
   RoutineTool | IngressTool | ActionTool | RelayTool | MemoryTool;
@@ -258,6 +271,13 @@ export function createDelegationMcp(options: {
   /** Fleet watch's `triage_decide` (fleet-watch.ts), for a triage run. */
   triageTools?: (actor: InstanceRow | undefined) => TriageTool[];
   /**
+   * What a session once did on the person's routes, as its own tools
+   * (server.ts `hubTools`): archiving its own delegates' workspaces, and
+   * installing a build, which asks the person when the hub requires paired
+   * devices.
+   */
+  hubTools?: (actor: InstanceRow | undefined) => HubTool[];
+  /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
    */
@@ -382,6 +402,7 @@ export function createDelegationMcp(options: {
           options.relayTools,
           options.memoryTools,
           options.triageTools,
+          options.hubTools,
         ] as (
           | ((actor: undefined) => (ProjectTool | CawTool | TriageTool)[])
           | undefined
@@ -683,15 +704,17 @@ export function createDelegationMcp(options: {
     return await projectToolCall(actor, name, input, toolUseId);
   };
 
-  /** A routine, ingress, approved-action, relay or memory tool (routines.ts, ingress.ts, actions.ts, relay.ts, memory.ts), bound to the caller. */
+  /** A routine, ingress, approved-action, relay or memory tool (routines.ts, ingress.ts, actions.ts, relay.ts, memory.ts), or one of the hub's own (server.ts `hubTools`), bound to the caller. */
   const projectToolCall = async (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
     toolUseId: string | undefined
   ): Promise<CallToolResult | undefined> => {
-    let group: ProjectTool[] | undefined;
-    if (MEMORY_TOOLS.has(name)) {
+    let group: (ProjectTool | HubTool)[] | undefined;
+    if (HUB_TOOLS.has(name)) {
+      group = options.hubTools?.(actor);
+    } else if (MEMORY_TOOLS.has(name)) {
       group = options.memoryTools?.(actor, toolUseId);
     } else if (RELAY_TOOLS.has(name)) {
       group = options.relayTools?.(actor);

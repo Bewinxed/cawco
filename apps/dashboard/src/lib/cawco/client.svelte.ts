@@ -120,6 +120,7 @@ import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { deletePreview } from "./artifact-api";
 import { currentClientId } from "./client-id";
+import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   failureReason,
   type HubFailure,
@@ -2906,6 +2907,11 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  if (frame.kind === "hub_auth") {
+    takeAuthFrame(frame);
+    return;
+  }
+
   if (frame.kind === "fleet_watch.notices") {
     state.watchNotices = frame.notices;
     return;
@@ -4585,9 +4591,14 @@ function socketClosed(): void {
   // With the host, for the same reason the traffic sweep passes it: a socket
   // that dies mid-command must SAY so, not merely record it.
   noteDisconnect(streamState, Date.now(), streamHost);
-  if (!globalThis.__cawcoDisposing) {
-    scheduleReconnect();
-  }
+  // A hub that now requires paired devices closes the socket of a browser it
+  // does not know, and refuses its next: the app then shows the pairing
+  // screen (hub-auth.svelte.ts).
+  readAuth().then(() => {
+    if (!(globalThis.__cawcoDisposing || mustPair())) {
+      scheduleReconnect();
+    }
+  });
 }
 
 /** When anything last arrived on the socket: the heartbeat's proof of life. */

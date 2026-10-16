@@ -30,6 +30,8 @@
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
     "./browser-gate": "./src/browser-gate.ts",
+    "./hub-auth": "./src/hub-auth.ts",
+    "./machine-key": "./src/machine-key.ts",
     "./choices": "./src/choices.ts",
     "./decisions": "./src/decisions.ts",
     "./canvas": "./src/canvas.ts",

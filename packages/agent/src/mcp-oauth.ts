@@ -4,6 +4,7 @@ import {
   RESUMABLE_CAWCO_TOOLS,
 } from "@cawco/core/binary-updates";
 import { portHolder } from "@cawco/core/live-processes";
+import { PROOF_HEADER, proofHeaders } from "./hub-proof";
 import {
   fenced,
   holdRestart,
@@ -46,6 +47,14 @@ async function relayMcp(
   headers.delete("Host");
   headers.delete("Connection");
   headers.delete("Content-Length");
+  // This machine vouches for what its loopback gateway relays: its key's
+  // proof rides each call (hub hub-auth.ts `tool` routes), and a caller's
+  // own copy of the header never passes.
+  headers.delete(PROOF_HEADER);
+  const proof = await proofHeaders(request.method, hub.toString());
+  for (const [name, value] of Object.entries(proof)) {
+    headers.set(name, value);
+  }
   try {
     const response = await fetch(hub, {
       method: request.method,

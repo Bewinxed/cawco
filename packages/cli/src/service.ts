@@ -343,7 +343,10 @@ const hubOrigin = (): string =>
 
 /** A probe answers or it does not; nothing it finds is worth throwing over. */
 const probeJson = async <T>(url: string): Promise<T | undefined> => {
-  const answer = await fetch(url, {
+  // As this machine (core machine-key.ts): a hub that requires paired
+  // devices answers the fleet's rows to an admitted machine.
+  const { machineFetch } = await import("@cawco/core/machine-key");
+  const answer = await machineFetch(url, {
     signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
   }).catch(() => undefined);
   if (!answer?.ok) {

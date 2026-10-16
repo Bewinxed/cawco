@@ -25,6 +25,7 @@ typeOverrides:
     BlockMetadataReportKind: OpenEnums.BlockMetadataReportKind
     BlockMetadataToolStatus: OpenEnums.BlockMetadataToolStatus
     BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
+    CallerKind: OpenEnums.CallerKind
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawHarness: OpenEnums.CawHarness
@@ -45,6 +46,7 @@ typeOverrides:
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus
     DelegateTypeRole: OpenEnums.DelegateTypeRole
     DeleteApiJevTypesafeKey200Route: OpenEnums.DeleteApiJevTypesafeKey200Route
+    DeviceKind: OpenEnums.DeviceKind
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
     EffortLevel: OpenEnums.EffortLevel
     Exclude: OpenEnums.Exclude
@@ -66,6 +68,7 @@ typeOverrides:
     HomeStore: OpenEnums.HomeStore
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
     HookEvent: OpenEnums.HookEvent
+    HubAuthMode: OpenEnums.HubAuthMode
     InboundVia: OpenEnums.InboundVia
     InstanceRowEffort: OpenEnums.InstanceRowEffort
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
