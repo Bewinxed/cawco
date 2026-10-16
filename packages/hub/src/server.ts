@@ -9096,7 +9096,16 @@ export const createServer = (
         upstreamPosts: db.upstreamPosts(),
       };
     },
-    setUpstream: (posts) => db.setUpstreamPosts(posts),
+    // Every dashboard hears the answer at once (`fleet.upstream`); every
+    // machine with its next beat (upstream.ts).
+    setUpstream: (posts) => {
+      db.setUpstreamPosts(posts);
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "fleet.upstream", upstream: posts },
+      });
+    },
     write: (choices) => db.putSupervisorConfig(choices),
     synced: () => fanOutFleet(),
   };

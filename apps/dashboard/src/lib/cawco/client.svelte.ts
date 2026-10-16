@@ -2923,6 +2923,12 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  // The fleet's upstream answer, given anywhere: Needs you stops asking.
+  if (frame.kind === "fleet.upstream") {
+    state.fleetUpstream = frame.upstream;
+    return;
+  }
+
   if (frame.kind === "fleet.fetch") {
     for (const listener of fleetFetchListeners) {
       listener.heard(frame);
@@ -5430,7 +5436,6 @@ async function readProjectOffers(): Promise<void> {
   }
 }
 
-/** Fleet watch's needs-you notices, as the hub holds them now. */
 /** The fleet's upstream answer, as the hub holds it now. */
 async function readFleetUpstream(): Promise<void> {
   const read = await load<{ upstream: boolean | null }>("/api/fleet/choices");
@@ -5453,6 +5458,7 @@ export async function answerFleetUpstream(posts: boolean): Promise<void> {
   state.fleetUpstream = answered.upstream;
 }
 
+/** Fleet watch's needs-you notices, as the hub holds them now. */
 async function readWatchNotices(): Promise<void> {
   const read = await load<{ notices: FleetWatchNotice[] }>(
     "/api/fleet-watch/notices"

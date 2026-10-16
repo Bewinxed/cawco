@@ -27152,6 +27152,9 @@
             "$ref": "#/components/schemas/ProjectsChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/FleetUpstreamFrame"
+          },
+          {
             "$ref": "#/components/schemas/FleetFetchFrame"
           },
           {
@@ -27216,6 +27219,7 @@
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "decisions.changed": "#/components/schemas/DecisionsChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
+            "fleet.upstream": "#/components/schemas/FleetUpstreamFrame",
             "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "actions": "#/components/schemas/ActionsFrame",
@@ -47370,6 +47374,26 @@
         },
         "required": [
           "kind"
+        ]
+      },
+      "FleetUpstreamFrame": {
+        "description": "Hub-originated: the fleet's upstream answer (hub fleet-choices.ts\n`upstream`) was given or changed, from onboarding's Needs you row, a\nsetup page or the API: every dashboard takes it at once, so Needs you\nstops asking and each project's \"Same as the fleet\" names it.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fleet.upstream"
+            ]
+          },
+          "upstream": {
+            "description": "Whether agents may post to other people's repositories.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "upstream"
         ]
       },
       "FleetFetchFrame": {

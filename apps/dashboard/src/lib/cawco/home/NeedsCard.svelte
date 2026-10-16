@@ -811,10 +811,18 @@
   .peers > :global(.peer) {
     border-color: transparent;
   }
-  /* A choice's options are its words, longer than Deny and Approve: they
-     wrap onto a second line before either is cut. */
+  /* A choice's risk is the whole of what it asks: read whole, never cut. */
+  .row[data-kind="choice"] > .want {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: none;
+  }
+  /* A choice's options are its words, longer than Deny and Approve, too
+     long to stand side by side in the panel: they stack, each the text
+     column's width, so the two stay peers in size (The Peer Rule). */
   .row[data-kind="choice"] > .peers {
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
   }
   .peers > :global(.deny),
   .peers > :global(.deny:hover) {

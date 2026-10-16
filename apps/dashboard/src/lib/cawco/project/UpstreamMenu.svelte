@@ -2,7 +2,7 @@
   /**
    * The project ⋯ menu's upstream choice (ProjectHead): Other people's
    * repositories, opening onto its three answers. Same as the fleet names
-   * the fleet's answer beside it (unanswered reads as allowed, as the gate
+   * the fleet's answer under it (unanswered reads as allowed, as the gate
    * judges it); the other two are the project's own. `onchange` gets the
    * project's new answer, null for the fleet's.
    */
@@ -50,9 +50,14 @@
   </DropdownMenu.SubTrigger>
   <DropdownMenu.SubContent class="w-72">
     <DropdownMenu.RadioGroup onValueChange={choose} {value}>
-      <DropdownMenu.RadioItem value="fleet"
-        >{UPSTREAM_WORDS.inherit} · {fleetWords}</DropdownMenu.RadioItem
-      >
+      <!-- The fleet's answer under it, in meta ink: the row reads as
+           "Same as the fleet", never as a second copy of the one below. -->
+      <DropdownMenu.RadioItem value="fleet">
+        <span class="inherit" data-box>
+          <span>{UPSTREAM_WORDS.inherit}</span>
+          <span class="answer">{fleetWords}</span>
+        </span>
+      </DropdownMenu.RadioItem>
       <DropdownMenu.RadioItem value="off"
         >{UPSTREAM_WORDS.keepOff}</DropdownMenu.RadioItem
       >
@@ -62,3 +67,15 @@
     </DropdownMenu.RadioGroup>
   </DropdownMenu.SubContent>
 </DropdownMenu.Sub>
+
+<style>
+  .inherit {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+  .answer {
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+</style>

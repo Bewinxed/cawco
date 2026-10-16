@@ -534,6 +534,19 @@ export interface ProjectsChangedFrame {
 }
 
 /**
+ * Hub-originated: the fleet's upstream answer (hub fleet-choices.ts
+ * `upstream`) was given or changed, from onboarding's Needs you row, a
+ * setup page or the API: every dashboard takes it at once, so Needs you
+ * stops asking and each project's "Same as the fleet" names it.
+ */
+export interface FleetUpstreamFrame {
+  instanceId?: undefined;
+  kind: "fleet.upstream";
+  /** Whether agents may post to other people's repositories. */
+  upstream: boolean;
+}
+
+/**
  * Hub-originated: a download at the hub began (`fetching`) or landed. A fetch
  * runs after the request that asked for it has answered, so this is how
  * every dashboard learns what came of it. Exactly one of the four is set:
