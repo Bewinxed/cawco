@@ -55,7 +55,29 @@ export const CUSTODY_BOUND_MS = 90_000;
  */
 export const KEEPERS_ASK_AGAIN_MS = 10_000;
 
+/**
+ * How long an agent waits for its register's ack before the register has
+ * lapsed: the custody waiting on it fails, and the register goes again after
+ * a pause ({@link registerRetryMs}) with what the agent holds read fresh.
+ */
+export const REGISTER_ACK_MS = 120_000;
+
+/** The pause before the `attempt`th re-send of a register: 1 s, doubling, at most 30 s. */
+export const registerRetryMs = (attempt: number): number =>
+  Math.min(30_000, 1000 * 2 ** Math.min(attempt - 1, 5));
+
 // ── State ──────────────────────────────────────────────────────────────────
+
+/**
+ * The agent's hub connection: down; registering, its register sent and its
+ * ack not yet heard (`attempt`: how many times the ack did not come in time;
+ * `retrying`: a lapsed register waits for its pause and a fresh payload); or
+ * registered. A register goes out only while it is registering.
+ */
+export type Link =
+  | { kind: "down" }
+  | { kind: "registering"; attempt: number; retrying: boolean }
+  | { kind: "registered" };
 
 /** Why a machine is away: its socket closed (`agent`) or the hub started and has not heard it (`hub`). */
 export type AwayWhy = "agent" | "hub";
@@ -121,14 +143,14 @@ export type ArmingPhase =
 export interface HandoverState {
   arming: ArmingPhase;
   custody: Custody | null;
-  link: "down" | "registered";
+  link: Link;
   machines: Record<string, MachineState>;
   workspaces: Record<string, WorkspaceArm>;
 }
 
 export const initialHandover = (): HandoverState => ({
   machines: {},
-  link: "down",
+  link: { kind: "down" },
   custody: null,
   arming: { kind: "idle" },
   workspaces: {},
@@ -164,6 +186,12 @@ export type HandoverEvent =
   | { kind: "ask"; requestId: string }
   // The agent's hub connection.
   | { kind: "link-open" }
+  /** The hub's ack of this connection's register. */
+  | { kind: "register-ack" }
+  /** No ack came within {@link REGISTER_ACK_MS} of the last register. */
+  | { kind: "register-expired" }
+  /** A lapsed register's pause is over and what the agent holds is read fresh. */
+  | { kind: "register-due" }
   | { kind: "link-lost" }
   // Custody.
   | {
@@ -203,7 +231,10 @@ export type HandoverCommand =
   | { kind: "park"; requestId: string }
   | { kind: "publish"; requestId: string }
   // The agent.
+  /** Send this connection's register. */
   | { kind: "register" }
+  /** The register lapsed: the custody waiting on it fails, and the register is read fresh after `retryIn` ms. */
+  | { kind: "register-lapsed"; retryIn: number }
   | { kind: "announce" }
   | { kind: "read-keeper"; epoch: number; unit: string; keeper: string }
   | { kind: "hold"; unit: string; id: string; keeper: string }
@@ -718,6 +749,65 @@ const tick = (state: HandoverState, now: number): Stepped =>
     { state, commands: [] }
   );
 
+/**
+ * EVERY REGISTER THE AGENT SENDS IS ONE THIS STEP DECIDES. The first goes as
+ * the link opens, ahead of any probe: what the machine can do follows it on
+ * beats of its own (ea944761a). One whose ack does not come in time lapses,
+ * and goes again after its pause, once what the agent holds is read fresh,
+ * only while the link still waits for its ack: never after the ack, never on
+ * a link that is down.
+ */
+const linkStep = (
+  state: HandoverState,
+  event: Extract<
+    HandoverEvent,
+    {
+      kind:
+        | "link-open"
+        | "register-ack"
+        | "register-expired"
+        | "register-due"
+        | "link-lost";
+    }
+  >
+): Stepped => {
+  const { link } = state;
+  const at = (next: Link, commands: HandoverCommand[] = []): Stepped => ({
+    state: { ...state, link: next },
+    commands,
+  });
+  switch (event.kind) {
+    case "link-open":
+      return at({ kind: "registering", attempt: 0, retrying: false }, [
+        { kind: "register" },
+        { kind: "announce" },
+      ]);
+    case "register-ack":
+      return link.kind === "registering"
+        ? at({ kind: "registered" })
+        : { state, commands: [] };
+    case "register-expired": {
+      if (link.kind !== "registering" || link.retrying) {
+        return { state, commands: [] };
+      }
+      const attempt = link.attempt + 1;
+      return at({ kind: "registering", attempt, retrying: true }, [
+        { kind: "register-lapsed", retryIn: registerRetryMs(attempt) },
+      ]);
+    }
+    case "register-due":
+      return link.kind === "registering" && link.retrying
+        ? at({ ...link, retrying: false }, [{ kind: "register" }])
+        : { state, commands: [] };
+    default:
+      // What the next register hands back, its custody decides.
+      return {
+        state: { ...state, link: { kind: "down" }, custody: null },
+        commands: [],
+      };
+  }
+};
+
 /** The one step every part of the handover runs: the hub's presence and asks, the agent's link, custody and arming. */
 export const step = (state: HandoverState, event: HandoverEvent): Stepped => {
   switch (event.kind) {
@@ -730,15 +820,11 @@ export const step = (state: HandoverState, event: HandoverEvent): Stepped => {
     case "ask":
       return presenceStep(state, event);
     case "link-open":
-      // The register goes first and carries no probe: what the machine can
-      // do follows it on beats of its own (ea944761a).
-      return {
-        state: { ...state, link: "registered" },
-        commands: [{ kind: "register" }, { kind: "announce" }],
-      };
+    case "register-ack":
+    case "register-expired":
+    case "register-due":
     case "link-lost":
-      // What the next register hands back, its custody decides.
-      return { state: { ...state, link: "down", custody: null }, commands: [] };
+      return linkStep(state, event);
     case "custody-begin":
       return beginCustody(state, event);
     case "keeper-word":

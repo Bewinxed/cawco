@@ -78,6 +78,7 @@ import {
   step as handoverStep,
   initialHandover,
   type KeeperWord,
+  REGISTER_ACK_MS,
 } from "@cawco/core/handover";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
@@ -1360,43 +1361,50 @@ const attach = (
       payload.custody.state === "available" ? payload.custody.instances : []
     );
     let recoveryController: AbortController | undefined;
-    let registrationAttempt = 0;
-    let registrationDeadline: ReturnType<typeof setTimeout>;
-    const registrationExpired = () => {
-      if (awaitingRegisterAck && socket.readyState === WebSocket.OPEN) {
-        supervisor.failCustody(
-          custodyEpoch,
-          new Error(
-            "Registration did not provide a custody decision within 120 seconds"
-          )
-        );
-        registrationAttempt += 1;
-        const backoff = Math.min(
-          30_000,
-          1000 * 2 ** Math.min(registrationAttempt - 1, 5)
-        );
-        registrationDeadline = setTimeout(async () => {
-          if (awaitingRegisterAck && socket.readyState === WebSocket.OPEN) {
+    /** The wait for a register's ack, or a lapsed register's pause: cleared by the ack and by the connection's end. */
+    let registrationDeadline: ReturnType<typeof setTimeout> | undefined;
+    /** The register goes out, and its ack is waited for {@link REGISTER_ACK_MS}. */
+    const sendRegister = (): void => {
+      send(socket, {
+        verb: "register",
+        machineId: identity.machineId,
+        payload,
+      });
+      registrationDeadline = setTimeout(
+        () => obeyLink(agentStep({ kind: "register-expired" })),
+        REGISTER_ACK_MS
+      );
+    };
+    /**
+     * What the handover decides of a register past its first (core
+     * handover.ts `register-expired`, `register-due`): one whose ack did not
+     * come lapses, failing the custody that waited on it, and after its pause
+     * what the agent holds is read fresh and the step says whether it goes
+     * again. No register leaves this connection but by a step's command.
+     */
+    const obeyLink = (commands: HandoverCommand[]): void => {
+      for (const command of commands) {
+        if (command.kind === "register-lapsed") {
+          supervisor.failCustody(
+            custodyEpoch,
+            new Error(
+              `Registration did not provide a custody decision within ${REGISTER_ACK_MS / 1000} seconds`
+            )
+          );
+          registrationDeadline = setTimeout(async () => {
             payload = registerPayload(await readSessions());
-            if (!awaitingRegisterAck || socket.readyState !== WebSocket.OPEN) {
-              return;
-            }
-            custodyEpoch = supervisor.beginCustody(
-              payload.custody.state === "available"
-                ? payload.custody.instances
-                : []
-            );
-            send(socket, {
-              verb: "register",
-              machineId: identity.machineId,
-              payload,
-            });
-            registrationDeadline = setTimeout(registrationExpired, 120_000);
-          }
-        }, backoff);
+            obeyLink(agentStep({ kind: "register-due" }));
+          }, command.retryIn);
+        } else if (command.kind === "register") {
+          custodyEpoch = supervisor.beginCustody(
+            payload.custody.state === "available"
+              ? payload.custody.instances
+              : []
+          );
+          sendRegister();
+        }
       }
     };
-    registrationDeadline = setTimeout(registrationExpired, 120_000);
     /** This connection's way to ask the hub what a launch runs on, once it has registered. */
     const askHub = (envelope: Envelope): void => {
       if (socket.readyState === WebSocket.OPEN) {
@@ -1646,11 +1654,7 @@ const attach = (
     for (const command of agentStep({ kind: "link-open" })) {
       if (command.kind === "register") {
         firstRegisterSpawnedNothing(url);
-        send(socket, {
-          verb: "register",
-          machineId: identity.machineId,
-          payload,
-        });
+        sendRegister();
         yield* Effect.logInfo(`registered with ${url}`);
         markLive();
         reportServedCatalog(
@@ -1920,7 +1924,6 @@ const attach = (
      * straight through.
      */
     const heldSpawns: Envelope[] = [];
-    let awaitingRegisterAck = true;
     /** The hub holds this connection until the person admits the machine ({@link admission}). */
     let waitingAdmission = false;
     /**
@@ -2319,7 +2322,7 @@ const attach = (
           (envelope.payload as { addressContract?: unknown })
             .addressContract === true
         );
-        awaitingRegisterAck = false;
+        agentStep({ kind: "register-ack" });
         recordRegistered();
         // What each session is owed goes first, ahead of anything this ack
         // sets off: every frame the hub has not taken, then each running
@@ -2437,7 +2440,8 @@ const attach = (
         supervisor.dispatch(envelope);
         return;
       }
-      if (awaitingRegisterAck && beforeAck(envelope)) {
+      // Ahead of the register's ack: custody, taken on the ack.
+      if (handover.link.kind === "registering" && beforeAck(envelope)) {
         return;
       }
       // The hub's answer to a beat: the sessions it keeps awake.

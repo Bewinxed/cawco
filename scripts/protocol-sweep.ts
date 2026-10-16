@@ -11,9 +11,11 @@
  *   leads to a fresh spawn of a held session.
  * - Law B: a send while the machine is reconnecting is held, never failed;
  *   presence is read from one deadline.
- * - Law C: a register never follows a probe; a published ask was parked
- *   first; once quiescent, every workspace a session's process runs in has a
- *   judge of the current build, or says by name why it cannot.
+ * - Law C: every register is one `step` sends: a link's first goes before any
+ *   probe, none waits on a probe started with it, and none goes after its
+ *   link's ack or on a link that is down; a published ask was parked first;
+ *   once quiescent, every workspace a session's process runs in has a judge
+ *   of the current build, or says by name why it cannot.
  *
  * Then every named mutant (one break the product had, as a change to `step`)
  * must fail it: mutation testing at the reducer's grain (cacm.acm.org/practice/
@@ -75,6 +77,8 @@ interface Keeper {
 }
 
 interface World {
+  /** The hub's ack of this link's register has reached the agent. */
+  acked: boolean;
   agent: HandoverState;
   /** Keepers that gave custody their listing or their end, this custody. */
   answered: string[];
@@ -93,6 +97,10 @@ interface World {
   probed: boolean;
   // What the laws read: the hub's machine as the world knows it.
   registered: boolean;
+  /** A lapsed register waits for its pause and its fresh payload (`register-due`). */
+  retry: boolean;
+  /** This link's first register has gone. */
+  sentRegister: boolean;
   slow: Slow;
   until: number;
   /** The workspace: a session's process in it, its boundary and judge (the build that started it), and the keeper each runs on. */
@@ -169,10 +177,10 @@ const run = (
   const before = world[side];
   const { state, commands } = protocol.step(before, event);
   world[side] = state;
-  const held = new Set<string>();
+  const now: StepSoFar = { held: new Set<string>(), announced: false };
   for (const command of commands) {
     obeyHub(world, side, command);
-    obeyAgent(protocol, world, command, held);
+    obeyAgent(protocol, world, command, now);
   }
   if (side === "hub") {
     const presence = presenceOf(world.hub, MACHINE, world.now);
@@ -253,21 +261,47 @@ const absentTooSoon = (world: World, id: string): void => {
   }
 };
 
+/** What one step's commands have done so far: the sessions held, and whether a probe went out. */
+interface StepSoFar {
+  announced: boolean;
+  held: Set<string>;
+}
+
+/** Law C's register half: a register is one the link is waiting for, and no probe goes ahead of it. */
+const registerLaw = (world: World, now: StepSoFar): void => {
+  if (!world.linked) {
+    throw new Broken("Law C: a register went out on a link that is down");
+  }
+  if (world.acked) {
+    throw new Broken("Law C: a register went out after its link's ack");
+  }
+  if (world.probed && !world.sentRegister) {
+    throw new Broken("Law C: a link's first register followed a probe");
+  }
+  if (now.announced) {
+    throw new Broken("Law C: a register waited on a probe started with it");
+  }
+};
+
 /** A command of the agent's: the law it answers to, then the world's own effect. */
 const obeyAgent = (
   protocol: Protocol,
   world: World,
   command: HandoverCommand,
-  held: Set<string>
+  now: StepSoFar
 ): void => {
+  const { held } = now;
   switch (command.kind) {
     case "register":
-      if (world.probed) {
-        throw new Broken("Law C: a register followed a probe on its link");
-      }
+      registerLaw(world, now);
+      world.sentRegister = true;
+      return;
+    case "register-lapsed":
+      world.retry = true;
       return;
     case "announce":
       world.probed = true;
+      now.announced = true;
       return;
     case "read-keeper": {
       const alive = world.keepers[command.keeper]?.alive === true;
@@ -408,7 +442,10 @@ const ACTS: Act[] = [
       }
       world.agent = initialHandover();
       world.linked = false;
+      world.acked = false;
       world.probed = false;
+      world.sentRegister = false;
+      world.retry = false;
       world.build += 1;
       world.attached = [];
       world.pending = world.pending.filter((one) => one.side === "hub");
@@ -416,19 +453,54 @@ const ACTS: Act[] = [
     },
   },
   {
+    // The agent's connection opens and its register reaches the hub.
     name: "register",
     act: (protocol, world) => {
       if (world.linked) {
         return;
       }
-      run(protocol, world, "agent", { kind: "link-open" });
       world.linked = true;
+      world.acked = false;
+      world.probed = false;
+      world.sentRegister = false;
+      run(protocol, world, "agent", { kind: "link-open" });
       world.registered = true;
       run(protocol, world, "hub", {
         kind: "agent-register",
         machineId: MACHINE,
         now: world.now,
       });
+    },
+  },
+  {
+    // No ack within its wait: the agent's timer runs out.
+    name: "register expiry",
+    act: (protocol, world) => {
+      if (world.linked && !world.acked && !world.retry) {
+        run(protocol, world, "agent", { kind: "register-expired" });
+      }
+    },
+  },
+  {
+    // A lapsed register's pause is over and its payload is read, whatever
+    // came meanwhile: its ack, or the link's end.
+    name: "register due",
+    act: (protocol, world) => {
+      if (world.retry) {
+        world.retry = false;
+        run(protocol, world, "agent", { kind: "register-due" });
+      }
+    },
+  },
+  {
+    // The hub's ack reaches the agent, and custody begins.
+    name: "register ack",
+    act: (protocol, world) => {
+      if (!world.linked || world.acked) {
+        return;
+      }
+      world.acked = true;
+      run(protocol, world, "agent", { kind: "register-ack" });
       world.epoch += 1;
       world.answered = [];
       world.custodyKeepers = [CURRENT, RETIRING].filter(
@@ -466,7 +538,9 @@ const ACTS: Act[] = [
       if (world.linked) {
         run(protocol, world, "agent", { kind: "link-lost" });
         world.linked = false;
+        world.acked = false;
         world.probed = false;
+        world.sentRegister = false;
       }
     },
   },
@@ -521,7 +595,9 @@ const ACTS: Act[] = [
 /** Law C's quiescent half: nothing of the agent's is in flight, and it is registered. */
 const checkQuiet = (world: World): void => {
   const quiet =
-    world.linked && !world.pending.some((one) => one.side === "agent");
+    world.linked &&
+    world.acked &&
+    !world.pending.some((one) => one.side === "agent");
   if (!(quiet && world.ws.cli) || world.ws.judge?.build === world.build) {
     return;
   }
@@ -544,6 +620,9 @@ const startWorld = (
     hub: initialHandover(),
     agent: initialHandover(),
     linked: false,
+    acked: false,
+    sentRegister: false,
+    retry: false,
     build: 2,
     epoch: 0,
     slow,
@@ -873,6 +952,30 @@ const reversedFor =
       ? { ...stepped, commands: [...stepped.commands].reverse() }
       : stepped;
 
+/**
+ * A re-send its own timer decides, as daemon.ts `registrationExpired` did
+ * outside `step` before this change (on a flag of its own): here sent
+ * whatever came in its pause, the ack or the link's end.
+ */
+const resendOnItsTimer = (
+  _state: HandoverState,
+  event: HandoverEvent,
+  stepped: Stepped
+): Stepped =>
+  event.kind === "register-due"
+    ? { state: stepped.state, commands: [{ kind: "register" }] }
+    : stepped;
+
+/** A re-sent register that probes the machine again first. */
+const probeBeforeResend = (
+  _state: HandoverState,
+  event: HandoverEvent,
+  stepped: Stepped
+): Stepped =>
+  event.kind === "register-due"
+    ? { ...stepped, commands: [{ kind: "announce" }, ...stepped.commands] }
+    : stepped;
+
 /** Before dad89261b: a workspace a session's process ran in with no boundary was left for later. */
 const noRevive = (
   _state: HandoverState,
@@ -953,6 +1056,14 @@ const MUTANTS: Mutant[] = [
   {
     name: "probe before register",
     protocol: mutate(same, reversedFor("link-open")),
+  },
+  {
+    name: "probe before the re-sent register",
+    protocol: mutate(same, probeBeforeResend),
+  },
+  {
+    name: "re-send the register on its own timer, outside the step",
+    protocol: mutate(same, resendOnItsTimer),
   },
   {
     name: "leave a workspace whose session runs with no boundary for later",
