@@ -874,8 +874,9 @@ const PROBE_PROMPT = [
  * that ask raised on iOS 27.0 (the owner's phone and OS: at rest from
  * launch, as nothing taps there from a workspace) and on iOS 18.5, reached
  * through Needs you and the drawer, then its whole command opened and its
- * Deny tapped (its notification takes no push on an unauthorised simulator
- * app; that route is the Debug runs' `-push-route`). Only the probe's own ask is touched,
+ * Deny tapped (its notification is not reached: notifications are Pro's and
+ * this simulator's app is unentitled; that route is the Debug runs'
+ * `-push-route`). Only the probe's own ask is touched,
  * found by its ids; the probe is stopped and archived at the end.
  */
 async function askLive(kit: Kit, app: string, live: LiveHub): Promise<void> {
@@ -1122,54 +1123,16 @@ async function onSimulator(
       );
       return;
     }
-    // Notifications turned on as the owner has them: the hub sheet's "Turn
-    // on notifications", then iOS's own Allow (a first launch asks for none,
-    // and `simctl privacy` grants every service but notifications).
-    let allowed = false;
-    if (await tap((label) => label === "Open navigation")) {
-      await pause(2000);
-      // "Change hub" stands at the drawer's foot, under every project's
-      // sessions: the drawer scrolled down to it.
-      // On the owner's hub the drawer holds every project's sessions above
-      // it: each project folded first ("Hide <project>'s sessions", this
-      // simulator's own view of the drawer), then flicked, as a hand does.
-      for (let fold = 0; fold < 30; fold += 1) {
-        // biome-ignore lint/performance/noAwaitInLoops: one project folded after another
-        const folded = await tap(
-          (label) => label.startsWith("Hide ") && label.endsWith("'s sessions")
-        );
-        if (!folded) {
-          break;
-        }
-        await pause(700);
-      }
-      for (let swipe = 0; swipe < 20; swipe += 1) {
-        // biome-ignore lint/performance/noAwaitInLoops: one swipe after another, until it shows
-        if ((await labels()).some((node) => node.label === "Change hub")) {
-          break;
-        }
-        await sh(
-          `${AXE} swipe --start-x 150 --start-y 750 --end-x 150 --end-y 150 --duration 0.12 --udid ${udid}`
-        );
-        await pause(900);
-      }
-      if (await tap((label) => label === "Change hub")) {
-        await pause(2000);
-        if (await tap((label) => label === "Turn on notifications")) {
-          await pause(2000);
-          allowed = await tap((label) => label === "Allow");
-        }
-      }
-    }
-    kit.check(
-      `live ${tag} (Release): notifications turned on, as the owner has them`,
-      allowed,
-      allowed
-        ? "allowed"
-        : `see release-${which}-screen-*.txt for where it stopped`
+    // The ask's notification is not reached here: a simulator app takes no
+    // push until it may notify, and this one's "Turn on notifications" (the
+    // hub sheet's) is Pro's, offered only when entitled
+    // (ConnectViewController); unentitled, Change hub opens the paywall
+    // ("Never leave an agent waiting. 7 days free, then pay once."). Its tap
+    // opens the card through the route the Debug runs drive with
+    // `-push-route` (AppDelegate `deliver`).
+    kit.note(
+      `live ${tag} (Release): the ask's notification not reached: notifications are Pro's, and this simulator's app is unentitled (Change hub opens the paywall)`
     );
-    id = (await launch()) ?? id;
-    await pause(8000);
     // Needs you, the list that draws the ask's command on a line; then the probe's own row.
     const needs = await tap((label) => label.startsWith("Needs you"));
     await pause(3000);
@@ -1188,10 +1151,6 @@ async function onSimulator(
     let drawer = await tap((label) => label === "Open navigation");
     if (drawer) {
       await pause(2000);
-      // Its project open again, if the notifications step folded it.
-      if (await tap((label) => label === "Show cockpit's sessions")) {
-        await pause(1500);
-      }
       // The live probe's own row, which says it needs you: not an earlier probe's
       // stopped row, nor any other session that needs you.
       drawer = await tap(
@@ -1204,51 +1163,7 @@ async function onSimulator(
       drawer,
       await rest(id, "card-from-drawer")
     );
-    // The ask's notification, the app in the background: its banner tapped.
-    const ask = await ours();
-    await sh(`xcrun simctl launch ${udid} com.apple.Preferences >/dev/null`);
-    await pause(2000);
-    const payload = join(kit.out, `release-${which}-push.json`);
-    writeFileSync(
-      payload,
-      JSON.stringify({
-        aps: {
-          alert: { title: "Probe: long ask", body: INPUT.description },
-          sound: "default",
-        },
-        cawco: {
-          kind: "ask",
-          instanceId: ask?.instanceId,
-          requestId: ask?.requestId,
-        },
-      })
-    );
-    await sh(`xcrun simctl push ${udid} dev.cawco.app "${payload}" >/dev/null`);
-    await pause(2500);
-    const banner =
-      allowed &&
-      (await tap(
-        (label) =>
-          label.includes(INPUT.description) || label.includes("Probe: long ask")
-      ));
-    await pause(5000);
-    id = (await pid()) ?? id;
-    report(
-      "the probe's card from its notification",
-      banner,
-      await rest(id, "card-from-notification")
-    );
-    if (!banner) {
-      // Back on the card the way Needs you reaches it, for the steps after.
-      id = (await launch()) ?? id;
-      await pause(8000);
-      if (await tap((label) => label.startsWith("Needs you"))) {
-        await pause(3000);
-        await tap((label) => label.includes(INPUT.description));
-      }
-      await pause(3000);
-    }
-    // On the card: the whole command opened, then Deny.
+    // On the drawer's card: the whole command opened, then Deny.
     const opened = await tap((label) => label === "Show the whole command");
     await pause(2000);
     report(
