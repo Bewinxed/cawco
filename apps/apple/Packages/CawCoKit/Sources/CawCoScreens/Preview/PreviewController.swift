@@ -118,7 +118,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// mode, the radial's Comment), until it is said something: dismissed
     /// with nothing said or written, it is taken back.
     private var madePin: String?
-    private var thumbs: [String: Data] = [:]
     /// What went wrong with the open card's reply, resolve or send.
     private var cardError: String?
     private var replying = false
@@ -326,7 +325,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         card.onReply = { [weak self] text in self?.reply(text) }
         card.onResolve = { [weak self] resolved in self?.resolve(resolved) }
         card.onDelete = { [weak self] in try await self?.delete() }
-        card.onPicture = { [weak self] in self?.pictureOfOpenPin() }
         card.onWriting = { [weak self] on in
             guard let self else { return }
             writing = on
@@ -478,7 +476,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             // Another artifact: its pins are its own.
             artifactId = frame.artifact.id
             comments = .empty
-            thumbs = [:]
             closeCard()
             list?.dismiss(animated: true)
             paintPins()
@@ -664,15 +661,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             guard Self.pinId(body["id"]) == openPin else { return }
             pinAt = Self.pinAt(body)
             placeCard()
-        case "cawco:picture":
-            guard let id = Self.pinId(body["id"]) else { return }
-            let png = (body["png"] as? String).flatMap(Self.png)
-            if body["thumb"] as? Bool == true {
-                thumbs[id] = png
-                if id == openPin { paintCard() }
-            } else if let png, let pin = comments.pins.first(where: { $0.id == id }) {
-                PictureLightbox.show(png: png, caption: "Pin \(pin.label): \(pin.name)", over: self)
-            }
         case "cawco:key":
             if let key = Self.text(body["key"], 10) { press(key) }
         case "cawco:escape":
@@ -1042,7 +1030,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         pinAt = nil
         deliver(["type": "cawco:track-pin", "id": id])
         deliver(["type": "cawco:focus-pin", "id": id, "scroll": true])
-        if thumbs[id] == nil { deliver(["type": "cawco:picture", "id": id, "thumb": true]) }
         paintCard()
     }
 
@@ -1084,8 +1071,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// A tap outside the open card, anywhere in the window, closes it: the
     /// house's outside-press rule (press-outside.ts), as iOS's own popovers
     /// close on a tap outside them. Touches on the card are its own, those
-    /// in a layer the preview presented (the pins' sheet, the picture's
-    /// lightbox) are that layer's, and the page says its own
+    /// in a layer the preview presented (the pins' sheet) are that layer's,
+    /// and the page says its own
     /// (`cawco:press`), where a tap on a pin's disc opens that pin instead.
     /// It only watches, and closes once the tap has lifted and what it
     /// landed on has taken it. Closing the card ends its editing and sends
@@ -1154,7 +1141,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         card.link = pinLink(pin.label)
         // The agent answers as the session the artifact belongs to (PreviewPane.svelte `ownerName`).
         let agentName = hub.fleet.byId[instanceId].map(hub.fleet.title) ?? "The session"
-        card.show(pin, agentName: agentName, live: live.contains(openPin), thumbnail: thumbs[openPin], problem: cardError, replying: replying,
+        card.show(pin, agentName: agentName, live: live.contains(openPin), problem: cardError, replying: replying,
                   draft: drafts[openPin] ?? "")
         if outsidePress.view == nil, let window = view.window { window.addGestureRecognizer(outsidePress) }
         placeCard()
@@ -1348,12 +1335,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         PreviewProbe.say("preview \(what)-result pin=\(number) \(refused.map { "refused: \($0)" } ?? "ok")")
         #endif
         answer.resume(returning: refused)
-    }
-
-    /// The open pin's picture full size: the page draws it, and it opens in the lightbox.
-    private func pictureOfOpenPin() {
-        guard let openPin else { return }
-        deliver(["type": "cawco:picture", "id": openPin, "thumb": false])
     }
 
     // MARK: Send picks
@@ -1611,12 +1592,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard let x = body["x"] as? Double, let y = body["y"] as? Double, let r = body["r"] as? Double,
               x.isFinite, y.isFinite, r.isFinite else { return nil }
         return (x, y, r)
-    }
-
-    /// A picture the page drew (wire.ts `previewPng`).
-    private static func png(_ value: String) -> Data? {
-        guard !value.isEmpty, value.count <= 4_000_000 else { return nil }
-        return Data(base64Encoded: value)
     }
 
     /// source.ts `previewPlace`: a page by its name, a folder by its leaf, a dev server by its port.

@@ -79,7 +79,7 @@
  *    inside the card's box.
  */
 import { join } from "node:path";
-import type { Frame } from "playwright-core";
+import type { Frame, Locator } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 import {
@@ -352,6 +352,7 @@ const run = async (kit: Kit) => {
     () => scrollChecks(on, "container"),
     () => dismissChecks(on),
     () => roomChecks(on),
+    () => wordlessChecks(on),
   ]) {
     // biome-ignore lint/performance/noAwaitInLoops: the checks run in order, one after another
     await shutList(on);
@@ -438,6 +439,16 @@ const commentChecks = async (on: On, frame: Frame) => {
     "a: the first tapped pin's card is in the pane with its field focused",
     first.shown && first.focused,
     JSON.stringify(first)
+  );
+  const head = await headOf(card);
+  on.kit.check(
+    "1: the card's head names pin 1 in words, its component and the paragraph's text, never its selector; the file:line dim under it; the selector only in the tooltip; no picture",
+    head.name === "Hero · A paragraph to comment on, long enough to tap." &&
+      head.source === "src/Hero.svelte:12" &&
+      head.tip === "#para" &&
+      !head.shown.includes("#para") &&
+      head.pictures === 0,
+    JSON.stringify(head)
   );
 
   // Words in its field, so the card's dismissal keeps the pin (the said reply comes in 3).
@@ -2174,6 +2185,74 @@ const writeIn = (on: On, number: number, words: string) =>
     .locator(`.pin-card[data-pin-card="${number}"]`)
     .getByRole("textbox")
     .fill(words);
+
+/**
+ * A card's head as it reads: the name, the file:line under it, the tooltip,
+ * the words a reader sees in the whole card, and the pictures it draws.
+ */
+const headOf = (card: Locator) =>
+  card
+    .evaluate((el) => ({
+      name: el.querySelector(".head .name")?.textContent?.trim() ?? null,
+      source: el.querySelector(".head .source")?.textContent?.trim() ?? null,
+      tip: el.querySelector(".head .anchor")?.getAttribute("title") ?? null,
+      shown: (el as HTMLElement).innerText,
+      pictures: el.querySelectorAll("img, .thumb").length,
+    }))
+    .catch(() => ({
+      name: null,
+      source: null,
+      tip: null,
+      shown: "",
+      pictures: -1,
+    }));
+
+/**
+ * 7. A pin on an element with no text, written in a component: its card's
+ * head names it by the component, its selector only in the tooltip.
+ */
+const wordlessChecks = async (on: On) => {
+  await on.call(CREATE, {
+    kind: "page",
+    name: "wordless",
+    html: `<!doctype html><html><head><style>body { margin: 0; } main { padding: 24px; }</style></head>
+<body><main><div data-insp-path="src/StatusBadge.svelte:4:3" style="width: 200px; height: 80px; background: #d8d4cc"></div></main></body></html>`,
+  });
+  const frame = (await until(
+    "the wordless page in the pane",
+    async () => {
+      const shown = await pageFrame(on);
+      return (await shown
+        .locator("[data-insp-path]")
+        .count()
+        .catch(() => 0)) === 1
+        ? shown
+        : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  await settle(on.page, 400);
+  await on.page.locator(".preview-pane button[aria-keyshortcuts='C']").click();
+  await pageInComment(frame, true);
+  const b = await screenBox(on, frame, "[data-insp-path]");
+  await on.page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
+  const card = on.page.locator('.pin-card[data-pin-card="1"]');
+  await card.waitFor({ timeout: 10_000 }).catch(() => undefined);
+  await settle(on.page, 300);
+  const head = await headOf(card);
+  on.kit.check(
+    '7: a pin on an element with no text is named by its component (StatusBadge.svelte → "Status badge"), the file:line under it, its selector only in the tooltip, no picture',
+    head.name === "Status badge" &&
+      head.source === "src/StatusBadge.svelte:4" &&
+      !!head.tip &&
+      !head.shown.includes(head.tip) &&
+      head.pictures === 0,
+    JSON.stringify(head)
+  );
+  await on.page.keyboard.press("Escape");
+  await on.page.keyboard.press("Escape");
+};
 
 /** Pin `number`'s card in the pane, and whether its field has the keyboard. */
 const focusedCard = async (on: On, number: number | undefined) => {

@@ -1435,7 +1435,7 @@ async function markPictures(): Promise<MarkPicture[]> {
   }
   for (const pin of owed.slice(0, COMMENT_LIMITS.pictures - pictures.length)) {
     // biome-ignore lint/performance/noAwaitInLoops: one raster at a time keeps the page responsive
-    const png = await pins.picture(pin.id, false);
+    const png = await pins.picture(pin.id);
     if (png) {
       pictures.push({ pin: pin.id, png });
     }
@@ -1555,18 +1555,6 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:focus-pin": (message) =>
       pins.focus(idOf(message), message.scroll === true),
     "cawco:track-pin": (message) => pins.track(idOf(message)),
-    // A card's thumbnail, or its full picture for the lightbox.
-    "cawco:picture": async (message) => {
-      const id = idOf(message);
-      if (id) {
-        const thumb = message.thumb === true;
-        post("cawco:picture", {
-          id,
-          thumb,
-          png: await pins.picture(id, thumb),
-        });
-      }
-    },
     "cawco:capture": async () =>
       post("cawco:capture", await capture(document.documentElement)),
     // The composer's Send: the pins as text and the page with its ink as a picture.

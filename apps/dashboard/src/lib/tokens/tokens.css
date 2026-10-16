@@ -679,8 +679,6 @@
     --c-pin-list-min: 260px;
     /* The Comments panel at its widest. */
     --c-pin-list-max: 340px;
-    /* A pin's picture on its card: the element's crop or the ink's, opening full size in the lightbox. */
-    --c-pin-thumb: 56px;
     --c-mark: 26px;
     --c-mark-glyph: 16px;
     --c-row-mark: 18px;

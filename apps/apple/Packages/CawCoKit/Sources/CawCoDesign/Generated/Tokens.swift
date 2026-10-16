@@ -515,8 +515,6 @@ public enum Size {
     public static let cPinListMin: Double = 260
     /// The Comments panel at its widest.
     public static let cPinListMax: Double = 340
-    /// A pin's picture on its card: the element's crop or the ink's, opening full size in the lightbox.
-    public static let cPinThumb: Double = 56
     public static let cMark: Double = 26
     public static let cMarkGlyph: Double = 16
     public static let cRowMark: Double = 18

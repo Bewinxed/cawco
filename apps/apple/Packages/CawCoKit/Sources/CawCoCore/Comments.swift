@@ -11,15 +11,24 @@ public typealias Pin = Components.Schemas.Pin
 public typealias PinEntry = Components.Schemas.ThreadEntry
 
 public extension Pin {
-    /// What it stands on, as its row and card name it (pin-name.ts `pinName`):
-    /// the element's text, else its selector; a canvas's element by id.
+    /// What it stands on, in words, as its row and card name it (pin-name.ts
+    /// `pinName`): the component it is written in and the element's own text
+    /// ("Subagent card · Coconut cover take 3"); either alone; else the
+    /// element by its id, class or kind; a canvas's element by id. The
+    /// selector is never the name: it is the card head's tooltip (`selector`).
     var name: String {
-        if let page = anchor.value1 {
-            let text = page.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return text.isEmpty ? page.selector : text
+        guard let page = anchor.value1 else { return "Element \(anchor.value2?.element ?? "?")" }
+        let text = page.text?.replacing(/\s+/, with: " ").trimmingCharacters(in: .whitespaces) ?? ""
+        switch (PinWords.component(page), text.isEmpty) {
+        case let (named?, false): return "\(named) · \(text)"
+        case (nil, false): return text
+        case let (named?, true): return named
+        case (nil, true): return PinWords.element(elements.value2?.first)
         }
-        return "Element \(anchor.value2?.element ?? "?")"
     }
+
+    /// The pin's selector, for the card head's tooltip (pin-name.ts `pinSelector`); a canvas pin has none.
+    var selector: String? { anchor.value1?.selector }
 
     /// Where the element is written, `file:line`, when the page's dev build says (PinCard.svelte `source`).
     var source: String? {
@@ -41,6 +50,50 @@ public extension Pin {
         guard let last = thread.last else { return kind == .annotation ? "Annotation" : "Nothing written yet" }
         let first = last.text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         return "\(last.by == .agent ? "Agent" : "You"): \(first)"
+    }
+}
+
+/// pin-name.ts's words for what a pin stands on.
+private enum PinWords {
+    /// Words for a tag no text, id or class names: what the element is. Our call (pin-name.ts `TAG_WORDS`).
+    static let tags: [String: String] = [
+        "a": "Link", "article": "Article", "aside": "Aside", "button": "Button", "canvas": "Drawing",
+        "figure": "Figure", "footer": "Footer", "form": "Form", "h1": "Heading", "h2": "Heading",
+        "h3": "Heading", "h4": "Heading", "h5": "Heading", "h6": "Heading", "header": "Header",
+        "img": "Image", "input": "Field", "li": "List item", "nav": "Navigation", "ol": "List",
+        "p": "Paragraph", "picture": "Image", "section": "Section", "select": "Menu", "svg": "Drawing",
+        "table": "Table", "textarea": "Field", "ul": "List", "video": "Video",
+    ]
+
+    /// `SubagentCard`, `subagent-card`, `subagent_card` → "Subagent card".
+    static func words(_ name: String) -> String {
+        let spaced = name.replacing(/([a-z0-9])([A-Z])/) { "\($0.output.1) \($0.output.2)" }
+            .replacing(/[-_.]+/, with: " ")
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
+        return spaced.prefix(1).uppercased() + spaced.dropFirst()
+    }
+
+    /// The component the element is written in: the page's dev build's name
+    /// for it, else a sheet's innermost component, else its file's.
+    static func component(_ anchor: Components.Schemas.PageAnchor) -> String? {
+        if let named = [anchor.source?.component, anchor.chain?.first?.component].compactMap(\.self).first(where: { !$0.isEmpty }) {
+            return words(named)
+        }
+        guard let file = anchor.source?.file?.split(separator: "/").last,
+              let match = file.wholeMatch(of: /(.+)\.(svelte|vue|[jt]sx)/) else { return nil }
+        let base = String(match.output.1)
+        return base == "+page" || base == "index" ? nil : words(base)
+    }
+
+    /// The element itself, when it says nothing: its id, its first class, else what it is.
+    static func element(_ element: Components.Schemas.PinnedElement?) -> String {
+        guard let element else { return "Element" }
+        if let named = element.id.isEmpty ? element.classes.first : element.id {
+            let spoken = words(named)
+            if !spoken.isEmpty { return spoken }
+        }
+        return tags[element.tag] ?? "Element"
     }
 }
 

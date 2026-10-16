@@ -3,9 +3,10 @@
    * A pin's card (Projects spec §5.7; tsk-3; DESIGN.md Artifact panel, canvas
    * and ink), over the page beside its pin: the raised card recipe (12px,
    * control edge, hairline shadow, 11px padding), on a phone standing at the
-   * well's foot as the house drawer does. What the pin stands on (its text
-   * and file:line) with its picture, which opens full size in the lightbox;
-   * its thread in the transcript's two voices (MessageRow itself): the
+   * well's foot as the house drawer does. What the pin stands on, in words
+   * (pin-name.ts), its file:line dim under it and its selector only in the
+   * tooltip; no picture: the pin it would show stands beside the card. Its
+   * thread in the transcript's two voices (MessageRow itself): the
    * person's words in the reader's well, the agent's bare under its mark and
    * the session's name; the reply field and Reply.
    * Its head carries what acts on the pin, as Figma's, Vercel's and Miro's
@@ -17,7 +18,7 @@
    * under its question.
    *
    * A column: the head over it, the field and its actions at its foot, both
-   * always in view, and between them the picture and the thread, the only
+   * always in view, and between them the thread, the only
    * part that scrolls, under the house edge fade. Past the card's cap the
    * thread gives up height, never the actions.
    *
@@ -45,7 +46,7 @@
   import MessageRow from "../transcript/MessageRow.svelte";
   import type { Message } from "../types";
   import PinDisc from "./PinDisc.svelte";
-  import { pinName } from "./pin-name";
+  import { pinName, pinSelector } from "./pin-name";
 
   let {
     pin,
@@ -55,14 +56,12 @@
     room,
     sheet = false,
     live = false,
-    thumb,
     problem,
     draft = $bindable(""),
     onreply,
     onresolve,
     ondelete,
     onclose,
-    onpicture,
   }: {
     pin: Pin;
     /** Who answers in the thread: the session the artifact belongs to, as its transcript names it. */
@@ -77,8 +76,6 @@
     sheet?: boolean;
     /** The agent is working on this pin. */
     live?: boolean;
-    /** The pin's picture, small; null while it is drawn or when it has none. */
-    thumb: string | null;
     /** What went wrong with the last reply, resolve or send, in the error formula. */
     problem: string | null;
     /** What the person has written and not yet said: the pin's, kept by the pane. */
@@ -89,7 +86,6 @@
     /** Deletes the pin once the person confirmed; rejects with the refusal's sentence. */
     ondelete: () => Promise<void>;
     onclose: () => void;
-    onpicture: (from: HTMLElement) => void;
   } = $props();
 
   let height = $state(0);
@@ -154,8 +150,8 @@
     return () => watch.disconnect();
   });
 
-  // A press outside the card closes it; one in the picture's lightbox, a
-  // modal layer the card opened over everything, is that layer's.
+  // A press outside the card closes it; one in a modal layer over
+  // everything is that layer's.
   $effect(() => {
     if (!card) {
       return;
@@ -194,6 +190,7 @@
       ? `${pin.anchor.source.file}${pin.anchor.source.line ? `:${pin.anchor.source.line}` : ""}`
       : null
   );
+  const selector = $derived(pinSelector(pin));
 
   /** What the empty field says: a resolved pin's reopens it; a pin with a thread is replied to; a new one asks what to change. */
   const fieldHint = $derived.by(() => {
@@ -284,10 +281,11 @@
 >
   <header class="head" bind:this={head}>
     <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
-    <span class="anchor">
+    <span class="anchor" title={selector ?? undefined}>
       <span class="name">{pinName(pin)}</span>
       {#if source}
-        <span class="source">{source}</span>
+        <!-- Cut from its start, so the file's name and line stay. -->
+        <span class="source"><bdi>{source}</bdi></span>
       {/if}
     </span>
     {#if live}
@@ -343,48 +341,36 @@
   <!-- What the pin holds, the one part that scrolls: the head stands over it
        and the field and its actions under it, never a scroll away; the
        house edge fade says there is more above or below. -->
-  {#if thumb || pin.thread.length > 0}
+  {#if pin.thread.length > 0}
     <div
       class={["room kit-edge-fade-block", squeezed && "whole"]}
       data-pin-room
       onscroll={readAt}
       bind:this={roomEl}
     >
-      {#if thumb}
-        <button
-          aria-label={`Pin ${pin.number}'s picture, full size`}
-          class="thumb"
-          onclick={(event) => onpicture(event.currentTarget)}
-          type="button"
-        >
-          <img alt="" src={`data:image/png;base64,${thumb}`} />
-        </button>
-      {/if}
-      {#if pin.thread.length > 0}
-        <!-- The transcript's own rows: a run of one speaker's entries is one
-             turn (its later entries grouped under the first's speaker line),
-             the person's run one well. -->
-        <ol class="thread">
-          {#each pin.thread as entry, i (entry.id)}
-            <li class="entry" data-by={entry.by}>
-              <MessageRow
-                {agentName}
-                grouped={pin.thread[i - 1]?.by === entry.by}
-                message={asMessage(entry)}
-                runsOn={entry.by === "person" &&
-                  pin.thread[i + 1]?.by === "person"}
-              />
-              {#if entry.by === "agent" && entry.files?.length}
-                <p class="files">
-                  {#each entry.files as file (file)}
-                    <code>{file}</code>
-                  {/each}
-                </p>
-              {/if}
-            </li>
-          {/each}
-        </ol>
-      {/if}
+      <!-- The transcript's own rows: a run of one speaker's entries is one
+           turn (its later entries grouped under the first's speaker line),
+           the person's run one well. -->
+      <ol class="thread">
+        {#each pin.thread as entry, i (entry.id)}
+          <li class="entry" data-by={entry.by}>
+            <MessageRow
+              {agentName}
+              grouped={pin.thread[i - 1]?.by === entry.by}
+              message={asMessage(entry)}
+              runsOn={entry.by === "person" &&
+                pin.thread[i + 1]?.by === "person"}
+            />
+            {#if entry.by === "agent" && entry.files?.length}
+              <p class="files">
+                {#each entry.files as file (file)}
+                  <code>{file}</code>
+                {/each}
+              </p>
+            {/if}
+          </li>
+        {/each}
+      </ol>
     </div>
   {/if}
   <div class="foot" bind:this={foot}>
@@ -473,12 +459,14 @@
   }
   /* The one scroller: past the card's cap it gives up height, never the
      head or the foot. The card itself scrolls only when the head and foot
-     alone outgrow its room (a phone's keyboard over a short well). */
+     alone outgrow its room (a phone's keyboard over a short well). It holds
+     what the rows place absolutely (a grouped speaker line's name, kept for
+     a screen reader), which otherwise stood on the card and made it scroll. */
   .room {
+    position: relative;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: var(--space-2);
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -511,6 +499,9 @@
     font: var(--type-label);
   }
   .source {
+    /* rtl only to put the ellipsis at the start; the line stays at the left. */
+    direction: rtl;
+    text-align: left;
     color: var(--ink-muted);
     font: var(--text-meta) var(--font-mono);
   }
@@ -529,23 +520,6 @@
   @keyframes pin-card-live {
     50% {
       opacity: 0.4;
-    }
-  }
-  .thumb {
-    align-self: flex-start;
-    width: var(--c-pin-thumb);
-    height: var(--c-pin-thumb);
-    padding: 0;
-    overflow: hidden;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    cursor: zoom-in;
-
-    & img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
     }
   }
   /* The rows keep the transcript's rhythm: a turn --space-4 under the one

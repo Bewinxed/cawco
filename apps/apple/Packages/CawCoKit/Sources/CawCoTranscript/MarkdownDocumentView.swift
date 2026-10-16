@@ -26,14 +26,3 @@ public final class MarkdownDocumentView: UIView {
         body.configure(markdown, style: style)
     }
 }
-
-/// One picture full size in the transcript's lightbox, from where it was
-/// tapped (PreviewPane.svelte `showPicture`: a pin's picture out of its card's thumbnail).
-@MainActor
-public enum PictureLightbox {
-    public static func show(png: Data, caption: String, over host: UIViewController) {
-        guard let url = URL(string: "data:image/png;base64,\(png.base64EncodedString())") else { return }
-        let lightbox = Lightbox(.images([Lightbox.Picture(url: url, caption: caption)], index: 0), env: RowEnv())
-        host.present(lightbox, animated: !UIAccessibility.isReduceMotionEnabled)
-    }
-}

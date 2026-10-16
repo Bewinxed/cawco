@@ -319,8 +319,9 @@ private final class MovedRow: UIView {
 /// The open pin's card (PinCard.svelte), over the page beside its pin: the
 /// raised card recipe (12pt radius, control edge, hairline shadow, 11pt
 /// in); on a phone standing at the well's foot in the house drawer's shape.
-/// What the pin stands on (its text, its file:line in mono) with its
-/// picture as a 56pt thumbnail that opens the lightbox; its thread in the
+/// What the pin stands on, in words (`Pin.name`), its file:line in mono
+/// under it, cut from its start, and its selector only in the tooltip; no
+/// picture: the pin it would show stands beside the card. Its thread in the
 /// transcript's two voices (ThreadTurnsView: the person's words in the
 /// reader's well, the agent's bare under its mark and the session's name);
 /// the 16pt reply field and
@@ -334,7 +335,7 @@ private final class MovedRow: UIView {
 /// outside press); what the field holds is the pin's draft, which the
 /// controller keeps with the pin. A column, as the web's: the head over it,
 /// the field and its actions at its foot, always in view, and between them
-/// the picture and the thread, the only part that scrolls, under the house
+/// the thread, the only part that scrolls, under the house
 /// edge fade.
 final class PinCard: UIView, UITextViewDelegate {
     var onClose: () -> Void = {}
@@ -344,7 +345,6 @@ final class PinCard: UIView, UITextViewDelegate {
     var onResolve: (Bool) -> Void = { _ in }
     /// Deletes the pin once the person confirmed; throws the refusal's sentence.
     var onDelete: () async throws -> Void = {}
-    var onPicture: () -> Void = {}
     /// The reply field took the keyboard, or gave it back.
     var onWriting: (Bool) -> Void = { _ in }
     /// The pin's own address, which ⋯'s Copy link copies; nil while the hub's address is unknown.
@@ -360,9 +360,10 @@ final class PinCard: UIView, UITextViewDelegate {
     private let liveMark = liveDot()
     private let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private let source = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
-    private let thumb = UIButton(type: .custom)
+    /// The head's words carry the pin's selector, and only there (PinCard.svelte `.anchor`'s `title`).
+    private let selectorTip = UIToolTipInteraction()
     private let thread = ThreadTurnsView()
-    /// The picture and the thread, the one part of the card that scrolls
+    /// The thread, the one part of the card that scrolls
     /// (PinCard.svelte `.room`): past the card's cap it gives up height,
     /// never the head over it or the field and actions under it.
     private let room = UIScrollView()
@@ -428,7 +429,11 @@ final class PinCard: UIView, UITextViewDelegate {
             restingMore?(button)
             if button.isSelected { button.configuration?.background.backgroundColor = Palette.surfaceHover }
         }
-        let head = UIStackView(arrangedSubviews: [disc, pinWords(name, source), liveMark, resolveButton, moreButton, closeRoom])
+        let words = pinWords(name, source)
+        // Cut from its start, so the file's name and line stay.
+        source.lineBreakMode = .byTruncatingHead
+        words.addInteraction(selectorTip)
+        let head = UIStackView(arrangedSubviews: [disc, words, liveMark, resolveButton, moreButton, closeRoom])
         head.spacing = Space.space2
         head.alignment = .center
         for button in [resolveButton!, moreButton!] {
@@ -436,19 +441,8 @@ final class PinCard: UIView, UITextViewDelegate {
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
 
-        thumb.translatesAutoresizingMaskIntoConstraints = false
-        thumb.layer.cornerRadius = Radius.radiusSm
-        thumb.layer.cornerCurve = .continuous
-        thumb.layer.borderWidth = 1
-        thumb.clipsToBounds = true
-        thumb.backgroundColor = Palette.surfaceRecess
-        thumb.imageView?.contentMode = .scaleAspectFill
-        thumb.addAction(UIAction { [weak self] _ in self?.onPicture() }, for: .touchUpInside)
-        let thumbRow = UIStackView(arrangedSubviews: [thumb, UIView()])
-
-        for part in [thumbRow, thread] as [UIView] { roomColumn.addArrangedSubview(part) }
+        roomColumn.addArrangedSubview(thread)
         roomColumn.axis = .vertical
-        roomColumn.spacing = Space.space2
         roomColumn.translatesAutoresizingMaskIntoConstraints = false
         room.translatesAutoresizingMaskIntoConstraints = false
         room.alwaysBounceVertical = false
@@ -506,8 +500,6 @@ final class PinCard: UIView, UITextViewDelegate {
             roomColumn.widthAnchor.constraint(equalTo: room.frameLayoutGuide.widthAnchor),
             roomWhole,
             columnFits,
-            thumb.widthAnchor.constraint(equalToConstant: Size.cPinThumb),
-            thumb.heightAnchor.constraint(equalToConstant: Size.cPinThumb),
             scroll.topAnchor.constraint(equalTo: topAnchor),
             scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -529,12 +521,12 @@ final class PinCard: UIView, UITextViewDelegate {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("PinCard is built in code") }
 
-    /// The card's pin as the hub has it now, its thumbnail when drawn, and
-    /// what went wrong with the last reply, resolve or send. The agent
-    /// answers in its thread as `agentName`: the session the artifact
-    /// belongs to. The reply being written stays as it is; another pin's
-    /// card starts from that pin's own `draft`.
-    func show(_ pin: Pin, agentName: String, live: Bool, thumbnail: Data?, problem said: String?, replying: Bool, draft: String) {
+    /// The card's pin as the hub has it now, and what went wrong with the
+    /// last reply, resolve or send. The agent answers in its thread as
+    /// `agentName`: the session the artifact belongs to. The reply being
+    /// written stays as it is; another pin's card starts from that pin's own
+    /// `draft`.
+    func show(_ pin: Pin, agentName: String, live: Bool, problem said: String?, replying: Bool, draft: String) {
         liveMark.isHidden = !live
         let fresh = pin.id != pinId
         // Another pin in the same card: a question asked of the last one goes.
@@ -547,19 +539,15 @@ final class PinCard: UIView, UITextViewDelegate {
         name.text = pin.name
         source.text = pin.source
         source.isHidden = pin.source == nil
+        selectorTip.defaultToolTip = pin.selector
         accessibilityLabel = "Pin \(pin.label)"
-        let image = thumbnail.flatMap { UIImage(data: $0) }
-        thumb.setImage(image, for: .normal)
-        thumb.superview?.isHidden = image == nil
-        thumb.accessibilityLabel = "Pin \(pin.label)'s picture, full size"
         let threadChanged = fresh || pin.thread != shownThread
         if threadChanged || agentName != shownAgent {
             shownThread = pin.thread
             shownAgent = agentName
             thread.show(pin.thread, agentName: agentName)
         }
-        thread.isHidden = pin.thread.isEmpty
-        room.isHidden = pin.thread.isEmpty && image == nil
+        room.isHidden = pin.thread.isEmpty
         // The thread opens at its newest entry, beside the field that answers
         // it, and follows a new one while the person reads at its end
         // (PinCard.svelte); reading further back, they are left where they are.
@@ -733,7 +721,7 @@ final class PinCard: UIView, UITextViewDelegate {
 
     /// Where `part` (one of the column's own) stands in the scroll's content
     /// as laid out now. A resize is heard inside the scroll's own layout pass,
-    /// before the column has given its parts their new frames (a thumbnail
+    /// before the column has given its parts their new frames (an entry
     /// arriving above the field while the keyboard shrinks the card), and the
     /// scroll can't be laid out again from within that pass: so the column
     /// is laid out first, and its parts are read where they now stand.
@@ -773,7 +761,6 @@ final class PinCard: UIView, UITextViewDelegate {
         layer.borderWidth = 1
         layer.maskedCorners = drawer ? [.layerMinXMinYCorner, .layerMaxXMinYCorner]
             : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-        thumb.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
     }
 
     #if DEBUG

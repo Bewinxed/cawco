@@ -50,8 +50,6 @@ const PIN_R = 10;
 const RESOLVED_OPACITY = "0.4";
 /** The pixels a picture may hold, so its PNG stays inside a send's bound. Our call. */
 const PICTURE_AREA = 1_200_000;
-/** A card's thumbnail: 56px, drawn at 2× for a dense screen. */
-const THUMB_SIDE = 112;
 /** Room round an ink pin's crop, px. Our call. */
 const CROP_PAD = 24;
 const PNG_PREFIX = /^data:image\/png;base64,/;
@@ -101,8 +99,8 @@ export interface Pins {
   markdown: () => string;
   /** The page with the person's ink on it, as a send carries it. */
   pagePicture: () => Promise<string | null>;
-  /** A pin's picture: its element, or its ink with the page under it; small for a card's thumbnail. */
-  picture: (id: string, thumb: boolean) => Promise<string | null>;
+  /** A pin's picture, as a delivery carries it: its element, or its ink with the page under it. */
+  picture: (id: string) => Promise<string | null>;
   /** A pin on an ink group (Annotate, Comment); a comment's card opened. */
   pinInk: (
     group: InkGroup,
@@ -394,11 +392,8 @@ export function startPins(deps: PinsDeps): Pins {
   };
 
   /** The page cropped to `box` (the page's px), ink and all. */
-  const crop = async (box: Box, thumb: boolean): Promise<string | null> => {
-    const side = Math.max(box.w, box.h);
-    const scale = thumb
-      ? Math.min(2, THUMB_SIDE / side)
-      : fitScale(box.w, box.h, Math.min(2, devicePixelRatio));
+  const crop = async (box: Box): Promise<string | null> => {
+    const scale = fitScale(box.w, box.h, Math.min(2, devicePixelRatio));
     const root = document.documentElement;
     const whole = await deps.capture(root, scale);
     if (!whole.png) {
@@ -523,7 +518,7 @@ export function startPins(deps: PinsDeps): Pins {
         deps.peek(null);
       }
     },
-    picture: async (id, thumb) => {
+    picture: async (id) => {
       const pin = pinsMap().get(id);
       const where = placed.get(id);
       if (!(pin && where)) {
@@ -532,24 +527,19 @@ export function startPins(deps: PinsDeps): Pins {
       if (pin.ink) {
         const box = deps.groupBox(pin.ink);
         return box
-          ? await crop(
-              {
-                x: Math.max(0, box.x - CROP_PAD),
-                y: Math.max(0, box.y - CROP_PAD),
-                w: box.w + 2 * CROP_PAD,
-                h: box.h + 2 * CROP_PAD,
-              },
-              thumb
-            )
+          ? await crop({
+              x: Math.max(0, box.x - CROP_PAD),
+              y: Math.max(0, box.y - CROP_PAD),
+              w: box.w + 2 * CROP_PAD,
+              h: box.h + 2 * CROP_PAD,
+            })
           : null;
       }
       if (!where.el) {
         return null;
       }
       const box = pageBox(where.el);
-      const scale = thumb
-        ? Math.min(2, THUMB_SIDE / Math.max(1, box.w, box.h))
-        : fitScale(box.w, box.h, Math.min(2, devicePixelRatio));
+      const scale = fitScale(box.w, box.h, Math.min(2, devicePixelRatio));
       return (await deps.capture(where.el, scale)).png;
     },
     pagePicture: async () => {

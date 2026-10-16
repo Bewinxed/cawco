@@ -2384,11 +2384,6 @@
       "$value": "340px",
       "$description": "The Comments panel at its widest."
     },
-    "c-pin-thumb": {
-      "$type": "dimension",
-      "$value": "56px",
-      "$description": "A pin's picture on its card: the element's crop or the ink's, opening full size in the lightbox."
-    },
     "c-mark": {
       "$type": "dimension",
       "$value": "26px"

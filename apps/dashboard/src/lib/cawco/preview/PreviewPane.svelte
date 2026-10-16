@@ -51,7 +51,6 @@
     letGo,
     type Stage,
   } from "../canvas/stage.svelte";
-  import { lightbox } from "../lightbox/lightbox-state.svelte";
   import { resolveSessionTitle } from "../links";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
@@ -73,7 +72,6 @@
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
   import { pinDrafts } from "./pin-drafts.svelte";
-  import { pinName } from "./pin-name";
   import { isSetupPage } from "./setup-page";
   import { previewPlace } from "./source";
   import {
@@ -790,7 +788,6 @@
   /** The moved pin a tap places again, and the mode the pane goes back to once it is placed. */
   let placing = $state<string | null>(null);
   let placingFrom: PreviewMode | null = null;
-  let thumbs = $state<Record<string, string | null>>({});
   /** What went wrong with the open card's reply, resolve or send. */
   let cardError = $state<string | null>(null);
   let roomW = $state(0);
@@ -846,9 +843,6 @@
     drafts.open(id);
     post({ type: "cawco:track-pin", id });
     post({ type: "cawco:focus-pin", id, scroll: true });
-    if (!(id in thumbs)) {
-      post({ type: "cawco:picture", id, thumb: true });
-    }
   }
   /**
    * The card is dismissed: a press outside it, on the page or anywhere in
@@ -963,35 +957,6 @@
     drafts.discard(id);
     closeCard();
     return Promise.resolve();
-  }
-  /** A pin's picture full size, in the lightbox, out of its thumbnail. */
-  let lightboxFrom: HTMLElement | null = null;
-  function pictureOf(from: HTMLElement) {
-    if (openPin) {
-      lightboxFrom = from;
-      post({ type: "cawco:picture", id: openPin, thumb: false });
-    }
-  }
-  async function showPicture(id: string, png: string) {
-    const src = `data:image/png;base64,${png}`;
-    const image = new Image();
-    image.src = src;
-    await image.decode();
-    const pin = pins.find((one) => one.id === id);
-    lightbox.open({
-      kind: "image",
-      index: 0,
-      shots: [
-        {
-          alt: pin ? `Pin ${pin.number}: ${pinName(pin)}` : "A pin's picture",
-          src,
-          width: image.naturalWidth,
-          height: image.naturalHeight,
-          cropped: true,
-          ...(lightboxFrom ? { element: lightboxFrom } : {}),
-        },
-      ],
-    });
   }
 
   /** A key's mode: V Interact, C Comment, D Draw (Figma's V and C). */
@@ -1160,19 +1125,6 @@
       case "cawco:pin-at": {
         if (previewPinId(message.id) === openPin) {
           pinAt = previewPinAt(message);
-        }
-        break;
-      }
-      case "cawco:picture": {
-        const id = previewPinId(message.id);
-        if (!id) {
-          return;
-        }
-        const png = previewPng(message.png);
-        if (message.thumb === true) {
-          thumbs = { ...thumbs, [id]: png };
-        } else if (png) {
-          showPicture(id, png);
         }
         break;
       }
@@ -1770,7 +1722,6 @@
         live={live.has(cardPin.id)}
         onclose={closeCard}
         ondelete={deleteOpenPin}
-        onpicture={pictureOf}
         onreply={reply}
         onresolve={resolvePin}
         pin={cardPin}
@@ -1780,7 +1731,6 @@
           h: roomH,
         }}
         {sheet}
-        thumb={thumbs[cardPin.id] ?? null}
         bind:draft={
           () => drafts.text(cardPin.id), (text) => drafts.set(cardPin.id, text)
         }

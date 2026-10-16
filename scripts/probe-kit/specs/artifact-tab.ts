@@ -12,7 +12,7 @@
  *    page's frame (or the canvas's stage, over its slot) fills the well
  *    (getBoundingClientRect, ±2px).
  * 3. Hovering a pane control shows its tip (its title) and says no error.
- * 4. A pin's picture, from its card's thumbnail, opens in the lightbox.
+ * 4. A pin's card names what it stands on by its text and draws no picture.
  * 5. No console error in either tab.
  * 6. The JS each tab transferred (built dashboard) is within its budget,
  *    against main's reading with the app around it.
@@ -369,7 +369,7 @@ const run = async (kit: Kit) => {
   );
 
   // 4. A pin, written by the page's own doc as the overlay writes one; its
-  // card's thumbnail opens the lightbox.
+  // card names it by the element's text and draws no picture.
   await frame?.evaluate(() => {
     const { doc } = (
       window as unknown as {
@@ -398,24 +398,21 @@ const run = async (kit: Kit) => {
   // The pin's row is in the Comments panel, opened from the head.
   await tab.locator(".preview-pane button.comments").click({ timeout: 20_000 });
   await tab.locator('[data-pin-row="1"]').click({ timeout: 20_000 });
-  const thumb = tab.getByRole("button", { name: "Pin 1's picture, full size" });
-  await thumb.waitFor({ timeout: 30_000 });
-  await thumb.click();
-  const lightboxed = await until(
-    "the lightbox open on the pin's picture",
-    () =>
-      tab.evaluate(() => {
-        const root = document.querySelector(".cawco-pswp.pswp--open");
-        const img = root?.querySelector<HTMLImageElement>(".pswp__img");
-        return root && img ? img.src.slice(0, 22) : null;
-      }),
-    Boolean,
-    10_000
-  ).catch(() => null);
+  const card = tab.locator('.pin-card[data-pin-card="1"]');
+  await card.waitFor({ timeout: 30_000 }).catch(() => undefined);
+  const head = await card
+    .evaluate((el) => ({
+      name: el.querySelector(".head .name")?.textContent?.trim() ?? null,
+      tip: el.querySelector(".head .anchor")?.getAttribute("title") ?? null,
+      pictures: el.querySelectorAll("img, .thumb").length,
+    }))
+    .catch(() => null);
   kit.check(
-    "4: the pin's picture opens in the lightbox",
-    lightboxed === "data:image/png;base64,",
-    `lightbox image ${JSON.stringify(lightboxed)}`
+    "4: the pin's card names it by the element's text, its selector only in the tooltip, and draws no picture",
+    head?.name === "A tab of its own" &&
+      head.tip === "h1" &&
+      head.pictures === 0,
+    JSON.stringify(head)
   );
   await tab.keyboard.press("Escape");
   kit.check(
