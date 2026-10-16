@@ -39,6 +39,20 @@
  * by the scripts that filled it, and the hub's messages that took 4ms or
  * more by kind; every number is written to `numbers.json` in the spec's out
  * folder.
+ *
+ * A LEG COUNTS ONLY UNCONTENDED. Each phase is a leg, and it counts when the
+ * spec's own cgroup's CPU pressure (Linux PSI, `cpu.pressure`, `some avg10`)
+ * is under `PSI_LIMIT` at its start, middle and end; a leg over it is void
+ * and measured again (`LEG_TRIES`), and each leg's note leads with its PSI,
+ * the box's load average beside it for reference only. The pressure that
+ * cannot be read stops the spec: there is no other gate. On a box shared
+ * with the fleet the spec runs in a scope of its own weighted high, the
+ * fleet's services low, so its legs get a CPU whenever they ask:
+ *
+ *   systemd-run --user --scope -p CPUWeight=10000 bun scripts/probe-kit/run.ts two-pane-perf
+ *
+ * The weighting is the host's systemd's, run from its own shell; a
+ * workspace's commands cannot reach it.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one phase, one tab, one key at a time, as a person makes them
 import { readFileSync } from "node:fs";
@@ -671,52 +685,89 @@ async function switchLayoutParts(
   return read.join("; ");
 }
 /**
- * A leg is measured on a quiet host: the 1-minute load under this as it
- * starts and at every reading while it runs (ios-scroll-up's way, at this
- * box's own floor). The box is shared with other sessions' builds and
- * probes; a leg they land on reads their CPU, not the switch's.
+ * A leg counts when the spec itself got the CPU it asked for: its own
+ * cgroup's CPU pressure (Linux PSI, cgroup v2 `cpu.pressure`, `some avg10`:
+ * the share of the last 10s some task of its waited for a CPU) under this at
+ * the leg's start, middle and end. The box's load average says how busy the
+ * machine is, not whether this spec waited on it; with the fleet's services
+ * weighted low and the spec's scope high, the machine can be loaded and the
+ * spec uncontended, and PSI is what proves it.
  */
-const QUIET_LOAD = 8;
-/** How often the load is read while waiting for quiet: the 1-minute average moves slowly. */
-const QUIET_POLL_MS = 15_000;
-/** The longest a leg waits for quiet before it is measured as the host stands. */
-const QUIET_WAIT_MS = 20 * 60_000;
-/** How often the load is read while a leg runs. */
+const PSI_LIMIT = 1.0;
+/** How often the pressure is read while waiting for it to fall. */
+const PSI_POLL_MS = 5000;
+/** The longest a leg waits for the pressure to fall before it is measured as it stands. */
+const PSI_WAIT_MS = 20 * 60_000;
+/** How often the pressure is read while a leg runs (its middle is the middle reading). */
 const LEG_SAMPLE_MS = 1000;
-/** How many times a leg the host went loud on is measured again. */
+/** How many times a leg the spec waited for CPU in is measured again. */
 const LEG_TRIES = 3;
 
-const oneMinuteLoad = (): number =>
-  Number.parseFloat(readFileSync("/proc/loadavg", "utf8").split(" ")[0]);
-
-/** Waits for the 1-minute load to fall under `QUIET_LOAD`, bounded; how long it waited, from what. */
-async function quietHost(): Promise<string> {
-  const began = Date.now();
-  const first = oneMinuteLoad();
-  let load = first;
-  while (!(load < QUIET_LOAD) && Date.now() - began < QUIET_WAIT_MS) {
-    await Bun.sleep(QUIET_POLL_MS);
-    load = oneMinuteLoad();
+/** This process's cgroup's `cpu.pressure` file, read off `/proc/self/cgroup` (v2's `0::` line). */
+function pressureFile(): string {
+  const line = readFileSync("/proc/self/cgroup", "utf8")
+    .split("\n")
+    .find((one) => one.startsWith("0::"));
+  if (!line) {
+    throw new Error(
+      "two-pane-perf: no cgroup v2 line in /proc/self/cgroup, so its CPU pressure cannot be read; it measures nothing without it"
+    );
   }
-  return `waited ${((Date.now() - began) / 1000).toFixed(0)}s from load ${first}`;
+  return `/sys/fs/cgroup${line.slice(3)}/cpu.pressure`;
+}
+const PRESSURE = /^some avg10=([\d.]+)/m;
+/** The spec's own `some avg10`; throws when it cannot be read: there is no other gate. */
+function cpuPressure(file: string): number {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch (error) {
+    throw new Error(
+      `two-pane-perf: ${file} cannot be read (${String(error)}); it measures nothing without its CPU pressure`,
+      { cause: error }
+    );
+  }
+  const found = PRESSURE.exec(text);
+  if (!found) {
+    throw new Error(`two-pane-perf: no "some avg10" in ${file}: ${text}`);
+  }
+  return Number.parseFloat(found[1]);
+}
+/** The box's 1-minute load average, said beside the pressure for reference only. */
+const oneMinuteLoad = (): string =>
+  readFileSync("/proc/loadavg", "utf8").split(" ")[0];
+
+/** Waits for the spec's CPU pressure to fall under `PSI_LIMIT`, bounded; how long it waited, from what. */
+async function uncontended(file: string): Promise<string> {
+  const began = Date.now();
+  const first = cpuPressure(file);
+  let pressure = first;
+  while (!(pressure < PSI_LIMIT) && Date.now() - began < PSI_WAIT_MS) {
+    await Bun.sleep(PSI_POLL_MS);
+    pressure = cpuPressure(file);
+  }
+  return `waited ${((Date.now() - began) / 1000).toFixed(0)}s from PSI ${first}`;
 }
 
 /**
- * Runs a leg once the host is quiet, reading the load each second while it
- * runs, and again (up to `LEG_TRIES`) when a reading went over
- * `QUIET_LOAD`: a loud leg is void. Says the leg's readings: the try kept,
- * the range of the load through it, and whether it stayed quiet.
+ * Runs a leg once the spec waits on no one for CPU, reading its pressure
+ * each second while it runs, and again (up to `LEG_TRIES`) when its start,
+ * middle or end reading was `PSI_LIMIT` or more: a contended leg is void.
+ * Says the leg's readings: PSI at start, middle and end, the try kept, the
+ * wait, and the load average beside them for reference.
  */
 async function quietLeg(
   name: string,
+  file: string,
   run: () => Promise<void>
 ): Promise<string> {
   let said = "";
   for (let attempt = 1; attempt <= LEG_TRIES; attempt += 1) {
-    const waited = await quietHost();
-    const loads: number[] = [oneMinuteLoad()];
+    const waited = await uncontended(file);
+    const readings: number[] = [cpuPressure(file)];
+    const loadAt = oneMinuteLoad();
     const sampler = setInterval(
-      () => loads.push(oneMinuteLoad()),
+      () => readings.push(cpuPressure(file)),
       LEG_SAMPLE_MS
     );
     try {
@@ -724,16 +775,55 @@ async function quietLeg(
     } finally {
       clearInterval(sampler);
     }
-    loads.push(oneMinuteLoad());
-    const top = Math.max(...loads);
-    const quiet = top < QUIET_LOAD;
-    said = `load ${Math.min(...loads)}–${top} over ${loads.length} readings, try ${attempt} (${waited})${quiet ? "" : `, NOT QUIET (over ${QUIET_LOAD})`}`;
+    readings.push(cpuPressure(file));
+    const marks = [
+      readings[0],
+      readings[Math.floor(readings.length / 2)],
+      readings.at(-1) ?? 0,
+    ];
+    const quiet = marks.every((one) => one < PSI_LIMIT);
+    said = `PSI some avg10 ${marks.join(" / ")} (start / middle / end), try ${attempt} (${waited}), load ${loadAt}–${oneMinuteLoad()} for reference${quiet ? "" : `, CONTENDED (PSI ${PSI_LIMIT} or more)`}`;
     console.log(`  ${name}: ${said}`);
     if (quiet) {
       break;
     }
   }
   return said;
+}
+
+/**
+ * Each switch's work from its input (`two-pane:switch:<n>`, marked as the
+ * input goes in) to the frame that shows its pane (`two-pane:shown:<n>`,
+ * marked in that frame's callbacks): the CPU of every task from the one to
+ * the end of the task holding the other, and the wall clock over them.
+ * Noted for a phase that made switches.
+ */
+function noteInputToShown(
+  kit: Kit,
+  where: string,
+  own: MainTask[],
+  markAt: (mark: string) => number | undefined
+): void {
+  const read: string[] = [];
+  for (let n = 0; markAt(`two-pane:switch:${n}`) !== undefined; n += 1) {
+    const made = markAt(`two-pane:switch:${n}`) ?? 0;
+    const shown = markAt(`two-pane:shown:${n}`);
+    if (shown === undefined) {
+      read.push("not shown in 2s");
+      continue;
+    }
+    const frame = own.find((task) => task.at <= shown && task.end >= shown);
+    const end = frame ? frame.end : shown;
+    const cpu = own
+      .filter((task) => task.at >= made && task.at <= end)
+      .reduce((sum, task) => sum + task.cpu, 0);
+    read.push(`${cpu.toFixed(1)}ms (${((end - made) / 1000).toFixed(0)}ms)`);
+  }
+  if (read.length > 0) {
+    kit.note(
+      `${where}: from the input to the frame that shows the pane, the page's CPU (and the wall clock): ${read.join(", ")}`
+    );
+  }
 }
 
 /** The slow `setAttribute` calls of the switches `press` makes, one tab at a time. */
@@ -900,6 +990,7 @@ async function measure(
       switches.push(task);
       madeOf.set(task, made);
     }
+    noteInputToShown(kit, `${mode} pane(s), ${name}`, own, markAt);
     const longestSwitch = longestOf(switches);
     const whichTask = whichOf(longestSwitch, madeOf);
     const longest = longestSwitch ?? longestOf(own);
@@ -935,10 +1026,12 @@ async function measure(
         : "nothing",
     };
   };
-  // Each leg on a quiet host (`quietLeg`): measured again when the host's
-  // load went over `QUIET_LOAD` while it ran, its readings said with it.
+  // Each leg uncontended (`quietLeg`): measured again when the spec waited
+  // for CPU while it ran, its readings said with it.
+  const pressure = pressureFile();
+  cpuPressure(pressure);
   const phase = async (name: Phase, act: () => Promise<void>) => {
-    const leg = await quietLeg(`${mode} pane(s), ${name}`, () =>
+    const leg = await quietLeg(`${mode} pane(s), ${name}`, pressure, () =>
       measurePhase(name, act)
     );
     spans[name].restyled = `${leg} | ${spans[name].restyled}`;
@@ -983,6 +1076,33 @@ async function measure(
       .first();
   const marked = (mark: string) =>
     page.evaluate((name) => performance.mark(name), mark);
+  // The pointer's own input, as the browser takes it from a mouse (CDP
+  // `Input.dispatchMouseEvent`): a locator's click first scrolls, waits for
+  // the box to be stable and hit-tests it in the page (`expectHitTarget`,
+  // `elementsFromPoint`), about 4ms of the page's main thread inside the
+  // switch it is measuring. The tab's centre is read before the switch.
+  const input = await page.context().newCDPSession(page);
+  /** Where the pointer came onto the tab it is about to press. */
+  let pointedAt = { x: 0, y: 0 };
+  const centreOf = async (tab: Locator) => {
+    const box = await tab.boundingBox();
+    if (!box) {
+      throw new Error("two-pane-perf: a tab to switch to has no box");
+    }
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  };
+  const mouse = (
+    type: "mouseMoved" | "mousePressed" | "mouseReleased",
+    at: { x: number; y: number }
+  ) =>
+    input.send("Input.dispatchMouseEvent", {
+      type,
+      x: at.x,
+      y: at.y,
+      button: type === "mouseMoved" ? "none" : "left",
+      buttons: type === "mousePressed" ? 1 : 0,
+      clickCount: type === "mouseMoved" ? 0 : 1,
+    });
   const ways: Record<
     Switch,
     {
@@ -1003,8 +1123,16 @@ async function measure(
     },
     point: {
       dwell: REACH_MS,
-      make: (tab) => tab.click(),
-      reach: (tab) => tab.hover(),
+      // Pressed where the reach came onto the tab: its box is read before
+      // the switch's mark, not inside the switch.
+      make: async () => {
+        await mouse("mousePressed", pointedAt);
+        await mouse("mouseReleased", pointedAt);
+      },
+      reach: async (tab) => {
+        pointedAt = await centreOf(tab);
+        await mouse("mouseMoved", pointedAt);
+      },
     },
   };
   // What each switch changed on a box holding `ROOT_ELEMENTS` or more: an
@@ -1119,10 +1247,39 @@ async function measure(
         await marked(`two-pane:reach:${n}`);
         await way.reach(tab);
         await page.waitForTimeout(way.dwell);
-        const madeAt = await page.evaluate((mark) => {
-          performance.mark(mark);
-          return performance.now();
-        }, `two-pane:switch:${n}`);
+        // The frame that shows the chosen pane, marked in its callbacks:
+        // the switch's work from its input to that frame is read off the
+        // trace between the two marks (`measurePhase`).
+        const madeAt = await page.evaluate(
+          ({ mark, shown, pane }) => {
+            const drawn = () => {
+              const box = document.querySelector(
+                `.pane[data-pane="${CSS.escape(pane)}"]`
+              );
+              return (
+                box !== null &&
+                !box.classList.contains("pane-hidden") &&
+                !box.classList.contains("pane-settling")
+              );
+            };
+            const began = performance.now();
+            const look = () => {
+              if (drawn()) {
+                performance.mark(shown);
+              } else if (performance.now() - began < 2000) {
+                requestAnimationFrame(look);
+              }
+            };
+            performance.mark(mark);
+            requestAnimationFrame(look);
+            return performance.now();
+          },
+          {
+            mark: `two-pane:switch:${n}`,
+            shown: `two-pane:shown:${n}`,
+            pane: id,
+          }
+        );
         await way.make(tab);
         await page.waitForTimeout(SETTLE_MS);
         const said = await page.evaluate(
@@ -1478,6 +1635,11 @@ function longReply(
 const spec: Spec = {
   name: "two-pane-perf",
   run: async (kit) => {
+    // Its CPU pressure readable before anything is built: no gate, no run.
+    const pressure = pressureFile();
+    console.log(
+      `  two-pane-perf: legs gated on ${pressure}, PSI some avg10 ${cpuPressure(pressure)} now`
+    );
     const scene = sceneModel();
     const { counts, mark } = scene;
     const fleet = await kit.fleet(scene.respond);
