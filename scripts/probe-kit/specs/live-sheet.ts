@@ -152,7 +152,8 @@ const standUp = async (kit: Kit) => {
   // from the branch origin names (agent clone.ts `remoteDefault`), and this
   // checkout may stand on a detached HEAD (a host check's) that names none.
   const src = join(fleet.sandbox, "src");
-  const origin = join(fleet.sandbox, "origin.git");
+  // Not the sandbox's `origin.git`: that is the fleet's own repo's remote (scratch-fleet.ts).
+  const origin = join(fleet.sandbox, "src-origin.git");
   /** One git step as the owner; a failure throws with git's own words. */
   const git = async (...args: string[]) => {
     const run = await Bun.$`git ${args}`
