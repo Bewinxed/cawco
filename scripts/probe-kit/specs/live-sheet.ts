@@ -35,18 +35,45 @@
  *    the hub's record of that pin carries the desk's `source` and `chain`.
  * 5. The pane closed (no viewer) and no agent read: the stage sleeps after
  *    its idle time (`STAGE_IDLE_MS`, 30 min); the pane opened again wakes
- *    it, and the three frames render.
+ *    it, and its frames render.
+ *
+ * The inspector (spec §5, proof 6), on the real StatTile's two stories
+ * (`StatTile.stories.ts`, Spend and Live), made by the delegate's second
+ * `artifact_create` once the iPad's checks are done:
+ *
+ * 7. At the desk the inspector stands beside the page; changing Live's
+ *    variant (`tone`) redraws its frame at once and writes nothing; Save
+ *    writes only Live's `args` literal (`git diff`: one file, that
+ *    literal's lines, its quotes and indent kept), both frames redraw from
+ *    the file, it still type-checks (svelte-check), and the session hears
+ *    the save. At the phone it is a sheet over the page's foot; a change
+ *    redraws live and Discard puts the file's back.
+ * 8. Docgen in the host (spec §6, proof 7): the create answers StatTile's
+ *    props; the built host, run straight in the clone and in fresh Vite Vue
+ *    and React apps (written and installed here)
+ *    under node and under bun, reads each schema right, under 2 s cold and
+ *    200 ms warm (the component edited, its props read again).
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts live-sheet
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
+ * `PROBE_LIVE_SHEET_IPAD=off` leaves step 6 out, for a host that can't build
+ * the app or tap it (no Mac, or its console locked), and says so as the run's
+ * last line: `SKIP 6: iPad leg off (PROBE_LIVE_SHEET_IPAD=off)`. Unset, step 6
+ * runs; nothing turns it off by itself.
  */
+import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
-import type { Frame, Page } from "playwright-core";
-import { STAGE_IDLE_MS } from "../../../packages/core/src/stage";
+import type { Frame, Locator, Page } from "playwright-core";
+import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import {
+  type ComponentDoc,
+  type SheetRead,
+  STAGE_IDLE_MS,
+} from "../../../packages/core/src/stage";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { type SimTouch, simTouch } from "../../lib/sim-touch";
@@ -63,6 +90,8 @@ const COMPONENT = "apps/dashboard/src/lib/cawco/turn/Who.svelte";
 /** The files as the stage names them, from its Vite root. */
 const STORY_AT_ROOT = "src/lib/cawco/turn/Who.stories.ts";
 const COMPONENT_AT_ROOT = "src/lib/cawco/turn/Who.svelte";
+/** Step 6 left out, only when the run's environment says so (the header). */
+const IPAD_OFF = process.env.PROBE_LIVE_SHEET_IPAD === "off";
 const ROLE = '<span class="role">{name}</span>';
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
@@ -71,6 +100,14 @@ const ERRORS_NOTICE = /does not compile on its stage/;
 const ERROR_AT = new RegExp(
   `## Compile error at ${COMPONENT_AT_ROOT.replaceAll(/[./]/g, "\\$&")}:(\\d+):(\\d+)`
 );
+const TILE_STORY = "apps/dashboard/src/lib/cawco/StatTile.stories.ts";
+const TILE_AT_ROOT = "src/lib/cawco/StatTile.stories.ts";
+/** The saves notice (core injected.ts `artifactSavesNotice`) and its section's place. */
+const SAVES_NOTICE = /changed the sheet "stat-tile"/;
+const SAVED_AT =
+  /## Saved at apps\/dashboard\/src\/lib\/cawco\/StatTile\.stories\.ts:(\d+)/;
+/** A hunk's head in `git diff -U0`: the old and new lines it spans. */
+const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm;
 /** The errors an `artifact_read` of the sheet answers, as its JSON spells them. */
 const READ_ERRORS = /"errors":(\[[^\]]*\])/;
 /** The marks' quiet period, the hub's send and the model's request (artifacts/service.ts `MARKS_QUIET_MS`). */
@@ -182,6 +219,9 @@ const respond = (request: Seen): Reply => {
   }
   if (ERRORS_NOTICE.test(request.last)) {
     return restIn(request, "Heard the compile error.");
+  }
+  if (SAVES_NOTICE.test(request.last)) {
+    return restIn(request, "Heard the save.");
   }
   if (!(marker && ask)) {
     return restIn(request, "Installed.");
@@ -296,11 +336,25 @@ const call = async (
   )) as string;
 };
 
-/** The sheet in the delegate's pane, at the desk: its page frame once three frames hold a Who. */
-const openPane = async (kit: Kit, fleet: Fleet, session: string) => {
+/** What a sheet's frames show once rendered: Who's three, StatTile's two. */
+const WHOS = { selector: "[data-cawco-story] h2.who", count: 3 };
+const TILES = { selector: "[data-cawco-story] .st-card", count: 2 };
+
+/** The sheet in the delegate's pane, at `view`: its page frame once its frames render. */
+const openPane = async (
+  kit: Kit,
+  fleet: Fleet,
+  session: string,
+  ready: { count: number; selector: string } = WHOS,
+  view: "desk" | "phone" = "desk"
+) => {
   const base = await fleet.dashboard();
-  const page = await kit.page("desk");
+  const page = await kit.page(view);
   await open(page, `${base}/session/${session}`, ".artifact-trigger");
+  if ((await page.locator(".preview-pane iframe").count()) === 0) {
+    // A phone keeps the panel in its drawer until asked.
+    await page.locator(".artifact-trigger").first().click();
+  }
   const cdp = await page.context().newCDPSession(page);
   const on: On = {
     call: () => Promise.resolve(""),
@@ -313,8 +367,9 @@ const openPane = async (kit: Kit, fleet: Fleet, session: string) => {
   };
   const frame = await pageFrame(on);
   await frame.waitForFunction(
-    () => document.querySelectorAll("[data-cawco-story] h2.who").length === 3,
-    null,
+    ({ selector, count }) =>
+      document.querySelectorAll(selector).length === count,
+    ready,
     { timeout: 120_000 }
   );
   await settle(page, 400);
@@ -483,7 +538,16 @@ const pinChecks = async (
   const comment = page.locator(".preview-pane button[aria-keyshortcuts='C']");
   await comment.focus();
   await page.keyboard.press("c");
-  await settle(page, 300);
+  // The page's overlay in Comment (its layer's `comment`, page.ts `mode`): a click before it is the page's own.
+  await frame.waitForFunction(
+    () =>
+      document
+        .querySelector("cawco-overlay")
+        ?.shadowRoot?.querySelector(".layer")
+        ?.classList.contains("comment") === true,
+    null,
+    { timeout: 10_000 }
+  );
   const icon = '[data-cawco-story="Agent"] .dot.a svg';
   const b = await screenBox(on, frame, icon);
   await page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
@@ -702,6 +766,10 @@ const ipadChecks = async (
   original: string,
   desk: { anchor: SheetAnchor; id: string }
 ) => {
+  // Off only when the run says so, and said at the run's end: never off by itself.
+  if (IPAD_OFF) {
+    return;
+  }
   const { path: app, problem } = freshApp(ROOT);
   if (
     !kit.check("6: the app is built from this tree", !problem, problem ?? app)
@@ -830,6 +898,580 @@ const ipadChecks = async (
   }
 };
 
+/** The inspector once its entrance has run: every animation on it finished, so its box is where it rests. */
+const landed = (inspector: Locator) =>
+  inspector.evaluate((el) =>
+    Promise.all(el.getAnimations().map((one) => one.finished))
+  );
+
+/** The tone StatTile's Live frame mounts with now. */
+const liveTone = (frame: Frame) =>
+  frame.evaluate(
+    () =>
+      document.querySelector<HTMLElement>('[data-cawco-story="Live"] .st-card')
+        ?.dataset.tone ?? null
+  );
+
+/** The 1-based lines of Live's `args` literal in the story file as this checkout has it: `args: {` to its closing brace. */
+const liveArgsLines = (source: string): { from: number; to: number } => {
+  const lines = source.split("\n");
+  const story = lines.findIndex((line) => line.includes("export const Live"));
+  const from = lines.findIndex(
+    (line, at) => at >= story && line.includes("args:")
+  );
+  let depth = 0;
+  for (let at = from; at < lines.length; at += 1) {
+    depth += (lines[at]?.split("{").length ?? 1) - 1;
+    depth -= (lines[at]?.split("}").length ?? 1) - 1;
+    if (depth <= 0) {
+      return { from: from + 1, to: at + 1 };
+    }
+  }
+  return { from: from + 1, to: from + 1 };
+};
+
+/** The old and new lines each hunk of a `git diff -U0` changed. */
+const hunksOf = (diff: string) =>
+  [...diff.matchAll(HUNK)].map((hunk) => {
+    const old = Number(hunk[1]);
+    const oldCount = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    return { from: old, to: old + Math.max(oldCount, 1) - 1 };
+  });
+
+/** 6 and 7: StatTile's sheet made, its props answered, its inspector at the desk (write-back) and at the phone. */
+const inspectorChecks = async (
+  kit: Kit,
+  fleet: Fleet,
+  session: string,
+  clone: string
+) => {
+  const made = await call(fleet, session, CREATE, {
+    kind: "sheet",
+    name: "stat-tile",
+    file: TILE_STORY,
+  });
+  kit.check(
+    "8: artifact_create answers StatTile's props: tone the five-value enum with its default, label a required string, action a slot",
+    made.includes('"options":["neutral","live","attn","done","fail"]') &&
+      made.includes('"defaultValue":"\\"neutral\\""') &&
+      made.includes(
+        '"name":"label","type":{"name":"string","raw":"string"},"required":true'
+      ) &&
+      made.includes('"name":"action","type":{"name":"slot"'),
+    made.slice(0, 600)
+  );
+  const original = await readFile(join(ROOT, TILE_STORY), "utf8");
+  const literal = liveArgsLines(original);
+  const { page, frame } = await openPane(kit, fleet, session, TILES);
+  await page.locator(".preview-pane button.inspect").click();
+  const inspector = page.locator("[data-inspector]");
+  await inspector.waitFor({ timeout: 20_000 });
+  await landed(inspector);
+  const placed = await page.evaluate(() => {
+    const panel = document.querySelector<HTMLElement>("[data-inspector]");
+    const well = document.querySelector<HTMLElement>(
+      ".preview-pane .side-well"
+    );
+    const iframe = document.querySelector<HTMLElement>(
+      ".preview-pane iframe.ready"
+    );
+    const p = panel?.getBoundingClientRect();
+    const f = iframe?.getBoundingClientRect();
+    // The well's inner box, inside its edge: where the inspector stands.
+    const box = well?.getBoundingClientRect();
+    const w = well &&
+      box && {
+        right: box.left + well.clientLeft + well.clientWidth,
+        height: well.clientHeight,
+      };
+    return {
+      layout: panel?.dataset.inspector,
+      right: p && w ? Math.round(w.right - p.right) : null,
+      height: p && w ? Math.round(p.height - w.height) : null,
+      beside: p && f ? Math.round(p.left - f.right) : null,
+      edges: {
+        well: w ? Math.round(w.right) : null,
+        panel: p ? [Math.round(p.left), Math.round(p.right)] : null,
+        page: f ? [Math.round(f.left), Math.round(f.right)] : null,
+      },
+    };
+  });
+  kit.check(
+    "7: at the desk the inspector is a right panel beside the page, the page narrowed to meet it",
+    placed.layout === "panel" &&
+      placed.right === 0 &&
+      placed.height === 0 &&
+      placed.beside !== null &&
+      Math.abs(placed.beside) <= 1,
+    JSON.stringify(placed)
+  );
+  await inspector.locator("select").first().selectOption("Live");
+  await inspector.locator('[data-prop="tone"] select').selectOption("done");
+  const redrawn = await frame
+    .waitForFunction(
+      () =>
+        document.querySelector<HTMLElement>(
+          '[data-cawco-story="Live"] .st-card'
+        )?.dataset.tone === "done",
+      null,
+      { timeout: 10_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  const unwritten =
+    (
+      await Bun.$`git -C ${clone} status --porcelain -- ${TILE_STORY}`.text()
+    ).trim() === "";
+  kit.check(
+    "7: a variant changed in the inspector redraws its frame at once, and writes nothing until Save",
+    redrawn && unwritten,
+    `Live's tone ${await liveTone(frame)}; the file ${unwritten ? "unchanged" : "already written"}`
+  );
+  const renders = await frame.evaluate(
+    () =>
+      (window as unknown as { __cawcoSheet: { renders: number } }).__cawcoSheet
+        .renders
+  );
+  const before = heard.length;
+  await inspector.getByRole("button", { name: "Save", exact: true }).click();
+  const fromFile = await frame
+    .waitForFunction(
+      (was) => {
+        const sheet = (
+          window as unknown as { __cawcoSheet: { renders: number } }
+        ).__cawcoSheet;
+        const cards = document.querySelectorAll<HTMLElement>(
+          "[data-cawco-story] .st-card"
+        );
+        const live = document.querySelector<HTMLElement>(
+          '[data-cawco-story="Live"]'
+        );
+        return (
+          sheet.renders > was &&
+          cards.length === 2 &&
+          live?.querySelector<HTMLElement>(".st-card")?.dataset.tone ===
+            "done" &&
+          !live.hasAttribute("data-cawco-edited")
+        );
+      },
+      renders,
+      { timeout: 20_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  const stat = (await Bun.$`git -C ${clone} diff --stat`.text()).trim();
+  const diff = await Bun.$`git -C ${clone} diff -U0 -- ${TILE_STORY}`.text();
+  const hunks = hunksOf(diff);
+  const added = diff
+    .split("\n")
+    .filter((line) => line.startsWith("+") && !line.startsWith("+++"));
+  const inside =
+    hunks.length > 0 &&
+    hunks.every((one) => one.from >= literal.from && one.to <= literal.to);
+  kit.check(
+    "7: Save rewrites only Live's args literal: one file, that literal's lines, its quotes and indent kept",
+    stat.split("\n").length === 2 &&
+      stat.includes("StatTile.stories.ts") &&
+      inside &&
+      added.length > 0 &&
+      added.every(
+        (line) => line.startsWith("+  args:") || line.startsWith("+    ")
+      ) &&
+      added.some((line) => line.includes('tone: "done"')),
+    `${stat.replaceAll("\n", " / ")}; hunks ${JSON.stringify(hunks)} in ${literal.from}-${literal.to}; ${added.join(" | ")}`
+  );
+  kit.check(
+    "7: both frames redraw from the file once it is written",
+    fromFile,
+    `renders ${renders} → ${await frame.evaluate(() => (window as unknown as { __cawcoSheet: { renders: number } }).__cawcoSheet.renders)}; Live's tone ${await liveTone(frame)}`
+  );
+  const typed = await Bun.$`bun run typecheck`
+    .cwd(join(clone, "apps/dashboard"))
+    .quiet()
+    .nothrow();
+  kit.check(
+    "7: the story file still type-checks (svelte-check)",
+    typed.exitCode === 0,
+    typed.stdout.toString().trim().split("\n").slice(-3).join(" / ")
+  );
+  const told = await until(
+    "the save at the session",
+    () => heard.slice(before).find((one) => SAVES_NOTICE.test(one.last)),
+    Boolean,
+    DELIVERY_MS + 20_000
+  ).catch(() => undefined);
+  const at = told?.last.match(SAVED_AT);
+  kit.check(
+    "7: the session hears the person's save on the marks' channel, at the literal's line",
+    !!at && Number(at[1]) >= literal.from && Number(at[1]) <= literal.to,
+    at
+      ? `saved at line ${at[1]}`
+      : `not heard: ${heard.at(-1)?.last.slice(0, 300)}`
+  );
+  await page.close();
+
+  // At the phone: a sheet over the page's foot; a change redraws live, Discard puts the file's back.
+  const phone = await openPane(kit, fleet, session, TILES, "phone");
+  await phone.page.locator(".preview-pane button.inspect").click();
+  const sheet = phone.page.locator("[data-inspector]");
+  await sheet.waitFor({ timeout: 20_000 });
+  await landed(sheet);
+  const foot = await phone.page.evaluate(() => {
+    const panel = document.querySelector<HTMLElement>("[data-inspector]");
+    const well = document.querySelector<HTMLElement>(
+      ".preview-pane .side-well"
+    );
+    const p = panel?.getBoundingClientRect();
+    // The well's inner box, inside its edge: where the inspector stands.
+    const box = well?.getBoundingClientRect();
+    const w = well &&
+      box && {
+        bottom: box.top + well.clientTop + well.clientHeight,
+        width: well.clientWidth,
+        height: well.clientHeight,
+      };
+    return {
+      layout: panel?.dataset.inspector,
+      bottom: p && w ? Math.round(w.bottom - p.bottom) : null,
+      width: p && w ? Math.round(w.width - p.width) : null,
+      share: p && w ? Math.round((p.height / w.height) * 100) : null,
+    };
+  });
+  kit.check(
+    "7: at the phone the inspector is a sheet over the page's foot, edge to edge, at most 60% of the well",
+    foot.layout === "sheet" &&
+      foot.bottom === 0 &&
+      foot.width === 0 &&
+      foot.share !== null &&
+      foot.share <= 60,
+    JSON.stringify(foot)
+  );
+  await sheet.locator("select").first().selectOption("Live");
+  await sheet.locator('[data-prop="tone"] select').selectOption("attn");
+  const changed = await phone.frame
+    .waitForFunction(
+      () =>
+        document.querySelector<HTMLElement>(
+          '[data-cawco-story="Live"] .st-card'
+        )?.dataset.tone === "attn",
+      null,
+      { timeout: 10_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  await sheet.getByRole("button", { name: "Discard", exact: true }).click();
+  const back = await phone.frame
+    .waitForFunction(
+      () =>
+        document.querySelector<HTMLElement>(
+          '[data-cawco-story="Live"] .st-card'
+        )?.dataset.tone === "done",
+      null,
+      { timeout: 10_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  kit.check(
+    "7: at the phone a change redraws Live at once, and Discard puts the file's tone back",
+    changed && back,
+    `attn ${changed ? "drawn" : "never drawn"}; done again ${back ? "after Discard" : "never"}`
+  );
+  await phone.page.close();
+};
+
+/** A run of the built host straight in a Vite root, under `runtime`: its sheet read cold, then warm after its component's edit. */
+const hostRead = async (
+  host: string,
+  app: { framework: string; kit: string; root: string; story: string },
+  runtime: "node" | "bun",
+  port: number
+): Promise<{
+  cold: number;
+  error?: string;
+  read?: SheetRead;
+  warm: number;
+}> => {
+  await Bun.write(join(app.root, ".cawco/stage/host.mjs"), host);
+  const child = spawn(runtime, [".cawco/stage/host.mjs"], {
+    cwd: app.root,
+    env: {
+      ...process.env,
+      CAWCO_STAGE: "1",
+      CAWCO_STAGE_PORT: String(port),
+      CAWCO_STAGE_FRAMEWORK: app.framework,
+      CAWCO_STAGE_KIT: app.kit,
+      // The dashboard's config asks for a hub; no request reaches it.
+      CAWCO_DEV_HUB_URL: "http://127.0.0.1:9",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  try {
+    await new Promise<void>((done, fail) => {
+      let said = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        said += chunk.toString();
+        if (said.includes('"cawco":"ready"')) {
+          done();
+        } else if (said.includes('"cawco":"fatal"')) {
+          fail(new Error(said));
+        }
+      });
+      child.on("exit", (code) =>
+        fail(new Error(`${runtime} ended (${code}): ${said}`))
+      );
+    });
+    // Vite's own start (its dependency scan) shares the loop: read once it has settled.
+    await Bun.sleep(8000);
+    const url = `http://127.0.0.1:${port}/__cawco/stories?file=${encodeURIComponent(app.story)}`;
+    const timed = async () => {
+      const t0 = performance.now();
+      const read = (await (await fetch(url)).json()) as SheetRead;
+      return { read, ms: Math.round(performance.now() - t0) };
+    };
+    const first = await timed();
+    const component = first.read.components[0]?.file;
+    let warm = Number.NaN;
+    if (component) {
+      const path = join(app.root, component);
+      const was = await readFile(path, "utf8");
+      // A comment at its end: new content, so its props are read again.
+      await writeFile(
+        path,
+        `${was}${app.framework === "react" ? "\n// probe\n" : "\n<!-- probe -->\n"}`
+      );
+      warm = (await timed()).ms;
+      await writeFile(path, was);
+    }
+    return { read: first.read, cold: first.ms, warm };
+  } catch (error) {
+    return {
+      cold: Number.NaN,
+      warm: Number.NaN,
+      error:
+        error instanceof Error ? error.message.slice(0, 300) : String(error),
+    };
+  } finally {
+    child.kill("SIGTERM");
+  }
+};
+
+/** A fresh Vite app's tsconfig: strict, its own `src`. */
+const SAMPLE_TSCONFIG = JSON.stringify({
+  compilerOptions: {
+    strict: true,
+    target: "ES2022",
+    module: "ESNext",
+    moduleResolution: "bundler",
+    jsx: "preserve",
+    skipLibCheck: true,
+  },
+  include: ["src"],
+});
+
+/**
+ * Two fresh Vite apps, written here and installed before the reads: a Vue
+ * card and a React card, each with a `density` enum, a required title, a
+ * boolean, a number and a slot, their own config untouched by the stage.
+ */
+const SAMPLES: Record<"vue" | "react", Record<string, string>> = {
+  vue: {
+    "package.json": JSON.stringify({
+      name: "live-sheet-vue",
+      private: true,
+      type: "module",
+      dependencies: { vue: "3.5.44" },
+      devDependencies: {
+        "@vitejs/plugin-vue": "6.0.10",
+        typescript: "6.0.2",
+        vite: "8.3.4",
+      },
+    }),
+    "vite.config.ts":
+      'import vue from "@vitejs/plugin-vue";\n\nexport default { plugins: [vue()] };\n',
+    "tsconfig.json": SAMPLE_TSCONFIG,
+    "src/Card.vue": `<script setup lang="ts">
+/** A card of the sample app. */
+withDefaults(
+  defineProps<{
+    /** The card's title. */
+    title: string;
+    /** How much room the card takes. */
+    density?: "compact" | "roomy";
+    pinned?: boolean;
+    count?: number;
+  }>(),
+  { density: "compact", pinned: false }
+);
+</script>
+
+<template>
+  <article :data-density="density" :data-pinned="pinned">
+    <h3>{{ title }}</h3>
+    <span v-if="count !== undefined">{{ count }}</span>
+    <slot />
+  </article>
+</template>
+`,
+    "src/Card.stories.ts": `import Card from "./Card.vue";
+
+export default { component: Card, args: { title: "Sample" } };
+
+export const Compact = { args: {} };
+
+export const Roomy = { args: { density: "roomy" } };
+`,
+  },
+  react: {
+    "package.json": JSON.stringify({
+      name: "live-sheet-react",
+      private: true,
+      type: "module",
+      dependencies: { react: "19.3.1", "react-dom": "19.3.1" },
+      devDependencies: {
+        "@types/react": "19.3.0",
+        "@vitejs/plugin-react": "6.1.2",
+        typescript: "6.0.2",
+        vite: "8.3.4",
+      },
+    }),
+    "vite.config.ts":
+      'import react from "@vitejs/plugin-react";\n\nexport default { plugins: [react()] };\n',
+    "tsconfig.json": SAMPLE_TSCONFIG.replace('"preserve"', '"react-jsx"'),
+    "src/Card.tsx": `import type { ReactNode } from "react";
+
+export interface CardProps {
+  children?: ReactNode;
+  count?: number;
+  /** How much room the card takes. */
+  density?: "compact" | "roomy";
+  pinned?: boolean;
+  /** The card's title. */
+  title: string;
+}
+
+/** A card of the sample app. */
+export function Card({ title, density = "compact", pinned = false, count, children }: CardProps) {
+  return (
+    <article data-density={density} data-pinned={pinned}>
+      <h3>{title}</h3>
+      {count === undefined ? null : <span>{count}</span>}
+      {children}
+    </article>
+  );
+}
+`,
+    "src/Card.stories.tsx": `import { Card } from "./Card";
+
+export default { component: Card, args: { title: "Sample" } };
+
+export const Compact = { args: {} };
+
+export const Roomy = { args: { density: "roomy" } };
+`,
+  },
+};
+
+/** Whether a component's props hold `name` of kind `kind`, with `extra` true of it. */
+const has = (
+  doc: ComponentDoc | undefined,
+  name: string,
+  kind: string,
+  extra: (prop: ComponentDoc["props"][number]) => boolean = () => true
+) => {
+  const prop = doc?.props.find((one) => one.name === name);
+  return !!prop && prop.type.name === kind && extra(prop);
+};
+
+/** 7: the built host's docgen straight in the clone and in fresh Vue and React apps, under node and bun, right and in time. */
+const docgenChecks = async (kit: Kit, fleet: Fleet, clone: string) => {
+  const host = await buildStageHost();
+  const samples = join(fleet.sandbox, "samples");
+  await Promise.all(
+    Object.entries(SAMPLES).map(async ([name, files]) => {
+      await Promise.all(
+        Object.entries(files).map(([path, source]) =>
+          Bun.write(join(samples, name, path), source)
+        )
+      );
+      await Bun.$`bun install`.cwd(join(samples, name)).quiet();
+    })
+  );
+  const runs = [
+    {
+      name: "StatTile",
+      root: join(clone, "apps/dashboard"),
+      framework: "svelte",
+      kit: "1",
+      story: TILE_AT_ROOT,
+      right: (doc?: ComponentDoc) =>
+        has(
+          doc,
+          "tone",
+          "enum",
+          (one) =>
+            one.options?.join() === "neutral,live,attn,done,fail" &&
+            one.defaultValue === '"neutral"'
+        ) &&
+        has(doc, "label", "string", (one) => one.required) &&
+        has(doc, "action", "slot") &&
+        !doc?.props.some((one) => one.name === "class"),
+    },
+    {
+      name: "the Vue sample's Card",
+      root: join(samples, "vue"),
+      framework: "vue",
+      kit: "0",
+      story: "src/Card.stories.ts",
+      right: (doc?: ComponentDoc) =>
+        has(
+          doc,
+          "density",
+          "enum",
+          (one) =>
+            one.options?.join() === "compact,roomy" &&
+            one.defaultValue === '"compact"'
+        ) &&
+        has(doc, "title", "string", (one) => one.required) &&
+        has(doc, "pinned", "boolean") &&
+        has(doc, "count", "number"),
+    },
+    {
+      name: "the React sample's Card",
+      root: join(samples, "react"),
+      framework: "react",
+      kit: "0",
+      story: "src/Card.stories.tsx",
+      right: (doc?: ComponentDoc) =>
+        has(
+          doc,
+          "density",
+          "enum",
+          (one) =>
+            one.options?.join() === "compact,roomy" &&
+            one.defaultValue === '"compact"'
+        ) &&
+        has(doc, "title", "string", (one) => one.required) &&
+        has(doc, "pinned", "boolean") &&
+        has(doc, "children", "slot"),
+    },
+  ];
+  let port = 47_310;
+  for (const runtime of ["node", "bun"] as const) {
+    for (const run of runs) {
+      port += 1;
+      // biome-ignore lint/performance/noAwaitInLoops: one host at a time, so each read times only itself
+      const got = await hostRead(host, run, runtime, port);
+      const doc = got.read?.components[0];
+      kit.check(
+        `8: ${run.name}'s props under ${runtime}: its schema right, under 2 s cold and 200 ms warm`,
+        run.right(doc) && got.cold < 2000 && got.warm < 200,
+        got.error ??
+          `${got.cold} ms cold, ${got.warm} ms warm; ${JSON.stringify(doc?.props.map((one) => `${one.name}:${one.type.name}`))}`
+      );
+    }
+  }
+};
+
 /** 5: no viewer, no read: asleep after its idle time; the pane again wakes it, and its frames render. */
 const sleepChecks = async (
   kit: Kit,
@@ -852,15 +1494,24 @@ const sleepChecks = async (
     slept,
     slept
       ? `asleep ${Math.round((Date.now() - closedAt) / 60_000)} min after the pane closed`
-      : `still not asleep ${Math.round((Date.now() - closedAt) / 60_000)} min after the pane closed`
+      : `still not asleep ${Math.round((Date.now() - closedAt) / 60_000)} min after the pane closed; the agent's last stage lines: ${(
+          await fleet.logs("agent")
+        )
+          .split("\n")
+          .filter((line) => line.includes(`[stage] ${workspace.slice(0, 8)}`))
+          .slice(-12)
+          .join(" | ")}`
   );
   const wakeAt = Date.now();
-  const again = await openPane(kit, fleet, session).catch(() => undefined);
+  // The panel shows the newest sheet, StatTile's.
+  const again = await openPane(kit, fleet, session, TILES).catch(
+    () => undefined
+  );
   const after =
     (await fleet.logs("agent")).split(stageLine(workspace, "asleep")).at(-1) ??
     "";
   kit.check(
-    "5: the pane opened again wakes it, and its three frames render",
+    "5: the pane opened again wakes it, and its frames render",
     !!again &&
       after.includes(stageLine(workspace, "waking")) &&
       after.includes(stageLine(workspace, "live")),
@@ -918,11 +1569,20 @@ const run = async (kit: Kit) => {
   await errorChecks(kit, fleet, page, session, artifact, clone, original);
   const desk = await pinChecks(kit, on, frame);
   await ipadChecks(kit, fleet, session, artifact, clone, original, desk);
+  // After the iPad's: StatTile's sheet takes the panel from Who's.
+  await inspectorChecks(kit, fleet, session, clone);
   await sleepChecks(kit, fleet, page, session, delegate.workspaceId);
+  // Last: these start a Vite of their own in the stage's root, beside the stage.
+  await docgenChecks(kit, fleet, clone);
   await call(fleet, session, FINISH, {
     headline: "The sheet ran.",
     summary: "The sheet ran.",
   }).catch(() => undefined);
+  // The run's last word, not step 6's: a reader of the output's tail (the
+  // hub's check keeps only that of a half-hour run) sees what it left out.
+  if (IPAD_OFF) {
+    console.log("SKIP 6: iPad leg off (PROBE_LIVE_SHEET_IPAD=off)");
+  }
 };
 
 const spec: Spec = { name: "live-sheet", run };

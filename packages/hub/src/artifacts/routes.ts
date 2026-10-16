@@ -8,7 +8,7 @@
 import { ARTIFACT_NAME, PREVIEW_START_PATH, SHOWN_FAILURES } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
-import { STORY_FILE } from "@cawco/core/stage";
+import { STORY_FILE, type StoryOp } from "@cawco/core/stage";
 import { Elysia, t } from "elysia";
 import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
@@ -17,9 +17,10 @@ import {
   type Artifacts,
   type CanvasChange,
   type PageChange,
+  type SheetChange,
   type SkeletonElement,
 } from "./service";
-import { PATCH_LIMIT, WORKSPACE_ID } from "./tools";
+import { ARGS_LIMIT, PATCH_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
 
 const refused = (error: unknown) => {
   if (error instanceof ArtifactRefusal) {
@@ -56,22 +57,73 @@ const operation = t.Object({
   value: t.Optional(t.Unknown()),
 });
 
-/** The one change an update names: a page's html or patch, a canvas's elements, delete or mermaid. */
+const storyName = t.String({ pattern: STORY_NAME.source });
+const argValues = t.Record(
+  t.String({ minLength: 1, maxLength: 100 }),
+  t.Unknown(),
+  {
+    maxProperties: ARGS_LIMIT,
+  }
+);
+
+/** A sheet's change (core `SheetWrite` less its file): one story's args, or one story op. */
+const sheetChange = {
+  args: t.Optional(
+    t.Object({
+      story: storyName,
+      values: argValues,
+      unset: t.Optional(
+        t.Array(t.String({ minLength: 1, maxLength: 100 }), {
+          maxItems: ARGS_LIMIT,
+        })
+      ),
+    })
+  ),
+  story: t.Optional(
+    t.Union([
+      t.Object({ add: storyName, args: t.Optional(argValues) }),
+      t.Object({ duplicate: storyName, as: storyName }),
+      t.Object({ remove: storyName }),
+      t.Object({ move: storyName, before: t.Union([storyName, t.Null()]) }),
+    ])
+  ),
+};
+
+/** The one change a sheet's write names. */
+const sheetChangeOf = (body: {
+  args?: Extract<SheetChange, { args: unknown }>["args"];
+  story?: StoryOp;
+}): SheetChange => {
+  if ((body.args === undefined) === (body.story === undefined)) {
+    throw new ArtifactRefusal(
+      400,
+      "A sheet takes exactly one of args or story."
+    );
+  }
+  return body.args ? { args: body.args } : { story: body.story as StoryOp };
+};
+
+/** The one change an update names: a page's html or patch, a canvas's elements, delete or mermaid, a sheet's args or story. */
 const changeOf = (body: {
+  args?: Extract<SheetChange, { args: unknown }>["args"];
   delete?: string[];
   elements?: SkeletonElement[];
   html?: string;
   mermaid?: string;
   patch?: unknown[];
-}): PageChange | CanvasChange => {
+  story?: StoryOp;
+}): PageChange | CanvasChange | SheetChange => {
   const named = (
-    ["html", "patch", "elements", "delete", "mermaid"] as const
+    ["html", "patch", "elements", "delete", "mermaid", "args", "story"] as const
   ).filter((key) => body[key] !== undefined);
   if (named.length !== 1) {
     throw new ArtifactRefusal(
       400,
-      "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas)."
+      "Pass exactly one of html or patch (a page), elements, delete or mermaid (a canvas), or args or story (a sheet)."
     );
+  }
+  if (body.args !== undefined || body.story !== undefined) {
+    return sheetChangeOf(body);
   }
   if (body.html !== undefined) {
     return { html: body.html };
@@ -189,15 +241,47 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             })
           ),
           mermaid: t.Optional(mermaid),
+          ...sheetChange,
         }),
       },
       async ({ params, body }) => {
         try {
-          return await artifacts.update(
+          const change = changeOf(body);
+          return "args" in change || "story" in change
+            ? await artifacts.sheetUpdate(params.id, params.artifact, change)
+            : await artifacts.update(params.id, params.artifact, change);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // The person's Save in a sheet's inspector, or its story buttons: written by the stage, told to the session.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/sheet",
+      { body: t.Object(sheetChange) },
+      async ({ params, body }) => {
+        try {
+          return await artifacts.sheetWrite(
             params.id,
             params.artifact,
-            changeOf(body)
+            sheetChangeOf(body)
           );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // The components a sheet can show in the session's workspace (components_list).
+    .get(
+      "/api/instances/:id/artifacts/components",
+      {
+        query: t.Object({
+          dir: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
+        }),
+      },
+      async ({ params, query }) => {
+        try {
+          return await artifacts.components(params.id, query.dir);
         } catch (error) {
           return refused(error);
         }

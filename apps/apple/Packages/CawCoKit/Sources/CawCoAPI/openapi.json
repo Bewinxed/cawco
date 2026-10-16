@@ -4889,6 +4889,107 @@
                     "minLength": 1,
                     "maxLength": 20000,
                     "type": "string"
+                  },
+                  "args": {
+                    "type": "object",
+                    "properties": {
+                      "story": {
+                        "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                        "type": "string"
+                      },
+                      "values": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^.*$": {}
+                        },
+                        "maxProperties": 100
+                      },
+                      "unset": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "story",
+                      "values"
+                    ]
+                  },
+                  "story": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "add": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          },
+                          "args": {
+                            "type": "object",
+                            "patternProperties": {
+                              "^.*$": {}
+                            },
+                            "maxProperties": 100
+                          }
+                        },
+                        "required": [
+                          "add"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "duplicate": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          },
+                          "as": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "duplicate",
+                          "as"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "remove": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "remove"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "move": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          },
+                          "before": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "move",
+                          "before"
+                        ]
+                      }
+                    ]
                   }
                 }
               }
@@ -4946,6 +5047,211 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Removed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/sheet": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "properties": {
+                      "story": {
+                        "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                        "type": "string"
+                      },
+                      "values": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^.*$": {}
+                        },
+                        "maxProperties": 100
+                      },
+                      "unset": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "story",
+                      "values"
+                    ]
+                  },
+                  "story": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "add": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          },
+                          "args": {
+                            "type": "object",
+                            "patternProperties": {
+                              "^.*$": {}
+                            },
+                            "maxProperties": 100
+                          }
+                        },
+                        "required": [
+                          "add"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "duplicate": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          },
+                          "as": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "duplicate",
+                          "as"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "remove": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "remove"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "move": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": "string"
+                          },
+                          "before": {
+                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "move",
+                          "before"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdArtifactsByArtifactSheet",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSheet 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSheet 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/components": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "maxLength": 1000,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdArtifactsComponents",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdArtifactsComponents 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdArtifactsComponents200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiInstancesByIdArtifactsComponents 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -13412,394 +13718,6 @@
           },
           "503": {
             "description": "putApiProjectsByIdBlocksByPage 503",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/mockups/library": {
-      "get": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "getApiProjectsByIdMockupsLibrary",
-        "responses": {
-          "200": {
-            "description": "getApiProjectsByIdMockupsLibrary 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectMockups"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "getApiProjectsByIdMockupsLibrary 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "getApiProjectsByIdMockupsLibrary 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "getApiProjectsByIdMockupsLibrary 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "getApiProjectsByIdMockupsLibrary 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "getApiProjectsByIdMockupsLibrary 413",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "getApiProjectsByIdMockupsLibrary 415",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "getApiProjectsByIdMockupsLibrary 422",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "getApiProjectsByIdMockupsLibrary 500",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "getApiProjectsByIdMockupsLibrary 503",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/mockups/check": {
-      "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "source": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "source"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "postApiProjectsByIdMockupsCheck",
-        "responses": {
-          "200": {
-            "description": "postApiProjectsByIdMockupsCheck 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjectsByIdMockupsCheck200"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "postApiProjectsByIdMockupsCheck 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "postApiProjectsByIdMockupsCheck 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "postApiProjectsByIdMockupsCheck 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiProjectsByIdMockupsCheck 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "postApiProjectsByIdMockupsCheck 413",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "postApiProjectsByIdMockupsCheck 415",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiProjectsByIdMockupsCheck 422",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "postApiProjectsByIdMockupsCheck 500",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "postApiProjectsByIdMockupsCheck 503",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/mockups/file": {
-      "get": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "getApiProjectsByIdMockupsFile",
-        "responses": {
-          "200": {
-            "description": "getApiProjectsByIdMockupsFile 200",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "getApiProjectsByIdMockupsFile 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "getApiProjectsByIdMockupsFile 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "getApiProjectsByIdMockupsFile 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "getApiProjectsByIdMockupsFile 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "getApiProjectsByIdMockupsFile 413",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "getApiProjectsByIdMockupsFile 415",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "getApiProjectsByIdMockupsFile 422",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "getApiProjectsByIdMockupsFile 500",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "getApiProjectsByIdMockupsFile 503",
             "content": {
               "text/plain": {
                 "schema": {
@@ -23485,6 +23403,24 @@
           "$ref": "#/components/schemas/ArtifactStatus"
         }
       },
+      "getApiInstancesByIdArtifactsComponents200": {
+        "type": "object",
+        "properties": {
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Found"
+            }
+          },
+          "dir": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "components",
+          "dir"
+        ]
+      },
       "postApiInstancesByIdArtifactsCommentsByPinReply200": {
         "type": "object",
         "properties": {
@@ -24065,24 +24001,6 @@
         },
         "required": [
           "rows"
-        ]
-      },
-      "postApiProjectsByIdMockupsCheck200": {
-        "type": "object",
-        "properties": {
-          "components": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "source": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "components",
-          "source"
         ]
       },
       "postApiNoticesSeen200": {
@@ -24745,10 +24663,10 @@
                 "kind": {
                   "$ref": "#/components/schemas/WorkflowEffectKind"
                 },
-                "result": {},
                 "args": {
                   "type": "object"
                 },
+                "result": {},
                 "runId": {
                   "type": "string"
                 },
@@ -32138,16 +32056,13 @@
             "description": "Its live document on the hub's preview listener.",
             "type": "string"
           },
+          "sheet": {
+            "$ref": "#/components/schemas/SheetRead",
+            "description": "A sheet as its stage reads it: its stories with their args, its meta, and each component's props."
+          },
           "stage": {
             "$ref": "#/components/schemas/StageState",
             "description": "A sheet's stage, as it stands once started."
-          },
-          "stories": {
-            "description": "A sheet's stories, each its export's name and 1-based place in the story file.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Story"
-            }
           },
           "why": {
             "description": "Why it is not on screen, one sentence; only with `opened: false`.",
@@ -32167,6 +32082,204 @@
           "name",
           "opened",
           "route"
+        ]
+      },
+      "SheetRead": {
+        "description": "A sheet as its stage reads it: its stories, its meta, and the props of each component they mount.",
+        "type": "object",
+        "properties": {
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComponentDoc"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/SheetMeta"
+          },
+          "stories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Story"
+            }
+          }
+        },
+        "required": [
+          "components",
+          "meta",
+          "stories"
+        ]
+      },
+      "ComponentDoc": {
+        "description": "A component's props as the stage read them. `types` says how: `checked`\nby the TypeScript checker or a docgen of its own, `jsdoc` from JSDoc\nand PropTypes alone (the project has no TypeScript), `unknown` when\nnothing could read them, with `note` saying why.",
+        "type": "object",
+        "properties": {
+          "file": {
+            "description": "From the Vite root.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "props": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PropMeta"
+            }
+          },
+          "types": {
+            "$ref": "#/components/schemas/ComponentDocTypes"
+          }
+        },
+        "required": [
+          "file",
+          "name",
+          "props",
+          "types"
+        ]
+      },
+      "PropMeta": {
+        "description": "One prop of a component as its framework's docgen reads it, in\nStorybook's argTypes/PropertyMeta shape (spec §6): Svelte's by\nsvelte2tsx and TypeScript's checker, Vue's by vue-component-meta,\nReact's by react-docgen (react-docgen-typescript where a type is past\nit).",
+        "type": "object",
+        "properties": {
+          "defaultValue": {
+            "description": "Its default as the source writes it, like `\"neutral\"`; null when it has none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "options": {
+            "description": "An enum's values, in the order its type lists them.",
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/PropMetaTokens",
+            "description": "A string prop whose name says it is a colour, length or font takes that type's token names."
+          },
+          "type": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "$ref": "#/components/schemas/PropKind"
+              },
+              "raw": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "raw"
+            ]
+          }
+        },
+        "required": [
+          "defaultValue",
+          "description",
+          "name",
+          "required",
+          "type"
+        ]
+      },
+      "PropKind": {
+        "description": "A prop's type in Storybook's SBType names (`argTypes[name].type.name`),\nwhich decides its control: `enum` the variant control, `boolean`,\n`string` and `number` their fields, `slot` content that is a pin\n(`Snippet`, `ReactNode`, a Vue slot), the rest read-only.",
+        "type": "string",
+        "enum": [
+          "array",
+          "boolean",
+          "enum",
+          "function",
+          "number",
+          "object",
+          "other",
+          "slot",
+          "string"
+        ]
+      },
+      "SheetMeta": {
+        "description": "What a story file's default export says every story shares: its args, and the component each mounts unless it names its own.",
+        "type": "object",
+        "properties": {
+          "args": {
+            "type": "object"
+          },
+          "code": {
+            "type": "object"
+          },
+          "component": {
+            "description": "The component, from the Vite root; null when the meta names none the stage could resolve.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "args",
+          "code",
+          "component"
+        ]
+      },
+      "Story": {
+        "description": "One named export of a story file: a story, by its export's 1-based place,\nwith its `args` as the file writes them. A literal arg (a string, number,\nboolean, null, or an array or object of those) is its value; any other\n(a fixture import, a function) is in `code`, its source text, and the\ninspector shows it read-only.",
+        "type": "object",
+        "properties": {
+          "args": {
+            "type": "object"
+          },
+          "code": {
+            "type": "object",
+            "description": "Args whose value is code, not a literal: their source text."
+          },
+          "column": {
+            "type": "number"
+          },
+          "component": {
+            "description": "The story's own component, from the Vite root, when it names one apart from the meta's.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "line": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "args",
+          "code",
+          "column",
+          "component",
+          "line",
+          "name"
         ]
       },
       "StageState": {
@@ -32255,26 +32368,6 @@
           "live",
           "starting",
           "waking"
-        ]
-      },
-      "Story": {
-        "description": "One named export of a story file: a story, by its export's 1-based place.",
-        "type": "object",
-        "properties": {
-          "column": {
-            "type": "number"
-          },
-          "line": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "column",
-          "line",
-          "name"
         ]
       },
       "ArtifactStatus": {
@@ -32386,6 +32479,34 @@
             "description": "A canvas the person opened in the composer and has not sent yet.",
             "type": "boolean"
           },
+          "edit": {
+            "description": "A sheet's write: the story file, from the clone's root, and the 1-based lines it changed.",
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "lines": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "number"
+                  },
+                  "to": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "from",
+                  "to"
+                ]
+              }
+            },
+            "required": [
+              "file",
+              "lines"
+            ]
+          },
           "id": {
             "type": "string"
           },
@@ -32449,6 +32570,10 @@
             "description": "The cursor for the next read's `since`.",
             "type": "number"
           },
+          "sheet": {
+            "$ref": "#/components/schemas/SheetRead",
+            "description": "A sheet as its stage reads it: its stories with their args, its meta, and each component's props."
+          },
           "stage": {
             "$ref": "#/components/schemas/StageState",
             "description": "A sheet's stage: its status, and the compile errors standing in the modules the sheet imports."
@@ -32456,13 +32581,6 @@
           "state": {
             "type": "object",
             "description": "Every key, or with `since` only those changed after it."
-          },
-          "stories": {
-            "description": "A sheet's stories, each its export's name and 1-based place in the story file.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Story"
-            }
           },
           "workspace": {
             "description": "A port preview's workspace, whose dev server it is.",
@@ -32511,6 +32629,29 @@
             ]
           }
         }
+      },
+      "Found": {
+        "description": "A component the stage found (§6's discovery): its name, its file, and the story files that show it.",
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sheets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "file",
+          "name",
+          "sheets"
+        ]
       },
       "CommentRead": {
         "description": "What `comment_read` answers: each of the session's artifacts with pins\nthat match, the page's address the person last marked it at, and the time to\npass as the next `since`. A pin on ink carries the ink's box in the page.",
@@ -32965,13 +33106,13 @@
               "color": {
                 "type": "string"
               },
+              "fontFamily": {
+                "type": "string"
+              },
               "position": {
                 "type": "string"
               },
               "backgroundColor": {
-                "type": "string"
-              },
-              "fontFamily": {
                 "type": "string"
               },
               "fontSize": {
@@ -37067,208 +37208,6 @@
         "enum": [
           "narrow",
           "wide"
-        ]
-      },
-      "ProjectMockups": {
-        "description": "A project's mockup library, as the hub answers it and the dashboard draws a mockup with it.",
-        "type": "object",
-        "properties": {
-          "assets": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "alt": {
-                  "type": "string"
-                },
-                "file": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "alt",
-                "file",
-                "name"
-              ]
-            }
-          },
-          "css": {
-            "description": "The project's CSS, read for a shadow root; empty with no design, or CawCo's own.",
-            "type": "string"
-          },
-          "design": {
-            "$ref": "#/components/schemas/MockupDesign"
-          },
-          "fonts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MockupFont"
-            }
-          },
-          "hash": {
-            "description": "The design's content hash: the library changes only when it does.",
-            "type": "string"
-          },
-          "prompt": {
-            "description": "What an agent reads to write a mockup for this project.",
-            "type": "string"
-          },
-          "roles": {
-            "type": "object",
-            "properties": {
-              "canvas": {
-                "type": "string"
-              },
-              "line": {
-                "type": "string"
-              },
-              "surface": {
-                "type": "string"
-              },
-              "sunken": {
-                "type": "string"
-              },
-              "ink": {
-                "type": "string"
-              },
-              "muted": {
-                "type": "string"
-              },
-              "accent": {
-                "type": "string"
-              },
-              "onAccent": {
-                "type": "string"
-              },
-              "positive": {
-                "type": "string"
-              },
-              "caution": {
-                "type": "string"
-              },
-              "critical": {
-                "type": "string"
-              },
-              "fontBody": {
-                "type": "string"
-              },
-              "fontDisplay": {
-                "type": "string"
-              },
-              "textSize": {
-                "type": "string"
-              },
-              "space": {
-                "type": "string"
-              },
-              "radius": {
-                "type": "string"
-              },
-              "radiusSmall": {
-                "type": "string"
-              },
-              "shadow": {
-                "type": "string"
-              }
-            }
-          },
-          "templates": {
-            "type": "object",
-            "description": "Each specimen's template, checked, by component name."
-          }
-        },
-        "required": [
-          "assets",
-          "css",
-          "design",
-          "fonts",
-          "hash",
-          "prompt",
-          "roles",
-          "templates"
-        ]
-      },
-      "MockupDesign": {
-        "description": "What a project's mockup library is made from.",
-        "type": "object",
-        "properties": {
-          "assets": {
-            "description": "Asset names, for `Image`.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "specimens": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MockupSpecimen"
-            }
-          },
-          "system": {
-            "const": "cawco",
-            "type": "string"
-          }
-        },
-        "required": [
-          "assets",
-          "specimens"
-        ]
-      },
-      "MockupSpecimen": {
-        "description": "A specimen as its library component is made: its props, and whether its template takes children.",
-        "type": "object",
-        "properties": {
-          "description": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "props": {
-            "type": "object"
-          },
-          "slot": {
-            "description": "Its template has a `<slot>`: it takes `children`.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "description",
-          "name",
-          "props",
-          "slot"
-        ]
-      },
-      "MockupFont": {
-        "description": "A font of the project's design: its own name, the file, and the descriptors its",
-        "type": "object",
-        "properties": {
-          "descriptors": {
-            "type": "object",
-            "description": "Its other descriptors, as"
-          },
-          "family": {
-            "description": "The family's name in a mockup: the project's, made its own (`mk-<hash>-<name>`).",
-            "type": "string"
-          },
-          "file": {
-            "description": "The file in the project's folder, `design/…`.",
-            "type": "string"
-          },
-          "name": {
-            "description": "The project's own name for it.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "descriptors",
-          "family",
-          "file",
-          "name"
         ]
       },
       "JoinInfo": {
@@ -50867,6 +50806,14 @@
           "failed"
         ]
       },
+      "ComponentDocTypes": {
+        "type": "string",
+        "enum": [
+          "checked",
+          "jsdoc",
+          "unknown"
+        ]
+      },
       "ContinuationJobStage": {
         "type": "string",
         "enum": [
@@ -51164,6 +51111,14 @@
           "deferred",
           "failed",
           "stopped"
+        ]
+      },
+      "PropMetaTokens": {
+        "type": "string",
+        "enum": [
+          "color",
+          "dimension",
+          "fontFamily"
         ]
       },
       "RebalanceNoticeHow": {

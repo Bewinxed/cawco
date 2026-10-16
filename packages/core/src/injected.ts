@@ -269,6 +269,17 @@ export const artifactErrorsNotice = (
 ): string =>
   `[CawCo] The ${kind} "${name}" (artifact ${id}) does not compile on its stage; the panel shows the last good render under the error. Fix each at its file:line:column; artifact_read lists the errors standing, and none once it compiles.\n\n${sections.join("\n\n")}`;
 
+/**
+ * What the person saved from a sheet's inspector (live components spec §5):
+ * CawCo wrote it into the story file in the session's workspace, so the
+ * session hears it on the marks' channel before it next edits that file.
+ */
+export const artifactSavesNotice = (
+  { id, kind, name }: ArtifactComments,
+  sections: string[]
+): string =>
+  `[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file in your workspace. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
+
 const ARTIFACT_COMMENTS_LINE =
   /^\[CawCo\] The person commented on the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\)\.[^\n]*\n\n/;
 

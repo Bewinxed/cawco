@@ -430,7 +430,13 @@ async function start(
             instanceId,
             // A page's open socket (its HMR) is a viewer: the stage stays awake for it.
             ...(source.stage && source.workspace
-              ? { ended: stageViewer(source.workspace, source.stage.dir) }
+              ? {
+                  viewer: () =>
+                    stageViewer(
+                      source.workspace as string,
+                      (source.stage as { dir: string }).dir
+                    ),
+                }
               : {}),
           })
             ? undefined

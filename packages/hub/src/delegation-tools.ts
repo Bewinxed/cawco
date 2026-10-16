@@ -16,6 +16,7 @@ import {
   commentRead,
   commentReply,
   commentResolve,
+  componentsList,
 } from "./artifacts/tools";
 import {
   type HandoffDeps,
@@ -1155,6 +1156,24 @@ export function handoffTools(deps: HandoffDeps) {
       }
     ),
     tool(
+      componentsList.name,
+      componentsList.description,
+      componentsList.input,
+      async ({ dir }) =>
+        json(
+          await actions.artifactCall(
+            "GET",
+            `/components${dir ? `?dir=${encodeURIComponent(dir)}` : ""}`
+          )
+        ),
+      {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      }
+    ),
+    tool(
       artifactShow.name,
       artifactShow.description,
       artifactShow.input,
@@ -1286,8 +1305,8 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
   },
   { prefixes: ["workflow_", "submit_result"], what: "workflows" },
   {
-    prefixes: ["artifact_", "comment_"],
-    what: "artifacts you show and the person's pins on them",
+    prefixes: ["artifact_", "comment_", "components_list"],
+    what: "artifacts you show, the person's pins on them, the components a sheet shows",
   },
   { prefixes: ["memory_"], what: "project memory" },
   { prefixes: ["thread_"], what: "your threads with the person" },

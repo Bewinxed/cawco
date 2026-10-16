@@ -88,7 +88,6 @@
     sessionAct,
   } from "./session-acts.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
-  import type { MarkStatus } from "./TreeMark.svelte";
   import { isThreadTab } from "./thread-tabs";
   import AccountDot from "./usage/AccountDot.svelte";
   import { runIdOf } from "./workflow-runs";
@@ -111,7 +110,6 @@
     peek = true,
     fold = null,
     onarchive,
-    mark = null,
   }: {
     instance?: InstanceRow | null;
     info?: NeutralSessionInfo | null;
@@ -147,11 +145,6 @@
     } | null;
     /** Takes it off the list without opening it (a finished row). */
     onarchive?: () => void;
-    /**
-     * Its status as given, not read from the fleet: a mockup's row, whose
-     * session is made up (views/openui/mockup).
-     */
-    mark?: MarkStatus | null;
   } = $props();
 
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
@@ -159,7 +152,7 @@
   const run = $derived(instance ? runIdOf(instance.id) !== null : false);
   /** The row is a thread with the project's Caw (thread-tabs.ts), not a session. */
   const thread = $derived(instance ? isThreadTab(instance.id) : false);
-  const status = $derived(mark ?? sessionStatus(instance, done));
+  const status = $derived(sessionStatus(instance, done));
   /** Where it runs, for its mark's hue: the same seed in every list. */
   const place = $derived(
     instance?.cwd || info?.cwd || instance?.machineId || machineId

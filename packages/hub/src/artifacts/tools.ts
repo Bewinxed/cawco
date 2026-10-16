@@ -29,7 +29,17 @@ export const ARTIFACT_TOOLS = [
   "comment_read",
   "comment_reply",
   "comment_resolve",
+  "components_list",
 ] as const;
+
+/** A story's export name in a CSF file: `Roomy`. */
+export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/;
+/** Args one write may set. Our bound: a component's props. */
+export const ARGS_LIMIT = 100;
+
+/** A story's name in a tool's input: its pattern is the route's and the stage's to check, which say why. */
+const story = z.string();
+const argValues = z.record(z.string(), z.unknown());
 
 const id = z
   .string()
@@ -125,11 +135,31 @@ export const artifactUpdate = {
     'JSON Patch (RFC 6902) over its state, keyed by choice id or field name, like [{"op":"replace","path":"/hero/options","value":["b"]}]; ' +
     "all of it applies or none. Answers the state after the change. A canvas takes `elements` (added, or replacing " +
     'the one of the id given), `delete` (ids) or `mermaid` (added below); it answers its outline and "<id> changed ' +
-    'under you" for what you replaced that the person changed since your last read.',
+    "under you\" for what you replaced that the person changed since your last read. A sheet's `args` sets a " +
+    "story's values, its `story` adds, duplicates, removes or moves one; each answers the lines it wrote.",
   input: {
     id,
     elements,
     mermaid,
+    args: z
+      .object({
+        story,
+        values: argValues,
+        unset: z.array(z.string()).optional(),
+      })
+      .optional(),
+    story: z
+      .object({
+        add: story,
+        args: argValues,
+        duplicate: story,
+        as: story,
+        remove: story,
+        move: story,
+        before: story.nullable(),
+      })
+      .partial()
+      .optional(),
     delete: z
       .array(z.string().min(1).max(100))
       .min(1)
@@ -159,7 +189,7 @@ export const artifactRead = {
     "When the person sends picks, you are told the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture. A sheet adds " +
-    "`stories` and its stage's `status` and compile `errors`; its picks are stories.",
+    "`sheet` (stories, args, props) and its stage's `status` and `errors`; its picks are stories.",
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),
@@ -198,6 +228,18 @@ export const artifactDelete = {
     "Remove an artifact of yours a newer one superseded, once that one is up. Its picks and pins go too; a " +
     "promoted copy stays. Answers `showing`: what your panel shows now, or null.",
   input: { id },
+};
+
+export const componentsList = {
+  name: "components_list",
+  description:
+    "Your workspace's components a sheet can show, and each one's story files.",
+  input: {
+    dir: z
+      .string()
+      .optional()
+      .describe("Only under this folder of your clone."),
+  },
 };
 
 const pin = z

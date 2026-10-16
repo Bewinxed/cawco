@@ -77,7 +77,12 @@ import {
   writeMachineKey,
 } from "@cawco/core/machine-key";
 import { userLayerPath } from "@cawco/core/paths";
-import { STAGE_ENSURE } from "@cawco/core/stage";
+import {
+  type SheetWrite,
+  STAGE_COMPONENTS,
+  STAGE_ENSURE,
+  STAGE_WRITE,
+} from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
@@ -174,7 +179,13 @@ import {
   SessionSupervisor,
 } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
-import { ensureStage, setStageSink, stopStages } from "./stage";
+import {
+  ensureStage,
+  setStageSink,
+  stageComponents,
+  stopStages,
+  writeSheet,
+} from "./stage";
 
 /** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */
 const takeUpstream = (
@@ -2722,6 +2733,21 @@ export const startDaemon = (rediscover = false) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : ensureStage(ref as WorkspaceRef, String(file))
+    );
+    // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved.
+    supervisor.registerDaemonFunction(STAGE_WRITE, (ref, write) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : writeSheet(ref as WorkspaceRef, write as SheetWrite)
+    );
+    // A Vite root's components, as its stage finds them (spec §6's discovery).
+    supervisor.registerDaemonFunction(STAGE_COMPONENTS, (ref, dir) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : stageComponents(
+            ref as WorkspaceRef,
+            typeof dir === "string" ? dir : undefined
+          )
     );
     // A check that names another machine: the commit leaves here, and arrives there.
     supervisor.registerDaemonFunction(

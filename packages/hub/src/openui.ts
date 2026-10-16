@@ -50,46 +50,35 @@ const URL_LIKE =
 /** Markup in a string: a view's text is plain. */
 const MARKUP = /<\s*\/?\s*[a-z!][^>]*>/i;
 /** OpenUI Cloud's protocol markers: a scripts section carries code. */
-export const CLOUD_MARKER = "]]>openui:";
-/** Action steps and the plan that runs them: a view only reads, a mockup does nothing. */
+const CLOUD_MARKER = "]]>openui:";
+/** Action steps and the plan that runs them: a view only reads. */
 const ACTIONS = new Set(["OpenUrl", "ToAssistant", "Run", "Set", "Reset"]);
 /** lang-core's token kinds this reads (tokens.ts `T`, a const enum). */
 const TOKEN = { Str: 14, Type: 17, BuiltinCall: 35 } as const;
 
-/** What a program is, in a refusal's words: a view (this file) or a mockup (mockups.ts). */
-export type ProgramKind = "view" | "mockup";
-
-/** Refuses a program with every reason, as the folder refusal its route answers (422) and its tool call reads. */
-export const refuse = (
-  problems: string[],
-  what: ProgramKind = "view"
-): never => {
+/** Refuses a view with every reason, as the folder refusal its route answers (422) and its tool call reads. */
+const refuse = (problems: string[]): never => {
   throw new FolderRefusal(
     422,
     problems.length === 1
       ? (problems[0] ?? "")
-      : `The ${what} has ${problems.length} problems:\n- ${problems.slice(0, MAX_PROBLEMS).join("\n- ")}`
+      : `The view has ${problems.length} problems:\n- ${problems.slice(0, MAX_PROBLEMS).join("\n- ")}`
   );
 };
 
 /** Its strings, action steps and functions that would run code or reach out. */
-export const unsafe = (
-  source: string,
-  what: ProgramKind = "view"
-): string[] => {
+const unsafe = (source: string): string[] => {
   const found: string[] = [];
-  const stance =
-    what === "view" ? "a view only reads" : "a mockup does nothing";
   for (const token of tokenize(source)) {
     const value = String(token.v ?? "");
     if (token.t === TOKEN.Str) {
       if (URL_LIKE.test(value)) {
         found.push(
-          `“${value.slice(0, 60)}” is a URL: a ${what} cannot reach the network.`
+          `“${value.slice(0, 60)}” is a URL: a view cannot reach the network.`
         );
       } else if (MARKUP.test(value)) {
         found.push(
-          `“${value.slice(0, 60)}” holds markup: a ${what}'s text is plain.`
+          `“${value.slice(0, 60)}” holds markup: a view's text is plain.`
         );
       }
     } else if (
@@ -97,7 +86,7 @@ export const unsafe = (
       (token.t === TOKEN.Type && value === "Action")
     ) {
       found.push(
-        `${token.t === TOKEN.BuiltinCall ? "@" : ""}${value} is an action: ${stance}, so it has none.`
+        `${token.t === TOKEN.BuiltinCall ? "@" : ""}${value} is an action: a view only reads, so it has none.`
       );
     }
   }

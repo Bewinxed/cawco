@@ -42,12 +42,16 @@ import type { CarrySessionRequest } from "./harness";
  * 7: a workspace's held work (`GET /api/workspaces/:id/held`) names no files
  *    git ignores (`ignored`, `ignoredBytes`): they go with the clone, and
  *    only a held workspace has held work to read.
+ * 8: a sheet's create and read answer `sheet` (its stories with their args,
+ *    its meta, each component's props) in place of `stories` (live
+ *    components, slice 2). Nothing but an agent reads them; a page built for
+ *    7 reloads into the inspector that reads the sheet from its page.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 7;
+export const WIRE_PROTOCOL = 8;
 
 /**
  * What a session's stream carries: the changes each frame made to its

@@ -118,11 +118,21 @@ import type { Tasks } from "./tasks";
  * send_to_user's words were cut to what the schema and each parameter's own
  * description do not already say (worker 24,557, delegate 6,842, lead
  * 15,744 measured).
+ * 2026-10-16: live components, slice 2 (spec §5, §6): the person shapes a
+ * component from its sheet, and the agent writes the same: artifact_update's
+ * `args` (a story's values set and dropped) and `story` (add, duplicate,
+ * remove, move), artifact_read's `sheet` (args and props), and
+ * `components_list` (§6's discovery), deferred. Their words say only what
+ * the schema does not (what a write answers, where `dir` starts), and the
+ * story name's pattern is left to the route and the stage, which say why
+ * they refuse: 305 tokens for the worker, the delegate and the lead (worker
+ * 24,862, delegate 7,147, lead 16,049 measured with the hub's tools). Raised
+ * deliberately, by those 305 each.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 24_590,
-  delegate: 6940,
-  lead: 15_915,
+  worker: 24_895,
+  delegate: 7245,
+  lead: 16_220,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

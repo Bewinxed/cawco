@@ -19,7 +19,7 @@ Claude Code, OpenCode, pi. A Telegram bridge lets the operator approve permissio
 ## Design Context
 
 - **PRD**: `.design-foundations/plans/2026-10-06-projects.md` is the source of truth for the
-  Projects features (Caw, tasks, routines, decisions, OpenUI mockups). Read it whole before
+  Projects features (Caw, tasks, routines, decisions, live-component sheets). Read it whole before
   briefing or building any of them.
 - **Journey spec**: JOURNEY.md. Structural and IA decisions come from it.
 - **Design spec**: DESIGN.md is the locked design language and it is law. Apply its tokens

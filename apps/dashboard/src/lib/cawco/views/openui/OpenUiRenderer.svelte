@@ -35,8 +35,6 @@
     renderNode: Snippet<[unknown]>;
     /** The statement the element came from (`header = …`); none for an inline one. */
     statementId?: string;
-    /** The component's name in the program: what one renderer drawing several components (a mockup's specimens) is told. */
-    typeName?: string;
   }
   // biome-ignore lint/suspicious/noExplicitAny: a library holds components of every prop shape
   export type OpenUIComponent = Component<OpenUIRenderProps<any>>;
@@ -425,12 +423,7 @@
     >
       <!-- Its error is the component's, never the route's (region-held.ts). -->
       <RegionHeld />
-      <Comp
-        props={node.props}
-        {renderNode}
-        statementId={node.statementId}
-        typeName={node.typeName}
-      />
+      <Comp props={node.props} {renderNode} statementId={node.statementId} />
       {#snippet failed()}
         <!-- A component that throws draws nothing; its error is reported. -->
       {/snippet}

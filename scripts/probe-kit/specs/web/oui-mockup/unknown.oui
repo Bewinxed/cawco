@@ -1,3 +1,0 @@
-root = Stack([title, spark])
-title = Text("This week", "title")
-spark = Sparkline([1, 2, 3])

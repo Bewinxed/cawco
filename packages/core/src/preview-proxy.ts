@@ -274,8 +274,6 @@ export function proxyHeaders(input: Headers): Headers {
 
 export interface PreviewSocket {
   closed: boolean;
-  /** Said once the browser's socket closes: a stage counts its viewers by it (agent `stage.ts`). */
-  ended?: () => void;
   headers: Headers;
   /** The hop relaying it and the preview's session, for its failure's line. */
   hop: string;
@@ -285,8 +283,17 @@ export interface PreviewSocket {
   opened: boolean;
   pending: (string | Uint8Array<ArrayBuffer>)[];
   protocol: string;
+  /** The viewer's own release, once its socket opened; said when it closes. */
+  release?: () => void;
   upstream?: WebSocket;
   url: string;
+  /**
+   * A viewer the socket is, counted when it opens and released when it
+   * closes: a stage counts its viewers by it (agent `stage.ts`). Counted at
+   * the open, never at the upgrade's request, so a page that goes before its
+   * socket opens (a reload under it) leaves no count behind.
+   */
+  viewer?: () => () => void;
 }
 
 /** Bun's words for a client socket that failed, before its reason. */
@@ -312,7 +319,7 @@ export function upgradePreview(
   server: Server<PreviewSocket>,
   url: string,
   headers: Headers,
-  at: Pick<PreviewSocket, "ended" | "hop" | "instanceId" | "nothingListens">
+  at: Pick<PreviewSocket, "viewer" | "hop" | "instanceId" | "nothingListens">
 ): boolean {
   const protocol =
     request.headers.get("sec-websocket-protocol")?.split(",")[0]?.trim() ?? "";
@@ -353,6 +360,7 @@ const sendable = (code: number): number =>
 export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
   open(socket) {
     const { data } = socket;
+    data.release = data.viewer?.();
     const upstream = new ProxyWebSocket(data.url, {
       protocols: data.protocol ? [data.protocol] : [],
       headers: Object.fromEntries(data.headers),
@@ -402,7 +410,8 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
   },
   close(socket, code, reason) {
     socket.data.closed = true;
-    socket.data.ended?.();
+    socket.data.release?.();
+    socket.data.release = undefined;
     socket.data.pending.length = 0;
     socket.data.upstream?.close(sendable(code), reason);
   },

@@ -6,7 +6,7 @@
  * one run each:
  *
  * 1. Caw's folder_write puts a font (woff2) into the folder from base64, and
- *    the mockup's file route serves it byte-identical.
+ *    the folder's commit holds it byte-identical.
  * 2. The same for a photo (png).
  * 3. A content that is not base64 is refused with the reason, and Caw
  *    reads it.
@@ -21,9 +21,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
-import { FONT, photo } from "./web/oui-mockup/bytes";
+import { FONT, photo } from "./design-bytes";
 
-const HARBOUR = join(import.meta.dir, "web", "oui-mockup", "harbour");
 const WRITE = "mcp__cawco__folder_write";
 const CALL = /PROBE-CALL:(\d+)/g;
 /** A service's line about Caw's session: what says why a call never came. */
@@ -115,36 +114,15 @@ const spec: Spec = {
     await fleet.agentUp();
     await fleet.accountSignedIn();
 
-    // A project on the fleet's checkout, so its Caw can run, with a design
-    // whose manifest names the font and the photo.
+    // A project on the fleet's checkout, so its Caw can run.
     const project = await fleet.api<{ id: string }>("/api/projects", {
       name: "Harbour",
       machineId: MACHINE,
       cwd: fleet.repo,
       caw: false,
     });
-    for (const path of [
-      "manifest.json",
-      "tokens.css",
-      "specimens/price-tag.html",
-    ]) {
-      const written = await fetch(
-        `${fleet.base}/api/projects/${project.id}/folder/file`,
-        {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            path: `design/${path}`,
-            content: await readFile(join(HARBOUR, path), "utf8"),
-          }),
-        }
-      );
-      if (!written.ok) {
-        throw new Error(
-          `design/${path}: ${written.status} ${await written.text()}`
-        );
-      }
-    }
+    // The project's folder is a repository on the hub (project-folder.ts `projectRoot`): its commit holds the bytes.
+    const folder = join(fleet.sandbox, "hub", "projects", project.id);
 
     const files = [
       { path: "design/fonts/harbour-round.woff2", bytes: await readFile(FONT) },
@@ -156,18 +134,16 @@ const spec: Spec = {
         content: file.bytes.toString("base64"),
         encoding: "base64",
       });
-      const served = await fetch(
-        `${fleet.base}/api/projects/${project.id}/mockups/file?path=${encodeURIComponent(file.path)}`
-      );
-      const bytes = Buffer.from(await served.arrayBuffer());
+      const kept = await Bun.$`git -C ${folder} show HEAD:${file.path}`
+        .quiet()
+        .nothrow();
+      const bytes = Buffer.from(kept.stdout);
       kit.check(
-        `${index + 1}: Caw's folder_write puts ${file.path} in the folder from base64, and the mockup's file route serves it byte-identical`,
+        `${index + 1}: Caw's folder_write puts ${file.path} in the folder from base64, committed byte-identical`,
         said.includes(file.path) &&
-          served.ok &&
-          bytes.equals(file.bytes) &&
-          served.headers.get("content-type") ===
-            (file.path.endsWith(".png") ? "image/png" : "font/woff2"),
-        `folder_write said “${said.slice(0, 160)}”; served ${served.status} ${served.headers.get("content-type")}, ${bytes.byteLength} of ${file.bytes.byteLength} bytes, equal ${bytes.equals(file.bytes)}`
+          kept.exitCode === 0 &&
+          bytes.equals(file.bytes),
+        `folder_write said “${said.slice(0, 160)}”; the folder's HEAD holds ${bytes.byteLength} of ${file.bytes.byteLength} bytes, equal ${bytes.equals(file.bytes)}${kept.exitCode === 0 ? "" : `; git: ${kept.stderr.toString().trim()}`}`
       );
     }
 

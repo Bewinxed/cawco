@@ -1,12 +1,12 @@
 /**
- * The binary files a made-up shop's design holds, as the mockup probes
- * write them into its folder (web/oui-mockup.ts by the folder's write,
- * folder-bytes.ts by Caw's folder_write): a font and a photo, each its own
- * bytes, so what the hub serves back can be compared byte for byte.
+ * The binary files a made-up shop's design holds, as the probes write them
+ * (folder-bytes.ts by Caw's folder_write, web/task-review.ts as an
+ * attempt's output): a font and a photo, each its own bytes, so what the
+ * hub keeps can be compared byte for byte.
  */
 import { join } from "node:path";
 import { PNG } from "pngjs";
-import { ROOT } from "../../../kit";
+import { ROOT } from "../kit";
 
 /** A font the dashboard ships, given to the made-up shop under a name of its own. */
 export const FONT = join(

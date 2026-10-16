@@ -7,14 +7,13 @@ import Foundation
 
 /// The kinds of result the sheet draws, each its own way (`ResultKind`).
 nonisolated enum ResultKind: Sendable {
-    case document, page, mockup, data, table, picture, text
+    case document, page, data, table, picture, text
 
     /// What each kind is called above it: the reader's word, never the file's (`KIND_WORD`).
     var word: String {
         switch self {
         case .document: "Document"
         case .page: "Page"
-        case .mockup: "Mockup"
         case .data: "Data"
         case .table: "Table"
         case .picture: "Picture"
@@ -28,7 +27,6 @@ nonisolated enum ResultKind: Sendable {
         self = switch ext {
         case "md", "markdown", "mdx", "txt": .document
         case "html", "htm": .page
-        case "oui": .mockup
         case "json": .data
         case "csv", "tsv": .table
         case "svg", "png", "jpg", "jpeg", "gif", "webp": .picture

@@ -20,21 +20,47 @@
  * with why it could not start. Vite's own words go to stderr (`logLevel:
  * "warn"`). Once nothing reads its stdout (the daemon is gone), a beat's
  * write fails and the stage ends.
+ *
+ * Next to it, never through a preview (the hub answers `/__cawco/` itself
+ * on every preview origin), the daemon reads a sheet ({@link STORIES_PATH}:
+ * its stories, args and props), writes one ({@link WRITE_PATH}: a story's
+ * args, a story added, duplicated, removed or moved) and lists the
+ * components ({@link COMPONENTS_PATH}, spec §6's discovery).
  */
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parse } from "@babel/parser";
 import {
+  COMPONENTS_PATH,
+  type ComponentDoc,
+  type Found,
   HEALTH_PATH,
   SHEET_PATH,
+  type SheetOnPage,
+  type SheetRead,
+  type SheetWrite,
+  type SheetWritten,
   STORIES_PATH,
   STORY_FILE,
   type StageError,
-  type Story,
+  WRITE_PATH,
 } from "@cawco/core/stage";
 import { transformCode } from "@code-inspector/core";
+import { propsNames, propsOf } from "./docgen";
+import {
+  readStoryFile,
+  StoryRefusal,
+  writeArgs,
+  writeStoryOp,
+} from "./story-file";
+import { tokenNames } from "./tokens";
 
 type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
 
@@ -52,6 +78,12 @@ interface DevServer {
   environments: {
     client: {
       hot: { send: (payload: unknown, ...rest: unknown[]) => void };
+      pluginContainer: {
+        resolveId: (
+          id: string,
+          importer?: string
+        ) => Promise<{ id: string } | null>;
+      };
       moduleGraph: {
         getModuleById: (id: string) => ModuleNode | undefined;
         getModulesByFile: (file: string) => Set<ModuleNode> | undefined;
@@ -122,89 +154,72 @@ function projectPackage(name: string): string {
   }
 }
 
-/** A story file's syntax plugins, by its extension: JSX only where the file may hold it, so a `.ts` file's `<T>() =>` stays a generic. */
-const syntaxOf = (file: string): ("jsx" | "typescript")[] => {
-  if (TSX.test(file)) {
-    return ["typescript", "jsx"];
-  }
-  return TS.test(file) ? ["typescript"] : ["jsx"];
-};
-const TSX = /\.tsx$/;
-const TS = /\.[cm]?ts$/;
+/** The project's dev server, once it stands: what resolves a story's imports and sends its pages HMR words. */
+let server: DevServer | undefined;
 
-/** A named export's name, or the string a specifier exports (`export { a as "b" }`). */
-const exportedName = (node: {
-  name?: string;
-  value?: unknown;
-}): string | undefined =>
-  node.name ?? (typeof node.value === "string" ? node.value : undefined);
-
-/** The names a story file's export declares: its variables', or its function's or class's. */
-const declaredOf = (declaration: Declaration | null | undefined): Ident[] => {
-  if (declaration?.type === "VariableDeclaration") {
-    return declaration.declarations.map((one) => one.id as Ident);
-  }
-  if (
-    declaration?.type === "FunctionDeclaration" ||
-    declaration?.type === "ClassDeclaration"
-  ) {
-    return declaration.id ? [declaration.id as Ident] : [];
-  }
-  return [];
-};
+/** An import of `importer` (absolute) resolved as the project's Vite does (its aliases: `#lib`, `$lib`, `@/`), from the root; null when it resolves to nothing on disk. */
+async function resolved(
+  source: string,
+  importer: string
+): Promise<string | null> {
+  const found = await server?.environments.client.pluginContainer
+    .resolveId(source, importer)
+    .catch(() => null);
+  const file = found?.id.split("?")[0];
+  return file && existsSync(file) ? file : null;
+}
 
 /**
- * Each story of a CSF file, in order, by its export's name and 1-based
- * place, read with Babel's parser (TypeScript and JSX, as Storybook's own
- * CSF tooling reads them). The default export is the sheet's meta, a type
- * is no story, and Storybook's `__namedExportsOrder` is no story either.
+ * A story file as its stage reads it: its stories (each its export's name,
+ * 1-based place and args), its meta, and the props of each component its
+ * stories mount, by each framework's docgen (docgen.ts). A component the
+ * stage could not resolve has no props, and says so.
  */
-function storiesOf(file: string): Story[] {
-  const { program } = parse(readFileSync(file, "utf8"), {
-    sourceType: "module",
-    plugins: syntaxOf(file),
-  });
-  const found: Story[] = [];
-  const add = (node: Ident) => {
-    const name = exportedName(node);
-    if (name && name !== "__namedExportsOrder" && node.loc) {
-      found.push({
-        name,
-        line: node.loc.start.line,
-        column: node.loc.start.column + 1,
-      });
+async function sheetRead(file: string, text?: string): Promise<SheetRead> {
+  const abs = resolve(root, file);
+  const read = readStoryFile(abs, text ?? readFileSync(abs, "utf8"));
+  const local = new Map<string, Promise<string | null>>();
+  const fileOf = (name: string | null): Promise<string | null> => {
+    const source = name ? read.imports.get(name) : undefined;
+    if (!(name && source)) {
+      return Promise.resolve(null);
     }
+    if (!local.has(name)) {
+      local.set(name, resolved(source, abs));
+    }
+    return local.get(name) as Promise<string | null>;
   };
-  for (const node of program.body) {
-    if (node.type !== "ExportNamedDeclaration" || node.exportKind === "type") {
-      continue;
-    }
-    for (const one of declaredOf(node.declaration as Declaration | null)) {
-      add(one);
-    }
-    for (const specifier of node.specifiers) {
-      if (
-        specifier.type === "ExportSpecifier" &&
-        specifier.exportKind !== "type"
-      ) {
-        add(specifier.exported as Ident);
-      }
-    }
+  const metaFile = await fileOf(read.meta.component);
+  const owns = await Promise.all(
+    read.stories.map((story) => fileOf(story.component))
+  );
+  const stories = read.stories.map((story, at) => {
+    const own = owns[at];
+    return { ...story, component: own ? relative(root, own) : null };
+  });
+  // Each component a story mounts, by its file, under the name the file imports it by.
+  const names = new Map<string, string>();
+  if (metaFile && read.meta.component) {
+    names.set(metaFile, read.meta.component);
   }
-  return found;
-}
-
-/** A node a story's name is read off: an identifier, or a specifier's string. */
-interface Ident {
-  loc?: { start: { column: number; line: number } } | null;
-  name?: string;
-  value?: unknown;
-}
-/** A named export's declaration, as far as its names are read. */
-interface Declaration {
-  declarations: { id: unknown }[];
-  id?: unknown;
-  type: string;
+  read.stories.forEach((story, at) => {
+    const own = owns[at];
+    if (own && story.component) {
+      names.set(own, story.component);
+    }
+  });
+  const components: ComponentDoc[] = await Promise.all(
+    [...names].map(([component, name]) => propsOf(component, name))
+  );
+  return {
+    stories,
+    meta: {
+      args: read.meta.args,
+      code: read.meta.code,
+      component: metaFile ? relative(root, metaFile) : null,
+    },
+    components,
+  };
 }
 
 /** The app's page: SvelteKit's `src/app.html`, a Vite app's `index.html`. */
@@ -312,10 +327,22 @@ function mountStory(target, s) {
  * places, after its last run took its stories down. A component's edit is
  * the framework's own HMR and never reaches it. Each HMR update says
  * `cawco:hmr` on the window, so the overlay reads its pins' anchors again.
+ *
+ * The inspector's side (spec §5): each run says the sheet on the window
+ * (`cawco:sheet`, its stories, args and props, and the project's token
+ * names), which the overlay carries to the pane, and again when a
+ * component's props change (the stage's `cawco:props`); the pane's live
+ * args (`cawco:story-args`) mount a story again over the file's, with no
+ * write until Save; the pane's chosen story (`cawco:story-select`) is
+ * marked on its frame.
  */
-function sheetModule(file: string): string {
+async function sheetModule(file: string): Promise<string> {
   const abs = resolve(root, file);
-  const stories = storiesOf(abs);
+  const sheet: SheetOnPage = {
+    ...(await sheetRead(file)),
+    file,
+    tokens: tokenNames(root),
+  };
   const styles = globalStyles()
     .map((style) => `import ${JSON.stringify(style)};`)
     .join("\n");
@@ -323,9 +350,17 @@ function sheetModule(file: string): string {
 ${ADAPTERS[framework]}
 import * as sheet from ${JSON.stringify(abs)};
 const FILE = ${JSON.stringify(file)};
-const STORIES = ${JSON.stringify(stories)};
+const SHEET = ${JSON.stringify(sheet)};
+const STORIES = SHEET.stories;
 const host = document.getElementById("cawco-sheet");
 const live = new Map();
+/** The pane's args over a story's own, until its Save writes them or it lets them go. */
+const overrides = new Map();
+let chosen = window.__cawcoSheetChosen ?? null;
+function said() {
+  window.__cawcoSheetOnPage = SHEET;
+  dispatchEvent(new CustomEvent("cawco:sheet", { detail: SHEET }));
+}
 function frameOf(story) {
   let frame = host.querySelector('[data-cawco-story="' + CSS.escape(story.name) + '"]');
   if (!frame) {
@@ -345,50 +380,87 @@ function frameOf(story) {
   host.append(frame);
   return frame;
 }
-function render(mod) {
+function mountOne(mod, story) {
   const meta = mod.default ?? {};
+  const value = mod[story.name];
+  if (!value) return;
+  const csf = typeof value === "function" ? { render: value, ...value } : value;
+  const frame = frameOf(story);
+  const body = frame.querySelector(".cawco-frame-body");
+  live.get(story.name)?.();
+  live.delete(story.name);
+  body.replaceChildren();
+  const override = overrides.get(story.name);
+  frame.toggleAttribute("data-cawco-edited", !!override);
+  frame.toggleAttribute("data-cawco-selected", chosen === story.name);
+  const args = { ...(meta.args ?? {}), ...(csf.args ?? {}), ...(override ?? {}) };
+  const context = { args, id: story.name, name: csf.name ?? story.name, title: meta.title ?? FILE, parameters: { ...(meta.parameters ?? {}), ...(csf.parameters ?? {}) }, argTypes: {}, globals: {}, viewMode: "story" };
+  try {
+    live.set(story.name, mountStory(body, {
+      args, context,
+      component: csf.component ?? meta.component,
+      render: csf.render ?? meta.render,
+      decorators: [...(csf.decorators ?? []), ...(meta.decorators ?? [])],
+    }));
+  } catch (error) {
+    console.error("[cawco] story " + story.name + " did not mount:", error);
+  }
+}
+function render(mod) {
   for (const frame of host.querySelectorAll("[data-cawco-story]")) {
     if (!STORIES.some((story) => story.name === frame.dataset.cawcoStory)) frame.remove();
   }
-  for (const story of STORIES) {
-    const value = mod[story.name];
-    if (!value) continue;
-    const csf = typeof value === "function" ? { render: value, ...value } : value;
-    const body = frameOf(story).querySelector(".cawco-frame-body");
-    body.replaceChildren();
-    const args = { ...(meta.args ?? {}), ...(csf.args ?? {}) };
-    const context = { args, id: story.name, name: csf.name ?? story.name, title: meta.title ?? FILE, parameters: { ...(meta.parameters ?? {}), ...(csf.parameters ?? {}) }, argTypes: {}, globals: {}, viewMode: "story" };
-    try {
-      live.set(story.name, mountStory(body, {
-        args, context,
-        component: csf.component ?? meta.component,
-        render: csf.render ?? meta.render,
-        decorators: [...(csf.decorators ?? []), ...(meta.decorators ?? [])],
-      }));
-    } catch (error) {
-      console.error("[cawco] story " + story.name + " did not mount:", error);
-    }
-  }
+  for (const story of STORIES) mountOne(mod, story);
   window.__cawcoSheet = { file: FILE, stories: STORIES.map((story) => story.name), renders: (window.__cawcoSheet?.renders ?? 0) + 1 };
+  said();
 }
+function storyArgs(event) {
+  const { story, args } = event.detail ?? {};
+  const one = STORIES.find((each) => each.name === story);
+  if (!one) return;
+  if (args && typeof args === "object") overrides.set(story, args);
+  else overrides.delete(story);
+  mountOne(sheet, one);
+  dispatchEvent(new CustomEvent("cawco:hmr"));
+}
+function storySelect(event) {
+  chosen = typeof event.detail?.story === "string" ? event.detail.story : null;
+  window.__cawcoSheetChosen = chosen;
+  for (const frame of host.querySelectorAll("[data-cawco-story]")) {
+    frame.toggleAttribute("data-cawco-selected", frame.dataset.cawcoStory === chosen);
+  }
+}
+addEventListener("cawco:story-args", storyArgs);
+addEventListener("cawco:story-select", storySelect);
 render(sheet);
 if (import.meta.hot) {
   import.meta.hot.accept();
   import.meta.hot.dispose(() => {
+    removeEventListener("cawco:story-args", storyArgs);
+    removeEventListener("cawco:story-select", storySelect);
     for (const undo of live.values()) undo?.();
     live.clear();
   });
   import.meta.hot.on("vite:afterUpdate", () => dispatchEvent(new CustomEvent("cawco:hmr")));
+  import.meta.hot.on("cawco:props", (doc) => {
+    const at = SHEET.components.findIndex((one) => one.file === doc.file && one.name === doc.name);
+    if (at === -1) return;
+    SHEET.components[at] = doc;
+    said();
+  });
 }
 `;
 }
 
-/** The sheet chrome's own look: frames in a wrapping row, each hugging its story, its name over it. Neutral: the project's CSS is the stories'. */
+/** The sheet chrome's own look: frames in a wrapping row, each hugging its story, its name over it, the inspector's story outlined and an edited one's name marked. Neutral: the project's CSS is the stories'. */
 const SHEET_STYLE = `<style>
 .cawco-sheet{display:flex;flex-wrap:wrap;gap:24px;padding:24px;align-items:flex-start}
 .cawco-frame{display:flex;flex-direction:column;gap:8px;min-width:0}
 .cawco-frame-label{all:unset;align-self:flex-start;font:12px/1.4 system-ui,sans-serif;opacity:.6;cursor:pointer;border-radius:4px;padding:0 4px}
 .cawco-frame-label[data-cawco-picked]{opacity:1;outline:2px solid Highlight}
+.cawco-frame[data-cawco-selected]>.cawco-frame-label{opacity:1}
+.cawco-frame[data-cawco-selected]>.cawco-frame-body{outline:1px dashed Highlight;outline-offset:8px}
+.cawco-frame[data-cawco-edited]>.cawco-frame-label::after{content:" · edited"}
 </style>`;
 
 /**
@@ -457,9 +529,263 @@ async function serveSheet(
   }
 }
 
+/** A request's body, read whole as JSON. */
+const bodyOf = (req: IncomingMessage): Promise<unknown> =>
+  new Promise((done, fail) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      try {
+        done(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch (error) {
+        fail(error);
+      }
+    });
+    req.on("error", fail);
+  });
+
+/** Why value `value` does not fit prop `name` of the component, by its schema; null when it fits or the schema can't say. */
+function misfit(
+  doc: ComponentDoc | undefined,
+  name: string,
+  value: unknown
+): string | null {
+  const meta =
+    doc?.types === "unknown"
+      ? undefined
+      : doc?.props.find((one) => one.name === name);
+  if (!meta) {
+    return null;
+  }
+  const { name: kind, raw } = meta.type;
+  if (kind === "enum") {
+    return meta.options?.includes(value as string | number)
+      ? null
+      : `${name} takes one of ${meta.options?.map((one) => JSON.stringify(one)).join(", ")}; ${JSON.stringify(value)} is none of them.`;
+  }
+  if (kind === "slot") {
+    return `${name} is a slot (${raw}): its content is a pin for the agent, not an arg.`;
+  }
+  if (kind === "function") {
+    return `${name} is a function (${raw}), which is code: edit it in the file.`;
+  }
+  const scalar: Partial<Record<string, string>> = {
+    boolean: "boolean",
+    number: "number",
+  };
+  const wanted = scalar[kind];
+  if (wanted && typeof value !== wanted) {
+    return `${name} takes a ${wanted} (${raw}); ${JSON.stringify(value)} is not one.`;
+  }
+  if (
+    kind === "string" &&
+    !(
+      typeof value === "string" ||
+      (typeof value === "number" && raw.includes("number"))
+    )
+  ) {
+    return `${name} takes a string (${raw}); ${JSON.stringify(value)} is not one.`;
+  }
+  return null;
+}
+
+/**
+ * Writes a sheet's story file as `write` says (story-file.ts), refused by
+ * name when a value doesn't fit its prop's type or the file can't take it.
+ * The project's watcher sees the file change and the sheet redraws.
+ */
+async function written(write: SheetWrite): Promise<SheetWritten> {
+  const file = storyFile(write.file);
+  if (!file) {
+    throw new StoryRefusal(`${write.file} is no story file in ${root}.`);
+  }
+  const abs = resolve(root, file);
+  const text = readFileSync(abs, "utf8");
+  let out: { lines: { from: number; to: number }; text: string };
+  if ("args" in write) {
+    const before = await sheetRead(file, text);
+    const story = before.stories.find((one) => one.name === write.args.story);
+    const component = story?.component ?? before.meta.component;
+    const doc = before.components.find((one) => one.file === component);
+    for (const [name, value] of Object.entries(write.args.values)) {
+      const problem = misfit(doc, name, value);
+      if (problem) {
+        throw new StoryRefusal(`${problem} Nothing was written.`);
+      }
+    }
+    out = writeArgs(
+      file,
+      text,
+      write.args.story,
+      write.args.values,
+      write.args.unset
+    );
+  } else {
+    const op = write.story;
+    if ("add" in op) {
+      const before = await sheetRead(file, text);
+      const doc = before.components.find(
+        (one) => one.file === before.meta.component
+      );
+      for (const [name, value] of Object.entries(op.args ?? {})) {
+        const problem = misfit(doc, name, value);
+        if (problem) {
+          throw new StoryRefusal(`${problem} Nothing was written.`);
+        }
+      }
+    }
+    out = writeStoryOp(file, text, op);
+  }
+  writeFileSync(abs, out.text);
+  return { file, lines: out.lines, sheet: await sheetRead(file, out.text) };
+}
+
+/** Folders whose components are a framework's routes, never a component a sheet shows (spec §6). */
+const ROUTE_DIRS = new Set([
+  "routes",
+  "pages",
+  "app",
+  "node_modules",
+  ".svelte-kit",
+  ".cawco",
+  "dist",
+  "build",
+]);
+const COMPONENT_FILE = /\.(?:svelte|vue|[jt]sx)$/;
+/** A `.tsx`/`.jsx` file worth asking react-docgen about: one that exports a capitalised name. Our prefilter. */
+const CAPITAL_EXPORT =
+  /export\s+(?:default\s+)?(?:const|function|class|let)\s+[A-Z]|export\s+default\s+[A-Z]|export\s*\{[^}]*\b[A-Z]/;
+const recognised = new Map<string, { at: number; name: string | null }>();
+
+/** Every component file under `dir`, routes and builds left out. */
+function componentFiles(dir: string): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true }).map((one) =>
+      one.isDirectory() ? `${one.name}/` : one.name
+    );
+  } catch {
+    return [];
+  }
+  return entries.flatMap((entry) => {
+    if (entry.endsWith("/")) {
+      const name = entry.slice(0, -1);
+      return ROUTE_DIRS.has(name) || name.startsWith(".")
+        ? []
+        : componentFiles(join(dir, name));
+    }
+    return COMPONENT_FILE.test(entry) && !STORY_FILE.test(entry)
+      ? [join(dir, entry)]
+      : [];
+  });
+}
+
+/** A `.tsx`/`.jsx` file's component name, when react-docgen recognises one exported from it; kept by the file's time. */
+async function reactComponent(file: string): Promise<string | null> {
+  const at = statTime(file);
+  const hit = recognised.get(file);
+  if (hit?.at === at) {
+    return hit.name;
+  }
+  const text = readFileSync(file, "utf8");
+  let name: string | null = null;
+  if (CAPITAL_EXPORT.test(text)) {
+    const docgen =
+      (await import("react-docgen")) as typeof import("react-docgen");
+    try {
+      const docs = docgen.parse(text, {
+        filename: file,
+        babelOptions: { babelrc: false, configFile: false, root },
+      });
+      name = docs[0] ? (docs[0].displayName ?? fileName(file)) : null;
+    } catch {
+      name = null;
+    }
+  }
+  recognised.set(file, { at, name });
+  return name;
+}
+const statTime = (file: string): number =>
+  statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 0;
+const fileName = (file: string): string =>
+  (file.split(sep).at(-1) ?? file).replace(EXTENSION, "");
+const EXTENSION = /\.[^.]+$/;
+
+/**
+ * The Vite root's components (spec §6's discovery): every `.svelte` and
+ * `.vue` file under its source folder (`src/` when it has one), and every
+ * `.tsx`/`.jsx` exporting a component react-docgen recognises, routes and
+ * builds left out; each with the story files whose meta mounts it.
+ */
+async function discovered(): Promise<Found[]> {
+  const top = existsSync(join(root, "src")) ? join(root, "src") : root;
+  const all = componentFiles(top);
+  // Each story file's meta component, resolved as Vite resolves the import: no props read.
+  const shown = await Promise.all(
+    (all.length > 0 ? storyFilesUnder(top) : []).map(async (story) => {
+      try {
+        const read = readStoryFile(story, readFileSync(story, "utf8"));
+        const source = read.meta.component
+          ? read.imports.get(read.meta.component)
+          : undefined;
+        return { story, file: source ? await resolved(source, story) : null };
+      } catch {
+        return { story, file: null };
+      }
+    })
+  );
+  const sheets = new Map<string, string[]>();
+  for (const { story, file } of shown) {
+    if (file) {
+      sheets.set(file, [...(sheets.get(file) ?? []), relative(root, story)]);
+    }
+  }
+  const names = await Promise.all(
+    all.map((file) =>
+      file.endsWith(".svelte") || file.endsWith(".vue")
+        ? fileName(file)
+        : reactComponent(file)
+    )
+  );
+  return all.flatMap((file, at) => {
+    const name = names[at];
+    return name
+      ? [{ name, file: relative(root, file), sheets: sheets.get(file) ?? [] }]
+      : [];
+  });
+}
+
+/** Every story file under `dir`, routes and builds left out. */
+function storyFilesUnder(dir: string): string[] {
+  let entries: { dir: boolean; name: string }[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true }).map((one) => ({
+      name: one.name,
+      dir: one.isDirectory(),
+    }));
+  } catch {
+    return [];
+  }
+  return entries.flatMap((one) => {
+    if (one.dir) {
+      return ROUTE_DIRS.has(one.name) || one.name.startsWith(".")
+        ? []
+        : storyFilesUnder(join(dir, one.name));
+    }
+    return STORY_FILE.test(one.name) ? [join(dir, one.name)] : [];
+  });
+}
+
+/** A refusal's answer: a write the file can't take is the person's or agent's to fix (422); anything else is the stage's. */
+const refusedWith = (res: ServerResponse, error: unknown) =>
+  json(res, error instanceof StoryRefusal ? 422 : 500, {
+    error: error instanceof Error ? error.message : String(error),
+  });
+
 /**
  * The stage's own paths: the launch-editor endpoint refused, its health, a
- * sheet's page and its stories; anything else goes on to the project's.
+ * sheet's page, its read and its writes, and the components; anything else
+ * goes on to the project's.
  */
 async function serveStage(
   dev: DevServer,
@@ -481,6 +807,22 @@ async function serveStage(
     json(res, 200, { ok: true });
     return;
   }
+  if (path === COMPONENTS_PATH) {
+    await discovered().then(
+      (components) => json(res, 200, { components }),
+      (error) => refusedWith(res, error)
+    );
+    return;
+  }
+  if (path === WRITE_PATH && req.method === "POST") {
+    await bodyOf(req)
+      .then((body) => written(body as SheetWrite))
+      .then(
+        (done) => json(res, 200, done),
+        (error) => refusedWith(res, error)
+      );
+    return;
+  }
   if (path !== SHEET_PATH && path !== STORIES_PATH) {
     next();
     return;
@@ -497,13 +839,14 @@ async function serveStage(
     await serveSheet(dev, req, res, next, base, file);
     return;
   }
-  try {
-    json(res, 200, { stories: storiesOf(resolve(root, file)) });
-  } catch (error) {
-    json(res, 422, {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  await sheetRead(file).then(
+    (read) => json(res, 200, read),
+    (error) =>
+      refusedWith(
+        res,
+        new StoryRefusal(error instanceof Error ? error.message : String(error))
+      )
+  );
 }
 
 /** A story file the request names, from the Vite root, when it is one inside it; null otherwise. */
@@ -526,7 +869,6 @@ function storyFile(named: string | null): string | null {
 function cawcoStage() {
   const errors = new Map<string, StageError>();
   const tell = () => say("errors", { errors: [...errors.values()] });
-  let server: DevServer | undefined;
 
   /** The story files (from the root) whose sheets import `file`, read up Vite's module graph. */
   const sheetsOf = (file: string): string[] => {
@@ -568,8 +910,20 @@ function cawcoStage() {
       );
     },
     // A story file's edit runs its sheet's module again from a fresh load: its stories' places may have moved.
+    // A component's edit reads its props again, and every sheet's page hears them (`cawco:props`).
     hotUpdate({ file }: { file: string }) {
-      if (!(STORY_FILE.test(file) && server)) {
+      if (!server) {
+        return;
+      }
+      if (!STORY_FILE.test(file)) {
+        const { hot } = server.environments.client;
+        for (const name of propsNames(file)) {
+          propsOf(file, name)
+            .then((doc) =>
+              hot.send({ type: "custom", event: "cawco:props", data: doc })
+            )
+            .catch(() => undefined);
+        }
         return;
       }
       const rel = relative(root, file);
@@ -687,7 +1041,7 @@ try {
   const configFile = CONFIGS.map((name) => resolve(root, name)).find(
     existsSync
   );
-  const server = await vite.createServer({
+  const started = await vite.createServer({
     root,
     configFile: configFile ?? false,
     clearScreen: false,
@@ -703,8 +1057,8 @@ try {
       hmr: { overlay: false },
     },
   });
-  await server.listen();
-  const address = server.httpServer?.address();
+  await started.listen();
+  const address = started.httpServer?.address();
   say("ready", {
     port: typeof address === "object" && address ? address.port : port,
     vite: vite.version,
@@ -716,7 +1070,7 @@ try {
   setInterval(() => say("beat"), BEAT_MS);
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      server.close().finally(() => process.exit(0));
+      started.close().finally(() => process.exit(0));
     });
   }
 } catch (error) {

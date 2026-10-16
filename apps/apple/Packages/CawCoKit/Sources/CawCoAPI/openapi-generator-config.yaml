@@ -34,6 +34,7 @@ typeOverrides:
     CawRunningKind: OpenEnums.CawRunningKind
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage
+    ComponentDocTypes: OpenEnums.ComponentDocTypes
     ConnectionAuth: OpenEnums.ConnectionAuth
     ConnectionState: OpenEnums.ConnectionState
     ConnectionTransport: OpenEnums.ConnectionTransport
@@ -105,6 +106,8 @@ typeOverrides:
     PreviewFrameState: OpenEnums.PreviewFrameState
     ProjectOfferReason: OpenEnums.ProjectOfferReason
     ProjectStopFrameOutcome: OpenEnums.ProjectStopFrameOutcome
+    PropKind: OpenEnums.PropKind
+    PropMetaTokens: OpenEnums.PropMetaTokens
     QueueSlot: OpenEnums.QueueSlot
     RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow
     RelayProvider: OpenEnums.RelayProvider

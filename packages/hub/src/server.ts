@@ -314,8 +314,12 @@ import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import {
+  type Found,
+  type SheetWritten,
+  STAGE_COMPONENTS,
   STAGE_ENSURE,
   STAGE_READY_MS,
+  STAGE_WRITE,
   type StageFrame,
   type StageOpened,
 } from "@cawco/core/stage";
@@ -501,7 +505,6 @@ import {
   roleInstructions,
   sessionProject,
 } from "./memory-scopes";
-import { mockupRoutes } from "./mockups";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
 import {
@@ -9572,6 +9575,48 @@ export const createServer = (
       }
     },
   });
+  /**
+   * A stage method (core stage.ts) on session `instance`'s own workspace's
+   * machine, with the workspace and `arg`: its answer, or a refusal saying
+   * why the stage can't be reached or said no.
+   */
+  const onStage = async (
+    instance: InstanceRow,
+    method: string,
+    arg: unknown
+  ): Promise<{ machineId: string; result: unknown; workspace: string }> => {
+    const workspace = workItems.workspaceOf(instance);
+    if (!workspace) {
+      throw new ArtifactRefusal(
+        409,
+        "A sheet runs on your workspace's stage, and this session runs in no workspace."
+      );
+    }
+    const machineId =
+      db.workspacesNamed(workspace.id)[0]?.machineId ?? instance.machineId;
+    const answer = await callAgent(
+      machineId,
+      method,
+      [workspace, arg],
+      STAGE_READY_MS + 15_000
+    );
+    if (answer === "offline") {
+      throw new ArtifactRefusal(
+        503,
+        "The workspace's machine isn't connected to the hub, so its stage can't be reached."
+      );
+    }
+    if (answer === "timeout") {
+      throw new ArtifactRefusal(
+        504,
+        `The workspace's machine didn't answer within ${(STAGE_READY_MS + 15_000) / 1000}s, so the stage's state is unknown.`
+      );
+    }
+    if (!answer.ok) {
+      throw new ArtifactRefusal(422, answer.error ?? "The stage said no.");
+    }
+    return { machineId, workspace: workspace.id, result: answer.result };
+  };
   const artifacts: Artifacts = createArtifacts({
     // The panel closes at once; a preview's machine that can't stop its
     // listener now drops it when it next registers (reconcilePreviews).
@@ -9666,45 +9711,20 @@ export const createServer = (
     workspaces: (needle) => db.workspacesNamed(needle),
     // A sheet runs on the session's own workspace's stage, on that workspace's machine.
     stage: async (instance, file) => {
-      const workspace = workItems.workspaceOf(instance);
-      if (!workspace) {
-        throw new ArtifactRefusal(
-          409,
-          "A sheet runs on your workspace's stage, and this session runs in no workspace."
-        );
-      }
-      const machineId =
-        db.workspacesNamed(workspace.id)[0]?.machineId ?? instance.machineId;
-      const answer = await callAgent(
-        machineId,
+      const { machineId, workspace, result } = await onStage(
+        instance,
         STAGE_ENSURE,
-        [workspace, file],
-        STAGE_READY_MS + 15_000
+        file
       );
-      if (answer === "offline") {
-        throw new ArtifactRefusal(
-          503,
-          "The workspace's machine isn't connected to the hub, so its stage can't start."
-        );
-      }
-      if (answer === "timeout") {
-        throw new ArtifactRefusal(
-          504,
-          `The workspace's machine didn't answer within ${(STAGE_READY_MS + 15_000) / 1000}s, so the stage's state is unknown.`
-        );
-      }
-      if (!answer.ok) {
-        throw new ArtifactRefusal(
-          422,
-          answer.error ?? "The stage didn't start."
-        );
-      }
-      return {
-        machineId,
-        workspace: workspace.id,
-        opened: answer.result as StageOpened,
-      };
+      return { machineId, workspace, opened: result as StageOpened };
     },
+    stageWrite: async (instance, write) =>
+      (await onStage(instance, STAGE_WRITE, write)).result as SheetWritten,
+    stageComponents: async (instance, dir) =>
+      (await onStage(instance, STAGE_COMPONENTS, dir ?? null)).result as {
+        components: Found[];
+        dir: string;
+      },
   });
   importLegacyCanvases({
     db: db.artifacts,
@@ -19729,7 +19749,6 @@ export const createServer = (
         sessionLimitRoutes(db),
         viewRoutes(views),
         blockRoutes(blocks),
-        mockupRoutes((id) => db.project(id) !== undefined),
         noticesSeen.routes,
         joinRoutes({
           lifetime,

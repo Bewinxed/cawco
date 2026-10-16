@@ -5,6 +5,7 @@
  * reaches them without loading the fleet.
  */
 import type { ArtifactSummary, ShownFailure } from "@cawco/core";
+import type { SheetRead, StoryOp } from "@cawco/core/stage";
 import { currentClientId } from "./client-id";
 
 const artifactsPath = (instanceId: string, id?: string) =>
@@ -117,6 +118,41 @@ export async function exportCanvas(
     }
     throw error;
   }
+}
+
+/** A sheet's write from its inspector, as its Save and story buttons make it (core `SheetWrite` less its file). */
+export type SheetChange =
+  | {
+      args: {
+        story: string;
+        unset?: string[];
+        values: Record<string, unknown>;
+      };
+    }
+  | { story: StoryOp };
+
+/**
+ * The person's write to a sheet's story file (live components spec §5):
+ * the stage writes it in the session's workspace and the session is told.
+ * Answers the sheet as it reads after; a refusal throws its sentence.
+ */
+export async function writeSheet(
+  instanceId: string,
+  id: string,
+  change: SheetChange
+): Promise<{
+  edit?: { file: string; lines: { from: number; to: number } };
+  sheet?: SheetRead;
+}> {
+  return (
+    await ok(
+      await fetch(`${artifactsPath(instanceId, id)}/sheet`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(change),
+      })
+    )
+  ).json();
 }
 
 /** The draft canvas went out with a send: the session holds it now. */

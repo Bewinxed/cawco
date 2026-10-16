@@ -36,6 +36,7 @@
     IconPlus,
     IconRefresh,
     IconSend,
+    IconTuning,
     IconUndock,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -44,6 +45,7 @@
     artifactShown,
     createDraftCanvas,
     showArtifact,
+    writeSheet,
   } from "../artifact-api";
   import {
     handBack,
@@ -72,7 +74,9 @@
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
   import { pinDrafts } from "./pin-drafts.svelte";
+  import SheetInspector from "./SheetInspector.svelte";
   import { isSetupPage } from "./setup-page";
+  import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
   import { previewPlace } from "./source";
   import {
     type PaneKey,
@@ -83,6 +87,7 @@
     previewPinAt,
     previewPinId,
     previewPng,
+    previewSheet,
     previewShortcut,
     previewTitle,
     previewUrl,
@@ -596,6 +601,36 @@
   const compileErrors = $derived(
     sheetStage?.status === "live" ? sheetStage.errors : []
   );
+  /*
+   * A sheet's inspector (live components spec §5): the chosen story's props
+   * as controls, from the sheet its page says (`cawco:sheet`). Opened from
+   * the head's Inspect and kept per session, as Comments is; a right panel
+   * beside the page on a desk and a tablet, a sheet over the page's foot on
+   * a phone. One per sheet: another sheet starts with nothing unsaved.
+   */
+  let inspectOpen = $state(false);
+  const inspectKey = $derived(`cawco-preview-inspect:${instanceId}`);
+  $effect.pre(() => {
+    const key = inspectKey;
+    untrack(() => {
+      inspectOpen = stored("local", key) === "open";
+    });
+  });
+  function showInspector(open: boolean) {
+    inspectOpen = open;
+    store("local", inspectKey, open ? "open" : "shut");
+  }
+  const isSheet = $derived(artifact?.kind === "sheet");
+  const inspector = $derived.by(() => {
+    const id = artifactId;
+    const session = instanceId;
+    return id && isSheet
+      ? new Inspector(post, (change) => writeSheet(session, id, change))
+      : null;
+  });
+  const inspecting = $derived(!!inspector && inspectOpen);
+  /** A right panel beside the page on a desk and a tablet; on a phone, where the pane is the sheet over the conversation, a sheet over the page's foot (the spec's §5). */
+  const inspectorLayout = $derived(sheet ? "sheet" : "panel");
   /** A compile error's place, `file:line:column` as far as Vite's payload names it. */
   const errorPlace = (error: {
     column: number | null;
@@ -1150,6 +1185,14 @@
           failure = null;
         }
         break;
+      case "cawco:sheet": {
+        // A sheet's page said its stories and props: the inspector's controls.
+        const said = previewSheet(message.sheet);
+        if (said && inspector) {
+          inspector.heard(said);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -1359,6 +1402,19 @@
       target="_blank"
       title="Open in new tab"><IconExternal /></a
     >
+  {/if}
+  {#if inspector}
+    <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
+    <button
+      aria-label="Inspect"
+      aria-pressed={inspectOpen}
+      class="inspect touch-hit"
+      onclick={() => showInspector(!inspectOpen)}
+      title="Inspect: change the story's props, then Save them into its file"
+      type="button"
+    >
+      <IconTuning />
+    </button>
   {/if}
   {#if !isCanvas}
     <!-- The mode: Interact, Comment, Draw (V, C, D; Esc back to Interact),
@@ -1576,6 +1632,9 @@
           }
         }}
         src={byHost ? entries[key]?.src : `${paneOrigin}${framePlace}`}
+        style:width={inspecting && inspectorLayout === "panel"
+          ? "calc(100% - var(--c-sheet-inspector-w))"
+          : undefined}
         title="Preview"
         class:ready={!current || loaded}
         {@attach (node) => {
@@ -1701,6 +1760,13 @@
       </EmptyState>
     </div>
   {/if}
+  {#if inspector && inspecting && !unreached}
+    <SheetInspector
+      {inspector}
+      layout={inspectorLayout}
+      onclose={() => showInspector(false)}
+    />
+  {/if}
   {#if picking}
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
   {/if}
@@ -1815,7 +1881,8 @@
   .comments {
     font-variant-numeric: tabular-nums;
   }
-  .comments[aria-expanded="true"] {
+  .comments[aria-expanded="true"],
+  .inspect[aria-pressed="true"] {
     background: var(--surface-fill);
   }
   .count,

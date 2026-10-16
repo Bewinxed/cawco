@@ -67,8 +67,7 @@ final class ResultCard: TileView {
 /// One output an attempt handed in, drawn as the thing it is
 /// (tasks/ResultView.svelte): a document as a document, a page as a page in
 /// a frame that runs none of its scripts, data as what it says, a table as a
-/// table, a picture at its own size. A mockup (`.oui`) is shown as its text:
-/// the OpenUI library that drew it is being removed (PRD D29). What it is
+/// table, a picture at its own size. What it is
 /// called above it is its kind, and its own title where it has one; a read
 /// the hub refused is said in the hub's words where the result would be.
 final class TaskOutputView: UIView {
@@ -108,7 +107,6 @@ final class TaskOutputView: UIView {
         switch kind {
         case .document: .document
         case .page: .window
-        case .mockup: .palette
         case .data: .dataLayers
         case .table: .fileTable
         case .picture: .eye
@@ -179,7 +177,7 @@ final class TaskOutputView: UIView {
                 head.indices.map { at in ResultDataView.cell(at < row.count ? .string(row[at]) : .null) }
             })])
             shown = "table"
-        case .mockup, .text, .picture:
+        case .text, .picture:
             card.setContent([Self.preformatted(text)])
             shown = "text"
         }

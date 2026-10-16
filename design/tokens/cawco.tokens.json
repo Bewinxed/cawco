@@ -3870,6 +3870,22 @@
       },
       "$description": "A pin's card over the page, at its widest: the anchor line with Resolve, ⋯ and Close, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink). Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px is the narrowest that keeps the anchor line beside its four controls."
     },
+    "c-sheet-inspector-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 296,
+        "unit": "px"
+      },
+      "$description": "A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons."
+    },
+    "c-sheet-inspector-head-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
+      "$description": "The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink)."
+    },
     "c-pin-list-share": {
       "$type": "number",
       "$value": 0.22,

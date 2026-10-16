@@ -12,15 +12,41 @@ import { embeddedFile, standalone } from "@cawco/core/runtime";
 
 const HOST = new URL("./host.ts", import.meta.url).pathname;
 
-/** code-inspector's licence, as its package ships it. */
+/** The libraries bundled whole into the host, each with where it comes from: their licences head the file. */
+const BUNDLED: [name: string, home: string][] = [
+  ["@code-inspector/core", "https://github.com/zh-lx/code-inspector"],
+  ["svelte2tsx", "https://github.com/sveltejs/language-tools"],
+  ["vue-component-meta", "https://github.com/vuejs/language-tools"],
+  ["react-docgen", "https://github.com/reactjs/react-docgen"],
+  [
+    "react-docgen-typescript",
+    "https://github.com/styleguidist/react-docgen-typescript",
+  ],
+];
+const LICENCE_FILES = ["LICENSE", "LICENSE.md", "license", "LICENCE"];
+
+/** Each bundled library's licence, as its package ships it. */
 const notice = async (): Promise<string> => {
-  const pkg = Bun.resolveSync("@code-inspector/core/package.json", HOST);
-  const text = await readFile(join(pkg, "..", "LICENSE"), "utf8");
-  return `/*!\n * Bundles @code-inspector/core (https://github.com/zh-lx/code-inspector):\n *\n${text
-    .trim()
-    .split("\n")
-    .map((line) => ` * ${line}`.trimEnd())
-    .join("\n")}\n */`;
+  const parts = await Promise.all(
+    BUNDLED.map(async ([name, home]) => {
+      const pkg = join(Bun.resolveSync(`${name}/package.json`, HOST), "..");
+      const file = LICENCE_FILES.map((one) => join(pkg, one)).find(
+        (one) => Bun.file(one).size > 0
+      );
+      if (!file) {
+        throw new Error(
+          `${name} ships no licence file this build knows: read its package again.`
+        );
+      }
+      const text = await readFile(file, "utf8");
+      return ` * Bundles ${name} (${home}):\n *\n${text
+        .trim()
+        .split("\n")
+        .map((line) => ` * ${line}`.trimEnd())
+        .join("\n")}`;
+    })
+  );
+  return `/*!\n${parts.join("\n *\n")}\n */`;
 };
 
 /**
@@ -53,6 +79,25 @@ const noClient: Bun.BunPlugin = {
   },
 };
 
+/**
+ * The docgen tools' peers (docgen.ts), the project's own: left out of the
+ * bundle, so each tool's `require` of them is the project's copy, resolved
+ * from where the host is written (the Vite root's `.cawco/stage/`) as Node
+ * resolves it, and only when a file of that framework is read.
+ */
+const PEERS = ["typescript", "svelte/compiler"];
+
+/** svelte2tsx's shims for the code it writes, which the checker reads beside it; the bundle has no files beside it. */
+const svelteShims = async (): Promise<string> =>
+  await readFile(
+    join(
+      Bun.resolveSync("svelte2tsx/package.json", HOST),
+      "..",
+      "svelte-shims-v4.d.ts"
+    ),
+    "utf8"
+  );
+
 /** The host, bundled: its text. */
 export async function buildStageHost(): Promise<string> {
   const result = await Bun.build({
@@ -62,6 +107,8 @@ export async function buildStageHost(): Promise<string> {
     minify: true,
     banner: await notice(),
     plugins: [noClient],
+    external: PEERS,
+    define: { __SVELTE_SHIMS__: JSON.stringify(await svelteShims()) },
   });
   if (!result.success) {
     throw new AggregateError(result.logs, "The stage host's build failed");

@@ -1,7 +1,0 @@
-root = Stack([phone], false, "large")
-phone = Device("phone", [screen], "CawCo")
-screen = Stack([title, tabs, ready, review], false, "medium", "stretch", "start", "medium")
-title = Text("Harbour launch", "title")
-tabs = Tabs(["Board", "Table", "Calendar"], 0)
-ready = BoardColumn("Ready", "todo", [TaskCard("Draft the launch post", "tsk-12", ["copy"]), TaskCard("Pick the hero image", "tsk-14", ["design"], false, true, 1, 3)])
-review = Annotation(BoardColumn("Review", "you", [TaskCard("Approve the pricing page", "tsk-9", ["web"], true, false, 2, 2)]), "Waits on you: the card says so on the phone too", 1)

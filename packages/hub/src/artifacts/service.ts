@@ -24,6 +24,7 @@ import {
   type ArtifactSummary,
   artifactCommentsNotice,
   artifactErrorsNotice,
+  artifactSavesNotice,
   type ChoiceEntry,
   choiceEntryProblem,
   type InstanceRow,
@@ -55,12 +56,16 @@ import {
 import type { InkGroup } from "@cawco/core/ink";
 import { pageHash } from "@cawco/core/preview-proxy";
 import {
+  type Found,
   SHEET_PATH,
+  type SheetRead,
+  type SheetWrite,
+  type SheetWritten,
   type StageError,
   type StageFrame,
   type StageOpened,
   type StageState,
-  type Story,
+  type StoryOp,
 } from "@cawco/core/stage";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { applyPatch, type Operation } from "rfc6902";
@@ -140,6 +145,17 @@ export type CanvasChange =
 /** What `artifact_update` changes on a page: exactly one of these. */
 export type PageChange = { html: string } | { patch: Operation[] };
 
+/** What `artifact_update` and the inspector's Save change on a sheet: one story's args, or one story op. */
+export type SheetChange =
+  | {
+      args: {
+        story: string;
+        unset?: string[];
+        values: Record<string, unknown>;
+      };
+    }
+  | { story: StoryOp };
+
 /** The fields each kind takes, and what its refusal says it takes. */
 const KIND_FIELDS = {
   page: { fields: ["html", "dir"], takes: "html or dir" },
@@ -200,6 +216,8 @@ export interface ArtifactRead {
   deleted?: string[];
   /** A canvas the person opened in the composer and has not sent yet. */
   draft?: boolean;
+  /** A sheet's write: the story file, from the clone's root, and the 1-based lines it changed. */
+  edit?: { file: string; lines: { from: number; to: number } };
   id: string;
   kind: ArtifactKind;
   missing?: string[];
@@ -219,12 +237,12 @@ export interface ArtifactRead {
   sentText?: string;
   /** The cursor for the next read's `since`. */
   seq: number;
+  /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
+  sheet?: SheetRead;
   /** A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. */
   stage?: StageState;
   /** Every key, or with `since` only those changed after it. */
   state: Record<string, ReadEntry>;
-  /** A sheet's stories, each its export's name and 1-based place in the story file. */
-  stories?: Story[];
   /** A port preview's workspace, whose dev server it is. */
   workspace?: string;
   /** The element ids an update wrote. */
@@ -280,10 +298,10 @@ export interface Created {
   port?: number;
   /** Its live document on the hub's preview listener. */
   route: string;
+  /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
+  sheet?: SheetRead;
   /** A sheet's stage, as it stands once started. */
   stage?: StageState;
-  /** A sheet's stories, each its export's name and 1-based place in the story file. */
-  stories?: Story[];
   /** Why it is not on screen, one sentence; only with `opened: false`. */
   why?: string;
   /** The element ids a canvas's create wrote. */
@@ -646,6 +664,20 @@ export interface ArtifactServiceDeps {
     instance: InstanceRow,
     file: string
   ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
+  /** The components of the Vite root `dir` names in session `instance`'s workspace (agent stage.ts `stageComponents`). */
+  stageComponents: (
+    instance: InstanceRow,
+    dir: string | undefined
+  ) => Promise<{ components: Found[]; dir: string }>;
+  /**
+   * A write to a sheet's story file in session `instance`'s workspace, made
+   * by its stage (agent stage.ts `writeSheet`): the lines it changed and the
+   * sheet after. Throws an {@link ArtifactRefusal} saying why it can't.
+   */
+  stageWrite: (
+    instance: InstanceRow,
+    write: SheetWrite
+  ) => Promise<SheetWritten>;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
 }
@@ -1262,7 +1294,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const doc = docs.doc(id);
     const { pins, owed, loose, groups } = marksOwed(doc);
     const errors = errorsOwed(row, doc);
-    if (owed.length === 0 && loose.length === 0 && errors.length === 0) {
+    const saves = savesOwed(row, doc);
+    if (
+      owed.length === 0 &&
+      loose.length === 0 &&
+      errors.length === 0 &&
+      saves.length === 0
+    ) {
       return;
     }
     const kept = held.get(id);
@@ -1295,8 +1333,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         })
       ),
     ];
-    // A sheet's compile errors go on the person's marks' own channel.
-    const text = marksText(row, marks, errors);
+    // A sheet's saves and compile errors go on the person's marks' own channel.
+    const text = marksText(row, marks, errors, saves);
     const outcome = await deps.deliverMarks(instance, row, { text, images });
     if (!outcome.ok) {
       console.warn(
@@ -1316,6 +1354,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       url
     );
     errorsHeard(id, errors);
+    savesHeard(id, saves);
     keepInkPicture(
       row,
       loose.map(pictureOfGroup).findLast((png) => png !== null) ?? null
@@ -1630,14 +1669,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** Keeps the stage's state (and the stories, when read) in the sheet's doc. */
-  const writeStage = (row: ArtifactRow, state: StageState, stories?: Story[]) =>
+  /** Keeps the stage's state (and the sheet as it reads, when read) in the sheet's doc. */
+  const writeStage = (row: ArtifactRow, state: StageState, sheet?: SheetRead) =>
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
       const mine = sheetState(row, state);
       meta.set("stage", mine);
-      if (stories) {
-        meta.set("stories", stories);
+      if (sheet) {
+        meta.set("sheet", sheet);
       }
       // Compiles again: an error that comes back later is news again.
       if (mine.errors.length === 0) {
@@ -1674,15 +1713,119 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
   };
 
-  /** A delivery's words: the person's marks under the comments notice, a sheet's compile errors with them, or alone under their own. */
+  /** What the person saved from a sheet's inspector that the session has not heard: one section each. */
+  const savesOwed = (row: ArtifactRow, doc: Doc): string[] =>
+    row.kind === "sheet"
+      ? ((doc.getMap("meta").get("saves") as string[] | undefined) ?? [])
+      : [];
+
+  /** A delivery carried these saves: the session has heard them. */
+  const savesHeard = (id: string, saves: string[]) => {
+    if (saves.length === 0) {
+      return;
+    }
+    docs.transact(id, "hub", (live) => {
+      const meta = live.getMap("meta");
+      const now = (meta.get("saves") as string[] | undefined) ?? [];
+      const left = now.filter((one) => !saves.includes(one));
+      if (left.length > 0) {
+        meta.set("saves", left);
+      } else {
+        meta.delete("saves");
+      }
+    });
+  };
+
+  /**
+   * A delivery's words: the person's marks under the comments notice, a
+   * sheet's saves and compile errors with them; with no mark, the saves
+   * under their own notice, errors with them; else the errors alone.
+   */
   const marksText = (
     row: ArtifactRow,
     marks: string[],
-    errors: StageError[]
-  ): string =>
-    marks.length > 0
-      ? artifactCommentsNotice(row, [...marks, ...errors.map(errorSection)])
+    errors: StageError[],
+    saves: string[]
+  ): string => {
+    if (marks.length > 0) {
+      return artifactCommentsNotice(row, [
+        ...marks,
+        ...saves,
+        ...errors.map(errorSection),
+      ]);
+    }
+    return saves.length > 0
+      ? artifactSavesNotice(row, [...saves, ...errors.map(errorSection)])
       : artifactErrorsNotice(row, errors.map(errorSection));
+  };
+
+  /** One write as the session reads of it: where, and what. */
+  const saveSection = (change: SheetChange, edit: SheetWritten): string => {
+    const at = `${edit.file}:${edit.lines.from}${edit.lines.to === edit.lines.from ? "" : `-${edit.lines.to}`}`;
+    if ("args" in change) {
+      const set = Object.entries(change.args.values).map(
+        ([key, value]) => `${key}: ${JSON.stringify(value)}`
+      );
+      const unset = (change.args.unset ?? []).map((key) => `${key} dropped`);
+      return `## Saved at ${at}\n- ${change.args.story}'s args: ${[...set, ...unset].join(", ")}`;
+    }
+    const op = change.story;
+    let did: string;
+    if ("add" in op) {
+      did = `story ${op.add} added`;
+    } else if ("duplicate" in op) {
+      did = `${op.duplicate} duplicated as ${op.as}`;
+    } else if ("remove" in op) {
+      did = `story ${op.remove} removed`;
+    } else {
+      did = `${op.move} moved ${op.before === null ? "to the end" : `before ${op.before}`}`;
+    }
+    return `## Saved at ${at}\n- ${did}`;
+  };
+
+  /**
+   * A write to sheet `row`'s story file by its stage: one story's args, or
+   * a story added, duplicated, removed or moved. The sheet's doc keeps the
+   * sheet as it reads after; the person's write is owed to the session on
+   * the marks' channel, since it changed a file in the session's workspace.
+   */
+  const writeSheet = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    change: SheetChange,
+    by: "agent" | "person"
+  ): Promise<ArtifactRead> => {
+    const sheet = sheetOf(row);
+    if (!sheet) {
+      throw new ArtifactRefusal(
+        409,
+        `${row.name} is a ${row.kind}: args and story are for a sheet.`
+      );
+    }
+    const file = join(sheet.dir, sheet.file);
+    const edit = await deps.stageWrite(
+      instance,
+      "args" in change
+        ? { file, args: change.args }
+        : { file, story: change.story }
+    );
+    docs.transact(row.id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      meta.set("sheet", edit.sheet);
+      if (by === "person") {
+        const owed = (meta.get("saves") as string[] | undefined) ?? [];
+        meta.set("saves", [...owed, saveSection(change, edit)]);
+      }
+    });
+    if (by === "person") {
+      marked(row.id);
+    }
+    return {
+      ...read(db.get(row.id) as ArtifactRow),
+      sheet: edit.sheet,
+      edit: { file: edit.file, lines: edit.lines },
+    };
+  };
 
   /** Makes a sheet (or opens the one of that name) on its workspace's stage, and shows it. */
   const createSheet = async (
@@ -1732,7 +1875,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           shownAt: null,
         });
     stampMeta(row, null);
-    writeStage(row, opened.state, opened.stories);
+    writeStage(row, opened.state, opened.sheet);
     const shown = await show(row);
     if (!(shown.started || before)) {
       discard(row);
@@ -1744,7 +1887,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       name: row.name,
       route: routeOf(row.id),
       ...openedOf(shown),
-      stories: opened.stories,
+      sheet: opened.sheet,
       stage: sheetState(row, opened.state),
     };
   };
@@ -1768,16 +1911,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           instance,
           join(sheet.dir, sheet.file)
         );
-        writeStage(row, opened.state, opened.stories);
+        writeStage(row, opened.state, opened.sheet);
       } catch (error) {
         failure = error instanceof Error ? error.message : String(error);
       }
     }
     const meta = docs.doc(row.id).getMap("meta");
     const stage = meta.get("stage") as StageState | undefined;
+    const sheetNow = meta.get("sheet") as SheetRead | undefined;
     return {
       ...read(row, since),
-      stories: (meta.get("stories") as Story[] | undefined) ?? [],
+      ...(sheetNow ? { sheet: sheetNow } : {}),
       ...(stage
         ? {
             stage: failure
@@ -2089,6 +2233,40 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? await readSheet(instance, row, since)
         : read(row, since);
     },
+
+    /** The session's `artifact_update` of a sheet: one story's args, or one story op, written by its stage. */
+    sheetUpdate: (
+      instanceId: string,
+      id: string,
+      change: SheetChange
+    ): Promise<ArtifactRead> => {
+      const instance = sessionOf(instanceId);
+      return writeSheet(instance, own(instance, id), change, "agent");
+    },
+
+    /**
+     * The person's Save in a sheet's inspector, or its story buttons: the
+     * same write as the session's `artifact_update`, owed to the session.
+     */
+    sheetWrite: (
+      instanceId: string,
+      id: string,
+      change: SheetChange
+    ): Promise<ArtifactRead> => {
+      const instance = sessionOf(instanceId);
+      const row = db.get(id);
+      if (!row || row.instanceId !== instance.id) {
+        throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+      }
+      return writeSheet(instance, row, change, "person");
+    },
+
+    /** `components_list`: the components of a Vite root in the session's workspace, each with the sheets that show it. */
+    components: (
+      instanceId: string,
+      dir: string | undefined
+    ): Promise<{ components: Found[]; dir: string }> =>
+      deps.stageComponents(sessionOf(instanceId), dir),
 
     /**
      * A workspace's stage changed (the daemon's {@link StageFrame}): each

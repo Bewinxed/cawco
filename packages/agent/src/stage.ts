@@ -27,13 +27,18 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
+  COMPONENTS_PATH,
+  type Found,
   HEALTH_PATH,
+  type SheetRead,
+  type SheetWrite,
+  type SheetWritten,
   STAGE_HEALTH_MS,
   STAGE_IDLE_MS,
   STAGE_READY_MS,
@@ -45,7 +50,7 @@ import {
   type StageOpened,
   type StageState,
   type StageStatus,
-  type Story,
+  WRITE_PATH,
 } from "@cawco/core/stage";
 import { ensureBoundary, shellQuote } from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
@@ -216,7 +221,8 @@ const storyPath = (workspace: WorkspaceRef, file: string): string => {
  */
 function stageFor(
   workspace: WorkspaceRef,
-  story: string
+  story: string,
+  rootOnly = false
 ): Omit<
   Stage,
   | "status"
@@ -301,7 +307,7 @@ function stageFor(
   const kit = "@sveltejs/kit" in deps;
   // SvelteKit narrows Vite's served files to `src/` and its own folders: a
   // story file anywhere else would load as a 403 (the spike's LibProbe).
-  if (kit && relative(join(root, "src"), story).startsWith("..")) {
+  if (!rootOnly && kit && relative(join(root, "src"), story).startsWith("..")) {
     throw new StageRefusal(
       `SvelteKit serves only ${dir}/src, so a sheet sits beside its component there; ${relative(workspace.path, story)} is outside it.`
     );
@@ -328,7 +334,8 @@ const bridgeName = (stage: Stage) =>
 async function askStage(
   stage: Stage,
   path: string,
-  waitMs: number
+  waitMs: number,
+  body?: object
 ): Promise<Response> {
   const reached = await reachWorkspace(
     bridgeName(stage),
@@ -341,9 +348,30 @@ async function askStage(
       : `http://localhost:${stage.port}${path}`,
     {
       signal: AbortSignal.timeout(waitMs),
+      ...(body
+        ? {
+            method: "POST",
+            body: JSON.stringify(body),
+            headers: { "content-type": "application/json" },
+          }
+        : {}),
       ...(reached === "host" ? {} : { unix: reached }),
     }
   );
+}
+
+/** How long a sheet's read or write may take on its stage: the first read of a component runs its docgen, under 2 s measured. Ours. */
+const READ_WAIT_MS = 15_000;
+
+/** The stage's JSON answer, or a refusal in its own words. */
+async function answerOf<T>(response: Response, what: string): Promise<T> {
+  const body = (await response.json()) as T & { error?: string };
+  if (!response.ok) {
+    throw new StageRefusal(
+      body.error ?? `The stage could not ${what} (${response.status}).`
+    );
+  }
+  return body;
 }
 
 /** Writes the host into the Vite root when it is not there as this build has it, git-excluded. */
@@ -562,17 +590,11 @@ async function start(stage: Stage): Promise<void> {
   });
 }
 
-/**
- * The stage a story file runs on, started or woken when it is not live, and
- * waited on: its port, root and state, the sheet's stories. An agent's use:
- * its idle time starts again. Refused with why, when the sheet cannot run.
- */
-export async function ensureStage(
-  workspace: WorkspaceRef,
-  file: string
-): Promise<StageOpened> {
-  const story = storyPath(workspace, file);
-  const found = stageFor(workspace, story);
+/** The stage at `found`'s Vite root, kept from before or made now; started or woken by `by`, and waited on. */
+async function stageAtRoot(
+  found: ReturnType<typeof stageFor>,
+  by: string
+): Promise<Stage> {
   let stage = stages.get(found.key);
   if (!stage) {
     stage = {
@@ -587,32 +609,152 @@ export async function ensureStage(
     };
     stages.set(found.key, stage);
   }
-  await wake(stage);
+  await wake(stage, by);
+  return stage;
+}
+
+/**
+ * The stage a story file runs on, started or woken when it is not live, and
+ * waited on: its port, root and state, and the sheet as it reads (its
+ * stories, args and props). An agent's use: its idle time starts again.
+ * Refused with why, when the sheet cannot run.
+ */
+export async function ensureStage(
+  workspace: WorkspaceRef,
+  file: string
+): Promise<StageOpened> {
+  const story = storyPath(workspace, file);
+  const stage = await stageAtRoot(stageFor(workspace, story), "a sheet's read");
   const rel = relative(stage.root, story);
-  const answer = await askStage(
-    stage,
-    `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
-    HEALTH_WAIT_MS
+  const sheet = await answerOf<SheetRead>(
+    await askStage(
+      stage,
+      `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
+      READ_WAIT_MS
+    ),
+    `read ${rel}'s stories`
   );
-  const body = (await answer.json()) as { error?: string; stories?: Story[] };
-  if (!answer.ok) {
-    throw new StageRefusal(
-      body.error ??
-        `The stage could not read ${rel}'s stories (${answer.status}).`
-    );
-  }
   return {
     port: stage.port,
     dir: stage.dir,
     file: rel,
     state: stateOf(stage),
-    stories: body.stories ?? [],
+    sheet,
   };
 }
 
-/** Starts a stage that is not live (`waking` after sleep), or waits on its start under way; rejects with why it is in `error`. */
-async function wake(stage: Stage): Promise<void> {
+/**
+ * A write to a sheet's story file (core `SheetWrite`, `file` from the
+ * clone's root), made by its stage inside the workspace's boundary: the
+ * lines it changed and the sheet as it reads after. The stage's watcher
+ * sees the file change, and every page of the sheet redraws.
+ */
+export async function writeSheet(
+  workspace: WorkspaceRef,
+  write: SheetWrite
+): Promise<SheetWritten> {
+  const story = storyPath(workspace, write.file);
+  const stage = await stageAtRoot(stageFor(workspace, story), "a write");
+  const rel = relative(stage.root, story);
+  const done = await answerOf<SheetWritten>(
+    await askStage(stage, WRITE_PATH, READ_WAIT_MS, { ...write, file: rel }),
+    `write ${rel}`
+  );
+  return { ...done, file: join(stage.dir, done.file) };
+}
+
+/**
+ * The components of the Vite root `dir` is in (`dir` from the clone's
+ * root; omitted, the clone's own root): spec §6's discovery, read by its
+ * stage. A dir under no Vite root is refused with the roots the clone has.
+ */
+export async function stageComponents(
+  workspace: WorkspaceRef,
+  dir = "."
+): Promise<{ components: Found[]; dir: string }> {
+  const abs = resolve(workspace.path, dir);
+  if (relative(workspace.path, abs).startsWith("..")) {
+    throw new StageRefusal(`${dir} is outside this workspace's clone.`);
+  }
+  const roots = upFrom(abs, workspace.path).filter((at) =>
+    VITE_CONFIGS.some((name) => existsSync(join(at, name)))
+  );
+  if (roots.length === 0) {
+    const found = viteRootsUnder(workspace.path);
+    throw new StageRefusal(
+      found.length > 0
+        ? `${dir} is under no Vite root; this clone's are ${found.join(", ")}: name one as dir.`
+        : `This clone has no vite.config, so it has no components a sheet shows. ${AS_PAGE}`
+    );
+  }
+  // The stage is found from a file of the root: its own config stands in for a story.
+  const config = VITE_CONFIGS.map((name) =>
+    join(roots[0] as string, name)
+  ).find(existsSync) as string;
+  const stage = await stageAtRoot(
+    stageFor(workspace, config, true),
+    "a components list"
+  );
+  const { components } = await answerOf<{ components: Found[] }>(
+    await askStage(stage, COMPONENTS_PATH, READ_WAIT_MS * 4),
+    "list its components"
+  );
+  return {
+    dir: stage.dir,
+    components: components.map((one) => ({
+      ...one,
+      file: join(stage.dir, one.file),
+      sheets: one.sheets.map((sheet) => join(stage.dir, sheet)),
+    })),
+  };
+}
+
+/** The clone's Vite roots, from its root, a few folders down: what a refusal names. Ours: a monorepo's apps stand near the top. */
+function viteRootsUnder(top: string, depth = 3): string[] {
+  const found: string[] = [];
+  const walk = (dir: string, left: number) => {
+    if (VITE_CONFIGS.some((name) => existsSync(join(dir, name)))) {
+      found.push(relative(top, dir) || ".");
+    }
+    if (left === 0) {
+      return;
+    }
+    let entries: string[] = [];
+    try {
+      entries = readdirSync(dir).filter(
+        (one) => !(one.startsWith(".") || one === "node_modules")
+      );
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry);
+      if (statSync(path, { throwIfNoEntry: false })?.isDirectory()) {
+        walk(path, left - 1);
+      }
+    }
+  };
+  walk(top, depth);
+  return found;
+}
+
+/** How long a stage stays unused before its next use is said, with what used it. Ours: a stage that won't sleep says why. */
+const QUIET_SAID_MS = 60_000;
+
+/** A use of the stage: its idle time starts again. One after a quiet minute or more is said, with what used it. */
+const used = (stage: Stage, by: string): void => {
+  const quiet = Date.now() - stage.lastUse;
+  if (quiet >= QUIET_SAID_MS) {
+    console.info(
+      `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: used by ${by} after ${Math.round(quiet / 60_000)} min quiet`
+    );
+  }
   stage.lastUse = Date.now();
+};
+
+/** Starts a stage that is not live (`waking` after sleep), or waits on its start under way; rejects with why it is in `error`. */
+async function wake(stage: Stage, by: string): Promise<void> {
+  used(stage, by);
   if (stage.status === "live") {
     return;
   }
@@ -652,7 +794,7 @@ export async function wakeStage(
 ): Promise<void> {
   const known = stageAt(workspace, dir);
   if (known) {
-    await wake(known);
+    await wake(known, "a preview's request");
     return;
   }
   const ref = (await workspaceRefs()).find((one) => one.id === workspace);
@@ -670,12 +812,19 @@ export function stageViewer(workspace: string, dir: string): () => void {
   }
   stage.viewers += 1;
   stage.lastUse = Date.now();
+  // What keeps a stage awake, said as it changes.
+  console.info(
+    `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: ${stage.viewers} viewer(s)`
+  );
   let released = false;
   return () => {
     if (!released) {
       released = true;
       stage.viewers -= 1;
       stage.lastUse = Date.now();
+      console.info(
+        `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: ${stage.viewers} viewer(s)`
+      );
     }
   };
 }

@@ -1063,6 +1063,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ComponentDocTypes`.
+    public enum ComponentDocTypes: OpenEnum {
+        case checked
+        case jsdoc
+        case unknown
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "checked": self = .checked
+            case "jsdoc": self = .jsdoc
+            case "unknown": self = .unknown
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .checked: "checked"
+            case .jsdoc: "jsdoc"
+            case .unknown: "unknown"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.checked, .jsdoc, .unknown]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ConnectionAuth`.
     public enum ConnectionAuth: OpenEnum {
         case bearer
@@ -4204,6 +4245,106 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.deferred, .failed, .stopped]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/PropKind`.
+    public enum PropKind: OpenEnum {
+        case array
+        case boolean
+        case _enum
+        case function
+        case number
+        case object
+        case other
+        case slot
+        case string
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "array": self = .array
+            case "boolean": self = .boolean
+            case "enum": self = ._enum
+            case "function": self = .function
+            case "number": self = .number
+            case "object": self = .object
+            case "other": self = .other
+            case "slot": self = .slot
+            case "string": self = .string
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .array: "array"
+            case .boolean: "boolean"
+            case ._enum: "enum"
+            case .function: "function"
+            case .number: "number"
+            case .object: "object"
+            case .other: "other"
+            case .slot: "slot"
+            case .string: "string"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.array, .boolean, ._enum, .function, .number, .object, .other, .slot, .string]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/PropMetaTokens`.
+    public enum PropMetaTokens: OpenEnum {
+        case color
+        case dimension
+        case fontFamily
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "color": self = .color
+            case "dimension": self = .dimension
+            case "fontFamily": self = .fontFamily
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .color: "color"
+            case .dimension: "dimension"
+            case .fontFamily: "fontFamily"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.color, .dimension, .fontFamily]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

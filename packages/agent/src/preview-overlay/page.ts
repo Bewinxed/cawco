@@ -1639,8 +1639,35 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       }
       takeTheme(message.theme);
       takeInset(message.inset);
+      // A sheet's module ran before the pane said hello: its sheet goes now.
+      const onPage = (window as { __cawcoSheetOnPage?: object })
+        .__cawcoSheetOnPage;
+      if (onPage) {
+        post("cawco:sheet", { sheet: onPage });
+      }
     },
     "cawco:place": (message) => takeInset(message.inset),
+    // A sheet's inspector: a story mounted again with the pane's args (null lets them go), and the story it shows.
+    "cawco:story-args": (message) => {
+      dispatchEvent(
+        new CustomEvent("cawco:story-args", {
+          detail: {
+            story: message.story,
+            args:
+              message.args && typeof message.args === "object"
+                ? message.args
+                : null,
+          },
+        })
+      );
+    },
+    "cawco:story-select": (message) => {
+      dispatchEvent(
+        new CustomEvent("cawco:story-select", {
+          detail: { story: message.story },
+        })
+      );
+    },
     "cawco:theme": (message) => takeTheme(message.theme),
     // A host that holds no doc of its own (the app) writes the person's reply,
     // resolve and delete through this page's, by the one write core keeps.
@@ -1705,6 +1732,15 @@ window.addEventListener("cawco:element-press", (event) => {
     artifact: artifact.id(),
     ...(event as CustomEvent<object>).detail,
   });
+});
+
+/*
+ * A sheet's page (live components): its module says the sheet on each run
+ * and each props refresh (stage-host host.ts), and the pane's inspector
+ * draws its controls from it.
+ */
+window.addEventListener("cawco:sheet", (event) => {
+  post("cawco:sheet", { sheet: (event as CustomEvent<object>).detail });
 });
 
 window.addEventListener("popstate", navigated);

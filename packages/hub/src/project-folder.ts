@@ -792,8 +792,7 @@ export const folderFileRaw = async (
 };
 
 /**
- * One file's bytes, whole, text or not, up to `limit`: what a mockup draws
- * from a project's design (a font, an image), or an output an attempt
+ * One file's bytes, whole, text or not, up to `limit`: an output an attempt
  * handed in.
  */
 export const readFolderBytes = async (

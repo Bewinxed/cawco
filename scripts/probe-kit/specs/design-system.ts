@@ -43,7 +43,7 @@ import {
 } from "../../../packages/hub/src/dtcg-resolver";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
-import { FONT } from "./web/oui-mockup/bytes";
+import { FONT } from "./design-bytes";
 
 const WRITE = "mcp__cawco__design_write";
 const CALL = /PROBE-CALL:(\d+)/g;

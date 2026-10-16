@@ -25,7 +25,7 @@
 import { Database } from "bun:sqlite";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { photo } from "../probe-kit/specs/web/oui-mockup/bytes";
+import { photo } from "../probe-kit/specs/design-bytes";
 import { ANNOUNCEMENT, RESULTS } from "./results";
 
 /** The fleet's info.json, which the probe writes and TASK_REVIEW_INFO names. */

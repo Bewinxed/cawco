@@ -89,11 +89,7 @@
       "types": "./src/views-library.ts",
       "default": "./src/views-library.ts"
     },
-    "./views-spec": "./src/views-spec.json",
-    "./mockups": {
-      "types": "./src/mockups.ts",
-      "default": "./src/mockups.ts"
-    }
+    "./views-spec": "./src/views-spec.json"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
