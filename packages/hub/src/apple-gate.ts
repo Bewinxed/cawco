@@ -27,9 +27,14 @@ import { capabilitiesOf } from "./runs-on";
 /** The gate's check, as an item's check list and its report name it. */
 export const APPLE_GATE_CHECK = "iOS build compiles";
 
-/** What it runs on the Mac, in the item's check workspace there. */
+/**
+ * What it runs on the Mac, in the item's check workspace there at its last
+ * commit: the iOS Simulator compile, in the one build root every item's gate
+ * shares (build-both.sh `--gate`), so Xcode compiles only what the item's
+ * tree changed against the last one the gate compiled.
+ */
 export const APPLE_GATE_COMMAND =
-  "bash apps/apple/scripts/build-both.sh ios --compile-only";
+  "bash apps/apple/scripts/build-both.sh ios --gate";
 
 /** The build waits for the Mac's one build slot, then compiles: half an hour at most. */
 export const APPLE_GATE_TIMEOUT_SEC = 1800;

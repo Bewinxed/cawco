@@ -2,13 +2,24 @@
 # Builds the CawCo app on the Mac for an iPhone simulator, then for the Mac
 # (Mac Catalyst), and
 # proves each build starts and stays up for 8 s. A launch-time abort fails it.
-# Run from anywhere in the repo: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only]
+# Run from anywhere in the repo: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only|--gate]
 # With no argument it builds both and prints BUILT iOS, LAUNCHED iOS,
 # BUILT macOS, LAUNCHED macOS, BUILT iOS 18.5, LAUNCHED iOS 18.5.
 # `ios` proves both iOS runtimes; `macos` proves only macOS.
 # A landing check runs `build-both.sh ios`: it launches on the floor (iOS
 # 18.5) and the newest runtime, so a binary that dies at launch fails it.
-# `--compile-only` never launches; it is for a workspace that cannot.
+# `--compile-only` never launches; it is for a workspace that cannot. Its
+# generic iOS Simulator build compiles arm64 alone: the Mac's simulators are
+# Apple silicon, and the x86_64 slice the generic destination adds doubles
+# the compile for code no simulator here runs.
+# `--gate` is the Apple build gate's (packages/hub apple-gate.ts): it
+# compiles as `--compile-only` does, in the one build root `gate` every
+# item's gate shares instead of the checkout's own. That root stays warm
+# between items, so Xcode rebuilds only what the item's tree changed against
+# the last tree it compiled: the rsync below makes the root's apps/apple
+# that tree exactly (--checksum --delete; a changed file is written anew,
+# an unchanged one keeps its mtime), and Xcode's incremental build follows.
+# No probe reads that root; a workspace's own builds stay in its own.
 # Exits non-zero at the first failure. It starts only with room for a whole
 # build root: below 10 GB free (CAWCO_MIN_FREE_GB) where it builds, it exits 3
 # with one sentence naming the free space and the biggest folders under
@@ -18,7 +29,7 @@
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
 # OpenAPIGenerator build plugin (CawCoAPI) run without Xcode's trust prompt.
 # Each workspace owns ~/build/cawco-apple/<workspace>, including DerivedData
-# and logs. Mac-side locks cover retirement, rsync and both builds; a
+# and logs; `--gate` builds in ~/build/cawco-apple/gate. Mac-side locks cover retirement, rsync and both builds; a
 # second build of the same workspace, and builds from different
 # workspaces, wait their turn.
 # The Mac build slot (one Xcode build at a time) is one lock for every caller,
@@ -57,8 +68,15 @@ else
   APPLE_ROOT=
 fi
 ROOT=$(git rev-parse --show-toplevel)
+PLATFORM=${1:-both}
+COMPILE_ONLY=${2:-}
+[[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only || $COMPILE_ONLY == --gate ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only|--gate]" >&2; exit 2; }
 BUILD=$(basename "$ROOT")
 if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
+if [[ $COMPILE_ONLY == --gate ]]; then
+  BUILD=gate
+  COMPILE_ONLY=--compile-only
+fi
 [[ $BUILD =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "invalid workspace name: $BUILD" >&2; exit 2; }
 REMOTE=build/cawco-apple/$BUILD/apps/apple
 
@@ -66,9 +84,6 @@ REMOTE=build/cawco-apple/$BUILD/apps/apple
 # run from apps/apple) builds the same tree.
 cd "$ROOT"
 [[ -f apps/apple/project.yml ]] || { echo "no apps/apple/project.yml under $ROOT" >&2; exit 2; }
-PLATFORM=${1:-both}
-COMPILE_ONLY=${2:-}
-[[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only]" >&2; exit 2; }
 case $PLATFORM in
   ios | macos | both) ;;
   *) echo "usage: build-both.sh [ios|macos]" >&2; exit 2 ;;
@@ -89,8 +104,9 @@ if [[ $(uname -s) == Darwin ]]; then
 fi
 
 # Pass the authoritative workspace inventory from this host, never the Mac's
-# copies. Fail before retirement if the inventory cannot be read.
-LIVE=(main "$BUILD")
+# copies. Fail before retirement if the inventory cannot be read. The gate's
+# root is the repository's, never a spent workspace's.
+LIVE=(main gate "$BUILD")
 [[ -d $HOME/.worktrees ]] || { echo "missing workspace inventory: $HOME/.worktrees" >&2; exit 2; }
 for workspace in "$HOME"/.worktrees/*; do
   [[ ! -d $workspace ]] || LIVE+=("$(basename "$workspace")")
@@ -154,17 +170,22 @@ trap 'GO=1' USR1
   kill -TERM "$$"
 ) <&0 &
 WAIT_PID=$!
-# One build per workspace: a second run waits its turn (two of an item's
-# checks may start together), and a caller that leaves ends the wait above.
+# One build per build root: a second run waits its turn (two of an item's
+# checks may start together; every item's gate shares the root `gate`), and
+# a caller that leaves ends the wait above. The wait is a build-slot queue
+# (the queue marker below), so a check's clock stands through it.
 next_notice=0
+waited=
 until shlock -p $$ -f "$LOCK"; do
   now=$(date +%s)
   if (( now >= next_notice )); then
-    echo "WAITING for workspace $BUILD's build: process $(cat "$LOCK" 2>/dev/null || echo unknown) holds it (lock: $LOCK)"
+    echo "CAWCO-QUEUE wait build: build root $BUILD, held by process $(cat "$LOCK" 2>/dev/null || echo unknown)"
+    waited=1
     next_notice=$((now + 60))
   fi
   sleep 5
 done
+[[ -z $waited ]] || echo "CAWCO-QUEUE held build"
 next_notice=0
 waited=
 until shlock -p $$ -f "$MACHINE_LOCK"; do
@@ -258,14 +279,17 @@ build() { # <destination> <label> [signed]
   # keychain unlocked, as TestFlight's do (scripts/signed.sh); a simulator's
   # needs no identity.
   # (No empty-array expansion here: the Mac's bash 3.2 calls it unbound under `set -u`.)
-  local runner=env
+  local runner=env archs=
   [[ ${3:-} != signed ]] || runner=scripts/signed.sh
+  # The generic simulator destination has no active arch, so Xcode builds
+  # every one it supports; arm64 is the one the Mac's simulators run.
+  case $1 in generic/*) archs=ARCHS=arm64 ;; esac
   # A simulator app is stamped with the apps/apple it is built from
   # (tree-stamp.sh), and only once it is: the stamp goes as the build starts.
   local stamp="$DD/Build/Products/Debug-iphonesimulator/CawCo.app.tree"
   case $1 in *"iOS Simulator"*) rm -f "$stamp" ;; *) stamp= ;; esac
   "$runner" xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination "$1" \
-    -derivedDataPath "$DD" -skipPackagePluginValidation build \
+    -derivedDataPath "$DD" -skipPackagePluginValidation ${archs:+"$archs"} build \
     >"$LOGS/build-$2.log" 2>&1 || {
     if grep -a -q -E "error:|BUILD FAILED" "$LOGS/build-$2.log"; then
       grep -a -E "error:|BUILD FAILED" "$LOGS/build-$2.log" | sort -u | head -40 || true

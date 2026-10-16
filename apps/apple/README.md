@@ -37,7 +37,10 @@ and the hub runs it in a workspace on the Mac at the item's commit; or the
 work is delegated to the Mac. A landing check launches (`build-both.sh ios`
 proves the floor, iOS 18.5, and the newest runtime): a binary that dies at
 launch compiles clean. `--compile-only` never launches; it is for a workspace
-that cannot. Inside a workspace only the iOS
+that cannot, and compiles the simulator's arm64 slice alone. `--gate` is the
+Apple build gate's: the same compile in one build root, `gate`, that every
+item's gate shares and that stays warm, so an item's gate compiles only what
+its tree changed. Inside a workspace only the iOS
 Simulator builds: Mac Catalyst (which signs, `--compile-only` too), device
 builds, `signed.sh` and TestFlight refuse there, since signing keys never
 reach agent code. Those run from the orchestrator's shell.
