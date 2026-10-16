@@ -94,8 +94,7 @@ const tailOf = () => {
     return null;
   }
   return {
-    fromEnd:
-      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+    fromEnd: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
     marked: scroller.querySelector("[data-marked]") !== null,
     note: scroller.querySelector("[data-open-at]")?.textContent?.trim() ?? "",
   };
