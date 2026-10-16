@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P25",
+ "letters": {
+  "A": "cawco",
+  "B": "cc+C-filed",
+  "C": "tree-nozoom",
+  "D": "cc"
+ },
+ "scores": {
+  "cawco": {
+   "score": 0,
+   "why": "Says it doesn't know the problem; doesn't mention the session-title mention coming up empty."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says memory doesn't hold the original problem; misses the gold fact."
+  },
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Claims the cause was the owner's 'pretty useless now' remark, which contradicts the gold about a title mention coming up empty."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Says it doesn't know what prompted it; misses the gold fact."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

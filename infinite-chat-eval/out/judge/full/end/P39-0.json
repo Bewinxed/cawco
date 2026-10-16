@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P39",
+ "letters": {
+  "A": "cc-real+C-filed",
+  "B": "cc-real",
+  "C": "cc-real+C-existing",
+  "D": "cc"
+ },
+ "scores": {
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "All four required items are present with correct jobs, and a4e27882 two-pane gains is also mentioned."
+  },
+  "cc-real": {
+   "score": 2,
+   "why": "Lists all four required ids with matching jobs; omitting a4e27882 is acceptable."
+  },
+  "cc-real+C-existing": {
+   "score": 2,
+   "why": "All four required items with correct jobs, plus a4e27882 two-pane gains."
+  },
+  "cc": {
+   "score": 2,
+   "why": "All four required ids with correct jobs; the iOS review fixes and TestFlight on SHIP match, and the blocker details do not contradict the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

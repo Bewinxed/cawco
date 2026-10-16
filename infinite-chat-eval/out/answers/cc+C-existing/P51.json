@@ -1,0 +1,20 @@
+{
+ "id": "P51",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds nothing about OpenCode database backups. Nothing in the summary, the open items, or the owner-decisions list mentions OpenCode or a database backup decision.\n\nThe pending owner decisions I do have are: the upstream-choice pick (artifact fb142065), Caw cold-wake cost and model window, Vite 5 for sheets, the tab-strip and hang baselines, the 25 ms switch target, perf_event_paranoid, the Screen Recording grant and gh sign-in on the Mac, the read-only leaf item-state tool, the kept workspaces, and \"Authenticate machines joining the hub\".\n\nIf the backups question is one of those, tell me and I'll expand. Otherwise it may have come up before my context reset and not carried over.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P51/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 558,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 248,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

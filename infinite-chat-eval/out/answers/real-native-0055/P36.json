@@ -1,0 +1,20 @@
+{
+ "id": "P36",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't name a file that lists the workspaces kept back from the cleanup. It only holds a few related facts:\n\n- I archived 17 workspaces with discard, after checking ahead=0, dirty=0 and the ignored files.\n- Workspaces pile up because `.svelte-kit` and `.build-next` (about 91 MB) exceed the 64 MB carry limit. d991be26 is fixing that.\n- The kept-audit workspaces are on the owner-decisions list for the morning. The two I can name are a142d818 (routines) and a377ef5e (Decisions tab); the summary says \"and others\" without listing them.\n\nIf a file exists, it may be in the full transcript at `/home/bewinxed/.cawco/accounts/3c788add-0f48-4fe6-8b05-638c18bdc77a/claude/projects/-home-bewinxed-cockpit/adfd0048-885e-4cb6-b3d2-bb1cfa18f319.jsonl`. I can't confirm that from memory.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P36/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 564,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 474,
+  "thinking": 137
+ },
+ "off_model": [],
+ "refused": []
+}

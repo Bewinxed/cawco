@@ -1,0 +1,20 @@
+{
+ "id": "P43",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have anything about a \"folder-bytes probe spec\" in my memory. It isn't in the summary, the open items, or the pending notes, so I can't say what run is owed for it.\n\nThe closest things I do hold are other probe and host-check runs. Those are the ios-caw-thread, live-sheet and run-mac-checks host runs, which all passed, and tsk-16, the webkit-caw probe on obelisk, which landed in fe73d0f7b. None of them is a folder-bytes spec, and I won't guess a link.\n\nIf it exists, it's likely in a leaf workspace or in memory/pending.md, which I can check when I resume.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P43/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 210,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

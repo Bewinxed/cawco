@@ -1,0 +1,20 @@
+{
+ "id": "P26",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about OpenUI mockups or what you required for projects that have their own design system. The summary mentions your standing asks: the robust fix over the quick one, real code from the first screen, and the HTML `page` artifact for toolchains without a plugin API. None of those covers OpenUI mockups. If the requirement was set before the earlier context was summarized, it didn't survive. I won't guess at it. If you restate it, I'll apply it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P26/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 176,
+  "thinking": 26
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P43",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-cawco-2319",
+  "C": "replay-cawco-2319",
+  "D": "real-native-0055"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it doesn't know about folder-bytes and gives unrelated runs."
+  },
+  "real-cawco-2319": {
+   "score": 2,
+   "why": "States one host run of `bun scripts/probe-kit/run.ts folder-bytes` is owed, with a consistent reason about not running inside a workspace."
+  },
+  "replay-cawco-2319": {
+   "score": 2,
+   "why": "States a host run of folder-bytes is owed with the correct command and commit ca467d0d4; the AppArmor detail is extra but does not contradict the gold."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says it has no memory of folder-bytes and gives unrelated runs."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

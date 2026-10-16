@@ -1,0 +1,20 @@
+{
+ "id": "P31",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't record any iOS app crashes the owner reported on 10-15, so I can't say where their fixes stand. I won't guess.\n\nThe nearest things I do hold are not crash reports:\n- **iOS review fixes (leaf 23e62015):** the blockers are transcript prose rows not wrapping, literal backticks, and Page output in dark mode. Six polish items and the MessageBody stale-height root fix are also open, and captures are being regenerated. A second Sonnet capture review is still to come, and TestFlight goes out only on SHIP.\n- **The only crash I recorded:** a web crash, the traffic-longtask TDZ on `recorded` in Transcript.svelte. It was hoisted in dcecee4e2.\n\nIf the owner did report iOS crashes, they were not in the summary I resumed from. Check the original thread or the hub's work items.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P31/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 398,
+  "thinking": 112
+ },
+ "off_model": [],
+ "refused": []
+}

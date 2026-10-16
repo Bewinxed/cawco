@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P32",
+ "letters": {
+  "A": "cc+C-existing",
+  "B": "cc"
+ },
+ "scores": {
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no issue ids, so none of the required ids are present."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Says it has no record and gives no issue ids, so none of the required ids are present."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

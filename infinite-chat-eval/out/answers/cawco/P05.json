@@ -1,0 +1,20 @@
+{
+ "id": "P05",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory only partly answers this.\n\n**What's recorded:** you picked option C: CSF 3 story files beside the real components, run by the project's own toolchain under the daemon (spec `docs/specs/live-components-c.md`, PRD D29). Slice 1 is built for Vite. It refuses Angular and webpack, with the fallback noted as \"HTML page on project CSS\". Astro, Nuxt and Next are marked \"later\", and Vite below 6 is refused by name.\n\n**What I don't have:** the reasoning for that Angular/webpack split, and anything specific about custom servers. I can't tell you whether the \"HTML page on project CSS\" is a settled answer for those projects or just where slice 1 stopped. The spec file would say.\n\nVite 5 support is still an open decision for you, because it would need a second code path.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P05/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 589,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 505,
+  "thinking": 237
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P36",
+ "letters": {
+  "A": "cc-real+C-filed",
+  "B": "tree-nozoom",
+  "C": "cc+C-existing",
+  "D": "cc-real"
+ },
+ "scores": {
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "Gives the exact path /home/bewinxed/.cawco/tmp/kept-audit.md and the 12 workspaces, matching the gold."
+  },
+  "tree-nozoom": {
+   "score": 1,
+   "why": "Names the kept-audit file and the 12 KEEP count but says it doesn't know the path, which is a partial answer with no contradiction."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Guesses pending.md and never names kept-audit.md, so it points the agent to the wrong file."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it doesn't know which file lists them and doesn't name kept-audit.md."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

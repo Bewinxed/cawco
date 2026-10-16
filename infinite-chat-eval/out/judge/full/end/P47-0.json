@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P47",
+ "letters": {
+  "A": "cc",
+  "B": "tree-nozoom",
+  "C": "cc-real+C-existing",
+  "D": "cc+C-existing"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says no promise is remembered; misses that Fable designs after slice 1 and owner picks."
+  },
+  "tree-nozoom": {
+   "score": 2,
+   "why": "Recalls that the design depends on slice 1, then a screenshot of the real sheet, then Fable designs; it doesn't mention the owner's pick, but the core promise is present and consistent. It does call it a deferral, which matches the gold's 'dependency'."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says no promise is remembered and gives none of the required facts."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says no promise is remembered and gives none of the required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

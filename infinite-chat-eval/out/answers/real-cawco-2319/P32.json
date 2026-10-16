@@ -1,0 +1,20 @@
+{
+ "id": "P32",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an answer to that. It has no record of agents filing open upstream issues, nor of you being asked whether to close or withdraw any, so I have no ids to give you.\n\nWhat I do remember about upstream is different. The upstream guard (678d8943, landed with migration 0179) stops sessions from pushing or posting upstream. Its onboarding UI is held on `upstream-ui-held` (7bc186f5c) until you pick a design. You ruled earlier that upstream filing becomes an onboarding or per-project setting. I won't guess at issue ids. If those issues exist, they would be in the hub's records or on GitHub, and I'd have to look there.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P32/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 576,
+  "cache_write_1h": 0,
+  "cache_read": 22830,
+  "output": 219,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

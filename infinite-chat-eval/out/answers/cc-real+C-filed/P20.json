@@ -1,0 +1,20 @@
+{
+ "id": "P20",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "**Numbers (my Caw cost analysis):** $39.96 over 97 turns in the last 24h. $25.67 of that came from just 6 cold wakes. `caw_model` is blank, so Caw runs on `claude-opus-5-5[1m]`, the 1M-context variant.\n\n**Options (open item since 10-16 01:39):**\n1. Give Caw the 200k window.\n2. Roll over to a cheap summary.\n3. Leave it as is.\n\n**Recommendation:** option 1, the 200k window on `claude-opus-5-5`.\n\nMy memory doesn't hold the projected savings for any option, or how the rollover summary would work in detail. I haven't applied anything. This is the owner's call.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P20/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 579,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 236,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

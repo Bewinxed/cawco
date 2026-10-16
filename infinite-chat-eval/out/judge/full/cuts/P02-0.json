@@ -1,0 +1,20 @@
+{
+ "group": "cuts",
+ "id": "P02",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-native-0055"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 2,
+   "why": "States he never asked to cancel tests, quotes the exact line, and says he objected to useless tests and repeated CI runs; the extra details don't contradict the gold."
+  },
+  "real-native-0055": {
+   "score": 2,
+   "why": "Says no, quotes the verbatim 'never said u shoukd cancel tests' line, names useless tests and repeated runs, and notes the resumed items."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

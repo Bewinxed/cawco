@@ -1,0 +1,20 @@
+{
+ "id": "P24",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold the owner's own report about this chat's effort setting. None of his messages in my summary mention effort, so I can't quote him or say what exactly he saw.\n\nWhat I do have is the outcome. A fix landed on main as 44996b923. The nightly notes list it under Fixed as \"effort kept through relaunches\", and the effort-relaunch host proof passed. That fix hasn't shipped yet. The nightly is blocked on 3e70dd7a's hub-rollback cause. The full transcript may have the original report.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P24/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 340,
+  "thinking": 166
+ },
+ "off_model": [],
+ "refused": []
+}

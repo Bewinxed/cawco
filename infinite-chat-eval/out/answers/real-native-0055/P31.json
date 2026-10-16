@@ -1,0 +1,20 @@
+{
+ "id": "P31",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't say which iOS crashes the owner reported on 10-15. The message list I kept has no dates and no crash report in it, so I won't guess at the list.\n\nWhat I do hold about iOS crashes:\n- **Fix landed:** an iOS crash fix is on main as 2a74e9fa6. I recorded it as the \"iOS approval crash\".\n- **Not yet verified:** it ships through TestFlight, not the nightly. The check on TestFlight is still owed, after the nightly release, which is waiting on 3e70dd7a's hub-rollback fix.\n- **Related, not crash fixes:** the Safari edge colours Simulator recheck, and item 23e62015's iOS task sheet, which still needs the ios-task-review spec.\n\nThe earlier transcript may have the actual reports: `/home/bewinxed/.cawco/accounts/3c788add-0f48-4fe6-8b05-638c18bdc77a/claude/projects/-home-bewinxed-cockpit/adfd0048-885e-4cb6-b3d2-bb1cfa18f319.jsonl`.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P31/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 495,
+  "thinking": 129
+ },
+ "off_model": [],
+ "refused": []
+}

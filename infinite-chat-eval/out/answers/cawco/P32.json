@@ -1,0 +1,20 @@
+{
+ "id": "P32",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My notes list four upstream filings among the owner decisions pending in the morning, under \"close upstream filings\":\n\n- **bits-ui#2202**\n- **vaul-svelte#141**\n- **unlazy#41**\n- **bun#45320**\n\nMy notes say only \"close upstream filings\", so I can't say whether the owner was asked to close them or withdraw them. They also don't say which agents filed them. They do record the owner's rule that nothing is filed or commented upstream under their name.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P32/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 576,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 154,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

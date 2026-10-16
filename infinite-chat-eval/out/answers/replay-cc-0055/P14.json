@@ -1,0 +1,20 @@
+{
+ "id": "P14",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "The owner picked **option C**. His words were \"Ok do C\", followed by \"Ask fable to flesh it out and see what's the best practice and approach here.\"\n\nMy memory doesn't hold what options A and B were, or the reason he gave for choosing C, so I won't guess at either.\n\nWhat C became (PRD D29):\n- A component exists once, as the project's real file.\n- A \"sheet\" is a CSF 3 story file beside it, such as `EventCard.stories.ts`.\n- The daemon runs the project's own Vite, Astro, Nuxt or Next with one CawCo plugin.\n- It replaces the OpenUI mockup library.\n\nHe then made three follow-up choices:\n- Structural edits are pins that the agent applies.\n- No-code projects start as real code.\n- Angular and other non-pluggable toolchains get an HTML/json canvas.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P14/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 391,
+  "thinking": 115
+ },
+ "off_model": [],
+ "refused": []
+}

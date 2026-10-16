@@ -1,0 +1,20 @@
+{
+ "id": "P43",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about a \"folder-bytes probe spec\", so I can't say what run is owed for it. The host runs I recorded as passed this segment were stay-in-context, ios-caw-thread (iPhone and iPad), live-sheet (12 checks), workspace-retire-kept, host-checks and run-mac-checks. None of them is a folder-bytes probe. The closest unrelated item is the CACHEDIR.TAG workspace-retire work, which is the `workspace-retire-kept` check, and I won't guess that it's the same thing. If you can give me the spec's path or the delegate id, or I can check the repo or the hub, I can answer properly.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P43/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 253,
+  "thinking": 30
+ },
+ "off_model": [],
+ "refused": []
+}

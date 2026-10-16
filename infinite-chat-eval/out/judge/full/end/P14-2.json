@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P14",
+ "letters": {
+  "A": "cc-real+C-existing",
+  "B": "cc"
+ },
+ "scores": {
+  "cc-real+C-existing": {
+   "score": 1,
+   "why": "Correctly says the owner picked Option C (live components) but admits it doesn't know the alternatives or the reason, so two required facts are missing."
+  },
+  "cc": {
+   "score": 1,
+   "why": "Identifies C as real code components on the project's own Vite but gives no alternatives or the never-rewrites reason, and doubts the owner chose it himself."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

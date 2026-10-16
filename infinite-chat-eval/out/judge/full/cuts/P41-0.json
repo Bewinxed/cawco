@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P41",
+ "letters": {
+  "A": "real-cawco-2319",
+  "B": "replay-cc-0055",
+  "C": "real-native-0055",
+  "D": "replay-cawco-2319"
+ },
+ "scores": {
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no build number or bridge names."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it doesn't know and gives neither the build nor the bridge names."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says it doesn't know and gives neither the build nor the bridge names."
+  },
+  "replay-cawco-2319": {
+   "score": 1,
+   "why": "Mentions TestFlight build 20261015.3 as the only one, which is on the right thread, but says it doesn't know the bridges and names neither host nor routineMade."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

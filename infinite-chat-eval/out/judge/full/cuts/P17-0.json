@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P17",
+ "letters": {
+  "A": "real-cawco-2319",
+  "B": "real-native-0055",
+  "C": "replay-cc-0055",
+  "D": "replay-cawco-2319"
+ },
+ "scores": {
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Says it has no record and does not state a bento layout."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says it has no record and does not state a bento layout."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it doesn't have it and does not mention a bento."
+  },
+  "replay-cawco-2319": {
+   "score": 0,
+   "why": "Says it doesn't know and does not mention a bento."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

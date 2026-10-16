@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P33",
+ "letters": {
+  "A": "cc",
+  "B": "cc-real+C-existing"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it cannot name the commit and lists other commits; does not give 44996b923."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it has no record of an effort fix and lists other commits; does not give 44996b923."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

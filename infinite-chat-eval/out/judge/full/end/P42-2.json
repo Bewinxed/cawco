@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P42",
+ "letters": {
+  "A": "cawco",
+  "B": "factory"
+ },
+ "scores": {
+  "cawco": {
+   "score": 0,
+   "why": "Says nothing is owed and doesn't know; misses the Connecting… stall and the owed rerun."
+  },
+  "factory": {
+   "score": 1,
+   "why": "Correctly says the simulator check is still owed, but lacks the stuck-at-Connecting… on :3000 detail and the diagnose-then-rerun on the Mac, and mentions a production address rather than :3000."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

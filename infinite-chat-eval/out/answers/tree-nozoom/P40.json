@@ -1,0 +1,20 @@
+{
+ "id": "P40",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "Commit 710134a1c, \"part A\" from work item 6632522c (the preview websockets fix). The cause was that Cloudflare's X-Forwarded-Proto header broke the /ws connection for previews. The fix went to main. A second part, B, was delegated to 965195be. My memory doesn't hold the full commit message or the exact code change.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P40/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 120,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

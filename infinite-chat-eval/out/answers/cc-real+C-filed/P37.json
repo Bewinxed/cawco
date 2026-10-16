@@ -1,0 +1,20 @@
+{
+ "id": "P37",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has the commits but not a spec path.\n\n- **Commits:** live components slice 1 (the sheet artifact, the `cawcoStage()` Vite plugin and `/@cawco/sheet`) landed on main as **d9ede1e03** and **495066138**.\n- **Spec:** the host check that proved it is **live-sheet** (12 checks, passed on a host run). I don't have its file path, and I can't say whether \"live-sheet\" is the exact filename.\n- **Option C itself:** I only have it as an earlier owner decision (\"Option C live components\"). I don't remember where that decision is written down.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P37/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 287,
+  "thinking": 87
+ },
+ "off_model": [],
+ "refused": []
+}

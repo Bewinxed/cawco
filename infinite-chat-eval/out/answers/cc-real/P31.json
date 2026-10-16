@@ -1,0 +1,20 @@
+{
+ "id": "P31",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold a report from the owner on 10-15 listing specific iOS app crashes, so I can't name them or give their fix status.\n\nThe nearest items I do have:\n- **Approval crash:** after TestFlight, I'm to \"check the approval-crash scenario on the TestFlight build.\" I don't remember where it came from or what the crash was.\n- **Delegate 23e62015:** it is fixing the MessageBody root stale-height problem plus 9 review findings. TestFlight goes out only after a second Sonnet review returns SHIP. This was still running when my context reset.\n- **iOS task sheet:** it landed as 73c29fc91.\n\nThe earlier user messages may have the crash details, but they were compressed out of my summary. The delegate's thread or the hub's item history would be the place to check.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P31/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 367,
+  "thinking": 104
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P43",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds nothing about a \"folder-bytes\" probe spec, so I can't say what run is owed for it. I won't guess.\n\nThe nearest things I do have are different specs:\n- **folder-tabs:** it passed on a4e27882's rebased tree in 331.4 s.\n- **workspace-retire-kept:** it passed on the host at 20e919275, covering the CACHEDIR.TAG work.\n\nNeither is called folder-bytes. If it is a newer spec, or a name from a delegate's report I no longer hold, check the spec list with `git ls-tree -r --name-only origin/main scripts/probe-kit/specs | grep -i folder`. A `delegate_list` for the item that introduced it would also show which run it owes.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P43/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 330,
+  "thinking": 87
+ },
+ "off_model": [],
+ "refused": []
+}

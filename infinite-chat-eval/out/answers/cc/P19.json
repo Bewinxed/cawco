@@ -1,0 +1,20 @@
+{
+ "id": "P19",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds one control rule and no designed mechanism. Your standing rule is \"nothing filed upstream unless asked\", so no agent posts on someone else's repository unless you ask.\n\nI have no record of an enforcement design, such as a gate in the executor, a permission check, or a review step. I also have no record of what is still pending on filing itself.\n\nOne open owner decision is called \"upstream-choice pick\" (artifact fb142065, 8 states; 678d8943 lands after; keep the harness $app stand-ins). My notes don't say whether it concerns filing on other people's repositories, so I won't claim it does. I'd need to open that artifact to tell you.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P19/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 575,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 414,
+  "thinking": 202
+ },
+ "off_model": [],
+ "refused": []
+}

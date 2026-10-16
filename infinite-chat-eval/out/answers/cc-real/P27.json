@@ -1,0 +1,20 @@
+{
+ "id": "P27",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't tie any owner message to the 22:33-23:08 window, so I can't say what was stated in that span. The summary keeps no timestamps for earlier owner messages.\n\nWhat I do hold are the owner decisions on live components that still stand, without times:\n- **Option C** for live components.\n- **Real code from the first screen.**\n- An **HTML `page` artifact** for toolchains without a plugin API.\n- **Pins applied by the agent.**\n\nSlice 1 shipped as the sheet artifact, the `cawcoStage()` Vite plugin and `/@cawco/sheet`. Whether the owner stated these inside your window, I can't confirm. The earlier summary or the session transcript would have the exact wording and times.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P27/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 341,
+  "thinking": 101
+ },
+ "off_model": [],
+ "refused": []
+}

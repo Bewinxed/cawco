@@ -1,0 +1,20 @@
+{
+ "id": "P05",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "Those projects get an HTML `page` artifact built on the project's own CSS, not a live component stage. The design was never meant to cover them with a plugin.\n\nHow it was settled: I first decided an Angular fallback myself, and you rebuked me (\"Why did you decide the fallback on your own when I just asked for explanation?\"). I re-asked through AskUserQuestion. Your first reply was \"What cawco plugin now?\", and then you chose: \"Just use ur own canvas with some html or json or whatever? Cmon\".\n\nThe PRD (D29, §5.10) and the spec in `.design-foundations/plans/2026-10-16-live-components.md` record this.\n\nMy memory doesn't say whether plain webpack and custom servers are handled any differently from Angular CLI. The notes name Angular CLI and plain webpack as the non-pluggable cases.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P05/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 589,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 276,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

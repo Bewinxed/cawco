@@ -1,0 +1,20 @@
+{
+ "id": "P31",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "Memory holds only the outline of the crashes. tsk-17, \"iOS app crash loop\", has two crashes: an open-chat crash and an approval crash. It was opened 10-15 17:01. I don't have the owner's exact words or any stack traces.\n\n**Where they stand:**\n- The fix is on main (2a74e9fa6), but tsk-17 is still open.\n- It has not shipped in a TestFlight.\n- Leaf 23e62015 (work item 352c9579) is still running the iOS review fixes. After it comes a second screenshot review, then a TestFlight build, only on SHIP. Then the owner's approval-crash scenario gets run on that build.\n- Nothing is confirmed fixed on a device yet.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P31/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 401,
+  "thinking": 161
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "group": "cuts",
+ "id": "P42",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-native-0055"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says the check is blocked on the nightly and hasn't run; never mentions the Simulator stuck at Connecting… on :3000 or a rerun after fixing the connection."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Attributes the wait to the nightly and hub rollback instead of the Simulator being stuck at Connecting… on :3000, so it would send the agent the wrong way."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

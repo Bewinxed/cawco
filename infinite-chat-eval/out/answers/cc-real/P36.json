@@ -1,0 +1,20 @@
+{
+ "id": "P36",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't say which file lists the workspaces kept back from the disk cleanup, so I won't guess.\n\nWhat I do have is related but not the answer. Commit f57468076 added the CACHEDIR.TAG signature rule, which retires workspaces that contain only build output. The host check `workspace-retire-kept` passed this segment. My notes don't record where a \"kept\" list is stored, or whether one exists as a file at all. The retire logic and that check's spec would be the place to look, but I haven't confirmed that.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P36/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 564,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 299,
+  "thinking": 130
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P48",
+ "letters": {
+  "A": "cc-real",
+  "B": "cc+C-filed",
+  "C": "cc",
+  "D": "cc-real+C-filed"
+ },
+ "scores": {
+  "cc-real": {
+   "score": 0,
+   "why": "Says memory has no ranking check, missing the owed live check with owner's queries."
+  },
+  "cc+C-filed": {
+   "score": 2,
+   "why": "States the check is a live check of finder ranking with the owner's own queries once deployed."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Claims no ranking check is recorded, missing the required fact."
+  },
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "Correctly states the owed check is ranking checked live with the owner's own queries once deployed."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

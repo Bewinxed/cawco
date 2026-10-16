@@ -1,0 +1,20 @@
+{
+ "group": "cuts",
+ "id": "P24",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-native-0055"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it doesn't know the report and cites different commits (a693d8141, 3fb8ccd8b), never giving the 44996b923 fix or the medium-effort complaint."
+  },
+  "real-native-0055": {
+   "score": 1,
+   "why": "Gives the correct fix (44996b923, effort kept through relaunches) but says it lacks the owner's report that the chat switched to medium effort without him."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

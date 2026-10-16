@@ -1,0 +1,20 @@
+{
+ "id": "P18",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about a \"Decisions tab preview\", so I can't say what you decided. Nothing in my notes or open items mentions that preview or a ruling on it.\n\nThe nearest items I do have are the open decision records (Caw cold-wake cost, Vite 5 for sheets, the 25 ms switch target). The only preview-related rule I have is the general one: UI changes go advisor → preview → owner pick → build. If you mean one of those, tell me which. Otherwise, point me to the artifact or workspace and I'll check it rather than guess.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P18/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 224,
+  "thinking": 40
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P48",
+ "letters": {
+  "A": "cc+C-existing",
+  "B": "cawco",
+  "C": "tree",
+  "D": "factory"
+ },
+ "scores": {
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says no ranking check is recorded and does not mention a live check with the owner's own queries."
+  },
+  "cawco": {
+   "score": 0,
+   "why": "Says memory records no ranking check and only guesses at a general finder check, missing the live check with the owner's queries."
+  },
+  "tree": {
+   "score": 0,
+   "why": "Says no ranking check was recorded, only a generic live check for Jump and ⌘K, so it misses the owner's-own-queries ranking check."
+  },
+  "factory": {
+   "score": 0,
+   "why": "Denies any ranking-specific check is owed and mentions only a general finder look, not a live check with the owner's queries."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

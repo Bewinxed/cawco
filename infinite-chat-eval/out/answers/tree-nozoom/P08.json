@@ -1,0 +1,20 @@
+{
+ "id": "P08",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "Not by link. My memory holds your own words on this: you asked why links weren't the preview tool, and why the previews were trying to reach your hub through the bewinxed domain while you browse over tailscale. You also said \"this should be a floating pane.\" Links also broke for you: the Decisions page was unreachable at ts.net:20958.\n\nPlan I recorded: after the preview websocket fix was on main and published, I'd re-point routines, tasks and Decisions at the panel (the in-app preview tool), with no more links. Previews should follow the dashboard's origin (delegated as 57a464d3). You also said previews must match the live app, since mismatched ones are \"waste of time\", and that preview-tool instructions should be visible to all installers. I delegated that as e220b831.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P08/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 253,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P37",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "Option C is recorded in two places in the repo, both under `.design-foundations/plans/`:\n\n- **PRD:** `2026-10-06-projects.md`. The D29 row and the §5.10 paragraph were rewritten for option C with your three decisions, plus a decision log entry. That's commit **cdd94a2a4** (\"PRD: D29 is option C…\").\n- **Spec:** `2026-10-16-live-components.md`, Fable's spec. It has the \"Decided by the owner (2026-10-16)\" section and the §10 HTML-page decision, added in cdd94a2a4. The spike's corrections to §2 and §4, and proofs 1–5 marked as measured, came in commit **afcf54ba8**.\n\nFable's original draft is a project asset at `…/assets/d18c2e87/docs/specs/live-components-c.md`.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P37/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 283,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

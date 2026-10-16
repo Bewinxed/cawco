@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P11",
+ "letters": {
+  "A": "factory",
+  "B": "cc+C-filed"
+ },
+ "scores": {
+  "factory": {
+   "score": 0,
+   "why": "Says it doesn't know the 23:09 correction and guesses at other rules, without the 'stop jumping to action, research and write options first' correction."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it has no record of the correction and names unrelated rules, so it misses the required fact."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

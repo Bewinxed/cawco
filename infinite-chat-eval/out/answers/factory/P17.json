@@ -1,0 +1,20 @@
+{
+ "id": "P17",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have that in my memory. The only routines-related items I hold are the routines workspace a142d818 (kept as ahead-of-main) and `FindRoutine.threadId`, which makes a routine's ↵ open its thread (null means no thread yet). Nothing records a big-screen layout request for the routines view, so I won't guess. If you remember when you asked, tell me and I'll check the workspace a142d818 or the hub history. Otherwise, repeat the layout you want and I'll brief it.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P17/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 561,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 164,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

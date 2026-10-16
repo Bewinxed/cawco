@@ -1,0 +1,20 @@
+{
+ "id": "P20",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "**Numbers (last 24 h):** Caw cost $39.96 over 97 turns. $25.67 of that came from 6 cold wakes. `caw_model` is blank for all projects, so Caw runs the default `claude-opus-5-5[1m]`, and its conversation is 5.2 MB.\n\n**Options:**\n1. Set a 200k window, `claude-opus-5-5`. This is my recommendation.\n2. The hub rolls Caw to a cheap-model summary once the conversation passes a set size.\n3. Leave it as is.\n\n**Status:** I haven't changed anything. The call is yours, since it changes a product default.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P20/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 579,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 210,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

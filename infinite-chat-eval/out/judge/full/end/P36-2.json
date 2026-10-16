@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P36",
+ "letters": {
+  "A": "tree",
+  "B": "cc+C-filed"
+ },
+ "scores": {
+  "tree": {
+   "score": 2,
+   "why": "Names kept-audit.md under ~/.cawco/tmp, matching the gold; the extra details do not contradict it."
+  },
+  "cc+C-filed": {
+   "score": 2,
+   "why": "Gives the exact path /home/bewinxed/.cawco/tmp/kept-audit.md and the 12 kept workspaces, matching the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

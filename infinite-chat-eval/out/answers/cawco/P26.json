@@ -1,0 +1,20 @@
+{
+ "id": "P26",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold what the owner required of OpenUI mockups for projects with their own design system, so I won't guess.\n\nThe only OpenUI trace I have is a follow-up, \"OpenUI steps note (C replaces mockup library)\". That ties to the owner picking option C for live components: CSF 3 story files beside the real components, run with the project's own toolchain (spec `docs/specs/live-components-c.md`, PRD D29).\n\nThe nearby standing rules are \"Reuse existing components; no new primitives\" and \"components exist once\". I can't confirm they were stated about OpenUI. The spec and PRD D29 would have the actual wording.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P26/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 363,
+  "thinking": 152
+ },
+ "off_model": [],
+ "refused": []
+}

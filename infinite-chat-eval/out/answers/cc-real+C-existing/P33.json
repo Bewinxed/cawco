@@ -1,0 +1,20 @@
+{
+ "id": "P33",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't have an \"effort fix\", so I can't name a commit for it. I won't guess which one you mean.\n\nThe fixes I do have on main this segment are:\n- **Caw dock reply fix:** dcecee4e2\n- **Exec empty-`if` fix:** eec9bd328\n- **publishRuntime:** 637609a44\n- **CACHEDIR retire:** f57468076\n\nIf you meant the Caw model or cost setting (`caw_model` is blank, so it runs `claude-opus-5-5[1m]`), that is still an owner decision and has not landed. If you mean something else, tell me and I'll check.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P33/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 555,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 286,
+  "thinking": 79
+ },
+ "off_model": [],
+ "refused": []
+}

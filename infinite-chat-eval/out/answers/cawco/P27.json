@@ -1,0 +1,20 @@
+{
+ "id": "P27",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't tie anything to the 22:33–23:08 window, so I can't say what was stated in that span. It records the owner's live-component requirements without timestamps:\n\n- **Decision:** the owner picked option C. Sheets are CSF 3 story files beside the real components, run by the daemon with the project's own toolchain (`docs/specs/live-components-c.md`, PRD D29).\n- **Standing rules behind it:**\n  - No rewriting Figma.\n  - Components exist once.\n  - \"I don't want jsx\" (Svelte).\n  - It must work for all users across languages and frameworks.\n  - Use an existing standard.\n- **Rejected earlier:** Penpot, Storybook-per-framework renderers, in-binary Svelte compile, and Fable's proprietary markup.\n- **Still open:** the inspector design waits for a real sheet screenshot, then Fable, then the owner's pick.\n\nFor exact wording in that window, check the transcript.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P27/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 567,
+  "thinking": 248
+ },
+ "off_model": [],
+ "refused": []
+}

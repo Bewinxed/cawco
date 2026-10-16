@@ -1,0 +1,20 @@
+{
+ "id": "P08",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no explicit owner ruling on link versus another way to show a preview, so I won't claim one.\n\nWhat I do hold is practice:\n- Previews go as artifacts, not bare links. Examples are the `page` artifact (an HTML page for toolchains without a plugin API), the live sheet artifact, and artifact fb142065 for the upstream-choice decision.\n- I have planned \"one phone review page\" for approving the screenshot baselines.\n- The owner's Option C and \"real code from the first screen\" decisions mean the preview should be the real running component, not a mock.\n\nIf you want a firm rule, such as always an artifact versus sending a URL, tell me and I'll record it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P08/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 387,
+  "thinking": 168
+ },
+ "off_model": [],
+ "refused": []
+}

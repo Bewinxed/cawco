@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P08",
+ "letters": {
+  "A": "tree-nozoom",
+  "B": "cc-real+C-filed",
+  "C": "cc-real",
+  "D": "cawco"
+ },
+ "scores": {
+  "tree-nozoom": {
+   "score": 2,
+   "why": "Says not by link and to use the in-app preview tool/panel, matching the owner's complaint about links versus the preview tool."
+  },
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Claims no owner ruling exists and says artifacts rather than the preview tool, missing the gold rule."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says no explicit ruling exists and only guesses at artifacts, so it does not give the owner's preview-tool rule."
+  },
+  "cawco": {
+   "score": 1,
+   "why": "Says not by link and to use the panel via artifact tools, which is close to the preview tool but not the owner's wording, and it invents a quote."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

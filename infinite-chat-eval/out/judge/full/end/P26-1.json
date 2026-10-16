@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P26",
+ "letters": {
+  "A": "cc-real+C-existing",
+  "B": "cc-real",
+  "C": "cc",
+  "D": "cawco"
+ },
+ "scores": {
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know; no mention of using the project's design-system assets."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no memory of the requirement; the required fact is absent."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Says it doesn't have it; no design-system assets requirement stated."
+  },
+  "cawco": {
+   "score": 0,
+   "why": "Declines to answer; the mention of option C and rules about reusing components doesn't state the required design-system-assets fact."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

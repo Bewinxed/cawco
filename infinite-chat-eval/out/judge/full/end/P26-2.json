@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P26",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "cc+C-existing"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it doesn't know the requirement and gives no mention of using the project's design-system assets."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know and doesn't state that mockups should use the project's design-system assets."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

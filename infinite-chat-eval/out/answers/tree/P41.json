@@ -1,0 +1,31 @@
+{
+ "id": "P41",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold this. I found nothing naming \"two wire bridges\" kept alive by any TestFlight build. The only TestFlight build I can confirm is CawCo 0.1.11, CFBundleVersion 20261015.3, uploaded 2026-10-15 16:25:14. The 0ecf4bf8 iOS crash handoff also cites that build. Nothing I opened mentions bridges, and I haven't opened every line, so I can't say which build or what they're called. Don't treat 20261015.3 as the answer. Ask me to look further, or tell me which wire or bridge you mean.",
+ "zooms": [
+  [
+   "4176+16",
+   "2816+64"
+  ],
+  [
+   "1152+128",
+   "2048+128"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P41/r0",
+  "answer/tree/P41/r1",
+  "answer/tree/P41/r2"
+ ],
+ "usage": {
+  "input": 6,
+  "cache_write": 4560,
+  "cache_write_1h": 0,
+  "cache_read": 96519,
+  "output": 648,
+  "thinking": 395
+ },
+ "off_model": [],
+ "refused": []
+}

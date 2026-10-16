@@ -1,0 +1,20 @@
+{
+ "id": "P40",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "The fix is commit **a2eafa079**: \"A previewed app's WebSocket opens behind Cloudflare: the agent drops the proxy's forwarding headers\".\n\nThe commit title implies the cause: the proxy's forwarding headers were reaching the previewed app, and the WebSocket was refused. The fix makes the agent drop those headers. It touched `packages/agent/src/preview.ts`, `packages/core/src/preview-proxy.ts` and `packages/hub/src/preview.ts`, and added the probe spec `scripts/probe-kit/specs/preview-socket.ts`.\n\nMy memory doesn't hold the commit body, so I can't say which headers were involved or why the app refused the connection. I won't guess at that.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P40/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 22830,
+  "output": 427,
+  "thinking": 184
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P50",
+ "letters": {
+  "A": "cc",
+  "B": "cc-real+C-filed",
+  "C": "cc-real+C-existing",
+  "D": "cawco"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it knows nothing about the Ink chip decision and talks about @ mention chips instead."
+  },
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "Correctly says the decision is open and waiting on the owner, that the chip duplicates automatic pin delivery, and that the agent suggested removing it."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it has no memory of an Ink chip decision and points to unrelated @ chips."
+  },
+  "cawco": {
+   "score": 1,
+   "why": "Correctly says the decision to remove the composer Ink chip is pending the owner, but gives neither the duplication reason nor the agent's recommendation."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P37",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "Option C is recorded in three places, per my memory:\n\n- **Spec file:** `docs/specs/live-components-c.md`. It records the decision, and PRD D29 refers to it.\n- **Commits (slice 1):** d9ede1e03 (\"Live components, slice 1: a sheet is a CSF 3 story file, run on its workspace's stage\") and 495066138 (\"Sheets on current main: find knows the sheet kind, a Kit sheet outside src/ is refused by name\"). Nightly 0.1.11-nightly.3427 shipped from 495066138.\n\nMemory doesn't say which commit added the spec doc itself. It may have come with d9ede1e03, but I haven't confirmed that. The host probe for it is live-sheet, which passed all 12 checks.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P37/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 258,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

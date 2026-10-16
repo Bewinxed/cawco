@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P31",
+ "letters": {
+  "A": "cawco",
+  "B": "tree"
+ },
+ "scores": {
+  "cawco": {
+   "score": 0,
+   "why": "Says it cannot name the crashes and 'doesn't remember what the crash was', failing to identify the chat-open crash loop and approval crash as reports."
+  },
+  "tree": {
+   "score": 2,
+   "why": "Identifies both crashes (keeps crashing/chat open loop tsk-17, and approving crash), and states fix 2a74e9fa6 on main with TestFlight pending after review fixes."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

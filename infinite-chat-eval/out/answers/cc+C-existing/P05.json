@@ -1,0 +1,20 @@
+{
+ "id": "P05",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't settle that question. Nothing in it covers Angular CLI, plain webpack, or custom servers, or how they were decided.\n\nWhat I do have is that live components (option C) put a story file beside the component. It runs on the project's own Vite ≥6 through `cawcoStage()`, served at `/@cawco/sheet`, with pins carrying `source` and `chain`.\n\nThe only related open item is your pending decision on \"Vite 5 for sheets (second code path)\". That covers older Vite, not toolchains without a plugin.\n\nIf a decision on those toolchains was made, it isn't in what I retained. I won't guess one. If you want it settled, I'd ask you via AskUserQuestion.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P05/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 589,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 351,
+  "thinking": 122
+ },
+ "off_model": [],
+ "refused": []
+}

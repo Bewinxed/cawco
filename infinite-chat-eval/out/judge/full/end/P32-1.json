@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P32",
+ "letters": {
+  "A": "cc-real+C-existing",
+  "B": "cc-real",
+  "C": "factory",
+  "D": "cc-real+C-filed"
+ },
+ "scores": {
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no issue ids."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it can't give ids and lists none."
+  },
+  "factory": {
+   "score": 2,
+   "why": "Lists all five correct ids as the upstream issues closure question."
+  },
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "Lists all five correct ids as the close-or-withdraw question waiting on the owner."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

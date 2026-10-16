@@ -1,0 +1,20 @@
+{
+ "id": "P44",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold the details of what's owed for the app-store-connect MCP server. The only trace is in the list of open owner decisions, where \"app-store-connect scoping\" appears alongside \"Mac Wrangler\" and \"OpenCode DB backups\". It's listed as a decision still open, but I have no record of what the scoping question is, what has been built, or what's pending.\n\nI'd rather not guess. The detail may be in a delegate's report or in the memory files (owner-rules.md, hazards.md), but I haven't re-read those since the reset. I can dispatch a leaf to find the item and report back, if you want.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P44/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 558,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 201,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

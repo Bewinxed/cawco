@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P10",
+ "letters": {
+  "A": "cc-real+C-existing",
+  "B": "cc-real+C-filed",
+  "C": "cawco",
+  "D": "factory"
+ },
+ "scores": {
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know the owner's words and gives neither the C-shaped SVG path nor the unfixed foot seam."
+  },
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Says memory doesn't hold it; no C-shaped SVG path and no foot seam statement."
+  },
+  "cawco": {
+   "score": 0,
+   "why": "Disclaims knowledge and gives no C-shaped SVG path or foot seam as unfixed."
+  },
+  "factory": {
+   "score": 0,
+   "why": "Disclaims knowledge of the owner's words and lacks both required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

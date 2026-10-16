@@ -1,0 +1,25 @@
+{
+ "id": "P28",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "Around 23:25–23:27 (the memory lines don't carry timestamps; I placed this by position) the owner objected to long, repeated CI. His words to the delegate a4e27882 were \"I will not accept such long and wasteful ci cd processes any longer!\" He then asked: \"And are you consuming my usage with your tests!?\"\n\nOn usage, the agent found that the probe specs use a mock model, not real usage. effort-relaunch showed real=1 mock=1, where \"claude-opus-5-5\" is just a name. menus-fit showed mock=0.\n\nThe agent then limited the leaves' checks to typecheck and lint:changed, and finish_item went ahead at e37826420.",
+ "zooms": [
+  [
+   "3456+32"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P28/r0",
+  "answer/tree/P28/r1"
+ ],
+ "usage": {
+  "input": 4,
+  "cache_write": 1599,
+  "cache_write_1h": 0,
+  "cache_read": 64346,
+  "output": 356,
+  "thinking": 115
+ },
+ "off_model": [],
+ "refused": []
+}

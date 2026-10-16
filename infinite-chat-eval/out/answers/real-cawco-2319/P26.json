@@ -1,0 +1,20 @@
+{
+ "id": "P26",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold what the owner required of OpenUI mockups for projects with their own design system, so I won't guess.\n\nThe closest thing I have is a commit title, 3fd3b6c22, \"Mockups are OpenUI Lang over each project's own design system\". It touched the Projects PRD, `OpenUiRenderer.svelte` and a new `mockup/` component set. That shows what was built, but not the owner's words.\n\nRelated owner statements I do have are:\n- Components should be \"just components and agnostic\".\n- \"remember this needs to work for all our users, across their many languages and frameworks\".\n- He ruled out a proprietary format (\"Ur not going to rewrite figma from scratch...\").\n\nThe PRD file `.design-foundations/plans/2026-10-06-projects.md` would show the exact requirement.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P26/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 22830,
+  "output": 477,
+  "thinking": 213
+ },
+ "off_model": [],
+ "refused": []
+}

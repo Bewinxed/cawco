@@ -1,0 +1,20 @@
+{
+ "id": "P33",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an \"effort fix\", so I can't name a commit for it. I won't guess which one you mean.\n\nThe fixes I do have recorded are:\n- **eec9bd328:** the executor `ghToken` empty-`if` syntax error.\n- **637609a44:** the concurrent runtime publish.\n- **dcecee4e2:** the dock/scheduler `join` bug.\n- **0b9b6813d:** the two-pane gains.\n\nIf \"effort\" means something else, such as a model effort setting, I have nothing on it. Tell me which fix you mean, or I can have a leaf check git history.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P33/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 555,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 298,
+  "thinking": 98
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P28",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything timestamped at 23:25–23:27, so I can't say what was said then.\n\nI do have two related facts, but I can't tie them to that window:\n- **CI:** the owner is against useless tests and repeated identical CI runs. He never asked me to cancel tests or reduce the delegate count.\n- **Usage:** I found Caw's cold wakes cost $25.67 of $39.96 over 24 hours, from 6 cold wakes. `caw_model` is blank, so it runs on the 1M window. I recommend a 200k window, and that decision is still open for him.\n\nIf you need the exact exchange, check the transcript at that time.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P28/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 575,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 360,
+  "thinking": 145
+ },
+ "off_model": [],
+ "refused": []
+}

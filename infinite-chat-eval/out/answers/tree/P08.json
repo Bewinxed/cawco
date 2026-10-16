@@ -1,0 +1,20 @@
+{
+ "id": "P08",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "Use the preview tool, not a link. Show it in the dashboard's preview panel.\n\n- **Owner's complaint:** he asked why I sent links instead of using the preview tool. My answer was to re-point the routines, tasks and Decisions previews at the panel once the preview websocket fix was published, with no more links.\n- **Owner's wish:** \"this should be a floating pane\".\n- **Mechanics:** I create the preview with `artifact_create`, which needs `--session <id>`. I then ask him to pin whatever is off.\n- **Why links fail:** he browses over Tailscale, so a link that points at the bewinxed domain, or at a port like ts.net:20958, didn't reach him. Previews should follow the dashboard's origin.\n- **Fidelity:** a preview must match the live app. He called mismatches \"a waste of time\".\n\nI haven't re-checked the exact wording of that exchange.",
+ "zooms": [],
+ "calls": [
+  "answer/tree/P08/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 32173,
+  "output": 493,
+  "thinking": 193
+ },
+ "off_model": [],
+ "refused": []
+}

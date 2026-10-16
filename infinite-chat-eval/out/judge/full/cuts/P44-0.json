@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P44",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-cawco-2319",
+  "C": "replay-cawco-2319",
+  "D": "real-native-0055"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it doesn't know the details and gives no scoping to darwin or the missing run.sh."
+  },
+  "real-cawco-2319": {
+   "score": 1,
+   "why": "Gets the darwin put after fleet-faults and the missing run.sh, but omits that the owner approves and that whether asc-mcp should exist is the owner's call."
+  },
+  "replay-cawco-2319": {
+   "score": 2,
+   "why": "Covers darwin scoping needing owner approval and the owner deciding whether asc-mcp exists, with the Mac reporting run.sh missing; the 'attempted' wording is a minor deviation."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says it has no memory of the app-store-connect MCP server."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

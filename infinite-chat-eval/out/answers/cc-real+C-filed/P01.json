@@ -1,0 +1,20 @@
+{
+ "id": "P01",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an answer. I have no record of the owner saying anything about secret detection, redaction in summaries, or rotation prompts for pasted passwords, so I can't quote them or say what they decided.\n\nThe nearest things in my notes are not that decision:\n- A standing constraint not to reproduce the classifier-stopped machine-auth brief content.\n- The pending \"Screen Recording grant and gh sign-in on the Mac\" item.\n\nNeither covers pasted passwords. This is not an open decision in my list either. If the owner said something before the context reset that the summary dropped, I can't recover it, and I won't guess a policy. If you want it decided, tell me which of the three you want and I'll treat it as a new instruction.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P01/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 6392,
+  "cache_write_1h": 0,
+  "cache_read": 0,
+  "output": 334,
+  "thinking": 97
+ },
+ "off_model": [],
+ "refused": []
+}

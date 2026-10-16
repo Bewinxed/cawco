@@ -1,0 +1,20 @@
+{
+ "id": "P32",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "The open item (waiting on you, since 10-15 15:54) asks whether to close or withdraw these five upstream issues:\n\n- bits-ui#2202\n- vaul-svelte#141\n- unlazy#41\n- language-tools#3142\n- bun#45320\n\nThe record is a decision item. My memory doesn't say which of them are still open upstream or whether you've answered, only that the question is waiting on you.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P32/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 576,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 131,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

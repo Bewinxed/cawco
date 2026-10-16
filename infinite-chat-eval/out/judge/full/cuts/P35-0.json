@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P35",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-native-0055",
+  "C": "replay-cawco-2319",
+  "D": "real-cawco-2319"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Does not give the file or the limit, and suggests checking max_user_watches rather than the correct file."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says it doesn't know and names no file or value."
+  },
+  "replay-cawco-2319": {
+   "score": 0,
+   "why": "Declines to answer and gives neither the file nor the limit."
+  },
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Says it doesn't know; no required file given."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

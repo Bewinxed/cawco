@@ -1,0 +1,20 @@
+{
+ "id": "P34",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an answer to that. It records no orchestrator memory prune and no before/after size for what loads at session start.\n\nThe only memory-file edits I have are to `owner-rules.md` (I added a tests/CI entry, then removed it, so no net change) and to `hazards.md` (three additions: the release.ts proof-reuse note, the stage 2 25 GB free note, and the `zsh -lc` PATH note). All of those added content rather than shrinking anything, and I have no numbers.\n\nThe full transcript is at `/home/bewinxed/.cawco/accounts/3c788add-0f48-4fe6-8b05-638c18bdc77a/claude/projects/-home-bewinxed-cockpit/adfd0048-885e-4cb6-b3d2-bb1cfa18f319.jsonl`. Any prune would show up there if it happened.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P34/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 287,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

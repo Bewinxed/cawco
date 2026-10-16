@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P54",
+ "letters": {
+  "A": "factory",
+  "B": "cc",
+  "C": "cc+C-existing",
+  "D": "tree"
+ },
+ "scores": {
+  "factory": {
+   "score": 0,
+   "why": "Says it has no memory of the session and gives none of the required facts (ios-scroll-up gate on 48109ebbc, load under 20)."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Says it doesn't know the session and only guesses at unrelated leaves; neither required fact is present."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know the session; neither required fact is present."
+  },
+  "tree": {
+   "score": 0,
+   "why": "Says it has no record of 5b112f95 and names other sessions; neither required fact is present."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "group": "cuts",
+ "id": "P47",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-native-0055"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 2,
+   "why": "States that after slice 1 lands the agent screenshots the real sheet, Fable designs the inspector against it, and it goes to the owner for a pick before building."
+  },
+  "real-native-0055": {
+   "score": 1,
+   "why": "Mentions the inspector design after slice 1 and waiting for a design pick, but omits that Fable designs it against a screenshot and doesn't clearly state the owner picks before building."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

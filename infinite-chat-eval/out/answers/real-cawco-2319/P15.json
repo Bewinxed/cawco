@@ -1,0 +1,20 @@
+{
+ "id": "P15",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "Penpot's caveats, each checked against its source:\n\n1. **No iPad or Pencil support.** Issue #6394 (May 2025): \"not something we expect to prioritize in the near future\". Bug #3810: touch selection, drawing and zooming are broken. Issue #2102: the Pencil can click but not drag or draw. Your PRD's D24–D27 flows wouldn't work.\n2. **Can't be embedded in our panel.** Issue #11735: \"There is no supported way to embed a Penpot file or prototype in another website\". The only workaround is a dev-only `enable-cors` flag that opens the login cookie to any origin.\n3. **Agents need a person's browser tab open.** The MCP talks to a plugin in an open tab, active in only one tab at a time. Agents edit by writing JavaScript (`execute_code`).\n4. **Code export stops at web CSS and HTML.** No React export and nothing native.\n5. **Real code components can't go in.** They'd have to be recreated, which is the rewrite-and-drift problem.\n6. **Self-hosting is a real server stack.** Docker Compose with Postgres, Valkey, exporter and more.\n\n**Good:** MPL-2.0 licence, open file format, native W3C tokens, and a free MCP.\n\n**Unverified:** resource needs, large-file performance, and running the plugin headless.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P15/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 22830,
+  "output": 449,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

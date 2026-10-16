@@ -1,0 +1,20 @@
+{
+ "id": "P25",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold the problem that prompted the @-mention rework. I have no record of the owner's original complaint or request.\n\nWhat I do have is the current plan:\n- The finder (93bc8ca8's design) lands on the new find engine in 0a6da208, item 44ddd92d, as option C. That means finder only, and the @ chips stay as 3a9275a18 left them.\n- Option B was rejected because it departed from the owner's chosen design.\n- @ with chips (MentionField, `draft.text` stays a plain string, sent as `@Title · linux <cockpit#5a167bde>`) is a separate later item, built as A.\n\nThe original trigger is probably in the 93bc8ca8 or 3a9275a18 history, but I haven't got that here.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P25/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 560,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 348,
+  "thinking": 100
+ },
+ "off_model": [],
+ "refused": []
+}

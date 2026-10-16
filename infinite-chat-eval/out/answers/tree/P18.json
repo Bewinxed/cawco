@@ -1,0 +1,30 @@
+{
+ "id": "P18",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds no owner decision on the Decisions tab preview itself. What it does hold:\n\n- The owner's only comment: pin 38fc24e9 on \"decisions-tab\": \"this is a lazy way to present this and what is this suppsoed to show?\" It was redelivered even though I had already answered it.\n- I delegated an xhigh \"Decisions tab build\" (b1b12bc7, workspace a377ef5e).\n- The Decisions picking page was unreachable at ts.net:20958, with 5 of 12 picked. I set up a socat forward for it.\n\nI haven't seen a pick or approval from him on that preview.",
+ "zooms": [
+  [
+   "2176+64",
+   "1280+128"
+  ],
+  [
+   "1024+128"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P18/r0",
+  "answer/tree/P18/r1",
+  "answer/tree/P18/r2"
+ ],
+ "usage": {
+  "input": 6,
+  "cache_write": 3781,
+  "cache_write_1h": 0,
+  "cache_read": 96519,
+  "output": 377,
+  "thinking": 132
+ },
+ "off_model": [],
+ "refused": []
+}

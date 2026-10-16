@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P13",
+ "letters": {
+  "A": "cc-real+C-filed",
+  "B": "cc-real+C-existing",
+  "C": "tree-nozoom",
+  "D": "cc-real"
+ },
+ "scores": {
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Says it has no memory of the complaint and offers unrelated items."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it has no memory of the complaint and offers unrelated items."
+  },
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Says it cannot answer; the nearby items it cites (decisions tab pin, crash) are not the approval-card complaint or the fix."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no memory of the complaint or the work done."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

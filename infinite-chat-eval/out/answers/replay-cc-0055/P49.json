@@ -1,0 +1,20 @@
+{
+ "id": "P49",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't have anything about a TestFlight build numbered 20261015, so I can't say what has to happen to it or what that triggers. I won't guess.\n\nThe only TestFlight item I hold is a pending live check after the nightly ships: confirming the iOS approval crash is fixed on TestFlight. That sits behind the nightly, which is blocked on leaf 3e70dd7a's finding about the hub-update rollback. I have no record that this check is tied to a build with that number, or that it triggers anything downstream.\n\nIf 20261015 was discussed before the reset and didn't make it into my summary, tell me what it covers and I'll work from that.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P49/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 567,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 315,
+  "thinking": 104
+ },
+ "off_model": [],
+ "refused": []
+}

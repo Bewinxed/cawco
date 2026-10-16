@@ -1,0 +1,20 @@
+{
+ "id": "P36",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "The kept workspaces are listed in the kept-audit file, which host bb6cd949 wrote after delegate 151c41ea's audit failed in the sandbox. It counted 86 active workspaces: LANDED 24, SUPERSEDED 25, KEEP 12, with about 76G archivable. My memory doesn't give its path.\n\nThe separate pending.md (in the memory folder under .cawco/accounts/…/memory/) has a section for archive items, but my memory doesn't say it lists the kept workspaces.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P36/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 564,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 177,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

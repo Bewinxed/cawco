@@ -1,0 +1,20 @@
+{
+ "id": "P26",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold that. Nothing in it mentions OpenUI mockups or a rule for projects that have their own design system, so I won't guess at what you required.\n\nThe nearest things I do have are:\n- **UI changes:** they go advisor → preview → your pick → build.\n- **Option C live components:** a story file sits beside the component and runs on the project's own Vite (≥6) via `cawcoStage()`, served at `/@cawco/sheet`.\n\nNeither is a statement about OpenUI or design systems. If you tell me the requirement, I'll carry it forward.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P26/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 277,
+  "thinking": 89
+ },
+ "off_model": [],
+ "refused": []
+}

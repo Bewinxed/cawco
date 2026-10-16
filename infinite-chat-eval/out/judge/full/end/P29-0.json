@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P29",
+ "letters": {
+  "A": "cawco",
+  "B": "factory",
+  "C": "cc+C-filed",
+  "D": "tree-nozoom"
+ },
+ "scores": {
+  "cawco": {
+   "score": 0,
+   "why": "Says no owner question is remembered and misses the archive and 32G to 64G outcome, though it mentions the OpenCode backups pending."
+  },
+  "factory": {
+   "score": 0,
+   "why": "Denies any owner question and gives unrelated housekeeping, with nothing on the archive result or the pending decisions."
+  },
+  "cc+C-filed": {
+   "score": 1,
+   "why": "Mentions the pending OpenCode backup deletion that frees ~25G, but misses the question, the archive and 32G to 64G, and the kept workspaces."
+  },
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Denies a direct owner question and gives free-space figures that differ from 32G to 64G, without the kept-audit result or the OpenCode backups."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

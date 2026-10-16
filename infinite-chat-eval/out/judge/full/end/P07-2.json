@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P07",
+ "letters": {
+  "A": "cc-real+C-filed",
+  "B": "cc"
+ },
+ "scores": {
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "States the existing harness/model picker and quotes \"why are you inventing new patterns\"; extra detail about per-project scoping uncertainty doesn't contradict the gold."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Says it has no record of the owner's ruling and gives nothing about the existing selector or the not-a-new-pattern point."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

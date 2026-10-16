@@ -1,0 +1,20 @@
+{
+ "id": "P24",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds nothing about an effort setting for this chat. The owner's messages I have are the standing rules, the automated rule reminders, and his last real message, \"Gonna sleep finish what your can\". None of them mentions effort, a reasoning level, or any change to it, so I can't say what he reported or what came of it. If you tell me what he said, I can work from that, but I won't guess at it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P24/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 126,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

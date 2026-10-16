@@ -1,0 +1,20 @@
+{
+ "id": "P41",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have that in my memory. Nothing I retained mentions a TestFlight build keeping two wire bridges alive, or any bridges by name. The only TestFlight items I hold are the iOS approval crash fix (2a74e9fa6), which needs a live check on TestFlight after the nightly, and the iOS task sheet work in 23e62015. I won't guess at a build number or names. The full transcript at `/home/bewinxed/.cawco/accounts/3c788add-0f48-4fe6-8b05-638c18bdc77a/claude/projects/-home-bewinxed-cockpit/adfd0048-885e-4cb6-b3d2-bb1cfa18f319.jsonl` might have it, and I can search it if you want.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P41/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 570,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 247,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

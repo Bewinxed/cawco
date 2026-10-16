@@ -1,0 +1,20 @@
+{
+ "id": "P48",
+ "run": "replay-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't record any ranking check owed after the finder is deployed, so I won't guess at one.\n\nWhat I do have on the finder is limited:\n- Leaf 0a6da208 is building the find engine, including `artifacts.opened_revision`.\n- Leaf 93bc8ca8 is building the find/@ UI and is blocked until the engine lands.\n- That UI leaf will later swap its local types for `@cawco/core`, and it is to be proven with `bun scripts/probe-kit/run.ts web finder`.\n\nNothing in my notes mentions a ranking check, a ranking threshold or a post-deploy follow-up. If you asked a leaf for one, it may be in that leaf's brief or report, which I'd have to re-read.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cawco-2319/P48/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 562,
+  "cache_write_1h": 0,
+  "cache_read": 22153,
+  "output": 362,
+  "thinking": 117
+ },
+ "off_model": [],
+ "refused": []
+}

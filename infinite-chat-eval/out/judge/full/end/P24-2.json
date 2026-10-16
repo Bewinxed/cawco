@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P24",
+ "letters": {
+  "A": "cc",
+  "B": "cc-real+C-existing"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it has no memory of the effort report and gives no required facts."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it has no record of the effort report and offers unrelated Caw model analysis, with none of the required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

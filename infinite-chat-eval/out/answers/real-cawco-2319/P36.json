@@ -1,0 +1,20 @@
+{
+ "id": "P36",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "The workspaces kept back from the cleanup are listed in **kept-audit.md**. My memory has it as \"the 12 kept workspaces in kept-audit.md\", which is waiting on your decision. I don't have the file's full directory path, so I can't say exactly where it sits on disk.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P36/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 564,
+  "cache_write_1h": 0,
+  "cache_read": 22830,
+  "output": 163,
+  "thinking": 69
+ },
+ "off_model": [],
+ "refused": []
+}

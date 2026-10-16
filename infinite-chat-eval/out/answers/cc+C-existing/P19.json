@@ -1,0 +1,20 @@
+{
+ "id": "P19",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory only holds the rule in force and the open decision, not the design.\n\n**Control today:** a standing owner rule says nothing is filed upstream unless you ask.\n\n**Pending:** the decision \"upstream-choice: pick how agents treat other people's repositories\" is waiting on you, in artifact fb142065 (open since 10-15 19:21). My notes say it has 8 states. Workspace 678d8943 lands after your pick, and I'm keeping the harness `$app` stand-ins until then.\n\nI don't remember what the 8 states or options are, or whether I recommended one. Open fb142065 to see them. I won't guess at the contents.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P19/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 575,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 334,
+  "thinking": 125
+ },
+ "off_model": [],
+ "refused": []
+}

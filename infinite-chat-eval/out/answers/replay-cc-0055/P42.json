@@ -1,0 +1,20 @@
+{
+ "id": "P42",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory only holds a thin answer. \"Safari edges in iPhone Simulator\" is one of the live checks I owe after the nightly ships. The nightly carries the Safari edge fixes, and the release notes draft (~/.cache/cawco-release/notes-next.md) lists \"Safari edges\".\n\nThat check hasn't run yet, because the nightly is blocked. Leaf 3e70dd7a is still investigating the hub-update rollback (f2d2554e6 failed with machine load around 92).\n\nI don't remember which colours or strips the check covers, who owns it, or what the pass criteria are. I'd rather not guess at those.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P42/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 569,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 322,
+  "thinking": 114
+ },
+ "off_model": [],
+ "refused": []
+}

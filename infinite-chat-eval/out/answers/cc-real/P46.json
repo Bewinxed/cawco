@@ -1,0 +1,20 @@
+{
+ "id": "P46",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "From my memory, the path runs through delegate 23e62015:\n\n1. It finishes the MessageBody root stale-height fix plus the 9 review findings.\n2. It regenerates the captures into `/Users/bewinxed/.cawco/tmp/23e62015/captures-v2/`.\n3. A second Sonnet review of those captures must come back SHIP. TestFlight goes out only on SHIP.\n4. I then run `apps/apple/scripts/testflight.py` from the Mac.\n5. After that I check the approval-crash scenario on the TestFlight build.\n\nMy notes don't say whether 23e62015 has finished. They also don't list which crashes the \"crash fixes\" cover, so I can't confirm that fix is the whole set.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P46/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 401,
+  "thinking": 158
+ },
+ "off_model": [],
+ "refused": []
+}

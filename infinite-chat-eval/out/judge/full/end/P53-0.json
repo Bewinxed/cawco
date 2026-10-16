@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P53",
+ "letters": {
+  "A": "tree-nozoom",
+  "B": "factory",
+  "C": "cc-real+C-existing",
+  "D": "cc+C-filed"
+ },
+ "scores": {
+  "tree-nozoom": {
+   "score": 2,
+   "why": "Names tab-strip and hang baselines awaiting approval and re-gate as all tab-strip assertions passing except the two rest baselines."
+  },
+  "factory": {
+   "score": 2,
+   "why": "Lists tab-strip rest baselines and hang baselines, mentions one phone review page, and re-gate limited to the two rest assertions."
+  },
+  "cc-real+C-existing": {
+   "score": 1,
+   "why": "Identifies both approvals and that the gate excludes the two rest diffs, but is vague, says the notes don't specify, and omits the phone page and the stays-red-until-approved detail."
+  },
+  "cc+C-filed": {
+   "score": 2,
+   "why": "Covers tab-strip and hang baselines on one phone page, and the gate requiring all tab-strip assertions except the two named baseline comparisons, which stay red until approved."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

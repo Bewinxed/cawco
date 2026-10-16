@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P06",
+ "letters": {
+  "A": "cawco",
+  "B": "cc-real+C-existing",
+  "C": "tree",
+  "D": "tree-nozoom"
+ },
+ "scores": {
+  "cawco": {
+   "score": 0,
+   "why": "Says no ruling exists and offers unrelated items; misses all required facts."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Claims no ruling found; none of the required facts are given."
+  },
+  "tree": {
+   "score": 1,
+   "why": "Captures the 'why are you inventing new patterns' sentiment and CawField's deletion, but not the floating panel with Caw hero/chips, reusing Composer and Transcript, or the no-push rule."
+  },
+  "tree-nozoom": {
+   "score": 1,
+   "why": "Gets 'floating pane' and CawField deleted, with Composer preferred, but lacks the hero/chips, the Transcript reuse, and the not-pushing-content ruling."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

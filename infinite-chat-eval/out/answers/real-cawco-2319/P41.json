@@ -1,0 +1,20 @@
+{
+ "id": "P41",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have this in my memory. Nothing I recorded mentions a TestFlight build that keeps two wire bridges alive, or any bridges by that name. The nearest things I hold are the nightly 3353 (cb125d77d) on obelisk and the Mac, and the preview bridge (`packages/agent/src/preview-bridge.ts`), which isn't a TestFlight item and which I have no record of being called a \"wire bridge\". I'd rather not guess a build number or names. If you can tell me where you saw it, I can check it against the repo or the release notes.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P41/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 570,
+  "cache_write_1h": 0,
+  "cache_read": 22830,
+  "output": 184,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

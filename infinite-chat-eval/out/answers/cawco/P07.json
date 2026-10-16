@@ -1,0 +1,20 @@
+{
+ "id": "P07",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an owner statement on where Caw's per-project harness and model settings should live, so I won't guess.\n\nWhat I do have is the current state. The `projects` table already has `caw`, `caw_harness`, `caw_model`, `cap_usd` and `cap_period` columns, and `caw_model` is blank, so Caw falls back to `claude-opus-5-5[1m]`. I recommended `claude-opus-5-5` (200k window), but changing it is still the owner's call. The one \"per-project/onboarding setting\" ruling I recorded concerns upstream filing, not Caw's harness or model.\n\nIf the owner said more on this, it isn't in what survived the reset.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P07/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 376,
+  "thinking": 151
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P29",
+ "letters": {
+  "A": "real-native-0055",
+  "B": "real-cawco-2319",
+  "C": "replay-cc-0055",
+  "D": "replay-cawco-2319"
+ },
+ "scores": {
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says no owner question is remembered and gives different numbers (17 workspaces, 56 GB) that contradict the gold's 25 archived and 32G to 64G."
+  },
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Says it doesn't know and only mentions a df command; no archive result or pending decisions."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says no owner question is remembered; gives 56 GB and six kept workspaces, which differ from the gold's 64G and 12 kept."
+  },
+  "replay-cawco-2319": {
+   "score": 1,
+   "why": "Does mention the pending decision on deleting the two 12.7G OpenCode backups, but says it has no memory of the question and omits the archiving and 32G to 64G result."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

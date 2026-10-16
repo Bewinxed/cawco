@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P01",
+ "letters": {
+  "A": "replay-cawco-2319",
+  "B": "real-cawco-2319",
+  "C": "real-native-0055",
+  "D": "replay-cc-0055"
+ },
+ "scores": {
+  "replay-cawco-2319": {
+   "score": 1,
+   "why": "Correctly says no detection/redaction/rotation but gives only a memory summary and no close-to-verbatim owner quote about sudo/passwords being safe with anthropic."
+  },
+  "real-cawco-2319": {
+   "score": 1,
+   "why": "Reaches the correct 'no' but admits it lacks the owner's wording, so the required quote is missing."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Claims the owner never said anything about passwords or secrets, which contradicts the gold answer."
+  },
+  "replay-cc-0055": {
+   "score": 1,
+   "why": "Quotes the owner's 'it's safe with anthropic' (close enough) but says whether to add detection or redaction is still open, which contradicts the gold 'No'."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

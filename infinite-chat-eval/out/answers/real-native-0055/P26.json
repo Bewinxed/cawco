@@ -1,0 +1,20 @@
+{
+ "id": "P26",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about OpenUI mockups or what you required for projects with their own design system. OpenUI isn't mentioned anywhere in my summary.\n\nThe closest thing I have is the option C work on live components. There, a component exists once, a sheet is a CSF 3 `*.stories.ts` file beside it, and the project's own Vite toolchain renders it. You also decided that a project with no code starts as real code from the first screen. But I can't tell you that's what you meant, and I won't guess.\n\nThe full transcript is at `/home/bewinxed/.cawco/accounts/3c788add-0f48-4fe6-8b05-638c18bdc77a/claude/projects/-home-bewinxed-cockpit/adfd0048-885e-4cb6-b3d2-bb1cfa18f319.jsonl`. It may have the answer if you want me to look.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P26/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 341,
+  "thinking": 54
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P26",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about OpenUI mockups or what you required for projects with their own design system. The summary doesn't mention OpenUI. The nearest rules I have are \"UI changes go advisor → preview → owner pick → build\" and the DESIGN.md \"Mark Line Rule\" that I cited for the delegate-tray spec. Neither covers mockups. I won't guess at the requirement. If it was said earlier in the session, it was lost in the reset, so I'd need you to restate it or point me to where it's recorded.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P26/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 203,
+  "thinking": 29
+ },
+ "off_model": [],
+ "refused": []
+}

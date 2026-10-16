@@ -1,0 +1,20 @@
+{
+ "id": "P33",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't have an \"effort fix\", so I can't name a commit for it. Nothing I recorded on main this segment is described that way.\n\nThe closest items I do have:\n- **dcecee4e2**: the Caw dock reply fix (scheduler `join` read the fingerprint inside the effect).\n- **eec9bd328**: the `ghToken` exec fix.\n- **0b9b6813d**: the two-pane gains.\n\nIf you meant one of these, tell me which. Otherwise `git log` on main would answer it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P33/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 555,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 253,
+  "thinking": 82
+ },
+ "off_model": [],
+ "refused": []
+}

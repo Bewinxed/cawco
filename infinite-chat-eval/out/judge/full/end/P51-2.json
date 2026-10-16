@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P51",
+ "letters": {
+  "A": "cc-real",
+  "B": "cawco"
+ },
+ "scores": {
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no knowledge of the OpenCode backups, so it misses both required facts."
+  },
+  "cawco": {
+   "score": 2,
+   "why": "Identifies the pending decision on deleting two 12.7G OpenCode backups, awaiting the owner's ruling; it omits obelisk and the ~25 GB freed, but the required facts are present and nothing contradicts the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

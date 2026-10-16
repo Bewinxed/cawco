@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P37",
+ "letters": {
+  "A": "tree-nozoom",
+  "B": "cc-real+C-filed",
+  "C": "cc",
+  "D": "cc+C-existing"
+ },
+ "scores": {
+  "tree-nozoom": {
+   "score": 1,
+   "why": "Gives the correct spec filename 2026-10-16-live-components.md under .design-foundations/plans/, but the commit afcf54ba8 is not cdd94a2a4 and it invents a different spec path."
+  },
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Gives neither cdd94a2a4 nor the spec filename, and says it doesn't know."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Gives neither the correct commit nor the spec file, and points to other commits."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Gives neither the correct commit nor the spec file, and points to other commits."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

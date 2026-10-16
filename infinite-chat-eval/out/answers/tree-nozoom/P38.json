@@ -1,0 +1,20 @@
+{
+ "id": "P38",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "Slice 1 (be171c45, CSF story sheets) landed on main as commits d9ede1e03 and 495066138, atop 3a6118c9d, c41469bb4 and 0d5aea8db. The host live-sheet probe passed ALL PASS (12 checks) at 392e82bd3, but it was not re-run after the rebase.\n\nIt shipped in nightly 0.1.11-nightly.3427, built from 495066138145. That nightly was published and installed on both obelisk and the Mac. The 3427 notes carried a \"### New\" entry for live component sheets.\n\nA later nightly built from main, with exit 0, was cut after the dock fix. My memory doesn't give its version number.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P38/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 567,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 235,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

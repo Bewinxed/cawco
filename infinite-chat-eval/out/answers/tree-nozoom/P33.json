@@ -1,0 +1,20 @@
+{
+ "id": "P33",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "The effort fix landed on main as commit 44996b923. Delegate bb2644e8 (\"Find why relaunch dropped effort\") reported it done. The fix adds `chosen_effort` with migration 0178, and its proof run was ALL PASS in 233s.\n\nThe root cause was that the continuation relaunch passed no effort, so the CLI defaulted to medium. The EFFORT_READ handler then overwrote the owner's xhigh setting.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P33/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 555,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 155,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

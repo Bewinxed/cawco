@@ -1,0 +1,20 @@
+{
+ "id": "P01",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds no owner instruction to add secret detection, redaction in summaries, or rotation prompts, so I can't say he wants that built.\n\nWhat I do have is about one incident. The owner pasted a sudo password earlier, and I used it once for the inotify sysctl. My notes say he was told to rotate it. He replied that passwords in the transcript are fine: \"it's safe with anthropic\".\n\nI carried forward a rule for myself, not a feature. I never store or reuse that password, and I don't repeat it in summaries or answers. Whether the session should automate detection or redaction is still an open question for him, and I haven't decided it for him.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P01/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 5995,
+  "cache_write_1h": 0,
+  "cache_read": 0,
+  "output": 355,
+  "thinking": 150
+ },
+ "off_model": [],
+ "refused": []
+}

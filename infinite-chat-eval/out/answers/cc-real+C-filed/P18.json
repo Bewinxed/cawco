@@ -1,0 +1,20 @@
+{
+ "id": "P18",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about a \"Decisions tab preview,\" so I can't say what the owner decided. Nothing in my summary or open items mentions it. The decisions I do have are the ones listed as waiting on the person (upstream choice, Caw cold-wake cost, Vite 5 for sheets, the 25 ms switch target, baseline approvals), and none of them concerns that preview. The owner has also sent no new message this segment since \"Gonna sleep finish what your can\".\n\nIf it was discussed before the reset and not carried into my summary, I don't have it. Point me to the artifact, work item, or decision record and I can look.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P18/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 205,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

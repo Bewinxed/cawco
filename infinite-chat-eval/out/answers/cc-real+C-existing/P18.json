@@ -1,0 +1,20 @@
+{
+ "id": "P18",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about a \"Decisions tab preview,\" so I can't say what you decided. The summary has no mention of a Decisions tab, and none of your messages in it touch on one. Your last message was \"Gonna sleep finish what your can,\" and you haven't sent a new one since.\n\nThe nearest things I do have are the owner decisions I listed for the morning, which are still open: the upstream-choice pick (artifact fb142065), the Caw cold-wake cost, Vite 5 for sheets, and the baseline approvals. None of those is a Decisions tab preview. If you tell me where it came up, I can look from there.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P18/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 204,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

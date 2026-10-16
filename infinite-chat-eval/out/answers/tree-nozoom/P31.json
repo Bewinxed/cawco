@@ -1,0 +1,20 @@
+{
+ "id": "P31",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds the crashes but not their dates, so I can't confirm they were all on 10-15. The dates would need checking.\n\nReported crashes:\n1. \"The iOS app keeps crashing.\" Apple diagnostics showed v0.1.11 0x8BADF00D, signal 6 WebKit. Then \"now refuses to start just keeps crashing\" and \"why does the app crash because of something on the preview\". The cause was Previews.swift building an unreachable https://outpost.bewinxed.com:3459. I deleted preview instance 23cb5219 and delegated \"Fix the iOS preview crash loop\" (tsk-17, 01960ff3). tsk-17 later ran as 0ecf4bf8.\n2. \"Another ios crash when approving sth.\" This was crash 5e7ba196f35b55c6, in TranscriptView.frame(_:) (TranscriptView.swift:1332) ← DisplayTarget.tick. It was a 0x8BADF00D watchdog on build 20261015.3 (SIGBUS noted).\n\nWhere they stand:\n- The crash fix 2a74e9fa6 is on main. ios-chat-opens passed at 2a74e9fa6.\n- The fix is not yet on TestFlight.\n- TestFlight is gated on the 23e62015 review fixes landing (3 blockers, 7 polish) and a second review returning SHIP.\n- The approval-crash scenario hasn't been checked on a build yet.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P31/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 488,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

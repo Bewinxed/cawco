@@ -1,0 +1,20 @@
+{
+ "id": "P40",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have that in my memory. The summary covers the nightly rollback (637609a44 runtime publish), the stage 2 rig failure (eec9bd328), the dock/scheduler fix (dcecee4e2) and others, but nothing about previews behind Cloudflare or a refused live connection. I won't guess a commit or cause. If it's useful, I can have a leaf search git history for it once I'm running again.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P40/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 136,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,134 @@
+{
+ "done": true,
+ "messages": 4530,
+ "nodes": 8900,
+ "model_nodes": 5001,
+ "view_lines": 173,
+ "view_bytes": 67207,
+ "view_levels": {
+  "0": 48,
+  "1": 17,
+  "2": 18,
+  "3": 19,
+  "4": 18,
+  "5": 17,
+  "6": 19,
+  "7": 17
+ },
+ "events": [
+  {
+   "T": 456,
+   "before": 128279,
+   "after": 63657,
+   "merges": 258
+  },
+  {
+   "T": 690,
+   "before": 128047,
+   "after": 63939,
+   "merges": 267
+  },
+  {
+   "T": 932,
+   "before": 128499,
+   "after": 63663,
+   "merges": 227
+  },
+  {
+   "T": 1152,
+   "before": 128082,
+   "after": 63929,
+   "merges": 226
+  },
+  {
+   "T": 1394,
+   "before": 128231,
+   "after": 63882,
+   "merges": 242
+  },
+  {
+   "T": 1626,
+   "before": 128014,
+   "after": 63806,
+   "merges": 234
+  },
+  {
+   "T": 1847,
+   "before": 128071,
+   "after": 63896,
+   "merges": 217
+  },
+  {
+   "T": 2090,
+   "before": 128465,
+   "after": 63706,
+   "merges": 249
+  },
+  {
+   "T": 2302,
+   "before": 128229,
+   "after": 63824,
+   "merges": 216
+  },
+  {
+   "T": 2496,
+   "before": 128192,
+   "after": 63818,
+   "merges": 200
+  },
+  {
+   "T": 2714,
+   "before": 128448,
+   "after": 63839,
+   "merges": 205
+  },
+  {
+   "T": 2955,
+   "before": 128333,
+   "after": 63637,
+   "merges": 235
+  },
+  {
+   "T": 3191,
+   "before": 128059,
+   "after": 63765,
+   "merges": 246
+  },
+  {
+   "T": 3405,
+   "before": 128144,
+   "after": 63886,
+   "merges": 218
+  },
+  {
+   "T": 3654,
+   "before": 128229,
+   "after": 63974,
+   "merges": 248
+  },
+  {
+   "T": 3880,
+   "before": 128251,
+   "after": 63778,
+   "merges": 225
+  },
+  {
+   "T": 4093,
+   "before": 128398,
+   "after": 63657,
+   "merges": 214
+  },
+  {
+   "T": 4308,
+   "before": 128357,
+   "after": 63966,
+   "merges": 219
+  },
+  {
+   "T": 4518,
+   "before": 128116,
+   "after": 63930,
+   "merges": 211
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P27",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no timestamps on the owner's messages, so I can't say which requirements he stated between 22:33 and 23:08.\n\nWhat I do hold about live components, without times:\n\n- **Standing rules:** they must work across languages and frameworks, a component exists once, and they use existing standards and libraries.\n- **Decision:** option C, specified in `.design-foundations/plans/2026-10-16-live-components.md`. Toolchains with no plugin get an HTML `page` artifact.\n- **Slice 1 (landed):** `artifact_create(kind:\"sheet\")`, which supports Vite 6 and newer only. Vite 5 is refused by name. A second code path for Vite 5 needs his go-ahead.\n\nThe spec file or the session transcript would show the exact wording and times.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P27/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 353,
+  "thinking": 98
+ },
+ "off_model": [],
+ "refused": []
+}

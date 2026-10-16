@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P49",
+ "letters": {
+  "A": "replay-cawco-2319",
+  "B": "real-cawco-2319",
+  "C": "replay-cc-0055",
+  "D": "real-native-0055"
+ },
+ "scores": {
+  "replay-cawco-2319": {
+   "score": 0,
+   "why": "Says it doesn't know of any expiry or follow-up; misses both required facts."
+  },
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Says memory has nothing on this build; misses both facts."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Claims no record of the build; misses expiry and bridge removal."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says nothing is known about the build; misses both required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

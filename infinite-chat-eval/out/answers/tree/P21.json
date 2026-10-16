@@ -1,0 +1,25 @@
+{
+ "id": "P21",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "Slice 1 of the live component sheets (be171c45) refuses projects on Vite older than 6, and also Angular, Astro, Nuxt and Next. Supporting Vite 5 would need a second code path in the sheet engine. My notes say \"Vite 5 proposal needs go-ahead\" from you.\n\nYou haven't decided yet whether I should build that second path or keep Vite 6+ as the requirement. Slice 1 is on main (495066138, d9ede1e03). The probe passed at 392e82bd3 but was not re-run after the rebase. The Vite 5 decision is still listed under \"Waiting on user\".",
+ "zooms": [
+  [
+   "4280+8"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P21/r0",
+  "answer/tree/P21/r1"
+ ],
+ "usage": {
+  "input": 4,
+  "cache_write": 1659,
+  "cache_write_1h": 0,
+  "cache_read": 64346,
+  "output": 446,
+  "thinking": 222
+ },
+ "off_model": [],
+ "refused": []
+}

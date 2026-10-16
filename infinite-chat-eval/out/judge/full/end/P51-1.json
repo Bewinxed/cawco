@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P51",
+ "letters": {
+  "A": "cc",
+  "B": "tree",
+  "C": "cc+C-filed",
+  "D": "factory"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says memory has nothing about OpenCode backups, missing the pending delete decision."
+  },
+  "tree": {
+   "score": 0,
+   "why": "Claims no pending decision on OpenCode backups and lists unrelated decisions."
+  },
+  "cc+C-filed": {
+   "score": 2,
+   "why": "Correctly states the pending decision is whether to delete the two 12.7 GB OpenCode backups on obelisk, freeing ~25 GB, awaiting owner."
+  },
+  "factory": {
+   "score": 1,
+   "why": "Identifies 12.7G OpenCode backups as an owner question but doesn't know the decision is delete or that there are two."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

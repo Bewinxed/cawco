@@ -1,0 +1,20 @@
+{
+ "id": "P42",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory shows the check landed but the Simulator step is not recorded as done.\n\n- Leaf 72ab4a24 (Safari edges) landed on main at 3a69efe50, with an \"8-step Simulator check\" attached. It needed a Mac iOS build (~00:57).\n- Later, 72ab4a24 landed again as 284a80bf8 (152/152 passing). That landing report doesn't say the iPhone Simulator colour check ran.\n- I have no record of anyone running the 8-step Simulator check, and no result for it.\n- I also don't know whether the Mac-side run was ever requested after 284a80bf8.\n\nSo what's owed is the 8-step iPhone Simulator check of the edge-strip colours, run on the Mac. Whether it has since been done, I can't tell from memory.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P42/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 569,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 269,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

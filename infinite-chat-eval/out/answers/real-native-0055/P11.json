@@ -1,0 +1,20 @@
+{
+ "id": "P11",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no timestamps for the owner's messages, so I can't say which one came at 23:09. The summary lists them in order but without times.\n\nTwo corrections fit the live-components discussion, but I can't confirm either was the 23:09 one:\n\n- **Fallback decision:** \"Why did you decide the fallback on your own when I just asked for explanation?\" This was about the Angular fallback, and I re-asked him afterwards.\n- **Owner rules:** \"Bro you don't have to edit the owner rules\" and \"Why are you quiting me in the own3r rules\".\n\nThe full transcript at `/home/bewinxed/.cawco/accounts/3c788add-0f48-4fe6-8b05-638c18bdc77a/claude/projects/-home-bewinxed-cockpit/adfd0048-885e-4cb6-b3d2-bb1cfa18f319.jsonl` should have the timestamps.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P11/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 567,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 437,
+  "thinking": 140
+ },
+ "off_model": [],
+ "refused": []
+}

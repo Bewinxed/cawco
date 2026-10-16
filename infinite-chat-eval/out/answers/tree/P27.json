@@ -1,0 +1,30 @@
+{
+ "id": "P27",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no timestamps for these, so I can't tie them exactly to 22:33–23:08. The live-components requirements the owner stated in that stretch were:\n\n- Live components are Svelte, never JSX (PRD D29). He wanted something like svelte-dynamic-component-engine and said \"lookup newer ones\". svelte-jsx was old and unwanted.\n- The product ships compiled on people's computers: \"u realize this product is going to be a compiled version on people's computers? … did you do your research?\"\n- Research how Pencil (.pen), Paper and similar tools do it.\n- \"remember this needs to work for all our users, across their many languages and frameworks\".\n- \"ask fable for a proper spec for this, i already talked about this in the prd\".\n- A project may have no Vite: \"What if the project is pure design … no vite?\", \"Isnt it just components and agnostic?... how does figma or pen or paper does it?\"\n\nLater answers, probably after that window: \"Pin; agent edits the code\", \"Real code from the first screen\", and \"Just use ur own canvas…\".",
+ "zooms": [
+  [
+   "2944+64",
+   "3008+64",
+   "3072+64",
+   "3136+64",
+   "3200+64",
+   "3552+32"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P27/r0",
+  "answer/tree/P27/r1"
+ ],
+ "usage": {
+  "input": 4,
+  "cache_write": 3752,
+  "cache_write_1h": 0,
+  "cache_read": 64346,
+  "output": 912,
+  "thinking": 495
+ },
+ "off_model": [],
+ "refused": []
+}

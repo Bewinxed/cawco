@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P12",
+ "letters": {
+  "A": "cc-real+C-filed",
+  "B": "cc+C-filed",
+  "C": "tree-nozoom",
+  "D": "tree"
+ },
+ "scores": {
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Says it has no record; mentions a related standing constraint but doesn't give the owner's reaction or the Mobbin/best-practices quotes."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it has no record and offers unrelated pushback quotes; misses best practices/Mobbin and the 'questions for the sake of it' reaction."
+  },
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Describes different complaints (preview mismatch, inventing patterns) rather than the best-practices/Mobbin and 'questions for the sake of adding them' reaction."
+  },
+  "tree": {
+   "score": 0,
+   "why": "Offers other candidate exchanges with different quotes and never mentions best practices, Mobbin, or asking questions for the sake of it."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

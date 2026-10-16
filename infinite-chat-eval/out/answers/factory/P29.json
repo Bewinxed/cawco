@@ -1,0 +1,20 @@
+{
+ "id": "P29",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold any question from the owner about obelisk's disk, so I can't say what he asked or what it led to.\n\nWhat I do have is my own disk housekeeping. `/` sits around 97–98% full with about 49 GB free. I deleted old `failed-*` directories, `out-cb125d77d` and stale proof builds. A nightly proof needs at least 25 GB free, so I'm keeping that margin by clearing old `out-*` directories, stale proof builds and spent worktrees.\n\nIf he asked about it, the question isn't in what survived the reset.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P29/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 326,
+  "thinking": 141
+ },
+ "off_model": [],
+ "refused": []
+}

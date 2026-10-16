@@ -1,0 +1,20 @@
+{
+ "id": "P48",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't record a check of the finder's ranking specifically, so I won't invent one.\n\nWhat I do have is a general plan. After the nightly installs on obelisk and the Mac, I run one live browser check covering Caw replying in the dock, ⌘K from an artifact page, a sheet artifact, and \"Jump/finder\". That is about whether the finder works, not how it ranks.\n\nI also moved a finder reminder into my pending notes when I dropped the finder TODO from the release notes. The summary doesn't say what that reminder contains, so it may be the ranking item. Check `pending.md` to find out.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P48/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 562,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 428,
+  "thinking": 230
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P43",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "The folder-bytes spec is owed one run on the host: `bun scripts/probe-kit/run.ts folder-bytes`. It's open item 5 in my notes. The reason is that delegate-based probe-kit specs can't start a boundary inside a workspace, where the sandbox is already nested in another bwrap. I run them on the host from the leaf's clone instead.\n\nMy notes don't say which worktree to run it from, which leaf owns the spec, or whether it has been run since. Nothing in memory records a result.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P43/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 22830,
+  "output": 168,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

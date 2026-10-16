@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P05",
+ "letters": {
+  "A": "cc",
+  "B": "cc-real+C-existing"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it doesn't know the fallback or how it was settled, so it misses both required facts."
+  },
+  "cc-real+C-existing": {
+   "score": 1,
+   "why": "Correctly gives the HTML page artifact fallback as the owner's decision, but omits that the owner objected to the agent deciding it and the 'own canvas' wording, and doesn't mention loading the built CSS."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

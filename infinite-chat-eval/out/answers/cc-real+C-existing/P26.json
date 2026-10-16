@@ -1,0 +1,20 @@
+{
+ "id": "P26",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds nothing about OpenUI mockups or what the owner required of them for projects with their own design system. The summary doesn't mention OpenUI at all. The nearest owner decisions I do have are \"real code from the first screen\" and the HTML `page` artifact for toolchains without a plugin API, but I won't stretch those into an answer. If the requirement exists, it was probably in an earlier segment that the summary didn't carry over, so the original message or the repo docs would settle it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P26/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 182,
+  "thinking": 26
+ },
+ "off_model": [],
+ "refused": []
+}

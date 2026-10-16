@@ -1,0 +1,20 @@
+{
+ "id": "P19",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold the full design of the upstream guard, only these pieces.\n\n**Rule in force:** nothing gets filed upstream under your account without your ask.\n\n**Already landed:** a guard in the `exec` script. The fix eec9bd328 made `ghToken` apply only when `[ -z \"$guarded\" ] && [ -z \"${GH_TOKEN:-}\" ]`.\n\n**Pending on you:**\n- Pick a design from the upstream-choice preview, artifact fb142065-461b-4f79-9f1b-170d39944ae8, which has 8 states.\n- Workspace 678d8943 holds the UI on branch `upstream-ui` and waits for that pick. It then cherry-picks the UI and removes `harness/upstream-choice`. I also need to know whether to land it as-is or gate-only.\n- The guard UI stays out of the release notes until you pick.\n- Decide whether to close the open upstream issues: bits-ui#2202, vaul-svelte#141, unlazy#41, language-tools#3142 and bun#45320.\n\nI don't remember the guard's exact mechanism beyond that.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P19/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 575,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 628,
+  "thinking": 255
+ },
+ "off_model": [],
+ "refused": []
+}

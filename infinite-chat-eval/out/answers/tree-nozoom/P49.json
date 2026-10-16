@@ -1,0 +1,20 @@
+{
+ "id": "P49",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no plan for TestFlight 20261015 itself, only that it is what's shipped. The shipped build is CawCo 0.1.11, CFBundleVersion 20261015.3, uploaded 2026-10-15 16:25:14. It also carries the crash that hit the iOS app when approving something (0x8BADF00D watchdog).\n\nWhat is planned is a new TestFlight build, cut later via apps/apple/scripts/testflight.py on the Mac. It needs two things first:\n1. Browser leaf 28024bea's review says SHIP, or its FIX items land. The last verdict was FIX, so the new captures get a second Sonnet review.\n2. The MessageBody stale-height fix lands in 23e62015.\n\nThat build carries:\n- crash fix 2a74e9fa6\n- task sheet 73c29fc91\n- the Swift pins\n- the iPad sheets from ffa87e41, if landed\n\nAfter it ships, I check the approval-crash scenario on the new build.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P49/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 567,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 332,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P20",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "**Numbers (from my cost analysis):** Caw spent $39.96 over 97 turns in 24h. $25.67 of that came from just 6 cold wakes. `caw_model` is blank, so it runs on `claude-opus-5-5[1m]`, the 1M-token window.\n\n**Decision for you:** whether to keep the 1M window or move Caw to a smaller one.\n\n**My recommendation:** set `caw_model` to a 200k window, `claude-opus-5-5`. A cold wake has to reload the whole context, which is where most of the cost comes from.\n\nMy memory doesn't record any other options, or a projected saving for the 200k setting. You haven't answered yet; I've listed it among the morning decisions.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P20/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 579,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 237,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

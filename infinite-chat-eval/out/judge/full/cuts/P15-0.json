@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P15",
+ "letters": {
+  "A": "real-native-0055",
+  "B": "replay-cawco-2319",
+  "C": "replay-cc-0055",
+  "D": "real-cawco-2319"
+ },
+ "scores": {
+  "real-native-0055": {
+   "score": 1,
+   "why": "Names iPad and embedding as failures but admits it lacks details and omits MCP tab and CSS/HTML-only facts."
+  },
+  "replay-cawco-2319": {
+   "score": 2,
+   "why": "Covers all four required facts (iPad/Pencil, not embeddable, MCP browser tab, CSS/HTML only and no real component import) plus the good points."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it has no memory of Penpot and gives none of the caveats."
+  },
+  "real-cawco-2319": {
+   "score": 2,
+   "why": "Includes all required caveats accurately, plus the self-hosting and good points matching the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

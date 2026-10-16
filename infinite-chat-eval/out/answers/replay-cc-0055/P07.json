@@ -1,0 +1,20 @@
+{
+ "id": "P07",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an answer to that. Nothing in my summary records the owner saying where Caw's per-project harness and model settings should live. The closest items I have are the \"effort\" work (which landed) and the standing rule that fleet config only goes through the admin_* tools, but neither speaks to per-project harness or model settings. I won't guess. If you can point me to the thread or message where he said it, or ask him again, I can act on it.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P07/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 140,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

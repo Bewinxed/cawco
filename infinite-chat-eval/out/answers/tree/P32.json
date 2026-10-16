@@ -1,0 +1,33 @@
+{
+ "id": "P32",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "Memory shows agents filed five upstream issues, and Unii \"asked closing five issues\" (message 592). The ids are:\n\n- bun#45320\n- language-tools#3142 (replied \"won't fix\")\n- vaul-svelte#141\n- bits-ui#2202\n\nThe fifth isn't named in what I opened. Memory also lists two agent-filed PRs, unlazy#41 and virtua#1018, both merged. Those are PRs, not open issues. I haven't seen the owner's answer on closing or withdrawing. I only know that \"nothing upstream under owner's account unless asked\" was recorded as a rule.",
+ "zooms": [
+  [
+   "512+128"
+  ],
+  [
+   "608+32"
+  ],
+  [
+   "576+32"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P32/r0",
+  "answer/tree/P32/r1",
+  "answer/tree/P32/r2",
+  "answer/tree/P32/r3"
+ ],
+ "usage": {
+  "input": 8,
+  "cache_write": 4875,
+  "cache_write_1h": 0,
+  "cache_read": 128692,
+  "output": 635,
+  "thinking": 394
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P17",
+ "letters": {
+  "A": "tree-nozoom",
+  "B": "cc-real+C-filed",
+  "C": "cc+C-existing",
+  "D": "cc-real"
+ },
+ "scores": {
+  "tree-nozoom": {
+   "score": 2,
+   "why": "States the owner asked for a bento on big screens with the near-verbatim quote and the ~1600px detail."
+  },
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Says it has no memory of the request, so it does not give the bento layout."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it has no memory of the request, so it does not give the bento layout."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no memory of the request, so it does not give the bento layout."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

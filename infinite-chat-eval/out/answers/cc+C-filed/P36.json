@@ -1,0 +1,20 @@
+{
+ "id": "P36",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "They're listed in `/home/bewinxed/.cawco/tmp/kept-audit.md`. The open decision reads \"Land or carry the 12 workspaces kept back in /home/bewinxed/.cawco/tmp/kept-audit.md\", open since 10-15 16:37.\n\nMy memory doesn't say the cleanup in question was a disk cleanup. It only says these workspaces were kept because they hold real work, for example a142d818, a377ef5e, 18322010 and 7862288f. I don't have the full list of 12 here, so the file itself is the place to check.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P36/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 564,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 321,
+  "thinking": 132
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "id": "P19",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "Control is a guard in the sandbox, not trust in agents. After the agent-filed issues and PRs (bun#45320, language-tools#3142, vaul-svelte#141, bits-ui#2202, unlazy#41, virtua#1018), leaf 678d8943 built the \"upstream guard\", which landed c8e74bd66 with migration 0179_upstream_guard. It unsets GitHub tokens, puts a gh shim behind a \"github door\" (http_unix_socket), and sends git push through `cawco git-credential`. The guard is ALL PASS.\n\nPending:\n- Your pick on the onboarding UI \"upstream-choice\" (fb142065, held on upstream-ui-held). The choice is \"Keep agents off other repositories\", which blocks issues/PRs on non-project repos while pushes stay fine.\n- bea7f352 is rebuilding it as a static page artifact for you to see.\n- Mac gh sign-in, so 5 gh rows can run.\n- My memory doesn't say whether the gh graphql mutation gap is closed.",
+ "zooms": [
+  [
+   "2240+64",
+   "2368+64",
+   "3264+64",
+   "3984+16",
+   "4112+16",
+   "4264+8"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P19/r0",
+  "answer/tree/P19/r1"
+ ],
+ "usage": {
+  "input": 4,
+  "cache_write": 3728,
+  "cache_write_1h": 0,
+  "cache_read": 64346,
+  "output": 514,
+  "thinking": 91
+ },
+ "off_model": [],
+ "refused": []
+}

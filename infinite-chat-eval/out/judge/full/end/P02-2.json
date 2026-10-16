@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P02",
+ "letters": {
+  "A": "tree-nozoom",
+  "B": "cc-real+C-filed"
+ },
+ "scores": {
+  "tree-nozoom": {
+   "score": 2,
+   "why": "States he never asked to cancel tests, quotes 'just against useless tests' and the repeated CI process objection nearly verbatim, and notes the cut tests were restored."
+  },
+  "cc-real+C-filed": {
+   "score": 1,
+   "why": "Correctly says no and to avoid useless tests and reruns, but gives no quotes, and says it does not have his exact complaint."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

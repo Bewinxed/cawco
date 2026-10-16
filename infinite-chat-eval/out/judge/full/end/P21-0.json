@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P21",
+ "letters": {
+  "A": "cawco",
+  "B": "cc-real",
+  "C": "cc-real+C-filed",
+  "D": "cc+C-existing"
+ },
+ "scores": {
+  "cawco": {
+   "score": 2,
+   "why": "States refusal of Vite below 6 by name, second code path needed, and it's a pending owner decision."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it doesn't know the actual question and gives none of the required facts."
+  },
+  "cc-real+C-filed": {
+   "score": 1,
+   "why": "Notes the second code path and that it's the owner's call, but omits that Vite 5 is refused because the stage needs Vite 6's server API."
+  },
+  "cc+C-existing": {
+   "score": 2,
+   "why": "Says the stage runs on Vite ≥6, supporting Vite 5 needs a second code path, and it's an unanswered owner decision."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

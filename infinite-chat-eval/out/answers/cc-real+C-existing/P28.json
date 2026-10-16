@@ -1,0 +1,20 @@
+{
+ "id": "P28",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold what the owner objected to about CI and usage at 23:25–23:27. The summary covers that period only as \"earlier user messages,\" without timestamps or wording, so I won't guess at the objection.\n\nThe closest usage finding I do have is the Caw cost analysis:\n- $39.96 across 97 turns in 24 hours.\n- $25.67 of that came from 6 cold wakes.\n- `caw_model` is blank, so it runs `claude-opus-5-5[1m]`.\n\nI recommended a 200k window on `claude-opus-5-5`, and that is still waiting on the owner. I can't confirm this is the finding you mean, or that it relates to the CI objection.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P28/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 575,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 362,
+  "thinking": 135
+ },
+ "off_model": [],
+ "refused": []
+}

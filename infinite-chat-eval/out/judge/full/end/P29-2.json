@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P29",
+ "letters": {
+  "A": "cc",
+  "B": "cc+C-existing"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it has no record of the question and gives unrelated disk notes, missing the archive, 32G to 64G, and pending decisions."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Also claims no record of the owner's question and offers unrelated notes, with none of the required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

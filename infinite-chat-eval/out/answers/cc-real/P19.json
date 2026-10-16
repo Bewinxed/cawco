@@ -1,0 +1,20 @@
+{
+ "id": "P19",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold the control design for upstream filing, so I can't say how it should work.\n\nAll I have is one pending item. Among the owner decisions for the morning is an \"upstream-choice pick\", written up in artifact fb142065. Delegate 678d8943 lands after you decide, and it is idle/done now. I don't remember the options in that artifact.\n\nI also don't remember what has already shipped for upstream filing. Open fb142065 for the options, or ask 678d8943 for its status, and I can go from there.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P19/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 575,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 264,
+  "thinking": 98
+ },
+ "off_model": [],
+ "refused": []
+}

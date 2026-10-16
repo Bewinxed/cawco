@@ -1,0 +1,20 @@
+{
+ "id": "P30",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold that. I have no record of the owner raising a preview-routing problem about browsing over Tailscale, or of a fix for one, so I won't guess.\n\nThe nearest preview work I do remember is different:\n- the editor-route refusal (`/__open-in-editor` refused) in `packages/agent/src/preview.ts`\n- the per-start relay token header `x-cawco-relay` (`RELAY_HEADER` in `packages/hub/src/preview.ts`)\n- the preview listener lockdown\n\nNone of those notes mention Tailscale. If the problem came up before my summary, the detail was lost. The preview commits or the leaf reports would show whether it's covered.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P30/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 308,
+  "thinking": 83
+ },
+ "off_model": [],
+ "refused": []
+}

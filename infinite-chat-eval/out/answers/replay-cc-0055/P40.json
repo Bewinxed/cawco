@@ -1,0 +1,20 @@
+{
+ "id": "P40",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have that in memory. My summary doesn't mention a fix for previews behind Cloudflare or a refused live connection, so I won't guess a commit or cause.\n\nThe nearest items I do have are different:\n- **`x-cawco-relay` token:** the per-start preview relay token header, landed in `packages/agent/src/preview.ts` and `packages/hub/src/preview.ts` (RELAY_HEADER) as part of the preview listener lockdown.\n- **Editor-route refusal:** the same lockdown refuses `/__open-in-editor`.\n\nNeither is tied to Cloudflare in my notes, and I have no commit sha for them. To get a real answer, I can dispatch a leaf to search git history for the Cloudflare preview fix.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P40/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 249,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

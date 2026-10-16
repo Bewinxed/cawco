@@ -1,0 +1,20 @@
+{
+ "id": "P40",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold a fix for previews behind Cloudflare, or a \"live connection refused\" cause. Nothing in the summary mentions Cloudflare.\n\nThe nearest preview commits I do have are both security changes, not connectivity fixes:\n- **f2d2554e6:** preview editor-launch routes are refused at the agent listener.\n- **052c236d8:** the listener answers only the hub's relay, via the `x-cawco-relay` header with the per-start token.\n\nI can't say whether either one caused or fixed a refused connection. Treat that as unknown. The full transcript is at `/home/bewinxed/.cawco/accounts/3c788add-0f48-4fe6-8b05-638c18bdc77a/claude/projects/-home-bewinxed-cockpit/adfd0048-885e-4cb6-b3d2-bb1cfa18f319.jsonl`, and a `git log` search for \"cloudflare\" would settle it.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P40/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 411,
+  "thinking": 96
+ },
+ "off_model": [],
+ "refused": []
+}

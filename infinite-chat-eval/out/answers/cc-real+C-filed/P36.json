@@ -1,0 +1,20 @@
+{
+ "id": "P36",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "They're listed in `/home/bewinxed/.cawco/tmp/kept-audit.md`. My open item reads \"Land or carry the 12 workspaces kept back in /home/bewinxed/.cawco/tmp/kept-audit.md\", and it has been waiting on your decision since 10-15 16:37. My notes don't say that the disk cleanup is why they were kept back, though that fits the file name.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P36/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 564,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 269,
+  "thinking": 134
+ },
+ "off_model": [],
+ "refused": []
+}

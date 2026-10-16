@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P50",
+ "letters": {
+  "A": "factory",
+  "B": "cc+C-existing"
+ },
+ "scores": {
+  "factory": {
+   "score": 0,
+   "why": "Says it has no knowledge of the Ink chip decision, so none of the required facts are given."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Also says it has no record of an Ink chip decision and talks about @ mention chips instead, missing both required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

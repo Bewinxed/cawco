@@ -1,0 +1,20 @@
+{
+ "id": "P20",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "Here is what my memory holds on it.\n\n**Numbers:** Caw's cold wakes cost $25.67 of the $39.96 spent in the last 24 hours. Six cold wakes account for that. `caw_model` is blank, so Caw runs on the 1M context window.\n\n**Recommendation:** I recommend setting it to a 200k window.\n\n**Options:** My memory doesn't list the alternatives you'd be choosing between beyond the 1M default versus 200k. It also doesn't say whether I've estimated the savings from 200k, so I can't give a figure.\n\nIt's on the open decisions list for the morning. Since it's your call, it should go through AskUserQuestion, and nothing has been changed yet.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P20/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 579,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 232,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

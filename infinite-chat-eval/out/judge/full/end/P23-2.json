@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P23",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "cawco"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it has no record of the pause request, giving neither the reason nor the 3 hours."
+  },
+  "cawco": {
+   "score": 0,
+   "why": "Says it has no record of the pause request, giving neither the reason nor the 3 hours."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

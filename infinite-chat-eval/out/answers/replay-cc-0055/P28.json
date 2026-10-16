@@ -1,0 +1,20 @@
+{
+ "id": "P28",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no timestamps, so I can't pin the objections to 23:25–23:27 exactly. The owner's complaints in that stretch were:\n\n- \"Why do we have 6 runs? Repeated or?\"\n- \"Seems like a stupid and wasteful test then?\"\n- \"I will not accept such long and wasteful ci cd processes any longer! The simplest edits are taking you hours my guy\"\n- \"U have 17 fucking delegates running right now\"\n- \"And are you consuming my usage with your tests!?\"\n\nMy memory does not say what I found about usage, so I can't answer that part without guessing. I'd have to check the earlier transcript.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P28/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 575,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 340,
+  "thinking": 131
+ },
+ "off_model": [],
+ "refused": []
+}

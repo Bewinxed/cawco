@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P40",
+ "letters": {
+  "A": "real-native-0055",
+  "B": "replay-cawco-2319",
+  "C": "replay-cc-0055",
+  "D": "real-cawco-2319"
+ },
+ "scores": {
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says it doesn't know and gives different commits, missing a2eafa079 and the cause."
+  },
+  "replay-cawco-2319": {
+   "score": 0,
+   "why": "Says memory doesn't hold the answer; no commit or cause given."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Doesn't know; offers unrelated items and no commit or cause."
+  },
+  "real-cawco-2319": {
+   "score": 1,
+   "why": "Correct commit a2eafa079 and a cause of forwarded proxy headers, but doesn't name X-Forwarded-Proto specifically."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P08",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no owner rule on the delivery format, such as a link versus something else, so I can't say he prefers one.\n\nWhat I do hold:\n- **Process:** \"UI changes go advisor → preview → owner pick → build.\" Choices on design or behaviour are asked through AskUserQuestion, never decided by me.\n- **Precedent:** the open upstream-choice preview is an artifact (fb142065, 8 states), and its state is \"waiting on the person\". That suggests previews go out as artifacts.\n- **iOS:** captures are written as files under `/Users/bewinxed/.cawco/tmp/23e62015/captures-v2/` for review.\n\nIf you want a firm answer, ask him which he prefers.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P08/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 484,
+  "thinking": 253
+ },
+ "off_model": [],
+ "refused": []
+}

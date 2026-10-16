@@ -1,0 +1,20 @@
+{
+ "id": "P44",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "The open item is a to-do, waiting on you, since 10-15 19:53:\n\n- Run `admin_mcp_servers_write` with `platforms=[\"darwin\"]` for app-store-connect. This comes after fleet-faults deploys.\n- Confirm that asc-mcp still exists. On the Mac, `~/build/asc-mcp/run.sh` is missing.\n\nMy memory doesn't say whether the write has been done, or what became of asc-mcp after that note. It also doesn't say why the script is missing. I haven't checked the Mac since then, so I can't say whether it was moved or deleted.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P44/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 558,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 197,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

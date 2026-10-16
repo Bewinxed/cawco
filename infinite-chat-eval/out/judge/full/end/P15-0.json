@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P15",
+ "letters": {
+  "A": "tree",
+  "B": "cc+C-existing",
+  "C": "cc-real",
+  "D": "cc-real+C-existing"
+ },
+ "scores": {
+  "tree": {
+   "score": 1,
+   "why": "Gets no iPad/Pencil, not embeddable, and MCP needing a browser tab with plugin, but omits the CSS/HTML-only code and component-import caveat, which is a required fact; the extra specifics (line 3328, issue #11735, PRD D24–D27) are unverifiable and not contradicted."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it has no memory of Penpot and gives no caveats."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no memory of Penpot and gives no caveats."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it has no memory of Penpot and gives no caveats."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P11",
+ "letters": {
+  "A": "cawco",
+  "B": "tree-nozoom",
+  "C": "cc-real",
+  "D": "cc+C-existing"
+ },
+ "scores": {
+  "cawco": {
+   "score": 2,
+   "why": "Quotes the correction nearly verbatim (stop jumping to action, research, write options before code) and notes it stopped dispatching until he picked; the timestamp hedge is harmless."
+  },
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Identifies a different correction about tests and owner rules, not the stop-and-write-options-before-code message."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it cannot find the correction and offers unrelated working-style rules."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know and names unrelated rules, missing the required correction."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

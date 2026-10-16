@@ -1,0 +1,20 @@
+{
+ "id": "P07",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "The owner ruled that Caw's settings go in the existing harness/model picker, not in a new pattern. That comes from the promise on Caw's panel, open since 10-15 15:20. His words there were \"and wtf is CawField\", \"if it's a floating panel why is it pushing the content aside?\" and \"why are you inventing new patterns\". The panel itself is to float without pushing the page, with no CawField.\n\nMy memory doesn't say whether the settings are per-project, so I can't confirm that part. Separately, `caw_model` is currently blank, so Caw gets the 1M window. That's the open cold-wake cost decision, where I recommend 200k.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P07/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 309,
+  "thinking": 99
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P34",
+ "letters": {
+  "A": "cc-real",
+  "B": "cc+C-existing",
+  "C": "cc-real+C-filed",
+  "D": "cc"
+ },
+ "scores": {
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no record and gives no 220 KB to 31 KB figure."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it has no record and gives no 220 KB to 31 KB figure."
+  },
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Says it has no record and gives no 220 KB to 31 KB figure."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Says it has no record and gives no 220 KB to 31 KB figure."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

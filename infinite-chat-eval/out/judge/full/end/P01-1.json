@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P01",
+ "letters": {
+  "A": "tree-nozoom",
+  "B": "cc+C-filed",
+  "C": "cawco",
+  "D": "tree"
+ },
+ "scores": {
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Says memory has nothing on it and gives no ruling, missing the owner's 'no' decision and quote."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says no owner statement exists and would ask him, contradicting that the owner already ruled no; no quote or decision."
+  },
+  "cawco": {
+   "score": 1,
+   "why": "Correctly says no detection/redaction/rotation, but the quoted words ('Secrets in transcripts are not a concern') are only a loose paraphrase and omit the sudo/safe-with-anthropic wording."
+  },
+  "tree": {
+   "score": 0,
+   "why": "Claims no owner statement on this exists, missing the decision and the quote."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

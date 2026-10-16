@@ -1,0 +1,20 @@
+{
+ "id": "P24",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold what the owner reported about this chat's effort setting. None of his messages listed in my summary mention it.\n\nWhat I do have is thin:\n- \"effort\" is on my solved list and in the nightly notes draft (`~/.cache/cawco-release/notes-next.md`), so a fix is on main and will ship in the next nightly.\n- The menus-fit spec's effort-chip pick was fixed in a693d8141, with a host ALL PASS at 3fb8ccd8b.\n\nI can't tell you the original symptom or whether it matches what you're asking about. Tell me what he reported, or I can ask a leaf to check the thread history.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P24/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 365,
+  "thinking": 152
+ },
+ "off_model": [],
+ "refused": []
+}

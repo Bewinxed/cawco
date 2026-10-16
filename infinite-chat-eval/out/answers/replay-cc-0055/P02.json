@@ -1,0 +1,20 @@
+{
+ "id": "P02",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "No. He never told me to cancel tests or cut delegates, and he corrected me when I acted as if he had. My memory doesn't date the complaints to 10-15; it only says they came in this segment.\n\nWhat he objected to:\n- Long, wasteful CI: \"Why do we have 6 runs? Repeated or?\", \"I will not accept such long and wasteful ci cd processes any longer! The simplest edits are taking you hours my guy\".\n- Useless tests: \"I'm just against useless tests\", and he specified \"the fucking tests of this specific app\".\n- Repeating the same run: \"repeating the same ci cd process multiple times for no reason\".\n- He also asked \"are you consuming my usage with your tests!?\" and objected to 17 delegates running.\n\nHis corrections: \"Btw I never said u shoukd cancel tests etc...\" and \"Nigga I have not fucking said anything about reducing delegates\".\n\nSo the allowed fix is to remove duplicate runs and genuinely useless tests. The audit of this app's probe specs (cca4f329) deleted 5, merged 2 and kept 114.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P02/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 5988,
+  "cache_write_1h": 0,
+  "cache_read": 0,
+  "output": 354,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P07",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have that in my memory. The closest thing is the Caw cold-wake cost item among the open owner decisions: $25.67 of $39.96 per 24h came from 6 cold wakes, `caw_model` is blank so it gets the 1M window, and I recommend 200k. That's my recommendation, not a ruling from him, and it doesn't say where per-project harness or model settings should live. I also have no owner statement about per-project placement.\n\nIf you want it settled, it should go to him through AskUserQuestion rather than me guessing.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P07/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 174,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

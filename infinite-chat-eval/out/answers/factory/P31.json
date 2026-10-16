@@ -1,0 +1,20 @@
+{
+ "id": "P31",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory names only one iOS crash: the approval crash, which I diagnosed as an 8BADF00D watchdog kill. I can't say whether other crashes were reported or which were reported on 10-15, because I don't have the report dates.\n\nWhere it stands:\n- **Fix:** 2a74e9fa6.\n- **Evidence:** ios-chat-opens passed on 2a74e9fa6, with 0 frames in the background rule over 12 trips.\n- **Not yet confirmed:** the fix is not yet confirmed on a TestFlight build. The one I remember, 20261015.3, predates the fix.\n- **Next:** TestFlight goes out only after a SHIP verdict on the task-sheet review (23e62015, item 352c9579). It runs from the Mac with `apps/apple/scripts/testflight.py` and carries the fix. Then I check the approval crash on that build.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P31/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 495,
+  "thinking": 201
+ },
+ "off_model": [],
+ "refused": []
+}

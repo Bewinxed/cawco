@@ -1,0 +1,20 @@
+{
+ "id": "P08",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an explicit ruling on \"link versus something else\" for previews, so I won't guess at one.\n\nWhat it does hold are related owner decisions:\n- **Option C, live components:** a preview is a live artifact, not a screenshot or a pasted link. Slice 1 shipped as the `sheet` artifact, the `cawcoStage()` Vite plugin and `/@cawco/sheet`.\n- **Real code from the first screen.**\n- **HTML `page` artifact** for toolchains without a plugin API.\n\nSo the established practice points to showing previews as artifacts inside the dashboard. Whether a plain link is ever acceptable isn't something the owner has told me. If you want that settled, it's a question for you.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P08/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 390,
+  "thinking": 152
+ },
+ "off_model": [],
+ "refused": []
+}

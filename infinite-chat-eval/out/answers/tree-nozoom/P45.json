@@ -1,0 +1,20 @@
+{
+ "id": "P45",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "The nightly (background bc166pa3z, built from origin/main with the dock fix) finished with exit 0, so it should be published. Its notes only cover post-3427 changes (lighter pane switching, Caw first press, ⌘K in artifact pages, dock reply shows on send, mid-load messages kept, blank pane on switch-back fixed). My plan:\n\n1. POST binary-updates/check (body `{}`), then install on obelisk (d04ca118428001f1) and, after the hub is healthy, the Mac (271a214a5d568e4c), one at a time.\n2. Run one browser live check: Caw dock reply, ⌘K in an artifact page, sheet artifact.\n3. If it passes, cut stable 0.1.12, which fixes fresh Mac installs.\n\nI never confirmed the version number or the publish itself. The session limit hit, resetting at 7am Qatar.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P45/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 300,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

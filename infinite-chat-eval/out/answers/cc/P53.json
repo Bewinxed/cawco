@@ -1,0 +1,20 @@
+{
+ "id": "P53",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "Two sets of baseline approvals are waiting on you:\n\n- **Tab-strip rest baselines:** rest-light and rest-dark.\n- **The 20 hang baselines.**\n\nOn the tab seam, the cause was a `mask-image` on the PaneTabs `.shade`, which erased the seam casts. Leaf d2c6485d fixed it in 550f9d8af. It is still in flight, landing the seam fix plus a per-capture `--approve`. That lets you approve one capture at a time rather than a whole set.\n\nMy memory doesn't say how the seam item's gate itself was reworked beyond that. I won't guess at it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P53/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 577,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 372,
+  "thinking": 163
+ },
+ "off_model": [],
+ "refused": []
+}

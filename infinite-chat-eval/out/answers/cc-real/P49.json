@@ -1,0 +1,20 @@
+{
+ "id": "P49",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no record of a TestFlight build numbered 20261015, so I can't say what has to happen to that specific build.\n\nWhat I do hold about TestFlight in general:\n- Delegate 23e62015 is fixing the MessageBody stale-height bug plus 9 review findings. It then regenerates captures into `/Users/bewinxed/.cawco/tmp/23e62015/captures-v2/` and gets a second Sonnet review.\n- Only if that review says SHIP does the TestFlight upload run from the Mac, via `apps/apple/scripts/testflight.py`.\n- After the upload, I check the approval-crash scenario on the TestFlight build.\n\nIf 20261015 is that build, those are the steps, but I can't confirm the number matches.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P49/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 567,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 343,
+  "thinking": 95
+ },
+ "off_model": [],
+ "refused": []
+}

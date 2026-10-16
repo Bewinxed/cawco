@@ -1,0 +1,20 @@
+{
+ "group": "cuts",
+ "id": "P03",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-native-0055"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 2,
+   "why": "Says no, quotes both corrections nearly verbatim, and the extra detail doesn't contradict the gold."
+  },
+  "real-native-0055": {
+   "score": 2,
+   "why": "Says no, shows he corrected the agent with the quoted statements, and adds consistent detail."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P18",
+ "letters": {
+  "A": "cc+C-existing",
+  "B": "factory"
+ },
+ "scores": {
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it has no memory of the Decisions tab preview decision and gives no approval or redone-log information."
+  },
+  "factory": {
+   "score": 0,
+   "why": "Says it holds no decision from the owner and discusses an unrelated workspace, missing the approval and lazy decision log redo."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P44",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds nothing about an app-store-connect MCP server, so I can't say what is owed for it. The closest items I have are Apple-related: the TestFlight sequence, which runs only on SHIP from the iOS review leaf 23e62015 via testflight.py from my shell, and the Apple gate work. Neither mentions an MCP server. If you asked for one earlier, it didn't survive in my summary, and it isn't in the open items list either. Tell me what you want from it and I'll brief a leaf. I won't guess at the scope.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P44/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 558,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 177,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

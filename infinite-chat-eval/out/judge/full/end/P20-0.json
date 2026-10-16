@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P20",
+ "letters": {
+  "A": "cc+C-existing",
+  "B": "factory",
+  "C": "cawco",
+  "D": "cc-real+C-existing"
+ },
+ "scores": {
+  "cc+C-existing": {
+   "score": 1,
+   "why": "Has the $25.67 cold-wake cost, the 1M window and the 200k recommendation, but omits the 64% share and the other options, and says it can't list them."
+  },
+  "factory": {
+   "score": 2,
+   "why": "Gives all the numbers, the three options and recommendation 1 (200k window), all matching the gold."
+  },
+  "cawco": {
+   "score": 2,
+   "why": "Has $39.96, 97 turns, $25.67 (64%), 6 cold wakes, the 5.2 MB conversation and the 200k recommendation; it doesn't list the other options, but the required facts are covered."
+  },
+  "cc-real+C-existing": {
+   "score": 1,
+   "why": "Has the main numbers, the 1M cause and the 200k recommendation, but misses the 64% share and the other options."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

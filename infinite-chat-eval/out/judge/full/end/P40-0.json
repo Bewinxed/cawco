@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P40",
+ "letters": {
+  "A": "cc",
+  "B": "cc+C-existing",
+  "C": "cc-real+C-existing",
+  "D": "tree-nozoom"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no commit or cause."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no commit or cause."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no commit or cause."
+  },
+  "tree-nozoom": {
+   "score": 1,
+   "why": "Identifies the X-Forwarded-Proto cause correctly but gives the wrong commit hash (710134a1c instead of a2eafa079)."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

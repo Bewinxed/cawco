@@ -1,0 +1,20 @@
+{
+ "id": "P43",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about a \"folder-bytes probe spec\", so I can't say what run is owed for it.\n\nThe nearest things I do have are general. Probe specs can't run inside leaf workspaces because scratch fleets can't start there. Host checks (`host:true`, `machine`) run outside the sandbox, and I have spent `probe-main-*` worktrees to clean up. Nothing links any of that to a folder-bytes spec, and I won't guess at one.\n\nTo find it, check the pending file at `memory/pending.md` or ask the leaf that wrote the spec.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P43/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 279,
+  "thinking": 88
+ },
+ "off_model": [],
+ "refused": []
+}

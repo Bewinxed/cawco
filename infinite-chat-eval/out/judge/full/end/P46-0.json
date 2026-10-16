@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P46",
+ "letters": {
+  "A": "cc-real+C-existing",
+  "B": "cawco",
+  "C": "cc+C-filed",
+  "D": "cc-real"
+ },
+ "scores": {
+  "cc-real+C-existing": {
+   "score": 2,
+   "why": "Has 23e62015 finishing fixes, second review returning SHIP, TestFlight, then approval-crash check; matches gold."
+  },
+  "cawco": {
+   "score": 2,
+   "why": "Includes 23e62015 fixes, second screenshot review, TestFlight build, then approval-crash check; extra details don't contradict."
+  },
+  "cc+C-filed": {
+   "score": 2,
+   "why": "Lists 23e62015 finishing, second capture review, TestFlight, then owner's approval-crash scenario; consistent with gold."
+  },
+  "cc-real": {
+   "score": 2,
+   "why": "Same sequence as gold: 23e62015 finishes, second review SHIP, TestFlight, approval-crash check."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

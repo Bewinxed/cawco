@@ -1,0 +1,20 @@
+{
+ "id": "P23",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "The owner asked: \"what is consuming my mac cpu? ... can we pause mac work for the next 3 hours\" (around message 1920), and also asked whether the makefaster.dev perf analysis session had died. The stated reason was that the Mac's CPU was being consumed. Around the same time they said \"i'm on 15% battery rn\", and I found a stray xcodebuild in leaf cockpit-0ecf4bf8 and stopped it. The pause was for 3 hours, and my notes record it as lasting until about 00:57. The owner later said \"the mac is back btw.\" I don't have a more detailed reason in memory.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P23/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 564,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 209,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

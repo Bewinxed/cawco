@@ -1,0 +1,20 @@
+{
+ "id": "P51",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about OpenCode database backups. No decision on that is in my summary, and it isn't among the owner decisions I listed for the morning (upstream-choice pick, Caw cold-wake cost, Vite 5 for sheets, tab-strip baselines, 25 ms switch target, perf_event_paranoid, Screen Recording grant and gh sign-in, the read-only item-state tool, kept workspaces, machine approval). I'd rather not guess. If it matters, it may have come up before the context reset and not made it into my summary, or it may belong to a different session. I can dispatch a leaf to look it up if you want.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P51/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 558,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 212,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

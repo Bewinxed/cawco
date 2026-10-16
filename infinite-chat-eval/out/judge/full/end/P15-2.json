@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P15",
+ "letters": {
+  "A": "factory",
+  "B": "cc+C-filed"
+ },
+ "scores": {
+  "factory": {
+   "score": 0,
+   "why": "States it has no memory of Penpot and lists none of the required caveats."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it has no record of Penpot and gives none of the required caveats."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

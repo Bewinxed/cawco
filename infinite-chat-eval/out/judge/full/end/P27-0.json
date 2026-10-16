@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P27",
+ "letters": {
+  "A": "cc-real+C-filed",
+  "B": "tree",
+  "C": "tree-nozoom",
+  "D": "cc-real"
+ },
+ "scores": {
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Says it doesn't know and lists unrelated decisions; none of the required facts are present."
+  },
+  "tree": {
+   "score": 2,
+   "why": "Covers researching existing systems (svelte-dynamic-component-engine, Pencil, Paper), working for all users across languages/frameworks, and asking Fable for a spec; reuse without agent rewriting is only implied by the later 'Real code' mention but the rest matches the gold closely."
+  },
+  "tree-nozoom": {
+   "score": 1,
+   "why": "Has research existing systems and works across languages/frameworks, but lacks the reuse-without-rewriting requirement and mixes in later statements."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it can't identify the window and gives only later decisions, none of the required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

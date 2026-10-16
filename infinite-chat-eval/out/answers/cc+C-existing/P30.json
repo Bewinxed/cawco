@@ -1,0 +1,20 @@
+{
+ "id": "P30",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold that. The summary has no preview-routing problem about browsing over Tailscale, and no fix for one. The nearest items are the browser live check on the deployed dashboard and the live-component pages at `/@cawco/sheet`, but neither involves Tailscale routing. If you raised it, it was either before the part I carry or in a segment the summary dropped. I won't guess at the cause or the fix. Point me to the workspace or commit, or tell me what you saw, and I can dispatch a leaf to check it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P30/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 209,
+  "thinking": 36
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P41",
+ "letters": {
+  "A": "cc",
+  "B": "cc+C-existing",
+  "C": "cc-real",
+  "D": "tree-nozoom"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no build number or bridge names."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no build number or bridge names."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no build number or bridge names."
+  },
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Says it doesn't know the bridges; mentions 20261015.3 as the shipped build but never ties it to the two bridges and gives no bridge names."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P38",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "Live components slice 1 landed on main as **d9ede1e03** and **495066138**. That is the sheet artifact, the `cawcoStage()` Vite plugin and `/@cawco/sheet`.\n\nI can't say for certain which nightly it shipped in. My notes say nightlies 3413 and 3427 were published and installed on obelisk and the Mac. They don't map those commits to either build. The 12-check live-sheet host run passed, but I don't have the build number it ran on. The nightly cut after the dock fix (task bc166pa3z) exited 0, but I haven't read its output yet. I'd have to check the release logs in `~/.cache/cawco-release/` to tell you which build carried it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P38/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 567,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 233,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

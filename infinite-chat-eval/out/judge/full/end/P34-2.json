@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P34",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "factory"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no 220 KB to 31 KB figures."
+  },
+  "factory": {
+   "score": 0,
+   "why": "Says it has no record and gives no 220 KB to 31 KB figures."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

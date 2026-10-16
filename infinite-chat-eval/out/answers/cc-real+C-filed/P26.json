@@ -1,0 +1,20 @@
+{
+ "id": "P26",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold anything about OpenUI mockups or what you required for projects with their own design system, so I can't answer that without guessing. The nearest items I do have are the \"real code from the first screen\" decision and the HTML `page` artifact for toolchains without a plugin API. Neither mentions OpenUI or design systems. If you tell me what you said, I'll apply it. The record may also be in an earlier session or in the fleet's rules files.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P26/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 171,
+  "thinking": 26
+ },
+ "off_model": [],
+ "refused": []
+}

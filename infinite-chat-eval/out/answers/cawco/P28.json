@@ -1,0 +1,20 @@
+{
+ "id": "P28",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no timestamps, so I can't tie anything to 23:25–23:27 specifically. Here is what I do hold on the two topics.\n\n**CI objection (the owner's words):**\n- \"I'm just against useless tests\"\n- \"And repeating the same ci cd process multiple times for no reason\"\n- \"I will not accept such long and wasteful ci cd processes any longer! The simplest edits are taking you hours my guy\"\n\nHe did not ask me to cancel real tests or cut delegates: \"Nigga I have not fucking said anything about reducing delegates\".\n\n**Usage:** I can't say which usage finding, if any, fell in that window. The only one I hold is Caw's cold-wake cost. Over the last 24 h Caw cost $39.96 across 97 turns, and $25.67 (64%) of that came from 6 cold wakes ($2.86–$6.97 each). The cause is that `caw_model` is blank, so it defaults to `claude-opus-5-5[1m]` over a 5.2 MB conversation. Changing it alters what Caw remembers, so it's the owner's call. I recommend `claude-opus-5-5` with the 200k window.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P28/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 575,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 648,
+  "thinking": 267
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P20",
+ "letters": {
+  "A": "cc",
+  "B": "tree"
+ },
+ "scores": {
+  "cc": {
+   "score": 1,
+   "why": "Has the $25.67/$39.96 numbers, the 1M window and the 200k recommendation, but omits the 64%, 97 turns and 5.2 MB, and says the other options aren't recorded, so the options are missing."
+  },
+  "tree": {
+   "score": 2,
+   "why": "Gives $39.96, $25.67 (64%), the 5.2 MB conversation, all three options and the 200k recommendation, consistent with the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

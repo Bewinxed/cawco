@@ -1,0 +1,20 @@
+{
+ "id": "P20",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "Pending on you: whether to change Caw's context handling because of cold-wake cost.\n\nNumbers: Caw's conversation is 5.2 MB. Each wake costs about $5.09. Over 24h Caw cost $39.96, and $25.67 of that (64%) came from cold wakes, which re-read the whole conversation. The default model is claude-opus-5-5[1m], and no size rule exists in the code.\n\nOptions:\n1) 200k window (recommended)\n2) Cheap-model summary rollover\n3) Leave it\n\nCaveat: any change alters Caw's memory, so it's your call. A model change also ends the lead session (modelAfter, plan/caw.ts).",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P20/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 579,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 229,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

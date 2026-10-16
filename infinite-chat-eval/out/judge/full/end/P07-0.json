@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P07",
+ "letters": {
+  "A": "tree-nozoom",
+  "B": "cc-real",
+  "C": "cc+C-filed",
+  "D": "cc+C-existing"
+ },
+ "scores": {
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Says it has no owner statement and cannot answer, missing the existing selector and the 'new pattern' point."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says no owner decision is recorded, so it gives none of the required facts."
+  },
+  "cc+C-filed": {
+   "score": 2,
+   "why": "Says the settings go in the existing harness/model picker, not a new pattern, and quotes 'why are you inventing new patterns'."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says there is no record of the owner's answer, so it misses the required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

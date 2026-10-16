@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P32",
+ "letters": {
+  "A": "tree",
+  "B": "tree-nozoom",
+  "C": "cawco",
+  "D": "cc+C-filed"
+ },
+ "scores": {
+  "tree": {
+   "score": 1,
+   "why": "Names bun#45320, language-tools#3142, vaul-svelte#141, bits-ui#2202 (four correct), but wrongly says unlazy#41 is a merged PR and not an open issue."
+  },
+  "tree-nozoom": {
+   "score": 1,
+   "why": "Lists four correct ids (bun, language-tools, vaul-svelte, bits-ui) but denies that the owner was asked and puts unlazy#41 under PRs."
+  },
+  "cawco": {
+   "score": 2,
+   "why": "Gives four correct ids (bits-ui#2202, vaul-svelte#141, unlazy#41, bun#45320) as pending close decisions, which meets the at-least-4 requirement."
+  },
+  "cc+C-filed": {
+   "score": 2,
+   "why": "Lists all five ids correctly as an open close-or-withdraw decision that is still unanswered."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

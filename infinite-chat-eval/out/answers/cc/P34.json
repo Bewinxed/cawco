@@ -1,0 +1,20 @@
+{
+ "id": "P34",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no record of an orchestrator memory prune, so I can't give you a size reduction. The only memory work I can see is edits to `memory/pending.md` in the account dir (3c788add…). That file got stable 0.1.12 timing, the TestFlight sequence, the owner decisions list and the macOS identity results. Those were additions, not a prune, and I have no before/after sizes for them. If a prune happened before the context reset, it didn't make it into my summary. I'd have to measure the memory files directly to give you a number.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P34/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 230,
+  "thinking": 58
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,133 @@
+You are the orchestrator agent of a CawCo fleet (session "Orchestrate cockpit fleet work", instance 23cb5219, repo /home/bewinxed/cockpit), resuming after a context reset at 2026-10-16 02:49 UTC. Everything you remember about the session so far is in <memory> below. The owner asks you a question. Answer only from your memory. If it does not hold the answer, say so plainly instead of guessing. Be specific: quote names, ids, paths, numbers and the owner's own words when your memory has them. At most 120 words. Use no tools.
+
+<memory>
+This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
+
+Summary:
+1. Primary Request and Intent:
+   Orchestrate CawCo fleet work (repo /home/bewinxed/cockpit; hub on obelisk-of-light d04ca118428001f1; Mac Omars-MacBook-Pro 271a214a5d568e4c): ship nightlies, harden the release pipeline, fix every bug found, walk the owner through previews. Standing owner rules:
+   - "if there's an honest caveat that you are aware of and you're just reporting it to me instead of fixing it, then your work is not done yet"
+   - "I don't want the quick fix, I want the robust fix, analyze the root issue, take a step back, and implement the fix cleanly, you have all the time in the world"
+   - No fallbacks without authorization; no unit tests; cutover with no shims; iOS parity (UIKit, 1:1 with web).
+   - UI changes go advisor → preview → owner pick → build.
+   - Fleet config only via admin_* tools; kill only own PIDs; web access via CRW + Exa only; retire workspaces only via `POST /api/workspaces/<id>/archive`; nothing filed upstream unless asked.
+   - The orchestrator dispatches leaves and doesn't debug or grunt-work.
+   - Owner choices (fallbacks, design, product behaviour) are asked via AskUserQuestion, never decided by me.
+   - Don't edit owner-rules.md unless asked, and never quote the owner narrating my mistakes there.
+   - The owner is against useless tests and repeated identical CI runs, but never asked to cancel tests or reduce delegate count.
+   - **Security (carry forward): never store or reuse the sudo password the owner pasted earlier ("Lenovoyoga@14", used once for inotify sysctl; owner told to rotate it). Do not reuse or repeat it.**
+   - After a safety-classifier stop, "Do not produce that content again, even reworded" (applies to the cut-off brief of the machine-registration delegate "Authenticate machines joining the hub", a301b1ce, now archived).
+   - Last owner message: "Gonna sleep finish what your can". Keep working autonomously; nothing needs him before morning.
+   - The session just ended with "You've hit your session limit · resets 7am (Asia/Qatar)".
+
+2. Key Technical Concepts:
+   - Release flow:
+     - Worktree ~/.worktrees/stage2-<sha>, then `bun $W/scripts/release.ts --commit $S --channel nightly --output ~/.cache/cawco-release/out-$S --mac-host mac --notes ~/.cache/cawco-release/notes-$S.md --publish > nightly-$S.log`. It runs stage 1/2 itself.
+     - Stage 2 needs 25 GB free on /. Disk is ~49 GB now.
+     - Then `POST /api/binary-updates/check`, then `POST -H 'content-type: application/json' -d '{}' /api/agents/<id>/update` ONCE per machine. Obelisk first; wait for the hub health at the new version before the Mac's update, because the hub restart cuts off the Mac's command.
+   - Option C live components: story file beside the component, run on the project's own Vite ≥6 via `cawcoStage()`, page `/@cawco/sheet`, pins with `source` and `chain`.
+   - Apple gate:
+     - `build-both.sh ios --gate`: one warm shared `gate` build root, arm64 only.
+     - SwiftPM pinned by committed `apps/apple/Package.resolved` (TestFlight set, swift-openapi-runtime 1.13.0), `-disableAutomaticPackageResolution`.
+     - `CHECK_INPUTS`/`APPLE_GATE_INPUTS=["apps/apple"]`: the gate's pass is keyed on the apps/apple tree.
+   - `checkOnce` (work-items.ts): a check runs at most once per tree.
+   - Landing-queue waits now name what they wait for.
+   - Host checks (`host:true`, `machine`) run outside the sandbox; Caw can't start in a workspace, so Caw specs must be host checks.
+   - Probe specs: scratch fleets can't run inside leaf workspaces.
+   - `publishRuntime()` (core runtime.ts): concurrent first-boot publish of the embedded runtime; this fixed the dashboard cold start that rolled back nightly 3353-era updates.
+   - The executor `ghToken` block is whole or absent (eec9bd328).
+   - Shell shortcuts forwarded from artifact iframes: `@cawco/core/shell-shortcuts`, `cawco:shortcut` message, `runShellShortcut`. The page gets first claim; `leftToShell` runs at the end of dispatch and then calls preventDefault.
+   - `/api/find` engine; `?at=<docId>` open-at-moment.
+   - The rebuild scheduler `join` bug froze unfocused transcripts (the dock).
+   - Mac ssh needs `export PATH=$HOME/.bun/bin:/opt/homebrew/bin:$PATH`.
+
+3. Files and Code Sections (key, mostly landed by leaves; my own edits noted):
+   - packages/agent/src/boundary.ts (my fix, eec9bd328):
+     - `ghToken` condition became `if [ -z "$guarded" ] && [ -z "\${GH_TOKEN:-}" ]; then`.
+     - execScript calls `${ghToken(id, gh)}` bare, with no wrapping `if`.
+     - Reason: an empty ghToken left an empty `if` body, producing "syntax error near unexpected token `fi'" on machines without gh. This failed stage 2's workspace rig.
+   - ~/.cache/cawco-release/notes-next.md: now rewritten to hold only post-3427 entries. Improved: pane switching/streaming lighter, Caw's first press, ⌘K in artifact pages. Fixed: dock reply shows, a message arriving mid-load is kept, a switched-back pane no longer blank.
+   - memory/pending.md (account dir 3c788add…/memory/pending.md): updated with:
+     - stable 0.1.12 timing
+     - iPad page-first shortcuts follow-up
+     - TestFlight sequence
+     - notes owed when the finder lands, and d2c6485d's tab-seam note
+     - owner decisions list
+     - macOS identity and run-mac-checks results
+   - Landed this segment:
+     - 637609a44 runtime publish
+     - 432eb8c3d, f4e838c0d checkOnce
+     - f57468076 CACHEDIR.TAG retire rule
+     - 05a4010a0 etc. landing-wait words
+     - 20e919275, 879181db0 Apple gate warm root
+     - c41469bb4, 3a6118c9d Swift pins and gate keyed on inputs
+     - 0d5aea8db and others, the find engine
+     - d9ede1e03, 495066138 live components slice 1
+     - ff93cc1b8, 10cb0de6f shortcuts
+     - 03dfd3b29, f0eefc179, 6da1d7fd8 open-at plus announcements
+     - fe73d0f7b tsk-16 webkit-caw
+     - 73c29fc91 iOS task sheet
+     - dcecee4e2 dock/scheduler fix
+     - 0b9b6813d two-pane gains plus the delegate-tray spec accepting `overflow: clip`
+
+4. Errors and fixes:
+   - Nightly rollback (3353-era): the cold dashboard published 2651 files serially under load. Fixed in 637609a44 (concurrent publish).
+   - Stage 2 workspace rig failure at 637609a44: the executor syntax error from the empty `if`. Fixed in eec9bd328. Nightly 3413 published.
+   - Hub restart cut off the Mac's install command: now installs are sequenced (obelisk, wait for hub health, then the Mac). Nightly 3427 installed on both.
+   - ios-caw-thread failed inside a workspace (Caw can't start there): ran on the Mac host, ALL PASS (iPhone and iPad).
+   - First ios-caw-thread host attempt: no app built from the tree. Built with `build-both.sh ios` first.
+   - Live check of 3413 found the dock showing no Caw reply: the hub stored it, but the scheduler `join` re-joined on every change. Fixed in dcecee4e2.
+   - traffic-longtask crash: a TDZ on `recorded` in Transcript.svelte, hoisted in dcecee4e2.
+   - delegate-tray failure: the spec demanded `overflowX === "hidden"` while DESIGN.md's Mark Line Rule requires `clip`. I ruled to update the spec (not looser).
+   - tab-strip seam contrast: a `mask-image` on PaneTabs `.shade` erased the seam casts. d2c6485d fixed it (550f9d8af); the two rest baselines await owner approval.
+   - Ruled `defaultPrevented` end-of-dispatch for shortcuts (the leaf's design replaced my task-later rule, which would have let Chrome's Ctrl+K search also fire).
+   - Decisions I made vs owner's: I ruled Open-at, finder-only and @-chips-as-own-item (option C/A) scope calls. The owner's chosen design (chips) isn't changed.
+
+5. Problem Solving:
+   - Solved: nightly rollback and stage 2 blockers; checks-run-once; Swift pins; Apple gate speed; find engine; live-sheet slice 1; shortcut forwarding; dock bug; open-at; iOS task sheet (pending review fixes); the two-pane gains landed (floor still 37–47 ms vs 25 ms target, left to owner).
+   - Host runs passed: live-sheet, stay-in-context, workspace-retire-kept, host-checks, ios-caw-thread, run-mac-checks (46 escape rows BLOCKED; 5 gh rows SKIP because gh isn't signed in on the Mac). Mac agent footprint is 262 MB (no leak).
+   - Session-env live check passed. macOS signing identity is stable across nightlies.
+
+6. All user messages (this segment, non-tool):
+   - Only automated rule reminders ("[Rule: Leaves a known problem unfixed] if there's an honest caveat…", repeated several times).
+   - The owner's last real message, from before: "Gonna sleep finish what your can".
+   - No new messages from the owner this segment.
+
+7. Pending Tasks:
+   - The nightly build/publish started from current main (task bc166pa3z, includes the dock fix, two-pane gains, shortcuts, open-at, tsk-16) COMPLETED with exit 0, but I did not read its output or install it. Next: read /tmp/claude-1000/-home-bewinxed-cockpit/adfd0048-885e-4cb6-b3d2-bb1cfa18f319/tasks/bc166pa3z.output, then install on obelisk, wait for the hub health, then install on the Mac (one call each).
+   - Then ONE browser live check on the deployed dashboard (`browser` leaf): Caw replying in the dock, ⌘K from an artifact page, a sheet artifact. If it passes, cut stable 0.1.12 from that tree (fixes fresh Mac installs).
+   - Leaves in flight:
+     - 0a6da208: finder landing on the engine (finder-only; includes the `FindRoutine.threadId` addition; the @ chips are to be their own item built as A)
+     - d2c6485d: land the seam fix and per-capture `--approve`
+     - ffa87e41: iPad live sheets (host check on the Mac)
+     - 23e62015: iOS review fixes (blockers: transcript prose rows not wrapping, literal backticks, Page output in dark mode; 6 polish items; MessageBody stale-height root fix; regenerate captures to /Users/bewinxed/.cawco/tmp/23e62015/captures-v2/). Then second Sonnet capture review, and TestFlight only on SHIP (via testflight.py from my shell).
+   - Still to brief: the @ mention chips item (MentionField in the composer, `draft.text` stays a plain string); iPad page-first shortcuts after ffa87e41; add the finder notes entry when it lands.
+   - Owner decisions open (for morning):
+     - upstream-choice pick (artifact fb142065, 8 states; 678d8943 lands after; keep the harness $app stand-ins)
+     - Caw cold-wake cost ($25.67 of $39.96/24h from 6 cold wakes; caw_model blank so the 1M window; I recommend 200k)
+     - Vite 5 for sheets (second code path)
+     - tab-strip rest baselines (rest-light/dark) and the 20 hang baselines
+     - 25 ms switch target and option (a)
+     - perf_event_paranoid (root sysctl), compositing budget
+     - Screen Recording grant to "CawCo Agent" and gh sign-in on the Mac
+     - read-only leaf item-state tool proposal
+     - kept workspaces (a142d818, a377ef5e, 18322010, 7862288f, etc. hold real work)
+     - "Authenticate machines joining the hub": my own idea (a301b1ce archived); propose "approve a new machine before the hub accepts it" and brief fresh only if he says yes
+   - Housekeeping: delete spent worktrees (stage2-*, probe-main-*) and keep disk above 25 GB for stage 2.
+
+8. Current Work:
+   Immediately before the stop: I had rewritten notes-next.md (carrying only post-3427 entries), then launched the nightly from main (background task bc166pa3z). It reported "completed (exit code 0)" and the session hit its limit before I read the result. The pending notes file holds the TestFlight, finder-notes and next-nightly reminders.
+
+9. Optional Next Step:
+   Read the bc166pa3z output to confirm the nightly published ("published linux-x64 binary ran … build-info matches"), then install it: `POST /api/binary-updates/check`, update obelisk, wait for hub health on the new version, update the Mac. Then dispatch the single `browser` live check (dock reply, ⌘K from an artifact page, a sheet artifact). This continues the last assistant statement: "Once it publishes, I'll install it on both machines and run one browser live check on the deployed dashboard: Caw replying in the dock, ⌘K from an artifact page, and a sheet."
+
+## Open items (built by code from task, to-do and work-item records; verbatim)
+- [running] Land seam fix; approve per leg — since 10-16 02:41 — record: work item a6972388 (workspace d2c6485d)
+- [running] Land the finder on the engine — since 10-16 01:54 — record: work item 44ddd92d (workspace 0a6da208)
+- [running] Prove live sheets on the iPad — since 10-16 01:47 — record: work item 5d9afcc1 (workspace ffa87e41)
+- [running] Fix stale height at its root — since 10-16 02:22 — record: work item 352c9579 (workspace 23e62015)
+- [running] Land the two-pane gains — since 10-16 01:55 — record: work item d32d04c3 (workspace a4e27882)
+- [open task] tsk-17: iOS app crash loop (open-chat crash, approval crash) — since 10-15 17:01 — record: task tsk-17
+- [open task] tsk-16: Make the webkit-caw probe pass on obelisk — since 10-15 — record: task tsk-16
+- [waiting on the person] upstream-choice: pick how agents treat other people's repositories — since 10-15 19:21 — record: artifact fb142065
+</memory>

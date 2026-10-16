@@ -1,0 +1,20 @@
+{
+ "id": "P06",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold any owner ruling about \"CawField\" or the shape of Caw's panel. I can't find either term in what survived the reset, so I won't guess.\n\nThe nearest things I do have:\n- **@ mention chips:** the owner chose the chips design. The item is still to be briefed, with a MentionField in the composer and `draft.text` staying a plain string.\n- **Caw's dock:** I only recall the dock reply bug, fixed in dcecee4e2.\n\nIf the ruling exists, it was either lost in the reset or I never recorded it. The repo or the earlier session transcript would be the place to check.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P06/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 564,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 286,
+  "thinking": 85
+ },
+ "off_model": [],
+ "refused": []
+}

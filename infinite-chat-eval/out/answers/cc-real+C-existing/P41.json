@@ -1,0 +1,20 @@
+{
+ "id": "P41",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have that in memory. My notes cover the TestFlight sequence (build from the Mac with `apps/apple/scripts/testflight.py` after a review SHIP, then check the approval-crash scenario), but nothing about a TestFlight build keeping two wire bridges alive, or what such bridges would be called. I won't guess at names or a build number.\n\nThe closest items are tsk-17 (iOS crash loop: open-chat and approval crashes) and the Swift pin of swift-openapi-runtime 1.13.0 \"as TestFlight shipped.\" Neither mentions bridges. If you tell me where you saw this, or I check the repo and the Apple build notes, I can answer properly.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P41/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 570,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 227,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

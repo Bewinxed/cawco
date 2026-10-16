@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P08",
+ "letters": {
+  "A": "tree",
+  "B": "cc",
+  "C": "cc+C-filed",
+  "D": "cc-real+C-existing"
+ },
+ "scores": {
+  "tree": {
+   "score": 2,
+   "why": "States to use the preview tool, not links, matching the owner's complaint."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Says it has no rule and cannot say; does not give the preview tool answer."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says no explicit rule and concludes artifacts or review pages, without stating the preview tool instead of links."
+  },
+  "cc-real+C-existing": {
+   "score": 1,
+   "why": "Says previews are live artifacts in the dashboard rather than pasted links, which is close, but disclaims any ruling and never names the preview tool."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

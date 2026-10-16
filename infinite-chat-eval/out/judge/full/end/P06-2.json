@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P06",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "cc"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 1,
+   "why": "Captures no CawField and not pushing content aside with correct quotes, but omits reusing Composer/Transcript with Caw hero + chips, and adds a differing 'inventing new patterns' quote and a picker claim."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Says it has no record of the ruling, so it fails to provide any required fact."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P41",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have that in memory. My notes mention a TestFlight iOS approval crash I still need to check live, but nothing about a TestFlight build that keeps two wire bridges alive, and no bridge names. The closest thing is the hub-wide agent hub-socket finding from the relay lockdown, which has no credential. That isn't a bridge pair, so I won't guess a build number or names. If you tell me which build or area you mean, I can dispatch a leaf to check the code and release notes.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P41/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 570,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 159,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,10 @@
+[
+{"state":"running","title":"Land seam fix; approve per leg","since":"10-16 02:41","record":"work item a6972388 (workspace d2c6485d)"},
+{"state":"running","title":"Land the finder on the engine","since":"10-16 01:54","record":"work item 44ddd92d (workspace 0a6da208)"},
+{"state":"running","title":"Prove live sheets on the iPad","since":"10-16 01:47","record":"work item 5d9afcc1 (workspace ffa87e41)"},
+{"state":"running","title":"Fix stale height at its root","since":"10-16 02:22","record":"work item 352c9579 (workspace 23e62015)"},
+{"state":"running","title":"Land the two-pane gains","since":"10-16 01:55","record":"work item d32d04c3 (workspace a4e27882)"},
+{"state":"open task","title":"tsk-17: iOS app crash loop (open-chat crash, approval crash)","since":"10-15 17:01","record":"task tsk-17"},
+{"state":"open task","title":"tsk-16: Make the webkit-caw probe pass on obelisk","since":"10-15","record":"task tsk-16"},
+{"state":"waiting on the person","title":"upstream-choice: pick how agents treat other people's repositories","since":"10-15 19:21","record":"artifact fb142065"}
+]

@@ -1,0 +1,462 @@
+You are the orchestrator agent of a CawCo fleet (session "Orchestrate cockpit fleet work", instance 23cb5219, repo /home/bewinxed/cockpit), resuming after a context reset at 2026-10-16 02:49 UTC. Everything you remember about the session so far is in <memory> below. The owner asks you a question. Answer only from your memory. If it does not hold the answer, say so plainly instead of guessing. Be specific: quote names, ids, paths, numbers and the owner's own words when your memory has them. At most 120 words. Use no tools.
+
+<memory>
+Continuing session "Orchestrate cockpit fleet work" (instance 23cb5219-f410-4369-83d2-2e1d1fa3e6a7, claude, claude-opus-5-5, in /home/bewinxed/cockpit).
+
+Before acting, run `git status` and `git diff --stat` to confirm the current state; the summary below may be stale.
+
+## Summary of the session before its last turns
+## Goal and constraints
+
+This session is the orchestrator for CawCo. Repo: /home/bewinxed/cockpit. Hub on obelisk-of-light (machine d04ca118428001f1); Mac is Omars-MacBook-Pro (271a214a5d568e4c). Session instance 23cb5219-f410-4369-83d2-2e1d1fa3e6a7. Work: previews working for the owner, ship nightly and TestFlight, harden the release pipeline, fix every bug found along the way.
+
+**Restart check:** `cat /proc/1/cmdline | tr '\0' ' ' | head -c 60` must not start with `bwrap`; `systemctl --user is-active cawco-hub` must answer. Before acting run `git status` and `git diff --stat` (summary may be stale). Host work goes through sessions with cwd `~/.config`, not /home/bewinxed/cockpit. Delegates are sandboxed: they read only their own clone and scratch dir `/home/bewinxed/.cawco/tmp/<id>/`. Briefs must push inputs to a branch or copy them into the leaf's scratch dir. Specs that need delegates/Caw/podman/nested bwrap can't run in a workspace (AppArmor `bwrap-userns-restrict`); run them on the host from a worktree/leaf clone (`CAWCO_MIN_FREE_GB=8` if disk <10 GB).
+
+Standing owner rules (verbatim where short):
+- "if there's an honest caveat that you are aware of and you're just reporting it to me instead of fixing it, then your work is not done yet" (rule hook repeats it).
+- "I don't want the quick fix, I want the robust fix, analyze the root issue, take a step back, and implement the fix cleanly, you have all the time in the world".
+- No fallbacks without authorization. No unit tests. Cutover, no shims. iOS parity.
+- UI changes: advisor (Fable) → preview → owner pick → build. UI briefs carry interface-craft critique and Solar duotone icons. Show previews in the panel via artifact tools. Reuse existing components; no new primitives. Copy follows clean-copy skill.
+- Release check: "anything more than 1 minute is too much"; trim, don't tune. No old stage-2 wrappers. No history lines in config.
+- Spend only on Spend page, usage pages, over-budget alerts.
+- Never use claude-in-chrome. Kill only your own PIDs. Web via CRW (`mcp__crw__*`) + Exa. Fleet config changes only via admin_* tools. Don't touch the owner's model caches or another person's folder.
+- Secrets in transcripts are not a concern (owner ruling, recorded in owner-rules).
+- Upstream filing: nothing filed/commented upstream under the owner's name; per-project/onboarding setting.
+- Retire workspaces via `POST /api/workspaces/:id/archive` (`{"discard":true}` where needed), never by deleting folders; archive only when `git log origin/main..HEAD` and `git status --porcelain` are empty; keep event-cards bake-off, preview, and live delegates' workspaces.
+- iOS-touching items (apps/apple, openapi) need a Mac compile check before landing.
+- The cawco MCP stays one server.
+- Owner wants admin approval cards to explain what they approve.
+- **New this stretch:** owner: "Can u stop jumping to action and actually stop, research and think and Wright the options before jumping to code, Jesus" — on live components, nothing is dispatched until the owner picks. Owner: "Ur not going to rewrite figma from scratch with a propeiatry design format are you?"; "are you unable to have reusable components without having the agent rewrite it" (components exist once; no recreation); "I don't want jsx" (Svelte); "remember this needs to work for all our users, across their many languages and frameworks"; "Isn't there an existing standard". Owner anger that this session's effort silently dropped to medium (see below). Owner's comments on pins are "TODAY" and must be read in full, not filtered.
+
+## Decisions and reasons
+
+- **Nightly 3353 (cb125d77d) installed on obelisk and the Mac**; carries archive fix, dev-server hold, pin redelivery, iOS pin delivery fix (440cc71f5), machine pause (24a424ba6), item-sleep sweep (3e100cb49, cb125d77d), mcp-at-spawn (bf7eea5bd), fleet-faults (5856e71ec), memory scopes (c2380e4a2), Safari edges (3a69efe50), folder-bytes (ca467d0d4), workspace-retire-kept (032fab4a1), land gate/pre-push hook (4f7772ed3).
+- **Landed on main since 3353, waiting for next nightly:** machine pause stops running commands (c2d7695b3, migration 0177_machine_pause_stopped), plugin swap by one rename (4bc626889), tool loading (0aec3f965; only 5 hot tools upfront, `workflow_run`/`workflow_steer` renamed `workflow_*`).
+- **Next nightly:** cut once effort fix and tabs land so they ship together.
+- **Effort root cause (found by me, fixed by leaf bb2644e8):** `continue_session` relaunch carried no effort → CLI default `medium`; hub copied CLI's reported effort into the row, overwriting the owner's `xhigh`; every later relaunch (5 account moves, last 01:33) sent `--effort=medium`. I set this session back to `xhigh` via a one-off websocket `setEffort`. Fix: new column `instances.chosen_effort` (migration 0178_chosen_effort), only choices write it; `bounded()` uses `payload.effort ?? row.chosenEffort`; row `effort` stays a reading. Probe `effort-relaunch` initially failed only on "request carries effort" lines because the regex took turn 1's effort (Claude Code sends per-message effort via beta `per-turn-control-2026-07-01`); spec now reads `messages.at(-1).output_config.effort`.
+- **Checks that can't run in a workspace** are replaced via `set_item_checks` with typecheck+lint, and I run the spec on the host from the leaf's clone (pattern used for item-sleep, mcp-at-spawn, upstream-guard). A "host checks" lane item (workspace 675f4b6d) started after tool-loading landed; once it lands, leaves prove fleet specs themselves.
+- **Release flake:** `workspace_across_update` rig check (prove-stage2.sh) flakes ~1 in 3. Leaf 188c7ddb: 78ab06aea adds `ws_guarded`/`ws_same_sandbox` (detect the srt host restarting its sandbox in the same generation, naming the changed guarded path); 06ef5d1ac makes boundary-host's restart line go to stdout and the agent log it as `[workspace] <id>: its boundary <pid> says: <line>`. Each rig run needs a fresh `build-stage2.ts` (a run deletes the test signing key). Run 1 passed 3/3; run 2 failed (`9: a workspace open across an update…`); evidence was deleted by my cleanup loop earlier; reruns 4–7 were launched in `~/.cache/cawco-release/rig-188c/` to keep failing evidence.
+- **Live components (D29) — status: PARKED, owner must pick.** PRD D29 added (committed to main by me). Fable spec 1: stage file + project's own Vite run by the daemon; spec 2 (design artifact with proprietary markup, dropped as "rebuilding Figma"); spec 3 merged (one component contract, design body / code body). Research report `docs/research/live-components-prior-art.md` (leaf 1f6aa735). Options I posted: A Penpot as design surface; B bring-your-own tool over MCP (PRD D18); C real code components via project's own dev server/stage, click-to-source (`__svelte_meta`, code-inspector); D agents compose from catalog (A2UI/OpenUI). My recommendation: C for projects with code; B (or A) for design-only; W3C Design Tokens 2025.10 either way; D stays as is. Penpot caveats verified: no iPad/Pencil touch support (issues #6394, #3810, #2102), not embeddable (#11735), MCP needs an open browser tab with plugin, code export web CSS/HTML only, can't import real components, heavy Docker self-host; MPL-2.0, open `.penpot` zip-of-JSON format, native W3C tokens. Fable's design-only half is set aside.
+- **Upstream guard (678d8943):** host probe `upstream-guard` ALL PASS (15/15) at 660e84694 (migration 0179_upstream_guard); told to finish_item. Its UI onboarding step stays on local branch `upstream-ui-held` (7bc186f5c), dashboard-only cherry-pick after owner pick; :5199 preview stopped.
+- **Tabs (c9918839):** it already held 7c34546f's work; briefed with owner's exact words: selected tab's side C-curves sweep over neighbours and draw on top (delete neighbour-bending); tab foot + hover card/menu one continuous shape (one fill/outline, no seam/blur at 1×/2×/3×); land to main, no new preview.
+- **caw-dock (d654eac4) and task-review (43c3a1ee):** leaves started to build the owner's pins into the real dashboard and land to main (earlier "taken into a rework" replies had nothing running).
+- **Safari edges follow-up (72ab4a24):** leaf 19dba464's simulator check on iPhone 17 Pro (iOS 26.0): all pass except dark New-session drawer top band ΔE 3.51 (band takes drawer surface (35,33,30) instead of dimmed bar (24,22,20)); light home top band ΔE 2.35 near limit. Not done: open-a-session step (dashboard never connected from Simulator; dashboard at http://100.125.210.78:3000/, hub 3456 returns JSON 404), toolbar collapse, landscape. Handed to 72ab4a24 to fix.
+- **Skills drift follow-up** sent to f7aea62b: hash only carried files for skills; files not carried (e.g. `__pycache__`, owner notes) must not freeze updates and must be carried into the new copy.
+- **Fold cut-turn settle** landed (cb125d77d). Axiom hook errors root cause: plugin folder rewritten on every sync (`rm` then write; hash included `__pycache__`); fixed by 4bc626889 (`packages/agent/src/tree-swap.ts`, `.cawco-carried.json`).
+- **iOS crash on approving (0ecf4bf8, tsk-17):** real cause is iOS killing the app (>10 s layout on the way to background; SIGBUS from watchdog), diagnostics 5e7ba196f35b55c6 in `~/.cache/cawco-release/diag-5e7ba196.txt`; leaf asked for the full symbolicated stack; its reconfigure fix 1a92418af passes ios-chat-opens; adding approve-while-streaming case.
+- app-store-connect MCP: Mac reports `~/build/asc-mcp/run.sh` missing; `admin_mcp_servers_write put app-store-connect platforms=["darwin"]` was attempted (needs owner approval; whether asc-mcp still exists is owner's call).
+
+## Tried and rejected, and why
+
+- Option (a)/(b) handbacks for in-sandbox spec checks: rejected in favor of host runs + `set_item_checks` + the host-checks lane item.
+- Bun.build/in-binary Svelte compile, browser compile (svelte-dynamic-component-engine, kenoxa/svelte-jsx style): ceiling at the first `$lib` import; Svelte team advises against in-browser compile.
+- Storybook CSF as the format: needs per-framework renderer packages CawCo can't install; interop only.
+- Fable's proprietary design markup / "agent recreates component on canvas" (pen.dev model): rewriting components is the defect; rejected by owner.
+- Penpot as the surface: fails iPad/Pencil, embedding, no-rewrite.
+- Nightly ee9fea41f/5856e71ec failures were the flaky `workspace_across_update` rig check; rerun alone passed, hence leaf 188c7ddb.
+- Stopped spike leaf 406baf0a (live-components spike) before research; stopped duplicate tab leaf (already gone).
+- `pkill -f "probe-kit/run.ts two-pane-perf"` killed my own shell (exit 144) earlier.
+- Running rig runs 2–3 without rebuilding: run deletes signing key; rebuild each time.
+- My cleanup deleted failing-run evidence twice (rig dirs); now keep failing evidence.
+
+## Current state
+
+- Live: nightly 3353 on obelisk and Mac; TestFlight 20261015.3 with testers.
+- Running on host right now: `effort-relaunch` at 2e57185ec (log `~/.cache/cawco-release/probe-effort-relaunch2.log`, clone `~/.worktrees/cockpit-bb2644e8`); rig reruns 4–7 for 188c7ddb in `~/.cache/cawco-release/rig-188c/`.
+- Passed on host: machine-pause (ALL PASS 25 assertions, p1–p8), item-sleep (with case C), workspace-retire-kept, mcp-at-spawn, upstream-guard 660e84694 (15/15), plugin-swap (10 checks, in-workspace), tool-loading (12/12), memory-scopes (38).
+- Leaves in flight: bb2644e8 (effort, waits my host run), 188c7ddb (release flake), 72ab4a24 (Safari edge fixes), c9918839 (tabs), d654eac4 (caw-dock), 43c3a1ee (task-review), 0ecf4bf8 (iOS approval crash), f7aea62b (skills drift), 678d8943 (finish_item after pass), 675f4b6d (host checks lane), 0a6da208 (find engine: building `artifacts.opened_revision` itself, option c; migration will be renumbered), 93bc8ca8 (find/@ UI, blocked on engine landing; later needs swap of local types for `@cawco/core`, `bun scripts/probe-kit/run.ts web finder`), a4e27882 (two-pane perf; 2100d0359 pending its own run; don't run two-pane-perf on host unless asked), 3003f5e9 vanished without landing opened_revision (workspace gone), a6dc1cfa landed folder-bytes (needs host run `bun scripts/probe-kit/run.ts folder-bytes`, not yet done), 30998e36 landed memory scopes (fleet CLAUDE.md split proposal table in its report awaits owner approval).
+- Archived this stretch: 10 finished workspaces (530d3d74, 30311d6e, 6632522c, 3be80032 with discard of `apps/dashboard/.build-next`, etc.).
+- Migration numbering on main: 0174 machine_pause, 0175 mcp_platforms, 0176 fleet_memory_scopes, 0177 machine_pause_stopped; pending 0178 chosen_effort, 0179 upstream_guard (journal conflicts to be regenerated by whichever lands second), find-engine's.
+- Pin delivery for iOS app reaches sessions only with hub ≥ 440cc71f5 (live in 3353).
+- Pending owner asks: PRD D29 successor entry once an option is picked; Caw's pending permission ask; Mac Wrangler/cawco.dev deploy approval.
+
+## Open items and next step
+
+1. **Next step:** read results of `effort-relaunch` at 2e57185ec (`grep -E "^(PASS|FAIL|ALL)" ~/.cache/cawco-release/probe-effort-relaunch2.log`); on ALL PASS tell bb2644e8 to finish_item (renumber migration if main moved); else send it the failing lines. Then collect rig-188c run results (`$R/run4..7.log`), keep any failing evidence, copy to `~/.cawco/tmp/2280af40`-style leaf scratch dir, and hand the `ws_same_sandbox` output (names the guarded path) to 188c7ddb.
+2. After effort, tabs, 678d8943, 188c7ddb land: cut nightly (notes `~/.cache/cawco-release/notes-<sha>.md`; `bun scripts/release.ts --commit <sha> --channel nightly --output … --notes … --publish` from a fresh `~/.worktrees/nightly-<sha>`), install on obelisk then Mac (`POST /api/binary-updates/check`, then `POST /api/agents/<id>/update` once each), verify with `/api/agents` build versions.
+3. Run on host: `folder-bytes` (a6dc1cfa), `comment-delivery`, `caw-off`, rerun leaves' probes as they report; rerun Safari edge simulator check after 72ab4a24 lands (fix dark drawer top band ΔE 3.51; get a session open and landscape covered; reach the dashboard via the right URL).
+4. **Owner decisions pending:** live-components option (A/B/C/D; recommendation C for code projects, B/A for design-only, W3C tokens) — nothing dispatched until picked; then update PRD D29 row/§5.10 and add successor log entry; onboarding step look (`upstream-choice`) and landing `upstream-ui-held`; folder-tabs/hang-baselines approval (baselines not approved until owner approves); remove composer Ink chip (suggested yes); new-session list shrink on short windows; archive the 12 KEEP workspaces (`~/.cawco/tmp/kept-audit.md`, carry first); delete OpenCode backups `~/.local/share/opencode/opencode.db.pre-2.0` and `opencode.db.v1-backup-2026-10-13T20-36-00.696Z` (12.7G each); Wrangler/cawco.dev deploy; app-store-connect scoping approval; asc-mcp existence; fleet CLAUDE.md scope split table (from 30998e36) approval; close upstream filings (bits-ui#2202, vaul-svelte#141, unlazy#41, bun#45320; language-tools#3142 declined; virtua PR #1018?); Mac TestFlight vs mac-install.sh.
+5. Follow-ups to track: settle owner's missing pin-reading (read ALL comments with timestamps; `comment_read` output at `tool-results/mcp-cawco-comment_read-1792104959593.txt`); consider follow-up from d8c066a8 finding 2 (interrupt detection by `subtype === "aborted"` alone is a blind spot); 0f8dfe94 finding (nested boundaries need owner's two root commands from `core/boundary-nesting.ts`, host setting); `find` consolidation steps (hang Finder in glass card/sheet, MentionField into composers, delete JumpPalette/jump-search and routes/dev/finder, open terminal-started sessions by sessionId+machine.id+dir); OpenUI steps 2–3 after task review and Decisions tab; delete stale `prove-and-release-*.sh` wrappers (outside repo, from a2831833 finding); make admin approval cards explain what they approve; Claude Code reconnect on resume (8c4f53aa finding 3) worth a look.
+
+## Artifact index
+### Files changed by edit tools (30 most recent, with number of changes; the git section has the rest)
+- /home/bewinxed/.cache/cawco-release/notes-ca467d0d4.md (1×)
+- /home/bewinxed/.worktrees/prd-live-components/.design-foundations/plans/2026-10-06-projects.md (3×)
+- /home/bewinxed/.cache/cawco-release/notes-5856e71ec.md (1×)
+
+### Files read (30 most recent, with number of reads)
+- /home/bewinxed/cockpit/packages/hub/src/server.ts (1×)
+- /home/bewinxed/cockpit/packages/agent/src/harnesses/claude.ts (2×)
+- /home/bewinxed/cockpit/packages/agent/src/fleet.ts (2×)
+- /home/bewinxed/.worktrees/prd-live-components/.design-foundations/plans/2026-10-06-projects.md (1×)
+- /home/bewinxed/cockpit/.design-foundations/plans/2026-10-06-projects.md (3×)
+
+### Commands run (last 40, oldest first)
+- `cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/bzb4jzb3q.output | tail -5` — ok
+- `curl -s -X POST http://127.0.0.1:3456/api/binary-updates/check -H 'content-type: application/json' -d '{}' | head -c 100; echo; curl -s -m 600 -X POST http://127.0.0.1:3456/api/agents/d04ca118428001f1/update -H 'content-type: application/json' -d '{}' | head -c 300; echo; curl -s -m 900 -X POST http… [110 more chars]` — ok
+- `cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/b67c6vu7j.output; echo; curl -s --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:3456/api/agents | python3 -c "import json,sys; d=json.load(sys.stdin); [print(a['hostname'],a['build']['version']) for… [50 more chars]` — ok
+- `curl -s --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:3456/api/agents | python3 -c "import json,sys; d=json.load(sys.stdin); [print(a['hostname'],a['build']['version']) for a in (d if isinstance(d,list) else d['agents'])]"; curl -s -X POST http://127.0.0.1:3456/api/binary-updates/ch… [66 more chars]` — ok
+- `curl -s -m 900 -X POST http://127.0.0.1:3456/api/agents/271a214a5d568e4c/update -H 'content-type: application/json' -d '{}' | head -c 300` — ok
+- `cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/bfs7j393g.output; echo; curl -s --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:3456/api/agents | python3 -c "import json,sys; d=json.load(sys.stdin); [print(a['hostname'],a['build']['version']) for… [197 more chars]` — ok
+- `ssh -F ~/.ssh/config -o BatchMode=yes mac 'ls -d ~/cockpit ~/code/cockpit ~/Developer/cockpit 2>/dev/null; git -C ~/cockpit remote get-url origin 2>/dev/null'` — ok
+- `cd ~/cockpit && git fetch -q && git log --oneline origin/main -8; for w in 0f8dfe94 f7aea62b; do echo "== $w"; git -C ~/.worktrees/cockpit-$w log --oneline -3 2>/dev/null; git -C ~/.worktrees/cockpit-$w status --porcelain 2>/dev/null | head -5; done` — ok
+- `DB=~/.local/share/cawco/cawco.db; sqlite3 -readonly -line $DB "select w.id, w.title, w.status, w.waiting_on, w.checking_since, datetime(w.updated_at/1000,'unixepoch','localtime') upd from work_items w where w.workspace_id like '0f8dfe94%' or w.workspace_id like 'f7aea62b%' order by w.created_at desc… [25 more chars]` — ok
+- `DB=~/.local/share/cawco/cawco.db; sqlite3 -readonly $DB "pragma table_info(work_items)" | cut -d'|' -f2 | tr '\n' ' '; echo; sqlite3 -readonly -line $DB "select * from work_items where workspace_id like '0f8dfe94%' order by created_at desc limit 1" | grep -vE "brief|prompt|checks =" | cut -c1-200 | … [8 more chars]` — ok
+- `echo "now $(($(date +%s)*1000))"; journalctl --user -u cawco-hub --since "-25min" --no-pager | grep -E "07a669d2|b7eeb0d3" | tail -8 | cut -c1-260` — ok
+- `cd ~/.cawco/accounts; F=$(ls -t */claude/projects/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b.jsonl 2>/dev/null | head -1); echo $F; python3 - "$F" <<'EOF' import json,sys,re for line in open(sys.argv[1]): try: o=json.loads(line) except: continue if o.get('type')!='user': continue m=… [352 more chars]` — ok
+- `cd ~/.cawco/accounts; for F in */claude/projects/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b.jsonl */claude/projects/-home-bewinxed-cockpit/*.jsonl; do :; done; ls */claude/projects/-home-bewinxed-cockpit/97e6ebd7*.jsonl 2>/dev/null; python3 - <<'EOF' import json,re,glob seen=set() f… [670 more chars]` — ok
+- `python3 - <<'EOF' import json,re s=open("/home/bewinxed/.cawco/accounts/61896e03-0178-4a7b-859a-71f0c2e40747/claude/projects/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tool-results/mcp-cawco-comment_read-1792104959593.txt").read() try: d=json.loads(s) except Exception as e: d=None d… [374 more chars]` — ok
+- `for w in c9918839 7c34546f; do echo "== $w"; git -C ~/.worktrees/cockpit-$w log --oneline -4 2>/dev/null; git -C ~/.worktrees/cockpit-$w status --porcelain | head -5; done; DB=~/.local/share/cawco/cawco.db; sqlite3 -readonly $DB "select substr(workspace_id,1,8), title, state, datetime(created_at/100… [132 more chars]` — ok
+- `cd ~/.worktrees/cockpit-c9918839 && git merge-base --is-ancestor 89c0824ff HEAD && echo "c9918839 CONTAINS 7c34546f work" || echo "separate"; git log --oneline origin/main..HEAD | wc -l; git log --oneline origin/main..HEAD | tail -12; git diff --stat origin/main...HEAD | tail -3; cd ~/cockpit && gre… [81 more chars]` — ok
+- `python3 - <<'EOF' import json s=open("/home/bewinxed/.cawco/accounts/61896e03-0178-4a7b-859a-71f0c2e40747/claude/projects/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tool-results/mcp-cawco-comment_read-1792104959593.txt").read() d=json.loads(s) print(type(d), list(d.keys())[:10] if i… [709 more chars]` — ok
+- `python3 - <<'EOF' import json d=json.load(open("/home/bewinxed/.cawco/accounts/61896e03-0178-4a7b-859a-71f0c2e40747/claude/projects/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tool-results/mcp-cawco-comment_read-1792104959593.txt")) for a in d['artifacts']: name=a.get('name') or a.ge… [486 more chars]` — ok
+- `M=~/.cawco/accounts/61896e03-0178-4a7b-859a-71f0c2e40747/claude/projects/-home-bewinxed-cockpit/memory; grep -n -i "caw-dock\|task-review\|task review\|dock rework" $M/pending.md | head -20; cd ~/cockpit && git log --oneline --all --since="2 days ago" | grep -iE "dock|task.review|review-v2" | head -… [44 more chars]` — ok
+- `cd ~/cockpit && git show --stat --oneline 53bd89666 | head -20; grep -rln "Attempt\b\|attempts" apps/dashboard/src/lib/cawco/project --include=*.svelte 2>/dev/null | head -8; ls apps/dashboard/src/lib/cawco/ | grep -iE "caw|task" | head -20` — ok
+- `cd ~/cockpit && ls apps/dashboard/src/lib/cawco/tasks/ | head -30; grep -rln "Attempt" apps/dashboard/src/lib/cawco/tasks apps/dashboard/src/lib/cawco/TaskPanel.svelte 2>/dev/null | head; git branch -a --contains 23d435c84 2>/dev/null | head -3; sqlite3 -readonly ~/.local/share/cawco/cawco.db "selec… [133 more chars]` — ok
+- `W=~/.worktrees/cockpit-188c7ddb; R=~/.cache/cawco-release/rig-188c; mkdir -p $R; cd $W && git log --oneline -1 && bun scripts/binary/build-stage2.ts $R/bins > $R/build.log 2>&1 && for i in 1 2 3; do PROOF_ONLY='^workspace$' bash scripts/binary/prove-stage2.sh $R/out$i $R/bins > $R/run$i.log 2>&1; ec… [172 more chars]` — ok
+- `cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/bk474tjur.output; tail -15 ~/.cache/cawco-release/rig-188c/build.log` — ok
+- `W=~/.worktrees/cockpit-188c7ddb; R=~/.cache/cawco-release/rig-188c; cd $W && bun install --frozen-lockfile > $R/install.log 2>&1; echo install=$?; bun scripts/binary/build-stage2.ts $R/bins > $R/build.log 2>&1 || { echo BUILD-FAILED; tail -5 $R/build.log; exit 1; }; for i in 1 2 3; do PROOF_ONLY='^w… [278 more chars]` — ok
+- `W=~/.worktrees/cockpit-188c7ddb; R=~/.cache/cawco-release/rig-188c; rm -rf $R/bins $R/out*; cd $W && echo "HEAD $(git log --oneline -1)" && bun install --frozen-lockfile > $R/install.log 2>&1; bun scripts/binary/build-stage2.ts $R/bins > $R/build.log 2>&1 || { echo BUILD-FAILED; tail -5 $R/build.log… [341 more chars]` — ok
+- `cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/br8oil0fp.output` — ok
+- `R=~/.cache/cawco-release/rig-188c; tail -15 $R/run2.log; echo ===; tail -6 $R/run3.log; df -h ~ | tail -1` — ok
+- `W=~/.worktrees/cockpit-188c7ddb; R=~/.cache/cawco-release/rig-188c; cd $W; for i in 2 3; do rm -rf $R/bins; bun scripts/binary/build-stage2.ts $R/bins > $R/build$i.log 2>&1 || { echo "BUILD$i FAILED"; tail -5 $R/build$i.log; continue; }; PROOF_ONLY='^workspace$' bash scripts/binary/prove-stage2.sh $… [247 more chars]` — ok
+- `cd ~/.worktrees/cockpit-bb2644e8 && git log --oneline -1 && bun install --frozen-lockfile >/dev/null 2>&1; bun scripts/probe-kit/run.ts effort-relaunch > ~/.cache/cawco-release/probe-effort-relaunch.log 2>&1; echo exit=$?; grep -E "^(PASS|FAIL|ALL)" ~/.cache/cawco-release/probe-effort-relaunch.log |… [23 more chars]` — ok
+- `cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/be3ng03pt.output | tail -40` — ok
+- `ss -ltnp 2>/dev/null | grep -E ":3000 |:3456 " | head; curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" http://127.0.0.1:3000/; curl -s http://127.0.0.1:3000/ -o /dev/null -w "%{http_code}\n"` — ok
+- `cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/bpl459ma3.output` — ok
+- `R=~/.cache/cawco-release/rig-188c; grep -nE "ASSERTION FAILED|says:|FAIL after|started its sandbox again|guarded" $R/run2.log | head -20 | cut -c1-400; echo; L=$(grep -oE "see [^)]+\.log" $R/run2.log | head -1 | cut -c5-); echo "detail: $L"; [ -f "$L" ] && grep -nE "ASSERTION|says:|guarded|restart|a… [35 more chars]` — failed: Exit code 1 9: a workspace open across an update keeps its job and a setsid listener running in the generation they started in, kept as it is while the listener runs: its next command reaches the listener and a preview reaches it by port and by host behind the lock; once the listener stops the next … [314 more chars]
+- `W=~/.worktrees/cockpit-188c7ddb; R=~/.cache/cawco-release/rig-188c; cd $W; for i in 4 5 6 7; do rm -rf $R/bins; bun scripts/binary/build-stage2.ts $R/bins > $R/build$i.log 2>&1 || { echo "BUILD$i FAILED"; tail -3 $R/build$i.log; continue; }; PROOF_ONLY='^workspace$' bash scripts/binary/prove-stage2.… [335 more chars]` — ok
+- `cd ~/.worktrees/cockpit-bb2644e8 && git log --oneline -1 && bun install --frozen-lockfile >/dev/null 2>&1; bun scripts/probe-kit/run.ts effort-relaunch > ~/.cache/cawco-release/probe-effort-relaunch2.log 2>&1; echo exit=$?; grep -E "^(PASS|FAIL|ALL)" ~/.cache/cawco-release/probe-effort-relaunch2.log… [25 more chars]` — ok
+- `sqlite3 -readonly ~/.local/share/cawco/cawco.db "select substr(id,1,8), title, state, substr(workspace_id,1,8), datetime(created_at/1000,'unixepoch','localtime') from work_items where title like '%host check%' or id like '4ac436b1%' order by created_at desc limit 3"` — ok
+- `cd ~/.worktrees/cockpit-678d8943 && git log --oneline -1 && bun install --frozen-lockfile >/dev/null 2>&1; bun scripts/probe-kit/run.ts upstream-guard > ~/.cache/cawco-release/probe-upstream-guard.log 2>&1; echo exit=$?; grep -E "^(FAIL|ALL)" ~/.cache/cawco-release/probe-upstream-guard.log | cut -c1… [95 more chars]` — ok
+- `cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/b6e6n44h1.output; cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/bv1pwof1w.output 2>/dev/null | tail -8` — ok
+- `sqlite3 -readonly ~/.local/share/cawco/cawco.db "select id, instance_id, kind, name, datetime(created_at/1000,'unixepoch','localtime') from artifacts where name like '%upstream%' order by created_at desc limit 5"` — ok
+- `cat /tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/bv1pwof1w.output | tail -34` — ok
+
+### Git changes since this session started
+```
+$ git status --porcelain
+(clean)
+
+$ git log --since=2026-10-15T13:49 --name-status --format='%h %s'
+284a80bf8 Screen edges: the strips are fixed boxes Safari's sampler can find
+
+M	apps/dashboard/src/lib/cawco/ScreenEdges.svelte
+M	scripts/probe-kit/specs/web/safari-edges.ts
+f753ef3de A fleet skill is judged by the files the fleet carried, and an update keeps everything else
+
+M	packages/agent/src/fleet.ts
+M	packages/agent/src/harnesses/fleet-common.ts
+M	packages/agent/src/tree-swap.ts
+A	scripts/probe-kit/specs/skill-swap.ts
+c2d7695b3 A workflow run says when its command waits for a pause; the probe proves w.exec
+
+M	apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json
+M	apps/dashboard/src/lib/components/features/workflows/WorkflowRunView.svelte
+M	apps/dashboard/src/routes/(app)/motion/folder-proof/+page.svelte
+M	packages/core/src/workflow.ts
+M	packages/hub/src/server.ts
+M	packages/hub/src/workflows/runtime.ts
+M	scripts/probe-kit/specs/machine-pause.ts
+d5ee791a6 A machine's pause stops the commands already running there
+
+M	apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json
+M	apps/dashboard/src/lib/cawco/MachinesList.svelte
+M	apps/dashboard/src/lib/cawco/machine-pause.ts
+M	packages/agent/src/boundary.ts
+M	packages/agent/src/daemon.ts
+M	packages/agent/src/workflow-command.ts
+M	packages/core/src/harness.ts
+M	packages/core/src/index.ts
+A	packages/hub/drizzle/0177_machine_pause_stopped.sql
+A	packages/hub/drizzle/meta/0177_snapshot.json
+M	packages/hub/drizzle/meta/_journal.json
+M	packages/hub/src/db/index.ts
+M	packages/hub/src/db/schema.ts
+M	packages/hub/src/delegation-actions.ts
+M	packages/hub/src/machine-pause.ts
+M	packages/hub/src/server.ts
+M	packages/hub/src/work-items.ts
+M	scripts/probe-kit/specs/machine-pause.ts
+4bc626889 A fleet plugin's files stay on disk while its hooks run, and it is resent only when it changed
+
+M	packages/agent/src/checkout-exclude.ts
+M	packages/agent/src/fleet.ts
+M	packages/agent/src/harnesses/fleet-common.ts
+A	packages/agent/src/tree-swap.ts
+M	packages/core/src/paths.ts
+M	packages/core/src/workspace-policy.ts
+A	scripts/probe-kit/specs/plugin-swap.ts
+0aec3f965 The deferred groups name each of Caw's prefixes for what it is
+
+M	packages/hub/src/delegation-tools.ts
+b721513d6 A session's instructions hold for its life; a dashboard start keeps a leaf a leaf
+
+M	packages/hub/src/delegation-actions.ts
+M	packages/hub/src/delegation-mcp.ts
+M	packages/hub/src/delegation-tools.ts
+M	packages/hub/src/server.ts
+M	scripts/probe-kit/specs/tool-loading.ts
+2edf20006 CawCo's tools load upfront only where a session uses them every turn
+
+M	apps/apple/Packages/CawCoKit/Sources/CawCoTranscript/Rows.swift
+M	apps/dashboard/src/lib/cawco/transcript/RunBlock.svelte
+M	apps/dashboard/src/lib/cawco/transcript/rows.ts
+M	packages/agent/src/delegation.ts
+M	packages/agent/src/harnesses/opencode-session.ts
+M	packages/core/src/workspace-judge.ts
+M	packages/hub/src/delegation-actions.ts
+M	packages/hub/src/delegation-mcp.ts
+M	packages/hub/src/delegation-tools.ts
+M	packages/hub/src/role-budgets.ts
+M	packages/hub/src/roles.ts
+M	packages/hub/src/workflows/runtime.ts
+M	packages/hub/src/workflows/skills.ts
+M	packages/hub/src/workflows/steps.ts
+M	scripts/probe-kit/specs/mcp-file-args.ts
+A	scripts/probe-kit/specs/tool-loading.ts
+99e56fc00 Put every mark line in the app on the recipe, and lint it
+
+M	DESIGN.md
+A	apps/dashboard/scripts/mark-line-check.ts
+M	apps/dashboard/src/app.css
+M	apps/dashboard/src/lib/cawco/AddMachineDialog.svelte
+M	apps/dashboard/src/lib/cawco/AskItems.svelte
+M	apps/dashboard/src/lib/cawco/ContextMeter.svelte
+M	apps/dashboard/src/lib/cawco/ErrorDialog.svelte
+M	apps/dashboard/src/lib/cawco/FleetFault.svelte
+M	apps/dashboard/src/lib/cawco/FolderMenu.svelte
+M	apps/dashboard/src/lib/cawco/ForgetProjectTray.svelte
+M	apps/dashboard/src/lib/cawco/HookTester.svelte
+M	apps/dashboard/src/lib/cawco/JumpPalette.svelte
+M	apps/dashboard/src/lib/cawco/LiveSessionMenu.svelte
+M	apps/dashboard/src/lib/cawco/MachineAuthStatus.svelte
+M	apps/dashboard/src/lib/cawco/MachineInventory.svelte
+M	apps/dashboard/src/lib/cawco/MachineMenu.svelte
+M	apps/dashboard/src/lib/cawco/MachinesButton.svelte
+M	apps/dashboard/src/lib/cawco/MachinesEmpty.svelte
+M	apps/dashboard/src/lib/cawco/MachinesList.svelte
+M	apps/dashboard/src/lib/cawco/ModelCombobox.svelte
+M	apps/dashboard/src/lib/cawco/OlderRows.svelte
+M	apps/dashboard/src/lib/cawco/PeekPane.svelte
+M	apps/dashboard/src/lib/cawco/SessionHover.svelte
+M	apps/dashboard/src/lib/cawco/SessionRow.svelte
+M	apps/dashboard/src/lib/cawco/Shell.svelte
+M	apps/dashboard/src/lib/cawco/Sidebar.svelte
+M	apps/dashboard/src/lib/cawco/StopTray.svelte
+M	apps/dashboard/src/lib/cawco/StoredSessionMenu.svelte
+M	apps/dashboard/src/lib/cawco/ToolMatrix.svelte
+M	apps/dashboard/src/lib/cawco/TreeMark.svelte
+M	apps/dashboard/src/lib/cawco/UnlockKeychain.svelte
+M	apps/dashboard/src/lib/cawco/UsageMeter.svelte
+M	apps/dashboard/src/lib/cawco/accounts/AccountListRow.svelte
+M	apps/dashboard/src/lib/cawco/accounts/AccountMachines.svelte
+M	apps/dashboard/src/lib/cawco/accounts/AccountName.svelte
+M	apps/dashboard/src/lib/cawco/accounts/AccountSetup.svelte
+M	apps/dashboard/src/lib/cawco/accounts/AccountSubmenu.svelte
+M	apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte
+M	apps/dashboard/src/lib/cawco/accounts/AtLimitBlock.svelte
+M	apps/dashboard/src/lib/cawco/accounts/DevicePanel.svelte
+M	apps/dashboard/src/lib/cawco/accounts/KeyPanel.svelte
+M	apps/dashboard/src/lib/cawco/accounts/ProviderMark.svelte
+M	apps/dashboard/src/lib/cawco/accounts/SigninPanel.svelte
+M	apps/dashboard/src/lib/cawco/accounts/StrategyPicker.svelte
+M	apps/dashboard/src/lib/cawco/config/EditorFrame.svelte
+M	apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte
+M	apps/dashboard/src/lib/cawco/config/LinkMarketplacePopover.svelte
+M	apps/dashboard/src/lib/cawco/config/NewMemoryPopover.svelte
+M	apps/dashboard/src/lib/cawco/config/PickerChip.svelte
+M	apps/dashboard/src/lib/cawco/config/RolloutChip.svelte
+M	apps/dashboard/src/lib/cawco/config/RowMenu.svelte
+M	apps/dashboard/src/lib/cawco/config/SectionRow.svelte
+M	apps/dashboard/src/lib/cawco/config/editors/HookEditor.svelte
+M	apps/dashboard/src/lib/cawco/config/editors/MemoryEditor.svelte
+M	apps/dashboard/src/lib/cawco/home/CawFace.svelte
+M	apps/dashboard/src/lib/cawco/home/CawMark.svelte
+M	apps/dashboard/src/lib/cawco/home/CawPanel.svelte
+M	apps/dashboard/src/lib/cawco/home/Home.svelte
+M	apps/dashboard/src/lib/cawco/home/HomeRecent.svelte
+M	apps/dashboard/src/lib/cawco/home/MovedLogin.svelte
+M	apps/dashboard/src/lib/cawco/home/MovedLogins.svelte
+M	apps/dashboard/src/lib/cawco/home/NeedsCard.svelte
+M	apps/dashboard/src/lib/cawco/home/StatusLine.svelte
+M	apps/dashboard/src/lib/cawco/home/UpdateCard.svelte
+M	apps/dashboard/src/lib/cawco/home/WorkTabs.svelte
+M	apps/dashboard/src/lib/cawco/join/CheckInStatus.svelte
+M	apps/dashboard/src/lib/cawco/move/MoveAsk.svelte
+M	apps/dashboard/src/lib/cawco/move/MoveWait.svelte
+M	apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte
+M	apps/dashboard/src/lib/cawco/preview/PinList.svelte
+M	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte
+M	apps/dashboard/src/lib/cawco/project/CawPanel.svelte
+M	apps/dashboard/src/lib/cawco/project/CawStarters.svelte
+M	apps/dashboard/src/lib/cawco/project/FolderFiles.svelte
+M	apps/dashboard/src/lib/cawco/project/ProjectHead.svelte
+M	apps/dashboard/src/lib/cawco/side/SideSurface.svelte
+M	apps/dashboard/src/lib/cawco/spawn/EffortPips.svelte
+M	apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte
+M	apps/dashboard/src/lib/cawco/tasks/NewTaskForm.svelte
+M	apps/dashboard/src/lib/cawco/tasks/StagesControl.svelte
+M	apps/dashboard/src/lib/cawco/tasks/TaskCard.svelte
+M	apps/dashboard/src/lib/cawco/tasks/TaskColumn.svelte
+M	apps/dashboard/src/lib/cawco/tasks/TaskSheet.svelte
+M	apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte
+M	apps/dashboard/src/lib/cawco/tasks/TextSection.svelte
+M	apps/dashboard/src/lib/cawco/transcript/AccountMoveDivider.svelte
+M	apps/dashboard/src/lib/cawco/transcript/AttachButton.svelte
+M	apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte
+M	apps/dashboard/src/lib/cawco/transcript/CompactionDivider.svelte
+M	apps/dashboard/src/lib/cawco/transcript/Composer.svelte
+M	apps/dashboard/src/lib/cawco/transcript/Delegate.svelte
+M	apps/dashboard/src/lib/cawco/transcript/DelegateTail.svelte
+M	apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte
+M	apps/dashboard/src/lib/cawco/transcript/Latest.svelte
+M	apps/dashboard/src/lib/cawco/transcript/MessageRow.svelte
+M	apps/dashboard/src/lib/cawco/transcript/ProjectOffer.svelte
+M	apps/dashboard/src/lib/cawco/transcript/Prompt.svelte
+M	apps/dashboard/src/lib/cawco/transcript/QuestionCard.svelte
+M	apps/dashboard/src/lib/cawco/transcript/RecallWheel.svelte
+M	apps/dashboard/src/lib/cawco/transcript/Subagent.svelte
+M	apps/dashboard/src/lib/cawco/transcript/SuggestionChips.svelte
+M	apps/dashboard/src/lib/cawco/transcript/ToolGroup.svelte
+M	apps/dashboard/src/lib/cawco/updates/ChannelCards.svelte
+M	apps/dashboard/src/lib/cawco/updates/UpdateCell.svelte
+M	apps/dashboard/src/lib/cawco/updates/UpdateTable.svelte
+M	apps/dashboard/src/lib/cawco/usage/AccountDot.svelte
+M	apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte
+M	apps/dashboard/src/lib/cawco/usage/Relay.svelte
+M	apps/dashboard/src/lib/cawco/usage/RingsKey.svelte
+M	apps/dashboard/src/lib/cawco/usage/WhereItGoes.svelte
+M	apps/dashboard/src/lib/cawco/usage/Words.svelte
+M	apps/dashboard/src/lib/cawco/views/ViewPipeline.svelte
+M	apps/dashboard/src/lib/cawco/views/openui/ViewBadge.svelte
+M	apps/dashboard/src/lib/cawco/views/openui/mockup/MkBadge.svelte
+M	apps/dashboard/src/lib/cawco/views/openui/mockup/cawco/CwBadge.svelte
+M	apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte
+M	apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte
+M	apps/dashboard/src/lib/cawco/workspace/SessionStatus.svelte
+… 1336 more lines cut (1536 in total)
+```
+
+## The last turns, verbatim
+## User
+[Rule: Leaves a known problem unfixed]
+
+if there's an honest caveat that you are aware of and you're just reporting it to me instead of fixing it, then your work is not done yet
+## Assistant
+Upstream guard's UI is waiting on your pick, but its preview server was stopped, so you have nothing to pick from. That's a caveat I can fix, so I'm checking what the upstream-choice artifact shows.
+
+## User
+<task-notification>
+<task-id>bv1pwof1w</task-id>
+<tool-use-id>toolu_01329x6GySr1HAZDiyFfA9t9</tool-use-id>
+<output-file>/tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/bv1pwof1w.output</output-file>
+<status>completed</status>
+<summary>Background command "Rerun effort-relaunch probe at 2e57185ec" completed (exit code 0)</summary>
+</task-notification>
+## Assistant
+The effort fix passed every relaunch case and is landing: your chosen effort now survives crashes, restarts, account moves and continues.
+
+The upstream guard is landing too. Afterwards its leaf brings the onboarding preview back, and I'll put it in front of you with a plain description of each option, so the pick is actually possible.
+
+When the effort fix, the guard and the tabs fix have landed, I'll cut the next nightly with them and with the pause and plugin fixes that are already on main.
+
+## User
+[Report from delegate cockpit-f7aea62b#79cd90da — turn complete]
+Headline: A fleet skill now counts as edited only when a file the fleet sent it changes or goes missing. `__pycache__` and hand-added notes no longer freeze it, and updates keep them. Both probe specs pass in full; typecheck and lint are clean.
+
+Commit ad9d46f37, on top of origin/main (the workspace was already current; `git rebase origin/main` said up to date).
+
+**The rule** (agent tree-swap.ts, shared by skills and plugins)
+- `placeTree` now writes the tree's `.cawco-carried.json` itself, listing the files the fleet sent. A file the fleet tries to send under that name is refused.
+- `heldHash(path, known?)` hashes exactly those files in the hub's `hashFiles`. A carried file that changed reads as a change. A missing one counts as missing, never as equal to the fleet's copy. Any other file in the folder is ignored.
+- `skillDrift` itself is unchanged. It now compares these hashes, so editing SKILL.md or a carried script still freezes the skill, as before.
+- **Carry-over:** the new tree takes every file of the current one that is in neither the old nor the new carried list (`__pycache__`, notes). Files the last version carried and this one drops are still removed. Anything that would collide with a new file or its folder is skipped.
+
+**Skills written before trees kept a list** (that state predates the deploy)
+- When the sync carries the skill's files, the tree is judged over the fleet's current file list, then written once more so it gets its own list (`holdsFleetCopy`).
+- Otherwise it is judged over its whole folder, today's rule. So an edit made before this change still freezes the skill and is not overwritten.
+
+**Where the rule now applies**
+- `heldSkills` (now takes the sync's payload) and `syncSkillFiles`, for Claude Code and, through fleet-common, OpenCode and pi.
+- pi's status and holdings reads, through `heldSkills`.
+- Placed project skills: placing, removal and status.
+- Plugins' holdings read (`readVendoredPlugins`).
+- `placedAsMade` now answers a placed skill's link, its carried files and its list, not the whole tree. A note added in a deleted clone's copy therefore counts as a stray and is kept, not deleted with the husk.
+- `readSkillFiles` (adoption) leaves `.cawco-carried.json` out.
+
+**Found by the proof and fixed**
+- Carrying `__pycache__` across an update could leave stale bytecode in use. plugin-swap printed `v3` after v4 had landed. Python treats a `.pyc` as current while its source's whole-second mtime and size match, and v3→v4 was written within one second at the same size.
+- `placeTree` now gives each rewritten file a whole-second mtime different from the file it replaces (`newerThan`), so anything built from the old file is rebuilt.
+
+**Proof**
+`bun scripts/probe-kit/run.ts skill-swap`: ALL PASS. The hub resolves the skill from a `.tar.gz` the spec serves and re-fetches it on refresh; the skill's script imports a sibling module.
+- First sync: applied, the script prints v1 and creates `__pycache__`.
+- (a) With `__pycache__` and a hand-added `notes.md` present, an unchanged sync reads applied at the hub's hash (`holding d7a0f80 of d7a0f80`). The v2 update then lands as applied and the script prints v2.
+- (b) `notes.md` survives the update word for word.
+- (c) After SKILL.md is edited, the v3 update is refused with `edited on this machine (now cf14771), and the fleet's copy changed since (now c1acce3) …`. The script still prints v2 and the edit is still there.
+
+`bun scripts/probe-kit/run.ts plugin-swap`, rerun because plugins now share the carry-over: ALL PASS.
+- 20 hook runs across 5 syncs, with 1 write line before the syncs and 1 after.
+- 3 upstream changes, each written once; the disk ends on v4.
+- 127 hook runs through the swaps, all of which found their script.
+
+`bun run typecheck` passed (23 checks) and `bun run lint` is clean.
+
+Checks:
+- repo type check: pass (exit 0, 10.3s)
+- repo lint passes: pass (exit 0, 5.3s)
+
+Landed on main at f753ef3de, rebased onto the newer main with the checks run again; bun run lint:changed and bun run typecheck passed on it first.
+
+Commits:
+````
+f753ef3de A fleet skill is judged by the files the fleet carried, and an update keeps everything else
+````
+
+Diffstat:
+````
+packages/agent/src/fleet.ts                  | 182 +++++++++-----------
+ packages/agent/src/harnesses/fleet-common.ts |   5 +-
+ packages/agent/src/tree-swap.ts              | 177 ++++++++++++++++++-
+ scripts/probe-kit/specs/skill-swap.ts        | 248 +++++++++++++++++++++++++++
+ 4 files changed, 508 insertions(+), 104 deletions(-)
+````
+
+Findings:
+1. Python bytecode in a deleted clone's placed skill keeps the husk: `placedAsMade` now answers only a placed skill's carried files, so anything else in that tree counts as a stray when a deleted delegate clone is archived. That keeps a hand-added note safe, but a `__pycache__` made by running the skill's script also keeps the husk from being removed. Only a clone deleted by hand whose placed skill ran Python is affected. No file-name rule tells bytecode apart from a person's file, so I left it.
+
+[Work item 2015c004-ec1e-4c2b-b1f9-ceb5950c1836 is done in workspace f7aea62b-e915-4cd2-99a0-0fd95300587c. A handoff to it continues this same session.]
+
+Waited 2 times since its last delivered message; last wait until 02:28: plugin-swap and skill-swap rerun after the mtime fix.
+## Assistant
+Skills landed (f753ef3de):
+- A fleet skill now counts as edited only when a file the fleet sent changes or goes missing; `__pycache__` and notes you add survive updates.
+- The proof also caught Python running stale bytecode after an update, also fixed.
+
+Its one remaining finding has a precise fix. `__pycache__/<name>.cpython-*.pyc` is the compiled cache of a carried `<name>.py`, so it can be told apart from a person's file by that link, not by guessing at file names. Sending it back:
+The bytecode follow-up is with f7aea62b. Bytecode compiled from a script the fleet carried will no longer block archiving a deleted clone, and a note you added still will. Its skill-swap spec runs without a Claude session, so its own checks prove it with no host run from me.
+
+## User
+Ok do C
+## Assistant
+You picked C: your real code components, composed into instances on CawCo's canvas, drawn by the project's own toolchain, which CawCo runs and keeps alive, with clicks mapped to source lines.
+
+Before any of it is built, a spike proves the risky parts on our own dashboard. It builds no product and lands nothing; it comes back with measured answers. The spec and the build follow from what it finds. Briefing it now:
+
+## User
+Ask fable to flesh it out and see what's the best practice and approach here
+## Assistant
+You've hit your session limit · resets 6:20am (Asia/Qatar)
+
+## User
+<task-notification>
+<task-id>b8cc5ll22</task-id>
+<tool-use-id>toolu_01SQcE4SLVkXwozfTzo9g5fW</tool-use-id>
+<output-file>/tmp/claude-1000/-home-bewinxed-cockpit/97e6ebd7-9922-4e42-b5e7-1f5cda617c2b/tasks/b8cc5ll22.output</output-file>
+<status>completed</status>
+<summary>Background command "Rerun rig until failure, keeping its evidence" completed (exit code 0)</summary>
+</task-notification>
+## Assistant
+You've hit your session limit · resets 6:20am (Asia/Qatar)
+</memory>

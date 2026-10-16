@@ -1,0 +1,145 @@
+{
+ "batch": "build/tree/merge/L3/20-42",
+ "parents": [
+  [
+   3,
+   20
+  ],
+  [
+   3,
+   21
+  ],
+  [
+   3,
+   22
+  ],
+  [
+   3,
+   23
+  ],
+  [
+   3,
+   24
+  ],
+  [
+   3,
+   25
+  ],
+  [
+   3,
+   29
+  ],
+  [
+   3,
+   30
+  ],
+  [
+   3,
+   31
+  ],
+  [
+   3,
+   32
+  ],
+  [
+   3,
+   33
+  ],
+  [
+   3,
+   34
+  ],
+  [
+   3,
+   35
+  ],
+  [
+   3,
+   36
+  ],
+  [
+   3,
+   37
+  ],
+  [
+   3,
+   38
+  ],
+  [
+   3,
+   39
+  ],
+  [
+   3,
+   40
+  ],
+  [
+   3,
+   41
+  ],
+  [
+   3,
+   42
+  ]
+ ],
+ "raw": "<<160+8>>user rule \"Leaves a known problem unfixed\"; unii checks tabs leaf scratch (~/.cawco/tmp/7c34546f) logs: folder-tabs.log all PASS, preview.log refused ws from localhost:5199. echo: stale vites on 5199/5197 in several workspaces; old vites have own net+pid ns, retiring-*.json never removed. tool: handoff to c2deed2a (invariants A reachable, B close ends all, C retiring removed); killed stale vites 1001132, 2241126, 365009, 3183944 (+children), 7 GB freed; current tabs vite 3683621 serves 200.\n\n<<168+8>>echo: stranded previews (routines 704c3333, task-split d9289b3d, caw-dock 8972732d); no worktrees for some. tool: host worktree pv-caw-dock, unit on 5281 (needs CAWCO_DEV_HUB_URL), caw-dock renders fine in headless browser; pv-routines worktree (patched from 704c3333) hub 46087, vite 5282. user: \"hey i'm back... go through what we need one by one\". unii asked caw-dock Qs (input in bar vs composer foot; settings push vs overlay); boundary leaf: B,C hold, A kept (166af788a), break at 16:46:26 preview restart; handoff: wait for keeper-set ready.\n\n<<176+8>>user: \"cawfield and composer seem to be the same thing?\"; \"why are you inventing a new primitive instead of a floating panel with caw as hero, suggestion chips, reusing composer and transcript?\"; \"wtf is CawField\". echo: CawField predates dock (b53a7f75f); PeekPane reusable. tool: delegate 13c3f65d \"Preview Caw floating panel, no CawField\" (work item 358370f6, ws e3efa1a3); tabs held on hold/tabs-svg, asked land or change.\n\n<<184+8>>user comments on caw-dock pins: spend not front-facing, unstyled chips/menus, hero greeting, \"why preview stuff that doesn't match the live app\", no unstyled settings controls, \"why inventing new patterns\" (harness/model selector exists: ModelSection in NewSessionDialog/SessionDetails). unii: replied pins; spend-removal delegate; memory note; handoffs to 13c3f65d. user: folder-tabs preview blank white; started pv-tabs on 5283 from hold/tabs-svg (89c0824ff).",
+ "lines": {
+  "160+8": "user rule \"Leaves a known problem unfixed\"; unii checks tabs leaf scratch (~/.cawco/tmp/7c34546f) logs: folder-tabs.log all PASS, preview.log refused ws from localhost:5199. echo: stale vites on 5199/5197 in several workspaces; old vites have own net+pid ns, retiring-*.json never removed. tool: handoff to c2deed2a (invariants A reachable, B close ends all, C retiring removed); killed stale vites 1001132, 2241126, 365009, 3183944 (+children), 7 GB freed; current tabs vite 3683621 serves 200.",
+  "168+8": "echo: stranded previews (routines 704c3333, task-split d9289b3d, caw-dock 8972732d); no worktrees for some. tool: host worktree pv-caw-dock, unit on 5281 (needs CAWCO_DEV_HUB_URL), caw-dock renders fine in headless browser; pv-routines worktree (patched from 704c3333) hub 46087, vite 5282. user: \"hey i'm back... go through what we need one by one\". unii asked caw-dock Qs (input in bar vs composer foot; settings push vs overlay); boundary leaf: B,C hold, A kept (166af788a), break at 16:46:26 preview restart; handoff: wait for keeper-set ready.",
+  "176+8": "user: \"cawfield and composer seem to be the same thing?\"; \"why are you inventing a new primitive instead of a floating panel with caw as hero, suggestion chips, reusing composer and transcript?\"; \"wtf is CawField\". echo: CawField predates dock (b53a7f75f); PeekPane reusable. tool: delegate 13c3f65d \"Preview Caw floating panel, no CawField\" (work item 358370f6, ws e3efa1a3); tabs held on hold/tabs-svg, asked land or change.",
+  "184+8": "user comments on caw-dock pins: spend not front-facing, unstyled chips/menus, hero greeting, \"why preview stuff that doesn't match the live app\", no unstyled settings controls, \"why inventing new patterns\" (harness/model selector exists: ModelSection in NewSessionDialog/SessionDetails). unii: replied pins; spend-removal delegate; memory note; handoffs to 13c3f65d. user: folder-tabs preview blank white; started pv-tabs on 5283 from hold/tabs-svg (89c0824ff).",
+  "192+8": null,
+  "200+8": null,
+  "232+8": null,
+  "240+8": null,
+  "248+8": null,
+  "256+8": null,
+  "264+8": null,
+  "272+8": null,
+  "280+8": null,
+  "288+8": null,
+  "296+8": null,
+  "304+8": null,
+  "312+8": null,
+  "320+8": null,
+  "328+8": null,
+  "336+8": null
+ },
+ "sizes": [
+  426,
+  461,
+  495,
+  548
+ ],
+ "missing": [
+  "192+8",
+  "200+8",
+  "232+8",
+  "240+8",
+  "248+8",
+  "256+8",
+  "264+8",
+  "272+8",
+  "280+8",
+  "288+8",
+  "296+8",
+  "304+8",
+  "312+8",
+  "320+8",
+  "328+8",
+  "336+8"
+ ],
+ "usage": {
+  "input": 16257,
+  "cache_write": 0,
+  "cache_write_1h": 0,
+  "cache_read": 0,
+  "output": 841,
+  "thinking": 0
+ },
+ "first_run_fix_calls": [
+  "fix0",
+  "fix1",
+  "fix2"
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "id": "P30",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "The owner asked: \"why are the previews trying to reach my hub through my bewinxed domain when i'm browsing it over tailscale now?\" (Earlier, previews had also been built with an unreachable https://outpost.bewinxed.com:3459 URL.) I delegated the fix as \"Previews follow the dashboard's origin\" (leaf 57a464d3, item 3c3cb345), so previews use the same origin as the dashboard, such as the tailnet host obelisk-of-light.tailf7f9d3.ts.net. Separately, a preview websocket fix (6632522c, part A 710134a1c) addressed Cloudflare's X-Forwarded-Proto breaking /ws. My memory doesn't say whether the origin fix landed, so I can't confirm it did.",
+ "zooms": [
+  [
+   "512+128"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P30/r0",
+  "answer/tree/P30/r1"
+ ],
+ "usage": {
+  "input": 4,
+  "cache_write": 1619,
+  "cache_write_1h": 0,
+  "cache_read": 64346,
+  "output": 391,
+  "thinking": 116
+ },
+ "off_model": [],
+ "refused": []
+}

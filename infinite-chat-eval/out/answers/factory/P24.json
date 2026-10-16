@@ -1,0 +1,20 @@
+{
+ "id": "P24",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold what the owner reported about this chat's effort setting. The only related trace is a standing decision named `instances.chosen_effort`, but I have no record of his words, the symptom or the outcome. I won't guess at them.\n\nIf it matters, the hub's `instances` record for this session (23cb5219) or the commit that introduced `chosen_effort` should show what was fixed. Otherwise, ask the owner to repeat the report.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P24/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 209,
+  "thinking": 64
+ },
+ "off_model": [],
+ "refused": []
+}

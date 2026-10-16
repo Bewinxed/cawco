@@ -1,0 +1,20 @@
+{
+ "id": "P43",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't mention a \"folder-bytes\" probe spec, so I can't say what run is owed for it. It may have been in work I no longer hold.\n\nThe host runs I do have on record are:\n- **Live-sheet probe:** bk8be4h11, about 40 minutes, from ~/.worktrees/cockpit-be171c45 at 392e82bd3. Its PASS/FAIL lines go to be171c45/e08a3314.\n- **Stay-in-context:** b59bc8m31, run from main.\n- **Host-checks:** its own spec run, bootstrapped with `bun scripts/probe-kit/run.ts host-checks` from ~/.worktrees/cockpit-675f4b6d.\n\nIf the folder-bytes spec belongs to one of those leaves, tell me which and I'll check with that leaf.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P43/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 362,
+  "thinking": 88
+ },
+ "off_model": [],
+ "refused": []
+}

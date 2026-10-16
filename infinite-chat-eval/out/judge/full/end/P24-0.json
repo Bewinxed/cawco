@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P24",
+ "letters": {
+  "A": "tree",
+  "B": "cawco",
+  "C": "factory",
+  "D": "cc+C-filed"
+ },
+ "scores": {
+  "tree": {
+   "score": 2,
+   "why": "Reports the unwanted switch to medium, the owner having set it himself, and the fix landing as 44996b923 so chosen effort persists across relaunches."
+  },
+  "cawco": {
+   "score": 0,
+   "why": "Says it has no record of the report or outcome."
+  },
+  "factory": {
+   "score": 0,
+   "why": "Says it doesn't know the report or outcome; only mentions chosen_effort without details."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says nothing is known about the owner's effort report."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

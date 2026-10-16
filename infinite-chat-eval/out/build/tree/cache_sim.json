@@ -1,0 +1,7 @@
+{
+ "view_bytes_mean": 92684,
+ "view_bytes_max": 127996,
+ "view_bytes_final": 67193,
+ "cached_share_of_view_bytes": 0.9896,
+ "batch_events": 19
+}

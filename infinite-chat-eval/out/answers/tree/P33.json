@@ -1,0 +1,20 @@
+{
+ "id": "P33",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "The effort fix landed on main as commit 44996b923. The work report from bb2644e8 (line 3424) says it \"landed 44996b923 (chosen_effort, migration 0178; ALL PASS 233s)\".\n\nRoot cause, from earlier in the chat: a continuation relaunch passed no effort, so the CLI defaulted to medium, and the EFFORT_READ handler then overwrote the user's xhigh.",
+ "zooms": [],
+ "calls": [
+  "answer/tree/P33/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 555,
+  "cache_write_1h": 0,
+  "cache_read": 32173,
+  "output": 146,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

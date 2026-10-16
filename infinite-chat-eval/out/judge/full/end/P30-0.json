@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P30",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "cawco",
+  "C": "cc-real+C-existing",
+  "D": "tree-nozoom"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no problem or fix."
+  },
+  "cawco": {
+   "score": 0,
+   "why": "Says it has no record; gives no problem or fix."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it has no record; gives no problem or fix."
+  },
+  "tree-nozoom": {
+   "score": 2,
+   "why": "Identifies previews reaching the hub via the bewinxed domain while on Tailscale, and the fix that previews follow the dashboard's origin; extra detail doesn't contradict the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

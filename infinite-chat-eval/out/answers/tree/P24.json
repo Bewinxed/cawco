@@ -1,0 +1,20 @@
+{
+ "id": "P24",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "The owner was angry: \"why the FUCK did this chat switch its effort to medium?\" The live process was running `--effort=medium` while the DB said xhigh (instance 23cb5219). I reset it to xhigh via a one-off ws client. The owner then said \"NO I SWITCEHD IT MYSELF, why was it switched?\" because he had moved accounts many times (last relaunch 01:33:14).\n\nRoot cause: a continuation relaunch passed no effort, so the CLI defaulted to medium, and the EFFORT_READ handler overwrote xhigh. Delegate bb2644e8 fixed it. It landed as 44996b923 (chosen_effort, migration 0178, ALL PASS 233s), and effort stayed xhigh after relaunch.",
+ "zooms": [],
+ "calls": [
+  "answer/tree/P24/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 32173,
+  "output": 260,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

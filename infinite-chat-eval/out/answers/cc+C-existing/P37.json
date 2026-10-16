@@ -1,0 +1,20 @@
+{
+ "id": "P37",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory records the commits but not the spec file path.\n\n- **Commits:** option C (live components) slice 1 landed as d9ede1e03 and 495066138.\n- **Spec:** the host check is called \"live-sheet\", and it passed on the Mac host. I don't have its file path. The iPad follow-up, ffa87e41 (\"Prove live sheets on the iPad\"), is still running as a host check on the Mac.\n- **Design:** the story file sits beside the component and runs on the project's own Vite ≥6 via `cawcoStage()`. The page is `/@cawco/sheet`, and pins carry `source` and `chain`.\n\nTo find the spec path, run `git show --stat d9ede1e03 495066138` in /home/bewinxed/cockpit.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P37/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 318,
+  "thinking": 67
+ },
+ "off_model": [],
+ "refused": []
+}

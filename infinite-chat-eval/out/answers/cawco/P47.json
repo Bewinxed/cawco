@@ -1,0 +1,20 @@
+{
+ "id": "P47",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory only holds a short promise. The inspector design for live components waits on three steps, in order:\n\n1. A real sheet screenshot.\n2. The advisor (Fable) designs it from that screenshot.\n3. You pick, and only then does it get built.\n\nThat follows your standing UI rule: advisor, then preview, then your pick, then build. The inspector design is also on the list of decisions waiting for you in the morning.\n\nI don't have anything about the inspector's layout, controls, or props handling. The spec is `docs/specs/live-components-c.md`, and it may say more, but I haven't kept its contents. Slice 1 (d9ede1e03, 495066138) landed without an inspector.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P47/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 557,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 314,
+  "thinking": 92
+ },
+ "off_model": [],
+ "refused": []
+}

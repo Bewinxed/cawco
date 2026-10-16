@@ -1,0 +1,20 @@
+{
+ "id": "P43",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "One host run is owed: `bun scripts/probe-kit/run.ts folder-bytes`. It's logged as an [owed check] since 10-15 22:39, with the record in my to-do list. My memory doesn't say anything about what the spec itself checks, and no result is recorded yet.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P43/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 95,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

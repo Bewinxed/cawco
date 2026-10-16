@@ -1,0 +1,20 @@
+{
+ "id": "P30",
+ "run": "replay-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds no preview-routing problem about browsing over Tailscale, and no fix for one, so I won't guess.\n\nThe nearest thing I have is from the Safari edges follow-up (72ab4a24). The Simulator never connected to the dashboard there. The dashboard was at http://100.125.210.78:3000/, which looks like a Tailscale address, and hub port 3456 returns a JSON 404. That is a Simulator connection problem, not preview routing, and nothing in my notes says it was the problem you raised.\n\nIf you tell me which session or pin it came from, I can read it. I can also check the preview and hub code once I'm acting again.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cawco-2319/P30/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 22153,
+  "output": 317,
+  "thinking": 107
+ },
+ "off_model": [],
+ "refused": []
+}

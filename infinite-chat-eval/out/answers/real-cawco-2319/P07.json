@@ -1,0 +1,20 @@
+{
+ "id": "P07",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an answer to that. Nothing in this session records the owner saying where Caw's per-project harness and model settings should live.\n\nThe closest things I have are unrelated to that question:\n- The effort fix added a `chosen_effort` column (migration 0178), which stores a per-instance choice. It is not a per-project setting, and the owner didn't say it should live there.\n- The upstream onboarding or per-project setting was ruled on, but that concerns upstream filing, not harness or model.\n\nIf the owner has said where harness and model settings belong, it was either before this session or in a part I no longer hold. I'd rather not guess. Please tell me where, or point me at the PRD (`.design-foundations/plans/2026-10-06-projects.md`) so I can check it there.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P07/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 23395,
+  "cache_write_1h": 0,
+  "cache_read": 0,
+  "output": 251,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

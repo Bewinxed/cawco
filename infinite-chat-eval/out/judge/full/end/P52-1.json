@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P52",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "cc+C-existing",
+  "C": "tree",
+  "D": "cc-real+C-filed"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 2,
+   "why": "Names both the Screen Recording grant to CawCo Agent and the gh sign-in on the Mac, with 5 skipped rows."
+  },
+  "cc+C-existing": {
+   "score": 2,
+   "why": "Lists both the Screen Recording grant to CawCo Agent and the gh sign-in, with 5 SKIP rows, and the hedging doesn't contradict the gold."
+  },
+  "tree": {
+   "score": 2,
+   "why": "Includes both required items, and the survives-an-install check and the 5 skipped rows match the gold."
+  },
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "States both items nearly verbatim from the open pending entry, with the 5 skipped gh rows."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

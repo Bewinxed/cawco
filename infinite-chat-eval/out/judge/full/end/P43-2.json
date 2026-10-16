@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P43",
+ "letters": {
+  "A": "factory",
+  "B": "cc-real+C-filed"
+ },
+ "scores": {
+  "factory": {
+   "score": 0,
+   "why": "Says it has no knowledge of the folder-bytes spec and doesn't state that one host run is owed."
+  },
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "States one host run of `bun scripts/probe-kit/run.ts folder-bytes` is owed, matching the gold; extra details don't contradict it."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

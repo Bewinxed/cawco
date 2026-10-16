@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P45",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "tree-nozoom",
+  "C": "cc",
+  "D": "cc-real"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 2,
+   "why": "Includes installing on both machines one at a time, the browser live check with dock, ⌘K and sheet, and cutting stable 0.1.12."
+  },
+  "tree-nozoom": {
+   "score": 2,
+   "why": "Covers installing on both machines one at a time, the live check with all three items, and cutting stable 0.1.12 to fix fresh Mac installs."
+  },
+  "cc": {
+   "score": 2,
+   "why": "Includes installing on obelisk and the Mac once each, the live check with all three items, and cutting stable 0.1.12 which fixes fresh Mac installs."
+  },
+  "cc-real": {
+   "score": 2,
+   "why": "Includes updating both machines in sequence, the browser live check with all three items, and cutting stable 0.1.12; the extra detail about a version bump and release doc doesn't contradict the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

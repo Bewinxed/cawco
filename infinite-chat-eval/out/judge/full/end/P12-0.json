@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P12",
+ "letters": {
+  "A": "cc",
+  "B": "cawco",
+  "C": "factory",
+  "D": "cc-real"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it doesn't know and doesn't give the best-practices/Mobbin or 'questions for the sake of it' reaction."
+  },
+  "cawco": {
+   "score": 0,
+   "why": "Claims no record and quotes unrelated owner statements, missing the required facts."
+  },
+  "factory": {
+   "score": 0,
+   "why": "Says no record and gives no reaction about best practices, Mobbin, or questions for the sake of it."
+  },
+  "cc-real": {
+   "score": 1,
+   "why": "Doesn't recall the event but cites the standing constraint 'don't ask what established practice settles', which partly matches the best-practices fact, though it lacks Mobbin and the 'for the sake of it' reaction."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

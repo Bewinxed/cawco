@@ -1,0 +1,20 @@
+{
+ "id": "P33",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold the commit that landed the effort fix on main. I only have \"effort\" listed as solved, with no sha.\n\nThe nearest effort-related commit I do have is a693d8141, which fixed the menus-fit spec's effort-chip pick, and that spec passed on the host at 3fb8ccd8b. That's a test fix, not necessarily the effort feature or fix itself.\n\n`git log --oneline --grep=effort main` in the repo should give the exact sha. I can also have a leaf look it up.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P33/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 555,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 265,
+  "thinking": 96
+ },
+ "off_model": [],
+ "refused": []
+}

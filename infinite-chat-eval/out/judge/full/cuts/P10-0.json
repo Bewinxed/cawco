@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P10",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-cawco-2319",
+  "C": "replay-cawco-2319",
+  "D": "real-native-0055"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it doesn't know the owner's meaning and gives none of the required facts."
+  },
+  "real-cawco-2319": {
+   "score": 2,
+   "why": "Quotes the small c shape svg path at the side of the tab and the unfixed tab foot seam, matching the gold."
+  },
+  "replay-cawco-2319": {
+   "score": 0,
+   "why": "Says it can't recall the owner's words; it only infers from a brief and never states the c-shaped svg path as his statement or the unfixed foot seam as his complaint."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says memory doesn't hold it and gives neither required fact."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

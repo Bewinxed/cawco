@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P11",
+ "letters": {
+  "A": "real-cawco-2319",
+  "B": "replay-cc-0055",
+  "C": "real-native-0055",
+  "D": "replay-cawco-2319"
+ },
+ "scores": {
+  "real-cawco-2319": {
+   "score": 2,
+   "why": "Quotes the correction nearly verbatim (stop jumping to action, research, think, write options before code), with hedging on the timestamp."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Identifies a different correction (the Angular fallback) and misses the stop/research/options message."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Offers the fallback and owner-rules corrections, not the stop-jumping-to-code correction."
+  },
+  "replay-cawco-2319": {
+   "score": 2,
+   "why": "Gives the correct quote and notes that nothing was dispatched until the owner picked, matching the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

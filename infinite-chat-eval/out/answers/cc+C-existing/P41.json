@@ -1,0 +1,20 @@
+{
+ "id": "P41",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold the answer. It has nothing about a TestFlight build that keeps two wire bridges alive, or what such bridges would be called.\n\nWhat I do have on TestFlight is narrow. The Swift pins use the TestFlight package set (swift-openapi-runtime 1.13.0, committed in `apps/apple/Package.resolved`). The TestFlight sequence is noted in memory/pending.md. A TestFlight upload goes out via testflight.py from my shell, only after the second Sonnet capture review of leaf 23e62015 says SHIP.\n\nThe pending.md entry may have more detail, but I can't read it without tools. I won't guess at build numbers or bridge names.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P41/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 570,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 320,
+  "thinking": 91
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P34",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold that answer. I have no record of a memory prune, and no before-and-after size for what loads at session start.\n\nThe closest things I remember are these:\n- I added entries to owner-rules.md and later removed them at your word, so only unrelated rules remain.\n- hazards.md has entries on release.ts running the proofs itself, stage 2 needing 25 GB free, and stale ~/.cache/cawco-proof/builds being safe to delete.\n\nI never recorded line, byte or token counts for either file. I can't give you a number without guessing, so I won't. If the prune was done by a leaf, its report should have the figures. I can ask for them, or I can measure the files directly once I'm allowed to use tools.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P34/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 313,
+  "thinking": 80
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P41",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "TestFlight build **20261015** keeps them alive. My open \"later\" item reads: \"Expire TestFlight 20261015 once the owner is on the next build, then remove the host and routineMade bridges.\"\n\nSo the two bridges are **host** and **routineMade**. They stay until the owner moves to the next build, then I expire 20261015 and remove them. My memory doesn't say what each bridge does on the wire, so I can't describe them beyond their names.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P41/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 570,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 146,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

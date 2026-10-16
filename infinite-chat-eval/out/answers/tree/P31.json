@@ -1,0 +1,27 @@
+{
+ "id": "P31",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "Two iOS crash reports from the owner on 10-15/16.\n\n1) \"The iOS app keeps crashing\" / \"now refuses to start just keeps crashing\". Apple diagnostics showed v0.1.11 0x8BADF00D and signal 6 in WebKit. Cause: Previews.swift built an unreachable https://outpost.bewinxed.com:3459 preview URL. I deleted preview instance 23cb5219 and delegated \"Fix the iOS preview crash loop\" (tsk-17, item 01960ff3). Later, 0ecf4bf8's ios-chat-opens and ios-caw-thread passed (ios-caw-thread on the Mac, 685s). The memory does not show the preview-URL fix itself landing.\n\n2) \"Another ios crash when approving sth\". Crash 5e7ba196f35b55c6 was TranscriptView.frame(_:) (TranscriptView.swift:1332) from DisplayTarget.tick, on build 20261015.3, a 0x8BADF00D watchdog / SIGBUS. I handed 0ecf4bf8 the fix and an approve-while-streaming test case. Crash fix 2a74e9fa6 is on main but not yet in TestFlight. The TestFlight build waits on the task-sheet fixes (23e62015), and I will check the approval crash on that build.",
+ "zooms": [
+  [
+   "1152+128",
+   "2816+64",
+   "1024+128"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P31/r0",
+  "answer/tree/P31/r1"
+ ],
+ "usage": {
+  "input": 4,
+  "cache_write": 2497,
+  "cache_write_1h": 0,
+  "cache_read": 64346,
+  "output": 560,
+  "thinking": 71
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P33",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "The effort fix landed on main as **44996b923**. It's the one that keeps effort through relaunches. The host proof `effort-relaunch` passed for it.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P33/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 555,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 53,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

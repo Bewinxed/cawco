@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P51",
+ "letters": {
+  "A": "cc-real+C-filed",
+  "B": "tree-nozoom",
+  "C": "cc-real+C-existing",
+  "D": "cc+C-existing"
+ },
+ "scores": {
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "Identifies the two 12.7 GB OpenCode backups on obelisk (~25 GB) with deletion awaiting the owner's approval, matching the gold."
+  },
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Says memory has nothing about the OpenCode backups decision, so it misses the gold."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it has no record of the OpenCode backups decision, so it misses the gold."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it has no record of the OpenCode backups decision, so it misses the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P13",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "cc",
+  "C": "cawco",
+  "D": "cc+C-existing"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it has no memory of the complaint and offers unrelated items, so none of the required facts appear."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Says nothing is known about the admin approval card complaint and gives no required facts."
+  },
+  "cawco": {
+   "score": 1,
+   "why": "Recalls the rule that admin approval cards must explain what they approve, which matches the complaint, but it does not say what was done or the commit."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it has no record of the complaint or fix and offers unrelated items."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

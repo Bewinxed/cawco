@@ -1,0 +1,20 @@
+{
+ "id": "P34",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold that. It has no record of an orchestrator memory prune, and no before-and-after size for what loads at session start. The closest thing I recall is that I updated `pending.md` in `~/.cawco/accounts/3c788add…/claude/projects/-home-bewinxed-cockpit/memory/`. That was an update to its contents (stable 0.1.12 timing, the iPad shortcut follow-up, the TestFlight sequence), not a prune, and I have no sizes for it. I won't guess a number. If you want a figure, I can measure that memory directory's size and line count now.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P34/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 240,
+  "thinking": 42
+ },
+ "off_model": [],
+ "refused": []
+}

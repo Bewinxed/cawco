@@ -1,0 +1,20 @@
+{
+ "id": "P05",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "Projects whose toolchain has no plugin API (Angular CLI, plain webpack, custom servers) get the HTML `page` artifact. My notes list this among the earlier owner decisions that still stand, alongside Option C for live components, pins applied by the agent, and real code from the first screen.\n\nSlice 1 covers the sheet artifact, which uses the `cawcoStage()` Vite plugin and `/@cawco/sheet`. That plugin path is Vite-only, so the `page` artifact is the route for everything else.\n\nMy summary doesn't keep the discussion that led to the decision, the exact wording, or the date. I can't say what alternatives were weighed or what the owner said. I also have no memory of whether a Vite 5 question, which is still open for sheets, affects this.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P05/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 589,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 377,
+  "thinking": 122
+ },
+ "off_model": [],
+ "refused": []
+}

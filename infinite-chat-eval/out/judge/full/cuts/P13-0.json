@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P13",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-cawco-2319",
+  "C": "real-native-0055",
+  "D": "replay-cawco-2319"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says no memory of the complaint and doesn't identify what he objected to or the fix."
+  },
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Claims no record of the complaint and discusses an unrelated iOS crash."
+  },
+  "real-native-0055": {
+   "score": 1,
+   "why": "Gives commit 39e13d9cc (artifact_list and approvals) but states no complaint and doesn't say cards now explain what changes and why."
+  },
+  "replay-cawco-2319": {
+   "score": 1,
+   "why": "Captures that cards must explain what they approve, but wrongly says the fix is not landed and is still open."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

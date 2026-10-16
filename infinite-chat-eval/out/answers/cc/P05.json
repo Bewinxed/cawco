@@ -1,0 +1,20 @@
+{
+ "id": "P05",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't say. I have no record of what Angular CLI, plain webpack or custom-server projects should get, or of how that was settled.\n\nWhat I do hold is that Option C live components run on the project's own Vite ≥6 through `cawcoStage()`. A story file sits beside the component, the page is `/@cawco/sheet`, and pins carry `source` and `chain`. The only related open item is \"Vite 5 for sheets (second code path)\", which is waiting on you for the morning. I don't know whether non-Vite toolchains were ever discussed.\n\nI won't guess at a design. If you want one, it's an owner choice, so I'd put it to you through AskUserQuestion, or the live-components leaf's brief and artifacts may hold the answer.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P05/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 589,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 424,
+  "thinking": 179
+ },
+ "off_model": [],
+ "refused": []
+}

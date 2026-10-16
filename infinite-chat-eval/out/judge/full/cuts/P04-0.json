@@ -1,0 +1,20 @@
+{
+ "group": "cuts",
+ "id": "P04",
+ "letters": {
+  "A": "real-native-0055",
+  "B": "replay-cc-0055"
+ },
+ "scores": {
+  "real-native-0055": {
+   "score": 2,
+   "why": "Both quotes are verbatim and it says the entry was added then removed, which covers the objection and the trim/removal."
+  },
+  "replay-cc-0055": {
+   "score": 2,
+   "why": "Both quotes are verbatim and it says the entries were removed; the extra interpretation doesn't contradict the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

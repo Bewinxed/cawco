@@ -1,0 +1,20 @@
+{
+ "id": "P27",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold the owner's messages from 22:33 to 23:08, so I can't say what was stated in that window. The summary only keeps the decisions that still stand, without timestamps or the owner's exact wording:\n\n- Option C for live components.\n- The agent applies pins.\n- Real code from the first screen.\n- An HTML `page` artifact for toolchains with no plugin API.\n\nI can't confirm that these were all stated in that window. Slice 1 shipped as the sheet artifact, the `cawcoStage()` Vite plugin and `/@cawco/sheet`. The props inspector is still owed: Fable designs it, and the owner picks before I build. The original messages in the session transcript would give the exact requirements.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P27/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 353,
+  "thinking": 116
+ },
+ "off_model": [],
+ "refused": []
+}

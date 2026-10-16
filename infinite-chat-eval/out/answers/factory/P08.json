@@ -1,0 +1,20 @@
+{
+ "id": "P08",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no explicit rule on link versus another delivery method, so I won't claim one.\n\nWhat I did this session:\n- **Live previews:** these are hub-vouched and run as host `pv-*` units. They are reached at `https://p-{port}.bewinxed.com`, which is effectively a link.\n- **UI previews:** I show these as artifacts, which are real components with mock data. Examples are the upstream-choice artifact fb142065-461b-4f79-9f1b-170d39944ae8, `task-sheet-pairs` af4ddb93-bb36-40e5-bf45-a18d40ae7604, and folder-tabs 95222113.\n- **Phone review:** for the 20 hang baselines I proposed a single phone review page.\n\nIf you want a different default, such as always an artifact with screenshots plus the link, tell me.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P08/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 472,
+  "thinking": 199
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P05",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "They get an HTML `page` artifact on the project's own CSS, instead of a plugin-driven live sheet.\n\nHow it was settled: I first asked you the Angular/webpack/custom-server question, and you answered \"What cawco plugin now?\" I then decided the fallback myself when you had only asked for an explanation, and you called that out: \"Why did you decide the fallback on your own when I just asked for explanation?\" I re-asked, and you replied: \"Just use ur own canvas with some html or json or whatever? Cmon\".\n\nSo the HTML `page` artifact is my reading of that answer, and I noted it as my call. It's recorded in the PRD (D29 and §5.10, commit cdd94a2a4) and in §10 of the live-components spec.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P05/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 589,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 243,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

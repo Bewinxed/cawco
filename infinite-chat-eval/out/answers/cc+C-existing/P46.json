@@ -1,0 +1,20 @@
+{
+ "id": "P46",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't say whether the crash fixes exist. tsk-17 (\"iOS app crash loop (open-chat crash, approval crash)\") is open since 10-15 17:01. I have no record of a leaf or commit fixing it, so I can't say what the fix needs.\n\nThe only route to the phone I do remember is TestFlight. That depends on:\n1. 23e62015 landing its iOS review fixes (prose rows not wrapping, literal backticks, dark-mode Page output, the MessageBody stale-height root fix) and regenerating captures.\n2. A second Sonnet capture review returning SHIP.\n3. Me running `testflight.py` from my shell.\n\nI can't confirm the tsk-17 crashes are part of that build, so I'd have to check the task before promising anything.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P46/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 526,
+  "thinking": 267
+ },
+ "off_model": [],
+ "refused": []
+}

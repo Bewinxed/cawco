@@ -1,0 +1,20 @@
+{
+ "id": "P54",
+ "run": "replay-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has nothing on a Mac session 5b112f95. It isn't among the leaves I listed (bb2644e8, 188c7ddb, 72ab4a24, c9918839, d654eac4, 43c3a1ee, 0ecf4bf8, f7aea62b, 678d8943, 675f4b6d, 0a6da208, 93bc8ca8, a4e27882), and I don't recall what it was doing at the start of this period or any result owed from it.\n\nThe closest Mac-side items I do hold are the Safari edges simulator check on iPhone 17 Pro (leaf 19dba464, handed to 72ab4a24) and the missing `~/build/asc-mcp/run.sh` on the Mac. I can't tie either to 5b112f95. To find out, I'd check the hub's work items and instances for that id, but I'd be guessing if I answered from memory.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cawco-2319/P54/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 571,
+  "cache_write_1h": 0,
+  "cache_read": 22153,
+  "output": 320,
+  "thinking": 29
+ },
+ "off_model": [],
+ "refused": []
+}

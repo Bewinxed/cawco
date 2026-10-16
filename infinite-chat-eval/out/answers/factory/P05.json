@@ -1,0 +1,20 @@
+{
+ "id": "P05",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "Projects with no plugin toolchain get an HTML `page` artifact. That is part of the live components decision I recorded as \"option C\", and the spec is `.design-foundations/plans/2026-10-16-live-components.md`.\n\nMy memory doesn't hold how option C was settled. I have no record of the alternatives or the owner's exact words, so the spec file is the place to check.\n\nWhat I do know is how it shipped. Slice 1 landed in d9ede1e03 and 495066138, with `stage.ts`, `/@cawco/sheet` and `artifact_create(kind:\"sheet\")`. It supports Vite 6 and newer only, and Vite 5 is refused by name. A second code path for Vite 5 needs your go-ahead.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P05/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 589,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 399,
+  "thinking": 158
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P21",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "Live sheet artifacts (`artifact_create(kind:\"sheet\")`, `/@cawco/sheet`, slice 1 landed in d9ede1e03/495066138) only work with Vite 6 or newer. A project on Vite 5 is refused by name, with a clear message instead of silently breaking.\n\nSupporting Vite 5 would need a second code path in the sheet toolchain. I haven't built that, because it needs your go-ahead.\n\nYour options are to keep the Vite ≥6 only rule and the by-name refusal, or to approve a second code path for Vite 5. My memory doesn't record a recommendation from me or any preference from you, so I'm not picking one.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P21/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 558,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 223,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

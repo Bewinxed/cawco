@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P23",
+ "letters": {
+  "A": "factory",
+  "B": "cc+C-existing",
+  "C": "tree",
+  "D": "cc-real"
+ },
+ "scores": {
+  "factory": {
+   "score": 0,
+   "why": "Says it has no record of a pause request, so it gives neither the reason nor the 3 hours."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it has no record of the owner asking to pause Mac work, so it gives neither the reason nor the duration."
+  },
+  "tree": {
+   "score": 2,
+   "why": "Gives the reason (Mac CPU slowing him down, on battery at 15%) and the 3-hour duration, matching the gold."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no record of a pause request, so it gives neither the reason nor the duration."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P28",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold what the owner said at 23:25–23:27, so I can't quote that exchange. I have no timestamps at that granularity.\n\nTwo related things are in memory, though I can't tie either to those minutes:\n\n- **CI rule:** he wants no long, wasteful or repeated CI. Real tests that prove something stay, and a run repeats only when the code under it changed. Delegate count is not a target.\n- **Usage finding:** Caw's last 24 hours cost $39.96 over 97 turns, and $25.67 of that came from 6 cold wakes. `caw_model` is blank for every project, so it defaults to `claude-opus-5-5[1m]`, and the Caw conversation is 5.2 MB. I recommended a 200k window on `claude-opus-5-5`, which is still his call.\n\nIf you need the exact wording, the session transcript around that time would have it.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P28/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 575,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 468,
+  "thinking": 178
+ },
+ "off_model": [],
+ "refused": []
+}

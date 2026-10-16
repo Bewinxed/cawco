@@ -1,0 +1,20 @@
+{
+ "id": "P30",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "The owner asked: \"why are the previews trying to reach my hub through my bewinxed domain when i'm browsing over tailscale?\" Previews were pointing at the public bewinxed domain instead of the origin he was actually using.\n\nIn response I delegated a leaf task titled \"Previews follow the dashboard's origin\" (57a464d3), so previews would use the dashboard's own origin.\n\nLater, a related websocket problem was found: Cloudflare's X-Forwarded-Proto broke /ws. Part A of that fix landed as 710134a1c (work 6632522c), and 965195be did part B. My memory does not record the exact implementation details or whether 57a464d3's change was verified live.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P30/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 231,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

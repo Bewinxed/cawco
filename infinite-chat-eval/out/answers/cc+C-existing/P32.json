@@ -1,0 +1,20 @@
+{
+ "id": "P32",
+ "run": "cc+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an answer to that, so I won't guess at ids. It records no upstream issues filed by agents, and no question to you about closing or withdrawing any.\n\nThe closest items are:\n- Your standing rule: \"nothing filed upstream unless asked.\"\n- The open decision `upstream-choice` (artifact fb142065, 8 states), which asks how agents treat other people's repositories. It is a policy pick, not a list of filed issues.\n\nTo find any filed issues, check the upstream repos directly or the artifact fb142065.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-existing/P32/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 576,
+  "cache_write_1h": 0,
+  "cache_read": 5620,
+  "output": 286,
+  "thinking": 111
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,31 @@
+{
+ "id": "P05",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory only partly settles this. The owner rejected both options offered for Angular/webpack-style toolchains (\"What cawco plugin now?\"). He also rejected the webpack option: \"Just use ur own canvas with some html or json or whatever? Cmon\". So projects without a plugin should get CawCo's own canvas, not a toolchain-specific integration.\n\nFable wrote the spec (docs/specs/live-components-c.md), and the owner said \"Ok do C\". It was built as slice 1 (be171c45) using CSF story sheets at /@cawco/sheet. It refuses Vite<6, Angular, Astro, Nuxt and Next. I did not find the exact final design for no-plugin projects.",
+ "zooms": [
+  [
+   "3552+32",
+   "3584+32"
+  ],
+  [
+   "3840+32",
+   "3744+32"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P05/r0",
+  "answer/tree/P05/r1",
+  "answer/tree/P05/r2"
+ ],
+ "usage": {
+  "input": 6,
+  "cache_write": 4050,
+  "cache_write_1h": 0,
+  "cache_read": 96519,
+  "output": 730,
+  "thinking": 445
+ },
+ "off_model": [],
+ "refused": []
+}

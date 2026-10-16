@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P36",
+ "letters": {
+  "A": "factory",
+  "B": "cc-real+C-existing",
+  "C": "cc",
+  "D": "cawco"
+ },
+ "scores": {
+  "factory": {
+   "score": 2,
+   "why": "Names ~/.cawco/tmp/kept-audit.md, matching the gold file."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know the file and names none."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Points to memory/pending.md, not kept-audit.md."
+  },
+  "cawco": {
+   "score": 0,
+   "why": "Says it can't name a file and points to pending.md/probe spec instead."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

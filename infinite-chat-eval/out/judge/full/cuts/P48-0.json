@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P48",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-cawco-2319",
+  "C": "real-native-0055",
+  "D": "replay-cawco-2319"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no live check with the owner's own queries."
+  },
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Says no ranking check is recorded; it names only the probe-kit run, which is not the owner's live-query check."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says no ranking check is recorded and lists unrelated host runs."
+  },
+  "replay-cawco-2319": {
+   "score": 0,
+   "why": "Says no ranking check is recorded, so the live check with the owner's own queries is missing."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P51",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have the details. My memory lists \"OpenCode DB backups\" only as a bare item among the owner decisions still open, alongside Mac Wrangler and app-store-connect scoping. It doesn't say what the choice is, what the options are, or what prompted it. I won't guess at it. If you want it pinned down, I'd need to check the earlier delegate reports or have a leaf look up where the question came from.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P51/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 558,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 133,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

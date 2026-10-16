@@ -1,0 +1,27 @@
+{
+ "id": "P43",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no mention of a \"folder-bytes\" probe spec, so I can't say what run is owed for it. The zoomed lines cover only these owed runs:\n- Around 3856: caw-off, menus-fit and ios-caw-thread. Later lines show caw-off ALL PASS, menus-fit fixed and landed in a693d8141, and ios-caw-thread ALL PASS on the Mac.\n- Around 3904: host-checks and menus-fit.\n\nThe closest item is the \"Retire workspaces holding only build output\" delegate (d991be26, item e93b7137), which isn't a probe spec. I'd need a different search term, or the spec's name, to find it.",
+ "zooms": [
+  [
+   "3840+32",
+   "2304+64",
+   "3872+32"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P43/r0",
+  "answer/tree/P43/r1"
+ ],
+ "usage": {
+  "input": 4,
+  "cache_write": 2508,
+  "cache_write_1h": 0,
+  "cache_read": 64346,
+  "output": 501,
+  "thinking": 239
+ },
+ "off_model": [],
+ "refused": []
+}

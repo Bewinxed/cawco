@@ -1,0 +1,20 @@
+{
+ "id": "P30",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold that. I have no record of the owner raising a preview-routing problem about browsing over Tailscale, or of a fix for one.\n\nWhat I do have on previews is only the standing decisions: hub-vouched previews, host `pv-*` preview units, and the preview URL `https://p-{port}.bewinxed.com`. I also have the security work, which refused editor routes (f2d2554e6) and added a relay-only listener (052c236d8). None of those entries mention Tailscale.\n\nThe issue may have come up before my summaries began, or it may have been summarized away. I won't guess at the problem or the fix. If you point me to the item or commit, I can look into it.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P30/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 303,
+  "thinking": 84
+ },
+ "off_model": [],
+ "refused": []
+}

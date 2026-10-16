@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P50",
+ "letters": {
+  "A": "tree-nozoom",
+  "B": "tree",
+  "C": "cc+C-filed",
+  "D": "cc-real"
+ },
+ "scores": {
+  "tree-nozoom": {
+   "score": 1,
+   "why": "Identifies that something about removing the Ink chip was raised, but is vague, doesn't confirm it's open, and gives no duplication reason."
+  },
+  "tree": {
+   "score": 1,
+   "why": "Says open and agent suggested removing, but the duplication-with-automatic-delivery reason is missing and it's hedged (mentions 'Send N' duplication only as unconfirmed)."
+  },
+  "cc+C-filed": {
+   "score": 2,
+   "why": "States it is open, the chip duplicates automatic pin delivery, suggestion was removal, and pending the owner's call."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no memory of the Ink chip and gives no answer."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

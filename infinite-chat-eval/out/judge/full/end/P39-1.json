@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P39",
+ "letters": {
+  "A": "tree",
+  "B": "cc+C-existing",
+  "C": "cawco",
+  "D": "factory"
+ },
+ "scores": {
+  "tree": {
+   "score": 2,
+   "why": "Lists all four required delegates with matching jobs (seam fix with per-leg approve, finder, iPad sheets, iOS review fixes)."
+  },
+  "cc+C-existing": {
+   "score": 1,
+   "why": "Includes all four with correct jobs but wrongly lists a4e27882 as still running rather than landed just before."
+  },
+  "cawco": {
+   "score": 2,
+   "why": "All four delegates with correct jobs, including second screenshot review and TestFlight, and notes a4e27882 landed just before."
+  },
+  "factory": {
+   "score": 1,
+   "why": "Names the four with roughly correct jobs but hedges and adds 678d8943 as idle, which does not contradict the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

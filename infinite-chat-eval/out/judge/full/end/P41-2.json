@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P41",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "cc-real+C-existing"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 2,
+   "why": "Correctly identifies build 20261015 and the host and routineMade bridges, consistent with the gold."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no build number or bridge names."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

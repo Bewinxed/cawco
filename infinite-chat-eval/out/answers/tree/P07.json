@@ -1,0 +1,30 @@
+{
+ "id": "P07",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an owner statement on where Caw's per-project harness and model settings should live.\n\nWhat it does show is the current state: in plan/caw.ts, `project.cawModel` (lines 1160, 1735) is read via `modelAfter` (line 134). The projects table has every harness set to claude and `caw_model` blank. The default model is claude-opus-5-5[1m].\n\nA model change ends the lead session. I told the owner that changing it alters Caw's memory and is his call. Pending options for him: a 200k window (my recommendation), a cheap-model summary rollover, or leave it.",
+ "zooms": [
+  [
+   "4304+8"
+  ],
+  [
+   "640+128",
+   "3200+64"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P07/r0",
+  "answer/tree/P07/r1",
+  "answer/tree/P07/r2"
+ ],
+ "usage": {
+  "input": 6,
+  "cache_write": 3697,
+  "cache_write_1h": 0,
+  "cache_read": 96519,
+  "output": 675,
+  "thinking": 439
+ },
+ "off_model": [],
+ "refused": []
+}

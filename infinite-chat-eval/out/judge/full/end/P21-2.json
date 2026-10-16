@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P21",
+ "letters": {
+  "A": "cc",
+  "B": "tree"
+ },
+ "scores": {
+  "cc": {
+   "score": 1,
+   "why": "Gets the second code path and owner decision but says it doesn't know why, missing that Vite 5 is refused because stage needs Vite 6's server API."
+  },
+  "tree": {
+   "score": 2,
+   "why": "States sheets refuse Vite older than 6, supporting Vite 5 needs a second code path, and it awaits the owner's go-ahead; extra details don't contradict the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P07",
+ "run": "cc-real",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an owner statement on where Caw's per-project harness and model settings should live. The owner hasn't sent a message this segment, and the earlier summary records no decision on it.\n\nWhat I do have is the current state. `caw_model` is blank, so Caw runs on `claude-opus-5-5[1m]`. For the morning I plan to recommend a 200k window on `claude-opus-5-5`, but that is my recommendation, not the owner's ruling. It is queued as the \"Caw cold-wake cost\" decision.\n\nIf the owner said something earlier that didn't make it into the summary, I can't recover it. They would need to restate it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real/P07/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 3828,
+  "output": 297,
+  "thinking": 87
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "group": "cuts",
+ "id": "P28",
+ "letters": {
+  "A": "replay-cc-0055",
+  "B": "real-native-0055"
+ },
+ "scores": {
+  "replay-cc-0055": {
+   "score": 1,
+   "why": "Captures the 6 runs, wasteful CI, 17 delegates and usage question, but says it doesn't know what the agent found (mock model, delegates waking)."
+  },
+  "real-native-0055": {
+   "score": 1,
+   "why": "Gets wasteful CI, 17 delegates and the usage question, but omits the 6 runs and doesn't know the usage finding (mock model, delegates waking)."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

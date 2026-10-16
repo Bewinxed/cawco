@@ -1,0 +1,20 @@
+{
+ "id": "P52",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "Per my memory, two things are still owed on the Mac:\n\n1. **Screen Recording grant.** Grant it to \"CawCo Agent\" in macOS settings. The check that it survives an install is still owed.\n2. **gh sign-in on the Mac.** I haven't done it unasked. Five gh/git-push rows in `run-mac-checks.sh` were SKIPped because the host gh isn't signed in.\n\nWhat's already settled:\n- The macOS stable identity check PASSED. The designated requirement is identical across nightlies 3353, 3413 and 3427 (`dev.cawco.agent`, OU FN5LJSPX2R).\n- The Mac boundary check PASSED at ff93cc1b8: 46 escape rows BLOCKED, exit 0.",
+ "zooms": [],
+ "calls": [
+  "answer/tree/P52/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 32173,
+  "output": 261,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

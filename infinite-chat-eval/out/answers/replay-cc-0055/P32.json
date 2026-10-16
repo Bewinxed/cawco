@@ -1,0 +1,20 @@
+{
+ "id": "P32",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have that in memory. My summary lists \"upstream onboarding choice\" as an open owner decision and a rule that nothing is filed upstream unless asked. It also mentions the upstream guard (migration 0180) and the upstream-choice page artifact (leaf bea7f352). But it records no upstream issues that agents filed, no ids, and no question asking you to close or withdraw any.\n\nIf such issues exist, they'd be in the bea7f352 leaf's report or the hub's records. I'd have to check there rather than guess ids.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P32/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 576,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 174,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

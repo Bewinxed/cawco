@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P25",
+ "letters": {
+  "A": "cc-real+C-existing",
+  "B": "cc+C-existing",
+  "C": "factory",
+  "D": "tree"
+ },
+ "scores": {
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know the trigger and doesn't mention that mentioning the session by title came up empty."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Explicitly says it lacks the original complaint; no mention of the title-mention search coming up empty."
+  },
+  "factory": {
+   "score": 0,
+   "why": "States it has no record of the trigger; doesn't give the title-mention-came-up-empty problem."
+  },
+  "tree": {
+   "score": 0,
+   "why": "Offers 'pretty useless now' as nearby context but not the gold problem of mentioning this session by title coming up empty."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P48",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold a ranking check for the new finder. What I have on the finder is leaf 0a6da208, which is landing it on the `/api/find` engine as finder-only, including the `FindRoutine.threadId` addition. I also owe a release-notes entry in `pending.md` when it lands. The browser live check I planned after the nightly covers the dock reply, ⌘K from an artifact page and a sheet artifact, not finder ranking. If a ranking check was agreed, it isn't in my summary, so I won't guess what it is. The leaf's brief or `pending.md` might say more.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P48/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 562,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 274,
+  "thinking": 77
+ },
+ "off_model": [],
+ "refused": []
+}

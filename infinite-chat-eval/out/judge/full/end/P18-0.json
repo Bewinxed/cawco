@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P18",
+ "letters": {
+  "A": "cc",
+  "B": "cawco",
+  "C": "cc+C-filed",
+  "D": "cc-real"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it has no memory of the Decisions tab preview and gives no approval or decision log redo."
+  },
+  "cawco": {
+   "score": 0,
+   "why": "Says it has no record and points to an unrelated upstream-choice preview, missing the approval and the redone log."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it has no memory of the preview and states neither the approval nor the decision log redo."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has nothing on the Decisions tab preview and lists unrelated decisions, missing both required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

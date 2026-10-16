@@ -1,0 +1,20 @@
+{
+ "id": "P01",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds nothing on that. The owner never said anything about secret detection, redaction in summaries, or rotation prompts for pasted passwords, and I have no record of a password being pasted into the chat.\n\nThe closest items are two standing constraints, and neither is an owner statement about this:\n- Never reproduce the classifier-stopped machine-auth brief content.\n- Downloaded or untrusted files go in their own empty directory.\n\nThe earlier summary may hold more than I have now, but I can't confirm that. I won't guess at a position. If you want a policy, tell me which of the three you want and I'll treat it as a new decision.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P01/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 4840,
+  "cache_write_1h": 0,
+  "cache_read": 0,
+  "output": 300,
+  "thinking": 99
+ },
+ "off_model": [],
+ "refused": []
+}

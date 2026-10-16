@@ -1,0 +1,33 @@
+{
+ "id": "P13",
+ "run": "tree",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds no complaint from the owner about \"admin approval cards.\" I zoomed the nearby lines and found nothing on it.\n\nThe closest items I found:\n- work dd5b2338: \"settled cards are the record\", then an xhigh Decisions tab build (b1b12bc7, ws a377ef5e).\n- The owner's pin 38fc24e9 on decisions-tab: \"this is a lazy way to present this and what is this suppsoed to show?\". It was about the Decision log showing raw ids. I delegated advisor cb5ab4de for a design-only redo, replied on the pin (the log shows question, option picture, note, tasks, no ids), and approved the tab itself.\n\nIf you meant something else, tell me where it came up and I'll look again.",
+ "zooms": [
+  [
+   "1024+128"
+  ],
+  [
+   "896+64"
+  ],
+  [
+   "960+64"
+  ]
+ ],
+ "calls": [
+  "answer/tree/P13/r0",
+  "answer/tree/P13/r1",
+  "answer/tree/P13/r2",
+  "answer/tree/P13/r3"
+ ],
+ "usage": {
+  "input": 8,
+  "cache_write": 4847,
+  "cache_write_1h": 0,
+  "cache_read": 128692,
+  "output": 685,
+  "thinking": 401
+ },
+ "off_model": [],
+ "refused": []
+}

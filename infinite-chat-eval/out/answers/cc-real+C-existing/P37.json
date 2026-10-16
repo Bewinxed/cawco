@@ -1,0 +1,20 @@
+{
+ "id": "P37",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory only partly answers this.\n\n- **Commits:** Live components slice 1 (the sheet artifact, the `cawcoStage()` Vite plugin and `/@cawco/sheet`) landed on main as **d9ede1e03** and **495066138**.\n- **Spec:** The only related spec I recall is the host check **live-sheet** (12 checks), which passed on the Mac. I don't have its file path.\n- **Option C itself:** I don't have a record of where the owner's decision is written down, such as a doc or artifact. I only know it as an earlier owner decision.\n\nI won't guess at a path. I can look it up in the repo if you want.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P37/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 309,
+  "thinking": 97
+ },
+ "off_model": [],
+ "refused": []
+}

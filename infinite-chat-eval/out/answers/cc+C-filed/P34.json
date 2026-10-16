@@ -1,0 +1,20 @@
+{
+ "id": "P34",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an answer to that. It has no record of an orchestrator memory prune, and no before-and-after size for what loads at session start. The only memory-file change I recorded is that I updated memory/pending.md (stable 0.1.12 timing, the iPad page-first shortcuts follow-up, the TestFlight sequence, the owner decisions list). That was an update, not a prune, and I noted no sizes. I'd be guessing if I gave you a number. If you tell me which prune you mean, or I check the memory directory's file sizes directly, I can give you a real figure.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P34/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 191,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

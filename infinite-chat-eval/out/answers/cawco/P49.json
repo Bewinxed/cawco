@@ -1,0 +1,20 @@
+{
+ "id": "P49",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold a specific step for \"TestFlight 20261015\" itself. It records only that TestFlight is still at 20261015.3, and it doesn't say what is meant to happen to that build.\n\nWhat my memory does have is the next TestFlight build. It goes out only when these happen in order:\n1. 23e62015 lands the iOS review fixes (the three blockers plus polish, and the `MessageBody` stale-width fix).\n2. A second Sonnet screenshot review returns SHIP.\n3. I build TestFlight from my own shell.\n4. I then check the approval-crash scenario on that TestFlight build.\n\nMy pending notes file says \"TestFlight sequence recorded\", but I don't have its contents in memory, so I can't quote it. I'd have to read it to say more.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P49/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 567,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 497,
+  "thinking": 241
+ },
+ "off_model": [],
+ "refused": []
+}

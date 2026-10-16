@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P34",
+ "letters": {
+  "A": "real-native-0055",
+  "B": "replay-cawco-2319",
+  "C": "replay-cc-0055",
+  "D": "real-cawco-2319"
+ },
+ "scores": {
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says it has no record of the prune and gives no 220 KB to 31 KB figures."
+  },
+  "replay-cawco-2319": {
+   "score": 0,
+   "why": "Says it has no record and gives no 220 KB to 31 KB figures."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it has no record and gives no 220 KB to 31 KB figures."
+  },
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Says it has no record and gives no 220 KB to 31 KB figures."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

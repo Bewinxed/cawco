@@ -1,0 +1,20 @@
+{
+ "id": "P51",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "I don't have anything about OpenCode database backups in my memory, so I can't say what decision is pending. The summary and open items don't mention it.\n\nThe decisions I do have waiting on you are:\n- **Upstream choice:** how agents treat other people's repositories (artifact fb142065).\n- **Caw cold-wake cost:** I recommend a 200k window on `claude-opus-5-5`.\n- **Vite 5 for sheets.**\n- **Baselines:** hang (20) and tab-strip rest baselines.\n- **Performance targets:** the 25 ms switch target and perf counters sysctl.\n- **Compositing budget.**\n- **Leaf-readable item-state tool.**\n- **Mac setup:** Screen Recording grant and gh sign-in.\n\nIf the OpenCode backups were raised before this summary, I'd need you to restate it or point me to the record.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P51/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 558,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 287,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

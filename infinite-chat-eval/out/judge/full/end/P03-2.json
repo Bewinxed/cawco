@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P03",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "cc-real+C-existing"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 1,
+   "why": "Correctly says no, but omits that the owner corrected the agent for wrongly claiming this."
+  },
+  "cc-real+C-existing": {
+   "score": 1,
+   "why": "Correctly says no, but doesn't mention the owner's correction of the agent's false claim."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

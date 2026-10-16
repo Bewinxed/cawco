@@ -1,0 +1,20 @@
+{
+ "id": "P08",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no explicit decision on \"send a link versus something else\", so I won't invent one. What it does hold:\n\n- **Projects with a plugin API:** the preview is a live component sheet. The daemon runs the project's own Vite with `cawcoStage()` and serves the page at `/@cawco/sheet?file=`. It is reached only through the hub's relay. The agent listener answers only the hub's relay, via the `x-cawco-relay` header, so a raw link to the agent port wouldn't work.\n- **Toolchains with no plugin API (Angular, plain webpack, custom servers):** you said \"Just use ur own canvas with some html or json or whatever? Cmon\". I made that an HTML `page` artifact on the project's CSS, which was my call.\n\nThat's the extent of it.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P08/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 501,
+  "thinking": 244
+ },
+ "off_model": [],
+ "refused": []
+}

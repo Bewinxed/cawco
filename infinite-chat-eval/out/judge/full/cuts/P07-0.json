@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P07",
+ "letters": {
+  "A": "real-native-0055",
+  "B": "replay-cc-0055",
+  "C": "replay-cawco-2319",
+  "D": "real-cawco-2319"
+ },
+ "scores": {
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no answer about the existing selector."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no answer about the existing selector."
+  },
+  "replay-cawco-2319": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no answer about the existing selector."
+  },
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no answer about the existing selector."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

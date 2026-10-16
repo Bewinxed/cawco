@@ -1,0 +1,20 @@
+{
+ "id": "P46",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "Based on my memory, here's the path:\n\n1. Delegate 23e62015 (work item 352c9579) has to finish the MessageBody stale-height fix and the 9 review findings.\n2. It then regenerates the captures into `/Users/bewinxed/.cawco/tmp/23e62015/captures-v2/`.\n3. A second Sonnet review has to return SHIP. TestFlight goes out only on SHIP.\n4. I then run `apps/apple/scripts/testflight.py` from the Mac.\n5. After that I check the approval-crash scenario on the TestFlight build.\n\ntsk-17 (open-chat crash, approval crash) is still open. I don't have a record of which crash fixes are in 23e62015 and which aren't, so I can't say whether that path covers both crashes.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P46/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 502,
+  "thinking": 240
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P46",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "Per my memory, the crash fix (2a74e9fa6, for the 8BADF00D watchdog on approvals) only reaches your phone through TestFlight, and that hasn't been cut yet. The steps:\n\n1. Leaf 23e62015 (item 352c9579) finishes the MessageBody root fix, review FIX items 1–9, and the web table time wrap.\n2. It regenerates captures to `/Users/bewinxed/.cawco/tmp/23e62015/captures-v2/`.\n3. I send a second Sonnet screenshot review of those captures.\n4. Only on a SHIP verdict do I run `apps/apple/scripts/testflight.py` from the Mac. That build carries 2a74e9fa6, the task sheet, and the pinned SwiftPM.\n5. I then check the approval crash on the TestFlight build itself.\n\nUntil step 5, the fix is not confirmed on a real build.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P46/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 555,
+  "thinking": 250
+ },
+ "off_model": [],
+ "refused": []
+}

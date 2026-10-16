@@ -1,0 +1,20 @@
+{
+ "id": "P07",
+ "run": "cc-real+C-existing",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an owner ruling on where Caw's per-project harness and model settings should live, so I won't guess.\n\nWhat I do have is related but not the same:\n- `caw_model` is currently blank, so Caw runs on `claude-opus-5-5[1m]`.\n- I plan to recommend a 200k window, `claude-opus-5-5`, to cut cold-wake cost ($25.67 of $39.96 over 24h came from 6 cold wakes). That is my recommendation, still waiting on the owner.\n- Your standing ask is for robust root fixes, not quick ones.\n\nIf you gave a placement decision, it was either before the summary or not recorded. Tell me again and I'll act on it.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-existing/P07/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 4247,
+  "output": 315,
+  "thinking": 83
+ },
+ "off_model": [],
+ "refused": []
+}

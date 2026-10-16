@@ -1,0 +1,20 @@
+{
+ "id": "P14",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "The owner picked **option C**: CSF 3 story files sit beside the real components, and the daemon runs them with the project's own toolchain. The spec is `docs/specs/live-components-c.md` and the PRD entry is D29. Slice 1 landed in d9ede1e03 and 495066138.\n\nMy memory does not hold the full list of alternatives A, B and D, or the owner's own words for why he chose C. It only records what was rejected earlier: Penpot, Storybook-per-framework renderers, in-binary Svelte compile, and Fable's proprietary markup.\n\nRelated rulings that likely bear on the choice:\n- \"must work for all users across languages/frameworks\"\n- \"use an existing standard\"\n- \"I don't want jsx\"\n- reuse the real components\n\nI won't guess beyond that.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P14/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 436,
+  "thinking": 175
+ },
+ "off_model": [],
+ "refused": []
+}

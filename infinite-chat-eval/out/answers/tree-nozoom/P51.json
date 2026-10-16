@@ -1,0 +1,20 @@
+{
+ "id": "P51",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds nothing about OpenCode database backups, so I can't say what decision is pending. The only OpenCode mentions are on the Mac. Agent memory breakdown showed \"opencode.slots 3\" and \"opencode2 474 MB\" in the process list. Neither involves a backup decision.\n\nThe decisions I do have pending for you are:\n- the upstream-choice pick (fb142065)\n- the Caw context window and cold-wake cost\n- Vite 5\n- whether to keep the 25 ms switch target (now 37–47 ms)\n- the tab-strip and hang baseline approvals\n\nAlso owed: Screen Recording grant and gh sign-in on the Mac.\n\nIf you mean one of those, say so.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P51/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 558,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 240,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "id": "P08",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no single owner rule that says \"link or not\", so I can't quote one.\n\nWhat I do have: previews open in CawCo's own preview pane and artifact panel, not as a bare link. The preview pane has Interact, Comment and Draw modes (57dc0a703). Pins, replies and ink reach the session by themselves (1a59485f5). The owner's recorded rulings are that previews use DialKit and the timeline, work on mobile, and keep their selectors from covering the page.\n\nA caveat I know of: when a leaf's preview server (:5199) was stopped, the owner had nothing to pick from. So the preview has to be running when I show it.\n\nBeyond that, I won't guess.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P08/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 22830,
+  "output": 509,
+  "thinking": 286
+ },
+ "off_model": [],
+ "refused": []
+}

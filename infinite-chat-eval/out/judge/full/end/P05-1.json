@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P05",
+ "letters": {
+  "A": "tree-nozoom",
+  "B": "cc+C-filed",
+  "C": "tree",
+  "D": "cawco"
+ },
+ "scores": {
+  "tree-nozoom": {
+   "score": 1,
+   "why": "Quotes the owner's 'own canvas with some html or json' answer but doesn't state the outcome (HTML page artifact) or that the owner objected to the agent deciding the fallback itself."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it has nothing on what these projects should get or how it was decided."
+  },
+  "tree": {
+   "score": 1,
+   "why": "Captures the owner's 'own canvas with some html or json' answer and that projects without a plugin get CawCo's own canvas, but omits the objection to the agent deciding the fallback itself and the HTML page detail."
+  },
+  "cawco": {
+   "score": 1,
+   "why": "Mentions the 'HTML page on project CSS' fallback but doesn't say the owner settled it with 'own canvas with html/json' or that he objected to the agent deciding it alone, and it is unsure whether it's settled."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

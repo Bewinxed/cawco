@@ -1,0 +1,20 @@
+{
+ "id": "P29",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold an owner question about obelisk's disk. None of his messages in this segment, as summarised, mention it, and an earlier segment may have covered it without it reaching my summary.\n\nWhat I do remember is the disk pressure itself:\n- Nightly attempt 1 failed with 20 GB free, and stage 2 needs 25 GB.\n- Attempt 2 failed with \"database or disk is full\".\n- I archived spent workspaces, using `{\"discard\":true}` after checking nothing was unlanded. That brought free space to about 56 GB.\n- Six workspaces are kept because they hold real work: a142d818, a377ef5e, 93bc8ca8, 136058f9, 0b829659 and 37b73cb9. Deleting them is the owner's call.\n- Item d991be26 fixes retiring workspaces that hold only build output.\n- Stale `~/.cache/cawco-proof/builds` is safe to delete.\n\nIf you tell me what he asked, I can say whether it matches any of this.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P29/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 563,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 517,
+  "thinking": 184
+ },
+ "off_model": [],
+ "refused": []
+}

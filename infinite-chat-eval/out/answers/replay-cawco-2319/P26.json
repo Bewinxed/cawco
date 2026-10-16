@@ -1,0 +1,20 @@
+{
+ "id": "P26",
+ "run": "replay-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold what the owner required of OpenUI mockups for projects that have their own design system, so I won't guess.\n\nWhat I do have on OpenUI is thin. Option D of the live-components choice was \"agents compose from catalog (A2UI/OpenUI)\", and I recommended it \"stays as is\". A follow-up lists \"OpenUI steps 2–3 after task review and Decisions tab\". The repo has mockup files under `apps/dashboard/src/lib/cawco/views/openui/mockup/`, including a `cawco/` subfolder. None of that records a requirement about a project's own design system.\n\nThe owner's wording is probably in the PRD (D29 and §5.10), in `docs/research/live-components-prior-art.md`, or in the session transcript. I'd need to check one of those.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cawco-2319/P26/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 566,
+  "cache_write_1h": 0,
+  "cache_read": 22153,
+  "output": 396,
+  "thinking": 134
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P30",
+ "letters": {
+  "A": "factory",
+  "B": "cc-real",
+  "C": "cc-real+C-filed",
+  "D": "cc+C-existing"
+ },
+ "scores": {
+  "factory": {
+   "score": 0,
+   "why": "Says it has no record of the problem or fix, so it gives none of the required facts."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no memory of the issue or fix, so it gives none of the required facts."
+  },
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Says it has no memory of the issue or fix, so it gives none of the required facts."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it has no memory of the issue or fix, so it gives none of the required facts."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

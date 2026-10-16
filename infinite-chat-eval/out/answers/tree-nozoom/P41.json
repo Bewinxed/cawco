@@ -1,0 +1,20 @@
+{
+ "id": "P41",
+ "run": "tree-nozoom",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold this. I have no record of any TestFlight build keeping two wire bridges alive, or of bridges with names.\n\nWhat I do have on TestFlight: the shipped build is CawCo 0.1.11, CFBundleVersion 20261015.3, uploaded 2026-10-15 16:25:14. A new TestFlight is planned via apps/apple/scripts/testflight.py on the Mac. It waits on the 28024bea review verdict and the 23e62015 MessageBody fix. It would carry crash fix 2a74e9fa6 and task sheet 73c29fc91.\n\nI can't tell you which build or which bridges you mean without guessing.",
+ "zooms": [],
+ "calls": [
+  "answer/tree-nozoom/P41/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 570,
+  "cache_write_1h": 0,
+  "cache_read": 32075,
+  "output": 228,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P47",
+ "letters": {
+  "A": "cc-real+C-filed",
+  "B": "cawco"
+ },
+ "scores": {
+  "cc-real+C-filed": {
+   "score": 2,
+   "why": "States the sequence: after slice 1, screenshot the real sheet, Fable designs, owner picks before build; matches gold."
+  },
+  "cawco": {
+   "score": 2,
+   "why": "Includes screenshot, Fable (advisor) designs from it, and owner picks before building; extra detail like the spec path and slice 1 commits does not contradict the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

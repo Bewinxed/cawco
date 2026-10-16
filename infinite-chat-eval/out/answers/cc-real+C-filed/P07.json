@@ -1,0 +1,20 @@
+{
+ "id": "P07",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "The owner ruled that Caw's settings go in the **existing harness/model picker**. My to-do records it as \"Caw's panel as the owner ruled: no CawField, a floating panel that doesn't push the page, Caw's settings in the existing harness/model picker.\"\n\nHis words were \"and wtf is CawField\", \"if it's a floating panel why is it pushing the content aside?\" and \"why are you inventing new patterns.\"\n\nMy memory doesn't say whether those settings are scoped per project. It only notes that `caw_model` is currently blank, so Caw runs on `claude-opus-5-5[1m]`.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P07/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 292,
+  "thinking": 96
+ },
+ "off_model": [],
+ "refused": []
+}

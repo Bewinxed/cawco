@@ -1,0 +1,20 @@
+{
+ "id": "P46",
+ "run": "cc",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory has no iOS crash fixes, so I can't say what has to happen for them. The closest thing is leaf 23e62015's iOS review fixes, which are for layout problems, not crashes: transcript prose rows not wrapping, literal backticks, Page output in dark mode, 6 polish items, and the MessageBody stale-height root fix. The only crash I recorded was the web traffic-longtask TDZ in Transcript.svelte, fixed in dcecee4e2.\n\nFor that iOS work, the path to your phone is:\n1. 23e62015 lands the fixes and regenerates captures to /Users/bewinxed/.cawco/tmp/23e62015/captures-v2/.\n2. A second Sonnet capture review has to return SHIP.\n3. I then run testflight.py from my shell.\n\nIf you mean a specific crash, tell me which and I'll check.",
+ "zooms": [],
+ "calls": [
+  "answer/cc/P46/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 5201,
+  "output": 425,
+  "thinking": 138
+ },
+ "off_model": [],
+ "refused": []
+}

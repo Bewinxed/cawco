@@ -1,0 +1,20 @@
+{
+ "id": "P18",
+ "run": "real-cawco-2319",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds no decision from you about a \"Decisions tab preview\". I don't want to guess at what it refers to.\n\nThe nearest thing I have is the upstream onboarding UI. Its commit is held on `upstream-ui-held` (7bc186f5c), and it waits on your pick. Its preview server on :5199 was stopped, so I said I'd bring the preview back and describe each option plainly. I have no record that you've chosen.\n\nIf you mean something else, tell me which session or artifact and I'll look into it.",
+ "zooms": [],
+ "calls": [
+  "answer/real-cawco-2319/P18/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 22830,
+  "output": 257,
+  "thinking": 91
+ },
+ "off_model": [],
+ "refused": []
+}

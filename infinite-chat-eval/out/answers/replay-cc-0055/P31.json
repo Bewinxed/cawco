@@ -1,0 +1,20 @@
+{
+ "id": "P31",
+ "run": "replay-cc-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't list which iOS crashes you reported on 10-15, so I can't name them. I won't guess.\n\nWhat I do hold on the fix status:\n- The summary files \"iOS crashes\" under problems solved, with no detail.\n- The nightly is still blocked, so nothing is confirmed on TestFlight yet. That includes the iOS approval crash, which is still on my list for a live check once the nightly ships.\n- Leaf 88b0a5b7 is still running the iOS crash background-rule run and the ios-caw-thread spec.\n- Leaf 6819691c (iOS task sheet) passed its macOS build, and its checks are now typecheck only.\n\nFor the actual crash list, the leaf reports or your original messages from that day would have it.",
+ "zooms": [],
+ "calls": [
+  "answer/replay-cc-0055/P31/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 5402,
+  "output": 371,
+  "thinking": 126
+ },
+ "off_model": [],
+ "refused": []
+}

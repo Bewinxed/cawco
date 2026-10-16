@@ -1,0 +1,20 @@
+{
+ "id": "P18",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds no decision from the owner about a Decisions tab preview. The only mention is that workspace a377ef5e (\"Decisions tab\") is one of the kept-audit workspaces, alongside a142d818 (routines) and others. That item is on my list of owner decisions for the morning, so it is still open. The owner hasn't ruled on it, as far as I remember. The full transcript might say more, but I haven't checked it.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P18/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 226,
+  "thinking": 87
+ },
+ "off_model": [],
+ "refused": []
+}

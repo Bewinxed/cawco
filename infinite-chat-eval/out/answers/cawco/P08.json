@@ -1,0 +1,20 @@
+{
+ "id": "P08",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "Not by sending a link. My memory holds the owner's rule: \"Show previews in the panel via artifact tools.\" Previews go into the owner's panel through the artifact tools (e.g. `artifact_create`, including `kind:\"sheet\"` with a file for live components). The owner picks from them there.\n\nFor UI changes the flow is: advisor (Fable) → preview → owner pick → build. Nothing is dispatched until the owner picks.\n\nFor approvals that need a look, such as the tab-strip baselines, my plan was to put them on one phone review page. The upstream-choice preview is already an artifact (fb142065, 8 states).\n\nMy memory doesn't say whether a link is ever acceptable as a supplement.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P08/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 230,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

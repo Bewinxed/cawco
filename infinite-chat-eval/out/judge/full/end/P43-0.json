@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P43",
+ "letters": {
+  "A": "cawco",
+  "B": "cc-real+C-existing",
+  "C": "cc-real",
+  "D": "tree-nozoom"
+ },
+ "scores": {
+  "cawco": {
+   "score": 0,
+   "why": "Says it has no knowledge of folder-bytes and doesn't state that one host run is owed."
+  },
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it has no knowledge of folder-bytes and doesn't identify the owed host run."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says it has no knowledge of folder-bytes and doesn't identify the owed host run."
+  },
+  "tree-nozoom": {
+   "score": 0,
+   "why": "Says it has no knowledge of folder-bytes and lists unrelated owed runs, not the folder-bytes host run."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

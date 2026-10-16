@@ -1,0 +1,20 @@
+{
+ "id": "P53",
+ "run": "cc-real+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "**Waiting on you (baselines):** the open item reads \"Approve screenshot baselines: tab-strip now, hang after the finder lands (one phone review page).\" My notes also list the \"hang (20)\" rest baseline for approval. I don't self-approve baselines.\n\n**Tab-seam re-gate:** delegate d2c6485d (work item a6972388) is landing the seam fix 550f9d8af plus stale-spec fixes, with a per-capture `--approve`, so approval is per leg. The tab-strip gate excludes the two rest-baseline diffs. Its stated next step: \"every tab-strip assertion must pass except the two named baseline comparisons, which stay red until the owner approves.\"\n\nMy memory doesn't say which two captures those are by name, or whether d2c6485d has finished.",
+ "zooms": [],
+ "calls": [
+  "answer/cc-real+C-filed/P53/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 577,
+  "cache_write_1h": 0,
+  "cache_read": 5799,
+  "output": 262,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

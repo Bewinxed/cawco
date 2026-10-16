@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P17",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "tree"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says it has no record of the request and does not identify a bento layout."
+  },
+  "tree": {
+   "score": 2,
+   "why": "Correctly identifies a bento layout at big screens with the near-verbatim quote and ~1600px, matching the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

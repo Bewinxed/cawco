@@ -1,0 +1,145 @@
+{
+ "batch": "build/tree/merge/L1/0-41",
+ "parents": [
+  [
+   1,
+   0
+  ],
+  [
+   1,
+   1
+  ],
+  [
+   1,
+   4
+  ],
+  [
+   1,
+   5
+  ],
+  [
+   1,
+   6
+  ],
+  [
+   1,
+   8
+  ],
+  [
+   1,
+   11
+  ],
+  [
+   1,
+   22
+  ],
+  [
+   1,
+   23
+  ],
+  [
+   1,
+   24
+  ],
+  [
+   1,
+   25
+  ],
+  [
+   1,
+   27
+  ],
+  [
+   1,
+   30
+  ],
+  [
+   1,
+   31
+  ],
+  [
+   1,
+   34
+  ],
+  [
+   1,
+   35
+  ],
+  [
+   1,
+   37
+  ],
+  [
+   1,
+   38
+  ],
+  [
+   1,
+   39
+  ],
+  [
+   1,
+   41
+  ]
+ ],
+ "raw": "<<0+2>> note: resumed \"Orchestrate cockpit fleet work\" (CawCo orchestrator; /home/bewinxed/cockpit; hub obelisk-of-light; Mac). Owner rules: robust fix, honest caveat unfixed=not done, no fallbacks/unit tests/shims; UI advisor→preview→pick→build. Live: nightly 3238, TestFlight 20261015.3. Pending: owner picks, Mac scroll gate, Caw dirty files, retire worktrees. work: b7c9d8c2 scroll gate landed 48109ebbc (waits for Mac load <20); nightly 3238 published, 27/27 PASS; 3238 installed on both machines; Unii restarting in place.\n\n<<8+2>> echo: delegates: 7c34546f waiting (tabs preview :5199), c3201594, a4e27882, b2a591a2 running; six done ones clean, on main. Unii rm -rf'd their folders: agent refilled stand-ins. Hub archive worked for 24bdfe4f only; other five gave 409 (husk, \"no git clone\"). origin/main grep located guard in workspace.ts/stand-ins.ts/harness.ts.\n\n<<10+2>> echo: .out untracked file; origin/main is 48109ebbc. Checked six spent workspaces (24bdfe4f, 3eaedef2, e4cddd10, b6132a26, aff64726, b7c9d8c2): all ahead=0 dirty=0. Unii: removing them.\n\n<<12+2>> echo: after rm -rf, leftovers (opencode.jsonc, .vscode, .opencode) remained, not immutable. Located retire logic (hub stream/work-items/server, agent stand-ins). Hub POST /api/workspaces/<id>/archive archived 24bdfe4f (HTTP 200, folder gone).\n\n<<16+2>> Hub archive of other five (3eaedef2, e4cddd10, b6132a26, aff64726, b7c9d8c2) returned 409; reason: folder holds entries and is no git clone, nothing deleted; suggested discard:true (saves to ~/.cawco/carries). Retry with discard gave 502. Disk 97% (54G free).\n\n<<22+2>> Unii delegated \"Let husk workspaces archive cleanly\" (instance fcdafab0, workspace dfbe4033; fixes placeSkill, straysIn, discard). Saved memory_note: retire via hub archive POST, never rm folder. Queried 74 active obelisk workspaces; 12 candidates in /tmp/ws-mine.txt; ran clean check.\n\n<<44+2>> Archived five clean workspaces via hub: f037cc8c, c04ef394, cf58f5c7 HTTP 200 (folders gone); 4e129ba9 409 (husk, 2 entries, 53 KB); d1907cd7 502 (\"boundary ... is not alive\"). /home free 61G (97% used).",
+ "lines": {
+  "0+2": "note: resumed \"Orchestrate cockpit fleet work\" (CawCo orchestrator; /home/bewinxed/cockpit; hub obelisk-of-light; Mac). Owner rules: robust fix, honest caveat unfixed=not done, no fallbacks/unit tests/shims; UI advisor→preview→pick→build. Live: nightly 3238, TestFlight 20261015.3. Pending: owner picks, Mac scroll gate, Caw dirty files, retire worktrees. work: b7c9d8c2 scroll gate landed 48109ebbc (waits for Mac load <20); nightly 3238 published, 27/27 PASS; 3238 installed on both machines; Unii restarting in place.",
+  "2+2": null,
+  "8+2": "echo: delegates: 7c34546f waiting (tabs preview :5199), c3201594, a4e27882, b2a591a2 running; six done ones clean, on main. Unii rm -rf'd their folders: agent refilled stand-ins. Hub archive worked for 24bdfe4f only; other five gave 409 (husk, \"no git clone\"). origin/main grep located guard in workspace.ts/stand-ins.ts/harness.ts.",
+  "10+2": "echo: .out untracked file; origin/main is 48109ebbc. Checked six spent workspaces (24bdfe4f, 3eaedef2, e4cddd10, b6132a26, aff64726, b7c9d8c2): all ahead=0 dirty=0. Unii: removing them.",
+  "12+2": "echo: after rm -rf, leftovers (opencode.jsonc, .vscode, .opencode) remained, not immutable. Located retire logic (hub stream/work-items/server, agent stand-ins). Hub POST /api/workspaces/<id>/archive archived 24bdfe4f (HTTP 200, folder gone).",
+  "16+2": "Hub archive of other five (3eaedef2, e4cddd10, b6132a26, aff64726, b7c9d8c2) returned 409; reason: folder holds entries and is no git clone, nothing deleted; suggested discard:true (saves to ~/.cawco/carries). Retry with discard gave 502. Disk 97% (54G free).",
+  "22+2": "Unii delegated \"Let husk workspaces archive cleanly\" (instance fcdafab0, workspace dfbe4033; fixes placeSkill, straysIn, discard). Saved memory_note: retire via hub archive POST, never rm folder. Queried 74 active obelisk workspaces; 12 candidates in /tmp/ws-mine.txt; ran clean check.",
+  "44+2": "Archived five clean workspaces via hub: f037cc8c, c04ef394, cf58f5c7 HTTP 200 (folders gone); 4e129ba9 409 (husk, 2 entries, 53 KB); d1907cd7 502 (\"boundary ... is not alive\"). /home free 61G (97% used).",
+  "46+2": null,
+  "48+2": null,
+  "50+2": null,
+  "54+2": null,
+  "60+2": null,
+  "62+2": null,
+  "68+2": null,
+  "70+2": null,
+  "74+2": null,
+  "76+2": null,
+  "78+2": null,
+  "82+2": null
+ },
+ "sizes": [
+  185,
+  203,
+  242,
+  259,
+  285,
+  332,
+  526
+ ],
+ "missing": [
+  "2+2",
+  "46+2",
+  "48+2",
+  "50+2",
+  "54+2",
+  "60+2",
+  "62+2",
+  "68+2",
+  "70+2",
+  "74+2",
+  "76+2",
+  "78+2",
+  "82+2"
+ ],
+ "usage": {
+  "input": 9151,
+  "cache_write": 0,
+  "cache_write_1h": 0,
+  "cache_read": 0,
+  "output": 1005,
+  "thinking": 0
+ },
+ "first_run_fix_calls": [
+  "fix0",
+  "fix1",
+  "fix2"
+ ]
+}

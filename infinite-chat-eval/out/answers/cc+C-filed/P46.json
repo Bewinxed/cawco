@@ -1,0 +1,20 @@
+{
+ "id": "P46",
+ "run": "cc+C-filed",
+ "model": "claude-sonnet-5-5",
+ "answer": "Several steps remain, in this order:\n\n1. **Leaf 23e62015 finishes** (work item 352c9579, still running). It has to fix the stale-height root cause in MessageBody and the blockers (prose rows not wrapping, literal backticks, Page output in dark mode). It also has six polish items and must regenerate captures to `/Users/bewinxed/.cawco/tmp/23e62015/captures-v2/`.\n2. **A second Sonnet capture review** has to return SHIP.\n3. **I build the TestFlight** with `testflight.py` from my shell, only on SHIP.\n4. **The owner runs his approval-crash scenario** on that build.\n\nThe crash fix itself (tsk-17) is on main at 2a74e9fa6 and still needs this TestFlight to reach his phone. Nothing in my memory says the build has started.",
+ "zooms": [],
+ "calls": [
+  "answer/cc+C-filed/P46/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 565,
+  "cache_write_1h": 0,
+  "cache_read": 7172,
+  "output": 476,
+  "thinking": 195
+ },
+ "off_model": [],
+ "refused": []
+}

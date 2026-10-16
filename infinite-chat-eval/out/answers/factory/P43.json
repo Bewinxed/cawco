@@ -1,0 +1,20 @@
+{
+ "id": "P43",
+ "run": "factory",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory holds nothing about a \"folder-bytes probe spec\", so I can't say what run is owed for it. The nearest items I do have are probe-kit specs, and none of them is that one:\n\n- tab-strip: the two rest baselines await your approval.\n- delegate-tray: fixed in 0b9b6813d.\n- hang: the 20 baseline diffs are unapproved by design.\n- tsk-16: its CPU-per-frame probe is `scripts/probe-kit/cpu.ts`.\n\nIf it's one of those under another name, tell me which and I'll answer from what I have. Otherwise it may be in a context I lost at the reset, and I'd have to check the repo or the pending notes (`pending.md`) rather than guess.",
+ "zooms": [],
+ "calls": [
+  "answer/factory/P43/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 559,
+  "cache_write_1h": 0,
+  "cache_read": 7484,
+  "output": 271,
+  "thinking": 30
+ },
+ "off_model": [],
+ "refused": []
+}

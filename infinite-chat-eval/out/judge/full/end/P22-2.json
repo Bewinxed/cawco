@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P22",
+ "letters": {
+  "A": "cc-real",
+  "B": "cc-real+C-filed"
+ },
+ "scores": {
+  "cc-real": {
+   "score": 0,
+   "why": "Says it doesn't know and gives none of the required facts."
+  },
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Says it doesn't remember the request; none of the required facts are given."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

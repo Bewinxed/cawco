@@ -1,0 +1,30 @@
+{
+ "group": "cuts",
+ "id": "P16",
+ "letters": {
+  "A": "real-cawco-2319",
+  "B": "real-native-0055",
+  "C": "replay-cawco-2319",
+  "D": "replay-cc-0055"
+ },
+ "scores": {
+  "real-cawco-2319": {
+   "score": 0,
+   "why": "Says it doesn't know and gives no mention of the interface-craft critique or Option 1."
+  },
+  "real-native-0055": {
+   "score": 0,
+   "why": "Says it doesn't know; no owner delegation or Option 1 identified."
+  },
+  "replay-cawco-2319": {
+   "score": 0,
+   "why": "Disclaims knowledge and misattributes 'option c' to a column choice; misses the gold facts."
+  },
+  "replay-cc-0055": {
+   "score": 0,
+   "why": "Says it has nothing on find/@-mention and mentions a different option C; misses gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

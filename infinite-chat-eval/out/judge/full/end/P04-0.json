@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P04",
+ "letters": {
+  "A": "cawco",
+  "B": "cc-real",
+  "C": "cc-real+C-filed",
+  "D": "cc"
+ },
+ "scores": {
+  "cawco": {
+   "score": 0,
+   "why": "Says it has no record and offers unrelated quotes; doesn't state the objection or trimming."
+  },
+  "cc-real": {
+   "score": 0,
+   "why": "Says no record exists; only mentions a vague standing constraint, no objection quote or trimming."
+  },
+  "cc-real+C-filed": {
+   "score": 0,
+   "why": "Claims no memory of the exchange and gives no objection or trimming."
+  },
+  "cc": {
+   "score": 1,
+   "why": "Doesn't recall the wording but conveys the resulting rule not to edit owner-rules or quote him there, matching the thread partly; lacks trimming."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

@@ -1,0 +1,30 @@
+{
+ "group": "end",
+ "id": "P22",
+ "letters": {
+  "A": "cc",
+  "B": "cc+C-filed",
+  "C": "cc+C-existing",
+  "D": "tree"
+ },
+ "scores": {
+  "cc": {
+   "score": 0,
+   "why": "Says it doesn't know and gives none of the required facts."
+  },
+  "cc+C-filed": {
+   "score": 0,
+   "why": "Says memory doesn't hold the answer; no required facts present."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't have it; no required facts present."
+  },
+  "tree": {
+   "score": 0,
+   "why": "Says it doesn't know and cites unrelated preview-fidelity pins instead of the commenting UI requests."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

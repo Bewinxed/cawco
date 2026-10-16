@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P09",
+ "letters": {
+  "A": "cc+C-filed",
+  "B": "tree"
+ },
+ "scores": {
+  "cc+C-filed": {
+   "score": 1,
+   "why": "Gets the refetch at the hub on both machines and the quote 'no after u fix it U refetch it', but says it lacks the owner's cap statement, so 'cap removed' is missing."
+  },
+  "tree": {
+   "score": 2,
+   "why": "Quotes 'who made this fucking rule up, no cap' and 'no after u fix it U refetch it', and says the cap was removed and the anatomy skill must be refetched after the fix; the extra detail does not contradict the gold."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

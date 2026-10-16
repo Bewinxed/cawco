@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P12",
+ "letters": {
+  "A": "cc-real+C-existing",
+  "B": "cc+C-existing"
+ },
+ "scores": {
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says it has no record of the reaction and gives none of the gold's quotes or the Mobbin/best-practices/questions-for-the-sake-of-it points."
+  },
+  "cc+C-existing": {
+   "score": 0,
+   "why": "Says it doesn't know the reaction, and its claim that the owner wants design choices routed through AskUserQuestion contradicts the gold, where he pushed back on being asked."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

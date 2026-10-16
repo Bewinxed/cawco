@@ -1,0 +1,20 @@
+{
+ "group": "end",
+ "id": "P01",
+ "letters": {
+  "A": "cc-real+C-existing",
+  "B": "cc"
+ },
+ "scores": {
+  "cc-real+C-existing": {
+   "score": 0,
+   "why": "Says the owner never said anything about it and no record exists, missing the gold statement and decision entirely."
+  },
+  "cc": {
+   "score": 0,
+   "why": "Claims no owner statement and says he was told to rotate the password and to avoid repeating it in summaries, contradicting the gold 'no redaction, no rotation asks' decision."
+  }
+ },
+ "judge": "claude-sonnet-5-5",
+ "off_model": []
+}

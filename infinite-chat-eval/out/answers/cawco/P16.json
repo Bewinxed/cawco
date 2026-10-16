@@ -1,0 +1,20 @@
+{
+ "id": "P16",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't record how the find / @-mention design itself was chosen, so I can't say which design option won or who picked it. The standing rule is advisor (Fable), then preview, then owner pick, then build. But I have no note of the finder pick.\n\nWhat I do hold are my own scope rulings:\n- **Finder UI:** it was built in 93bc8ca8 and is being landed by 0a6da208 on main's find engine (0d5aea8db).\n- **@ chips:** I rejected \"option B\" (menu now, chip later). The chips (MentionField replacing the composer textarea) become their own item, built as designed. That item still needs a brief.\n- **Open-at:** I also rejected B here and built it as its own item, f5390b04 (`?at=<docId>`).\n\nFor the original design comparison, check the 93bc8ca8 workspace or its preview artifact.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P16/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 560,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 463,
+  "thinking": 182
+ },
+ "off_model": [],
+ "refused": []
+}

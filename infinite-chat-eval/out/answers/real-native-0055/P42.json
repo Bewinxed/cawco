@@ -1,0 +1,20 @@
+{
+ "id": "P42",
+ "run": "real-native-0055",
+ "model": "claude-sonnet-5-5",
+ "answer": "The Safari edges fix itself has landed on main (284a80bf8). What's owed is the live recheck on the iPhone Simulator, and that waits on the nightly.\n\nThe nightly is held up. Hub rollback was happening at f2d2554e6 with the rigs timing out at load ~92, and 3e70dd7a is investigating it. Once it reports the cause and fix, I re-release from main, publish, install on obelisk and the Mac, then run the Simulator recheck of the Safari edge colours, along with the other live checks (Caw dock, tabs, iOS approval crash on TestFlight).\n\nMy memory has no record of the specific colours or pass criteria beyond that.",
+ "zooms": [],
+ "calls": [
+  "answer/real-native-0055/P42/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 569,
+  "cache_write_1h": 0,
+  "cache_read": 6728,
+  "output": 222,
+  "thinking": 0
+ },
+ "off_model": [],
+ "refused": []
+}

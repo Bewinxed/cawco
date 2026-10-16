@@ -1,0 +1,20 @@
+{
+ "id": "P30",
+ "run": "cawco",
+ "model": "claude-sonnet-5-5",
+ "answer": "My memory doesn't hold that. I have no record of the owner raising a preview-routing problem about browsing over Tailscale, or of a fix for one.\n\nThe nearest items I do have are different:\n- A `preview-socket` host probe passed.\n- `packages/core/src/preview-proxy.ts` changed in the live-components slice 1 commit (d9ede1e03).\n- A follow-up notes that Playwright WebKit on the Mac can't reach the LAN, so it needs a relay to loopback.\n\nNone of these mention Tailscale. If the issue came up before my summary, it didn't survive the reset. The transcript, or `git log` searched for \"tailscale\" or \"preview\", should show it. I won't guess at the cause or the fix.",
+ "zooms": [],
+ "calls": [
+  "answer/cawco/P30/r0"
+ ],
+ "usage": {
+  "input": 2,
+  "cache_write": 574,
+  "cache_write_1h": 0,
+  "cache_read": 23909,
+  "output": 348,
+  "thinking": 108
+ },
+ "off_model": [],
+ "refused": []
+}
