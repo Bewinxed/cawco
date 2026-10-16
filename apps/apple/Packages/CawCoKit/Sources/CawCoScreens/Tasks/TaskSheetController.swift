@@ -1263,6 +1263,20 @@ final class HostCell: UICollectionViewCell {
     private weak var hosted: UIView?
     private var topConstraint: NSLayoutConstraint?
 
+    /// Sized at the width the list gives it with its content laid out at
+    /// that width first. A view whose height follows its width (MessageBody,
+    /// WrapLayout) learns the width only by being laid out at it; UIKit's
+    /// fitting lays nothing out, so a row the list sized off screen, after
+    /// the sheet changed width, kept the height of the width before (the
+    /// acceptance criteria 172pt where 636pt wide needs 268).
+    override func preferredLayoutAttributesFitting(_ layoutAttributes: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+        if abs(bounds.width - layoutAttributes.size.width) > 0.5 {
+            frame.size.width = layoutAttributes.size.width
+        }
+        layoutIfNeeded()
+        return super.preferredLayoutAttributesFitting(layoutAttributes)
+    }
+
     func host(_ view: UIView, top: Double) {
         backgroundConfiguration = .clear()
         if hosted === view, view.superview === contentView {
