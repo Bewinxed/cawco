@@ -30,21 +30,23 @@
  *  - `off`: no fade (`OFF`, this spec's own style).
  * Neither style ships.
  *
- * Asserted, at the desk (where the pane scrolls and its fade is live): the
- * look is the fade's, the same at every point of the scroll as the one
- * animation drew it (`--fade-start`, `--fade-end` and the mask at 0, 3, 50,
- * 97 and 100% of the scroll timeline); and the shipped fade restyles the
- * scroller on no more than `RESTYLE_SHARE` of a long scroll's frames (the
- * whole-scroll form restyled it on every one). The frames over budget, legs
- * against legs, are noted.
- *
- * A QUIET MACHINE: before each leg the one-minute load (`/proc/loadavg`)
- * must be under `QUIET`; it is sampled through the leg, and a leg that went
- * over is voided and run again, up to `RETRIES` times. Each leg's load is
- * printed beside its numbers. Every number is written to `numbers.json` in
- * the spec's out folder.
+ * Asserted, at the desk (where the pane scrolls and its fade is live), on
+ * what the engine counts, not on the wall clock, so a loaded host reads the
+ * same:
+ *  - the look is the fade's, the same at every point of the scroll as the
+ *    one animation drew it (`--fade-start`, `--fade-end` and the mask at 0,
+ *    3, 50, 97 and 100% of the scroll timeline);
+ *  - the shipped fade restyles the scroller on no more than `RESTYLE_SHARE`
+ *    of a long scroll's frames (the whole-scroll form restyled it on every
+ *    one: 4031 of 4050);
+ *  - the main thread's CPU over the scroll, by its thread clock, is within
+ *    `CPU_SHARE` of the legs without the fade, in the same run.
+ * The frames over budget, and what ran in them, are noted, each leg with the
+ * one-minute load (`/proc/loadavg`) through it: on a loaded host they are the
+ * host's as much as the page's. Every number is written to `numbers.json`
+ * in the spec's out folder.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, on a quiet machine
+// biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CDPSession, Page } from "playwright-core";
@@ -65,20 +67,22 @@ const OVER_MS = BUDGET_MS + 1;
 const SPEED = 1500;
 /** Rounds of the three legs per width. */
 const PAIRS = 3;
-/** The one-minute load a leg runs under. */
-const QUIET = 8;
-/** How long a leg waits for the machine to be quiet before the spec fails. */
-const QUIET_WAIT_MS = 60 * 60_000;
 /** How often the load is read through a leg. */
 const LOAD_EVERY_MS = 1000;
-/** A leg voided for the load is run again this many times at most. */
-const RETRIES = 3;
 /**
  * The most of a long scroll's frames the shipped fade may restyle the
- * scroller on: its edges move over 12% of the scroll. Our own call, with
- * room for the frames at the turn.
+ * scroller on: its edges move over 12% of the scroll, the first and last
+ * 6%, and only there (11.4% and 12.5% measured in two runs, 438 of 3847
+ * and 503 of 4032 frames). Our own call, with room for the frames the
+ * gesture spends turning at the foot.
  */
 const RESTYLE_SHARE = 0.2;
+/**
+ * How much more of the main thread's CPU a long scroll may take with the
+ * fade than without it: 1.32x and 1.40x measured in two runs, where the
+ * whole-scroll form took 2.31x and 2.46x. Our own call, between the two.
+ */
+const CPU_SHARE = 1.5;
 /** Where along the scroll the look is read, as fractions of it. */
 const LOOK_AT = [0, 0.03, 0.5, 0.97, 1];
 /** Where each edge's fade moves: the first and last 6% of the scroll. */
@@ -94,7 +98,8 @@ const hundredths = (value: string) =>
 const PANE = ".pane.kit-edge-fade-block";
 const ROW = ".ledger tr.row";
 /** No fade: this spec's own style, never shipped. */
-const OFF = ".kit-edge-fade, .kit-edge-fade-block { animation: none !important; mask-image: none !important; }";
+const OFF =
+  ".kit-edge-fade, .kit-edge-fade-block { animation: none !important; mask-image: none !important; }";
 /**
  * The form the fade replaced: one animation over the whole scroll, its
  * edges moving in the first and last 6%. This spec's own style, never shipped.
@@ -150,23 +155,6 @@ interface Leg {
 const load1 = async (): Promise<number> =>
   Number.parseFloat((await readFile("/proc/loadavg", "utf8")).split(" ")[0]);
 
-/** Waits for the one-minute load to fall under `QUIET`: what it read. */
-async function quiet(): Promise<number> {
-  const deadline = Date.now() + QUIET_WAIT_MS;
-  for (;;) {
-    const now = await load1();
-    if (now < QUIET) {
-      return now;
-    }
-    if (Date.now() > deadline) {
-      throw new Error(
-        `the one-minute load stayed at ${QUIET} or more for ${QUIET_WAIT_MS / 60_000} minutes (now ${now})`
-      );
-    }
-    await Bun.sleep(5000);
-  }
-}
-
 /** The page's drawn frames while `__fade.on`: each `requestAnimationFrame`'s timestamp. */
 function frameClock(): void {
   const w = window as unknown as { __fade: { on: boolean; rafs: number[] } };
@@ -202,7 +190,8 @@ const markScroller = (page: Page) =>
       at ?? (document.scrollingElement as HTMLElement | null) ?? document.body;
     scroller.setAttribute("data-probe-scroller", "");
     return {
-      scroller: scroller === from ? "the pane" : scroller.className || scroller.tagName,
+      scroller:
+        scroller === from ? "the pane" : scroller.className || scroller.tagName,
       run: scroller.scrollHeight - scroller.clientHeight,
       view: scroller.clientHeight,
     };
@@ -321,7 +310,7 @@ async function leg(
     throw new Error("no scroller marked on the page");
   }
   await settle(page, 400);
-  const startLoad = await quiet();
+  const startLoad = await load1();
   const loads: number[] = [startLoad];
   const sampler = setInterval(() => {
     load1().then((l) => loads.push(l));
@@ -399,30 +388,6 @@ async function leg(
   };
 }
 
-/** A leg run on a quiet machine: voided and run again while its load went over `QUIET`. */
-async function quietLeg(
-  kit: Kit,
-  page: Page,
-  fade: Fade,
-  source: "mouse" | "touch",
-  label: string
-): Promise<Leg> {
-  for (let attempt = 1; ; attempt += 1) {
-    const one = await leg(page, fade, source);
-    if (one.load.most < QUIET) {
-      return one;
-    }
-    kit.note(
-      `${label}: voided, the load reached ${one.load.most} (attempt ${attempt})`
-    );
-    if (attempt > RETRIES) {
-      throw new Error(
-        `${label}: the load went over ${QUIET} in ${attempt} legs running`
-      );
-    }
-  }
-}
-
 /**
  * The fade's look along the pane's scroll, as `fade` draws it: its two
  * lengths and the mask they make, at each of `LOOK_AT`.
@@ -430,8 +395,7 @@ async function quietLeg(
 const lookOf = (page: Page, fade: Fade) =>
   (async () => {
     await setFade(page, fade);
-    const read: { at: number; end: string; mask: string; start: string }[] =
-      [];
+    const read: { at: number; end: string; mask: string; start: string }[] = [];
     for (const at of LOOK_AT) {
       await page.evaluate(
         ([pane, f]) => {
@@ -579,7 +543,7 @@ const spec: Spec = {
         );
         for (const one of order) {
           const label = `${view}, fade ${one}, round ${round + 1}`;
-          const ran = await quietLeg(kit, page, one, source, label);
+          const ran = await leg(page, one, source);
           legs.push(ran);
           kit.note(`${label}: ${describe(ran)}`);
           for (const frame of ran.over.slice(0, 3)) {
@@ -598,11 +562,19 @@ const spec: Spec = {
         ).join("; ")}`
       );
       if (live) {
-        const share = sum("on", (l) => l.style.n) / Math.max(1, intervals("on"));
+        const share =
+          sum("on", (l) => l.style.n) / Math.max(1, intervals("on"));
         kit.check(
           `${view}: the fade restyles the scroller on no more than ${RESTYLE_SHARE * 100}% of a long scroll's frames`,
           share <= RESTYLE_SHARE,
           `${sum("on", (l) => l.style.n)} style recalcs over ${intervals("on")} frames (${(share * 100).toFixed(1)}%); the whole-scroll form ${sum("whole", (l) => l.style.n)} over ${intervals("whole")}; none ${sum("off", (l) => l.style.n)}`
+        );
+        const cpu = (one: Fade) => sum(one, (l) => l.mainCpu);
+        const ratio = cpu("on") / Math.max(1, cpu("off"));
+        kit.check(
+          `${view}: a long scroll's main-thread CPU with the fade within ${CPU_SHARE}x of the same run's without it`,
+          ratio <= CPU_SHARE,
+          `${ratio.toFixed(2)}x: ${cpu("on")}ms with it, ${cpu("off")}ms without; the whole-scroll form ${cpu("whole")}ms (${(cpu("whole") / Math.max(1, cpu("off"))).toFixed(2)}x)`
         );
       }
       await page.close();
