@@ -50,9 +50,11 @@ import type {
 import {
   CLAUDE_CONVERSATION_GONE,
   CONTINUATION_ORIGIN,
+  placedOnly,
   REMOVED_MACHINE,
   RESTART_LOST,
   resolveRates,
+  scoped,
   stoppedWords,
 } from "@cawco/core";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -136,6 +138,7 @@ import {
   fleetMemory,
   fleetMemoryDocProjects,
   fleetMemoryDocs,
+  fleetMemoryDocTypes,
   fleetMemoryHistory,
   fleetSkillHistory,
   fleetWatchNotices,
@@ -159,6 +162,7 @@ import {
   marketplaces,
   mcpServers,
   mcpToolListings,
+  memoryBriefings,
   moves,
   notificationCleared,
   notificationSent,
@@ -487,20 +491,27 @@ export interface MemoryDocRow {
   updatedAt: Date;
 }
 
-/** A stored row as the hub answers it, its projects read off the link table. */
+/** A stored row as the hub answers it, its projects and types read off their link tables. */
 const memoryDocRow = (
   row: typeof fleetMemoryDocs.$inferSelect,
-  projectIds: readonly string[]
+  links: { projectIds: readonly string[]; typeNames: readonly string[] }
 ): MemoryDocRow => {
   const scope: MemoryScope = {
+    ...(row.briefer ? { briefer: true as const } : {}),
     ...(row.role ? { role: row.role } : {}),
-    ...(projectIds.length > 0 ? { projectIds: [...projectIds].sort() } : {}),
+    ...(links.typeNames.length > 0
+      ? { delegateTypes: [...links.typeNames].sort() }
+      : {}),
+    ...(row.model ? { model: row.model } : {}),
+    ...(links.projectIds.length > 0
+      ? { projectIds: [...links.projectIds].sort() }
+      : {}),
   };
   return {
     path: row.path,
     content: row.content,
     hash: row.hash,
-    ...(scope.role || scope.projectIds ? { scope } : {}),
+    ...(scoped(scope) ? { scope } : {}),
     updatedAt: row.updatedAt,
   };
 };
@@ -644,6 +655,8 @@ export interface DbShape {
     threadId: string | null;
     usd: number;
   }) => void;
+  /** The briefer documents a session has been handed, path → the hash it read (briefings.ts). */
+  readonly briefingsHanded: (instanceId: string) => Map<string, string>;
   /** Whether nothing has been counted yet — the backfill's cue. */
   readonly capabilityUsageEmpty: () => boolean;
   /** Every usage row on or after `day` (`YYYY-MM-DD`). */
@@ -858,6 +871,8 @@ export interface DbShape {
     keepId: string,
     taskIds: ReadonlyMap<string, string>
   ) => { places: number; sessions: number; threads: number; workItems: number };
+  /** Forgets every briefer document a session was handed: its context no longer holds them. */
+  readonly forgetBriefings: (instanceId: string) => void;
   /** Every former id, by the id its session has now ({@link instanceIdOf}). */
   readonly formerIds: () => Record<string, string>;
   /** When a session last started again fresh; null when it never did. */
@@ -932,6 +947,11 @@ export interface DbShape {
    * or a turn took its place.
    */
   readonly handBackTurn: (id: string, from: number, at: number) => boolean;
+  /** Records briefer documents as handed to a session, each at its hash. */
+  readonly handBriefings: (
+    instanceId: string,
+    docs: readonly { path: string; hash: string }[]
+  ) => void;
   /** Every machine's held workspaces (schema.ts `WorkspaceState`), newest first. */
   readonly heldWorkspaces: () => WorkspaceRow[];
   readonly hiddenSession: (id: string) => boolean;
@@ -2462,6 +2482,8 @@ const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
     ...(row.scopeProjectId ? { projectId: row.scopeProjectId } : {}),
     ...(row.scopeHarness ? { harness: row.scopeHarness } : {}),
     ...(row.scopeModel ? { model: row.scopeModel } : {}),
+    ...(row.scopeRole ? { role: row.scopeRole } : {}),
+    ...(row.scopeDelegateType ? { delegateType: row.scopeDelegateType } : {}),
   },
   createdAt: row.createdAt.getTime(),
 });
@@ -3720,14 +3742,37 @@ const make = async (path: string): Promise<DbShape> => {
     return byPath;
   };
 
+  /** Each document's delegate types, by its path. */
+  const memoryDocTypes = (docPath?: string): Map<string, string[]> => {
+    const byPath = new Map<string, string[]>();
+    for (const link of db
+      .select()
+      .from(fleetMemoryDocTypes)
+      .where(
+        docPath === undefined
+          ? undefined
+          : eq(fleetMemoryDocTypes.path, docPath)
+      )
+      .all()) {
+      byPath.set(link.path, [...(byPath.get(link.path) ?? []), link.typeName]);
+    }
+    return byPath;
+  };
+
   const listFleetMemoryDocs = (): MemoryDocRow[] => {
     const projectsOf = memoryDocProjects();
+    const typesOf = memoryDocTypes();
     return db
       .select()
       .from(fleetMemoryDocs)
       .orderBy(fleetMemoryDocs.path)
       .all()
-      .map((row) => memoryDocRow(row, projectsOf.get(row.path) ?? []));
+      .map((row) =>
+        memoryDocRow(row, {
+          projectIds: projectsOf.get(row.path) ?? [],
+          typeNames: typesOf.get(row.path) ?? [],
+        })
+      );
   };
 
   const getFleetMemoryDoc = (docPath: string): MemoryDocRow | undefined => {
@@ -3737,7 +3782,10 @@ const make = async (path: string): Promise<DbShape> => {
       .where(eq(fleetMemoryDocs.path, docPath))
       .get();
     return row
-      ? memoryDocRow(row, memoryDocProjects(docPath).get(docPath) ?? [])
+      ? memoryDocRow(row, {
+          projectIds: memoryDocProjects(docPath).get(docPath) ?? [],
+          typeNames: memoryDocTypes(docPath).get(docPath) ?? [],
+        })
       : undefined;
   };
 
@@ -5988,19 +6036,20 @@ const make = async (path: string): Promise<DbShape> => {
         })(),
         // A project's documents for all its sessions, each placed once per
         // checkout and workspace of it as the sync goes out (project-placements.ts).
-        // One with a role goes to its sessions as they launch instead.
+        // One with a role, type or model goes to its sessions as they launch
+        // instead, and a briefer's to the sessions that delegate.
         // A document of several projects is one row per project.
         placedMemory: listFleetMemoryDocs().flatMap(
           ({ path: docPath, hash, content, scope }) =>
-            scope?.role
-              ? []
-              : (scope?.projectIds ?? []).map((projectId) => ({
+            placedOnly(scope)
+              ? (scope?.projectIds ?? []).map((projectId) => ({
                   path: docPath,
                   hash,
                   content,
                   projectId,
                   scope: "project" as const,
                 }))
+              : []
         ),
         // Always an array, like `skills` above, never omitted: this hub is not
         // one that predates hooks, so there is no version-skew reason to leave
@@ -6529,7 +6578,13 @@ const make = async (path: string): Promise<DbShape> => {
         hash: hashText(content),
         updatedAt: new Date(),
         // Given, it replaces the stored scope whole; left out, the stored one stays.
-        ...(scope === undefined ? {} : { role: scope.role ?? null }),
+        ...(scope === undefined
+          ? {}
+          : {
+              role: scope.role ?? null,
+              model: scope.model?.trim() || null,
+              briefer: scope.briefer === true,
+            }),
       };
       db.transaction((tx) => {
         tx.insert(fleetMemoryDocs)
@@ -6547,12 +6602,47 @@ const make = async (path: string): Promise<DbShape> => {
             .values({ path: docPath, projectId })
             .run();
         }
+        tx.delete(fleetMemoryDocTypes)
+          .where(eq(fleetMemoryDocTypes.path, docPath))
+          .run();
+        for (const typeName of new Set(scope.delegateTypes ?? [])) {
+          tx.insert(fleetMemoryDocTypes)
+            .values({ path: docPath, typeName: typeName.trim() })
+            .run();
+        }
       });
       const stored = getFleetMemoryDoc(docPath);
       if (!stored) {
         throw new Error(`${docPath} was not stored`);
       }
       return stored;
+    },
+    briefingsHanded: (instanceId) =>
+      new Map(
+        db
+          .select({ path: memoryBriefings.path, hash: memoryBriefings.hash })
+          .from(memoryBriefings)
+          .where(eq(memoryBriefings.instanceId, instanceId))
+          .all()
+          .map(({ path: docPath, hash }) => [docPath, hash])
+      ),
+    handBriefings: (instanceId, docs) => {
+      db.transaction((tx) => {
+        for (const { path: docPath, hash } of docs) {
+          tx.insert(memoryBriefings)
+            .values({ instanceId, path: docPath, hash })
+            .onConflictDoUpdate({
+              target: [memoryBriefings.instanceId, memoryBriefings.path],
+              set: { hash, handedAt: new Date() },
+            })
+            .run();
+        }
+      });
+    },
+    forgetBriefings: (instanceId) => {
+      db.delete(memoryBriefings)
+        .where(eq(memoryBriefings.instanceId, instanceId))
+        .run();
     },
     deleteFleetMemoryDoc: (docPath) => {
       db.delete(fleetMemoryDocs).where(eq(fleetMemoryDocs.path, docPath)).run();
@@ -9703,6 +9793,8 @@ const make = async (path: string): Promise<DbShape> => {
         scopeProjectId: rule.scope.projectId || null,
         scopeHarness: rule.scope.harness || null,
         scopeModel: rule.scope.model || null,
+        scopeRole: rule.scope.role || null,
+        scopeDelegateType: rule.scope.delegateType || null,
         createdAt: new Date(rule.createdAt),
         updatedAt: new Date(),
       };
@@ -9727,6 +9819,8 @@ const make = async (path: string): Promise<DbShape> => {
             scopeProjectId: values.scopeProjectId,
             scopeHarness: values.scopeHarness,
             scopeModel: values.scopeModel,
+            scopeRole: values.scopeRole,
+            scopeDelegateType: values.scopeDelegateType,
             updatedAt: values.updatedAt,
           },
         })

@@ -522,30 +522,135 @@ export const isMemoryRole = (value: string): value is MemoryRole =>
   (MEMORY_ROLES as readonly string[]).includes(value);
 
 /**
- * Which sessions a fleet memory document is loaded into. No scope at all is
- * a linked document under `~/.claude/memories/`, read on purpose (the
- * `models/` documents). A scope makes it instructions every matching session
- * loads at its start:
+ * Which sessions a fleet memory document reaches. No scope at all is a
+ * linked document under `~/.claude/memories/`, read on purpose. A scope
+ * makes it instructions every matching session loads at its start; each
+ * field narrows, and the fields are ANDed:
  *
- * - `role` alone: every session of that role, in any project or none;
- * - `projectIds` alone: every session in a checkout or workspace of any of
- *   those projects, written into each as `.claude/rules/cawco/<path>`
- *   ({@link FleetPlacedMemoryDoc}): one document for every coding project,
- *   and none for the projects it leaves out;
- * - both: the sessions of that role in any of those projects.
+ * - `role`: the sessions of that role;
+ * - `delegateTypes`: the sessions started as one of those delegate types;
+ * - `model`: the sessions whose model id contains it, in any case (`opus`
+ *   covers every dated build of it, as a rule's model scope does);
+ * - `projectIds`: the sessions in a checkout or workspace of one of those
+ *   projects. With nothing else, the document is written into each such
+ *   place as `.claude/rules/cawco/<path>` ({@link FleetPlacedMemoryDoc}).
  *
- * A document with a role reaches its sessions as they launch, from the hub
- * ({@link SessionInstruction}), never as a file on a machine.
+ * A document scoped by role, type or model reaches its sessions as they
+ * launch, from the hub ({@link SessionInstruction}), in the instructions a
+ * compaction keeps.
+ *
+ * `briefer` turns the scope around: the document is guidance for writing a
+ * brief, and reaches the session that calls `delegate`, never the delegate.
+ * `delegateTypes` and `model` then name the delegates it is about (none:
+ * every delegate); the hub hands it to the caller once before the first
+ * such delegate goes out, and again after the caller's next compaction
+ * (hub briefings.ts). It takes no `role` or `projectIds`.
  */
 export interface MemoryScope {
+  briefer?: true;
+  /** Never empty when present. */
+  delegateTypes?: string[];
+  /** A model id, or part of one; never blank when present. */
+  model?: string;
   /** Never empty when present: no project is `projectIds` left out. */
   projectIds?: string[];
   role?: MemoryRole;
 }
 
-/** Whether a scope binds a document to sessions: a role, projects, or both. */
+/** Whether a scope binds a document to sessions or briefers: anything at all. */
 export const scoped = (scope: MemoryScope | undefined): boolean =>
-  !!(scope?.role || scope?.projectIds?.length);
+  !!(
+    scope?.briefer ||
+    scope?.role ||
+    scope?.model ||
+    scope?.delegateTypes?.length ||
+    scope?.projectIds?.length
+  );
+
+/**
+ * Whether a scope places a document in its projects' folders: projects and
+ * nothing else. Anything that picks sessions by who they are (role, type,
+ * model) or makes it a briefing is the hub's to deliver instead.
+ */
+export const placedOnly = (scope: MemoryScope | undefined): boolean =>
+  !!scope?.projectIds?.length &&
+  !(scope.briefer || scope.role || scope.model || scope.delegateTypes?.length);
+
+/** Why a scope cannot be stored, in a sentence, or nothing when it can. */
+export const memoryScopeProblem = (scope: MemoryScope): string | undefined => {
+  if (scope.delegateTypes?.length === 0) {
+    return "delegateTypes names at least one delegate type when it is given";
+  }
+  if (scope.delegateTypes?.some((name) => !name.trim())) {
+    return "a delegate type in delegateTypes is a name, not blank";
+  }
+  if (scope.model !== undefined && !scope.model.trim()) {
+    return "model is part of a model id, not blank, when it is given";
+  }
+  if (scope.projectIds?.length === 0) {
+    return "projectIds names at least one project when it is given";
+  }
+  if (scope.briefer && (scope.role || scope.projectIds)) {
+    return "a briefer document reaches the session writing a brief, so it takes no role or projectIds: delegateTypes and model name the delegates it is about";
+  }
+  return undefined;
+};
+
+/** What a session is, as a document's scope reads it. */
+export interface DocumentFacts {
+  /** The delegate type it was started as; null when none. */
+  delegateType: string | null;
+  model: string | null;
+  /** The project it works in, if any. */
+  projectId: string | undefined;
+  role: MemoryRole;
+}
+
+/** Whether `model` is one a scope's `model` names: a substring, in any case. */
+export const modelMatches = (
+  wanted: string | undefined,
+  model: string | null
+): boolean => !wanted || !!model?.toLowerCase().includes(wanted.toLowerCase());
+
+/**
+ * Whether a session launches with a document: a scope that picks sessions
+ * by role, type or model (a projects-only one is placed in its folders
+ * instead, a briefer's goes to briefers), every field of which the session
+ * meets.
+ */
+export const sessionTakes = (
+  scope: MemoryScope | undefined,
+  facts: DocumentFacts
+): boolean =>
+  !!scope &&
+  !scope.briefer &&
+  !!(scope.role || scope.model || scope.delegateTypes?.length) &&
+  (!scope.role || scope.role === facts.role) &&
+  (!scope.delegateTypes ||
+    (facts.delegateType !== null &&
+      scope.delegateTypes.includes(facts.delegateType))) &&
+  modelMatches(scope.model, facts.model) &&
+  (!scope.projectIds ||
+    (facts.projectId !== undefined &&
+      scope.projectIds.includes(facts.projectId)));
+
+/** The delegate a brief is being written for, as a briefer's scope reads it. */
+export interface BriefTarget {
+  /** The delegate type it starts as; null when the call names a raw harness and model. */
+  delegateType: string | null;
+  model: string;
+}
+
+/** Whether a briefer document is about the delegate `target` describes. */
+export const briefTakes = (
+  scope: MemoryScope | undefined,
+  target: BriefTarget
+): boolean =>
+  !!scope?.briefer &&
+  (!scope.delegateTypes ||
+    (target.delegateType !== null &&
+      scope.delegateTypes.includes(target.delegateType))) &&
+  modelMatches(scope.model, target.model);
 
 /** Names in a sentence: `A`, `A and B`, `A, B and C`. */
 const listed = (names: readonly string[]): string =>
@@ -562,20 +667,36 @@ export const scopeWords = (
   scope: MemoryScope | undefined,
   projectName: (id: string) => string
 ): string => {
+  const types = scope?.delegateTypes?.length
+    ? `${listed(scope.delegateTypes)} delegates`
+    : undefined;
+  const model = scope?.model ? `on models matching ${scope.model}` : undefined;
+  if (scope?.briefer) {
+    const about = [types ?? "any delegate", model].filter(Boolean).join(" ");
+    return `Sessions briefing ${about}`;
+  }
   const role = scope?.role;
   const projects = scope?.projectIds?.length
     ? listed(scope.projectIds.map(projectName))
     : undefined;
-  if (role && projects) {
-    return `${role === "orchestrator" ? "Orchestrator" : "Leaf"} sessions in ${projects}`;
+  const who = [
+    role ? `${role === "orchestrator" ? "Orchestrator" : "Leaf"}` : undefined,
+    types,
+  ].filter(Boolean);
+  const subject = who.length > 0 ? `${who.join(" ")} sessions` : undefined;
+  const narrowing = [model, projects ? `in ${projects}` : undefined].filter(
+    Boolean
+  );
+  if (!(subject || narrowing.length > 0)) {
+    return "No session on its own: linked, read on purpose";
   }
-  if (role) {
+  if (subject && narrowing.length === 0 && !types && role) {
     return `Every ${role} session`;
   }
-  if (projects) {
+  if (!subject && projects && !model) {
     return `Every session in ${projects}`;
   }
-  return "No session on its own: linked, read on purpose";
+  return [subject ?? "Sessions", ...narrowing].join(" ");
 };
 
 /**
@@ -595,10 +716,17 @@ export interface FleetPlacedMemoryDoc extends FleetPlacement {
 }
 
 /**
- * One role-scoped document a session launches with: the hub picks them for
- * the session as it grants its launch (`LaunchGrant.instructions`), and the
- * harness puts each in its own instructions (Claude Code's system prompt
- * append, an OpenCode instruction entry, a pi context file).
+ * One scoped document a session launches with ({@link sessionTakes}): the
+ * hub picks them for the session as it grants its launch
+ * (`LaunchGrant.instructions`), and the harness puts each in its own
+ * instructions, the part of every request a compaction keeps: Claude Code's
+ * system prompt append ("System prompt and output style | Both still
+ * apply", code.claude.com/docs/en/context-window, What survives
+ * compaction), an OpenCode instruction entry ("6. Session-specific
+ * instruction entries supplied through the API", among the initial
+ * instructions, opencode.ai/v2/docs/instructions), a pi context file ("System
+ * messages are prompt state, not conversation; the compaction entry carries
+ * their replay", pi-coding-agent 1.0.1 compaction.js).
  */
 export interface SessionInstruction {
   content: string;
@@ -610,9 +738,8 @@ export interface SessionInstruction {
  * The user-scope memory: `~/.claude/CLAUDE.md` and the documents it links.
  *
  * The main file is loaded flat into every session, so it stays the part every
- * model should read. The linked ones are read on purpose — a SessionStart hook
- * puts `models/<model>.md` in front of the session that is actually running
- * that model, which is the only conditional loading Claude Code has.
+ * session should read. The linked ones (no {@link MemoryScope}) are read on
+ * purpose; a scoped one never lands here, the hub delivers it.
  */
 export interface FleetMemory {
   content: string;
@@ -829,9 +956,9 @@ export interface FleetSyncReport {
    */
   memoryDocs?: Record<string, FleetItemState>;
   /**
-   * The SessionStart hook that shows a session the document for the model it is
-   * running. Absent from a daemon that predates the set, and from one the set
-   * gave nothing to register.
+   * The model-memory SessionStart hook an earlier cawco registered, while a
+   * machine has not managed to take it back (agent fleet.ts
+   * `retireMemoryHook`): always `failed`, with why. Absent once it is gone.
    */
   memoryHook?: FleetItemState;
   plugins: Record<string, FleetItemState>;

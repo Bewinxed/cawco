@@ -728,11 +728,11 @@ export function adminTools() {
             projectId: z.string().optional(),
             harness: z.string().optional(),
             model: z.string().optional(),
+            role: z.enum(MEMORY_ROLES).optional(),
+            delegateType: z.string().optional(),
           })
           .optional()
-          .describe(
-            "Narrow the rule to specific machines, projects, harnesses or models."
-          ),
+          .describe("Narrow the rule; every field given must match."),
       },
       async (args) => {
         const { action } = args;
@@ -898,8 +898,9 @@ export function adminTools() {
       "memory",
       "the fleet's CLAUDE.md, loaded into every session, and its documents: " +
         `unscoped, linked under ${userLayerLabel("memories")}/; scoped, loaded into the ` +
-        "sessions of a `role` (orchestrator: has delegate; else leaf), `projectIds`, or " +
-        "both. 'get': CLAUDE.md; 'list_docs': the documents.",
+        "sessions matching every `scope` field (role: orchestrator has delegate, else leaf; " +
+        "model: substring). `briefer`: handed to the delegate's caller instead. " +
+        "'get': CLAUDE.md; 'list_docs': the documents.",
       ["get", "list_docs"],
       ["set", "set_doc", "remove_doc"],
       {
@@ -919,7 +920,10 @@ export function adminTools() {
         scope: z
           .object({
             role: z.enum(MEMORY_ROLES).optional(),
+            delegateTypes: z.array(z.string()).min(1).optional(),
+            model: z.string().min(1).optional(),
             projectIds: z.array(z.string()).min(1).optional(),
+            briefer: z.literal(true).optional(),
           })
           .optional()
           .describe(
@@ -946,13 +950,17 @@ export function adminTools() {
             memoryDocs?: { scope?: MemoryScope }[];
           };
           const docs = fleet.memoryDocs ?? [];
+          const sameList = (a?: string[], b?: string[]) =>
+            [...(a ?? [])].sort().join() === [...(b ?? [])].sort().join();
           return ok({
             docs: scope
               ? docs.filter(
                   (doc) =>
                     doc.scope?.role === scope.role &&
-                    [...(doc.scope?.projectIds ?? [])].sort().join() ===
-                      [...(scope.projectIds ?? [])].sort().join()
+                    doc.scope?.model === scope.model &&
+                    doc.scope?.briefer === scope.briefer &&
+                    sameList(doc.scope?.delegateTypes, scope.delegateTypes) &&
+                    sameList(doc.scope?.projectIds, scope.projectIds)
                 )
               : docs,
           });

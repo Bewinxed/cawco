@@ -38,6 +38,7 @@
  * to-dos still open, and steps left open become `(proposed)` to-dos.
  */
 import type {
+  BriefTarget,
   CommandResult,
   DelegateType,
   EndedBy,
@@ -104,6 +105,7 @@ import {
   diffPaths,
   lastMac,
 } from "./apple-gate";
+import { briefingFor } from "./briefings";
 import type {
   DbShape,
   QueuedWorkItemRow,
@@ -3344,6 +3346,47 @@ export const createWorkItems = ({
   };
 
   /**
+   * The delegate a `delegate` call briefs: a follow-up's, the session its
+   * workspace continues; any other's, the type and model it starts on.
+   */
+  const briefTarget = (
+    request: WorkItemRequest,
+    parent: Parent
+  ): BriefTarget => {
+    if (request.workspace) {
+      const [named] = db.workspacesNamed(request.workspace.trim());
+      const previous = named ? db.workItemsIn(named.id)[0] : undefined;
+      const [session] = previous
+        ? db.getInstancesByIds([previous.instanceId])
+        : [];
+      if (session) {
+        return {
+          delegateType: session.delegateType ?? null,
+          model: session.model ?? "",
+        };
+      }
+    }
+    const settings = settingsOf(request, parent);
+    return {
+      delegateType: settings.type?.name ?? null,
+      model: settings.model ?? "",
+    };
+  };
+
+  /**
+   * The briefing guidance a `delegate` call's caller has yet to read for its
+   * delegate (briefings.ts), recorded as handed; nothing when it has read
+   * it, or when the call is one {@link start} refuses in its own words.
+   */
+  const briefingOf = (request: WorkItemRequest): string | undefined => {
+    const [parent] = db.getInstancesByIds([request.parentInstanceId]);
+    if (!parent || parent.canDelegate === false) {
+      return undefined;
+    }
+    return briefingFor(db, parent.id, briefTarget(request, parent));
+  };
+
+  /**
    * What a fork takes from its parent: the conversation as it stands, and the
    * harness and model that wrote it. The prompt cache is keyed on both, so a
    * fork onto anything else would re-read the whole history at full price;
@@ -5483,6 +5526,13 @@ export const createWorkItems = ({
     ): Promise<WorkItemStart | { queued: string; text: string }> {
       // A role is the hub's to give (a curator run's), never a caller's.
       const { role: _role, ...asked } = called;
+      // The fleet's guidance for briefing this delegate, before anything
+      // starts, when the caller has not read it since its start or its
+      // last compaction (briefings.ts).
+      const guide = briefingOf(asked);
+      if (guide) {
+        throw new WorkItemRefusal(409, guide);
+      }
       try {
         return await start(asked);
       } catch (error) {

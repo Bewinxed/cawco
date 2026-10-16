@@ -157,6 +157,13 @@ import type { Tasks } from "./tasks";
  * (worker 24,991 → 24,278, delegate 7,291 → 7,239, lead 16,199 → 15,487,
  * web-facing 2,837 → 2,784, curator 1,121 → 1,069 measured). The same
  * budgets.
+ * 2026-10-16: a memory document's scope takes `delegateTypes`, `model` and
+ * `briefer`, and a rule's `role` and `delegateType` (memory-scopes.ts,
+ * briefings.ts): guidance for briefing a model reached the model instead of
+ * the session writing the brief, and the model-keyed SessionStart hook's
+ * text was summarized away at each compaction. About 150 tokens for the
+ * worker alone, the memory group's words and the rule scope's cut to a
+ * clause each. Within the same budgets.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 25_000,

@@ -19124,6 +19124,16 @@
                       },
                       "model": {
                         "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "orchestrator",
+                          "leaf"
+                        ]
+                      },
+                      "delegateType": {
+                        "type": "string"
                       }
                     }
                   }
@@ -19257,6 +19267,16 @@
                         "type": "string"
                       },
                       "model": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "orchestrator",
+                          "leaf"
+                        ]
+                      },
+                      "delegateType": {
                         "type": "string"
                       }
                     }
@@ -20776,6 +20796,21 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "delegateTypes": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "model": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "briefer": {
+                        "type": "boolean",
+                        "const": true
                       }
                     }
                   }
@@ -44739,9 +44774,24 @@
         ]
       },
       "MemoryScope": {
-        "description": "Which sessions a fleet memory document is loaded into. No scope at all is\na linked document under `~/.claude/memories/`, read on purpose (the\n`models/` documents). A scope makes it instructions every matching session\nloads at its start:\n\n- `role` alone: every session of that role, in any project or none;\n- `projectIds` alone: every session in a checkout or workspace of any of\n  those projects, written into each as `.claude/rules/cawco/<path>`\n  ({@link FleetPlacedMemoryDoc}): one document for every coding project,\n  and none for the projects it leaves out;\n- both: the sessions of that role in any of those projects.\n\nA document with a role reaches its sessions as they launch, from the hub\n({@link SessionInstruction}), never as a file on a machine.",
+        "description": "Which sessions a fleet memory document reaches. No scope at all is a\nlinked document under `~/.claude/memories/`, read on purpose. A scope\nmakes it instructions every matching session loads at its start; each\nfield narrows, and the fields are ANDed:\n\n- `role`: the sessions of that role;\n- `delegateTypes`: the sessions started as one of those delegate types;\n- `model`: the sessions whose model id contains it, in any case (`opus`\n  covers every dated build of it, as a rule's model scope does);\n- `projectIds`: the sessions in a checkout or workspace of one of those\n  projects. With nothing else, the document is written into each such\n  place as `.claude/rules/cawco/<path>` ({@link FleetPlacedMemoryDoc}).\n\nA document scoped by role, type or model reaches its sessions as they\nlaunch, from the hub ({@link SessionInstruction}), in the instructions a\ncompaction keeps.\n\n`briefer` turns the scope around: the document is guidance for writing a\nbrief, and reaches the session that calls `delegate`, never the delegate.\n`delegateTypes` and `model` then name the delegates it is about (none:\nevery delegate); the hub hands it to the caller once before the first\nsuch delegate goes out, and again after the caller's next compaction\n(hub briefings.ts). It takes no `role` or `projectIds`.",
         "type": "object",
         "properties": {
+          "briefer": {
+            "const": true,
+            "type": "boolean"
+          },
+          "delegateTypes": {
+            "description": "Never empty when present.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "description": "A model id, or part of one; never blank when present.",
+            "type": "string"
+          },
           "projectIds": {
             "description": "Never empty when present: no project is `projectIds` left out.",
             "type": "array",
@@ -44807,6 +44857,10 @@
         "description": "What narrows a rule from \"every session on the fleet\" to some of them. Every\nfield is optional and they are ANDed; an empty scope is the default and means\neverywhere. `model` is a substring test, so `opus` covers every dated build\nof it.",
         "type": "object",
         "properties": {
+          "delegateType": {
+            "description": "The delegate type the session was started as, by name.",
+            "type": "string"
+          },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind",
             "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter."
@@ -44819,6 +44873,10 @@
           },
           "projectId": {
             "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MemoryScopeRole",
+            "description": "Orchestrators (sessions holding `delegate`) or leaves, as fleet memory reads a role."
           }
         }
       },
@@ -51826,7 +51884,7 @@
         ]
       },
       "SessionInstruction": {
-        "description": "One role-scoped document a session launches with: the hub picks them for\nthe session as it grants its launch (`LaunchGrant.instructions`), and the\nharness puts each in its own instructions (Claude Code's system prompt\nappend, an OpenCode instruction entry, a pi context file).",
+        "description": "One scoped document a session launches with ({@link sessionTakes}): the\nhub picks them for the session as it grants its launch\n(`LaunchGrant.instructions`), and the harness puts each in its own\ninstructions, the part of every request a compaction keeps: Claude Code's\nsystem prompt append (\"System prompt and output style | Both still\napply\", code.claude.com/docs/en/context-window, What survives\ncompaction), an OpenCode instruction entry (\"6. Session-specific\ninstruction entries supplied through the API\", among the initial\ninstructions, opencode.ai/v2/docs/instructions), a pi context file (\"System\nmessages are prompt state, not conversation; the compaction entry carries\ntheir replay\", pi-coding-agent 1.0.1 compaction.js).",
         "type": "object",
         "properties": {
           "content": {

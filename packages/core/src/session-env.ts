@@ -26,14 +26,11 @@ const EMBEDDED_PI_DIR = "PI_PACKAGE_DIR";
  *   `credentialHeader`).
  * - `CAWCO_HUB_URL`: `cawco tool` finds its hub by it first (cli/src/discover.ts
  *   `discoverHub`: `const explicit = hub ?? readEnv(CAWCO_ENV.hubUrl)`).
- * - `CAWCO_MODEL`: the Claude `SessionStart` hook prints the session's model
- *   guidance by it (agent/src/fleet.ts, `model="${CAWCO_MODEL:-}"`).
  */
 export const SESSION_CAWCO_ENV: readonly string[] = [
   CAWCO_ENV.instanceId,
   CAWCO_ENV.sessionCredential,
   CAWCO_ENV.hubUrl,
-  "CAWCO_MODEL",
 ];
 
 const defined = (

@@ -1,3 +1,4 @@
+import { type MemoryRole, modelMatches } from "./fleet";
 import type { HarnessKind } from "./harness";
 
 /**
@@ -51,18 +52,24 @@ export type RuleTiming = "turn" | "message" | "immediate";
  * of it.
  */
 export interface RuleScope {
+  /** The delegate type the session was started as, by name. */
+  delegateType?: string;
   harness?: HarnessKind;
   machineId?: string;
   model?: string;
   projectId?: string;
+  /** Orchestrators (sessions holding `delegate`) or leaves, as fleet memory reads a role. */
+  role?: MemoryRole;
 }
 
 /** The instance facts a {@link RuleScope} is tested against. */
 export interface RuleFacts {
+  delegateType: string | null;
   harness: string | null;
   machineId: string;
   model: string | null;
   projectId: string | null;
+  role: MemoryRole;
 }
 
 /** One standing instruction. */
@@ -282,6 +289,12 @@ export function ruleSentence(rule: Partial<RuleDraft>): string {
   if (rule.scope?.machineId) {
     narrowing.push("one machine");
   }
+  if (rule.scope?.role) {
+    narrowing.push(`${rule.scope.role} sessions`);
+  }
+  if (rule.scope?.delegateType) {
+    narrowing.push(`${rule.scope.delegateType} delegates`);
+  }
   const scope = narrowing.length ? ` In ${narrowing.join(" and ")} only.` : "";
 
   let where: string;
@@ -389,15 +402,15 @@ export function ruleInScope(scope: RuleScope, facts: RuleFacts): boolean {
   if (scope.harness && scope.harness !== facts.harness) {
     return false;
   }
-  // Substring, so `opus` covers every dated build of it and the user does
-  // not have to keep the filter in step with model releases.
-  if (
-    scope.model &&
-    !facts.model?.toLowerCase().includes(scope.model.toLowerCase())
-  ) {
+  if (scope.role && scope.role !== facts.role) {
     return false;
   }
-  return true;
+  if (scope.delegateType && scope.delegateType !== facts.delegateType) {
+    return false;
+  }
+  // Substring, so `opus` covers every dated build of it and the user does
+  // not have to keep the filter in step with model releases.
+  return modelMatches(scope.model, facts.model);
 }
 
 /**

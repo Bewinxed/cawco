@@ -1913,10 +1913,61 @@ export const fleetMemoryDocs = sqliteTable("fleet_memory_docs", {
    * `~/.claude/memories/`, read on purpose.
    */
   role: text("role").$type<MemoryRole>(),
+  /**
+   * Part of a model id: the sessions whose model contains it, in any case
+   * (`MemoryScope.model`). Null for any model.
+   */
+  model: text("model"),
+  /**
+   * Guidance for writing a brief (`MemoryScope.briefer`): it reaches the
+   * session that calls `delegate`, and its delegate types and model name
+   * the delegates it is about.
+   */
+  briefer: integer("briefer", { mode: "boolean" }).notNull().default(false),
   updatedAt: timestamp("updated_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * The delegate types a fleet memory document is scoped to, one row each
+ * (`MemoryScope.delegateTypes`): the sessions started as one of them, or,
+ * on a briefer's, the delegates it is about. By name, as a session's row
+ * keeps its type.
+ */
+export const fleetMemoryDocTypes = sqliteTable(
+  "fleet_memory_doc_types",
+  {
+    path: text("path")
+      .notNull()
+      .references(() => fleetMemoryDocs.path, { onDelete: "cascade" }),
+    typeName: text("type_name").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.path, table.typeName] })]
+);
+
+/**
+ * The briefer documents a session has been handed (hub briefings.ts), each
+ * at the hash it read: its next `delegate` call that one is about goes out
+ * without it. A compaction of the session clears its rows, so the next such
+ * call hands it again; an edit to the document hands the new text.
+ */
+export const memoryBriefings = sqliteTable(
+  "memory_briefings",
+  {
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    path: text("path")
+      .notNull()
+      .references(() => fleetMemoryDocs.path, { onDelete: "cascade" }),
+    hash: text("hash").notNull(),
+    handedAt: timestamp("handed_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.path] })]
+);
 
 /**
  * The projects a fleet memory document is scoped to, one row each: the
@@ -2454,6 +2505,10 @@ export const rules = sqliteTable("rules", {
     text("scope_harness").$type<NonNullable<RuleScope["harness"]>>(),
   /** A model name it fires on, matched as a substring in any case. */
   scopeModel: text("scope_model"),
+  /** The role of the sessions it fires on: `orchestrator` or `leaf` (roles.ts `memoryRoleOf`). */
+  scopeRole: text("scope_role").$type<NonNullable<RuleScope["role"]>>(),
+  /** The delegate type the sessions it fires on were started as, by name. */
+  scopeDelegateType: text("scope_delegate_type"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

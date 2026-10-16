@@ -2696,7 +2696,7 @@ export class SessionSupervisor {
       if (grant?.placedMemory) {
         await placeMemoryAtLaunch(grant.placedMemory);
       }
-      // Its role's memory documents are the grant's alone, whatever the
+      // Its scoped memory documents are the grant's alone, whatever the
       // spawn carried.
       const spec: SpawnPayload = grant
         ? {

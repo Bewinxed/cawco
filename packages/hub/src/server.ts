@@ -236,6 +236,7 @@ import {
   machineFaultWords,
   mcpRunsOn,
   memoryDocProblem,
+  memoryScopeProblem,
   type NeutralSystemMessage,
   namedAccount,
   namedAmong,
@@ -397,6 +398,7 @@ import {
 import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { bodyLimitRefusal } from "./body-limits";
+import { briefingsObserve } from "./briefings";
 import {
   attemptTry,
   type Caw,
@@ -526,9 +528,9 @@ import {
 } from "./media";
 import { createMemory, createTurnWatch, memoryRoutes } from "./memory";
 import {
+  documentFacts,
   placesHolding,
-  roleInstructions,
-  sessionProject,
+  sessionInstructions,
 } from "./memory-scopes";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
@@ -619,7 +621,6 @@ import {
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRepoPublish } from "./repo-publish";
-import { memoryRoleOf } from "./roles";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
@@ -1293,6 +1294,8 @@ const ruleBody = t.Object({
     projectId: t.Optional(t.String()),
     harness: t.Optional(t.String()),
     model: t.Optional(t.String()),
+    role: t.Optional(t.Union(MEMORY_ROLES.map((role) => t.Literal(role)))),
+    delegateType: t.Optional(t.String()),
   }),
 });
 
@@ -5820,14 +5823,14 @@ export const createServer = (
     } else if (where.accountId) {
       account = { accountDir: { accountId: where.accountId } };
     }
-    // The fleet's documents for this session's role, in its project, as
-    // the fleet says them now (memory-scopes.ts); and its project's for its
-    // own place, which its machine writes there before the session starts.
+    // The fleet's documents for this session's role, delegate type, model
+    // and project, as the fleet says them now (memory-scopes.ts); and its
+    // project's for its own place, which its machine writes there before
+    // the session starts.
     const places = db.listProjects().flatMap((project) => project.places);
-    const instructions = roleInstructions(
+    const instructions = sessionInstructions(
       db.listFleetMemoryDocs(),
-      memoryRoleOf(stored),
-      sessionProject(stored, places)
+      documentFacts(stored, places)
     );
     const placedMemory = placedCopies(
       db.fleetConfig().placedMemory,
@@ -23434,18 +23437,39 @@ export const createServer = (
                   t.Union(MEMORY_ROLES.map((role) => t.Literal(role)))
                 ),
                 projectIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
+                delegateTypes: t.Optional(t.Array(t.String(), { minItems: 1 })),
+                model: t.Optional(t.String({ minLength: 1 })),
+                briefer: t.Optional(t.Literal(true)),
               })
             ),
           }),
         },
         ({ body, status }) => {
-          const problem = memoryDocProblem(body.path);
+          const problem =
+            memoryDocProblem(body.path) ??
+            (body.scope ? memoryScopeProblem(body.scope) : undefined);
           if (problem) {
             return status(400, problem);
           }
           const unknown = body.scope?.projectIds?.find((id) => !db.project(id));
           if (unknown) {
             return status(400, `there is no project ${unknown}`);
+          }
+          const typeNames = new Set([
+            ...delegateTypes.list().map((type) => type.name),
+            ...db
+              .listProjects()
+              .flatMap((project) => projectTypes.typesFor(project.id))
+              .map((type) => type.name),
+          ]);
+          const unknownType = body.scope?.delegateTypes?.find(
+            (name) => !typeNames.has(name.trim())
+          );
+          if (unknownType) {
+            return status(
+              400,
+              `there is no delegate type ${unknownType}; the catalog has ${[...typeNames].sort().join(", ")}`
+            );
           }
 
           const current = db.getFleetMemoryDoc(body.path);
@@ -27447,6 +27471,11 @@ export const createServer = (
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );
                 watch?.observe(
+                  message.instanceId,
+                  (message.payload as FramePayload & { kind: "frame" }).message
+                );
+                briefingsObserve(
+                  db,
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );

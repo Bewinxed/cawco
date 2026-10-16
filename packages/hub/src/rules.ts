@@ -1,15 +1,23 @@
 import type {
   Envelope,
+  InstanceRow,
   NeutralMessage,
   Rule,
+  RuleFacts,
   RuleTiming,
   SendPayload,
 } from "@cawco/core";
-import { RULE_FIRE_CEILING, ruleMarker, ruleMatches } from "@cawco/core";
+import {
+  RULE_FIRE_CEILING,
+  ruleInScope,
+  ruleMarker,
+  ruleMatches,
+} from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
 import type { DbShape } from "./db";
 import { jevUnanswered } from "./jev";
 import type { MeaningJudge } from "./meaning";
+import { memoryRoleOf } from "./roles";
 
 /**
  * The rule engine.
@@ -89,12 +97,7 @@ interface Buffer {
 }
 
 /** The instance facts a scope is tested against, cached off the hot path. */
-interface Facts {
-  harness: string | null;
-  machineId: string;
-  model: string | null;
-  projectId: string | null;
-}
+type Facts = RuleFacts;
 
 /**
  * Where a streaming buffer's thinking begins. NUL-fenced so no model text can
@@ -483,7 +486,7 @@ export class RuleEngine {
     }
   }
 
-  /** The instance's machine, project, harness and model — read once, then cached. */
+  /** The instance's machine, project, harness, model, role and delegate type — read once, then cached. */
   #factsFor(instanceId: string): Facts | undefined {
     const cached = this.#facts.get(instanceId);
     if (cached) {
@@ -500,6 +503,8 @@ export class RuleEngine {
       projectId: row.projectId ?? null,
       harness: row.harness ?? null,
       model: row.model ?? null,
+      role: memoryRoleOf(row as InstanceRow),
+      delegateType: row.delegateType ?? null,
     };
     this.#facts.set(instanceId, facts);
     return facts;
@@ -515,32 +520,10 @@ export class RuleEngine {
     return facts ? this.#agent(facts.machineId, instanceId) : undefined;
   }
 
-  #inScope(rule: Rule, facts: Facts): boolean {
-    const { scope } = rule;
-    if (scope.machineId && scope.machineId !== facts.machineId) {
-      return false;
-    }
-    if (scope.projectId && scope.projectId !== facts.projectId) {
-      return false;
-    }
-    if (scope.harness && scope.harness !== facts.harness) {
-      return false;
-    }
-    // Substring, so `opus` covers every dated build of it and the user does
-    // not have to keep the filter in step with model releases.
-    if (
-      scope.model &&
-      !facts.model?.toLowerCase().includes(scope.model.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  }
-
   /** Sends a matched rule's reply, unless its scope, shots or ceiling hold it; true when sent. */
   #fire(rule: Rule, instanceId: string): boolean {
     const facts = this.#factsFor(instanceId);
-    if (!(facts && this.#inScope(rule, facts))) {
+    if (!(facts && ruleInScope(rule.scope, facts))) {
       return false;
     }
 
