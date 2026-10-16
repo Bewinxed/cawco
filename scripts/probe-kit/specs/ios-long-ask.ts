@@ -1078,10 +1078,23 @@ async function onSimulator(
       return out;
     };
     let screens = 0;
+    /** The screen's height in points: an iPhone 17 Pro Max's, else an iPhone 16 Pro's. */
+    const height = which === "27" ? 956 : 874;
+    /** A node wholly on screen: the tree keeps rows scrolled out of view at their frames there, where a tap lands on nothing. */
+    const onScreen = (frame?: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }) =>
+      !!frame &&
+      frame.width > 0 &&
+      frame.y >= 0 &&
+      frame.y + frame.height <= height;
     const tap = async (test: (label: string) => boolean): Promise<boolean> => {
       const all = await labels();
       const frame = all.find(
-        (node) => test(node.label) && (node.frame?.width ?? 0) > 0
+        (node) => test(node.label) && onScreen(node.frame)
       )?.frame;
       if (!frame) {
         screens += 1;
@@ -1153,9 +1166,21 @@ async function onSimulator(
       await pause(2000);
       // The live probe's own row, which says it needs you: not an earlier probe's
       // stopped row, nor any other session that needs you.
-      drawer = await tap(
-        (label) => label === "Needs you: Probe: long ask (ios-long-ask)"
-      );
+      // It stands under every project above cockpit's: the drawer scrolled
+      // a little at a time until it is on screen.
+      const probeRow = (label: string) =>
+        label === "Needs you: Probe: long ask (ios-long-ask)";
+      drawer = false;
+      for (let swipe = 0; swipe < 16 && !drawer; swipe += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: one step down the drawer after another
+        drawer = await tap(probeRow);
+        if (!drawer) {
+          await sh(
+            `${AXE} swipe --start-x 150 --start-y 650 --end-x 150 --end-y 400 --duration 1.2 --udid ${udid}`
+          );
+          await pause(1200);
+        }
+      }
     }
     await pause(3000);
     report(
