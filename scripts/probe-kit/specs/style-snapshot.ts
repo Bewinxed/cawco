@@ -72,7 +72,7 @@ const has = (name: string): boolean => process.argv.includes(`--${name}`);
 async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
   const tape = await readTape(TAPE);
   const hub = player(tape);
-  const servers = new Servers(kit, hub.base);
+  const servers = new Servers(kit, hub);
   const writers = new Map<string, SnapshotWriter>();
   const writer = (surface: string) => {
     let w = writers.get(surface);
@@ -181,9 +181,15 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const scene = await seedScene(kit, fleet);
-  const tape: Tape = { at: Date.now(), http: [], sockets: [], scene };
+  const tape: Tape = {
+    at: Date.now(),
+    http: [],
+    preview: [],
+    sockets: [],
+    scene,
+  };
   const rec = recorder(fleet.base, tape);
-  const servers = new Servers(kit, rec.base);
+  const servers = new Servers(kit, rec);
   let fails = 0;
   try {
     // Every route and state at each width, opened as a snapshot opens it:
@@ -243,7 +249,7 @@ function styled(): string[] {
 async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
   const tape = await readTape(TAPE);
   const hub = player(tape);
-  const servers = new Servers(kit, hub.base);
+  const servers = new Servers(kit, hub);
   const seen = new Map<string, Set<string>>();
   try {
     await walk(

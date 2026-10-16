@@ -10,10 +10,10 @@
  * against a recorder in front of a scratch fleet's hub instead.
  */
 import { join } from "node:path";
-import type { Page } from "playwright-core";
+import type { BrowserContext, Page } from "playwright-core";
 import { heavySlot } from "../../lib/heavy-run";
 import { until } from "../../scratch-fleet";
-import type { Tape } from "../hub-tape";
+import type { Attach, Tape } from "../hub-tape";
 import { type Kit, open, ROOT, type Theme, type View } from "../kit";
 import type { State, Surface, Width } from "./catalogue";
 import { holdStill, installReader, PROPS } from "./read";
@@ -55,24 +55,52 @@ export const PASSES: Pass[] = [
   { name: "desk light reduced", width: "desk", theme: "light", reduced: true },
 ];
 
-/** The dashboard's two servers against one hub: the built one, and the dev server once a bench asks for it. */
+/** Where a page can reach this machine: a loopback origin. */
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * The dashboard's two servers against one hub (the tape's recorder or
+ * player): the built one, and the dev server once a bench asks for it.
+ * Every other loopback origin a page reaches is a preview's own, which the
+ * hub's `attach` routes on each page's context.
+ */
 export class Servers {
   private dev: Promise<{ base: string; child: Bun.Subprocess }> | null = null;
   private built: Promise<string> | null = null;
   private readonly kit: Kit;
+  private readonly own = new Set<string>();
   readonly hub: string;
-  constructor(kit: Kit, hub: string) {
+  private readonly tape: { attach: Attach; base: string };
+  constructor(kit: Kit, hub: { attach: Attach; base: string }) {
     this.kit = kit;
-    this.hub = hub;
+    this.hub = hub.base;
+    this.tape = hub;
+    this.own.add(new URL(hub.base).host);
   }
 
   base(serve: Surface["serve"]): Promise<string> {
+    // By host and port: a socket's URL (`ws://`) is the same server as the page's (`http://`).
+    const owned = (base: string) => {
+      this.own.add(new URL(base).host);
+      return base;
+    };
     if (serve === "built") {
-      this.built ??= this.kit.builtFor(this.hub);
+      this.built ??= this.kit.builtFor(this.hub).then(owned);
       return this.built;
     }
-    this.dev ??= devServer(this.hub);
+    this.dev ??= devServer(this.hub).then((d) => {
+      owned(d.base);
+      return d;
+    });
     return this.dev.then((d) => d.base);
+  }
+
+  /** Routes a page's context: its previews' origins on the tape. */
+  attach(context: BrowserContext): Promise<void> {
+    return this.tape.attach(
+      context,
+      (url) => LOOPBACK.has(url.hostname) && !this.own.has(url.host)
+    );
   }
 
   async close(): Promise<void> {
@@ -225,6 +253,7 @@ export async function walk(
         return;
       }
       const page = await passPage(kit, pass, tape.at);
+      await servers.attach(page.context());
       try {
         for (const state of states) {
           const what = `${surface.name}/${state.name} · ${pass.name}`;

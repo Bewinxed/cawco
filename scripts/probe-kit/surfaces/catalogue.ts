@@ -19,7 +19,7 @@ import { DELEGATE_TITLE, type Scene } from "./scene";
 export type Width = "desk" | "tablet" | "phone";
 
 export interface State {
-  /** What opens it, on the page as the route (and the states before it) left it. */
+  /** What opens it, on its route freshly loaded (the walk loads each state's route anew). */
   act?: (page: Page) => Promise<unknown>;
   name: string;
   /**
@@ -105,6 +105,44 @@ const LOCATION_CHIP = /^Location: /;
 const EFFORT_CHIP = /^Effort: /;
 const PERMISSION_CHIP = /^Permission mode: /;
 const ACCOUNT_CHIP = /^Account: /;
+/** The artifact's page in its session's pane. */
+const PREVIEW_FRAME = 'iframe[title="Preview"]';
+
+/**
+ * A pin on the preview, as a person drops one: C turns the pane's Comment
+ * mode on, and once the page has heard it (its overlay's layer in comment
+ * mode, comments.ts `pageInComment`), a tap on the heading writes pin 1 in
+ * the page's doc, which the pane's doc hears, and its card opens.
+ */
+const dropPin = async (page: Page) => {
+  await page
+    .locator("button[aria-keyshortcuts='C']")
+    .filter({ visible: true })
+    .first()
+    .focus();
+  await page.keyboard.press("c");
+  const frame = page.frameLocator(PREVIEW_FRAME);
+  await frame
+    .locator("cawco-overlay .layer.comment")
+    .waitFor({ state: "attached" });
+  const box = await frame.locator("h1").boundingBox();
+  if (!box) {
+    throw new Error("the preview's heading has no box");
+  }
+  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+};
+
+/** The spawn sheet opened, then each step in turn: every state of the sheet starts from a fresh page. */
+const inSheet =
+  (...steps: ((page: Page) => Promise<unknown>)[]) =>
+  async (page: Page) => {
+    await press("Start session")(page);
+    for (const step of steps) {
+      // biome-ignore lint/performance/noAwaitInLoops: one step of the sheet at a time
+      await step(page);
+    }
+  };
+
 /** The spawn sheet's location popover, then its folder browser walked to `~/code/chip-tray` (the scene's). */
 const browseTo = async (page: Page) => {
   await press("Browse")(page);
@@ -500,45 +538,38 @@ export const SURFACES: Surface[] = [
     name: "new-session",
     serve: "built",
     route: () => "/",
-    // One sheet, walked as a person fills it: where, the folder browsed to
-    // and used, then each chip's popover, then the prompt's `/` menu.
+    // The sheet as a person fills it: where, the folder browsed to and
+    // used, each chip's popover, the prompt's `/` menu.
     states: [
       {
         name: "open",
-        act: press("Start session"),
+        act: inSheet(),
         root: "[role=dialog][data-state=open]",
       },
-      { name: "location", act: press(LOCATION_CHIP), root: "body" },
-      { name: "browse", act: browseTo, root: "body" },
+      { name: "location", act: inSheet(press(LOCATION_CHIP)), root: "body" },
+      {
+        name: "browse",
+        act: inSheet(press(LOCATION_CHIP), browseTo),
+        root: "body",
+      },
       {
         name: "used",
-        act: press("Use this folder"),
+        act: inSheet(press(LOCATION_CHIP), browseTo, press("Use this folder")),
         root: "[role=dialog][data-state=open]",
       },
-      { name: "effort", act: press(EFFORT_CHIP), root: "body" },
+      { name: "effort", act: inSheet(press(EFFORT_CHIP)), root: "body" },
       {
         name: "permission",
-        act: async (page) => {
-          await page.keyboard.press("Escape");
-          await press(PERMISSION_CHIP)(page);
-        },
+        act: inSheet(press(PERMISSION_CHIP)),
         root: "body",
       },
-      {
-        name: "account",
-        act: async (page) => {
-          await page.keyboard.press("Escape");
-          await press(ACCOUNT_CHIP)(page);
-        },
-        root: "body",
-      },
+      { name: "account", act: inSheet(press(ACCOUNT_CHIP)), root: "body" },
       {
         name: "insert",
-        act: async (page) => {
-          await page.keyboard.press("Escape");
+        act: inSheet(async (page) => {
           await page.getByRole("textbox", { name: "First prompt" }).click();
           await page.keyboard.type("/");
-        },
+        }),
         root: "body",
       },
     ],
@@ -614,6 +645,14 @@ export const SURFACES: Surface[] = [
     states: [
       { name: "rest", root: "body" },
       { name: "in-session", route: (s) => `/session/${s.art}`, root: "body" },
+      // A pin on the preview, its card open (the desk's pane stands beside the transcript).
+      {
+        name: "pin",
+        route: (s) => `/session/${s.art}`,
+        act: dropPin,
+        root: "body",
+        widths: ["desk"],
+      },
     ],
   },
   {

@@ -27,7 +27,7 @@ const spec: Spec = {
   async run(kit) {
     const tape = await readTape(TAPE);
     const hub = player(tape);
-    const servers = new Servers(kit, hub.base);
+    const servers = new Servers(kit, hub);
     try {
       const seconds = await walk(
         kit,
